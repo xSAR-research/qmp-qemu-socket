@@ -2,7 +2,7 @@
 name = "qmp-qemu-socket"
 version = "1.0.0"
 edition = "2024"
-rust-version = "1.95"
+rust-version = "1.98.1"
 description = "A guarded QEMU/QMP controller operating on a Windows 11 VM running `Solitaire & Casual Games` application. This is to experiment with remote control and optimised screen image processing. Also Djistra/A* algorithm implementation for solving games."
 publish = false
 

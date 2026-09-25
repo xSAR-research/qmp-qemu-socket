@@ -5,17 +5,19 @@ use crate::{
     geometry::{PixelPoint, PixelRect},
 };
 
-pub const APP_NAME: &str = "Solitaire Solver";
+pub const APP_NAME: &str = env!("CARGO_PKG_NAME");
 pub const RELEASE_LABEL: &str = concat!("v", env!("CARGO_PKG_VERSION"));
 pub const INITIAL_WINDOW_WIDTH: f32 = 1120.0;
 pub const INITIAL_WINDOW_HEIGHT: f32 = 820.0;
 pub const OUTPUT_PANEL_HEIGHT: f32 = 245.0;
+
 // Reserve space below the preview for the collapsed log and EXIT control.
 // A horizontal scrollbar can consume part of the scroll area's outer height.
 pub const PREVIEW_FOOTER_RESERVE_POINTS: f32 = 96.0;
 pub const PREVIEW_SCROLLBAR_ALLOWANCE_POINTS: f32 = 24.0;
 pub const MIN_PREVIEW_VIEWPORT_HEIGHT_POINTS: f32 = 260.0;
 pub const MAX_LOG_LINES: usize = 2_000;
+
 // The rendered panel remains bounded while the complete session is retained
 // in diagnostic storage for Copy Output and later diagnosis.
 pub const VISIBLE_LOG_ROLLOVER_GAMES: usize = 3;
