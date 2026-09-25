@@ -1,5 +1,21 @@
 # Changes
 
+## 1.0.0 qmp-qemu-socket
+
+### 1.0.0 - Project transition from Solitaire Solver to qmp-qemu-socket 2026-09-26
+
+#### **New**
+
+- Start qmp-qemu-socket project from Solitaire Solver project to focus on image processing and Djistra/A* algorthym solving.
+
+#### **Fixed**
+
+- Fixed an issue where constants were not in UPPER_CASE_SNAKE_SNAKE format.
+
+#### **Changed**
+
+- Replace application name from Solitaire Solver to qmp-qemu-socket.
+
 ## 2.0.0-rc.3 — snapshot candidate pending local validation
 
 - Add a read-only Save snapshot button after Draw Targets, available on
