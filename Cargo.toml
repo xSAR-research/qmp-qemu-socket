@@ -1,0 +1,22 @@
+[package]
+name = "qmp-qemu-socket"
+version = "2.0.1"
+edition = "2024"
+rust-version = "1.95"
+description = "A guarded QEMU/QMP controller operating on a Windows 11 VM running `Solitaire & Casual Games` application. This is to experiment with remote control and optimised screen image processing. Also Djistra/A* algorithm implementation for solving games."
+publish = false
+
+[dependencies]
+eframe = { version = "0.36.2", default-features = false, features = [
+    "default_fonts",
+    "glow",
+    "wayland",
+    "x11",
+] }
+image = { version = "0.25.10", default-features = false, features = ["png"] }
+serde_json = "1.0.151"
+thiserror = "2.0.21"
+
+[profile.release]
+lto = "thin"
+strip = "symbols"
