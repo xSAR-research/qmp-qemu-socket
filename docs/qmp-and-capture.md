@@ -34,6 +34,14 @@ polling.
 The decoded frame must be exactly 1920x1080 with a valid four-channel layout.
 No scaling, interpolation or coordinate guessing is permitted.
 
+**Capture PNG** requests one separate read-only QMP screendump. The worker
+delivers its original PNG bytes and decoded frame together to the dialog, where
+the user can see the pending image before saving. Save reserves a private
+output file and writes those bytes without another QMP command or guest input.
+Recapture replaces the pending image and bytes; Cancel discards them. Only the
+on-screen preview is scaled. The default socket filename is
+`qmp-qemu-socket.sock`; `QMP_SOCKET_PATH` selects an existing QEMU socket.
+
 ## Absolute pointer conversion
 
 For a valid guest pixel and content extent, each axis uses widened integer
@@ -74,6 +82,14 @@ requires a fresh screenshot showing:
 The verified result frame is immutable and becomes the next action's planning
 frame. A fresh QMP health/pointer probe remains mandatory immediately before
 the next input.
+
+After every score-panel click, including bounded retries, the worker waits
+three seconds before classifying Level Up OK. A click requires the recognised
+gold control. If a fresh frame instead shows New Game, a second fresh frame
+must also recognise New Game before that stage's guarded click. Other post-game
+stages retain a one-second
+inter-stage wait. Challenge Complete Continue is calibrated for future use
+but does not authorise automatic input.
 
 ## Read-only Pyramid calibration
 

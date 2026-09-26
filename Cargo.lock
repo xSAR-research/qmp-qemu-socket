@@ -1735,7 +1735,9 @@ name = "qmp-qemu-socket"
 version = "1.0.0"
 dependencies = [
  "eframe",
+ "egui-winit",
  "image",
+ "raw-window-handle",
  "serde_json",
  "thiserror 2.0.21",
 ]

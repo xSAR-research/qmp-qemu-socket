@@ -18,7 +18,6 @@ use crate::{
     game::{ActionTarget, GameMode, GameProgress, InputOperation},
     geometry::{PixelRect, pixel_point_to_qmp, pixel_rect_to_qmp},
     qmp::QmpClient,
-    snapshot::SnapshotArtifact,
     stepper::{StepPlan, plan_step, verify_post_action},
     tracker::{
         PredictedAction, RowMask, TableauScanState, analyse_frame_with_state,
@@ -26,10 +25,9 @@ use crate::{
     },
 };
 
-use crate::parameters::snapshot_directory;
 use crate::parameters::{
     ACTION_CHANGE_CHANNEL_THRESHOLD, BOARD_TRANSITION_REOBSERVE_DELAY, CANCELLABLE_WAIT_SLICE,
-    CAPTURE_NAME_ATTEMPTS, CAPTURE_SEQUENCE, MULTI_STEP_INPUT_ENABLED,
+    CAPTURE_NAME_ATTEMPTS, CAPTURE_SEQUENCE, LEVEL_UP_APPEAR_DELAY, MULTI_STEP_INPUT_ENABLED,
     NO_HIGHLIGHT_REOBSERVE_DELAY, NOMINAL_FRAME_HEIGHT, NOMINAL_FRAME_WIDTH,
     POST_GAME_MAX_CLICK_ATTEMPTS, POST_GAME_MAX_OBSERVATION_ROUNDS, POST_GAME_MOUSE_HOLD,
     POST_GAME_STAGE_DELAY, POST_GAME_TARGETS, SCORE_SKIP_CONTROL, SCORE_SKIP_MAX_CLICK_ATTEMPTS,
@@ -81,10 +79,10 @@ enum WorkerCommand {
         socket_path: PathBuf,
         mode: GameMode,
     },
-    SaveSnapshot {
+    PrepareSnapshot {
         socket_path: PathBuf,
         mode: GameMode,
-        label: String,
+        request_id: u64,
     },
     ExecuteSteps {
         socket_path: PathBuf,
@@ -100,6 +98,17 @@ enum WorkerCommand {
 pub enum WorkerEvent {
     Log(String),
     Status(String),
+    SnapshotPrepared {
+        request_id: u64,
+        context: (PathBuf, GameMode),
+        frame: CapturedFrame,
+        png: Vec<u8>,
+        prediction: PredictedAction,
+    },
+    SnapshotPreparationFailed {
+        request_id: u64,
+        error: String,
+    },
     BoardProgress {
         current_board: usize,
         completed_boards: usize,
@@ -250,7 +259,7 @@ impl WorkerHandle {
         let cancel_requested = Arc::new(AtomicBool::new(false));
         let worker_cancel = Arc::clone(&cancel_requested);
         let join = thread::Builder::new()
-            .name("solitaire-qmp".to_owned())
+            .name("qmp-socket".to_owned())
             .spawn(move || run_worker(command_rx, event_sink, worker_cancel))
             .expect("failed to spawn QMP worker thread");
 
@@ -270,17 +279,17 @@ impl WorkerHandle {
             .map_err(|error| format!("QMP worker is unavailable: {error}"))
     }
 
-    pub fn save_snapshot(
+    pub fn prepare_snapshot(
         &self,
         socket_path: PathBuf,
         mode: GameMode,
-        label: String,
+        request_id: u64,
     ) -> Result<(), String> {
         self.command_tx
-            .send(WorkerCommand::SaveSnapshot {
+            .send(WorkerCommand::PrepareSnapshot {
                 socket_path,
                 mode,
-                label,
+                request_id,
             })
             .map_err(|error| format!("QMP worker is unavailable: {error}"))
     }
@@ -375,10 +384,10 @@ fn run_worker(
                 send_board_progress(&event_tx, &scan_state, completed_boards);
                 run_capture(socket_path, &scan_state, &event_tx);
             }
-            WorkerCommand::SaveSnapshot {
+            WorkerCommand::PrepareSnapshot {
                 socket_path,
                 mode,
-                label,
+                request_id,
             } => {
                 event_tx.set_capture_context(Some((socket_path.clone(), mode)));
                 reset_scan_state_for_context(
@@ -389,7 +398,7 @@ fn run_worker(
                     &mut completed_boards,
                 );
                 send_board_progress(&event_tx, &scan_state, completed_boards);
-                run_save_snapshot(socket_path, &scan_state, &label, &event_tx);
+                run_prepare_snapshot(socket_path, &scan_state, request_id, &event_tx);
             }
             WorkerCommand::ExecuteSteps {
                 socket_path,
@@ -525,19 +534,16 @@ fn run_capture(socket_path: PathBuf, scan_state: &TableauScanState, event_tx: &W
     }
 }
 
-fn run_save_snapshot(
+fn run_prepare_snapshot(
     socket_path: PathBuf,
     scan_state: &TableauScanState,
-    label: &str,
+    request_id: u64,
     event_tx: &WorkerEventSink,
 ) {
     send_state(event_tx, WorkerState::Connecting);
-    send_status(event_tx, "Saving snapshot".to_owned());
+    send_status(event_tx, "Capturing snapshot".to_owned());
 
     let result = (|| {
-        // Reserve the destination first so a missing screenshot directory
-        // cannot stall QEMU with a screendump that has nowhere to be saved.
-        let destination = SnapshotArtifact::reserve(&snapshot_directory(), label)?;
         let (mut qmp, probe) = connect_and_probe(&socket_path)?;
         if !probe.is_running() {
             return Err("snapshot refused because the VM is not running".to_owned());
@@ -568,30 +574,38 @@ fn run_save_snapshot(
                 PredictedAction::NoHighlight
             }
         };
-        let png_len = png.len();
-        let saved_path = destination.save(&png)?;
-        Ok::<_, String>((frame, prediction, saved_path, png_len, timing))
+        Ok::<_, String>((frame, prediction, png, timing))
     })();
 
     match result {
-        Ok((frame, prediction, saved_path, png_len, timing)) => {
-            event_tx.publish_frame(frame, prediction, false);
+        Ok((frame, prediction, png, timing)) => {
+            let png_len = png.len();
+            let _ = event_tx.send(WorkerEvent::SnapshotPrepared {
+                request_id,
+                context: (socket_path, scan_state.mode()),
+                frame,
+                png,
+                prediction,
+            });
             send_state(event_tx, WorkerState::Ready);
-            send_status(event_tx, "Snapshot saved".to_owned());
+            send_status(event_tx, "Snapshot ready to save".to_owned());
             send_log(
                 event_tx,
                 format!(
-                    "Original QMP PNG saved: {} ({} bytes); guest input events=0; one screendump={:.1} ms.",
-                    saved_path.display(),
+                    "Original QMP PNG prepared for preview ({} bytes); guest input events=0; one screendump={:.1} ms. Saving this capture requires no second screendump.",
                     png_len,
                     milliseconds(timing.screendump),
                 ),
             );
         }
         Err(error) => {
+            let _ = event_tx.send(WorkerEvent::SnapshotPreparationFailed {
+                request_id,
+                error: error.clone(),
+            });
             send_state(event_tx, WorkerState::Error);
-            send_status(event_tx, "Snapshot failed".to_owned());
-            send_log(event_tx, format!("Read-only snapshot failed: {error}"));
+            send_status(event_tx, "Snapshot capture failed".to_owned());
+            send_log(event_tx, format!("Read-only snapshot capture failed: {error}"));
         }
     }
 }
@@ -900,20 +914,24 @@ fn run_post_game_restart(
             SCORE_SKIP_CONTROL.click_point.x,
             SCORE_SKIP_CONTROL.click_point.y,
             POST_GAME_MOUSE_HOLD.as_millis(),
-            POST_GAME_STAGE_DELAY.as_millis(),
+            LEVEL_UP_APPEAR_DELAY.as_millis(),
         ),
     );
     send_state(event_tx, WorkerState::Verifying);
-    send_status(event_tx, "Waiting 1000 ms for Level Up".to_owned());
+    send_status(
+        event_tx,
+        format!("Waiting {} ms for Level Up", LEVEL_UP_APPEAR_DELAY.as_millis()),
+    );
     intentional_wait += wait_or_stop(
-        POST_GAME_STAGE_DELAY,
+        LEVEL_UP_APPEAR_DELAY,
         cancel_requested,
         "STOP was requested during the post-score-skip wait.",
     )?;
 
     let mut click_attempts = [0usize; POST_GAME_TARGETS.len()];
     let mut recovery_solver_click_attempts = 0usize;
-    for (target_index, target) in POST_GAME_TARGETS.into_iter().enumerate() {
+    let mut target_index = 0usize;
+    while let Some(target) = POST_GAME_TARGETS.get(target_index).copied() {
         let mut observation_round = 1usize;
         let matched_variant = loop {
             send_status(event_tx, format!("Waiting for {}", target.label));
@@ -1008,7 +1026,23 @@ fn run_post_game_restart(
             }
 
             if let Some(variant) = resolve_post_game_target(&observation, target)? {
-                break variant;
+                break Some(variant);
+            }
+
+            if target.stage == PostGameStage::LevelUpOk
+                && new_game_visible_while_awaiting_level_up(&observation)?
+            {
+                send_log(
+                    event_tx,
+                    "RECOVERED: Level Up OK is absent but the New Game control is visible in a fresh non-gameplay frame. Waiting for a second capture to verify New Game before sending input."
+                        .to_owned(),
+                );
+                intentional_wait += wait_or_stop(
+                    POST_GAME_STAGE_DELAY,
+                    cancel_requested,
+                    "STOP was requested while verifying the New Game transition.",
+                )?;
+                break None;
             }
 
             if observation.gameplay_scene
@@ -1075,12 +1109,12 @@ fn run_post_game_restart(
                         SCORE_SKIP_CONTROL.click_point.x,
                         SCORE_SKIP_CONTROL.click_point.y,
                         POST_GAME_MOUSE_HOLD.as_millis(),
-                        BOARD_TRANSITION_REOBSERVE_DELAY.as_millis(),
+                        LEVEL_UP_APPEAR_DELAY.as_millis(),
                     ),
                 );
                 send_state(event_tx, WorkerState::Verifying);
                 intentional_wait += wait_or_stop(
-                    BOARD_TRANSITION_REOBSERVE_DELAY,
+                    LEVEL_UP_APPEAR_DELAY,
                     cancel_requested,
                     "STOP was requested while waiting after a score-skip retry.",
                 )?;
@@ -1102,6 +1136,11 @@ fn run_post_game_restart(
                 "STOP was requested while waiting for the next post-game screen.",
             )?;
             observation_round = observation_round.saturating_add(1);
+        };
+
+        let Some(matched_variant) = matched_variant else {
+            target_index += 1;
+            continue;
         };
 
         let reprobe = qmp
@@ -1176,6 +1215,7 @@ fn run_post_game_restart(
             cancel_requested,
             "STOP was requested during the one-second post-game stage wait.",
         )?;
+        target_index += 1;
     }
 
     let solver_target = POST_GAME_TARGETS
@@ -1378,6 +1418,12 @@ fn level_up_overrides_board_progress(
     }
 
     Ok(resolve_post_game_target(observation, POST_GAME_TARGETS[0])?.is_some())
+}
+
+fn new_game_visible_while_awaiting_level_up(
+    observation: &FrameObservation,
+) -> Result<bool, String> {
+    Ok(resolve_post_game_target(observation, POST_GAME_TARGETS[1])?.is_some())
 }
 
 fn require_post_game_observation_retry_budget(
@@ -3057,7 +3103,7 @@ impl CaptureArtifact {
         for _ in 0..CAPTURE_NAME_ATTEMPTS {
             let sequence = CAPTURE_SEQUENCE.fetch_add(1, Ordering::Relaxed);
             let file_name = directory.join(format!(
-                ".solitaire-solver-capture-{}-{sequence}.png",
+                ".qmp-qemu-socket-capture-{}-{sequence}.png",
                 std::process::id()
             ));
             match OpenOptions::new()
@@ -3539,6 +3585,16 @@ mod tests {
             raised.click_point,
             crate::geometry::PixelPoint::new(960, 770)
         );
+    }
+
+    #[test]
+    fn new_game_can_be_verified_when_level_up_is_missing() {
+        let new_game = dialog_observation(&[NEW_GAME_CONTROL_VARIANTS[0]]);
+        assert_eq!(resolve_post_game_target(&new_game, POST_GAME_TARGETS[0]), Ok(None));
+        assert_eq!(new_game_visible_while_awaiting_level_up(&new_game), Ok(true));
+
+        let level_up = dialog_observation(&[LEVEL_UP_CONTROL_VARIANTS[1]]);
+        assert_eq!(new_game_visible_while_awaiting_level_up(&level_up), Ok(false));
     }
 
     #[test]

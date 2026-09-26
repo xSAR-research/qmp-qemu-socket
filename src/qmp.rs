@@ -556,7 +556,7 @@ mod tests {
             assert_eq!(
                 request["arguments"],
                 json!({
-                    "filename": "/tmp/solitaire-solver-frame.png",
+                    "filename": "/tmp/qmp-qemu-socket-frame.png",
                     "format": "png"
                 })
             );
@@ -577,7 +577,7 @@ mod tests {
         assert!(matches!(non_utf8, QmpError::CapturePath(_)));
 
         client
-            .screendump_png(Path::new("/tmp/solitaire-solver-frame.png"))
+            .screendump_png(Path::new("/tmp/qmp-qemu-socket-frame.png"))
             .expect("send screendump command");
         drop(client);
         server.join().expect("mock QMP server completed");
@@ -691,7 +691,7 @@ mod tests {
     #[test]
     fn command_failure_releases_on_original_and_fresh_connections_without_retrying_down() {
         let socket_file = SocketFile(std::env::temp_dir().join(format!(
-            "solitaire-solver-qmp-test-{}-{}.sock",
+            "qmp-qemu-socket-test-{}-{}.sock",
             process::id(),
             NEXT_SOCKET_ID.fetch_add(1, Ordering::Relaxed)
         )));

@@ -96,9 +96,9 @@ fn safe_label(raw: &str) -> String {
 
 fn snapshot_filename(timestamp: &str, label: &str, attempt: usize) -> String {
     let name = if label.is_empty() {
-        format!("solver {timestamp}")
+        format!("qmp-qemu-socket {timestamp}")
     } else {
-        format!("solver {timestamp} {label}")
+        format!("qmp-qemu-socket {timestamp} {label}")
     };
     if attempt == 0 {
         format!("{name}.png")
@@ -148,11 +148,11 @@ mod tests {
         assert!(safe_label(&"a".repeat(100)).len() <= SNAPSHOT_LABEL_MAX_CHARS);
         assert_eq!(
             snapshot_filename("260924 223501", "B1-Move", 0),
-            "solver 260924 223501 B1-Move.png"
+            "qmp-qemu-socket 260924 223501 B1-Move.png"
         );
         assert_eq!(
             snapshot_filename("260924 223501", "B1-Move", 1),
-            "solver 260924 223501 B1-Move-01.png"
+            "qmp-qemu-socket 260924 223501 B1-Move-01.png"
         );
     }
 
@@ -163,7 +163,7 @@ mod tests {
             .unwrap()
             .as_nanos();
         let directory = std::env::temp_dir().join(format!(
-            "solitaire-snapshot-test-{}-{nonce}",
+            "qmp-snapshot-test-{}-{nonce}",
             std::process::id()
         ));
         fs::create_dir(&directory).unwrap();

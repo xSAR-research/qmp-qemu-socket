@@ -6,21 +6,27 @@ use std::{
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
-use eframe::egui::{self, Align, Align2, Color32, FontId, Layout, Pos2, Rect, Sense, Stroke};
+use eframe::egui::{
+    self, Align, Align2, Color32, FontId, Layout, Pos2, Rect, Sense, Stroke, TextBuffer,
+};
+use egui_winit::clipboard::Clipboard;
+use raw_window_handle::HasDisplayHandle;
 
 use crate::{
     capture::{CapturedFrame, PixelFormat},
     game::{ActionTarget, GameMode, InputOperation},
     geometry::{PixelPoint, PixelRect},
     pyramid::{PYRAMID_TARGETS, TABLEAU_CARD_COUNT as PYRAMID_TABLEAU_CARD_COUNT},
+    snapshot::SnapshotArtifact,
     tracker::PredictedAction,
     worker::{WorkerEvent, WorkerHandle, WorkerState},
 };
 
 use crate::parameters::{
     ACTION_CHANGE_CHANNEL_THRESHOLD, ACTION_CURSOR_EXCLUSION_HALF_SIZE,
-    BOARD_REDEAL_SETTLE_DELAY_MS, DEFAULT_MULTI_STEP_ACTIONS, DRAW_ANIMATION_SETTLE_DELAY_MS,
-    GOLD_CHANNEL_TOLERANCE, GOLD_RGB_CANDIDATES, KEY_HOLD, MAX_LOG_LINES,
+    BOARD_REDEAL_SETTLE_DELAY_MS, CHALLENGE_COMPLETE_CONTINUE_CONTROL, DEFAULT_MULTI_STEP_ACTIONS,
+    DRAW_ANIMATION_SETTLE_DELAY_MS, GOLD_CHANNEL_TOLERANCE, GOLD_RGB_CANDIDATES, KEY_HOLD,
+    LEVEL_UP_APPEAR_DELAY, MAX_LOG_LINES,
     MAXIMUM_ANIMATION_SETTLE_DELAY_MS, MIN_PREVIEW_VIEWPORT_HEIGHT_POINTS,
     MINIMUM_ANIMATION_SETTLE_DELAY_MS, MINIMUM_DRAW_CHANGED_PIXELS, MINIMUM_TABLEAU_CHANGED_PIXELS,
     MOUSE_HOLD, MULTI_STEP_INPUT_ENABLED, NO_HIGHLIGHT_REOBSERVE_DELAY, NOMINAL_FRAME_HEIGHT,
@@ -49,6 +55,12 @@ const PREVIEW_MAPPING_FLOAT_EPSILON: f32 = 0.0005;
 enum ActiveRun {
     StepOnce,
     MultiStep,
+}
+
+enum SnapshotEditAction {
+    Cut,
+    Copy,
+    Paste,
 }
 
 impl SessionLog {
@@ -99,7 +111,7 @@ impl SessionLog {
     }
 }
 
-pub struct SolitaireSolverApp {
+pub struct QmpQemuSocketApp {
     worker: WorkerHandle,
     worker_state: WorkerState,
     game_mode: GameMode,
@@ -113,6 +125,17 @@ pub struct SolitaireSolverApp {
     show_parameters: bool,
     show_snapshot_dialog: bool,
     snapshot_label: String,
+    snapshot_request_id: u64,
+    snapshot_capture_pending: bool,
+    snapshot_focus_pending: bool,
+    snapshot_label_selection: Option<egui::text::CCursorRange>,
+    snapshot_error: Option<String>,
+    snapshot_png: Option<Vec<u8>>,
+    snapshot_frame: Option<CapturedFrame>,
+    snapshot_prediction: Option<PredictedAction>,
+    snapshot_context: Option<(PathBuf, GameMode)>,
+    snapshot_texture: Option<egui::TextureHandle>,
+    clipboard: Clipboard,
     capture_texture: Option<egui::TextureHandle>,
     captured_dimensions: Option<(u32, u32)>,
     preview_context: Option<(PathBuf, GameMode)>,
@@ -129,11 +152,17 @@ pub struct SolitaireSolverApp {
     current_status: String,
 }
 
-impl SolitaireSolverApp {
-    pub fn new(_creation_context: &eframe::CreationContext<'_>) -> Self {
+impl QmpQemuSocketApp {
+    pub fn new(creation_context: &eframe::CreationContext<'_>) -> Self {
         // Creates the initial UI state and starts its background worker.
         let started_at = Instant::now();
         let qmp_socket_path = default_qmp_socket_path().display().to_string();
+        let clipboard = Clipboard::new(
+            creation_context
+                .display_handle()
+                .ok()
+                .map(|handle| handle.as_raw()),
+        );
         let (session_log, session_log_error) = match SessionLog::create() {
             Ok(log) => (Some(log), None),
             Err(error) => (None, Some(error.to_string())),
@@ -152,6 +181,17 @@ impl SolitaireSolverApp {
             show_parameters: false,
             show_snapshot_dialog: false,
             snapshot_label: String::new(),
+            snapshot_request_id: 0,
+            snapshot_capture_pending: false,
+            snapshot_focus_pending: false,
+            snapshot_label_selection: None,
+            snapshot_error: None,
+            snapshot_png: None,
+            snapshot_frame: None,
+            snapshot_prediction: None,
+            snapshot_context: None,
+            snapshot_texture: None,
+            clipboard,
             capture_texture: None,
             captured_dimensions: None,
             preview_context: None,
@@ -169,7 +209,8 @@ impl SolitaireSolverApp {
         };
 
         app.push_log(format!(
-            "Solitaire Solver {RELEASE_LABEL} started; active game profile={}.",
+            "{} {RELEASE_LABEL} started; active game profile={}.",
+            crate::parameters::APP_NAME,
             app.game_mode
         ));
         if let Some(path) = app.session_log.as_ref().map(|log| log.path.clone()) {
@@ -285,6 +326,45 @@ impl SolitaireSolverApp {
             match event {
                 WorkerEvent::Log(message) => self.push_log(message),
                 WorkerEvent::Status(message) => self.current_status = message,
+                WorkerEvent::SnapshotPrepared {
+                    request_id,
+                    context: capture_context,
+                    frame,
+                    png,
+                    prediction,
+                } => {
+                    if self.show_snapshot_dialog
+                        && request_id == self.snapshot_request_id
+                        && capture_context == self.current_preview_context()
+                    {
+                        self.snapshot_capture_pending = false;
+                        match frame_to_colour_image(&frame) {
+                            Ok(image) => {
+                                self.snapshot_texture = Some(context.load_texture(
+                                    "qmp-snapshot-to-save",
+                                    image,
+                                    egui::TextureOptions::LINEAR,
+                                ));
+                                self.snapshot_context = Some(capture_context);
+                                self.snapshot_prediction = Some(prediction);
+                                self.snapshot_frame = Some(frame);
+                                self.snapshot_png = Some(png);
+                                self.snapshot_error = None;
+                            }
+                            Err(error) => {
+                                self.snapshot_error = Some(format!(
+                                    "Could not preview the captured PNG: {error}"
+                                ));
+                            }
+                        }
+                    }
+                }
+                WorkerEvent::SnapshotPreparationFailed { request_id, error } => {
+                    if self.show_snapshot_dialog && request_id == self.snapshot_request_id {
+                        self.snapshot_capture_pending = false;
+                        self.snapshot_error = Some(error);
+                    }
+                }
                 WorkerEvent::BoardProgress {
                     current_board,
                     completed_boards,
@@ -452,26 +532,90 @@ impl SolitaireSolverApp {
         }
     }
 
-    fn request_snapshot(&mut self) {
+    fn prepare_snapshot(&mut self) {
         if self.worker_state.is_busy() || self.active_run.is_some() || self.stop_requested {
             return;
         }
-        self.invalidate_preview();
+        self.snapshot_request_id = self.snapshot_request_id.wrapping_add(1);
+        self.snapshot_png = None;
+        self.snapshot_frame = None;
+        self.snapshot_prediction = None;
+        self.snapshot_context = None;
+        self.snapshot_texture = None;
+        self.snapshot_error = None;
+        self.snapshot_label_selection = None;
+        self.snapshot_capture_pending = true;
         self.worker_state = WorkerState::Connecting;
-        self.current_status = "Saving snapshot".to_owned();
+        self.current_status = "Capturing snapshot".to_owned();
         self.push_log(format!(
-            "Save snapshot requested: one fresh read-only {} QMP PNG; guest input events=0.",
+            "Snapshot capture requested: one fresh read-only {} QMP PNG for review before saving; guest input events=0.",
             self.game_mode
         ));
         let (socket_path, mode) = self.current_preview_context();
-        if let Err(error) =
-            self.worker
-                .save_snapshot(socket_path, mode, self.snapshot_label.clone())
+        if let Err(error) = self
+            .worker
+            .prepare_snapshot(socket_path, mode, self.snapshot_request_id)
         {
             self.worker_state = WorkerState::Error;
-            self.current_status = "Snapshot failed".to_owned();
+            self.snapshot_capture_pending = false;
+            self.snapshot_error = Some(error.clone());
+            self.current_status = "Snapshot capture failed".to_owned();
             self.push_log(error);
         }
+    }
+
+    fn save_prepared_snapshot(&mut self, context: &egui::Context) {
+        if self.snapshot_capture_pending
+            || !controls_are_mutable(self.active_run, self.worker_state, self.stop_requested)
+            || self.snapshot_context.as_ref() != Some(&self.current_preview_context())
+            || self.snapshot_texture.is_none()
+        {
+            self.snapshot_error = Some("Capture is not ready for this game and socket.".to_owned());
+            return;
+        }
+        let Some(png) = self.snapshot_png.as_ref() else {
+            self.snapshot_error = Some("No captured PNG is available to save.".to_owned());
+            return;
+        };
+        let png_len = png.len();
+        let result = SnapshotArtifact::reserve(&snapshot_directory(), &self.snapshot_label)
+            .and_then(|destination| destination.save(png));
+        match result {
+            Ok(path) => {
+                self.push_log(format!(
+                    "Original previewed QMP PNG saved: {} ({} bytes); guest input events=0; additional screendumps=0.",
+                    path.display(), png_len,
+                ));
+                if let (Some(frame), Some(prediction), Some(capture_context)) = (
+                    self.snapshot_frame.take(),
+                    self.snapshot_prediction.take(),
+                    self.snapshot_context.take(),
+                ) {
+                    self.install_frame(context, frame, prediction, false, Some(capture_context));
+                }
+                self.current_status = "Snapshot saved".to_owned();
+                self.close_snapshot_dialog();
+            }
+            Err(error) => {
+                self.snapshot_error = Some(error.clone());
+                self.current_status = "Snapshot save failed".to_owned();
+                self.push_log(format!(
+                    "Snapshot save failed; captured PNG retained for retry: {error}"
+                ));
+            }
+        }
+    }
+
+    fn close_snapshot_dialog(&mut self) {
+        self.show_snapshot_dialog = false;
+        self.snapshot_capture_pending = false;
+        self.snapshot_png = None;
+        self.snapshot_frame = None;
+        self.snapshot_prediction = None;
+        self.snapshot_context = None;
+        self.snapshot_texture = None;
+        self.snapshot_error = None;
+        self.snapshot_label_selection = None;
     }
 
     fn dispatch_steps(
@@ -546,7 +690,8 @@ impl SolitaireSolverApp {
             self.invalidate_preview();
         }
         let controls_enabled =
-            controls_are_mutable(self.active_run, self.worker_state, self.stop_requested);
+            controls_are_mutable(self.active_run, self.worker_state, self.stop_requested)
+                && !self.show_snapshot_dialog;
         let mut preview_available = self.has_current_preview();
         ui.horizontal(|ui| {
             ui.label("Game Type");
@@ -621,12 +766,14 @@ impl SolitaireSolverApp {
                     preview_available = false;
                 }
             }
-            if bevel_button(ui, "Save snapshot", SETUP_BLUE, false, controls_enabled)
-                .on_hover_text("Save one fresh original QMP PNG; send no guest input")
+            if bevel_button(ui, "Capture PNG", SETUP_BLUE, false, controls_enabled)
+                .on_hover_text("Capture and preview one fresh original QMP PNG before saving; send no guest input")
                 .clicked()
             {
                 self.snapshot_label.clear();
                 self.show_snapshot_dialog = true;
+                self.snapshot_focus_pending = true;
+                self.prepare_snapshot();
             }
             ui.separator();
             let state_colour = match self.worker_state {
@@ -901,7 +1048,9 @@ impl SolitaireSolverApp {
                 ui.separator();
                 ui.label("QMP Unix socket");
                 let socket_edit = ui.add_enabled(
-                    !self.worker_state.is_busy() && self.active_run.is_none(),
+                    !self.worker_state.is_busy()
+                        && self.active_run.is_none()
+                        && !self.show_snapshot_dialog,
                     egui::TextEdit::singleline(&mut self.qmp_socket_path),
                 );
                 if socket_edit.changed() {
@@ -911,7 +1060,10 @@ impl SolitaireSolverApp {
                 }
                 ui.separator();
                 ui.label("Execution settings for the next Step Once or Multi-Step run");
-                ui.add_enabled_ui(!self.worker_state.is_busy() && self.active_run.is_none(), |ui| {
+                let execution_enabled = !self.worker_state.is_busy()
+                    && self.active_run.is_none()
+                    && !self.show_snapshot_dialog;
+                ui.add_enabled_ui(execution_enabled, |ui| {
                     ui.horizontal(|ui| {
                         ui.label("Draw-class action settle");
                         ui.add(
@@ -1029,6 +1181,16 @@ impl SolitaireSolverApp {
                     POST_GAME_STAGE_DELAY.as_millis()
                 ));
                 ui.monospace(format!(
+                    "level-up-appear-delay = {} ms after score click",
+                    LEVEL_UP_APPEAR_DELAY.as_millis()
+                ));
+                ui.monospace(format!(
+                    "challenge-complete-continue (future) = probe {}, click x={}, y={} (no automatic input)",
+                    format_rect(CHALLENGE_COMPLETE_CONTINUE_CONTROL.bounds),
+                    CHALLENGE_COMPLETE_CONTINUE_CONTROL.click_point.x,
+                    CHALLENGE_COMPLETE_CONTINUE_CONTROL.click_point.y,
+                ));
+                ui.monospace(format!(
                     "post-game-bounds = {POST_GAME_MAX_OBSERVATION_ROUNDS} observations/stage, {POST_GAME_MAX_CLICK_ATTEMPTS} confirmed clicks/retry context"
                 ));
                 ui.monospace(format!(
@@ -1086,29 +1248,161 @@ impl SolitaireSolverApp {
         let mut open = self.show_snapshot_dialog;
         let mut save = false;
         let mut cancel = false;
-        egui::Window::new("Save QMP snapshot")
+        let mut recapture = false;
+        egui::Window::new("Capture QMP PNG")
             .open(&mut open)
             .collapsible(false)
-            .resizable(false)
+            .resizable(true)
+            .default_width(660.0)
             .show(context, |ui| {
-                ui.label("Capture one fresh full-resolution QMP PNG (no guest input).");
+                ui.label("Review this QMP capture; Save writes these exact PNG bytes.");
+                if let Some(texture) = &self.snapshot_texture {
+                    let width = ui.available_width().clamp(160.0, 640.0);
+                    let height = width * NOMINAL_FRAME_HEIGHT as f32 / NOMINAL_FRAME_WIDTH as f32;
+                    ui.image((texture.id(), egui::vec2(width, height)));
+                    ui.small(format!(
+                        "Original: {NOMINAL_FRAME_WIDTH}×{NOMINAL_FRAME_HEIGHT}, {} PNG bytes",
+                        self.snapshot_png.as_ref().map_or(0, Vec::len)
+                    ));
+                } else if self.snapshot_capture_pending {
+                    ui.spinner();
+                    ui.label("Capturing one fresh frame through QMP…");
+                }
+                if let Some(error) = &self.snapshot_error {
+                    ui.colored_label(Color32::LIGHT_RED, error);
+                }
                 ui.monospace(snapshot_directory().display().to_string());
                 ui.label("Optional identifying words");
-                ui.add(
-                    egui::TextEdit::singleline(&mut self.snapshot_label)
-                        .hint_text("e.g. Pyramid B1 Move halo")
-                        .char_limit(SNAPSHOT_LABEL_MAX_CHARS)
-                        .desired_width(300.0),
-                );
+                let mut label_output = egui::TextEdit::singleline(&mut self.snapshot_label)
+                    .hint_text("e.g. Pyramid B1 Move halo")
+                    .char_limit(SNAPSHOT_LABEL_MAX_CHARS)
+                    .desired_width(380.0)
+                    .show(ui);
+                if std::mem::take(&mut self.snapshot_focus_pending) {
+                    label_output.response.request_focus();
+                }
+                let opening_menu = label_output.response.secondary_clicked()
+                    || label_output.response.context_menu_opened();
+                let retained_selection = self.snapshot_label_selection.as_ref().filter(|range| {
+                    let selected = range.as_sorted_char_range();
+                    selected.start != selected.end
+                        && selected.end <= self.snapshot_label.chars().count().into()
+                });
+                let selected_range = if opening_menu {
+                    retained_selection
+                        .cloned()
+                        .or_else(|| label_output.cursor_range.clone())
+                } else {
+                    self.snapshot_label_selection = label_output.cursor_range.clone();
+                    label_output.cursor_range.clone()
+                };
+                let selected_text = selected_range
+                    .as_ref()
+                    .map(|range| {
+                        self.snapshot_label
+                            .char_range(range.as_sorted_char_range())
+                            .to_owned()
+                    })
+                    .unwrap_or_default();
+                let mut edit_action = None;
+                label_output.response.context_menu(|menu| {
+                    if menu
+                        .add_enabled(!selected_text.is_empty(), egui::Button::new("Cut"))
+                        .clicked()
+                    {
+                        edit_action = Some(SnapshotEditAction::Cut);
+                        menu.close();
+                    }
+                    if menu
+                        .add_enabled(!selected_text.is_empty(), egui::Button::new("Copy"))
+                        .clicked()
+                    {
+                        edit_action = Some(SnapshotEditAction::Copy);
+                        menu.close();
+                    }
+                    if menu.button("Paste").clicked() {
+                        edit_action = Some(SnapshotEditAction::Paste);
+                        menu.close();
+                    }
+                });
+                let menu_used = edit_action.is_some();
+                if let Some(action) = edit_action {
+                    self.snapshot_label_selection = None;
+                    match action {
+                        SnapshotEditAction::Copy => self.clipboard.set_text(selected_text),
+                        SnapshotEditAction::Cut => {
+                            if let Some(range) = selected_range {
+                                self.clipboard.set_text(selected_text);
+                                let cursor = self.snapshot_label.delete_selected(&range);
+                                label_output
+                                    .state
+                                    .cursor
+                                    .set_char_range(Some(egui::text::CCursorRange::two(
+                                        cursor, cursor,
+                                    )));
+                                label_output.state.store(ui.ctx(), label_output.response.id);
+                            }
+                        }
+                        SnapshotEditAction::Paste => {
+                            if let Some(pasted) = self.clipboard.get() {
+                                let retained_chars = self
+                                    .snapshot_label
+                                    .chars()
+                                    .count()
+                                    .saturating_sub(selected_text.chars().count());
+                                let available =
+                                    SNAPSHOT_LABEL_MAX_CHARS.saturating_sub(retained_chars);
+                                let single_line: String = pasted
+                                    .chars()
+                                    .filter(|ch| !ch.is_control())
+                                    .take(available)
+                                    .collect();
+                                if !single_line.is_empty() {
+                                    let mut cursor = if let Some(range) = selected_range.as_ref() {
+                                        self.snapshot_label.delete_selected(range)
+                                    } else {
+                                        egui::text::CCursor::new(self.snapshot_label.chars().count())
+                                    };
+                                    cursor +=
+                                        self.snapshot_label.insert_text(&single_line, cursor.index);
+                                    label_output
+                                        .state
+                                        .cursor
+                                        .set_char_range(Some(egui::text::CCursorRange::two(
+                                            cursor, cursor,
+                                        )));
+                                    label_output.state.store(ui.ctx(), label_output.response.id);
+                                }
+                            }
+                        }
+                    }
+                    label_output.response.request_focus();
+                }
+                if !menu_used
+                    && !label_output.response.context_menu_opened()
+                    && label_output.response.lost_focus()
+                    && ui.input(|input| input.key_pressed(egui::Key::Enter))
+                    && self.snapshot_png.is_some()
+                {
+                    save = true;
+                }
                 ui.small("The local date and time lead the filename; unsafe filename characters become separators.");
                 ui.horizontal(|ui| {
-                    let enabled = controls_are_mutable(
-                        self.active_run,
-                        self.worker_state,
-                        self.stop_requested,
-                    );
+                    let enabled = !self.snapshot_capture_pending
+                        && self.snapshot_png.is_some()
+                        && controls_are_mutable(
+                            self.active_run,
+                            self.worker_state,
+                            self.stop_requested,
+                        );
                     if bevel_button(ui, "Save PNG", SETUP_BLUE, false, enabled).clicked() {
                         save = true;
+                    }
+                    if ui
+                        .add_enabled(!self.snapshot_capture_pending, egui::Button::new("Recapture"))
+                        .clicked()
+                    {
+                        recapture = true;
                     }
                     if ui.button("Cancel").clicked() {
                         cancel = true;
@@ -1116,14 +1410,17 @@ impl SolitaireSolverApp {
                 });
             });
 
-        self.show_snapshot_dialog = open && !save && !cancel;
-        if save {
-            self.request_snapshot();
+        if !open || cancel {
+            self.close_snapshot_dialog();
+        } else if recapture {
+            self.prepare_snapshot();
+        } else if save {
+            self.save_prepared_snapshot(context);
         }
     }
 }
 
-impl eframe::App for SolitaireSolverApp {
+impl eframe::App for QmpQemuSocketApp {
     fn logic(&mut self, context: &egui::Context, _frame: &mut eframe::Frame) {
         // Polls worker events and schedules regular UI repainting.
         self.poll_worker(context);

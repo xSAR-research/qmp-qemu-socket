@@ -63,7 +63,7 @@ not automatically retried.
 
 ## Mode availability
 
-| Capability | TriPeaks | Pyramid v2.0.0-rc.2 |
+| Capability | TriPeaks | Pyramid (read-only calibration) |
 |---|---:|---:|
 | Capture Frame | Yes | Yes |
 | Track coordinates | Yes | Yes |

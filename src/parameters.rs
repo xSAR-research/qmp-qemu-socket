@@ -21,7 +21,7 @@ pub const MAX_LOG_LINES: usize = 2_000;
 // The rendered panel remains bounded while the complete session is retained
 // in diagnostic storage for Copy Output and later diagnosis.
 pub const VISIBLE_LOG_ROLLOVER_GAMES: usize = 3;
-pub const SESSION_LOG_FILE_PREFIX: &str = "Solitaire-";
+pub const SESSION_LOG_FILE_PREFIX: &str = "qmp-qemu-socket-";
 pub const SESSION_LOG_FILE_SUFFIX: &str = ".log";
 pub const SESSION_LOG_MODE: u32 = 0o600;
 pub const SESSION_LOG_NAME_ATTEMPTS: usize = 32;
@@ -394,6 +394,12 @@ pub const SCORE_SKIP_CONTROL: ControlTarget = ControlTarget::new(
     PixelRect::new(760, 360, 400, 360),
     PixelPoint::new(960, 540),
 );
+// Calibrated from the 1920x1080 Challenge Complete capture. This is reserved
+// for a future challenge flow; the current guarded run does not click it.
+pub const CHALLENGE_COMPLETE_CONTINUE_CONTROL: ControlTarget = ControlTarget::new(
+    PixelRect::new(805, 844, 308, 72),
+    PixelPoint::new(959, 880),
+);
 pub const UNDO_ALL_CONTROL: ControlTarget = ControlTarget::new(
     PixelRect::new(1_301, 959, 38, 38),
     PixelPoint::new(1_320, 978),
@@ -517,6 +523,9 @@ pub const BOARD_REDEAL_SETTLE_DELAY: Duration = Duration::from_millis(BOARD_REDE
 pub const NO_HIGHLIGHT_REOBSERVE_DELAY: Duration = Duration::from_millis(150);
 pub const BOARDS_PER_GAME: usize = 3;
 pub const POST_GAME_STAGE_DELAY: Duration = Duration::from_secs(1);
+// Give the score-counting transition time to finish after each centre click
+// before looking for Level Up OK. Other post-game controls keep their settle.
+pub const LEVEL_UP_APPEAR_DELAY: Duration = Duration::from_secs(3);
 pub const BOARD_TRANSITION_REOBSERVE_DELAY: Duration = Duration::from_secs(2);
 pub const POST_GAME_MAX_OBSERVATION_ROUNDS: usize = 20;
 pub const POST_GAME_MAX_CLICK_ATTEMPTS: usize = 3;
@@ -608,9 +617,14 @@ impl Default for StepRunSettings {
     }
 }
 
-pub const QMP_SOCKET_FILENAME: &str = "solitaire-solver-qmp.sock";
+pub const QMP_SOCKET_FILENAME: &str = "qmp-qemu-socket.sock";
 
 pub fn default_qmp_socket_path() -> PathBuf {
+    // An explicit path keeps an existing QEMU launch usable during the socket
+    // rename; otherwise use this application's own socket filename.
+    if let Some(path) = env::var_os("QMP_SOCKET_PATH").filter(|path| !path.is_empty()) {
+        return PathBuf::from(path);
+    }
     // Build the default QMP socket path from the runtime directory or fallback.
     env::var_os("XDG_RUNTIME_DIR")
         .filter(|runtime_dir| !runtime_dir.is_empty())
@@ -666,6 +680,7 @@ mod tests {
         assert_eq!(BOARDS_PER_GAME, 3);
         assert_eq!(BOARD_REDEAL_SETTLE_DELAY, Duration::from_secs(4));
         assert_eq!(POST_GAME_STAGE_DELAY, Duration::from_secs(1));
+        assert_eq!(LEVEL_UP_APPEAR_DELAY, Duration::from_secs(3));
         assert_eq!(POST_GAME_MAX_OBSERVATION_ROUNDS, 20);
         assert_eq!(POST_GAME_MAX_CLICK_ATTEMPTS, 3);
         assert_eq!(SCORE_SKIP_MAX_CLICK_ATTEMPTS, 3);
@@ -778,6 +793,19 @@ mod tests {
         );
         assert!(POST_GAME_TARGETS[3].requires_gameplay_scene);
         assert_eq!(SCORE_SKIP_CONTROL.click_point, PixelPoint::new(960, 540));
+        assert_eq!(
+            CHALLENGE_COMPLETE_CONTINUE_CONTROL.bounds,
+            PixelRect::new(805, 844, 308, 72)
+        );
+        assert_eq!(
+            CHALLENGE_COMPLETE_CONTINUE_CONTROL.click_point,
+            PixelPoint::new(959, 880)
+        );
+        assert!(
+            CHALLENGE_COMPLETE_CONTINUE_CONTROL.bounds.contains(
+                CHALLENGE_COMPLETE_CONTINUE_CONTROL.click_point
+            )
+        );
         assert_eq!(
             SOLVER_PROGRESS_RIGHT_PROBE,
             PixelRect::new(1_050, 84, 38, 2)
