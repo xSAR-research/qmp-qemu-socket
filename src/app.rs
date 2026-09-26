@@ -34,9 +34,9 @@ use crate::parameters::{
     POST_GAME_MAX_OBSERVATION_ROUNDS, POST_GAME_STAGE_DELAY, POST_GAME_TARGETS,
     PREVIEW_FOOTER_RESERVE_POINTS, PREVIEW_SCROLLBAR_ALLOWANCE_POINTS, RELEASE_LABEL,
     SCORE_SKIP_MAX_CLICK_ATTEMPTS, SESSION_LOG_FILE_PREFIX, SESSION_LOG_FILE_SUFFIX,
-    SESSION_LOG_MODE, SESSION_LOG_NAME_ATTEMPTS, SNAPSHOT_LABEL_MAX_CHARS, SOLVER_CONTROL,
+    SESSION_LOG_MODE, SESSION_LOG_NAME_ATTEMPTS, SNAPSHOT_LABEL_MAX_CHARS, SHARED_TOOLBAR_CONTROLS,
     STEP_ONCE_ACTIONS, STEP_ONCE_INPUT_ENABLED, TABLEAU_ANIMATION_SETTLE_DELAY_MS,
-    UNBOUNDED_MULTI_STEP_ACTIONS, UNDO_ALL_CONTROL, UNDO_CONTROL, VISIBLE_LOG_ROLLOVER_GAMES,
+    UNBOUNDED_MULTI_STEP_ACTIONS, VISIBLE_LOG_ROLLOVER_GAMES,
 };
 use crate::parameters::{AnimationSettleDelays, StepRunSettings};
 use crate::parameters::{default_qmp_socket_path, session_log_directory, snapshot_directory};
@@ -883,6 +883,8 @@ impl QmpQemuSocketApp {
                         Color32::from_gray(175),
                     );
                 }
+                // Preview-only paint operations. Never modify capture pixels or
+                // snapshot_png: saved evidence retains QEMU's original PNG bytes.
                 if self.draw_targets {
                     let profile = self.game_mode.profile();
                     for target in profile.preview_targets {
@@ -894,14 +896,27 @@ impl QmpQemuSocketApp {
                             target.label,
                         );
                     }
-                    if self.game_mode == GameMode::TriPeaks {
-                        for (label, control) in [
-                            ("Solver", SOLVER_CONTROL),
-                            ("Undo All", UNDO_ALL_CONTROL),
-                            ("Undo", UNDO_CONTROL),
-                        ] {
-                            paint_target(&painter, canvas, control.bounds, SETUP_BLUE, label);
+                    if self.game_mode == GameMode::Pyramid {
+                        for target in &PYRAMID_TARGETS {
+                            paint_labeled_crosshair(
+                                &painter,
+                                canvas,
+                                target.click_point,
+                                Color32::from_rgb(255, 100, 210),
+                                "",
+                            );
                         }
+                    }
+                    for (label, control) in SHARED_TOOLBAR_CONTROLS {
+                        let colour = Color32::from_rgb(120, 200, 255);
+                        paint_target(&painter, canvas, control.bounds, colour, label);
+                        paint_labeled_crosshair(
+                            &painter,
+                            canvas,
+                            control.click_point,
+                            colour,
+                            "",
+                        );
                     }
                 }
                 if let Some(prediction) = self.prediction {
@@ -1154,8 +1169,17 @@ impl QmpQemuSocketApp {
                         "target-slots = {} total, {pyramid_cards} cards (expected {PYRAMID_TABLEAU_CARD_COUNT})",
                         PYRAMID_TARGETS.len(),
                     ));
-                    ui.monospace("halo-probes = calibration pending");
-                    ui.monospace("click-points = calibration pending");
+                    ui.monospace("halo-probes = not validated; detection disabled");
+                    ui.monospace("click-points = screenshot geometry; input disabled");
+                    for target in &PYRAMID_TARGETS {
+                        ui.monospace(format!(
+                            "{}: bounds {}, hit x={}, y={}",
+                            target.label,
+                            format_rect(target.bounds),
+                            target.click_point.x,
+                            target.click_point.y,
+                        ));
+                    }
                 } else {
                     ui.monospace("guest-input-authorised = true");
                     ui.monospace(format!(
@@ -1163,6 +1187,15 @@ impl QmpQemuSocketApp {
                         profile.tableau_click_offset.x, profile.tableau_click_offset.y
                     ));
                 }
+                for (label, control) in SHARED_TOOLBAR_CONTROLS {
+                    ui.monospace(format!(
+                        "shared-toolbar-{label}: bounds {}, hit x={}, y={}",
+                        format_rect(control.bounds),
+                        control.click_point.x,
+                        control.click_point.y,
+                    ));
+                }
+                ui.small("Undo All confirmation requires separate calibration; no confirmation click is automated.");
                 ui.monospace(format!("gold-colours = {GOLD_RGB_CANDIDATES:?}"));
                 ui.monospace(format!(
                     "gold-channel-tolerance = ±{GOLD_CHANNEL_TOLERANCE}"

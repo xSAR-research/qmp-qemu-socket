@@ -413,12 +413,12 @@ fn glyph_similarity_per_mille(glyph: &BinaryGlyph, template: &RankTemplate) -> u
 
 // Provisional seed templates. Three is deliberately absent pending a labelled
 // capture. Evidence SHA-256 values:
-// - 1920 STEP 4 before: 4948762d698f7aead910cf4adfc062812f0d2a70ace4fce91a495b9d22cf00ee
-// - 1920 STEP 4 after:  28f5a30cce25b9f8e554b74b8c6aa271da94cc75b5caea7135ee7576d4a168a8
-// - 2560 STEP 3:        d3b244f5e6793489719eed916890dd1ae7777b631ee4d4415b50d732b7557227
+// - 1920-wide before: 4948762d698f7aead910cf4adfc062812f0d2a70ace4fce91a495b9d22cf00ee
+// - 1920-wide after:  28f5a30cce25b9f8e554b74b8c6aa271da94cc75b5caea7135ee7576d4a168a8
+// - 2560-wide frame:  d3b244f5e6793489719eed916890dd1ae7777b631ee4d4415b50d732b7557227
 // Seeds for Two, Four, Six, and King come from the 2560 evidence and therefore
 // remain provisional at the pinned 1920 resolution. All other seeds come from
-// the 1920 STEP 4 evidence. A no-match or close match remains an explicit error.
+// the 1920-wide evidence. A no-match or close match remains an explicit error.
 const ACE_SEED: RankTemplate = RankTemplate {
     rank: CardRank::Ace,
     width: 18,

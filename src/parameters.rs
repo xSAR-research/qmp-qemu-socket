@@ -292,7 +292,7 @@ pub const TABLEAU_ROW_SCAN_PROFILES: [TableauRowScanProfile; 4] = [
     },
 ];
 
-// Provisional rank-reader thresholds derived from the labelled STEP 3/4
+// Provisional rank-reader thresholds derived from the labelled calibration
 // evidence. Recognition remains fail-closed until all ranks, especially Three,
 // have controlled 1920x1080 samples.
 pub const RANK_CHANNEL_THRESHOLD: u8 = 220;
@@ -304,8 +304,8 @@ pub const MINIMUM_RANK_SCORE_PER_MILLE: u16 = 880;
 pub const MINIMUM_RANK_MARGIN_PER_MILLE: u16 = 50;
 pub const MAXIMUM_TEMPLATE_DIMENSION_DIFFERENCE: u8 = 2;
 
-// STEP 8 post-action evidence must change materially inside the action's
-// expected effect region. STEP 4 produced 10,065 >=20-channel changes in the
+// Post-action evidence must change materially inside the action's
+// expected effect region. The calibration produced 10,065 >=20-channel changes in the
 // waste interior. This lower bound remains deliberately below that observation
 // while rejecting small pointer, antialiasing, and compression artefacts.
 pub const ACTION_CHANGE_CHANNEL_THRESHOLD: u8 = 20;
@@ -386,9 +386,10 @@ impl ControlTarget {
     }
 }
 
-// Conservative visible-icon bounds and their centres. These are not claims
-// about the application's larger invisible hit areas.
-pub const SOLVER_CONTROL: ControlTarget =
+// Shared bottom-toolbar controls at the 1920x1080 guest layout, observed in
+// both TriPeaks and Pyramid. Bounds cover the visible icons, not the larger
+// invisible hit areas. Undo All confirmation is a separate, uncalibrated UI.
+pub const SHARED_SOLVER_CONTROL: ControlTarget =
     ControlTarget::new(PixelRect::new(585, 959, 35, 36), PixelPoint::new(602, 977));
 pub const SCORE_SKIP_CONTROL: ControlTarget = ControlTarget::new(
     PixelRect::new(760, 360, 400, 360),
@@ -400,14 +401,21 @@ pub const CHALLENGE_COMPLETE_CONTINUE_CONTROL: ControlTarget = ControlTarget::ne
     PixelRect::new(805, 844, 308, 72),
     PixelPoint::new(959, 880),
 );
-pub const UNDO_ALL_CONTROL: ControlTarget = ControlTarget::new(
+pub const SHARED_UNDO_ALL_CONTROL: ControlTarget = ControlTarget::new(
     PixelRect::new(1_301, 959, 38, 38),
     PixelPoint::new(1_320, 978),
 );
-pub const UNDO_CONTROL: ControlTarget = ControlTarget::new(
+pub const SHARED_UNDO_CONTROL: ControlTarget = ControlTarget::new(
     PixelRect::new(1_661, 960, 37, 36),
     PixelPoint::new(1_680, 978),
 );
+
+/// One shared definition for both game previews and future control consumers.
+pub const SHARED_TOOLBAR_CONTROLS: [(&str, ControlTarget); 3] = [
+    ("Solver", SHARED_SOLVER_CONTROL),
+    ("Undo All", SHARED_UNDO_ALL_CONTROL),
+    ("Undo", SHARED_UNDO_CONTROL),
+];
 
 // Level Up has two observed layouts. Each probe remains paired with the click
 // point calibrated for that layout so recognising one variant can never
@@ -440,8 +448,8 @@ pub const PLAY_CONTROL_VARIANTS: [PostGameControlVariant; 1] = [PostGameControlV
 
 pub const SOLVER_CONTROL_VARIANTS: [PostGameControlVariant; 1] = [PostGameControlVariant::new(
     "default",
-    SOLVER_CONTROL.bounds,
-    SOLVER_CONTROL.click_point,
+    SHARED_SOLVER_CONTROL.bounds,
+    SHARED_SOLVER_CONTROL.click_point,
 )];
 
 // The post-game sequence is ordered and fail-closed. Dialog variants use
@@ -730,7 +738,7 @@ mod tests {
 
     #[test]
     fn calibration_matches_verified_capture() {
-        // Lock the constants to the audited 1920x1080 STEP 3B/4 evidence.
+        // Lock the constants to the audited 1920x1080 capture evidence.
         assert_eq!((NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT), (1_920, 1_080));
         assert_eq!(TARGET_BOARD, PixelRect::new(112, 96, 1_696, 544));
         assert_eq!(TARGET_STOCK, PixelRect::new(700, 665, 280, 217));
@@ -789,7 +797,7 @@ mod tests {
         );
         assert_eq!(
             POST_GAME_TARGETS[3].control_variants[0].click_point,
-            SOLVER_CONTROL.click_point
+            SHARED_SOLVER_CONTROL.click_point
         );
         assert!(POST_GAME_TARGETS[3].requires_gameplay_scene);
         assert_eq!(SCORE_SKIP_CONTROL.click_point, PixelPoint::new(960, 540));
@@ -1055,9 +1063,9 @@ mod tests {
     #[test]
     fn control_targets_map_to_the_audited_qmp_coordinates() {
         let cases = [
-            (SOLVER_CONTROL, QmpPoint::new(10_273, 29_641)),
-            (UNDO_ALL_CONTROL, QmpPoint::new(22_527, 29_672)),
-            (UNDO_CONTROL, QmpPoint::new(28_671, 29_672)),
+            (SHARED_SOLVER_CONTROL, QmpPoint::new(10_273, 29_641)),
+            (SHARED_UNDO_ALL_CONTROL, QmpPoint::new(22_527, 29_672)),
+            (SHARED_UNDO_CONTROL, QmpPoint::new(28_671, 29_672)),
         ];
 
         for (target, expected_qmp) in cases {
@@ -1076,7 +1084,7 @@ mod tests {
 
     #[test]
     fn click_offset_maps_audited_anchor_to_card_centre() {
-        // The STEP 4 board highlight began at (1662, 630).
+        // The calibrated board highlight began at (1662, 630).
         let anchor = PixelPoint::new(1_662, 630);
         let centre = PixelPoint::new(anchor.x + CLICK_OFFSET_X, anchor.y + CLICK_OFFSET_Y);
         assert_eq!(centre, PixelPoint::new(1_723, 533));

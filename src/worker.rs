@@ -31,7 +31,7 @@ use crate::parameters::{
     NO_HIGHLIGHT_REOBSERVE_DELAY, NOMINAL_FRAME_HEIGHT, NOMINAL_FRAME_WIDTH,
     POST_GAME_MAX_CLICK_ATTEMPTS, POST_GAME_MAX_OBSERVATION_ROUNDS, POST_GAME_MOUSE_HOLD,
     POST_GAME_STAGE_DELAY, POST_GAME_TARGETS, SCORE_SKIP_CONTROL, SCORE_SKIP_MAX_CLICK_ATTEMPTS,
-    SNAPSHOT_MAX_PNG_BYTES, SOLVER_CONTROL, SOLVER_MOUSE_HOLD, STEP_ONCE_ACTIONS,
+    SNAPSHOT_MAX_PNG_BYTES, SHARED_SOLVER_CONTROL, SOLVER_MOUSE_HOLD, STEP_ONCE_ACTIONS,
     STEP_ONCE_INPUT_ENABLED,
 };
 use crate::parameters::{PostGameControlVariant, PostGameStage, PostGameTarget, StepRunSettings};
@@ -1063,7 +1063,7 @@ fn run_post_game_restart(
                 send_status(event_tx, "Click Solver".to_owned());
                 let input_started = Instant::now();
                 qmp.click_with_hold(
-                    SOLVER_CONTROL.click_point,
+                    SHARED_SOLVER_CONTROL.click_point,
                     NOMINAL_FRAME_WIDTH,
                     NOMINAL_FRAME_HEIGHT,
                     SOLVER_MOUSE_HOLD,
@@ -2203,7 +2203,7 @@ fn execute_guarded_action(
                     send_status(event_tx, "Click Solver".to_owned());
                     let input_started = Instant::now();
                     if let Err(error) = qmp.click_with_hold(
-                        SOLVER_CONTROL.click_point,
+                        SHARED_SOLVER_CONTROL.click_point,
                         NOMINAL_FRAME_WIDTH,
                         NOMINAL_FRAME_HEIGHT,
                         SOLVER_MOUSE_HOLD,
@@ -2322,7 +2322,7 @@ fn execute_guarded_action(
                 send_status(event_tx, "Click Solver".to_owned());
                 let input_started = Instant::now();
                 if let Err(error) = qmp.click_with_hold(
-                    SOLVER_CONTROL.click_point,
+                    SHARED_SOLVER_CONTROL.click_point,
                     NOMINAL_FRAME_WIDTH,
                     NOMINAL_FRAME_HEIGHT,
                     SOLVER_MOUSE_HOLD,
@@ -2346,8 +2346,8 @@ fn execute_guarded_action(
                     event_tx,
                     format!(
                         "No HALO remained after a fresh retry; Solver recovery click {solver_recovery_clicks} was sent at guest pixel ({}, {}) with a {} ms hold. Waiting {} ms before repeating the all-row HALO and card-presence checks.",
-                        SOLVER_CONTROL.click_point.x,
-                        SOLVER_CONTROL.click_point.y,
+                        SHARED_SOLVER_CONTROL.click_point.x,
+                        SHARED_SOLVER_CONTROL.click_point.y,
                         SOLVER_MOUSE_HOLD.as_millis(),
                         POST_GAME_STAGE_DELAY.as_millis(),
                     ),
@@ -2735,7 +2735,7 @@ fn step_failed_before_input(event_tx: &WorkerEventSink, reason: String) {
     send_state(event_tx, WorkerState::Error);
     send_log(
         event_tx,
-        format!("STEP 8 failed closed before input: {reason}"),
+        format!("Guarded run failed closed before input: {reason}"),
     );
 }
 

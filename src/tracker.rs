@@ -550,7 +550,7 @@ fn tableau_candidate(
     regions: CardRegionPixels,
     anchor: PixelPoint,
 ) -> Result<GuidedAction, TrackerError> {
-    // The STEP 4 offset is retained as an independent calibration check. The
+    // The calibrated halo-to-centre offset is an independent geometry check. The
     // emitted point is the canonical per-slot centre, so a shifted or
     // malformed halo fails closed instead of moving the proposed click away
     // from the known card centre.

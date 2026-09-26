@@ -28,8 +28,9 @@ pub struct CapturedFrame {
     pub stride: usize,
     pub format: PixelFormat,
     pub pixels: Vec<u8>,
-    /// Portal cursor metadata when available. This is the host cursor relative
-    /// to the selected stream, not the Windows guest cursor moved through QMP.
+    /// Optional host cursor metadata for frame sources that supply it.
+    /// QMP PNG capture sets this to `None`; guest cursor pixels, when present,
+    /// remain part of the image and are not separate cursor metadata.
     pub cursor: Option<PixelPoint>,
 }
 
@@ -83,10 +84,10 @@ pub fn read_png_frame(path: &Path) -> Result<CapturedFrame, CaptureError> {
     decode_png(&fs::read(path)?)
 }
 
-/// Boundary for the future XDG Desktop Portal/PipeWire implementation.
+/// Reserved abstraction for an alternative frame source; currently unused.
 ///
-/// The initial milestone deliberately keeps capture behind an interface so UI,
-/// detection and QMP work can be tested independently.
+/// The current worker calls QMP `screendump`, reads a temporary PNG and uses
+/// `decode_png` directly. No Portal/PipeWire or file-free backend is implemented.
 pub trait FrameSource: Send {
     type Error: std::error::Error + Send + Sync + 'static;
 
