@@ -11,8 +11,8 @@ use crate::{
 
 /// User-selectable game identity.
 ///
-/// TriPeaks is executable. Pyramid is exposed only for read-only calibration
-/// until its geometry and transition evidence have been approved.
+/// Each mode supplies its own target detector and effect evidence while the
+/// worker owns shared input delivery and the verified transition sequence.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum GameMode {
     #[default]
@@ -33,13 +33,13 @@ impl GameMode {
     pub const fn profile(self) -> &'static GameProfile {
         match self {
             Self::TriPeaks => &crate::tripeaks::PROFILE,
-            Self::Pyramid => &crate::pyramid::CALIBRATION_PROFILE,
+            Self::Pyramid => &crate::pyramid::PROFILE,
         }
     }
 
     /// Whether this mode has enough approved evidence to send guest input.
     pub const fn input_authorised(self) -> bool {
-        matches!(self, Self::TriPeaks)
+        matches!(self, Self::TriPeaks | Self::Pyramid)
     }
 
     pub const fn calibration_only(self) -> bool {
@@ -109,12 +109,23 @@ pub struct TableauTarget {
 pub enum ActionTarget {
     Bottom { index: u8, label: &'static str },
     Tableau(TableauTarget),
+    Pyramid(crate::pyramid::PyramidTargetKind),
+}
+
+impl ActionTarget {
+    pub const fn mode(self) -> GameMode {
+        match self {
+            Self::Bottom { .. } | Self::Tableau(_) => GameMode::TriPeaks,
+            Self::Pyramid(_) => GameMode::Pyramid,
+        }
+    }
 }
 
 impl fmt::Display for ActionTarget {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Bottom { label, .. } => formatter.write_str(label),
+            Self::Pyramid(kind) => write!(formatter, "Pyramid {kind}"),
             Self::Tableau(target) => write!(
                 formatter,
                 "tableau row {}, column {}",
@@ -135,14 +146,15 @@ pub enum InputOperation {
 pub enum AnimationClass {
     Draw,
     Tableau,
+    Fixed(Duration),
 }
 
 /// Whether seeing the same target after a verified effect is valid.
 ///
 /// Consecutive stock/draw recommendations are normal. A tableau card that is
 /// still highlighted after clicking it is not accepted by the TriPeaks
-/// profile. Pyramid bottom targets can later use `Allowed` without weakening
-/// tableau verification.
+/// profile. Pyramid lower-panel targets use `Allowed` with independent pile
+/// effect verification; its tableau requires positive removal evidence.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RepeatTargetPolicy {
     Allowed,
@@ -189,6 +201,7 @@ impl GuidedAction {
         match self.specification.animation_class {
             AnimationClass::Draw => delays.draw,
             AnimationClass::Tableau => delays.tableau,
+            AnimationClass::Fixed(delay) => delay,
         }
     }
 
@@ -245,6 +258,7 @@ pub struct GameProfile {
     pub target_selection: TargetSelectionPolicy,
     pub tableau_cards: &'static [CardRegionPixels],
     pub tableau_rows: &'static [TableauRowScanProfile],
+    pub tableau_row_count: u8,
     pub initial_active_rows: u8,
     pub tableau_click_offset: PixelPoint,
     pub minimum_tableau_changed_pixels: usize,
@@ -252,11 +266,15 @@ pub struct GameProfile {
 }
 
 impl GameProfile {
+    pub const fn row_count(self) -> u8 {
+        self.tableau_row_count
+    }
+
     pub const fn valid_row_bits(self) -> u8 {
-        if self.tableau_rows.len() >= u8::BITS as usize {
+        if self.row_count() >= u8::BITS as u8 {
             u8::MAX
         } else {
-            (1_u8 << self.tableau_rows.len()) - 1
+            (1_u8 << self.row_count()) - 1
         }
     }
 
@@ -317,7 +335,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn tripeaks_remains_the_default_and_only_executable_mode() {
+    fn tripeaks_remains_the_default_with_two_executable_modes() {
         let mode = GameMode::default();
         let profile = mode.profile();
 
@@ -325,8 +343,8 @@ mod tests {
         assert_eq!(GameMode::AVAILABLE, [GameMode::TriPeaks, GameMode::Pyramid]);
         assert!(GameMode::TriPeaks.input_authorised());
         assert!(!GameMode::TriPeaks.calibration_only());
-        assert!(!GameMode::Pyramid.input_authorised());
-        assert!(GameMode::Pyramid.calibration_only());
+        assert!(GameMode::Pyramid.input_authorised());
+        assert!(!GameMode::Pyramid.calibration_only());
         assert_eq!(profile.mode, mode);
         assert_eq!(profile.label, "TriPeaks");
         assert_eq!(profile.valid_row_bits(), 0b1111);
@@ -334,17 +352,23 @@ mod tests {
     }
 
     #[test]
-    fn pyramid_profile_cannot_supply_an_action_before_calibration() {
+    fn pyramid_uses_its_own_detector_and_the_shared_progress_calibration() {
         let profile = GameMode::Pyramid.profile();
 
         assert_eq!(profile.mode, GameMode::Pyramid);
         assert!(profile.bottom_targets.is_empty());
         assert!(profile.tableau_cards.is_empty());
         assert!(profile.tableau_rows.is_empty());
-        assert_eq!(profile.gameplay_scene, None);
-        assert_eq!(profile.game_progress, None);
-        assert_eq!(profile.initial_active_rows, 0);
-        assert_eq!(profile.valid_row_bits(), 0);
+        assert_eq!(
+            profile.game_progress,
+            GameMode::TriPeaks.profile().game_progress
+        );
+        assert_eq!(profile.valid_row_bits(), 0b111_1111);
+        assert_eq!(profile.row_count(), 7);
+        assert_eq!(
+            ActionTarget::Pyramid(crate::pyramid::PyramidTargetKind::Move).mode(),
+            GameMode::Pyramid
+        );
     }
 
     #[test]

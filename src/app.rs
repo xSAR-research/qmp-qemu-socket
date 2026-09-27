@@ -26,15 +26,15 @@ use crate::parameters::{
     ACTION_CHANGE_CHANNEL_THRESHOLD, ACTION_CURSOR_EXCLUSION_HALF_SIZE,
     BOARD_REDEAL_SETTLE_DELAY_MS, CHALLENGE_COMPLETE_CONTINUE_CONTROL, DEFAULT_MULTI_STEP_ACTIONS,
     DRAW_ANIMATION_SETTLE_DELAY_MS, GOLD_CHANNEL_TOLERANCE, GOLD_RGB_CANDIDATES, KEY_HOLD,
-    LEVEL_UP_APPEAR_DELAY, MAX_LOG_LINES,
-    MAXIMUM_ANIMATION_SETTLE_DELAY_MS, MIN_PREVIEW_VIEWPORT_HEIGHT_POINTS,
-    MINIMUM_ANIMATION_SETTLE_DELAY_MS, MINIMUM_DRAW_CHANGED_PIXELS, MINIMUM_TABLEAU_CHANGED_PIXELS,
-    MOUSE_HOLD, MULTI_STEP_INPUT_ENABLED, NO_HIGHLIGHT_REOBSERVE_DELAY, NOMINAL_FRAME_HEIGHT,
+    LEVEL_UP_APPEAR_DELAY, MAX_LOG_LINES, MAXIMUM_ANIMATION_SETTLE_DELAY_MS,
+    MIN_PREVIEW_VIEWPORT_HEIGHT_POINTS, MINIMUM_ANIMATION_SETTLE_DELAY_MS,
+    MINIMUM_DRAW_CHANGED_PIXELS, MINIMUM_TABLEAU_CHANGED_PIXELS, MOUSE_HOLD,
+    MULTI_STEP_INPUT_ENABLED, NO_HIGHLIGHT_REOBSERVE_DELAY, NOMINAL_FRAME_HEIGHT,
     NOMINAL_FRAME_WIDTH, OUTPUT_PANEL_HEIGHT, POINTER_SETTLE_DELAY, POST_GAME_MAX_CLICK_ATTEMPTS,
     POST_GAME_MAX_OBSERVATION_ROUNDS, POST_GAME_STAGE_DELAY, POST_GAME_TARGETS,
     PREVIEW_FOOTER_RESERVE_POINTS, PREVIEW_SCROLLBAR_ALLOWANCE_POINTS, RELEASE_LABEL,
     SCORE_SKIP_MAX_CLICK_ATTEMPTS, SESSION_LOG_FILE_PREFIX, SESSION_LOG_FILE_SUFFIX,
-    SESSION_LOG_MODE, SESSION_LOG_NAME_ATTEMPTS, SNAPSHOT_LABEL_MAX_CHARS, SHARED_TOOLBAR_CONTROLS,
+    SESSION_LOG_MODE, SESSION_LOG_NAME_ATTEMPTS, SHARED_TOOLBAR_CONTROLS, SNAPSHOT_LABEL_MAX_CHARS,
     STEP_ONCE_ACTIONS, STEP_ONCE_INPUT_ENABLED, TABLEAU_ANIMATION_SETTLE_DELAY_MS,
     UNBOUNDED_MULTI_STEP_ACTIONS, VISIBLE_LOG_ROLLOVER_GAMES,
 };
@@ -352,9 +352,8 @@ impl QmpQemuSocketApp {
                                 self.snapshot_error = None;
                             }
                             Err(error) => {
-                                self.snapshot_error = Some(format!(
-                                    "Could not preview the captured PNG: {error}"
-                                ));
+                                self.snapshot_error =
+                                    Some(format!("Could not preview the captured PNG: {error}"));
                             }
                         }
                     }
@@ -552,9 +551,9 @@ impl QmpQemuSocketApp {
             self.game_mode
         ));
         let (socket_path, mode) = self.current_preview_context();
-        if let Err(error) = self
-            .worker
-            .prepare_snapshot(socket_path, mode, self.snapshot_request_id)
+        if let Err(error) =
+            self.worker
+                .prepare_snapshot(socket_path, mode, self.snapshot_request_id)
         {
             self.worker_state = WorkerState::Error;
             self.snapshot_capture_pending = false;
@@ -640,8 +639,9 @@ impl QmpQemuSocketApp {
             ));
             return;
         }
-        let Some(approved_prediction) = self.prediction.filter(|_| self.has_current_preview())
-        else {
+        let Some(approved_prediction) = self.prediction.filter(|prediction| {
+            self.has_current_preview() && prediction_is_actionable(self.game_mode, *prediction)
+        }) else {
             self.worker_state = WorkerState::Error;
             self.push_log(format!(
                 "{request_name} refused: no approved preview target is available."
@@ -910,13 +910,7 @@ impl QmpQemuSocketApp {
                     for (label, control) in SHARED_TOOLBAR_CONTROLS {
                         let colour = Color32::from_rgb(120, 200, 255);
                         paint_target(&painter, canvas, control.bounds, colour, label);
-                        paint_labeled_crosshair(
-                            &painter,
-                            canvas,
-                            control.click_point,
-                            colour,
-                            "",
-                        );
+                        paint_labeled_crosshair(&painter, canvas, control.click_point, colour, "");
                     }
                 }
                 if let Some(prediction) = self.prediction {
@@ -1079,30 +1073,34 @@ impl QmpQemuSocketApp {
                     && self.active_run.is_none()
                     && !self.show_snapshot_dialog;
                 ui.add_enabled_ui(execution_enabled, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.label("Draw-class action settle");
-                        ui.add(
-                            egui::DragValue::new(&mut self.draw_animation_settle_ms)
-                                .range(
-                                    MINIMUM_ANIMATION_SETTLE_DELAY_MS
-                                        ..=MAXIMUM_ANIMATION_SETTLE_DELAY_MS,
-                                )
-                                .speed(10.0)
-                                .suffix(" ms"),
-                        );
-                    });
-                    ui.horizontal(|ui| {
-                        ui.label("Tableau move settle");
-                        ui.add(
-                            egui::DragValue::new(&mut self.tableau_animation_settle_ms)
-                                .range(
-                                    MINIMUM_ANIMATION_SETTLE_DELAY_MS
-                                        ..=MAXIMUM_ANIMATION_SETTLE_DELAY_MS,
-                                )
-                                .speed(10.0)
-                                .suffix(" ms"),
-                        );
-                    });
+                    if self.game_mode == GameMode::Pyramid {
+                        ui.label("Pyramid action settle: 500 ms");
+                    } else {
+                        ui.horizontal(|ui| {
+                            ui.label("Draw-class action settle");
+                            ui.add(
+                                egui::DragValue::new(&mut self.draw_animation_settle_ms)
+                                    .range(
+                                        MINIMUM_ANIMATION_SETTLE_DELAY_MS
+                                            ..=MAXIMUM_ANIMATION_SETTLE_DELAY_MS,
+                                    )
+                                    .speed(10.0)
+                                    .suffix(" ms"),
+                            );
+                        });
+                        ui.horizontal(|ui| {
+                            ui.label("Tableau move settle");
+                            ui.add(
+                                egui::DragValue::new(&mut self.tableau_animation_settle_ms)
+                                    .range(
+                                        MINIMUM_ANIMATION_SETTLE_DELAY_MS
+                                            ..=MAXIMUM_ANIMATION_SETTLE_DELAY_MS,
+                                    )
+                                    .speed(10.0)
+                                    .suffix(" ms"),
+                            );
+                        });
+                    }
                     ui.horizontal(|ui| {
                         ui.label("Board redeal settle");
                         ui.add(
@@ -1136,9 +1134,15 @@ impl QmpQemuSocketApp {
                         self.multi_step_actions = DEFAULT_MULTI_STEP_ACTIONS;
                     }
                 });
-                ui.small(format!(
-                    "Execution controls are session-only; defaults: draw {DRAW_ANIMATION_SETTLE_DELAY_MS} ms, tableau {TABLEAU_ANIMATION_SETTLE_DELAY_MS} ms, board redeal {BOARD_REDEAL_SETTLE_DELAY_MS} ms, Multi-Step {DEFAULT_MULTI_STEP_ACTIONS} (continuous)."
-                ));
+                if self.game_mode == GameMode::Pyramid {
+                    ui.small(format!(
+                        "Pyramid uses 500 ms settling per action. Session defaults: board redeal {BOARD_REDEAL_SETTLE_DELAY_MS} ms, Multi-Step {DEFAULT_MULTI_STEP_ACTIONS} (continuous)."
+                    ));
+                } else {
+                    ui.small(format!(
+                        "Execution controls are session-only; defaults: draw {DRAW_ANIMATION_SETTLE_DELAY_MS} ms, tableau {TABLEAU_ANIMATION_SETTLE_DELAY_MS} ms, board redeal {BOARD_REDEAL_SETTLE_DELAY_MS} ms, Multi-Step {DEFAULT_MULTI_STEP_ACTIONS} (continuous)."
+                    ));
+                }
                 if let Some(log) = self.session_log.as_ref() {
                     ui.small(format!("Complete output: {}", log.path.display()));
                 }
@@ -1158,26 +1162,28 @@ impl QmpQemuSocketApp {
                         format_rect(target.bounds)
                     ));
                 }
-                if self.game_mode.calibration_only() {
+                if self.game_mode == GameMode::Pyramid {
                     let pyramid_cards = PYRAMID_TARGETS
                         .iter()
                         .filter(|target| target.kind.is_card())
                         .count();
-                    ui.monospace("guest-input-authorised = false");
+                    ui.monospace("guest-input-authorised = true; one guarded click per action");
                     ui.monospace("target-priority = Move, Left, Right, Card");
                     ui.monospace(format!(
                         "target-slots = {} total, {pyramid_cards} cards (expected {PYRAMID_TABLEAU_CARD_COUNT})",
                         PYRAMID_TARGETS.len(),
                     ));
-                    ui.monospace("halo-probes = not validated; detection disabled");
-                    ui.monospace("click-points = screenshot geometry; input disabled");
+                    ui.monospace("halo-probes = fixed 2x2; first eligible target by priority");
+                    ui.monospace("card-state = suppress only a clicked card after verified removal");
+                    ui.monospace("Move / Left / Right = repeatable after verified effect");
                     for target in &PYRAMID_TARGETS {
                         ui.monospace(format!(
-                            "{}: bounds {}, hit x={}, y={}",
+                            "{}: bounds {}, hit x={}, y={}, HALO {}",
                             target.label,
                             format_rect(target.bounds),
                             target.click_point.x,
                             target.click_point.y,
+                            format_rect(crate::pyramid::halo_probe(*target)),
                         ));
                     }
                 } else {
@@ -1196,14 +1202,22 @@ impl QmpQemuSocketApp {
                     ));
                 }
                 ui.small("Undo All confirmation requires separate calibration; no confirmation click is automated.");
-                ui.monospace(format!("gold-colours = {GOLD_RGB_CANDIDATES:?}"));
-                ui.monospace(format!(
-                    "gold-channel-tolerance = ±{GOLD_CHANNEL_TOLERANCE}"
-                ));
-                ui.monospace(format!(
-                    "no-highlight-reobserve = until target or STOP, {} ms apart",
-                    NO_HIGHLIGHT_REOBSERVE_DELAY.as_millis()
-                ));
+                if self.game_mode == GameMode::Pyramid {
+                    ui.monospace("HALO requires all four pixels to match the Pyramid gold predicate");
+                } else {
+                    ui.monospace(format!("gold-colours = {GOLD_RGB_CANDIDATES:?}"));
+                    ui.monospace(format!(
+                        "gold-channel-tolerance = ±{GOLD_CHANNEL_TOLERANCE}"
+                    ));
+                }
+                if self.game_mode == GameMode::Pyramid {
+                    ui.monospace("no-highlight-recovery = bounded; never implies Move or completion");
+                } else {
+                    ui.monospace(format!(
+                        "no-highlight-reobserve = until target or STOP, {} ms apart",
+                        NO_HIGHLIGHT_REOBSERVE_DELAY.as_millis()
+                    ));
+                }
                 ui.monospace(format!(
                     "board-series = {} boards, redeal wait {} ms",
                     profile.boards_per_game,
@@ -1258,9 +1272,13 @@ impl QmpQemuSocketApp {
                         self.multi_step_actions.to_string()
                     }
                 ));
-                ui.monospace(format!(
-                    "action-change = channel >= {ACTION_CHANGE_CHANNEL_THRESHOLD}, draw pixels >= {MINIMUM_DRAW_CHANGED_PIXELS}, tableau pixels >= {MINIMUM_TABLEAU_CHANGED_PIXELS}"
-                ));
+                if self.game_mode == GameMode::Pyramid {
+                    ui.monospace("action-verification = card face removed or material lower-pile change");
+                } else {
+                    ui.monospace(format!(
+                        "action-change = channel >= {ACTION_CHANGE_CHANNEL_THRESHOLD}, draw pixels >= {MINIMUM_DRAW_CHANGED_PIXELS}, tableau pixels >= {MINIMUM_TABLEAU_CHANGED_PIXELS}"
+                    ));
+                }
                 ui.monospace(format!(
                     "cursor-exclusion-half-size = {ACTION_CURSOR_EXCLUSION_HALF_SIZE} px"
                 ));
@@ -1657,6 +1675,13 @@ fn format_prediction(prediction: PredictedAction) -> String {
                 "Prediction refused: tableau row {}, column {} has an invalid key-delivery specification; input sent=0.",
                 position.row, position.column
             ),
+            (ActionTarget::Pyramid(target), InputOperation::Click(click_point)) => format!(
+                "Prediction: click {target} at ({}, {}); 2x2 HALO probe=({}, {}); input sent=0.",
+                click_point.x, click_point.y, action.anchor.x, action.anchor.y
+            ),
+            (ActionTarget::Pyramid(target), InputOperation::PressDrawKey) => format!(
+                "Prediction refused: {target} requires mouse delivery; input sent=0."
+            ),
         },
         PredictedAction::Ambiguous { highlight_count } => format!(
             "Prediction refused: {highlight_count} calibrated highlights were found; input sent=0."
@@ -1665,7 +1690,16 @@ fn format_prediction(prediction: PredictedAction) -> String {
 }
 
 fn prediction_is_actionable(mode: GameMode, prediction: PredictedAction) -> bool {
-    mode.input_authorised() && matches!(prediction, PredictedAction::Action(_))
+    let PredictedAction::Action(action) = prediction else {
+        return false;
+    };
+    mode.input_authorised()
+        && action.target.mode() == mode
+        && match (action.target, action.operation()) {
+            (ActionTarget::Bottom { .. }, _) => true,
+            (_, InputOperation::Click(_)) => true,
+            (_, InputOperation::PressDrawKey) => false,
+        }
 }
 
 fn concise_prediction(prediction: PredictedAction) -> String {
@@ -1690,6 +1724,12 @@ fn concise_prediction(prediction: PredictedAction) -> String {
                     position.row, position.column
                 )
             }
+            (ActionTarget::Pyramid(target), InputOperation::Click(point)) => {
+                format!("{target} at ({}, {})", point.x, point.y)
+            }
+            (ActionTarget::Pyramid(target), InputOperation::PressDrawKey) => {
+                format!("invalid {target} key action")
+            }
         },
         PredictedAction::Ambiguous { highlight_count } => {
             format!("ambiguous ({highlight_count} highlights)")
@@ -1713,6 +1753,12 @@ fn display_action(prediction: PredictedAction) -> String {
             }
             (ActionTarget::Tableau(position), InputOperation::PressDrawKey) => {
                 format!("Invalid R{}C{} key action", position.row, position.column)
+            }
+            (ActionTarget::Pyramid(target), InputOperation::Click(_)) => {
+                format!("{target} click")
+            }
+            (ActionTarget::Pyramid(target), InputOperation::PressDrawKey) => {
+                format!("Invalid {target} key action")
             }
         },
         PredictedAction::Ambiguous { highlight_count } => {
@@ -1828,6 +1874,7 @@ fn paint_prediction(painter: &egui::Painter, canvas: Rect, prediction: Predicted
                     ActionTarget::Tableau(position) => {
                         format!("proposed r{}c{}", position.row, position.column)
                     }
+                    ActionTarget::Pyramid(target) => format!("proposed {target}"),
                 };
                 paint_labeled_crosshair(painter, canvas, click_point, proposal, &label);
             }
@@ -2032,6 +2079,18 @@ mod tests {
         assert!(prediction_is_actionable(GameMode::TriPeaks, draw));
         assert!(prediction_is_actionable(GameMode::TriPeaks, tableau));
         assert!(!prediction_is_actionable(GameMode::Pyramid, draw));
+        assert!(!prediction_is_actionable(GameMode::Pyramid, tableau));
+        let pyramid_action =
+            crate::pyramid::action_for_kind(crate::pyramid::PyramidTargetKind::Move).unwrap();
+        let pyramid = PredictedAction::Action(pyramid_action);
+        assert!(prediction_is_actionable(GameMode::Pyramid, pyramid));
+        assert!(!prediction_is_actionable(GameMode::TriPeaks, pyramid));
+        let mut invalid_key_action = pyramid_action;
+        invalid_key_action.specification.operation = InputOperation::PressDrawKey;
+        assert!(!prediction_is_actionable(
+            GameMode::Pyramid,
+            PredictedAction::Action(invalid_key_action),
+        ));
     }
 
     #[test]

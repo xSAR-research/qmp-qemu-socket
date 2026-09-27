@@ -17,6 +17,7 @@ use crate::{
     detector::{detect_game_progress_for_profile, has_dialog_gold_button, pixel_rgb},
     game::{ActionTarget, GameMode, GameProgress, InputOperation},
     geometry::{PixelRect, pixel_point_to_qmp, pixel_rect_to_qmp},
+    pyramid::{self, PyramidTargetKind},
     qmp::QmpClient,
     stepper::{StepPlan, plan_step, verify_post_action},
     tracker::{
@@ -31,10 +32,13 @@ use crate::parameters::{
     NO_HIGHLIGHT_REOBSERVE_DELAY, NOMINAL_FRAME_HEIGHT, NOMINAL_FRAME_WIDTH,
     POST_GAME_MAX_CLICK_ATTEMPTS, POST_GAME_MAX_OBSERVATION_ROUNDS, POST_GAME_MOUSE_HOLD,
     POST_GAME_STAGE_DELAY, POST_GAME_TARGETS, SCORE_SKIP_CONTROL, SCORE_SKIP_MAX_CLICK_ATTEMPTS,
-    SNAPSHOT_MAX_PNG_BYTES, SHARED_SOLVER_CONTROL, SOLVER_MOUSE_HOLD, STEP_ONCE_ACTIONS,
+    SHARED_SOLVER_CONTROL, SNAPSHOT_MAX_PNG_BYTES, SOLVER_MOUSE_HOLD, STEP_ONCE_ACTIONS,
     STEP_ONCE_INPUT_ENABLED,
 };
 use crate::parameters::{PostGameControlVariant, PostGameStage, PostGameTarget, StepRunSettings};
+
+const PYRAMID_OBSERVATION_LIMIT: usize = 6;
+const PYRAMID_SETTLE_DELAY: Duration = Duration::from_millis(500);
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum WorkerState {
@@ -605,7 +609,10 @@ fn run_prepare_snapshot(
             });
             send_state(event_tx, WorkerState::Error);
             send_status(event_tx, "Snapshot capture failed".to_owned());
-            send_log(event_tx, format!("Read-only snapshot capture failed: {error}"));
+            send_log(
+                event_tx,
+                format!("Read-only snapshot capture failed: {error}"),
+            );
         }
     }
 }
@@ -758,6 +765,7 @@ fn run_execute_steps(
                     match run_post_game_restart(
                         &mut qmp,
                         &socket_path,
+                        (scan_state.mode() == GameMode::Pyramid).then_some(&next_observation),
                         scan_state,
                         completed_boards,
                         event_tx,
@@ -865,6 +873,7 @@ fn reset_completed_series_for_new_run(
 fn run_post_game_restart(
     qmp: &mut QmpClient,
     socket_path: &Path,
+    initial_observation: Option<&FrameObservation>,
     scan_state: &mut TableauScanState,
     completed_boards: &mut usize,
     event_tx: &WorkerEventSink,
@@ -879,58 +888,67 @@ fn run_post_game_restart(
     let mut intentional_wait = Duration::ZERO;
     let mut input_wall = Duration::ZERO;
     let boards_per_game = scan_state.mode().profile().boards_per_game;
+    let known_terminal_stage = known_post_game_stage(initial_observation)?;
 
     *scan_state = TableauScanState::for_mode(scan_state.mode());
     send_state(event_tx, WorkerState::Verifying);
-    send_status(
-        event_tx,
-        format!(
-            "Detected end of game — waiting {} ms",
-            POST_GAME_STAGE_DELAY.as_millis()
-        ),
-    );
-    send_log(
-        event_tx,
-        format!(
-            "The {boards_per_game}-board game is complete; waiting {} ms before clicking the centre score panel to skip score counting.",
-            POST_GAME_STAGE_DELAY.as_millis(),
-        ),
-    );
-    intentional_wait += wait_or_stop(
-        POST_GAME_STAGE_DELAY,
-        cancel_requested,
-        "STOP was requested before the score-skip click.",
-    )?;
-
     let mut score_skip_click_attempts = 0usize;
-    send_state(event_tx, WorkerState::Acting);
-    send_status(event_tx, "Skip score counting".to_owned());
-    input_wall += send_score_skip_click(qmp, cancel_requested, score_skip_click_attempts)?;
-    score_skip_click_attempts = score_skip_click_attempts.saturating_add(1);
-    send_log(
-        event_tx,
-        format!(
-            "Score-counting panel click attempt {score_skip_click_attempts}/{SCORE_SKIP_MAX_CLICK_ATTEMPTS} sent at guest pixel ({}, {}) with a {} ms hold; waiting {} ms before classifying the Level Up screen.",
-            SCORE_SKIP_CONTROL.click_point.x,
-            SCORE_SKIP_CONTROL.click_point.y,
-            POST_GAME_MOUSE_HOLD.as_millis(),
-            LEVEL_UP_APPEAR_DELAY.as_millis(),
-        ),
-    );
-    send_state(event_tx, WorkerState::Verifying);
-    send_status(
-        event_tx,
-        format!("Waiting {} ms for Level Up", LEVEL_UP_APPEAR_DELAY.as_millis()),
-    );
-    intentional_wait += wait_or_stop(
-        LEVEL_UP_APPEAR_DELAY,
-        cancel_requested,
-        "STOP was requested during the post-score-skip wait.",
-    )?;
+    if known_terminal_stage.is_none() {
+        send_status(
+            event_tx,
+            format!(
+                "Detected end of game — waiting {} ms",
+                POST_GAME_STAGE_DELAY.as_millis()
+            ),
+        );
+        send_log(
+            event_tx,
+            format!(
+                "The {boards_per_game}-board game is complete; waiting {} ms before clicking the centre score panel to skip score counting.",
+                POST_GAME_STAGE_DELAY.as_millis(),
+            ),
+        );
+        intentional_wait += wait_or_stop(
+            POST_GAME_STAGE_DELAY,
+            cancel_requested,
+            "STOP was requested before the score-skip click.",
+        )?;
+
+        send_state(event_tx, WorkerState::Acting);
+        send_status(event_tx, "Skip score counting".to_owned());
+        input_wall += send_score_skip_click(qmp, cancel_requested, score_skip_click_attempts)?;
+        score_skip_click_attempts = score_skip_click_attempts.saturating_add(1);
+        send_log(
+            event_tx,
+            format!(
+                "Score-counting panel click attempt {score_skip_click_attempts}/{SCORE_SKIP_MAX_CLICK_ATTEMPTS} sent at guest pixel ({}, {}) with a {} ms hold; waiting {} ms before classifying the Level Up screen.",
+                SCORE_SKIP_CONTROL.click_point.x,
+                SCORE_SKIP_CONTROL.click_point.y,
+                POST_GAME_MOUSE_HOLD.as_millis(),
+                LEVEL_UP_APPEAR_DELAY.as_millis(),
+            ),
+        );
+        send_state(event_tx, WorkerState::Verifying);
+        send_status(
+            event_tx,
+            format!(
+                "Waiting {} ms for Level Up",
+                LEVEL_UP_APPEAR_DELAY.as_millis()
+            ),
+        );
+        intentional_wait += wait_or_stop(
+            LEVEL_UP_APPEAR_DELAY,
+            cancel_requested,
+            "STOP was requested during the post-score-skip wait.",
+        )?;
+    } else {
+        send_log(event_tx,
+            "A verified terminal dialog is already visible; entering the shared post-game controller at that stage without a score-skip click.".to_owned());
+    }
 
     let mut click_attempts = [0usize; POST_GAME_TARGETS.len()];
     let mut recovery_solver_click_attempts = 0usize;
-    let mut target_index = 0usize;
+    let mut target_index = known_terminal_stage.unwrap_or(0);
     while let Some(target) = POST_GAME_TARGETS.get(target_index).copied() {
         let mut observation_round = 1usize;
         let matched_variant = loop {
@@ -1062,12 +1080,7 @@ fn run_post_game_restart(
                 send_state(event_tx, WorkerState::Acting);
                 send_status(event_tx, "Click Solver".to_owned());
                 let input_started = Instant::now();
-                qmp.click_with_hold(
-                    SHARED_SOLVER_CONTROL.click_point,
-                    NOMINAL_FRAME_WIDTH,
-                    NOMINAL_FRAME_HEIGHT,
-                    SOLVER_MOUSE_HOLD,
-                )
+                click_shared_solver(qmp, cancel_requested)
                 .map_err(|error| {
                     format!(
                         "Post-game recovery Solver click is uncertain: {error}. No automatic input retry followed the uncertain QMP result."
@@ -1420,6 +1433,19 @@ fn level_up_overrides_board_progress(
     Ok(resolve_post_game_target(observation, POST_GAME_TARGETS[0])?.is_some())
 }
 
+fn known_post_game_stage(observation: Option<&FrameObservation>) -> Result<Option<usize>, String> {
+    let Some(observation) = observation else {
+        return Ok(None);
+    };
+    if resolve_post_game_target(observation, POST_GAME_TARGETS[0])?.is_some() {
+        return Ok(Some(0));
+    }
+    if new_game_visible_while_awaiting_level_up(observation)? {
+        return Ok(Some(1));
+    }
+    Ok(None)
+}
+
 fn new_game_visible_while_awaiting_level_up(
     observation: &FrameObservation,
 ) -> Result<bool, String> {
@@ -1731,14 +1757,33 @@ fn execute_guarded_action(
                     Err(error) => {
                         reconcile_observation_series(scan_state, &candidate_series.observations);
                         profile.validation_effect += validation_started.elapsed();
+                        if scan_state.mode() == GameMode::Pyramid
+                            && pre_action_round >= PYRAMID_OBSERVATION_LIMIT
+                        {
+                            return Err(action_failure(
+                                action_started,
+                                profile,
+                                WorkerState::Uncertain,
+                                format!(
+                                    "Pyramid initial planning stopped after {pre_action_round} observations: {error}. Activate Solver and capture a fresh preview; input sent: 0."
+                                ),
+                                candidate_series.observations.pop(),
+                                FailureFramePhase::PreAction,
+                            ));
+                        }
+                        let retry_delay = if scan_state.mode() == GameMode::Pyramid {
+                            PYRAMID_SETTLE_DELAY
+                        } else {
+                            NO_HIGHLIGHT_REOBSERVE_DELAY
+                        };
                         send_log(
                             event_tx,
                             format!(
                                 "WAITING: initial planning observation round {pre_action_round} has no stable target ({error}); waiting {} ms, then repeating capture/detection only. Press STOP to end the loop; input sent: 0.",
-                                NO_HIGHLIGHT_REOBSERVE_DELAY.as_millis(),
+                                retry_delay.as_millis(),
                             ),
                         );
-                        match cancellable_wait(NO_HIGHLIGHT_REOBSERVE_DELAY, cancel_requested) {
+                        match cancellable_wait(retry_delay, cancel_requested) {
                             Ok(waited) => profile.intentional_wait += waited,
                             Err(waited) => {
                                 profile.intentional_wait += waited;
@@ -1826,6 +1871,16 @@ fn execute_guarded_action(
         }
     };
 
+    if plan.input().action().target.mode() != scan_state.mode() {
+        return Err(action_failure(
+            action_started,
+            profile,
+            WorkerState::Uncertain,
+            "The planned target belongs to a different game mode; input sent: 0.".to_owned(),
+            before_series.observations.pop(),
+            FailureFramePhase::PreAction,
+        ));
+    }
     let effect_bounds = plan.input().effect_bounds();
     let exclusion_bounds = plan.input().effect_exclusion_bounds();
     let required_changed_pixels = plan.input().minimum_changed_pixels();
@@ -1944,6 +1999,22 @@ fn execute_guarded_action(
 
     send_state(event_tx, WorkerState::Verifying);
     send_status(event_tx, "Verifying move".to_owned());
+    if let ActionTarget::Pyramid(kind) = plan.input().action().target {
+        return verify_pyramid_action(
+            qmp,
+            socket_path,
+            before_series,
+            plan,
+            kind,
+            settings,
+            scan_state,
+            completed_boards,
+            event_tx,
+            cancel_requested,
+            action_started,
+            profile,
+        );
+    }
     let mut observation_round = 1usize;
     let mut board_completion_verified = false;
     let mut board_changed_pixels = 0usize;
@@ -2202,12 +2273,7 @@ fn execute_guarded_action(
                     send_state(event_tx, WorkerState::Acting);
                     send_status(event_tx, "Click Solver".to_owned());
                     let input_started = Instant::now();
-                    if let Err(error) = qmp.click_with_hold(
-                        SHARED_SOLVER_CONTROL.click_point,
-                        NOMINAL_FRAME_WIDTH,
-                        NOMINAL_FRAME_HEIGHT,
-                        SOLVER_MOUSE_HOLD,
-                    ) {
+                    if let Err(error) = click_shared_solver(qmp, cancel_requested) {
                         profile.input_wall += input_started.elapsed();
                         return Err(action_failure(
                             action_started,
@@ -2321,12 +2387,7 @@ fn execute_guarded_action(
                 send_state(event_tx, WorkerState::Acting);
                 send_status(event_tx, "Click Solver".to_owned());
                 let input_started = Instant::now();
-                if let Err(error) = qmp.click_with_hold(
-                    SHARED_SOLVER_CONTROL.click_point,
-                    NOMINAL_FRAME_WIDTH,
-                    NOMINAL_FRAME_HEIGHT,
-                    SOLVER_MOUSE_HOLD,
-                ) {
+                if let Err(error) = click_shared_solver(qmp, cancel_requested) {
                     profile.input_wall += input_started.elapsed();
                     return Err(action_failure(
                         action_started,
@@ -2589,6 +2650,332 @@ fn execute_guarded_action(
         completed_boards: *completed_boards,
         profile,
     })
+}
+
+fn verify_pyramid_action(
+    qmp: &mut QmpClient,
+    socket_path: &Path,
+    mut before_series: CaptureSeries,
+    plan: StepPlan,
+    kind: PyramidTargetKind,
+    settings: StepRunSettings,
+    scan_state: &mut TableauScanState,
+    completed_boards: &mut usize,
+    event_tx: &WorkerEventSink,
+    cancel_requested: &AtomicBool,
+    action_started: Instant,
+    mut profile: ActionProfile,
+) -> Result<ActionSuccess, ActionFailure> {
+    // Input planning and delivery are shared. Pyramid supplies only its
+    // semantic effect and board-transition evidence to this bounded verifier.
+    let mut last_observation = None;
+    let mut observation_rounds = 0usize;
+    let mut changed_pixels = 0usize;
+    let mut board_completed = false;
+    let mut series_complete = false;
+    let result = (|| -> Result<PredictedAction, String> {
+        let before = before_series
+            .observations
+            .pop()
+            .ok_or_else(|| "Pyramid verification has no planning frame".to_owned())?;
+        let expected_final_transition = pyramid::final_tableau_action(&before.frame, kind)
+            .map_err(|error| format!("Pyramid final-action analysis failed: {error}"))?;
+        let observation_limit = if expected_final_transition {
+            POST_GAME_MAX_OBSERVATION_ROUNDS
+        } else {
+            PYRAMID_OBSERVATION_LIMIT
+        };
+        let mut effect_verified = false;
+        let mut awaiting_redeal = false;
+        let mut solver_recovery_sent = false;
+        let mut phase_round = 0usize;
+        let boards_per_game = scan_state.mode().profile().boards_per_game;
+
+        loop {
+            phase_round += 1;
+            if phase_round > observation_limit {
+                return Err(format!(
+                    "Pyramid verification stopped after {observation_limit} observations in this phase; effect verified={effect_verified}, awaiting redeal={awaiting_redeal}. No card or Move input was retried. Inspect the attached result frame before another run."
+                ));
+            }
+            observation_rounds += 1;
+            send_log(
+                event_tx,
+                format!(
+                    "Pyramid result observation {observation_rounds} (phase {phase_round}/{observation_limit}); one fresh capture, no replay of the previous card or Move input."
+                ),
+            );
+            let mut series = capture_series(qmp, socket_path, scan_state, cancel_requested)?;
+            profile.capture.add_assign(series.timing);
+            last_observation = series.observations.pop();
+            let observation = last_observation
+                .as_mut()
+                .ok_or_else(|| "Pyramid result capture contained no frame".to_owned())?;
+            let analysis_started = Instant::now();
+
+            if !observation.gameplay_scene {
+                if (board_completed || expected_final_transition)
+                    && (level_up_overrides_board_progress(true, observation)?
+                        || new_game_visible_while_awaiting_level_up(observation)?)
+                {
+                    *completed_boards = boards_per_game;
+                    board_completed = true;
+                    series_complete = true;
+                    profile.validation_effect += analysis_started.elapsed();
+                    send_log(event_tx,
+                        "Pyramid final-tableau action followed by a recognised terminal dialog confirms game completion; the shared post-game controller will resume at the visible stage.".to_owned());
+                    return Ok(PredictedAction::NoHighlight);
+                }
+                profile.validation_effect += analysis_started.elapsed();
+                send_log(event_tx,
+                    "Pyramid result is not a recognised gameplay scene; observing the transition without guest input.".to_owned());
+            } else {
+                if !effect_verified
+                    && expected_final_transition
+                    && pyramid::redeal_after_final_tableau_action(
+                        &before.frame,
+                        &observation.frame,
+                        kind,
+                    )
+                    .map_err(|error| format!("Pyramid redeal analysis failed: {error}"))?
+                {
+                    if observation.game_progress != Some(GameProgress::AnotherBoard) {
+                        return Err("A fresh Pyramid board appeared after the final-tableau action, but the progress bar contradicts redeal; input stopped for inspection".to_owned());
+                    }
+                    *completed_boards = completed_boards
+                        .saturating_add(1)
+                        .min(boards_per_game.saturating_sub(1));
+                    board_completed = true;
+                    effect_verified = true;
+                    *scan_state = TableauScanState::for_mode(GameMode::Pyramid);
+                    refresh_observation_prediction(observation, scan_state)?;
+                    send_board_progress(event_tx, scan_state, *completed_boards);
+                    send_log(event_tx,
+                        "Pyramid automatic redeal verified: the planning frame had only the highlighted apex remaining, and the fresh result has new positive bottom-row cards with AnotherBoard progress. Per-board state reset; no new-board slot was marked consumed.".to_owned());
+                }
+                if !effect_verified {
+                    effect_verified =
+                        pyramid::verify_effect(&before.frame, &observation.frame, kind)
+                            .map_err(|error| format!("Pyramid effect analysis failed: {error}"))?;
+                    if effect_verified {
+                        changed_pixels = materially_changed_pixels(
+                            &before.frame,
+                            &observation.frame,
+                            plan.input().effect_bounds(),
+                            plan.input().effect_exclusion_bounds(),
+                            ACTION_CHANGE_CHANNEL_THRESHOLD,
+                        )?;
+                        // Only the clicked card is retired. An unclicked
+                        // partner and all three lower controls remain eligible.
+                        scan_state.pyramid.mark_removed(kind);
+                        refresh_observation_prediction(observation, scan_state)?;
+                        send_log(
+                            event_tx,
+                            format!(
+                                "Pyramid effect verified for {kind:?}; clicked-card state updated and the same result frame rescanned. Changed effect pixels={changed_pixels}."
+                            ),
+                        );
+                    }
+                }
+
+                if effect_verified {
+                    let board_empty =
+                        pyramid::board_is_empty(&observation.frame).map_err(|error| {
+                            format!("Pyramid board-presence analysis failed: {error}")
+                        })?;
+                    let cards_visible = pyramid::has_visible_tableau_card(&observation.frame)
+                        .map_err(|error| {
+                            format!("Pyramid card-presence analysis failed: {error}")
+                        })?;
+                    if !board_completed && board_empty {
+                        let progress = observation.game_progress.ok_or_else(|| {
+                            "Verified empty Pyramid board has no progress-bar classification"
+                                .to_owned()
+                        })?;
+                        series_complete = progress == GameProgress::GameComplete;
+                        *completed_boards = if series_complete {
+                            boards_per_game
+                        } else {
+                            completed_boards
+                                .saturating_add(1)
+                                .min(boards_per_game.saturating_sub(1))
+                        };
+                        board_completed = true;
+                        send_board_progress(event_tx, scan_state, *completed_boards);
+                        send_log(
+                            event_tx,
+                            format!(
+                                "Pyramid board completion verified by the action effect and positive empty-tableau evidence; shared progress bar={progress:?}."
+                            ),
+                        );
+                        profile.validation_effect += analysis_started.elapsed();
+                        if series_complete {
+                            return Ok(PredictedAction::NoHighlight);
+                        }
+                        awaiting_redeal = true;
+                        phase_round = 0;
+                        solver_recovery_sent = false;
+                        send_status(event_tx, "Waiting for Pyramid redeal".to_owned());
+                        profile.intentional_wait += wait_or_stop(
+                            settings.animation_delays().board_redeal,
+                            cancel_requested,
+                            "STOP was requested during the Pyramid redeal wait; the completed-board input was not retried.",
+                        )?;
+                        continue;
+                    }
+
+                    if awaiting_redeal && cards_visible {
+                        // The preceding board was positively empty. Fresh
+                        // gameplay with cards now proves a new board exists.
+                        *scan_state = TableauScanState::for_mode(GameMode::Pyramid);
+                        refresh_observation_prediction(observation, scan_state)?;
+                        awaiting_redeal = false;
+                        send_log(event_tx,
+                            "Pyramid redeal confirmed by a fresh non-empty gameplay frame; per-board clicked-card state reset.".to_owned());
+                    }
+
+                    if !awaiting_redeal {
+                        if matches!(observation.prediction, PredictedAction::Action(_)) {
+                            let after = if board_completed {
+                                plan_step(observation.prediction).map(|next| next.before())
+                            } else {
+                                verify_post_action(&plan, observation.prediction, true)
+                            }
+                            .map_err(|error| {
+                                format!("Pyramid next-target validation failed: {error}")
+                            })?;
+                            profile.validation_effect += analysis_started.elapsed();
+                            return Ok(after);
+                        }
+                        if !matches!(observation.prediction, PredictedAction::NoHighlight) {
+                            return Err("Pyramid produced an invalid next-target classification; no further input was sent".to_owned());
+                        }
+                        if pyramid_solver_recovery_authorised(
+                            observation.gameplay_scene,
+                            effect_verified,
+                            board_empty,
+                            cards_visible,
+                            phase_round,
+                            solver_recovery_sent,
+                        ) {
+                            profile.validation_effect += analysis_started.elapsed();
+                            let probe_started = Instant::now();
+                            let probe = qmp.probe().map_err(|error| {
+                                format!("Pyramid Solver recovery QMP probe failed: {error}")
+                            })?;
+                            validate_probe(&probe)?;
+                            profile.validation_effect += probe_started.elapsed();
+                            send_state(event_tx, WorkerState::Acting);
+                            send_status(event_tx, "Click Solver".to_owned());
+                            profile.input_wall += click_shared_solver(qmp, cancel_requested)?;
+                            profile.intentional_wait += SOLVER_MOUSE_HOLD;
+                            solver_recovery_sent = true;
+                            send_log(event_tx,
+                                "Pyramid action effect is verified and a non-empty gameplay scene has no halo; one shared Solver activation was sent. No Move, recycle or card input was inferred from the missing halo.".to_owned());
+                            send_state(event_tx, WorkerState::Verifying);
+                            profile.intentional_wait += wait_or_stop(
+                                PYRAMID_SETTLE_DELAY,
+                                cancel_requested,
+                                "STOP was requested after Pyramid Solver activation; input was not retried.",
+                            )?;
+                            continue;
+                        }
+                    }
+                }
+                profile.validation_effect += analysis_started.elapsed();
+            }
+
+            profile.intentional_wait += wait_or_stop(
+                PYRAMID_SETTLE_DELAY,
+                cancel_requested,
+                "STOP was requested during Pyramid result verification; the action was not retried.",
+            )?;
+        }
+    })();
+
+    let after = match result {
+        Ok(after) => after,
+        Err(error) => {
+            return Err(action_failure(
+                action_started,
+                profile,
+                WorkerState::Uncertain,
+                error,
+                last_observation,
+                FailureFramePhase::PostAction,
+            ));
+        }
+    };
+    let Some(observation) = last_observation else {
+        return Err(action_failure(
+            action_started,
+            profile,
+            WorkerState::Uncertain,
+            "Pyramid verification completed without a result frame".to_owned(),
+            None,
+            FailureFramePhase::PostAction,
+        ));
+    };
+    profile.total = action_started.elapsed();
+    Ok(ActionSuccess {
+        plan,
+        after,
+        observation,
+        changed_pixels,
+        observation_rounds,
+        board_completed,
+        series_complete,
+        completed_boards: *completed_boards,
+        profile,
+    })
+}
+
+fn refresh_observation_prediction(
+    observation: &mut FrameObservation,
+    scan_state: &TableauScanState,
+) -> Result<(), String> {
+    let analysis = analyse_frame_with_state(&observation.frame, scan_state)
+        .map_err(|error| format!("Result-frame rescan failed: {error}"))?;
+    observation.prediction = analysis.prediction;
+    observation.observed_rows = analysis.observed_rows;
+    Ok(())
+}
+
+fn pyramid_solver_recovery_authorised(
+    gameplay_scene: bool,
+    effect_verified: bool,
+    board_empty: bool,
+    cards_visible: bool,
+    observation_round: usize,
+    solver_already_sent: bool,
+) -> bool {
+    gameplay_scene
+        && effect_verified
+        && !board_empty
+        && cards_visible
+        && observation_round >= 2
+        && !solver_already_sent
+}
+
+fn click_shared_solver(
+    qmp: &mut QmpClient,
+    cancel_requested: &AtomicBool,
+) -> Result<Duration, String> {
+    if cancel_requested.load(Ordering::Acquire) {
+        return Err(
+            "STOP was requested before the Solver click; no Solver input was sent".to_owned(),
+        );
+    }
+    let started = Instant::now();
+    qmp.click_with_hold(
+        SHARED_SOLVER_CONTROL.click_point,
+        NOMINAL_FRAME_WIDTH,
+        NOMINAL_FRAME_HEIGHT,
+        SOLVER_MOUSE_HOLD,
+    ).map_err(|error| format!(
+        "Solver input result is uncertain: {error}. No automatic retry followed the uncertain delivery."
+    ))?;
+    Ok(started.elapsed())
 }
 
 fn action_failure(
@@ -3011,6 +3398,12 @@ fn format_prediction_target(prediction: PredictedAction) -> String {
                 "INVALID tableau row {}, column {} key action",
                 position.row, position.column
             ),
+            (ActionTarget::Pyramid(kind), InputOperation::Click(point)) => {
+                format!("CLICK Pyramid {kind:?} at ({}, {})", point.x, point.y)
+            }
+            (ActionTarget::Pyramid(kind), InputOperation::PressDrawKey) => {
+                format!("INVALID Pyramid {kind:?} key action")
+            }
         },
         PredictedAction::Ambiguous { highlight_count } => {
             format!("ambiguous ({highlight_count} highlights)")
@@ -3184,6 +3577,12 @@ fn format_action_status(prediction: PredictedAction) -> String {
             (ActionTarget::Tableau(position), InputOperation::PressDrawKey) => {
                 format!("Invalid R{}C{} key action", position.row, position.column)
             }
+            (ActionTarget::Pyramid(kind), InputOperation::Click(_)) => {
+                format!("Click Pyramid {kind:?}")
+            }
+            (ActionTarget::Pyramid(kind), InputOperation::PressDrawKey) => {
+                format!("Invalid Pyramid {kind:?} key action")
+            }
         },
         PredictedAction::NoHighlight => "No Solver HALO".to_owned(),
         PredictedAction::Ambiguous { highlight_count } => {
@@ -3254,19 +3653,13 @@ mod tests {
     }
 
     #[test]
-    fn pyramid_is_rejected_before_any_worker_command_or_qmp_connection() {
+    fn both_game_modes_allow_the_shared_guarded_input_path() {
         assert_eq!(ensure_input_authorised(GameMode::TriPeaks), Ok(()));
-        assert_eq!(
-            ensure_input_authorised(GameMode::Pyramid),
-            Err(
-                "Pyramid is available for read-only calibration only; guest input is disabled"
-                    .to_owned()
-            )
-        );
+        assert_eq!(ensure_input_authorised(GameMode::Pyramid), Ok(()));
     }
 
     #[test]
-    fn pyramid_capture_returns_only_calibration_metadata() {
+    fn unknown_pyramid_capture_grants_no_action_authority() {
         let scan_state = TableauScanState::for_mode(GameMode::Pyramid);
         let (observation, _) = analyse_captured_frame(
             blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT),
@@ -3274,19 +3667,14 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(
-            observation.prediction,
-            PredictedAction::CalibrationOnly {
-                mode: GameMode::Pyramid,
-            }
-        );
+        assert_eq!(observation.prediction, PredictedAction::NoHighlight);
         assert_eq!(observation.observed_rows, None);
         assert!(!observation.gameplay_scene);
-        assert_eq!(observation.game_progress, None);
+        assert!(plan_step(observation.prediction).is_err());
     }
 
     #[test]
-    fn pyramid_calibration_still_requires_the_exact_frame_contract() {
+    fn pyramid_gameplay_requires_the_exact_frame_contract() {
         let scan_state = TableauScanState::for_mode(GameMode::Pyramid);
         let error = analyse_captured_frame(blank_frame(1_280, 720), &scan_state)
             .err()
@@ -3294,8 +3682,87 @@ mod tests {
 
         assert_eq!(
             error,
-            "calibration frame must be exactly 1920x1080, got 1280x720"
+            "gameplay-scene analysis failed: captured frame must be exactly 1920x1080, got 1280x720"
         );
+    }
+
+    #[test]
+    fn pyramid_missing_halo_alone_cannot_authorise_solver_recovery() {
+        assert!(pyramid_solver_recovery_authorised(
+            true, true, false, true, 2, false
+        ));
+        assert!(!pyramid_solver_recovery_authorised(
+            false, true, false, true, 2, false
+        ));
+        assert!(!pyramid_solver_recovery_authorised(
+            true, false, false, true, 2, false
+        ));
+        assert!(!pyramid_solver_recovery_authorised(
+            true, true, true, true, 2, false
+        ));
+        assert!(!pyramid_solver_recovery_authorised(
+            true, true, false, false, 2, false
+        ));
+        assert!(!pyramid_solver_recovery_authorised(
+            true, true, false, true, 1, false
+        ));
+        assert!(!pyramid_solver_recovery_authorised(
+            true, true, false, true, 2, true
+        ));
+    }
+
+    #[test]
+    fn pyramid_consumed_slots_survive_same_context_and_reset_on_context_change() {
+        let socket = PathBuf::from("/test/first.sock");
+        let mut context = Some((socket.clone(), GameMode::Pyramid));
+        let mut state = TableauScanState::for_mode(GameMode::Pyramid);
+        let removed = PyramidTargetKind::Card { row: 7, column: 1 };
+        state.pyramid.mark_removed(removed);
+        let mut completed_boards = 1;
+        reset_scan_state_for_context(
+            &socket,
+            GameMode::Pyramid,
+            &mut context,
+            &mut state,
+            &mut completed_boards,
+        );
+        assert!(state.pyramid.clicked_target_slots[removed.slot_index().unwrap()]);
+        assert_eq!(completed_boards, 1);
+
+        reset_scan_state_for_context(
+            Path::new("/test/second.sock"),
+            GameMode::Pyramid,
+            &mut context,
+            &mut state,
+            &mut completed_boards,
+        );
+        assert!(
+            state
+                .pyramid
+                .clicked_target_slots
+                .iter()
+                .all(|clicked| !clicked)
+        );
+        assert_eq!(completed_boards, 0);
+    }
+
+    #[test]
+    fn explicit_progress_reset_clears_pyramid_consumed_slots() {
+        let mut state = TableauScanState::for_mode(GameMode::Pyramid);
+        state
+            .pyramid
+            .mark_removed(PyramidTargetKind::Card { row: 1, column: 1 });
+        let mut completed_boards = 2;
+        reset_progress_tracking(&mut state, &mut completed_boards);
+        assert_eq!(state.mode(), GameMode::Pyramid);
+        assert!(
+            state
+                .pyramid
+                .clicked_target_slots
+                .iter()
+                .all(|clicked| !clicked)
+        );
+        assert_eq!(completed_boards, 0);
     }
 
     fn row_mask(row: u8) -> RowMask {
@@ -3590,11 +4057,33 @@ mod tests {
     #[test]
     fn new_game_can_be_verified_when_level_up_is_missing() {
         let new_game = dialog_observation(&[NEW_GAME_CONTROL_VARIANTS[0]]);
-        assert_eq!(resolve_post_game_target(&new_game, POST_GAME_TARGETS[0]), Ok(None));
-        assert_eq!(new_game_visible_while_awaiting_level_up(&new_game), Ok(true));
+        assert_eq!(
+            resolve_post_game_target(&new_game, POST_GAME_TARGETS[0]),
+            Ok(None)
+        );
+        assert_eq!(
+            new_game_visible_while_awaiting_level_up(&new_game),
+            Ok(true)
+        );
 
         let level_up = dialog_observation(&[LEVEL_UP_CONTROL_VARIANTS[1]]);
-        assert_eq!(new_game_visible_while_awaiting_level_up(&level_up), Ok(false));
+        assert_eq!(
+            new_game_visible_while_awaiting_level_up(&level_up),
+            Ok(false)
+        );
+    }
+
+    #[test]
+    fn recognised_terminal_stage_skips_only_the_completed_post_game_steps() {
+        assert_eq!(known_post_game_stage(None), Ok(None));
+        let unknown = dialog_observation(&[]);
+        assert_eq!(known_post_game_stage(Some(&unknown)), Ok(None));
+        let level_up = dialog_observation(&[LEVEL_UP_CONTROL_VARIANTS[0]]);
+        assert_eq!(known_post_game_stage(Some(&level_up)), Ok(Some(0)));
+        let new_game = dialog_observation(&[NEW_GAME_CONTROL_VARIANTS[0]]);
+        assert_eq!(known_post_game_stage(Some(&new_game)), Ok(Some(1)));
+        let ambiguous = dialog_observation(&LEVEL_UP_CONTROL_VARIANTS);
+        assert!(known_post_game_stage(Some(&ambiguous)).is_err());
     }
 
     #[test]

@@ -60,13 +60,11 @@ current capture flow because it derives the temporary PNG path from the socket
 directory and rejects relative screendump output paths. Launching QEMU or the
 application from `target/release` does not relocate an absolute path.
 
-With a relative QEMU listener filename, the socket location depends on QEMU's
-launch directory. Resolve that actual location before setting the application's
-path. For a listener named `qmp-qemu-socket.sock` created from the Beast's
-`/home/charlie/repo/RUST/qmp-qemu-socket/target/release`, use that directory plus
-the filename as the absolute application path. Temporary PNGs will then also be
-placed there by the worker. QEMU's screendump protocol does not require this
-directory: putting PNGs beside the socket is this application's current choice.
+The Beast uses `/run/user/1000/qmp-qemu-socket.sock`; its temporary capture
+PNGs consequently use `/run/user/1000`. If another deployment chooses a
+relative QEMU listener filename, resolve its actual location to an absolute
+application path first. QEMU's screendump protocol does not require the socket
+directory: that location is this application's current choice.
 
 The application and QEMU must both be able to access the temporary capture
 directory in their host filesystem namespaces. The normal configuration uses
@@ -100,7 +98,8 @@ A click is delivered as three QMP commands:
 2. left-button down;
 3. left-button up after the configured hold.
 
-DRAW is delivered as qcode `D` down and up with the pointer unchanged. The
+TriPeaks DRAW is delivered as qcode `D` down and up with the pointer unchanged.
+Pyramid Move, pile and card targets are mouse clicks, never the draw key. The
 removed blank-felt primer click must not be reintroduced without evidence;
 the proven Solver click at each board also establishes guest focus.
 
@@ -114,8 +113,14 @@ QMP acknowledgement proves only that QEMU accepted a command. It does not
 prove that Solitaire acted on it. After the configured settle, the worker
 requires a fresh screenshot showing:
 
-- material pixel change inside the action's effect region; and
+- the selected profile's effect evidence inside its calibrated region; and
 - a valid resulting gameplay or transition state.
+
+TriPeaks uses material pixel change with cursor exclusion. Pyramid card actions
+add positive card-removal evidence; lower controls require a relevant pile
+change. A selection-only response or uncertain animation does not consume a
+card slot. Pyramid settles for 500 ms per action and uses bounded additional
+result observations when necessary, without repeating uncertain input.
 
 The verified result frame is immutable and becomes the next action's planning
 frame. A fresh QMP health/pointer probe remains mandatory immediately before
@@ -128,18 +133,27 @@ must also recognise New Game before that stage's guarded click. Other post-game
 stages retain a one-second inter-stage wait. Challenge Complete Continue is
 calibrated for future use but does not authorise automatic input.
 
-## Read-only Pyramid calibration
+## Pyramid profile
 
-Selecting Pyramid changes the preview profile but not input authority. Capture
-Frame still obtains the full display, Track reports guest pixels on a preview
-left-click (with no guest input), and Draw Targets shows the 28 card bounds,
-Left/Move/Right control bounds and the shared bottom toolbar. The worker returns explicit
-calibration-only metadata and rejects Pyramid execution before connecting to
-QMP.
+Pyramid reuses the shared QMP, Solver activation, progress probe and post-game
+controller. Its 31 target slots carry semantic `Move`, `Left`, `Right` and
+`Card { row, column }` identities. Fixed 2×2 halo probes select the first
+eligible target in that priority order, with cards scanned bottom row upward.
+Multiple halos are valid; one click removes a Solver pair or a King.
 
-Pyramid target centres remain read-only metadata. Future execution work must
-validate HALO probes and hit-point behaviour for `Move`, `Left`, `Right`, and all
-28 card slots, plus action effects, Kings, pair behaviour, stock/recycle
-transitions and post-game stages. An Undo All confirmation position has not
-been established from the supplied images. See `pyramid-calibration.md` for
-the preview calibration and the checks still required on the Beast.
+Only the clicked card's verified removal sets its per-board consumed flag.
+The unclicked highlighted partner is not flagged, and lower controls remain
+repeatable. The card state resets on a confirmed new board/game, explicit
+progress reset, or socket/mode context change. Stale preview predictions cannot
+authorise input for another mode or socket.
+
+Missing halos trigger scene classification and bounded recovery, not an
+unconditional Move click. Positive completion evidence enters the same
+progress-bar and score-skip → Level Up OK → New Game → Play → Solver sequence
+used by TriPeaks. The user confirmed this UI and the progress probe position
+are shared; live execution acceptance is still required on the Beast.
+
+The Draw Targets overlay and prediction marks are painted only on the preview.
+The saved manual PNG always contains the original capture bytes. Undo All
+confirmation remains uncalibrated and is not clicked automatically. See
+`pyramid-execution.md` for the profile measurements and evidence limits.

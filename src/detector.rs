@@ -996,6 +996,28 @@ mod tests {
     }
 
     #[test]
+    fn both_modes_share_the_exact_65_of_76_progress_threshold() {
+        let mut frame = rgba_frame(1_920, 1_080);
+        let probe = SOLVER_PROGRESS_RIGHT_PROBE;
+        for coloured_pixels in [11_u32, 12] {
+            for offset in 0..coloured_pixels {
+                set_pixel(&mut frame, probe.x + offset, probe.y, [172, 142, 84]);
+            }
+            let expected = if coloured_pixels == 11 {
+                GameProgress::AnotherBoard
+            } else {
+                GameProgress::GameComplete
+            };
+            for mode in crate::game::GameMode::AVAILABLE {
+                assert_eq!(
+                    detect_game_progress_for_profile(&frame, mode.profile()),
+                    Ok(expected)
+                );
+            }
+        }
+    }
+
+    #[test]
     fn rejects_invalid_layout_and_geometry() {
         let mut invalid_layout = rgba_frame(220, 220);
         invalid_layout.pixels.truncate(4);

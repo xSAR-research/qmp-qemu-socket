@@ -7,7 +7,7 @@
 | `app.rs` | egui controls, latest-frame preview, concise status and bounded visible output |
 | `game.rs` | small game/profile boundary and typed actions |
 | `tripeaks.rs` | validated TriPeaks profile assembly |
-| `pyramid.rs` | calibration-only Pyramid targets, bounds, hit points and priority |
+| `pyramid.rs` | Pyramid targets, fixed halo probes, priority and action-effect evidence |
 | `parameters.rs` | fixed geometry, colour values, delays, limits and release label |
 | `capture.rs` | decoded immutable frame representation |
 | `snapshot.rs` | collision-safe PNG naming and saving the original captured bytes |
@@ -20,12 +20,13 @@
 | `qmp.rs` | allow-listed QMP client and non-idempotent input delivery |
 | `worker.rs` | capture, guarded execution, recovery, timing and cancellation |
 
-`GameMode` selects a static `GameProfile`. Shared control code does not branch
-on Pyramid geometry. TriPeaks is executable; Pyramid supplies read-only
-preview geometry for 28 card slots and the Left, Move and Right controls.
-Pyramid's executable action lists remain empty. Shared Solver, Undo All and
-Undo toolbar geometry has explicit `SHARED_*` names and is shown in both
-profiles; displaying a target does not authorise input.
+`GameMode` selects a static `GameProfile`. TriPeaks and Pyramid share the QMP
+controller, Solver toolbar control, cancellation and guarded post-game stages.
+Their target detection and effect rules remain separate: TriPeaks requires one
+unique highlight; Pyramid chooses the first eligible target in its ordered
+31-slot profile. Typed action identities must belong to the selected mode.
+Shared Solver, Undo All and Undo toolbar geometry has explicit `SHARED_*`
+names. Displaying an overlay alone never grants input authority.
 
 ## Normal guarded run
 
@@ -91,21 +92,39 @@ implemented or benchmarked.
 
 ## Mode availability
 
-| Capability | TriPeaks | Pyramid (read-only calibration) |
-|---|---:|---:|
-| Capture Frame | Yes | Yes |
-| Track coordinates | Yes | Yes |
-| Draw profile overlays | Yes | Yes, 31 calibration targets and shared toolbar |
-| HALO classification | Yes | No |
-| Single Step | Yes | No |
-| Multiple Steps | Yes | No |
-| Guest input | Yes, guarded | No, independently rejected by worker |
+| Capability | TriPeaks | Pyramid |
+|---|---|---|
+| Capture Frame / Capture PNG | Read-only | Read-only |
+| Track coordinates / Draw Targets | Preview only | Preview only |
+| HALO selection | Unique across frame | First eligible of 31 fixed 2×2 probes |
+| Single Step / Multiple Steps | Guarded | Guarded |
+| Ordinary input | Draw key or tableau click | One mouse click |
+| Settling | Configurable draw/tableau delays | 500 ms |
+| Board/game transitions | Shared guarded controller | Shared guarded controller |
 
 Pyramid's semantic order is `Move`, `Left`, `Right`, then 28 card identities
-from row 7 left-to-right upward to the row-1 apex. Target bounds and hit points
-are preview calibration metadata, not executable actions. HALO probes and
-effect verification remain unvalidated. See `pyramid-calibration.md` for
-the source images and evidence limits.
+from row 7 left-to-right upward to the row-1 apex. It does not use TriPeaks row
+exposure or unique-target policy. A highlighted pair needs one click; no
+second click is queued.
+
+Pyramid keeps `clicked_target_slots[31]` for the current board. Only a clicked
+`Card` receives a consumed mark, and only after its face is positively observed
+as removed. A highlight disappearing or arbitrary changed pixels are
+insufficient. The unclicked partner receives no consumed mark. `Move`, `Left`
+and `Right` are always eligible for later scans, including consecutive actions,
+when their effect has been verified.
+
+Unsettled effects receive a bounded number of fresh observations, spaced by
+500 ms, without resending the gameplay click. A no-halo result must be
+reclassified; recognised gameplay may use bounded Solver recovery. No halo
+alone does not authorise Move, restart or board completion. A positively empty
+board and verified effect can enter the shared progress/transition flow.
+Unknown scenes stop safely.
+
+Confirmed redeal/new-game, an explicit progress reset, and changes of mode or
+socket clear the Pyramid board state. Every new context requires a fresh scene
+before guest input. See `pyramid-execution.md` for geometry and the remaining
+live acceptance checks.
 
 ## State and bounds
 

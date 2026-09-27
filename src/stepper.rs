@@ -97,6 +97,8 @@ pub enum StepValidationError {
     TargetStillHighlighted { target: ActionTarget },
     #[error("post-action effect region did not change materially; action result is uncertain")]
     NoObservedEffect,
+    #[error("Pyramid target does not match its calibrated one-click action")]
+    InvalidPyramidAction,
 }
 
 /// Build one action from exactly one fresh prediction.
@@ -108,7 +110,14 @@ pub fn plan_step(before: PredictedAction) -> Result<StepPlan, StepValidationErro
         PredictedAction::NoHighlight => {
             return Err(StepValidationError::NoPreActionHighlight);
         }
-        PredictedAction::Action(action) => PlannedInput(action),
+        PredictedAction::Action(action) => {
+            if let ActionTarget::Pyramid(kind) = action.target {
+                if crate::pyramid::action_for_kind(kind) != Some(action) {
+                    return Err(StepValidationError::InvalidPyramidAction);
+                }
+            }
+            PlannedInput(action)
+        }
         PredictedAction::Ambiguous { highlight_count } => {
             return Err(StepValidationError::AmbiguousPreAction { highlight_count });
         }
@@ -157,6 +166,36 @@ mod tests {
             MINIMUM_TABLEAU_CHANGED_PIXELS, MOUSE_HOLD, POINTER_SETTLE_DELAY, TABLEAU_CARD_REGIONS,
         },
     };
+
+    #[test]
+    fn pyramid_plan_requires_the_canonical_single_mouse_click() {
+        use crate::pyramid::{PyramidTargetKind, action_for_kind};
+        let action = action_for_kind(PyramidTargetKind::Move).unwrap();
+        let plan = plan_step(PredictedAction::Action(action)).unwrap();
+        assert_eq!(
+            plan.input().operation(),
+            InputOperation::Click(PixelPoint::new(960, 718))
+        );
+        assert_eq!(plan.input().qmp_command_count(), 3);
+        assert_eq!(
+            plan.input()
+                .animation_settle_delay(AnimationSettleDelays::default()),
+            Duration::from_millis(500)
+        );
+
+        let mut forged = action;
+        forged.specification.operation = InputOperation::PressDrawKey;
+        assert_eq!(
+            plan_step(PredictedAction::Action(forged)),
+            Err(StepValidationError::InvalidPyramidAction)
+        );
+        forged = action;
+        forged.specification.operation = InputOperation::Click(PixelPoint::new(10, 10));
+        assert_eq!(
+            plan_step(PredictedAction::Action(forged)),
+            Err(StepValidationError::InvalidPyramidAction)
+        );
+    }
 
     fn draw(anchor_x: i32) -> PredictedAction {
         PredictedAction::Action(

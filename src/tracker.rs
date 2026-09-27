@@ -10,6 +10,7 @@ use crate::{
     game::{GameMode, GameProfile, GuidedAction, TargetSelectionPolicy},
     geometry::PixelPoint,
     parameters::HALO_GOLD_LINE_OFFSET_Y,
+    pyramid::PyramidBoardState,
 };
 
 /// Compact set of one-based tableau rows.
@@ -119,6 +120,7 @@ impl RowMask {
 pub struct TableauScanState {
     mode: GameMode,
     active_rows: RowMask,
+    pub pyramid: PyramidBoardState,
 }
 
 impl TableauScanState {
@@ -132,6 +134,7 @@ impl TableauScanState {
         Self {
             mode,
             active_rows: RowMask(profile.initial_active_rows),
+            pyramid: PyramidBoardState::new(),
         }
     }
 
@@ -144,7 +147,11 @@ impl TableauScanState {
         if active_rows.is_empty() || active_rows.bits() & !profile.valid_row_bits() != 0 {
             None
         } else {
-            Some(Self { mode, active_rows })
+            Some(Self {
+                mode,
+                active_rows,
+                pyramid: PyramidBoardState::new(),
+            })
         }
     }
 
@@ -160,7 +167,7 @@ impl TableauScanState {
     pub const fn row_upper(self) -> u8 {
         match self
             .active_rows
-            .row_upper_for(self.mode.profile().tableau_rows.len() as u8)
+            .row_upper_for(self.mode.profile().row_count())
         {
             Some(row) => row,
             None => unreachable!(),
@@ -171,7 +178,7 @@ impl TableauScanState {
     pub const fn row_lower(self) -> u8 {
         match self
             .active_rows
-            .row_lower_for(self.mode.profile().tableau_rows.len() as u8)
+            .row_lower_for(self.mode.profile().row_count())
         {
             Some(row) => row,
             None => unreachable!(),
@@ -305,6 +312,14 @@ pub fn is_gameplay_scene_for_mode(
 ) -> Result<bool, TrackerError> {
     let profile = mode.profile();
     validate_frame(frame, profile)?;
+    if mode == GameMode::Pyramid {
+        return crate::pyramid::is_gameplay_scene(frame).map_err(|source| {
+            TrackerError::HaloDetection {
+                target: "Pyramid scene",
+                source,
+            }
+        });
+    }
     has_gameplay_felt_for_profile(frame, profile).map_err(|source| TrackerError::HaloDetection {
         target: "gameplay felt probe",
         source,
@@ -325,6 +340,15 @@ pub fn analyse_frame_with_state(
     state: &TableauScanState,
 ) -> Result<FrameAnalysis, TrackerError> {
     let profile = state.mode().profile();
+    if state.mode() == GameMode::Pyramid {
+        validate_frame(frame, profile)?;
+        return crate::pyramid::analyse(frame, &state.pyramid).map_err(|source| {
+            TrackerError::HaloDetection {
+                target: "Pyramid targets",
+                source,
+            }
+        });
+    }
     analyse_frame_for_profile(frame, state, profile)
 }
 
@@ -646,6 +670,40 @@ mod tests {
             TABLEAU_CARD_REGIONS, TABLEAU_ROW_SCAN_PROFILES,
         },
     };
+
+    #[test]
+    fn pyramid_board_record_is_separate_from_tripeaks_row_hints() {
+        let mut state = TableauScanState::for_mode(GameMode::Pyramid);
+        let kind = crate::pyramid::PyramidTargetKind::Card { row: 7, column: 1 };
+        state.pyramid.mark_removed(kind);
+        assert!(state.pyramid.clicked_target_slots[kind.slot_index().unwrap()]);
+        assert!(state.reconcile_observation(RowMask::single_for(4, 7)));
+        assert!(state.pyramid.clicked_target_slots[kind.slot_index().unwrap()]);
+        assert_eq!(state.row_upper(), 4);
+        assert_eq!(state.row_lower(), 4);
+
+        let reset = TableauScanState::for_mode(GameMode::Pyramid);
+        assert!(reset.pyramid.clicked_target_slots.iter().all(|used| !used));
+        let tripeaks = TableauScanState::for_mode(GameMode::TriPeaks);
+        assert_eq!(tripeaks.active_rows().bits(), 0b1000);
+        assert!(
+            tripeaks
+                .pyramid
+                .clicked_target_slots
+                .iter()
+                .all(|used| !used)
+        );
+    }
+
+    #[test]
+    fn pyramid_analysis_rejects_frame_dimensions_before_reading_pixels() {
+        let state = TableauScanState::for_mode(GameMode::Pyramid);
+        let frame = blank_frame(640, 480);
+        assert!(matches!(
+            analyse_frame_with_state(&frame, &state),
+            Err(TrackerError::UnexpectedFrameDimensions { .. })
+        ));
+    }
 
     fn blank_frame(width: u32, height: u32) -> CapturedFrame {
         CapturedFrame {

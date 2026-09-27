@@ -397,10 +397,8 @@ pub const SCORE_SKIP_CONTROL: ControlTarget = ControlTarget::new(
 );
 // Calibrated from the 1920x1080 Challenge Complete capture. This is reserved
 // for a future challenge flow; the current guarded run does not click it.
-pub const CHALLENGE_COMPLETE_CONTINUE_CONTROL: ControlTarget = ControlTarget::new(
-    PixelRect::new(805, 844, 308, 72),
-    PixelPoint::new(959, 880),
-);
+pub const CHALLENGE_COMPLETE_CONTINUE_CONTROL: ControlTarget =
+    ControlTarget::new(PixelRect::new(805, 844, 308, 72), PixelPoint::new(959, 880));
 pub const SHARED_UNDO_ALL_CONTROL: ControlTarget = ControlTarget::new(
     PixelRect::new(1_301, 959, 38, 38),
     PixelPoint::new(1_320, 978),
@@ -484,6 +482,12 @@ pub const POST_GAME_TARGETS: [PostGameTarget; 4] = [
 pub const SOLVER_PROGRESS_RIGHT_PROBE: PixelRect = PixelRect::new(1_050, 84, 38, 2);
 pub const SOLVER_PROGRESS_BLACK_CHANNEL_MAXIMUM: u8 = 32;
 pub const SOLVER_PROGRESS_BLACK_FRACTION_PER_MILLE: u32 = 850;
+pub const SHARED_SOLVER_PROGRESS_PROFILE: crate::game::GameProgressProfile =
+    crate::game::GameProgressProfile {
+        right_probe: SOLVER_PROGRESS_RIGHT_PROBE,
+        black_channel_maximum: SOLVER_PROGRESS_BLACK_CHANNEL_MAXIMUM,
+        black_fraction_per_mille: SOLVER_PROGRESS_BLACK_FRACTION_PER_MILLE,
+    };
 
 // Dialog buttons use a gold gradient rather than the exact two-colour halo.
 // The ordered stage machine also requires the correct scene class and band.
@@ -810,9 +814,9 @@ mod tests {
             PixelPoint::new(959, 880)
         );
         assert!(
-            CHALLENGE_COMPLETE_CONTINUE_CONTROL.bounds.contains(
-                CHALLENGE_COMPLETE_CONTINUE_CONTROL.click_point
-            )
+            CHALLENGE_COMPLETE_CONTINUE_CONTROL
+                .bounds
+                .contains(CHALLENGE_COMPLETE_CONTINUE_CONTROL.click_point)
         );
         assert_eq!(
             SOLVER_PROGRESS_RIGHT_PROBE,

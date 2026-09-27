@@ -1,8 +1,8 @@
 use crate::{
     game::{
         ActionSpecification, AnimationClass, BottomTargetProfile, GameMode, GameProfile,
-        GameProgressProfile, GameplaySceneProfile, InputOperation, PreviewTarget,
-        RepeatTargetPolicy, TargetSelectionPolicy,
+        GameplaySceneProfile, InputOperation, PreviewTarget, RepeatTargetPolicy,
+        TargetSelectionPolicy,
     },
     geometry::PixelPoint,
     parameters::{
@@ -11,8 +11,7 @@ use crate::{
         GAMEPLAY_FELT_GREEN_RED_DELTA_MINIMUM, GAMEPLAY_FELT_PROBE_BOUNDS,
         GAMEPLAY_FELT_REQUIRED_FRACTION_PER_MILLE, MINIMUM_DRAW_CHANGED_PIXELS,
         MINIMUM_TABLEAU_CHANGED_PIXELS, NOMINAL_FRAME_HEIGHT, NOMINAL_FRAME_WIDTH,
-        SOLVER_PROGRESS_BLACK_CHANNEL_MAXIMUM, SOLVER_PROGRESS_BLACK_FRACTION_PER_MILLE,
-        SOLVER_PROGRESS_RIGHT_PROBE, STOCK_HALO_SCAN_BOUNDS, TABLEAU_CARD_REGIONS,
+        SHARED_SOLVER_PROGRESS_PROFILE, STOCK_HALO_SCAN_BOUNDS, TABLEAU_CARD_REGIONS,
         TABLEAU_ROW_SCAN_PROFILES, TARGET_BOARD, TARGET_STOCK, TARGET_WASTE,
     },
 };
@@ -61,15 +60,12 @@ pub const PROFILE: GameProfile = GameProfile {
         green_blue_delta_minimum: GAMEPLAY_FELT_GREEN_BLUE_DELTA_MINIMUM,
         required_fraction_per_mille: GAMEPLAY_FELT_REQUIRED_FRACTION_PER_MILLE,
     }),
-    game_progress: Some(GameProgressProfile {
-        right_probe: SOLVER_PROGRESS_RIGHT_PROBE,
-        black_channel_maximum: SOLVER_PROGRESS_BLACK_CHANNEL_MAXIMUM,
-        black_fraction_per_mille: SOLVER_PROGRESS_BLACK_FRACTION_PER_MILLE,
-    }),
+    game_progress: Some(SHARED_SOLVER_PROGRESS_PROFILE),
     bottom_targets: &BOTTOM_TARGETS,
     target_selection: TargetSelectionPolicy::UniqueAcrossFrame,
     tableau_cards: &TABLEAU_CARD_REGIONS,
     tableau_rows: &TABLEAU_ROW_SCAN_PROFILES,
+    tableau_row_count: 4,
     initial_active_rows: 0b1000,
     tableau_click_offset: PixelPoint::new(CLICK_OFFSET_X, CLICK_OFFSET_Y),
     minimum_tableau_changed_pixels: MINIMUM_TABLEAU_CHANGED_PIXELS,
