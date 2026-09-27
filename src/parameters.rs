@@ -9,7 +9,9 @@ pub const APP_NAME: &str = env!("CARGO_PKG_NAME");
 pub const RELEASE_LABEL: &str = concat!("v", env!("CARGO_PKG_VERSION"));
 pub const INITIAL_WINDOW_WIDTH: f32 = 1120.0;
 pub const INITIAL_WINDOW_HEIGHT: f32 = 820.0;
-pub const OUTPUT_PANEL_HEIGHT: f32 = 245.0;
+// A fixed-height log: 40 more logical points is approximately 2.5 monospace
+// lines at the current UI font. Window growth remains available to the image.
+pub const OUTPUT_PANEL_HEIGHT: f32 = 285.0;
 
 // Reserve space below the preview for the collapsed log and EXIT control.
 // A horizontal scrollbar can consume part of the scroll area's outer height.

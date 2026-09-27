@@ -117,6 +117,7 @@ pub struct QmpQemuSocketApp {
     game_mode: GameMode,
     qmp_socket_path: String,
     log_lines: Vec<String>,
+    output_expanded: bool,
     session_log: Option<SessionLog>,
     completed_games: usize,
     started_at: Instant,
@@ -173,6 +174,7 @@ impl QmpQemuSocketApp {
             game_mode: GameMode::TriPeaks,
             qmp_socket_path,
             log_lines: Vec::new(),
+            output_expanded: false,
             session_log,
             completed_games: 0,
             started_at,
@@ -851,7 +853,11 @@ impl QmpQemuSocketApp {
             ui.pixels_per_point()
         ));
         let mut tracked_point = None;
-        let viewport_height = preview_viewport_height(ui.available_height(), ui.pixels_per_point());
+        let viewport_height = preview_viewport_height(
+            ui.available_height(),
+            ui.pixels_per_point(),
+            self.output_expanded,
+        );
         egui::ScrollArea::both()
             .auto_shrink([false, false])
             .max_height(viewport_height)
@@ -951,7 +957,7 @@ impl QmpQemuSocketApp {
         // Keeps complete diagnostics available without making them the primary
         // operational display.
         ui.separator();
-        egui::CollapsingHeader::new("Detailed output")
+        let output_response = egui::CollapsingHeader::new("Detailed output")
             .default_open(false)
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
@@ -1003,6 +1009,7 @@ impl QmpQemuSocketApp {
                     ui.set_min_height(OUTPUT_PANEL_HEIGHT);
                     egui::ScrollArea::vertical()
                         .stick_to_bottom(true)
+                        .max_height(OUTPUT_PANEL_HEIGHT)
                         .auto_shrink([false, false])
                         .show(ui, |ui| {
                             ui.set_width(ui.available_width());
@@ -1012,6 +1019,7 @@ impl QmpQemuSocketApp {
                         });
                 });
             });
+        self.output_expanded = output_response.body_response.is_some();
     }
 
     fn status_panel(&self, ui: &mut egui::Ui) {
@@ -1580,11 +1588,20 @@ fn board_position_label(
     }
 }
 
-fn preview_viewport_height(available_height: f32, pixels_per_point: f32) -> f32 {
+fn preview_viewport_height(
+    available_height: f32,
+    pixels_per_point: f32,
+    output_expanded: bool,
+) -> f32 {
     let image_height = NOMINAL_FRAME_HEIGHT as f32 / pixels_per_point;
     let image_and_scrollbar =
         (image_height + PREVIEW_SCROLLBAR_ALLOWANCE_POINTS).max(MIN_PREVIEW_VIEWPORT_HEIGHT_POINTS);
-    (available_height - PREVIEW_FOOTER_RESERVE_POINTS)
+    let reserved_output = if output_expanded {
+        OUTPUT_PANEL_HEIGHT
+    } else {
+        0.0
+    };
+    (available_height - PREVIEW_FOOTER_RESERVE_POINTS - reserved_output)
         .max(MIN_PREVIEW_VIEWPORT_HEIGHT_POINTS)
         .min(image_and_scrollbar)
 }
@@ -2037,9 +2054,11 @@ mod tests {
 
     #[test]
     fn preview_uses_the_full_guest_height_when_the_host_has_room() {
-        assert_eq!(preview_viewport_height(1_400.0, 1.0), 1_104.0);
-        assert_eq!(preview_viewport_height(900.0, 1.0), 804.0);
-        assert_eq!(preview_viewport_height(1_400.0, 2.0), 564.0);
+        assert_eq!(preview_viewport_height(1_400.0, 1.0, false), 1_104.0);
+        assert_eq!(preview_viewport_height(900.0, 1.0, false), 804.0);
+        assert_eq!(preview_viewport_height(1_400.0, 2.0, false), 564.0);
+        assert_eq!(preview_viewport_height(900.0, 1.0, true), 519.0);
+        assert_eq!(preview_viewport_height(1_400.0, 2.0, true), 564.0);
     }
 
     #[test]

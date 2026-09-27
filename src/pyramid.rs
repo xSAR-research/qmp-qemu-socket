@@ -492,6 +492,33 @@ pub fn analyse(
     })
 }
 
+/// A fresh, recognised halo on a card positively removed on an earlier board
+/// invalidates that board's consumed-card history. This is used only when a
+/// read-only Capture Frame found no eligible target with the retained history.
+/// A missing halo or a lower-control halo never clears the record.
+pub fn reappeared_consumed_card(
+    frame: &CapturedFrame,
+    state: &PyramidBoardState,
+) -> Result<Option<FrameAnalysis>, HaloDetectionError> {
+    if !state.clicked_target_slots[3..]
+        .iter()
+        .any(|clicked| *clicked)
+    {
+        return Ok(None);
+    }
+    let fresh = analyse(frame, &PyramidBoardState::new())?;
+    let PredictedAction::Action(action) = fresh.prediction else {
+        return Ok(None);
+    };
+    let ActionTarget::Pyramid(kind @ PyramidTargetKind::Card { .. }) = action.target else {
+        return Ok(None);
+    };
+    Ok(kind
+        .slot_index()
+        .filter(|&index| state.clicked_target_slots[index])
+        .map(|_| fresh))
+}
+
 pub fn board_is_empty(frame: &CapturedFrame) -> Result<bool, HaloDetectionError> {
     if !is_gameplay_scene(frame)? {
         return Ok(false);
@@ -1115,7 +1142,7 @@ mod tests {
                 .expect("valid measured screenshot fixture");
         assert_eq!(fixture["schema"], 1);
         let sources = fixture["sources"].as_array().expect("source captures");
-        assert_eq!(sources.len(), 20);
+        assert_eq!(sources.len(), 21);
         for source in sources {
             let name = source["name"].as_str().unwrap();
             assert_eq!(source["sha256"].as_str().unwrap().len(), 64);
@@ -1157,6 +1184,38 @@ mod tests {
                 "{name}: recorded halo priority"
             );
             assert!(!board_is_empty(&frame).unwrap(), "{name}: occupied board");
+            if name.ends_with("06-STOPPED-Uncertain.png") {
+                let first = PyramidTargetKind::Card { row: 6, column: 2 };
+                let partner = PyramidTargetKind::Card { row: 6, column: 6 };
+                let mut stale = PyramidBoardState::new();
+                stale.mark_removed(first);
+                stale.mark_removed(partner);
+                assert_eq!(predicted_target(&frame, &stale), None);
+                let recovered = reappeared_consumed_card(&frame, &stale)
+                    .unwrap()
+                    .expect("the highlighted, previously removed card proves stale history");
+                assert_eq!(
+                    recovered.prediction,
+                    analyse(&frame, &PyramidBoardState::new())
+                        .unwrap()
+                        .prediction
+                );
+                assert_eq!(
+                    predicted_target(&frame, &PyramidBoardState::new()),
+                    Some(first)
+                );
+                let mut first_consumed = PyramidBoardState::new();
+                first_consumed.mark_removed(first);
+                assert_eq!(predicted_target(&frame, &first_consumed), Some(partner));
+                assert!(
+                    reappeared_consumed_card(&frame, &PyramidBoardState::new())
+                        .unwrap()
+                        .is_none()
+                );
+                stale.clicked_target_slots[first.slot_index().unwrap()] = false;
+                assert_eq!(predicted_target(&frame, &stale), Some(first));
+                assert!(reappeared_consumed_card(&frame, &stale).unwrap().is_none());
+            }
         }
     }
 }

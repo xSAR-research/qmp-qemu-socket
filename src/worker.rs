@@ -386,7 +386,12 @@ fn run_worker(
                     &mut completed_boards,
                 );
                 send_board_progress(&event_tx, &scan_state, completed_boards);
-                run_capture(socket_path, &scan_state, &event_tx);
+                run_capture(
+                    socket_path,
+                    &mut scan_state,
+                    &mut completed_boards,
+                    &event_tx,
+                );
             }
             WorkerCommand::PrepareSnapshot {
                 socket_path,
@@ -476,7 +481,12 @@ fn reset_progress_tracking(scan_state: &mut TableauScanState, completed_boards: 
     *completed_boards = 0;
 }
 
-fn run_capture(socket_path: PathBuf, scan_state: &TableauScanState, event_tx: &WorkerEventSink) {
+fn run_capture(
+    socket_path: PathBuf,
+    scan_state: &mut TableauScanState,
+    completed_boards: &mut usize,
+    event_tx: &WorkerEventSink,
+) {
     // Captures and analyses exactly one guest frame without issuing guest input.
     send_state(event_tx, WorkerState::Connecting);
     send_status(event_tx, "Screengrab".to_owned());
@@ -485,7 +495,33 @@ fn run_capture(socket_path: PathBuf, scan_state: &TableauScanState, event_tx: &W
         format!("Connecting to QMP socket: {}", socket_path.display()),
     );
 
-    let result = capture_and_analyse(&socket_path, scan_state, event_tx);
+    let result = capture_and_analyse(&socket_path, scan_state, event_tx).and_then(
+        |(mut observation, timing)| {
+            if scan_state.mode() == GameMode::Pyramid
+                && observation.gameplay_scene
+                && matches!(observation.prediction, PredictedAction::NoHighlight)
+                && let Some(fresh) = pyramid::reappeared_consumed_card(
+                    &observation.frame,
+                    &scan_state.pyramid,
+                )
+                .map_err(|error| format!("Pyramid fresh-capture recovery failed: {error}"))?
+            {
+                *scan_state = TableauScanState::for_mode(GameMode::Pyramid);
+                *completed_boards = 0;
+                observation.prediction = fresh.prediction;
+                observation.observed_rows = fresh.observed_rows;
+                send_board_progress(event_tx, scan_state, *completed_boards);
+                send_log(
+                    event_tx,
+                    format!(
+                        "RECOVERED: fresh Pyramid capture found {} on a card positively removed in the previous board record; clearing stale per-board state and rescanning this same frame. No guest input or extra screendump was sent; board number reset to unknown.",
+                        format_prediction_target(observation.prediction),
+                    ),
+                );
+            }
+            Ok((observation, timing))
+        },
+    );
     match result {
         Ok((observation, timing)) => {
             let dimensions = format!("{}x{}", observation.frame.width, observation.frame.height);

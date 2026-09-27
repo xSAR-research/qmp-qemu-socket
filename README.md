@@ -6,7 +6,7 @@ Casual Games. TriPeaks and Pyramid actions are guarded by fresh captures and
 visual verification. Both use the same QMP controller and post-game flow; each
 game provides its own target selection and effect checks.
 
-The application version is `1.0.2`. `Cargo.toml` supplies the version shown in
+The application version is `1.0.3`. `Cargo.toml` supplies the version shown in
 the window title and Parameters.
 
 ## Build
@@ -54,6 +54,15 @@ acknowledgements and arbitrary visual changes cannot mark a card consumed or
 authorise a Move click. Unknown or unresolved results stop after bounded
 observation. Mode/socket changes and **Clear Output** invalidate retained
 progress; a confirmed new board also resets its card state.
+If a guarded run stopped across a missed redeal, **Capture Frame** can recover
+without cycling Game Type: a fresh halo on a card previously verified removed
+invalidates the old board record. The same frame is rescanned without another
+screendump or guest input. The separate automatic transition fault is tracked
+in issue #7.
+
+**Detailed output** uses a fixed panel height, increased by about 2.5 lines.
+When opened it reserves that space from the preview; further window growth
+still goes to the image.
 
 Automatic capture currently uses a temporary PNG beside the socket: QEMU writes
 the file, the worker reads it and decodes RGBA pixels, and normal cleanup tries

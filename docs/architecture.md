@@ -126,6 +126,17 @@ socket clear the Pyramid board state. Every new context requires a fresh scene
 before guest input. See `pyramid-execution.md` for geometry and the remaining
 live acceptance checks.
 
+After a stopped run, read-only Capture Frame can encounter a new board while
+the old board's consumed marks remain. Only when the fresh frame has a halo and
+present card at a previously verified removed slot, and old-state analysis
+found no eligible target, the worker clears the per-board record, resets the
+advisory board count to unknown, and reuses that exact frame for planning. This
+does not perform or repair automatic redeal detection; that is tracked in #7.
+
+The expanded detailed-output area has a fixed logical height. The preview
+reserves that fixed space only while the log is expanded, so additional window
+height increases the image area instead of stretching the log.
+
 ## State and bounds
 
 - Frame size is locked to 1920x1080.
