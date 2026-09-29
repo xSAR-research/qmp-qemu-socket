@@ -1,0 +1,119 @@
+{
+  "description": "Derived sparse regression fixtures. Listed half-open rectangles preserve original RGBA pixels exactly at original coordinates. All unlisted pixels are opaque black, no resizing. These are test fixtures, not substitute original screenshot evidence.",
+  "frame": [
+    1920,
+    1080
+  ],
+  "retained_rectangles_xyxy": [
+    [
+      378,
+      100,
+      1540,
+      940
+    ],
+    [
+      160,
+      310,
+      176,
+      326
+    ],
+    [
+      1730,
+      310,
+      1746,
+      326
+    ],
+    [
+      824,
+      34,
+      1096,
+      92
+    ]
+  ],
+  "files": [
+    {
+      "fixture": "K01.png",
+      "source": "K01-20260929-223615-initial-solver-off.png",
+      "source_sha256": "34125574f124baf8e42146b0c26f94c1340077178ed3a174d0c11cfc1cc87c31",
+      "fixture_sha256": "ee82492bf262a53909f3213510e4836e0ed9197a5f8e0a248008c7e240ef7fca",
+      "bytes": 1632899
+    },
+    {
+      "fixture": "K02.png",
+      "source": "K02-20260929-223628-ace-clubs-to-foundation-before.png",
+      "source_sha256": "0edd8b23318f149bd83916f68f8d96beaac91bc908a38b900c91d89bcd3c2607",
+      "fixture_sha256": "ba823700370bc07ff63c7e1ccb893bbfcb933a90e5d1bfb3a6cf845ace052fa7",
+      "bytes": 1606457
+    },
+    {
+      "fixture": "K03.png",
+      "source": "K03-20260929-223703-ace-clubs-to-foundation-after.png",
+      "source_sha256": "96fe90b916203bc2041ec2d344e717fe10e2cc3f83915fc63933b21f2ac21a24",
+      "fixture_sha256": "e098a7f99e9c1e8cf1b813a27ff1ab91f4f853064a3507ac81a548dd3618d36a",
+      "bytes": 1617952
+    },
+    {
+      "fixture": "K04.png",
+      "source": "K04-20260929-223744-seven-diamonds-to-eight-clubs-before.png",
+      "source_sha256": "23c470aeccad0363d17e75dfeabb4a4330695e032fb88c9394db04b1be148464",
+      "fixture_sha256": "c9078007fc86abd56542012f02d60e08dd7675001af5ce56345c9ef99f153916",
+      "bytes": 1608942
+    },
+    {
+      "fixture": "K05.png",
+      "source": "K05-20260929-223808-seven-diamonds-to-eight-clubs-after.png",
+      "source_sha256": "39dffad9d44ba68c956c2922e6294b5de772a541710bd30de88efa741b756808",
+      "fixture_sha256": "97e947d038ff8aea8fb9f5ddaeec36ec7dc46a6c280b6f3c4ba93d27a034ba46",
+      "bytes": 1606251
+    },
+    {
+      "fixture": "K06.png",
+      "source": "K06-20260929-223841-stock-draw-01-before.png",
+      "source_sha256": "49d1bbee7a988b6d36ee344fa1819f21b3026c28d3db56522adfe890af35187f",
+      "fixture_sha256": "c92fd4982dc1352ca3f3a675f2ec0dee70088f9b7728632086870ace4947f2a4",
+      "bytes": 1615716
+    },
+    {
+      "fixture": "K07.png",
+      "source": "K07-20260929-223908-stock-draw-01-after-two-spades.png",
+      "source_sha256": "14a06139802c92e81b108a4dc9a4cb55dc11ecf5355529b3691b018a99916ae0",
+      "fixture_sha256": "8450cc9fc42082367cf642ba0043f35796bfdcddc5b2a6b1c612cec4effe1ef2",
+      "bytes": 1582355
+    },
+    {
+      "fixture": "K08.png",
+      "source": "K08-20260929-223931-stock-draw-02-before.png",
+      "source_sha256": "1426b02db7290cd037f3f39e8a6359ad167903d635db53adae9d30066b9d4427",
+      "fixture_sha256": "49cb18cd44b27e850c57bf2af5657c9bbaa00b84692c3fef8c9d0d055c9d3757",
+      "bytes": 1572160
+    },
+    {
+      "fixture": "K09.png",
+      "source": "K09-20260929-223941-stock-draw-02-after-five-spades.png",
+      "source_sha256": "5dabcf38ed245fa4a627d9f63ee58db1f77bf1a6c0ae2c55a6ae1b649e2034ee",
+      "fixture_sha256": "2a4e62b6f79cb7813a47e31911e50907ce84aade063a82fbabcc3a807850e902",
+      "bytes": 1568516
+    },
+    {
+      "fixture": "K10.png",
+      "source": "K10-20260929-225639-jack-clubs-run-to-queen-hearts-before.png",
+      "source_sha256": "03e2a63a6293656d2d449376d9d4461af61f45db0ab68bf1a69da007d5cc5158",
+      "fixture_sha256": "18ec8ef1b084aed86c0e6311adc334dd2c99df9e4230d4d393cc55ac9efcf864",
+      "bytes": 1543033
+    },
+    {
+      "fixture": "K11.png",
+      "source": "K11-20260929-225657-jack-clubs-run-to-queen-hearts-after.png",
+      "source_sha256": "a841b1a3c21683a44baed44828c1b4633cc47142b48b24c5f9a8e607254cfca0",
+      "fixture_sha256": "d32e42d226c338d803255b35dfcdcbc4b956d950832edd229d3e795fe9c13e22",
+      "bytes": 1533357
+    },
+    {
+      "fixture": "K12.png",
+      "source": "qmp-qemu-socket 260930 015843 Recycle-Stack.png",
+      "source_sha256": "fc7dbc8327bcb37dc7a9f7b61cc1990fd82908ba7551bd46157cd68146b851c8",
+      "fixture_sha256": "fac0972b5dcc777a42cd9d5c6578ae101e686fb5eaf83b4c4cac678c0475acc0",
+      "bytes": 1443447
+    }
+  ]
+}
