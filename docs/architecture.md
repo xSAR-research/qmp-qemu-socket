@@ -8,6 +8,7 @@
 | `session_log.rs` | private session-file creation, append and complete-history reads |
 | `game.rs` | small game/profile boundary and typed actions |
 | `tripeaks.rs` | validated TriPeaks profile assembly |
+| `klondike.rs` | Klondike dynamic source blocks, stock/recycle, RIGHT fan and effect evidence |
 | `pyramid.rs` | Pyramid targets, fixed halo probes, priority and action-effect evidence |
 | `parameters.rs` | fixed geometry, colour values, delays, limits and release label |
 | `capture.rs` | decoded immutable frame representation |
@@ -21,6 +22,7 @@
 | `worker.rs` | worker commands/events, capture, guarded execution, timing and cancellation |
 | `worker/post_game.rs` | shared score, Level Up, New Game, Play and Solver progression |
 | `worker/pyramid_execution.rs` | Pyramid effect, fresh-pair continuation and redeal checks |
+| `worker/klondike_execution.rs` | Bounded Klondike execution and immediate-capture Solver recovery; no terminal flow |
 | `worker/tests.rs` | worker regression cases, including transition and cancellation guards |
 
 ---
@@ -157,6 +159,22 @@ The expanded detailed-output area has a fixed logical height. The preview
 reserves that fixed space only while the log is expanded, so additional window
 height increases the image area instead of stretching the log.
 
+## Klondike boundary
+
+Klondike uses an independent controller and no three-board progress probe.
+Its dynamic target identity includes the highlighted source geometry. It follows
+DRAW, RIGHT, tableau bottom-up and SUIT priority, using a key for ordinary draw
+and a single source click for transfers/recycle. Solid-source validation rejects
+the dark dashed landing guide. Source blocks can change height after every move.
+
+All Klondike runs have a finite gameplay action limit; zero is rejected in the
+worker as well as excluded by the UI. One recognised no-HALO context can request
+one Solver activation and an immediate capture, followed by bounded delayed
+observations. A recovery never proves the preceding gameplay effect. Unknown
+scenes, uncertain input and unresolved effects stop, without terminal clicks.
+An initial no-HALO approval is recovery-only and cannot initiate gameplay.
+See `klondike-candidate-1.md` for evidence and known limitations.
+
 ## State and bounds
 
 - Frame size is locked to 1920x1080.
@@ -172,7 +190,8 @@ height increases the image area instead of stretching the log.
   retains its original PNG and decoded frame.
 - The visible log is bounded; the complete private session log remains on
   disk.
-- Multi-Step defaults to continuous (`0`) and is STOP-cancellable.
+- TriPeaks/Pyramid Multi-Step defaults to continuous (`0`) and is STOP-cancellable.
+- Klondike Multi-Step defaults to 10 and permits only 1–10000 gameplay actions.
 - Transition retries and click attempts are bounded.
 - Advisory session counters never override visual transition evidence.
 - STOP and application exit detach locally; neither shuts down QEMU or Windows.

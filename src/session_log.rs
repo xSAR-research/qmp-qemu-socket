@@ -16,6 +16,7 @@ use crate::parameters::{
     session_log_directory,
 };
 
+
 /// Owns one uniquely reserved session file for append and complete-history reads.
 pub(crate) struct SessionLog {
     /// Destination retained for status display and complete-history reads.
@@ -24,7 +25,10 @@ pub(crate) struct SessionLog {
     file: File,
 }
 
+
 impl SessionLog {
+
+
     /// Reserves a private session file in the configured log directory.
     ///
     /// Existing names are never overwritten. A bounded suffix search handles
@@ -38,7 +42,10 @@ impl SessionLog {
             .map_err(io::Error::other)?
             .as_millis();
 
+
         for attempt in 0..SESSION_LOG_NAME_ATTEMPTS {
+
+
             let collision_suffix = if attempt == 0 {
                 String::new()
             } else {
@@ -47,6 +54,8 @@ impl SessionLog {
             let path = directory.join(format!(
                 "{SESSION_LOG_FILE_PREFIX}{timestamp}{collision_suffix}{SESSION_LOG_FILE_SUFFIX}"
             ));
+
+
             match OpenOptions::new()
                 .write(true)
                 .create_new(true)
@@ -64,6 +73,7 @@ impl SessionLog {
         ))
     }
 
+
     /// Writes one complete timestamped line, including its terminating newline.
     ///
     /// Returns the underlying write error so the UI can retain visible output
@@ -71,6 +81,7 @@ impl SessionLog {
     pub(crate) fn append(&mut self, line: &str) -> io::Result<()> {
         writeln!(self.file, "{line}")
     }
+
 
     /// Flushes pending writes and reads the complete UTF-8 session history.
     ///
@@ -80,6 +91,7 @@ impl SessionLog {
         self.file.flush()?;
         fs::read_to_string(&self.path)
     }
+
 
     /// Returns the reserved pathname for status messages without exposing the file.
     pub(crate) fn path(&self) -> &Path {

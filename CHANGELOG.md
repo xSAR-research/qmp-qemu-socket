@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.2.1 — 2026-09-30 (candidate 1; Beast verification pending)
+
+- Add the Solver-driven Klondike Draw 1 profile, dynamic source-block detection,
+  three-position RIGHT fan, stock draw/recycle and SUIT-source priority.
+- Add an independent bounded Klondike controller, configurable settle/recapture
+  values, finite Multi-Step, and one immediate-capture Solver recovery per
+  unresolved context. Unknown results never enter shared completion/restart.
+- Preserve the established TriPeaks/Pyramid policies and exact-byte PNG saving.
+- Add two blank lines before definitions and statement blocks throughout the
+  existing and new Rust source without running a formatter.
+- Keep nightly, rustfmt configuration and dependency versions unchanged.
+
+
 ## 1.0.1 — 2026-09-26 (candidate; Beast verification pending)
 
 - Record all 28 Pyramid card envelopes and hit points, plus Left, Move/Recycle and Right, from Issue #1's 1920x1080 screenshots.

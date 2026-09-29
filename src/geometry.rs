@@ -2,8 +2,10 @@
 
 use thiserror::Error;
 
+
 /// Maximum value of QEMU's absolute pointing-device coordinate range.
 pub const QMP_ABSOLUTE_MAX: u32 = 0x7fff;
+
 
 /// Signed guest-pixel point; negative values remain detectable before input.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -14,12 +16,16 @@ pub struct PixelPoint {
     pub y: i32,
 }
 
+
 impl PixelPoint {
+
+
     /// Construct a signed guest-pixel point.
     pub const fn new(x: i32, y: i32) -> Self {
         Self { x, y }
     }
 }
+
 
 /// Half-open guest-pixel rectangle with unsigned origin and dimensions.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -34,7 +40,10 @@ pub struct PixelRect {
     pub height: u32,
 }
 
+
 impl PixelRect {
+
+
     /// Construct a half-open guest-pixel rectangle.
     pub const fn new(x: u32, y: u32, width: u32, height: u32) -> Self {
         Self {
@@ -45,20 +54,24 @@ impl PixelRect {
         }
     }
 
+
     /// Return the saturating exclusive right edge.
     pub const fn right(self) -> u32 {
         self.x.saturating_add(self.width)
     }
+
 
     /// Return the saturating exclusive bottom edge.
     pub const fn bottom(self) -> u32 {
         self.y.saturating_add(self.height)
     }
 
+
     /// Report whether either rectangle dimension is zero.
     pub const fn is_empty(self) -> bool {
         self.width == 0 || self.height == 0
     }
+
 
     /// Return the integer midpoint used by calibrated screen targets.
     pub const fn centre(self) -> PixelPoint {
@@ -67,6 +80,7 @@ impl PixelRect {
             self.y.saturating_add(self.height / 2) as i32,
         )
     }
+
 
     /// Check membership using the rectangle's half-open pixel bounds.
     pub fn contains(self, point: PixelPoint) -> bool {
@@ -77,6 +91,7 @@ impl PixelRect {
     }
 }
 
+
 /// Absolute pointing-device coordinate in QEMU's calibrated input range.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct QmpPoint {
@@ -86,12 +101,16 @@ pub struct QmpPoint {
     pub y: u32,
 }
 
+
 impl QmpPoint {
+
+
     /// Construct an absolute QMP point.
     pub const fn new(x: u32, y: u32) -> Self {
         Self { x, y }
     }
 }
+
 
 /// Inclusive QMP corners corresponding to a half-open pixel rectangle.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -102,7 +121,10 @@ pub struct QmpRect {
     pub bottom_right_inclusive: QmpPoint,
 }
 
+
 impl QmpRect {
+
+
     /// Construct inclusive QMP corner geometry.
     pub const fn new(top_left: QmpPoint, bottom_right_inclusive: QmpPoint) -> Self {
         Self {
@@ -111,6 +133,7 @@ impl QmpRect {
         }
     }
 }
+
 
 /// Rejection reasons for coordinates that cannot map safely into the frame.
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -164,11 +187,16 @@ pub enum GeometryError {
     },
 }
 
+
 /// Convert one guest pixel coordinate to QEMU's absolute input range.
 pub fn pixel_to_qmp_axis(pixel: u32, extent: u32) -> Result<u32, GeometryError> {
+
+
     if extent == 0 {
         return Err(GeometryError::InvalidExtent);
     }
+
+
     if pixel >= extent {
         return Err(GeometryError::PixelOutsideExtent { pixel, extent });
     }
@@ -177,12 +205,15 @@ pub fn pixel_to_qmp_axis(pixel: u32, extent: u32) -> Result<u32, GeometryError> 
     Ok((numerator / u64::from(extent)) as u32)
 }
 
+
 /// Convert one guest pixel point to QEMU's absolute input coordinates.
 pub fn pixel_point_to_qmp(
     point: PixelPoint,
     frame_width: u32,
     frame_height: u32,
 ) -> Result<QmpPoint, GeometryError> {
+
+
     if point.x < 0 || point.y < 0 || point.x as u32 >= frame_width || point.y as u32 >= frame_height
     {
         return Err(GeometryError::PixelPointOutsideFrame {
@@ -199,12 +230,15 @@ pub fn pixel_point_to_qmp(
     ))
 }
 
+
 /// Convert a half-open pixel rectangle to inclusive QMP corner coordinates.
 pub fn pixel_rect_to_qmp(
     rect: PixelRect,
     frame_width: u32,
     frame_height: u32,
 ) -> Result<QmpRect, GeometryError> {
+
+
     if rect.is_empty() {
         return Err(GeometryError::EmptyRectangle);
     }
@@ -217,6 +251,7 @@ pub fn pixel_rect_to_qmp(
         .y
         .checked_add(rect.height)
         .ok_or(GeometryError::RectangleOverflow)?;
+
 
     if right > frame_width || bottom > frame_height {
         return Err(GeometryError::RectangleOutsideFrame {
@@ -241,10 +276,12 @@ pub fn pixel_rect_to_qmp(
     Ok(QmpRect::new(top_left, bottom_right_inclusive))
 }
 
+
 #[cfg(test)]
 mod tests {
     //! Calibrated conversions and coordinate-boundary regression coverage.
     use super::*;
+
 
     /// Preserve the established pixel-to-QMP calibration vectors.
     #[test]
@@ -264,10 +301,12 @@ mod tests {
             (1_079, 1_080, 32_736),
         ];
 
+
         for (pixel, extent, expected) in cases {
             assert_eq!(pixel_to_qmp_axis(pixel, extent), Ok(expected));
         }
     }
+
 
     /// Cover the smallest extent and u32 limits without intermediate overflow.
     #[test]
@@ -275,6 +314,7 @@ mod tests {
         assert_eq!(pixel_to_qmp_axis(0, 1), Ok(0));
         assert_eq!(pixel_to_qmp_axis(u32::MAX - 1, u32::MAX), Ok(32_766));
     }
+
 
     /// Reject empty axes and coordinates at the exclusive frame edge.
     #[test]
@@ -289,10 +329,13 @@ mod tests {
         );
     }
 
+
     /// Verify monotonic conversion against the calibrated integer formula.
     #[test]
     fn mapping_is_monotone_and_matches_the_integer_formula() {
         let mut previous = 0;
+
+
         for pixel in 0..1_920 {
             let actual = pixel_to_qmp_axis(pixel, 1_920).unwrap();
             let expected = (u64::from(pixel) * u64::from(QMP_ABSOLUTE_MAX) / 1_920) as u32;
@@ -302,6 +345,7 @@ mod tests {
             previous = actual;
         }
     }
+
 
     /// Verify inclusive QMP corners use the final included source pixel.
     #[test]
@@ -315,6 +359,7 @@ mod tests {
             QmpPoint::new(30_565, 18_901)
         );
     }
+
 
     /// Exercise empty, overflowing and frame-crossing rectangle failures.
     #[test]
@@ -339,6 +384,7 @@ mod tests {
             })
         );
     }
+
 
     /// Ensure large unsigned rectangle origins are not narrowed through i32.
     #[test]

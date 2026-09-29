@@ -8,6 +8,7 @@ mod cards;
 mod detector;
 mod game;
 mod geometry;
+mod klondike;
 mod parameters;
 mod pyramid;
 mod qmp;
@@ -21,6 +22,7 @@ mod worker;
 use app::QmpQemuSocketApp;
 use eframe::egui;
 use parameters::{APP_NAME, INITIAL_WINDOW_HEIGHT, INITIAL_WINDOW_WIDTH, RELEASE_LABEL};
+
 
 /// Configure the native window and run the controller until its viewport closes.
 ///

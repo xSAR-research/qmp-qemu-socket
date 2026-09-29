@@ -27,6 +27,8 @@ use crate::parameters::{
     ACTION_CHANGE_CHANNEL_THRESHOLD, ACTION_CURSOR_EXCLUSION_HALF_SIZE,
     BOARD_REDEAL_SETTLE_DELAY_MS, CHALLENGE_COMPLETE_CONTINUE_CONTROL, DEFAULT_MULTI_STEP_ACTIONS,
     DRAW_ANIMATION_SETTLE_DELAY_MS, GOLD_CHANNEL_TOLERANCE, GOLD_RGB_CANDIDATES, KEY_HOLD,
+    KLONDIKE_DEFAULT_MULTI_STEP_ACTIONS, KLONDIKE_MAX_MULTI_STEP_ACTIONS,
+    KLONDIKE_REOBSERVE_DELAY_MS, KLONDIKE_SETTLE_DELAY_MS,
     LEVEL_UP_APPEAR_DELAY, MAX_LOG_LINES, MAXIMUM_ANIMATION_SETTLE_DELAY_MS,
     MIN_PREVIEW_VIEWPORT_HEIGHT_POINTS, MINIMUM_ANIMATION_SETTLE_DELAY_MS,
     MINIMUM_DRAW_CHANGED_PIXELS, MINIMUM_TABLEAU_CHANGED_PIXELS, MOUSE_HOLD,
@@ -42,14 +44,22 @@ use crate::parameters::{
 use crate::parameters::{AnimationSettleDelays, StepRunSettings};
 use crate::parameters::{default_qmp_socket_path, session_log_directory, snapshot_directory};
 
+
 /// Fill colour for setup, capture and snapshot controls.
 const SETUP_BLUE: Color32 = Color32::from_rgb(27, 96, 157);
+
+
 /// Fill colour for controls that start an authorised run.
 const ACTION_GREEN: Color32 = Color32::from_rgb(35, 112, 43);
+
+
 /// Fill colour for stop and exit controls.
 const STATE_RED: Color32 = Color32::from_rgb(172, 35, 38);
+
+
 /// Sub-pixel allowance that corrects f32 round-trip drift at exact pixel boundaries.
 const PREVIEW_MAPPING_FLOAT_EPSILON: f32 = 0.0005;
+
 
 /// UI ownership of a dispatched run until worker completion or cancellation arrives.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -60,6 +70,7 @@ enum ActiveRun {
     MultiStep,
 }
 
+
 /// Deferred clipboard operation selected from the snapshot-label context menu.
 enum SnapshotEditAction {
     /// Copy selected text to the clipboard, then remove it from the label.
@@ -69,6 +80,7 @@ enum SnapshotEditAction {
     /// Insert sanitised clipboard text within the label length limit.
     Paste,
 }
+
 
 /// Owns UI state and submits bounded requests to the independent QMP worker.
 pub struct QmpQemuSocketApp {
@@ -144,6 +156,12 @@ pub struct QmpQemuSocketApp {
     pyramid_card_settle_ms: u64,
     /// Pyramid no-halo recapture delay copied into the next run settings.
     pyramid_reobserve_ms: u64,
+    /// Klondike action settling delay copied into the next run settings.
+    klondike_settle_ms: u64,
+    /// Klondike bounded recapture delay copied into the next run settings.
+    klondike_reobserve_ms: u64,
+    /// Separate finite Klondike operation budget; other modes retain their settings.
+    klondike_multi_step_actions: usize,
     /// Requested operation limit; the configured zero sentinel means continuous.
     multi_step_actions: usize,
     /// Run ownership retained until the worker reports completion.
@@ -160,7 +178,10 @@ pub struct QmpQemuSocketApp {
     current_status: String,
 }
 
+
 impl QmpQemuSocketApp {
+
+
     /// Creates UI state, starts the worker and requests one read-only capture.
     ///
     /// Uses the display handle for clipboard access. A log-creation failure is
@@ -174,6 +195,8 @@ impl QmpQemuSocketApp {
                 .ok()
                 .map(|handle| handle.as_raw()),
         );
+
+
         let (session_log, session_log_error) = match SessionLog::create() {
             Ok(log) => (Some(log), None),
             Err(error) => (None, Some(error.to_string())),
@@ -215,6 +238,9 @@ impl QmpQemuSocketApp {
             pyramid_move_settle_ms: PYRAMID_MOVE_SETTLE_DELAY_MS,
             pyramid_card_settle_ms: PYRAMID_CARD_SETTLE_DELAY_MS,
             pyramid_reobserve_ms: PYRAMID_REOBSERVE_DELAY_MS,
+            klondike_settle_ms: KLONDIKE_SETTLE_DELAY_MS,
+            klondike_reobserve_ms: KLONDIKE_REOBSERVE_DELAY_MS,
+            klondike_multi_step_actions: KLONDIKE_DEFAULT_MULTI_STEP_ACTIONS,
             multi_step_actions: DEFAULT_MULTI_STEP_ACTIONS,
             active_run: None,
             stop_requested: false,
@@ -229,6 +255,8 @@ impl QmpQemuSocketApp {
             crate::parameters::APP_NAME,
             app.game_mode
         ));
+
+
         if let Some(path) = app.session_log.as_ref().map(|log| log.path().to_path_buf()) {
             app.push_log(format!(
                 "Complete session output is being written to {} with mode 0600.",
@@ -252,6 +280,7 @@ impl QmpQemuSocketApp {
         app
     }
 
+
     /// Timestamps a message, appends it to the session file and retains its visible tail.
     ///
     /// A write failure disables further file-backed logging and adds a visible warning.
@@ -265,6 +294,8 @@ impl QmpQemuSocketApp {
             .session_log
             .as_mut()
             .and_then(|log| log.append(&line).err());
+
+
         if let Some(error) = session_error {
             self.session_log = None;
             self.push_visible_log_line(format!(
@@ -275,14 +306,18 @@ impl QmpQemuSocketApp {
         self.push_visible_log_line(line);
     }
 
+
     /// Retains the newest line while evicting enough old lines to respect `MAX_LOG_LINES`.
     fn push_visible_log_line(&mut self, line: String) {
+
+
         if self.log_lines.len() >= MAX_LOG_LINES {
             let remove_count = self.log_lines.len() + 1 - MAX_LOG_LINES;
             self.log_lines.drain(0..remove_count);
         }
         self.log_lines.push(line);
     }
+
 
     /// Timestamps a housekeeping entry without adding it to the visible panel.
     ///
@@ -293,22 +328,29 @@ impl QmpQemuSocketApp {
             self.started_at.elapsed().as_secs_f64(),
             message.into()
         );
+
+
         let result = match self.session_log.as_mut() {
             Some(log) => log
                 .append(&line)
                 .map_err(|error| format!("session log write failed: {error}")),
             None => Err("no session log is available".to_owned()),
         };
+
+
         if result.is_err() {
             self.session_log = None;
         }
         result
     }
 
+
     /// Returns the complete session file, or the visible tail when no file is available.
     ///
     /// A failed read of an existing file is reported rather than silently truncating output.
     fn complete_output(&mut self) -> Result<String, String> {
+
+
         match self.session_log.as_mut() {
             Some(log) => log
                 .complete_text()
@@ -317,15 +359,20 @@ impl QmpQemuSocketApp {
         }
     }
 
+
     /// Counts a restarted game and periodically clears only the rendered log tail.
     ///
     /// Rollover is skipped if its marker cannot be written to the complete session log.
     fn roll_visible_output_after_completed_game(&mut self) {
         self.completed_games = self.completed_games.saturating_add(1);
+
+
         if self.completed_games % VISIBLE_LOG_ROLLOVER_GAMES != 0 {
             return;
         }
         let boards_per_game = self.game_mode.profile().boards_per_game;
+
+
         if let Err(error) = self.append_session_only(format!(
             "Visible output rollover after {} completed games ({} boards); the complete history remains in the session log.",
             VISIBLE_LOG_ROLLOVER_GAMES,
@@ -344,13 +391,18 @@ impl QmpQemuSocketApp {
         ));
     }
 
+
     /// Applies queued worker events and installs only the latest compatible preview.
     ///
     /// Snapshot request tokens reject superseded captures; diagnostic frames remain
     /// inspection-only even when their pixels and predictions are displayed.
     fn poll_worker(&mut self, context: &egui::Context) {
         let events: Vec<_> = self.worker.try_events().collect();
+
+
         for event in events {
+
+
             match event {
                 WorkerEvent::Log(message) => self.push_log(message),
                 WorkerEvent::Status(message) => self.current_status = message,
@@ -361,11 +413,15 @@ impl QmpQemuSocketApp {
                     png,
                     prediction,
                 } => {
+
+
                     if self.show_snapshot_dialog
                         && request_id == self.snapshot_request_id
                         && capture_context == self.current_preview_context()
                     {
                         self.snapshot_capture_pending = false;
+
+
                         match frame_to_colour_image(&frame) {
                             Ok(image) => {
                                 self.snapshot_texture = Some(context.load_texture(
@@ -387,6 +443,8 @@ impl QmpQemuSocketApp {
                     }
                 }
                 WorkerEvent::SnapshotPreparationFailed { request_id, error } => {
+
+
                     if self.show_snapshot_dialog && request_id == self.snapshot_request_id {
                         self.snapshot_capture_pending = false;
                         self.snapshot_error = Some(error);
@@ -403,10 +461,14 @@ impl QmpQemuSocketApp {
                 }
                 WorkerEvent::State(state) => {
                     self.worker_state = state;
+
+
                     if matches!(state, WorkerState::Detached) {
                         self.stop_requested = false;
                         self.invalidate_preview();
                     }
+
+
                     if matches!(
                         state,
                         WorkerState::Detached
@@ -416,6 +478,8 @@ impl QmpQemuSocketApp {
                     ) {
                         self.active_run = None;
                     }
+
+
                     if matches!(state, WorkerState::Error) {
                         self.invalidate_preview();
                     }
@@ -432,6 +496,8 @@ impl QmpQemuSocketApp {
                 } => {
                     self.current_status = display_action(before);
                     let progress = format_operation_progress(operation_index, operation_limit);
+
+
                     let acceptance = if continued_from_halo {
                         "continued from fresh halo (prior effect unproven)"
                     } else {
@@ -468,19 +534,20 @@ impl QmpQemuSocketApp {
             }
         }
 
+
         if let Some(latest) = self.worker.take_latest_frame() {
+
+
             if latest.coalesced_frames > 0 {
                 self.push_log(format!(
                     "Preview backlog bounded: {} stale full-resolution frame(s) were coalesced; only the newest frame was retained.",
                     latest.coalesced_frames,
                 ));
             }
+
+
             if latest.context == Some(self.current_preview_context())
-                && !matches!(
-                    self.worker_state,
-                    WorkerState::Detached | WorkerState::Error
-                )
-                && (self.worker_state != WorkerState::Uncertain || latest.diagnostic)
+                && worker_frame_is_displayable(self.worker_state, latest.diagnostic)
             {
                 self.install_frame(
                     context,
@@ -489,16 +556,19 @@ impl QmpQemuSocketApp {
                     latest.log_prediction,
                     latest.context,
                 );
+
+
                 if latest.diagnostic && self.capture_texture.is_some() {
                     self.diagnostic_preview = true;
                     self.prediction = None;
                     self.push_log("Latest unverified post-action QMP frame is displayed for diagnosis; capture a fresh frame before another run.");
                 }
             } else {
-                self.push_log("Discarded a preview from a different mode/socket or a detached/uncertain worker state without a diagnostic frame.");
+                self.push_log("Discarded a preview from a different mode/socket, an error state, or a detached/uncertain worker state without a diagnostic frame.");
             }
         }
     }
+
 
     /// Validates and uploads a captured frame, retaining its prediction and source context.
     ///
@@ -513,6 +583,8 @@ impl QmpQemuSocketApp {
         frame_context: Option<(PathBuf, GameMode)>,
     ) {
         let dimensions = (frame.width, frame.height);
+
+
         match frame_to_colour_image(&frame) {
             Ok(image) => {
                 self.capture_texture = Some(context.load_texture(
@@ -524,6 +596,8 @@ impl QmpQemuSocketApp {
                 self.preview_context = frame_context;
                 self.prediction = Some(prediction);
                 self.diagnostic_preview = false;
+
+
                 if log_prediction {
                     self.push_log(format_prediction(prediction));
                 }
@@ -536,10 +610,12 @@ impl QmpQemuSocketApp {
         }
     }
 
+
     /// Returns the trimmed socket pathname and selected mode used to identify captures.
     fn current_preview_context(&self) -> (PathBuf, GameMode) {
         (PathBuf::from(self.qmp_socket_path.trim()), self.game_mode)
     }
+
 
     /// Reports whether the displayed frame can authorise a freshly validated run request.
     fn has_current_preview(&self) -> bool {
@@ -553,6 +629,7 @@ impl QmpQemuSocketApp {
         )
     }
 
+
     /// Drops displayed pixels, prediction and source context so they cannot authorise input.
     fn invalidate_preview(&mut self) {
         self.capture_texture = None;
@@ -562,10 +639,13 @@ impl QmpQemuSocketApp {
         self.diagnostic_preview = false;
     }
 
+
     /// Requests one read-only frame when no run, cancellation or worker operation is active.
     ///
     /// `source` labels the request in the log; dispatch failures become visible UI errors.
     fn request_capture(&mut self, source: &str) {
+
+
         if self.worker_state.is_busy() || self.active_run.is_some() || self.stop_requested {
             return;
         }
@@ -577,6 +657,8 @@ impl QmpQemuSocketApp {
             self.game_mode
         ));
         let (socket_path, mode) = self.current_preview_context();
+
+
         if let Err(error) = self.worker.capture_frame(socket_path, mode) {
             self.worker_state = WorkerState::Error;
             self.current_status = "Capture failed".to_owned();
@@ -584,11 +666,14 @@ impl QmpQemuSocketApp {
         }
     }
 
+
     /// Starts a fresh snapshot request and clears any superseded review artefact.
     ///
     /// Busy or cancelling runs are left untouched. Dispatch errors remain visible
     /// in the dialog, and the request token prevents old results replacing new ones.
     fn prepare_snapshot(&mut self) {
+
+
         if self.worker_state.is_busy() || self.active_run.is_some() || self.stop_requested {
             return;
         }
@@ -608,6 +693,8 @@ impl QmpQemuSocketApp {
             self.game_mode
         ));
         let (socket_path, mode) = self.current_preview_context();
+
+
         if let Err(error) =
             self.worker
                 .prepare_snapshot(socket_path, mode, self.snapshot_request_id)
@@ -620,11 +707,14 @@ impl QmpQemuSocketApp {
         }
     }
 
+
     /// Saves the exact retained PNG only after its source context and readiness checks pass.
     ///
     /// A successful save installs its decoded frame in the main preview. A failed
     /// reservation or write retains the bytes and reports the error for a later retry.
     fn save_prepared_snapshot(&mut self, context: &egui::Context) {
+
+
         if self.snapshot_capture_pending
             || !controls_are_mutable(self.active_run, self.worker_state, self.stop_requested)
             || self.snapshot_context.as_ref() != Some(&self.current_preview_context())
@@ -633,6 +723,8 @@ impl QmpQemuSocketApp {
             self.snapshot_error = Some("Capture is not ready for this game and socket.".to_owned());
             return;
         }
+
+
         let Some(png) = self.snapshot_png.as_ref() else {
             self.snapshot_error = Some("No captured PNG is available to save.".to_owned());
             return;
@@ -640,12 +732,16 @@ impl QmpQemuSocketApp {
         let png_len = png.len();
         let result = SnapshotArtifact::reserve(&snapshot_directory(), &self.snapshot_label)
             .and_then(|destination| destination.save(png));
+
+
         match result {
             Ok(path) => {
                 self.push_log(format!(
                     "Original previewed QMP PNG saved: {} ({} bytes); guest input events=0; additional screendumps=0.",
                     path.display(), png_len,
                 ));
+
+
                 if let (Some(frame), Some(prediction), Some(capture_context)) = (
                     self.snapshot_frame.take(),
                     self.snapshot_prediction.take(),
@@ -666,6 +762,7 @@ impl QmpQemuSocketApp {
         }
     }
 
+
     /// Closes snapshot review and releases its bytes, decoded frame and pending selection.
     fn close_snapshot_dialog(&mut self) {
         self.show_snapshot_dialog = false;
@@ -679,6 +776,7 @@ impl QmpQemuSocketApp {
         self.snapshot_label_selection = None;
     }
 
+
     /// Snapshots controls and asks the worker to execute the requested operation limit.
     ///
     /// Requires an authorised mode and current actionable preview. STOP and failed
@@ -689,12 +787,16 @@ impl QmpQemuSocketApp {
         request_name: &str,
         active_run: ActiveRun,
     ) {
+
+
         if self.stop_requested {
             self.push_log(format!(
                 "{request_name} refused: STOP is still being processed; guest input sent=0."
             ));
             return;
         }
+
+
         if !self.game_mode.input_authorised() {
             self.worker_state = WorkerState::Ready;
             self.current_status = format!("{} calibration — input disabled", self.game_mode);
@@ -704,6 +806,8 @@ impl QmpQemuSocketApp {
             ));
             return;
         }
+
+
         let Some(approved_prediction) = self.prediction.filter(|prediction| {
             self.has_current_preview() && prediction_is_actionable(self.game_mode, *prediction)
         }) else {
@@ -724,8 +828,18 @@ impl QmpQemuSocketApp {
             self.pyramid_move_settle_ms,
             self.pyramid_card_settle_ms,
             self.pyramid_reobserve_ms,
-        );
+        )
+        .with_klondike_millis(self.klondike_settle_ms, self.klondike_reobserve_ms);
+
+
+        let operation_limit = if self.game_mode == GameMode::Klondike {
+            operation_limit.clamp(1, KLONDIKE_MAX_MULTI_STEP_ACTIONS)
+        } else {
+            operation_limit
+        };
         let settings = StepRunSettings::new(animation_delays, operation_limit);
+
+
         let request_scope = if settings.is_unbounded() {
             "continuously until STOP or a fail-closed anomaly".to_owned()
         } else {
@@ -739,6 +853,15 @@ impl QmpQemuSocketApp {
             "{request_name} requested {request_scope}, starting from approved preview target: {}. The initial target receives one fresh validation capture; each accepted result frame then becomes the next planning frame.",
             concise_prediction(approved_prediction),
         ));
+
+
+        if self.game_mode == GameMode::Klondike
+            && approved_prediction == PredictedAction::NoHighlight
+        {
+            self.push_log("Klondike initial no-HALO request is recovery-only: freshly validate the board, refresh Solver once, capture immediately, then stop for preview review. No card or draw operation is authorised by this request.");
+        }
+
+
         if let Err(error) =
             self.worker
                 .execute_steps(socket_path, self.game_mode, approved_prediction, settings)
@@ -750,10 +873,25 @@ impl QmpQemuSocketApp {
         }
     }
 
+
+    /// Return the selected mode's operation budget without changing other modes.
+    fn selected_multi_step_actions(&self) -> usize {
+
+
+        if self.game_mode == GameMode::Klondike {
+            self.klondike_multi_step_actions.clamp(1, KLONDIKE_MAX_MULTI_STEP_ACTIONS)
+        } else {
+            self.multi_step_actions
+        }
+    }
+
+
     /// Draws mode, capture and execution controls with run-state gating.
     ///
     /// Mode or socket changes invalidate the previous preview before it can authorise input.
     fn top_bar(&mut self, ui: &mut egui::Ui) {
+
+
         // A mode/socket change invalidates an old frame before any action can use it.
         if self
             .preview_context
@@ -777,22 +915,30 @@ impl QmpQemuSocketApp {
                 egui::ComboBox::from_id_salt("game-mode")
                     .selected_text(egui::RichText::new(self.game_mode.label()).strong().color(Color32::WHITE))
                     .show_ui(ui, |ui| {
+
+
                         for mode in GameMode::AVAILABLE {
                             ui.selectable_value(&mut self.game_mode, mode, egui::RichText::new(mode.label()).strong());
                         }
                     });
             });
+
+
             if self.game_mode != previous_mode {
                 self.invalidate_preview();
                 preview_available = false;
                 self.current_board = 1;
                 self.board_position_established = false;
                 self.boards_per_game = self.game_mode.profile().boards_per_game;
+
+
                 self.current_status = if self.game_mode.calibration_only() {
                     format!("{} calibration — input disabled", self.game_mode)
                 } else {
                     "Ready — capture required".to_owned()
                 };
+
+
                 match self.worker.reset_progress() {
                     Ok(()) => {
                         self.push_log(format!(
@@ -811,6 +957,7 @@ impl QmpQemuSocketApp {
                 }
             }
 
+
             if bevel_button(ui, "Capture Frame", SETUP_BLUE, false, controls_enabled)
                 .on_hover_text("Capture and analyse one frame; send no guest input")
                 .clicked()
@@ -818,8 +965,11 @@ impl QmpQemuSocketApp {
                 self.request_capture("Manual capture");
             }
 
+
             if bevel_button(ui, "Track", SETUP_BLUE, self.show_coordinates, controls_enabled).clicked() {
                 self.show_coordinates = !self.show_coordinates;
+
+
                 self.push_log(if self.show_coordinates {
                     "Coordinate reporting enabled: left-click on the preview to log an exact guest pixel; no guest input is sent."
                 } else {
@@ -827,9 +977,14 @@ impl QmpQemuSocketApp {
                 });
             }
 
+
             if preview_available {
+
+
                 if bevel_button(ui, "Draw Targets", SETUP_BLUE, self.draw_targets, controls_enabled).clicked() {
                     self.draw_targets = !self.draw_targets;
+
+
                     self.push_log(if self.draw_targets {
                         "Read-only target outlines shown."
                     } else {
@@ -839,6 +994,8 @@ impl QmpQemuSocketApp {
                     preview_available = false;
                 }
             }
+
+
             if bevel_button(ui, "Capture PNG", SETUP_BLUE, false, controls_enabled)
                 .on_hover_text("Capture and preview one fresh original QMP PNG before saving; send no guest input")
                 .clicked()
@@ -849,6 +1006,8 @@ impl QmpQemuSocketApp {
                 self.prepare_snapshot();
             }
             ui.separator();
+
+
             let state_colour = match self.worker_state {
                 WorkerState::Detached => Color32::GRAY,
                 WorkerState::Connecting
@@ -862,11 +1021,16 @@ impl QmpQemuSocketApp {
             };
             ui.colored_label(state_colour, format!("QMP: {}", self.worker_state.label()));
 
+
             if self.active_run.is_some() {
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+
+
                     if bevel_button(ui, "STOP", STATE_RED, false, true).clicked() {
                         self.stop_requested = true;
                         self.current_status = "Stopping…".to_owned();
+
+
                         if let Err(error) = self.worker.disconnect() {
                             self.active_run = None;
                             self.worker_state = WorkerState::Error;
@@ -878,33 +1042,48 @@ impl QmpQemuSocketApp {
             }
         });
         ui.horizontal(|ui| {
+
+
             if bevel_button(ui, "Params", SETUP_BLUE, self.show_parameters, controls_enabled).clicked() {
                 self.show_parameters = true;
             }
+
+
             if preview_available {
                 let action_available = controls_enabled
                     && self.game_mode.input_authorised()
                     && matches!(self.worker_state, WorkerState::Ready)
                     && self.prediction.is_some_and(|prediction| prediction_is_actionable(self.game_mode, prediction));
+
+
                 if bevel_button(ui, "Single Step", ACTION_GREEN, false, STEP_ONCE_INPUT_ENABLED && action_available)
-                    .on_hover_text("Execute one freshly validated guarded action; require a changed effect and valid resulting state")
+                    .on_hover_text(if self.game_mode == GameMode::Klondike && self.prediction == Some(PredictedAction::NoHighlight) {
+                        "Refresh Solver once on a freshly validated Klondike board, capture immediately, then stop for review; no gameplay action"
+                    } else {
+                        "Execute one freshly validated guarded action; require a changed effect and valid resulting state"
+                    })
                     .clicked()
                 {
                     self.dispatch_steps(STEP_ONCE_ACTIONS, "Single Step", ActiveRun::StepOnce);
                 }
+
+
                 if bevel_button(ui, "Multiple Steps", ACTION_GREEN, false, MULTI_STEP_INPUT_ENABLED && action_available)
-                    .on_hover_text(if self.multi_step_actions == UNBOUNDED_MULTI_STEP_ACTIONS {
+                    .on_hover_text(if self.game_mode == GameMode::Klondike && self.prediction == Some(PredictedAction::NoHighlight) {
+                        "Refresh Solver once and stop for review; press again after a valid target appears to start bounded gameplay"
+                    } else if self.selected_multi_step_actions() == UNBOUNDED_MULTI_STEP_ACTIONS {
                         "Run continuously until STOP or the first guarded stop condition"
                     } else {
                         "Run the configured bounded number of actions"
                     })
                     .clicked()
                 {
-                    self.dispatch_steps(self.multi_step_actions, "Multiple Steps", ActiveRun::MultiStep);
+                    self.dispatch_steps(self.selected_multi_step_actions(), "Multiple Steps", ActiveRun::MultiStep);
                 }
             }
         });
     }
+
 
     /// Draws the native-scale capture, optional overlays and guest-coordinate inspection.
     ///
@@ -912,6 +1091,8 @@ impl QmpQemuSocketApp {
     /// pixels or the original PNG retained by the snapshot dialog.
     fn preview(&mut self, ui: &mut egui::Ui) {
         ui.heading("QMP capture and target preview");
+
+
         match self.captured_dimensions {
             Some((width, height)) if self.diagnostic_preview => {
                 ui.colored_label(Color32::from_rgb(255, 174, 79), format!(
@@ -951,6 +1132,8 @@ impl QmpQemuSocketApp {
                 let (canvas, response) = ui.allocate_exact_size(canvas_size, Sense::click());
                 let painter = ui.painter_at(canvas);
                 painter.rect_filled(canvas, 0.0, Color32::from_rgb(24, 43, 37));
+
+
                 if let Some(texture) = &self.capture_texture {
                     painter.image(
                         texture.id(),
@@ -968,10 +1151,14 @@ impl QmpQemuSocketApp {
                         Color32::from_gray(175),
                     );
                 }
+
+
                 // Preview-only paint operations. Never modify capture pixels or
                 // snapshot_png: saved evidence retains QEMU's original PNG bytes.
                 if self.draw_targets {
                     let profile = self.game_mode.profile();
+
+
                     for target in profile.preview_targets {
                         paint_target(
                             &painter,
@@ -981,7 +1168,11 @@ impl QmpQemuSocketApp {
                             target.label,
                         );
                     }
+
+
                     if self.game_mode == GameMode::Pyramid {
+
+
                         for target in &PYRAMID_TARGETS {
                             paint_labeled_crosshair(
                                 &painter,
@@ -992,12 +1183,16 @@ impl QmpQemuSocketApp {
                             );
                         }
                     }
+
+
                     for (label, control) in SHARED_TOOLBAR_CONTROLS {
                         let colour = Color32::from_rgb(120, 200, 255);
                         paint_target(&painter, canvas, control.bounds, colour, label);
                         paint_labeled_crosshair(&painter, canvas, control.click_point, colour, "");
                     }
                 }
+
+
                 if let Some(prediction) = self.prediction {
                     paint_prediction(&painter, canvas, prediction);
                 }
@@ -1007,15 +1202,23 @@ impl QmpQemuSocketApp {
                     .flatten()
                     .filter(|position| canvas.contains(*position))
                     .map(|position| preview_to_pixel(canvas, position));
+
+
                 if let Some(point) = pointer {
+
+
                     if self.show_coordinates {
                         paint_crosshair(&painter, canvas, point);
                     }
+
+
                     if self.show_coordinates && response.clicked() {
                         tracked_point = Some(point);
                     }
                 }
             });
+
+
         if let Some(point) = tracked_point {
             let targets = self
                 .game_mode
@@ -1032,6 +1235,7 @@ impl QmpQemuSocketApp {
         }
     }
 
+
     /// Draws the collapsible diagnostic tail and complete-history copy controls.
     ///
     /// Records the expanded state so the preview can reclaim space when collapsed.
@@ -1042,6 +1246,8 @@ impl QmpQemuSocketApp {
             .default_open(false)
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
+
+
                     if ui
                         .button("Copy Output")
                         .on_hover_text(
@@ -1049,11 +1255,15 @@ impl QmpQemuSocketApp {
                         )
                         .clicked()
                     {
+
+
                         match self.complete_output() {
                             Ok(output) => ui.ctx().copy_text(output),
                             Err(error) => self.push_log(error),
                         }
                     }
+
+
                     if ui
                         .add_enabled(
                             !self.worker_state.is_busy(),
@@ -1064,6 +1274,8 @@ impl QmpQemuSocketApp {
                         )
                         .clicked()
                     {
+
+
                         match self.worker.reset_progress() {
                             Ok(()) => {
                                 self.completed_games = 0;
@@ -1073,6 +1285,8 @@ impl QmpQemuSocketApp {
                                 let clear_result = self.append_session_only(
                                     "Visible output was manually cleared; board, game, and row-scan progress were reset; complete session history retained.",
                                 );
+
+
                                 match clear_result {
                                     Ok(()) => self.log_lines.clear(),
                                     Err(error) => self.push_log(format!(
@@ -1094,6 +1308,8 @@ impl QmpQemuSocketApp {
                         .auto_shrink([false, false])
                         .show(ui, |ui| {
                             ui.set_width(ui.available_width());
+
+
                             for line in &self.log_lines {
                                 ui.label(egui::RichText::new(line).monospace());
                             }
@@ -1103,10 +1319,13 @@ impl QmpQemuSocketApp {
         self.output_expanded = output_response.body_response.is_some();
     }
 
+
     /// Shows the concise operational status and advisory board position outside detailed output.
     fn status_panel(&self, ui: &mut egui::Ui) {
         egui::Frame::group(ui.style()).show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
+
+
                 if self.game_mode.calibration_only() {
                     ui.strong(format!("{} — calibration only", self.game_mode));
                 } else {
@@ -1123,11 +1342,14 @@ impl QmpQemuSocketApp {
         });
     }
 
+
     /// Draws settings and calibration information while the Parameters window is open.
     ///
     /// Execution values are editable only while idle and are copied into the next
     /// run; changing the socket invalidates the prior preview.
     fn parameters_window(&mut self, context: &egui::Context) {
+
+
         if !self.show_parameters {
             return;
         }
@@ -1139,6 +1361,8 @@ impl QmpQemuSocketApp {
             .show(context, |ui| {
                 ui.strong(RELEASE_LABEL);
                 ui.label(format!("Game Type: {}", self.game_mode));
+
+
                 if self.game_mode.calibration_only() {
                     ui.colored_label(
                         Color32::YELLOW,
@@ -1153,6 +1377,8 @@ impl QmpQemuSocketApp {
                         && !self.show_snapshot_dialog,
                     egui::TextEdit::singleline(&mut self.qmp_socket_path),
                 );
+
+
                 if socket_edit.changed() {
                     self.invalidate_preview();
                     self.current_status = "Socket changed — capture required".to_owned();
@@ -1163,13 +1389,39 @@ impl QmpQemuSocketApp {
                 let execution_enabled = !self.worker_state.is_busy()
                     && self.active_run.is_none()
                     && !self.show_snapshot_dialog;
+
+
                 if execution_enabled {
                     ui.small("Double-click a number to type milliseconds, or drag to adjust (0–5000 ms).");
                 } else {
                     ui.small("Timing controls are locked during a run or capture. STOP and close any snapshot dialog to edit the next run.");
                 }
                 ui.add_enabled_ui(execution_enabled, |ui| {
-                    if self.game_mode == GameMode::Pyramid {
+
+
+                    if self.game_mode == GameMode::Klondike {
+                        ui.horizontal(|ui| {
+                            ui.label("After Klondike card / Draw / Recycle action");
+                            ui.add(
+                                egui::DragValue::new(&mut self.klondike_settle_ms)
+                                    .range(MINIMUM_ANIMATION_SETTLE_DELAY_MS..=MAXIMUM_ANIMATION_SETTLE_DELAY_MS)
+                                    .speed(10.0)
+                                    .suffix(" ms"),
+                            )
+                            .on_hover_text("Wait after one delivered gameplay operation before capturing its result");
+                        });
+                        ui.horizontal(|ui| {
+                            ui.label("Klondike repeat observation settle");
+                            ui.add(
+                                egui::DragValue::new(&mut self.klondike_reobserve_ms)
+                                    .range(MINIMUM_ANIMATION_SETTLE_DELAY_MS..=MAXIMUM_ANIMATION_SETTLE_DELAY_MS)
+                                    .speed(10.0)
+                                    .suffix(" ms"),
+                            )
+                            .on_hover_text("Delay between bounded input-free result captures; Solver refresh itself has no additional capture delay");
+                        });
+                        ui.small("Draw 1; automatic reveal. Completion and restart are not automated.");
+                    } else if self.game_mode == GameMode::Pyramid {
                         ui.horizontal(|ui| {
                             ui.label("After Pyramid MOVE / Recycle click");
                             ui.add(
@@ -1236,32 +1488,43 @@ impl QmpQemuSocketApp {
                             );
                         });
                     }
-                    ui.horizontal(|ui| {
-                        ui.label("Board redeal settle");
-                        ui.add(
-                            egui::DragValue::new(&mut self.board_redeal_settle_ms)
-                                .range(
-                                    MINIMUM_ANIMATION_SETTLE_DELAY_MS
-                                        ..=MAXIMUM_ANIMATION_SETTLE_DELAY_MS,
-                                )
-                                .speed(50.0)
-                                .suffix(" ms"),
-                        )
-                        .on_hover_text(
-                            "Wait after a verified final-card move before checking the next board or Level Up dialog",
-                        );
-                    });
+
+
+                    if self.game_mode != GameMode::Klondike {
+                        ui.horizontal(|ui| {
+                            ui.label("Board redeal settle");
+                            ui.add(
+                                egui::DragValue::new(&mut self.board_redeal_settle_ms)
+                                    .range(MINIMUM_ANIMATION_SETTLE_DELAY_MS..=MAXIMUM_ANIMATION_SETTLE_DELAY_MS)
+                                    .speed(50.0)
+                                    .suffix(" ms"),
+                            )
+                            .on_hover_text("Wait after a verified final-card move before checking the next board or Level Up dialog");
+                        });
+                    }
                     ui.horizontal(|ui| {
                         ui.label("Actions per Multi-Step");
-                        ui.add(
-                            egui::DragValue::new(&mut self.multi_step_actions)
-                                .speed(1.0),
-                        )
-                        .on_hover_text("0 runs continuously across games until STOP or a fail-closed anomaly; positive values are exact gameplay-action limits");
+
+
+                        if self.game_mode == GameMode::Klondike {
+                            ui.add(
+                                egui::DragValue::new(&mut self.klondike_multi_step_actions)
+                                    .range(1..=KLONDIKE_MAX_MULTI_STEP_ACTIONS)
+                                    .speed(1.0),
+                            )
+                            .on_hover_text("Klondike always uses a finite gameplay-action limit; STOP remains available");
+                        } else {
+                            ui.add(egui::DragValue::new(&mut self.multi_step_actions).speed(1.0))
+                                .on_hover_text("0 runs continuously across games until STOP or a fail-closed anomaly; positive values are exact gameplay-action limits");
+                        }
                     });
-                    if self.multi_step_actions == UNBOUNDED_MULTI_STEP_ACTIONS {
+
+
+                    if self.selected_multi_step_actions() == UNBOUNDED_MULTI_STEP_ACTIONS {
                         ui.small("Multi-Step is unbounded: run until STOP or a guarded stop condition.");
                     }
+
+
                     if ui.button("Restore execution defaults").clicked() {
                         self.draw_animation_settle_ms = DRAW_ANIMATION_SETTLE_DELAY_MS;
                         self.tableau_animation_settle_ms = TABLEAU_ANIMATION_SETTLE_DELAY_MS;
@@ -1269,10 +1532,20 @@ impl QmpQemuSocketApp {
                         self.pyramid_move_settle_ms = PYRAMID_MOVE_SETTLE_DELAY_MS;
                         self.pyramid_card_settle_ms = PYRAMID_CARD_SETTLE_DELAY_MS;
                         self.pyramid_reobserve_ms = PYRAMID_REOBSERVE_DELAY_MS;
+                        self.klondike_settle_ms = KLONDIKE_SETTLE_DELAY_MS;
+                        self.klondike_reobserve_ms = KLONDIKE_REOBSERVE_DELAY_MS;
+                        self.klondike_multi_step_actions = KLONDIKE_DEFAULT_MULTI_STEP_ACTIONS;
                         self.multi_step_actions = DEFAULT_MULTI_STEP_ACTIONS;
                     }
                 });
-                if self.game_mode == GameMode::Pyramid {
+
+
+                if self.game_mode == GameMode::Klondike {
+                    ui.small(format!(
+                        "Klondike initial settings: action {KLONDIKE_SETTLE_DELAY_MS} ms, repeat observation {KLONDIKE_REOBSERVE_DELAY_MS} ms, Multi-Step {KLONDIKE_DEFAULT_MULTI_STEP_ACTIONS}. Timings are starting values for testing, not measured animation durations. Changes apply to the next run."
+                    ));
+                    ui.small("No-HALO recovery refreshes Solver once only on a recognised board, then captures immediately. A request starting without a target stops for review before any card or draw action.");
+                } else if self.game_mode == GameMode::Pyramid {
                     ui.small(format!(
                         "Session defaults: Pyramid Move/Recycle {PYRAMID_MOVE_SETTLE_DELAY_MS} ms, Card/Left/Right {PYRAMID_CARD_SETTLE_DELAY_MS} ms, repeat observation {PYRAMID_REOBSERVE_DELAY_MS} ms, board redeal {BOARD_REDEAL_SETTLE_DELAY_MS} ms, Multi-Step {DEFAULT_MULTI_STEP_ACTIONS} (continuous). Changes apply to the next run."
                     ));
@@ -1281,18 +1554,25 @@ impl QmpQemuSocketApp {
                         "Execution controls are session-only; defaults: draw {DRAW_ANIMATION_SETTLE_DELAY_MS} ms, tableau {TABLEAU_ANIMATION_SETTLE_DELAY_MS} ms, board redeal {BOARD_REDEAL_SETTLE_DELAY_MS} ms, Multi-Step {DEFAULT_MULTI_STEP_ACTIONS} (continuous)."
                     ));
                 }
+
+
                 if let Some(log) = self.session_log.as_ref() {
                     ui.small(format!("Complete output: {}", log.path().display()));
                 }
-                ui.small(
-                    "Current verification: one initial fresh planning capture, then each accepted result frame is reused for the next plan. Pyramid may continue a repeated Left–Right pair from fresh settled halos; this is logged separately from a proven effect. STOP cancels the active run.",
-                );
+                ui.small("Current verification: one initial fresh planning capture, then each accepted result frame is reused for the next plan. STOP cancels the active run.");
+
+
+                if self.game_mode == GameMode::Pyramid {
+                    ui.small("Pyramid may continue a repeated Left–Right pair from fresh settled halos; this is logged separately from a proven effect.");
+                }
                 ui.separator();
                 ui.monospace(format!(
                     "nominal-frame = {NOMINAL_FRAME_WIDTH}x{NOMINAL_FRAME_HEIGHT}"
                 ));
                 let profile = self.game_mode.profile();
                 ui.monospace(format!("game-profile = {}", profile.label));
+
+
                 for target in profile.preview_targets {
                     ui.monospace(format!(
                         "{:<13} = {}",
@@ -1300,7 +1580,15 @@ impl QmpQemuSocketApp {
                         format_rect(target.bounds)
                     ));
                 }
-                if self.game_mode == GameMode::Pyramid {
+
+
+                if self.game_mode == GameMode::Klondike {
+                    ui.monospace("guest-input-authorised = true; one guarded operation per action");
+                    ui.monospace("target-priority = Draw/Recycle, Right waste, tableau bottom-up, foundations");
+                    ui.monospace("source = continuous gold border with card interior; dashed destinations are excluded");
+                    ui.monospace("tableau = dynamic highlighted source block, clicked once; no drag");
+                    ui.monospace("Draw = qcode D; Recycle = click on independently recognised empty stock");
+                } else if self.game_mode == GameMode::Pyramid {
                     let pyramid_cards = PYRAMID_TARGETS
                         .iter()
                         .filter(|target| target.kind.is_card())
@@ -1314,6 +1602,8 @@ impl QmpQemuSocketApp {
                     ui.monospace("halo-probes = fixed 2x2; first eligible target by priority");
                     ui.monospace("card-state = suppress only a clicked card after verified removal");
                     ui.monospace("Move / Left / Right = repeatable; fresh settled Left–Right halos may authorise the next pair");
+
+
                     for target in &PYRAMID_TARGETS {
                         ui.monospace(format!(
                             "{}: bounds {}, hit x={}, y={}, HALO {}",
@@ -1331,6 +1621,8 @@ impl QmpQemuSocketApp {
                         profile.tableau_click_offset.x, profile.tableau_click_offset.y
                     ));
                 }
+
+
                 for (label, control) in SHARED_TOOLBAR_CONTROLS {
                     ui.monospace(format!(
                         "shared-toolbar-{label}: bounds {}, hit x={}, y={}",
@@ -1340,7 +1632,11 @@ impl QmpQemuSocketApp {
                     ));
                 }
                 ui.small("Undo All confirmation requires separate calibration; no confirmation click is automated.");
-                if self.game_mode == GameMode::Pyramid {
+
+
+                if self.game_mode == GameMode::Klondike {
+                    ui.monospace("HALO = source-border continuity plus independently validated card/stock geometry");
+                } else if self.game_mode == GameMode::Pyramid {
                     ui.monospace("HALO requires all four pixels to match the Pyramid gold predicate");
                 } else {
                     ui.monospace(format!("gold-colours = {GOLD_RGB_CANDIDATES:?}"));
@@ -1348,7 +1644,12 @@ impl QmpQemuSocketApp {
                         "gold-channel-tolerance = ±{GOLD_CHANNEL_TOLERANCE}"
                     ));
                 }
-                if self.game_mode == GameMode::Pyramid {
+
+
+                if self.game_mode == GameMode::Klondike {
+                    ui.monospace("no-highlight-recovery = bounded Solver refresh; never implies draw or completion");
+                    ui.monospace("completion / restart = unsupported; retain latest frame and stop");
+                } else if self.game_mode == GameMode::Pyramid {
                     ui.monospace("no-highlight-recovery = bounded; never implies Move or completion");
                 } else {
                     ui.monospace(format!(
@@ -1356,41 +1657,49 @@ impl QmpQemuSocketApp {
                         NO_HIGHLIGHT_REOBSERVE_DELAY.as_millis()
                     ));
                 }
-                ui.monospace(format!(
-                    "board-series = {} boards, redeal wait {} ms",
-                    profile.boards_per_game,
-                    self.board_redeal_settle_ms
-                ));
-                ui.monospace(format!(
-                    "post-game-stage-delay = {} ms",
-                    POST_GAME_STAGE_DELAY.as_millis()
-                ));
-                ui.monospace(format!(
-                    "level-up-appear-delay = {} ms after score click",
-                    LEVEL_UP_APPEAR_DELAY.as_millis()
-                ));
-                ui.monospace(format!(
-                    "challenge-complete-continue (future) = probe {}, click x={}, y={} (no automatic input)",
-                    format_rect(CHALLENGE_COMPLETE_CONTINUE_CONTROL.bounds),
-                    CHALLENGE_COMPLETE_CONTINUE_CONTROL.click_point.x,
-                    CHALLENGE_COMPLETE_CONTINUE_CONTROL.click_point.y,
-                ));
-                ui.monospace(format!(
-                    "post-game-bounds = {POST_GAME_MAX_OBSERVATION_ROUNDS} observations/stage, {POST_GAME_MAX_CLICK_ATTEMPTS} confirmed clicks/retry context"
-                ));
-                ui.monospace(format!(
-                    "score-skip-bound = {SCORE_SKIP_MAX_CLICK_ATTEMPTS} confirmed centre clicks total (initial included)"
-                ));
-                for target in POST_GAME_TARGETS {
-                    for variant in target.control_variants {
-                        ui.monospace(format!(
-                            "post-game-{}[{}] = probe {}, click x={}, y={}",
-                            target.label,
-                            variant.label,
-                            format_rect(variant.probe_bounds),
-                            variant.click_point.x,
-                            variant.click_point.y,
-                        ));
+
+
+                if self.game_mode != GameMode::Klondike {
+                    ui.monospace(format!(
+                        "board-series = {} boards, redeal wait {} ms",
+                        profile.boards_per_game,
+                        self.board_redeal_settle_ms
+                    ));
+                    ui.monospace(format!(
+                        "post-game-stage-delay = {} ms",
+                        POST_GAME_STAGE_DELAY.as_millis()
+                    ));
+                    ui.monospace(format!(
+                        "level-up-appear-delay = {} ms after score click",
+                        LEVEL_UP_APPEAR_DELAY.as_millis()
+                    ));
+                    ui.monospace(format!(
+                        "challenge-complete-continue (future) = probe {}, click x={}, y={} (no automatic input)",
+                        format_rect(CHALLENGE_COMPLETE_CONTINUE_CONTROL.bounds),
+                        CHALLENGE_COMPLETE_CONTINUE_CONTROL.click_point.x,
+                        CHALLENGE_COMPLETE_CONTINUE_CONTROL.click_point.y,
+                    ));
+                    ui.monospace(format!(
+                        "post-game-bounds = {POST_GAME_MAX_OBSERVATION_ROUNDS} observations/stage, {POST_GAME_MAX_CLICK_ATTEMPTS} confirmed clicks/retry context"
+                    ));
+                    ui.monospace(format!(
+                        "score-skip-bound = {SCORE_SKIP_MAX_CLICK_ATTEMPTS} confirmed centre clicks total (initial included)"
+                    ));
+
+
+                    for target in POST_GAME_TARGETS {
+
+
+                        for variant in target.control_variants {
+                            ui.monospace(format!(
+                                "post-game-{}[{}] = probe {}, click x={}, y={}",
+                                target.label,
+                                variant.label,
+                                format_rect(variant.probe_bounds),
+                                variant.click_point.x,
+                                variant.click_point.y,
+                            ));
+                        }
                     }
                 }
                 ui.monospace(format!(
@@ -1404,13 +1713,17 @@ impl QmpQemuSocketApp {
                 );
                 ui.monospace(format!(
                     "multi-step-actions = {}",
-                    if self.multi_step_actions == UNBOUNDED_MULTI_STEP_ACTIONS {
+                    if self.selected_multi_step_actions() == UNBOUNDED_MULTI_STEP_ACTIONS {
                         "until STOP".to_owned()
                     } else {
-                        self.multi_step_actions.to_string()
+                        self.selected_multi_step_actions().to_string()
                     }
                 ));
-                if self.game_mode == GameMode::Pyramid {
+
+
+                if self.game_mode == GameMode::Klondike {
+                    ui.monospace("action-verification = material change in target-specific card regions; no input replay");
+                } else if self.game_mode == GameMode::Pyramid {
                     ui.monospace("action-verification = card removal or material lower-pile change; repeated Left–Right pair may continue from fresh settled halos");
                 } else {
                     ui.monospace(format!(
@@ -1430,11 +1743,14 @@ impl QmpQemuSocketApp {
         self.show_parameters = open;
     }
 
+
     /// Draws original-PNG review, bounded label editing and save/recapture controls.
     ///
     /// Clipboard insertion strips control characters and honours the character cap;
     /// closing or cancelling releases the retained snapshot through one cleanup path.
     fn snapshot_window(&mut self, context: &egui::Context) {
+
+
         if !self.show_snapshot_dialog {
             return;
         }
@@ -1449,6 +1765,8 @@ impl QmpQemuSocketApp {
             .default_width(660.0)
             .show(context, |ui| {
                 ui.label("Review this QMP capture; Save writes these exact PNG bytes.");
+
+
                 if let Some(texture) = &self.snapshot_texture {
                     let width = ui.available_width().clamp(160.0, 640.0);
                     let height = width * NOMINAL_FRAME_HEIGHT as f32 / NOMINAL_FRAME_WIDTH as f32;
@@ -1461,6 +1779,8 @@ impl QmpQemuSocketApp {
                     ui.spinner();
                     ui.label("Capturing one fresh frame through QMP…");
                 }
+
+
                 if let Some(error) = &self.snapshot_error {
                     ui.colored_label(Color32::LIGHT_RED, error);
                 }
@@ -1471,6 +1791,8 @@ impl QmpQemuSocketApp {
                     .char_limit(SNAPSHOT_LABEL_MAX_CHARS)
                     .desired_width(380.0)
                     .show(ui);
+
+
                 if std::mem::take(&mut self.snapshot_focus_pending) {
                     label_output.response.request_focus();
                 }
@@ -1481,6 +1803,8 @@ impl QmpQemuSocketApp {
                     selected.start != selected.end
                         && selected.end <= self.snapshot_label.chars().count().into()
                 });
+
+
                 let selected_range = if opening_menu {
                     retained_selection
                         .cloned()
@@ -1499,6 +1823,8 @@ impl QmpQemuSocketApp {
                     .unwrap_or_default();
                 let mut edit_action = None;
                 label_output.response.context_menu(|menu| {
+
+
                     if menu
                         .add_enabled(!selected_text.is_empty(), egui::Button::new("Cut"))
                         .clicked()
@@ -1506,6 +1832,8 @@ impl QmpQemuSocketApp {
                         edit_action = Some(SnapshotEditAction::Cut);
                         menu.close();
                     }
+
+
                     if menu
                         .add_enabled(!selected_text.is_empty(), egui::Button::new("Copy"))
                         .clicked()
@@ -1513,17 +1841,25 @@ impl QmpQemuSocketApp {
                         edit_action = Some(SnapshotEditAction::Copy);
                         menu.close();
                     }
+
+
                     if menu.button("Paste").clicked() {
                         edit_action = Some(SnapshotEditAction::Paste);
                         menu.close();
                     }
                 });
                 let menu_used = edit_action.is_some();
+
+
                 if let Some(action) = edit_action {
                     self.snapshot_label_selection = None;
+
+
                     match action {
                         SnapshotEditAction::Copy => self.clipboard.set_text(selected_text),
                         SnapshotEditAction::Cut => {
+
+
                             if let Some(range) = selected_range {
                                 self.clipboard.set_text(selected_text);
                                 let cursor = self.snapshot_label.delete_selected(&range);
@@ -1537,6 +1873,8 @@ impl QmpQemuSocketApp {
                             }
                         }
                         SnapshotEditAction::Paste => {
+
+
                             if let Some(pasted) = self.clipboard.get() {
                                 let retained_chars = self
                                     .snapshot_label
@@ -1550,7 +1888,11 @@ impl QmpQemuSocketApp {
                                     .filter(|ch| !ch.is_control())
                                     .take(available)
                                     .collect();
+
+
                                 if !single_line.is_empty() {
+
+
                                     let mut cursor = if let Some(range) = selected_range.as_ref() {
                                         self.snapshot_label.delete_selected(range)
                                     } else {
@@ -1571,6 +1913,8 @@ impl QmpQemuSocketApp {
                     }
                     label_output.response.request_focus();
                 }
+
+
                 if !menu_used
                     && !label_output.response.context_menu_opened()
                     && label_output.response.lost_focus()
@@ -1588,20 +1932,27 @@ impl QmpQemuSocketApp {
                             self.worker_state,
                             self.stop_requested,
                         );
+
+
                     if bevel_button(ui, "Save PNG", SETUP_BLUE, false, enabled).clicked() {
                         save = true;
                     }
+
+
                     if ui
                         .add_enabled(!self.snapshot_capture_pending, egui::Button::new("Recapture"))
                         .clicked()
                     {
                         recapture = true;
                     }
+
+
                     if ui.button("Cancel").clicked() {
                         cancel = true;
                     }
                 });
             });
+
 
         if !open || cancel {
             self.close_snapshot_dialog();
@@ -1613,12 +1964,16 @@ impl QmpQemuSocketApp {
     }
 }
 
+
 impl eframe::App for QmpQemuSocketApp {
+
+
     /// Drains worker events and schedules the next UI update without blocking on QMP I/O.
     fn logic(&mut self, context: &egui::Context, _frame: &mut eframe::Frame) {
         self.poll_worker(context);
         context.request_repaint_after(std::time::Duration::from_millis(100));
     }
+
 
     /// Renders the main controls and dialogs; EXIT requests worker detachment before closing.
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
@@ -1631,6 +1986,8 @@ impl eframe::App for QmpQemuSocketApp {
             self.output(ui);
             ui.add_space(8.0);
             ui.with_layout(Layout::top_down(Align::Center), |ui| {
+
+
                 if bevel_button(ui, "EXIT", STATE_RED, false, true).clicked() {
                     self.push_log("EXIT requested; detaching locally and leaving QEMU untouched.");
                     let _ = self.worker.disconnect();
@@ -1643,6 +2000,7 @@ impl eframe::App for QmpQemuSocketApp {
         self.snapshot_window(ui.ctx());
     }
 }
+
 
 /// Adds an enabled or disabled coloured button and returns its interaction response.
 ///
@@ -1658,10 +2016,14 @@ fn bevel_button(
         .fill(fill)
         .stroke(Stroke::new(1.0, fill));
     let response = ui.add_enabled(enabled, button);
+
+
     if enabled {
         let pressed = selected || response.is_pointer_button_down_on();
         let light = fill.gamma_multiply(1.7);
         let dark = fill.gamma_multiply(0.5);
+
+
         let (top_left, bottom_right) = if pressed {
             (dark, light)
         } else {
@@ -1689,6 +2051,7 @@ fn bevel_button(
     response
 }
 
+
 /// Returns true only after run ownership, worker activity and cancellation have all cleared.
 fn controls_are_mutable(
     active_run: Option<ActiveRun>,
@@ -1697,6 +2060,22 @@ fn controls_are_mutable(
 ) -> bool {
     active_run.is_none() && !state.is_busy() && !stop_requested
 }
+
+
+/// Retain inspection-only pixels after STOP while rejecting advisory input authority.
+///
+/// The caller separately requires a matching mode and socket. Diagnostic frames
+/// have their prediction removed on installation and cannot enable execution.
+fn worker_frame_is_displayable(state: WorkerState, diagnostic: bool) -> bool {
+
+
+    match state {
+        WorkerState::Error => false,
+        WorkerState::Detached | WorkerState::Uncertain => diagnostic,
+        _ => true,
+    }
+}
+
 
 /// Checks nominal dimensions, texture availability and matching socket/mode authority.
 ///
@@ -1716,6 +2095,7 @@ fn preview_is_current(
         && !diagnostic_preview
 }
 
+
 /// Formats the session board advisory without asserting an unobserved initial board number.
 fn board_position_label(
     mode: GameMode,
@@ -1723,7 +2103,11 @@ fn board_position_label(
     boards_per_game: usize,
     established: bool,
 ) -> String {
-    if established {
+
+
+    if mode == GameMode::Klondike {
+        "Klondike — completion detection unsupported".to_owned()
+    } else if established {
         format!("{mode} — Board {current_board}/{boards_per_game} (session advisory)")
     } else {
         format!(
@@ -1731,6 +2115,7 @@ fn board_position_label(
         )
     }
 }
+
 
 /// Returns preview height in UI points after reserving footer and expanded-output space.
 ///
@@ -1744,6 +2129,8 @@ fn preview_viewport_height(
     let image_height = NOMINAL_FRAME_HEIGHT as f32 / pixels_per_point;
     let image_and_scrollbar =
         (image_height + PREVIEW_SCROLLBAR_ALLOWANCE_POINTS).max(MIN_PREVIEW_VIEWPORT_HEIGHT_POINTS);
+
+
     let reserved_output = if output_expanded {
         OUTPUT_PANEL_HEIGHT
     } else {
@@ -1754,6 +2141,7 @@ fn preview_viewport_height(
         .min(image_and_scrollbar)
 }
 
+
 /// Formats a calibrated pixel rectangle for diagnostic and parameter displays.
 fn format_rect(rect: PixelRect) -> String {
     format!(
@@ -1762,11 +2150,14 @@ fn format_rect(rect: PixelRect) -> String {
     )
 }
 
+
 /// Converts a validated strided RGBA capture to the tightly packed egui layout.
 ///
 /// Returns descriptive errors for invalid buffer layout or checked-size overflow;
 /// row padding is omitted from the separate display buffer.
 fn frame_to_colour_image(frame: &CapturedFrame) -> Result<egui::ColorImage, String> {
+
+
     if !frame.is_layout_valid() {
         return Err("pixel layout is invalid".to_owned());
     }
@@ -1783,6 +2174,7 @@ fn frame_to_colour_image(frame: &CapturedFrame) -> Result<egui::ColorImage, Stri
         .ok_or_else(|| "RGBA frame length overflowed usize".to_owned())?;
     let mut rgba = Vec::with_capacity(total_bytes);
 
+
     for y in 0..height {
         let row_start = y
             .checked_mul(frame.stride)
@@ -1795,6 +2187,7 @@ fn frame_to_colour_image(frame: &CapturedFrame) -> Result<egui::ColorImage, Stri
             .get(row_start..row_end)
             .ok_or_else(|| "source row lies outside the pixel buffer".to_owned())?;
 
+
         match frame.format {
             PixelFormat::Rgba8 => rgba.extend_from_slice(row),
         }
@@ -1806,8 +2199,11 @@ fn frame_to_colour_image(frame: &CapturedFrame) -> Result<egui::ColorImage, Stri
     ))
 }
 
+
 /// Describes detector evidence for the log without claiming an action was executed.
 fn format_prediction(prediction: PredictedAction) -> String {
+
+
     match prediction {
         PredictedAction::CalibrationOnly { mode } => format!(
             "{mode} calibration capture ready; detector and guest input are disabled pending approved coordinates."
@@ -1845,6 +2241,14 @@ fn format_prediction(prediction: PredictedAction) -> String {
             (ActionTarget::Pyramid(target), InputOperation::PressDrawKey) => format!(
                 "Prediction refused: {target} requires mouse delivery; input sent=0."
             ),
+            (ActionTarget::Klondike(target), InputOperation::Click(point)) => format!(
+                "Prediction: click Klondike {target} at ({}, {}); source anchor=({}, {}); input sent=0.",
+                point.x, point.y, action.anchor.x, action.anchor.y
+            ),
+            (ActionTarget::Klondike(target), InputOperation::PressDrawKey) => format!(
+                "Prediction: Klondike {target} using qcode D; source anchor=({}, {}); input sent=0.",
+                action.anchor.x, action.anchor.y
+            ),
         },
         PredictedAction::Ambiguous { highlight_count } => format!(
             "Prediction refused: {highlight_count} calibrated highlights were found; input sent=0."
@@ -1852,22 +2256,38 @@ fn format_prediction(prediction: PredictedAction) -> String {
     }
 }
 
-/// Checks that one concrete prediction belongs to the authorised mode and input method.
+
+/// Checks mode ownership, permitting Klondike no-HALO recovery without gameplay authority.
 fn prediction_is_actionable(mode: GameMode, prediction: PredictedAction) -> bool {
+
+
+    if mode == GameMode::Klondike && prediction == PredictedAction::NoHighlight {
+        return true;
+    }
+
+
     let PredictedAction::Action(action) = prediction else {
         return false;
     };
+
+
     mode.input_authorised()
         && action.target.mode() == mode
         && match (action.target, action.operation()) {
+            (ActionTarget::Klondike(target), _) => {
+                crate::klondike::canonical_action(target) == Some(action)
+            }
             (ActionTarget::Bottom { .. }, _) => true,
             (_, InputOperation::Click(_)) => true,
             (_, InputOperation::PressDrawKey) => false,
         }
 }
 
+
 /// Formats a compact target description for request logs, retaining invalid-action warnings.
 fn concise_prediction(prediction: PredictedAction) -> String {
+
+
     match prediction {
         PredictedAction::CalibrationOnly { mode } => format!("{mode} calibration only"),
         PredictedAction::NoHighlight => "no highlight".to_owned(),
@@ -1895,6 +2315,12 @@ fn concise_prediction(prediction: PredictedAction) -> String {
             (ActionTarget::Pyramid(target), InputOperation::PressDrawKey) => {
                 format!("invalid {target} key action")
             }
+            (ActionTarget::Klondike(target), InputOperation::Click(point)) => {
+                format!("Klondike {target} at ({}, {})", point.x, point.y)
+            }
+            (ActionTarget::Klondike(target), InputOperation::PressDrawKey) => {
+                format!("Klondike {target} using D")
+            }
         },
         PredictedAction::Ambiguous { highlight_count } => {
             format!("ambiguous ({highlight_count} highlights)")
@@ -1902,8 +2328,11 @@ fn concise_prediction(prediction: PredictedAction) -> String {
     }
 }
 
+
 /// Formats the next-action label for the UI, including calibration and ambiguous states.
 fn display_action(prediction: PredictedAction) -> String {
+
+
     match prediction {
         PredictedAction::CalibrationOnly { mode } => format!("{mode} calibration — input disabled"),
         PredictedAction::NoHighlight => "No Solver HALO".to_owned(),
@@ -1926,6 +2355,12 @@ fn display_action(prediction: PredictedAction) -> String {
             (ActionTarget::Pyramid(target), InputOperation::PressDrawKey) => {
                 format!("Invalid {target} key action")
             }
+            (ActionTarget::Klondike(target), InputOperation::Click(_)) => {
+                format!("Klondike {target} click")
+            }
+            (ActionTarget::Klondike(target), InputOperation::PressDrawKey) => {
+                format!("Klondike {target} — D")
+            }
         },
         PredictedAction::Ambiguous { highlight_count } => {
             format!("Ambiguous — {highlight_count} HALOs")
@@ -1933,8 +2368,11 @@ fn display_action(prediction: PredictedAction) -> String {
     }
 }
 
+
 /// Names a fixed operation limit or the configured continuous-run sentinel.
 fn format_operation_limit(operation_limit: usize) -> String {
+
+
     if operation_limit == UNBOUNDED_MULTI_STEP_ACTIONS {
         "continuous until STOP".to_owned()
     } else {
@@ -1942,14 +2380,18 @@ fn format_operation_limit(operation_limit: usize) -> String {
     }
 }
 
+
 /// Formats an operation index against its fixed limit or an unbounded denominator.
 fn format_operation_progress(operation_index: usize, operation_limit: usize) -> String {
+
+
     if operation_limit == UNBOUNDED_MULTI_STEP_ACTIONS {
         format!("{operation_index}/unbounded")
     } else {
         format!("{operation_index}/{operation_limit}")
     }
 }
+
 
 /// Maps a non-empty preview canvas position into half-open nominal guest coordinates.
 ///
@@ -1968,12 +2410,14 @@ fn preview_to_pixel(canvas: Rect, position: Pos2) -> PixelPoint {
     PixelPoint::new(x, y)
 }
 
+
 /// Maps a nominal guest pixel into UI points within the supplied preview canvas.
 fn pixel_to_preview(canvas: Rect, point: PixelPoint) -> Pos2 {
     let x = canvas.left() + point.x as f32 * canvas.width() / NOMINAL_FRAME_WIDTH as f32;
     let y = canvas.top() + point.y as f32 * canvas.height() / NOMINAL_FRAME_HEIGHT as f32;
     Pos2::new(x, y)
 }
+
 
 /// Maps both edges of a nominal guest rectangle into preview UI coordinates.
 fn rect_to_preview(canvas: Rect, pixel_rect: PixelRect) -> Rect {
@@ -1988,6 +2432,7 @@ fn rect_to_preview(canvas: Rect, pixel_rect: PixelRect) -> Rect {
         ),
     )
 }
+
 
 /// Paints a labelled calibrated rectangle without modifying captured frame pixels.
 fn paint_target(
@@ -2008,10 +2453,12 @@ fn paint_target(
     );
 }
 
+
 /// Paints read-only detector evidence and proposed click/key markers on the preview.
 fn paint_prediction(painter: &egui::Painter, canvas: Rect, prediction: PredictedAction) {
     let gold = Color32::from_rgb(245, 205, 75);
     let proposal = Color32::from_rgb(255, 80, 210);
+
 
     match prediction {
         PredictedAction::CalibrationOnly { mode } => {
@@ -2033,18 +2480,25 @@ fn paint_prediction(painter: &egui::Painter, canvas: Rect, prediction: Predicted
             );
         }
         PredictedAction::Action(action) => {
+
+
             let anchor_label = match action.operation() {
                 InputOperation::PressDrawKey => "gold anchor: DRAW (D)",
                 InputOperation::Click(_) => "gold anchor",
             };
             paint_labeled_marker(painter, canvas, action.anchor, gold, anchor_label);
+
+
             if let InputOperation::Click(click_point) = action.operation() {
+
+
                 let label = match action.target {
                     ActionTarget::Bottom { label, .. } => format!("proposed {label}"),
                     ActionTarget::Tableau(position) => {
                         format!("proposed r{}c{}", position.row, position.column)
                     }
                     ActionTarget::Pyramid(target) => format!("proposed {target}"),
+                    ActionTarget::Klondike(target) => format!("proposed {target}"),
                 };
                 paint_labeled_crosshair(painter, canvas, click_point, proposal, &label);
             }
@@ -2060,6 +2514,7 @@ fn paint_prediction(painter: &egui::Painter, canvas: Rect, prediction: Predicted
         }
     }
 }
+
 
 /// Paints a small circular marker and adjacent text at a nominal guest pixel.
 fn paint_labeled_marker(
@@ -2080,6 +2535,7 @@ fn paint_labeled_marker(
         colour,
     );
 }
+
 
 /// Paints a short labelled crosshair at a nominal guest click point.
 fn paint_labeled_crosshair(
@@ -2108,6 +2564,7 @@ fn paint_labeled_crosshair(
     );
 }
 
+
 /// Paints the four edges of a rectangle using the supplied stroke.
 fn paint_outline(painter: &egui::Painter, rect: Rect, stroke: Stroke) {
     painter.line_segment([rect.left_top(), rect.right_top()], stroke);
@@ -2116,9 +2573,12 @@ fn paint_outline(painter: &egui::Painter, rect: Rect, stroke: Stroke) {
     painter.line_segment([rect.left_bottom(), rect.left_top()], stroke);
 }
 
+
 /// Paints a subdued calibration grid when no capture texture is available.
 fn paint_grid(painter: &egui::Painter, canvas: Rect) {
     let stroke = Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 14));
+
+
     for division in 1..8 {
         let fraction = division as f32 / 8.0;
         let x = canvas.left() + canvas.width() * fraction;
@@ -2127,6 +2587,8 @@ fn paint_grid(painter: &egui::Painter, canvas: Rect) {
             stroke,
         );
     }
+
+
     for division in 1..4 {
         let fraction = division as f32 / 4.0;
         let y = canvas.top() + canvas.height() * fraction;
@@ -2136,6 +2598,7 @@ fn paint_grid(painter: &egui::Painter, canvas: Rect) {
         );
     }
 }
+
 
 /// Paints horizontal and vertical alignment guides confined to the preview canvas.
 fn paint_crosshair(painter: &egui::Painter, canvas: Rect, point: PixelPoint) {
@@ -2157,11 +2620,13 @@ fn paint_crosshair(painter: &egui::Painter, canvas: Rect, point: PixelPoint) {
     );
 }
 
+
 #[cfg(test)]
 mod tests {
     //! UI policy and coordinate-mapping regressions independent of a live window.
 
     use super::*;
+
 
     /// Constructs a translated canvas at nominal size to exercise coordinate conversions.
     fn test_canvas() -> Rect {
@@ -2171,10 +2636,13 @@ mod tests {
         )
     }
 
+
     /// Checks that calibrated guest points survive a pixel-to-preview-to-pixel round trip.
     #[test]
     fn preview_mapping_round_trips_calibrated_points() {
         let canvas = test_canvas();
+
+
         for point in [
             PixelPoint::new(0, 0),
             PixelPoint::new(842, 870),
@@ -2189,9 +2657,12 @@ mod tests {
         }
     }
 
+
     /// Checks pixel round trips across fractional and integer host display scales.
     #[test]
     fn native_preview_mapping_round_trips_at_common_wayland_scales() {
+
+
         for scale in [1.0_f32, 1.25, 1.5, 1.75, 2.0] {
             let canvas = Rect::from_min_size(
                 Pos2::new(25.0, 40.0),
@@ -2200,7 +2671,11 @@ mod tests {
                     NOMINAL_FRAME_HEIGHT as f32 / scale,
                 ),
             );
+
+
             for x in [0, 1, 60, 842, 1_320, 1_680, 1_919] {
+
+
                 for y in [0, 1, 84, 540, 977, 1_079] {
                     let pixel = PixelPoint::new(x, y);
                     assert_eq!(
@@ -2212,6 +2687,7 @@ mod tests {
         }
     }
 
+
     /// Checks native-height limits and the reclaimed preview space when output is collapsed.
     #[test]
     fn preview_uses_the_full_guest_height_when_the_host_has_room() {
@@ -2221,6 +2697,7 @@ mod tests {
         assert_eq!(preview_viewport_height(900.0, 1.0, true), 519.0);
         assert_eq!(preview_viewport_height(1_400.0, 2.0, true), 564.0);
     }
+
 
     /// Checks that the inclusive canvas corner maps to the last valid guest pixel.
     #[test]
@@ -2232,6 +2709,7 @@ mod tests {
             PixelPoint::new(1_919, 1_079)
         );
     }
+
 
     /// Checks mode ownership and input-method gating for actionable preview predictions.
     #[test]
@@ -2275,6 +2753,32 @@ mod tests {
         ));
     }
 
+
+    /// Klondike permits recovery-only no-HALO requests and its canonical actions.
+    #[test]
+    fn klondike_preview_recovery_and_draw_authority_remain_separate() {
+        use crate::klondike::{KlondikeTarget, canonical_action};
+
+        assert!(prediction_is_actionable(GameMode::Klondike, PredictedAction::NoHighlight));
+        assert!(!prediction_is_actionable(GameMode::Pyramid, PredictedAction::NoHighlight));
+        assert!(!prediction_is_actionable(
+            GameMode::Klondike,
+            PredictedAction::Ambiguous { highlight_count: 2 },
+        ));
+        let draw = canonical_action(KlondikeTarget::Draw).unwrap();
+        assert!(prediction_is_actionable(GameMode::Klondike, PredictedAction::Action(draw)));
+        assert!(!prediction_is_actionable(GameMode::TriPeaks, PredictedAction::Action(draw)));
+        let mut recycle = canonical_action(KlondikeTarget::Recycle).unwrap();
+        assert!(prediction_is_actionable(GameMode::Klondike, PredictedAction::Action(recycle)));
+        recycle.specification.operation = InputOperation::PressDrawKey;
+        assert!(!prediction_is_actionable(GameMode::Klondike, PredictedAction::Action(recycle)));
+        assert_eq!(
+            board_position_label(GameMode::Klondike, 3, 3, true),
+            "Klondike — completion detection unsupported",
+        );
+    }
+
+
     /// Checks that a zero operation limit is presented as continuous rather than empty.
     #[test]
     fn operation_labels_distinguish_bounded_and_unbounded_runs() {
@@ -2283,6 +2787,24 @@ mod tests {
         assert_eq!(format_operation_progress(7, 0), "7/unbounded");
         assert_eq!(format_operation_progress(7, 25), "7/25");
     }
+
+
+    /// STOP can retain a diagnostic frame, but that frame never regains authority.
+    #[test]
+    fn detached_worker_retains_only_non_actionable_diagnostic_frames() {
+        assert!(worker_frame_is_displayable(WorkerState::Detached, true));
+        assert!(!worker_frame_is_displayable(WorkerState::Detached, false));
+        assert!(worker_frame_is_displayable(WorkerState::Uncertain, true));
+        assert!(!worker_frame_is_displayable(WorkerState::Uncertain, false));
+        assert!(!worker_frame_is_displayable(WorkerState::Error, true));
+        assert!(worker_frame_is_displayable(WorkerState::Ready, false));
+        let context = (PathBuf::from("/tmp/klondike.sock"), GameMode::Klondike);
+        assert!(!preview_is_current(
+            Some((NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT)),
+            Some(&context), &context, true, false, true,
+        ));
+    }
+
 
     /// Checks that stale, diagnostic, missing and cancelled previews cannot authorise input.
     #[test]
@@ -2349,6 +2871,7 @@ mod tests {
         ));
     }
 
+
     /// Checks that worker readiness alone cannot clear run ownership or pending cancellation.
     #[test]
     fn run_controls_are_disabled_until_the_run_is_really_stopped() {
@@ -2365,6 +2888,7 @@ mod tests {
         ));
         assert!(!controls_are_mutable(None, WorkerState::Ready, true));
     }
+
 
     /// Checks that a board position remains explicitly uncertain until a transition establishes it.
     #[test]

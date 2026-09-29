@@ -17,10 +17,14 @@ use crate::{
     tracker::{FrameAnalysis, PredictedAction, RowMask},
 };
 
+
 /// Number of calibrated targets: Move, two lower piles and 28 tableau cards.
 pub const TARGET_COUNT: usize = 31;
+
+
 /// Number of tableau cards in the seven-row Pyramid layout.
 pub const TABLEAU_CARD_COUNT: usize = 28;
+
 
 /// Semantic identity and scan priority for a Pyramid target.
 /// Rows run from the apex (1) to the bottom (7); columns run left to right.
@@ -41,14 +45,20 @@ pub enum PyramidTargetKind {
     },
 }
 
+
 impl PyramidTargetKind {
+
+
     /// Report whether this target is a tableau slot rather than a lower control.
     pub const fn is_card(self) -> bool {
         matches!(self, Self::Card { .. })
     }
 
+
     /// Map a valid semantic target to its fixed priority index; reject invalid rows.
     pub const fn slot_index(self) -> Option<usize> {
+
+
         match self {
             Self::Move => Some(0),
             Self::Left => Some(1),
@@ -62,9 +72,14 @@ impl PyramidTargetKind {
     }
 }
 
+
 impl fmt::Display for PyramidTargetKind {
+
+
     /// Format the target as a control name or one-based tableau row and column.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+
+
         match self {
             Self::Move => formatter.write_str("Move/Recycle"),
             Self::Left => formatter.write_str("Left"),
@@ -76,6 +91,7 @@ impl fmt::Display for PyramidTargetKind {
     }
 }
 
+
 /// Per-board history; only a verified removal of the clicked card consumes a slot.
 /// An unclicked pair partner is never inferred into this history.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -84,7 +100,10 @@ pub struct PyramidBoardState {
     pub clicked_target_slots: [bool; TARGET_COUNT],
 }
 
+
 impl PyramidBoardState {
+
+
     /// Create an empty per-board record with no verified clicked-card removals.
     pub const fn new() -> Self {
         Self {
@@ -92,8 +111,11 @@ impl PyramidBoardState {
         }
     }
 
+
     /// Record only a valid clicked tableau card as removed; lower piles stay reusable.
     pub fn mark_removed(&mut self, kind: PyramidTargetKind) {
+
+
         if kind.is_card()
             && let Some(index) = kind.slot_index()
         {
@@ -102,12 +124,16 @@ impl PyramidBoardState {
     }
 }
 
+
 impl Default for PyramidBoardState {
+
+
     /// Start with no consumed tableau slots on a newly observed board.
     fn default() -> Self {
         Self::new()
     }
 }
+
 
 /// Calibrated guest-pixel geometry. Geometry alone does not grant input authority.
 /// Bounds are half-open visible-face envelopes, excluding shadows and halos.
@@ -122,6 +148,7 @@ pub struct PyramidTargetSlot {
     /// Guest-pixel point used only after fresh halo validation.
     pub click_point: PixelPoint,
 }
+
 
 /// Construct a target geometry record without granting guest-input authority.
 const fn target(
@@ -138,12 +165,16 @@ const fn target(
     }
 }
 
+
 // Measured from Issue #1's 1920x1080 captures. The envelope includes the
 // one-pixel variation in antialiased card edges. See docs/pyramid-calibration.md.
 /// Pyramid tableau card envelope width in guest pixels, including edge variation.
 pub const CARD_FACE_WIDTH: u32 = 140;
+
+
 /// Pyramid tableau card envelope height in guest pixels at 100% scaling.
 pub const CARD_FACE_HEIGHT: u32 = 187;
+
 
 /// Construct one tableau slot with its click inside the exposed top strip.
 const fn card(row: u8, column: u8, label: &'static str, x: u32, y: u32) -> PyramidTargetSlot {
@@ -158,6 +189,7 @@ const fn card(row: u8, column: u8, label: &'static str, x: u32, y: u32) -> Pyram
     )
 }
 
+
 /// The same visual control moves a card or recycles the pile. Geometry alone
 /// cannot distinguish the operation; only its fresh halo authorises a click.
 pub const MOVE_TARGET: PyramidTargetSlot = target(
@@ -166,6 +198,8 @@ pub const MOVE_TARGET: PyramidTargetSlot = target(
     PixelRect::new(920, 678, 80, 80),
     PixelPoint::new(960, 718),
 );
+
+
 /// Calibrated left lower-pile face envelope and click point in guest pixels.
 pub const LEFT_TARGET: PyramidTargetSlot = target(
     PyramidTargetKind::Left,
@@ -173,6 +207,8 @@ pub const LEFT_TARGET: PyramidTargetSlot = target(
     PixelRect::new(759, 678, 139, 187),
     PixelPoint::new(828, 771),
 );
+
+
 /// Calibrated right lower-pile face envelope and click point in guest pixels.
 pub const RIGHT_TARGET: PyramidTargetSlot = target(
     PyramidTargetKind::Right,
@@ -180,6 +216,7 @@ pub const RIGHT_TARGET: PyramidTargetSlot = target(
     PixelRect::new(1_022, 678, 139, 187),
     PixelPoint::new(1_091, 771),
 );
+
 
 /// Retain the agreed semantic order: Move, Left, Right, then bottom to apex.
 /// Every target has a separate fixed halo probe and a calibrated click point.
@@ -217,6 +254,7 @@ pub const PYRAMID_TARGETS: [PyramidTargetSlot; TARGET_COUNT] = [
     card(1, 1, "PY r1c1", 890, 112),
 ];
 
+
 /// Derive read-only preview rectangles from the fixed target geometry.
 const fn preview_targets() -> [PreviewTarget; TARGET_COUNT] {
     let mut targets = [PreviewTarget {
@@ -225,8 +263,12 @@ const fn preview_targets() -> [PreviewTarget; TARGET_COUNT] {
         colour: [80, 190, 255],
     }; TARGET_COUNT];
     let mut index = 0;
+
+
     while index < TARGET_COUNT {
         let slot = PYRAMID_TARGETS[index];
+
+
         targets[index] = PreviewTarget {
             label: slot.label,
             bounds: slot.bounds,
@@ -241,8 +283,10 @@ const fn preview_targets() -> [PreviewTarget; TARGET_COUNT] {
     targets
 }
 
+
 /// Display-only overlay geometry; it never independently authorises a click.
 pub const PREVIEW_TARGETS: [PreviewTarget; TARGET_COUNT] = preview_targets();
+
 
 /// Pyramid shares the progress and transition controller with TriPeaks. Its
 /// target detector is separate because overlap topology and multi-halo priority
@@ -271,6 +315,7 @@ pub const PROFILE: GameProfile = GameProfile {
     boards_per_game: 3,
 };
 
+
 // All six Pyramid legend separators are outside every input hotspot. The
 // Move icon also has a stable signature, but can be obscured by the guest
 // cursor immediately after clicking; it must not be a required scene probe.
@@ -283,6 +328,8 @@ const WHITE_SCENE_PROBES: [PixelRect; 6] = [
     PixelRect::new(1_816, 321, 68, 2),
     PixelRect::new(1_816, 359, 68, 2),
 ];
+
+
 /// Guest-pixel felt patches required to reject unknown screens and overlays.
 const FELT_SCENE_PROBES: [PixelRect; 4] = [
     PixelRect::new(938, 635, 12, 3),
@@ -290,13 +337,20 @@ const FELT_SCENE_PROBES: [PixelRect; 4] = [
     PixelRect::new(1_720, 600, 16, 16),
     PixelRect::new(940, 816, 16, 16),
 ];
+
+
 /// Minimum cursor-excluded interior pixel changes proving a lower-pile effect.
 const PILE_CHANGE_MINIMUM: usize = 128;
+
+
 /// Guest-pixel union of the lower piles used for displayed effect diagnostics.
 const PILE_EFFECT_BOUNDS: PixelRect = PixelRect::new(759, 678, 402, 187);
 
+
 /// Fixed 2x2 probes, not a search over card artwork or a long-line fallback.
 pub const fn halo_probe(slot: PyramidTargetSlot) -> PixelRect {
+
+
     match slot.kind {
         PyramidTargetKind::Move => PixelRect::new(950, 753, 2, 2),
         PyramidTargetKind::Left => PixelRect::new(789, 871, 2, 2),
@@ -307,8 +361,11 @@ pub const fn halo_probe(slot: PyramidTargetSlot) -> PixelRect {
     }
 }
 
+
 /// Reject uncalibrated dimensions, overflowing strides and truncated pixel buffers.
 fn validate_frame(frame: &CapturedFrame) -> Result<(), HaloDetectionError> {
+
+
     if frame.width != NOMINAL_FRAME_WIDTH || frame.height != NOMINAL_FRAME_HEIGHT {
         return Err(HaloDetectionError::BoundsOutsideFrame);
     }
@@ -316,11 +373,14 @@ fn validate_frame(frame: &CapturedFrame) -> Result<(), HaloDetectionError> {
         .stride
         .checked_mul(frame.height as usize)
         .ok_or(HaloDetectionError::InvalidFrameLayout)?;
+
+
     if frame.stride < NOMINAL_FRAME_WIDTH as usize * 4 || frame.pixels.len() < required {
         return Err(HaloDetectionError::InvalidFrameLayout);
     }
     Ok(())
 }
+
 
 /// Count predicate matches inside checked half-open guest-pixel bounds.
 fn count_matching(
@@ -336,14 +396,22 @@ fn count_matching(
         .y
         .checked_add(bounds.height)
         .ok_or(HaloDetectionError::BoundsOutsideFrame)?;
+
+
     if bounds.is_empty() {
         return Err(HaloDetectionError::EmptyBounds);
     }
+
+
     if right > frame.width || bottom > frame.height {
         return Err(HaloDetectionError::BoundsOutsideFrame);
     }
     let mut count = 0;
+
+
     for y in bounds.y..bottom {
+
+
         for x in bounds.x..right {
             let rgb = pixel_rgb(frame, x, y).ok_or(HaloDetectionError::InvalidFrameLayout)?;
             count += u32::from(predicate(rgb));
@@ -352,10 +420,12 @@ fn count_matching(
     Ok(count)
 }
 
+
 /// Recognise near-white card or legend pixels using every RGB channel.
 fn is_white(rgb: [u8; 3]) -> bool {
     rgb.into_iter().all(|channel| channel >= 245)
 }
+
 
 /// Recognise green felt using bounded channels and their relative differences.
 fn is_felt([red, green, blue]: [u8; 3]) -> bool {
@@ -365,6 +435,7 @@ fn is_felt([red, green, blue]: [u8; 3]) -> bool {
         && i16::from(green) - i16::from(red) >= 20
         && i16::from(green) - i16::from(blue) >= 15
 }
+
 
 /// Recognise Pyramid halo gold while rejecting white faces and green felt.
 fn is_halo_gold([red, green, blue]: [u8; 3]) -> bool {
@@ -376,22 +447,32 @@ fn is_halo_gold([red, green, blue]: [u8; 3]) -> bool {
         && i16::from(green) - i16::from(blue) >= 40
 }
 
+
 /// Positive scene fingerprint measured across all twenty calibration captures.
 /// Missing probes or unknown overlays supply no Pyramid input authority.
 pub fn is_gameplay_scene(frame: &CapturedFrame) -> Result<bool, HaloDetectionError> {
     validate_frame(frame)?;
+
+
     for bounds in WHITE_SCENE_PROBES {
+
+
         if count_matching(frame, bounds, is_white)? != bounds.width * bounds.height {
             return Ok(false);
         }
     }
+
+
     for bounds in FELT_SCENE_PROBES {
+
+
         if count_matching(frame, bounds, is_felt)? != bounds.width * bounds.height {
             return Ok(false);
         }
     }
     Ok(true)
 }
+
 
 /// Positive occupancy, overlap or uncertainty determined from a lower face probe.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -406,10 +487,12 @@ pub enum FaceEvidence {
     Unknown,
 }
 
+
 /// Return the fixed 60-by-4-pixel white/felt patch near a card face bottom.
 const fn lower_face_probe(slot: PyramidTargetSlot) -> PixelRect {
     PixelRect::new(slot.bounds.x + 40, slot.bounds.y + 178, 60, 4)
 }
+
 
 /// Classify a face probe as white, felt or unknown without assuming absence.
 fn face_evidence(
@@ -418,6 +501,8 @@ fn face_evidence(
 ) -> Result<FaceEvidence, HaloDetectionError> {
     let bounds = lower_face_probe(slot);
     let total = bounds.width * bounds.height;
+
+
     if count_matching(frame, bounds, is_white)? * 100 >= total * 90 {
         Ok(FaceEvidence::Present)
     } else if count_matching(frame, bounds, is_felt)? * 100 >= total * 95 {
@@ -427,16 +512,23 @@ fn face_evidence(
     }
 }
 
+
 /// Lower-face pixels can be interpreted only after both children are absent.
 /// A top-strip white test would mistake exposed ancestor cards for this card.
 fn tableau_evidence(
     frame: &CapturedFrame,
 ) -> Result<[FaceEvidence; TARGET_COUNT], HaloDetectionError> {
     let mut evidence = [FaceEvidence::Unknown; TARGET_COUNT];
+
+
     for (index, slot) in PYRAMID_TARGETS.iter().copied().enumerate() {
+
+
         let PyramidTargetKind::Card { row, column } = slot.kind else {
             continue;
         };
+
+
         if row < 7 {
             let left = PyramidTargetKind::Card {
                 row: row + 1,
@@ -450,6 +542,8 @@ fn tableau_evidence(
             }
             .slot_index()
             .ok_or(HaloDetectionError::BoundsOutsideFrame)?;
+
+
             if evidence[left] != FaceEvidence::Absent || evidence[right] != FaceEvidence::Absent {
                 evidence[index] = FaceEvidence::Blocked;
                 continue;
@@ -460,9 +554,12 @@ fn tableau_evidence(
     Ok(evidence)
 }
 
+
 /// Build the canonical single click, timing class and repeat policy for a slot.
 fn guided_action(slot: PyramidTargetSlot) -> GuidedAction {
     let probe = halo_probe(slot);
+
+
     GuidedAction {
         target: ActionTarget::Pyramid(slot.kind),
         anchor: PixelPoint::new(probe.x as i32, probe.y as i32),
@@ -491,11 +588,13 @@ fn guided_action(slot: PyramidTargetSlot) -> GuidedAction {
     }
 }
 
+
 /// Return a calibrated action for a valid target, without detecting its halo.
 pub fn action_for_kind(kind: PyramidTargetKind) -> Option<GuidedAction> {
     kind.slot_index()
         .map(|index| guided_action(PYRAMID_TARGETS[index]))
 }
+
 
 /// Choose the first eligible halo in semantic priority order. Multiple halos
 /// are valid; they never become a batch of clicks or consume an unclicked card.
@@ -503,6 +602,8 @@ pub fn analyse(
     frame: &CapturedFrame,
     state: &PyramidBoardState,
 ) -> Result<FrameAnalysis, HaloDetectionError> {
+
+
     if !is_gameplay_scene(frame)? {
         return Ok(FrameAnalysis {
             prediction: PredictedAction::NoHighlight,
@@ -513,18 +614,30 @@ pub fn analyse(
     let evidence = tableau_evidence(frame)?;
     let mut rows = RowMask::EMPTY;
     let mut top_row_face_up_count = 0;
+
+
     for (index, slot) in PYRAMID_TARGETS.iter().copied().enumerate() {
+
+
         if let PyramidTargetKind::Card { row, .. } = slot.kind {
+
+
             if evidence[index] != FaceEvidence::Absent {
                 rows.insert(row);
             }
+
+
             if row == 1 && evidence[index] == FaceEvidence::Present {
                 top_row_face_up_count += 1;
             }
         }
     }
     let mut prediction = PredictedAction::NoHighlight;
+
+
     for (index, slot) in PYRAMID_TARGETS.iter().copied().enumerate() {
+
+
         let eligible = match slot.kind {
             PyramidTargetKind::Move => true,
             PyramidTargetKind::Left | PyramidTargetKind::Right => {
@@ -534,6 +647,8 @@ pub fn analyse(
                 !state.clicked_target_slots[index] && evidence[index] == FaceEvidence::Present
             }
         };
+
+
         if eligible && count_matching(frame, halo_probe(slot), is_halo_gold)? == 4 {
             prediction = PredictedAction::Action(guided_action(slot));
             break;
@@ -546,6 +661,7 @@ pub fn analyse(
     })
 }
 
+
 /// A fresh, recognised halo on a card positively removed on an earlier board
 /// invalidates that board's consumed-card history. This is used only when a
 /// read-only Capture Frame found no eligible target with the retained history.
@@ -554,6 +670,8 @@ pub fn reappeared_consumed_card(
     frame: &CapturedFrame,
     state: &PyramidBoardState,
 ) -> Result<Option<FrameAnalysis>, HaloDetectionError> {
+
+
     if !state.clicked_target_slots[3..]
         .iter()
         .any(|clicked| *clicked)
@@ -561,9 +679,13 @@ pub fn reappeared_consumed_card(
         return Ok(None);
     }
     let fresh = analyse(frame, &PyramidBoardState::new())?;
+
+
     let PredictedAction::Action(action) = fresh.prediction else {
         return Ok(None);
     };
+
+
     let ActionTarget::Pyramid(kind @ PyramidTargetKind::Card { .. }) = action.target else {
         return Ok(None);
     };
@@ -573,8 +695,11 @@ pub fn reappeared_consumed_card(
         .map(|_| fresh))
 }
 
+
 /// Require a recognised scene and positive absence of every tableau card.
 pub fn board_is_empty(frame: &CapturedFrame) -> Result<bool, HaloDetectionError> {
+
+
     if !is_gameplay_scene(frame)? {
         return Ok(false);
     }
@@ -586,9 +711,12 @@ pub fn board_is_empty(frame: &CapturedFrame) -> Result<bool, HaloDetectionError>
         .all(|(index, _)| evidence[index] == FaceEvidence::Absent))
 }
 
+
 /// Redeal evidence after the controller has already verified an empty board.
 /// Unknown/blocked occupancy does not establish that a new card has arrived.
 pub fn has_visible_tableau_card(frame: &CapturedFrame) -> Result<bool, HaloDetectionError> {
+
+
     if !is_gameplay_scene(frame)? {
         return Ok(false);
     }
@@ -600,6 +728,7 @@ pub fn has_visible_tableau_card(frame: &CapturedFrame) -> Result<bool, HaloDetec
         .any(|(index, _)| evidence[index] == FaceEvidence::Present))
 }
 
+
 /// A narrow pre-action check for the controller's independently recognised
 /// LEVEL UP fallback when the game skips an observable empty-tableau frame.
 /// This is not removal evidence and cannot authorise a transition by itself.
@@ -607,9 +736,13 @@ pub fn final_tableau_action(
     frame: &CapturedFrame,
     kind: PyramidTargetKind,
 ) -> Result<bool, HaloDetectionError> {
+
+
     if kind == PyramidTargetKind::Move || !is_gameplay_scene(frame)? {
         return Ok(false);
     }
+
+
     let Some(index) = kind.slot_index() else {
         return Ok(false);
     };
@@ -617,10 +750,14 @@ pub fn final_tableau_action(
         .slot_index()
         .ok_or(HaloDetectionError::BoundsOutsideFrame)?;
     let apex = PYRAMID_TARGETS[apex_index];
+
+
     if kind.is_card() && kind != apex.kind {
         return Ok(false);
     }
     let evidence = tableau_evidence(frame)?;
+
+
     if evidence[apex_index] != FaceEvidence::Present
         || PYRAMID_TARGETS
             .iter()
@@ -638,6 +775,7 @@ pub fn final_tableau_action(
     )
 }
 
+
 /// Recognise a redeal that completed before an empty-board capture. The
 /// before-frame must prove the final apex action; the after-frame must restore
 /// at least two distinct bottom cards that were positively absent beforehand.
@@ -647,6 +785,8 @@ pub fn redeal_after_final_tableau_action(
     after: &CapturedFrame,
     kind: PyramidTargetKind,
 ) -> Result<bool, HaloDetectionError> {
+
+
     if !final_tableau_action(before, kind)? || !is_gameplay_scene(after)? {
         return Ok(false);
     }
@@ -661,6 +801,7 @@ pub fn redeal_after_final_tableau_action(
         .count()
         >= 2)
 }
+
 
 /// Count material changes inside a pile while excluding borders and cursor hotspots.
 fn changed_pile_interior(
@@ -681,9 +822,15 @@ fn changed_pile_interior(
     let exclusions = [MOVE_TARGET, LEFT_TARGET, RIGHT_TARGET]
         .map(|target| guided_action(target).effect_exclusion_bounds());
     let mut changed = 0;
+
+
     for y in bounds.y..bounds.bottom() {
+
+
         for x in bounds.x..bounds.right() {
             let point = PixelPoint::new(x as i32, y as i32);
+
+
             if exclusions
                 .iter()
                 .any(|excluded| excluded.is_some_and(|bounds| bounds.contains(point)))
@@ -692,6 +839,8 @@ fn changed_pile_interior(
             }
             let old = pixel_rgb(before, x, y).ok_or(HaloDetectionError::InvalidFrameLayout)?;
             let new = pixel_rgb(after, x, y).ok_or(HaloDetectionError::InvalidFrameLayout)?;
+
+
             if old
                 .into_iter()
                 .zip(new)
@@ -704,6 +853,7 @@ fn changed_pile_interior(
     Ok(changed)
 }
 
+
 /// Before/after occupancy and cursor-excluded change count for one lower pile.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PileEffectEvidence {
@@ -714,6 +864,7 @@ pub struct PileEffectEvidence {
     /// Materially changed interior pixels outside all lower-control cursor masks.
     pub changed_pixels: usize,
 }
+
 
 /// The measurements which actually decide a Pyramid action's effect. Counts
 /// use cursor-excluded pile interiors, not the display-only effect rectangle.
@@ -737,29 +888,42 @@ pub struct PyramidEffectEvidence {
     pub removed_highlighted_partner: Option<PyramidTargetKind>,
 }
 
+
 /// Identify the pair from the planning frame, never from the result's halos.
 /// Unknown or covered faces are ineligible; more than one partner is ambiguous.
 fn unique_highlighted_partner(
     before: &CapturedFrame,
     clicked: PyramidTargetSlot,
 ) -> Result<Option<PyramidTargetSlot>, HaloDetectionError> {
+
+
     if count_matching(before, halo_probe(clicked), is_halo_gold)? != 4 {
         return Ok(None);
     }
     let before_tableau = tableau_evidence(before)?;
     let mut partner = None;
+
+
     for (index, slot) in PYRAMID_TARGETS.iter().copied().enumerate() {
+
+
         if slot.kind == clicked.kind || slot.kind == PyramidTargetKind::Move {
             continue;
         }
+
+
         let face = if slot.kind.is_card() {
             before_tableau[index]
         } else {
             face_evidence(before, slot)?
         };
+
+
         if face == FaceEvidence::Present
             && count_matching(before, halo_probe(slot), is_halo_gold)? == 4
         {
+
+
             if partner.is_some() {
                 return Ok(None);
             }
@@ -769,6 +933,7 @@ fn unique_highlighted_partner(
     Ok(partner)
 }
 
+
 /// A fresh highlighted Left/Right pair can be the same ranks and suits as the
 /// preceding pair. It authorises a new plan after settling, but does not prove
 /// the previous click's effect. The worker separately excludes win/redeal phases.
@@ -777,12 +942,18 @@ pub fn has_repeated_pile_pair(
     after: &CapturedFrame,
     clicked: PyramidTargetKind,
 ) -> Result<bool, HaloDetectionError> {
+
+
     let (clicked, opposite) = match clicked {
         PyramidTargetKind::Left => (LEFT_TARGET, RIGHT_TARGET),
         PyramidTargetKind::Right => (RIGHT_TARGET, LEFT_TARGET),
         _ => return Ok(false),
     };
+
+
     for frame in [before, after] {
+
+
         if !is_gameplay_scene(frame)?
             || face_evidence(frame, clicked)? != FaceEvidence::Present
             || unique_highlighted_partner(frame, clicked)?.map(|slot| slot.kind)
@@ -796,6 +967,7 @@ pub fn has_repeated_pile_pair(
     has_visible_tableau_card(after)
 }
 
+
 /// A tableau card succeeds only on a positive Present -> Absent transition.
 /// Bottom piles require material interior change or their unique pre-highlighted
 /// partner's positive removal. A known Left/Right pair measures both interiors
@@ -806,13 +978,19 @@ pub fn measure_effect(
     kind: PyramidTargetKind,
 ) -> Result<PyramidEffectEvidence, HaloDetectionError> {
     let mut evidence = PyramidEffectEvidence::default();
+
+
     if !is_gameplay_scene(before)? || !is_gameplay_scene(after)? {
         return Ok(evidence);
     }
+
+
     let Some(index) = kind.slot_index() else {
         return Ok(evidence);
     };
     let slot = PYRAMID_TARGETS[index];
+
+
     match kind {
         PyramidTargetKind::Card { .. } => {
             evidence.before_face = Some(tableau_evidence(before)?[index]);
@@ -821,7 +999,11 @@ pub fn measure_effect(
                 && evidence.after_face == Some(FaceEvidence::Absent);
         }
         PyramidTargetKind::Move => {
+
+
             for pile in [LEFT_TARGET, RIGHT_TARGET] {
+
+
                 if !matches!(
                     face_evidence(before, pile)?,
                     FaceEvidence::Present | FaceEvidence::Absent
@@ -838,6 +1020,8 @@ pub fn measure_effect(
             evidence.verified = changed >= PILE_CHANGE_MINIMUM;
         }
         PyramidTargetKind::Left | PyramidTargetKind::Right => {
+
+
             let opposite = if kind == PyramidTargetKind::Left {
                 RIGHT_TARGET
             } else {
@@ -855,16 +1039,24 @@ pub fn measure_effect(
             evidence.after_face = Some(after_face);
             evidence.pile_changed_pixels = Some(changed);
             evidence.opposite_pile = Some(opposite_evidence);
+
+
             if before_face == FaceEvidence::Present
                 && matches!(after_face, FaceEvidence::Present | FaceEvidence::Absent)
             {
+
+
                 if changed >= PILE_CHANGE_MINIMUM {
                     evidence.verified = true;
                 } else if let Some(partner) = unique_highlighted_partner(before, slot)? {
                     evidence.highlighted_partner = Some(partner.kind);
+
+
                     if let Some(index) =
                         partner.kind.slot_index().filter(|_| partner.kind.is_card())
                     {
+
+
                         if tableau_evidence(after)?[index] == FaceEvidence::Absent {
                             evidence.removed_highlighted_partner = Some(partner.kind);
                             evidence.verified = true;
@@ -880,6 +1072,8 @@ pub fn measure_effect(
                         // faces may each fall below the single-pile minimum.
                         let pair_changed = changed + opposite_evidence.changed_pixels;
                         evidence.pair_changed_pixels = Some(pair_changed);
+
+
                         if opposite_evidence.after_face == FaceEvidence::Absent {
                             evidence.removed_highlighted_partner = Some(partner.kind);
                         }
@@ -893,6 +1087,7 @@ pub fn measure_effect(
     Ok(evidence)
 }
 
+
 /// Expose the measured effect decision to focused verification tests.
 #[cfg(test)]
 fn verify_effect(
@@ -902,6 +1097,7 @@ fn verify_effect(
 ) -> Result<bool, HaloDetectionError> {
     Ok(measure_effect(before, after, kind)?.verified)
 }
+
 
 #[cfg(test)]
 mod tests {
@@ -914,22 +1110,33 @@ mod tests {
         parameters::AnimationSettleDelays,
     };
 
+
     /// Synthetic opaque green-felt RGBA sample used by scene and absence fixtures.
     const FELT: [u8; 4] = [20, 110, 60, 255];
+
+
     /// Synthetic opaque card-face RGBA sample used by occupancy fixtures.
     const WHITE: [u8; 4] = [255, 255, 255, 255];
+
+
     /// Synthetic opaque gold RGBA sample used by fixed-halo fixtures.
     const GOLD: [u8; 4] = [237, 207, 109, 255];
 
+
     /// Paint an RGBA rectangle into a synthetic test frame with known valid bounds.
     fn paint(frame: &mut CapturedFrame, bounds: PixelRect, rgba: [u8; 4]) {
+
+
         for y in bounds.y..bounds.bottom() {
+
+
             for x in bounds.x..bounds.right() {
                 let offset = y as usize * frame.stride + x as usize * 4;
                 frame.pixels[offset..offset + 4].copy_from_slice(&rgba);
             }
         }
     }
+
 
     /// Build a synthetic recognised scene with felt at every empty tableau slot.
     fn empty_board() -> CapturedFrame {
@@ -940,26 +1147,34 @@ mod tests {
             format: PixelFormat::Rgba8,
             pixels: FELT.repeat((NOMINAL_FRAME_WIDTH * NOMINAL_FRAME_HEIGHT) as usize),
         };
+
+
         for bounds in WHITE_SCENE_PROBES {
             paint(&mut frame, bounds, WHITE);
         }
         frame
     }
 
+
     /// Paint a synthetic white card and optionally its four-pixel gold halo.
     fn add_card(frame: &mut CapturedFrame, kind: PyramidTargetKind, highlighted: bool) {
         let slot = PYRAMID_TARGETS[kind.slot_index().expect("valid test target")];
         paint(frame, lower_face_probe(slot), WHITE);
+
+
         if highlighted {
             paint(frame, halo_probe(slot), GOLD);
         }
     }
+
 
     /// Extract the semantic Pyramid target from a test frame analysis.
     fn predicted_target(
         frame: &CapturedFrame,
         state: &PyramidBoardState,
     ) -> Option<PyramidTargetKind> {
+
+
         match analyse(frame, state).expect("valid fixture").prediction {
             PredictedAction::Action(GuidedAction {
                 target: ActionTarget::Pyramid(kind),
@@ -970,6 +1185,7 @@ mod tests {
         }
     }
 
+
     /// Verify priority order and complete, unique coverage of all tableau slots.
     #[test]
     fn semantic_order_covers_every_card_once_from_bottom_to_apex() {
@@ -978,7 +1194,11 @@ mod tests {
             [MOVE_TARGET, LEFT_TARGET, RIGHT_TARGET]
         );
         let mut index = 3;
+
+
         for row in (1_u8..=7).rev() {
+
+
             for column in 1..=row {
                 assert_eq!(
                     PYRAMID_TARGETS[index].kind,
@@ -992,9 +1212,12 @@ mod tests {
         assert_eq!(index - 3, TABLEAU_CARD_COUNT);
     }
 
+
     /// Verify target geometry and hit points fit the guest frame and QMP range.
     #[test]
     fn every_bound_and_hit_point_is_inside_the_frame_and_qmp_mappable() {
+
+
         for target in PYRAMID_TARGETS {
             assert!(
                 target.bounds.contains(target.click_point),
@@ -1015,15 +1238,26 @@ mod tests {
         }
     }
 
+
     /// Verify tableau clicks remain in each exposed top strip.
     #[test]
     fn tableau_hit_points_avoid_overlapping_lower_rows() {
+
+
         for target in PYRAMID_TARGETS {
+
+
             let PyramidTargetKind::Card { row, .. } = target.kind else {
                 continue;
             };
+
+
             for other in PYRAMID_TARGETS {
+
+
                 if let PyramidTargetKind::Card { row: other_row, .. } = other.kind {
+
+
                     if other_row > row {
                         assert!(
                             !other.bounds.contains(target.click_point),
@@ -1037,6 +1271,7 @@ mod tests {
         }
     }
 
+
     /// Verify Pyramid uses its own targets and the shared completion calibration.
     #[test]
     fn profile_uses_separate_detector_and_shared_progress_calibration() {
@@ -1045,16 +1280,21 @@ mod tests {
         assert!(PROFILE.tableau_rows.is_empty());
         assert_eq!(PROFILE.game_progress, Some(SHARED_SOLVER_PROGRESS_PROFILE));
         assert_eq!(PREVIEW_TARGETS.len(), TARGET_COUNT);
+
+
         for (preview, target) in PREVIEW_TARGETS.iter().zip(PYRAMID_TARGETS) {
             assert_eq!(preview.bounds, target.bounds);
             assert_eq!(preview.label, target.label);
         }
     }
 
+
     /// Verify out-of-range row and column values cannot index or alter slot history.
     #[test]
     fn invalid_semantic_targets_never_index_or_consume_history() {
         let mut state = PyramidBoardState::new();
+
+
         for kind in [
             PyramidTargetKind::Card { row: 0, column: 1 },
             PyramidTargetKind::Card { row: 8, column: 1 },
@@ -1068,6 +1308,7 @@ mod tests {
         assert_eq!(state, PyramidBoardState::new());
     }
 
+
     /// Verify multiple legal halos select exactly one target in the agreed order.
     #[test]
     fn multiple_halos_use_move_left_right_then_bottom_to_apex_priority() {
@@ -1078,12 +1319,15 @@ mod tests {
         add_card(&mut frame, PyramidTargetKind::Left, true);
         paint(&mut frame, halo_probe(MOVE_TARGET), GOLD);
         let state = PyramidBoardState::new();
+
+
         for slot in [MOVE_TARGET, LEFT_TARGET, RIGHT_TARGET] {
             assert_eq!(predicted_target(&frame, &state), Some(slot.kind));
             paint(&mut frame, halo_probe(slot), FELT);
         }
         assert_eq!(predicted_target(&frame, &state), Some(bottom));
     }
+
 
     /// Verify halo-like pixels on blocked or absent cards do not grant input authority.
     #[test]
@@ -1102,6 +1346,7 @@ mod tests {
         assert_eq!(predicted_target(&absent, &PyramidBoardState::new()), None);
     }
 
+
     /// Verify removal history excludes only clicked tableau slots, preserving pile reuse.
     #[test]
     fn consumed_history_skips_only_clicked_card_and_never_bottom_targets() {
@@ -1109,6 +1354,8 @@ mod tests {
         let first = PyramidTargetKind::Card { row: 7, column: 1 };
         let partner = PyramidTargetKind::Card { row: 7, column: 2 };
         state.mark_removed(first);
+
+
         for kind in [
             PyramidTargetKind::Move,
             PyramidTargetKind::Left,
@@ -1139,6 +1386,7 @@ mod tests {
         );
     }
 
+
     /// Verify cosmetic changes cannot masquerade as positive tableau removal.
     #[test]
     fn halo_loss_selection_tint_and_unrelated_change_are_not_card_removal() {
@@ -1161,6 +1409,7 @@ mod tests {
         );
     }
 
+
     /// Verify tableau effects require the white-to-felt occupancy transition.
     #[test]
     fn king_and_pair_removal_require_positive_lower_face_to_felt_transition() {
@@ -1181,6 +1430,7 @@ mod tests {
         assert!(verify_effect(&before, &after, king).unwrap());
         assert!(verify_effect(&before, &after, partner).unwrap());
     }
+
 
     /// Verify blocked, unknown or overlaid evidence cannot establish an empty board.
     #[test]
@@ -1212,6 +1462,7 @@ mod tests {
         );
     }
 
+
     /// Verify halo recognition requires all four pixels at the calibrated probe.
     #[test]
     fn fixed_probe_requires_all_four_gold_pixels_without_searching_nearby() {
@@ -1223,6 +1474,7 @@ mod tests {
         paint(&mut frame, PixelRect::new(probe.x, probe.y, 1, 1), FELT);
         assert_eq!(predicted_target(&frame, &PyramidBoardState::new()), None);
     }
+
 
     /// Verify lower-pile effects exclude cosmetic halo and cursor movement.
     #[test]
@@ -1250,6 +1502,7 @@ mod tests {
         assert!(!verify_effect(&left_before, &tinted, PyramidTargetKind::Left).unwrap());
     }
 
+
     /// Verify positive removal of a unique pre-highlighted partner proves a pile action.
     #[test]
     fn unchanged_pile_accepts_only_its_unique_highlighted_tableau_partner_removal() {
@@ -1257,6 +1510,8 @@ mod tests {
         // unavailable historical before-frame from the reported stop.
         let partner = PyramidTargetKind::Card { row: 7, column: 3 };
         let partner_slot = PYRAMID_TARGETS[partner.slot_index().unwrap()];
+
+
         for pile in [LEFT_TARGET, RIGHT_TARGET] {
             let mut before = empty_board();
             add_card(&mut before, pile.kind, true);
@@ -1277,6 +1532,7 @@ mod tests {
             assert!(!verify_effect(&before, &after, PyramidTargetKind::Move).unwrap());
         }
     }
+
 
     /// Verify result halos alone do not retroactively prove the preceding effect.
     #[test]
@@ -1305,6 +1561,7 @@ mod tests {
         assert_eq!(measured.removed_highlighted_partner, None);
     }
 
+
     /// Verify partner-based effect evidence requires one unambiguous planning-frame halo.
     #[test]
     fn partner_removal_rejects_unhighlighted_or_ambiguous_partners() {
@@ -1324,6 +1581,7 @@ mod tests {
         add_card(&mut unhighlighted, partner, true);
         assert!(!verify_effect(&unhighlighted, &after, PyramidTargetKind::Left).unwrap());
 
+
         for extra in [
             PyramidTargetKind::Card { row: 7, column: 5 },
             PyramidTargetKind::Right,
@@ -1334,6 +1592,7 @@ mod tests {
         }
     }
 
+
     /// Build a synthetic scene with both lower piles uniquely highlighted.
     fn pile_pair() -> CapturedFrame {
         let mut before = empty_board();
@@ -1342,9 +1601,12 @@ mod tests {
         before
     }
 
+
     /// Alter a requested number of interior pixels outside cursor exclusions.
     fn paint_pile_changes(frame: &mut CapturedFrame, pile: PyramidTargetSlot, count: u32) {
         assert!(count <= 128);
+
+
         // Synthetic evidence outside the cursor mask, halo and face probe.
         for pixel in 0..count {
             paint(
@@ -1360,10 +1622,15 @@ mod tests {
         }
     }
 
+
     /// Verify a known pair combines both pile deltas at the exact effect threshold.
     #[test]
     fn known_pile_pair_combines_only_its_cursor_excluded_interiors() {
+
+
         for (clicked, opposite) in [(LEFT_TARGET, RIGHT_TARGET), (RIGHT_TARGET, LEFT_TARGET)] {
+
+
             // These are synthetic threshold cases, not reconstructed historical
             // before/after captures. Both new cards may retain the same halos.
             for (clicked_count, opposite_count, verified) in [
@@ -1396,9 +1663,12 @@ mod tests {
         }
     }
 
+
     /// Verify positive opposite-pile absence proves removal even with no measured delta.
     #[test]
     fn pile_pair_accepts_positive_partner_removal_without_interior_delta() {
+
+
         for (clicked, opposite) in [(LEFT_TARGET, RIGHT_TARGET), (RIGHT_TARGET, LEFT_TARGET)] {
             let before = pile_pair();
             let mut after = before.clone();
@@ -1412,14 +1682,19 @@ mod tests {
         }
     }
 
+
     /// Verify paired-pile effects reject unrelated or uncertain planning evidence.
     #[test]
     fn pile_pair_rejects_unrelated_ambiguous_unknown_or_overlaid_evidence() {
+
+
         for (clicked, opposite) in [(LEFT_TARGET, RIGHT_TARGET), (RIGHT_TARGET, LEFT_TARGET)] {
             let before = pile_pair();
             let mut after = before.clone();
             paint_pile_changes(&mut after, clicked, 124);
             paint_pile_changes(&mut after, opposite, 124);
+
+
             for pile in [clicked, opposite] {
                 let mut unhighlighted = before.clone();
                 paint(&mut unhighlighted, halo_probe(pile), FELT);
@@ -1459,11 +1734,14 @@ mod tests {
         }
     }
 
+
     /// Verify both cursor locations and halo disappearance remain excluded from effects.
     #[test]
     fn pile_pair_ignores_both_cursor_hotspots_and_halo_loss() {
         let before = pile_pair();
         let mut after = before.clone();
+
+
         for pile in [LEFT_TARGET, RIGHT_TARGET] {
             paint(&mut after, halo_probe(pile), FELT);
             paint(
@@ -1472,6 +1750,8 @@ mod tests {
                 WHITE,
             );
         }
+
+
         for clicked in [LEFT_TARGET, RIGHT_TARGET] {
             let measured = measure_effect(&before, &after, clicked.kind).unwrap();
             assert_eq!(measured.pile_changed_pixels, Some(0));
@@ -1480,6 +1760,7 @@ mod tests {
             assert!(!verify_effect(&after, &before, clicked.kind).unwrap());
         }
     }
+
 
     /// Verify identical repeated pile pairs permit continuation without claiming an effect.
     #[test]
@@ -1490,6 +1771,8 @@ mod tests {
             PyramidTargetKind::Card { row: 1, column: 1 },
             false,
         );
+
+
         for clicked in [PyramidTargetKind::Left, PyramidTargetKind::Right] {
             assert!(has_repeated_pile_pair(&frame, &frame, clicked).unwrap());
             let evidence = measure_effect(&frame, &frame, clicked).unwrap();
@@ -1497,6 +1780,7 @@ mod tests {
             assert_eq!(evidence.pair_changed_pixels, Some(0));
         }
     }
+
 
     /// Verify repeat permission needs known faces, a unique pair and remaining tableau.
     #[test]
@@ -1507,8 +1791,14 @@ mod tests {
             PyramidTargetKind::Card { row: 1, column: 1 },
             false,
         );
+
+
         for clicked in [PyramidTargetKind::Left, PyramidTargetKind::Right] {
+
+
             for pile in [LEFT_TARGET, RIGHT_TARGET] {
+
+
                 for bad_face in [FELT, [120, 120, 120, 255]] {
                     let mut bad = before.clone();
                     paint(&mut bad, lower_face_probe(pile), bad_face);
@@ -1539,6 +1829,8 @@ mod tests {
             assert!(!has_repeated_pile_pair(&modal, &before, clicked).unwrap());
             assert!(!has_repeated_pile_pair(&before, &pile_pair(), clicked).unwrap());
         }
+
+
         for other in [
             PyramidTargetKind::Move,
             PyramidTargetKind::Card { row: 1, column: 1 },
@@ -1546,6 +1838,7 @@ mod tests {
             assert!(!has_repeated_pile_pair(&before, &before, other).unwrap());
         }
     }
+
 
     /// Verify uncertain occupancy and invalid scenes cannot prove partner removal.
     #[test]
@@ -1605,11 +1898,14 @@ mod tests {
         assert!(measure_effect(&before, &malformed, PyramidTargetKind::Left).is_err());
     }
 
+
     /// Verify every calibrated target emits one click with its intended timing and reuse.
     #[test]
     fn every_action_is_one_mouse_click_with_move_specific_settle_and_repeat_policy() {
         let custom_delays =
             AnimationSettleDelays::from_millis(1, 2, 3).with_pyramid_millis(725, 1_350, 950);
+
+
         for slot in PYRAMID_TARGETS {
             let action = action_for_kind(slot.kind).unwrap();
             assert_eq!(action.operation(), InputOperation::Click(slot.click_point));
@@ -1631,6 +1927,7 @@ mod tests {
             );
         }
     }
+
 
     /// Verify malformed frames fail before any calibrated pixel sampling.
     #[test]
@@ -1655,6 +1952,7 @@ mod tests {
         );
     }
 
+
     /// Verify RGBA row padding does not alter the chosen target.
     #[test]
     fn rgba_and_padded_stride_have_identical_detection() {
@@ -1663,6 +1961,8 @@ mod tests {
         let mut padded = rgba.clone();
         padded.stride += 16;
         padded.pixels = vec![0; padded.stride * padded.height as usize];
+
+
         for y in 0..rgba.height as usize {
             padded.pixels[y * padded.stride..y * padded.stride + rgba.stride]
                 .copy_from_slice(&rgba.pixels[y * rgba.stride..(y + 1) * rgba.stride]);
@@ -1674,6 +1974,7 @@ mod tests {
         );
         assert_eq!(analyse(&rgba, &state), analyse(&padded, &state));
     }
+
 
     /// Verify final-action detection requires the lone apex and valid clicked halo.
     #[test]
@@ -1693,6 +1994,7 @@ mod tests {
         );
         assert!(!final_tableau_action(&frame, apex).unwrap());
     }
+
 
     /// Verify redeal evidence needs a final action and at least two restored bottom cards.
     #[test]
@@ -1726,6 +2028,7 @@ mod tests {
         assert!(!redeal_after_final_tableau_action(&before, &after, apex).unwrap());
     }
 
+
     /// Replay measured screenshot probe fixtures and verify recorded target selection.
     #[test]
     fn calibrated_screenshot_patches_select_the_recorded_targets() {
@@ -1735,11 +2038,15 @@ mod tests {
         assert_eq!(fixture["schema"], 1);
         let sources = fixture["sources"].as_array().expect("source captures");
         assert_eq!(sources.len(), 21);
+
+
         for source in sources {
             let name = source["name"].as_str().unwrap();
             assert_eq!(source["sha256"].as_str().unwrap().len(), 64);
             let mut frame = empty_board();
             frame.pixels.fill(0);
+
+
             for patch in source["patches"].as_array().unwrap() {
                 let bounds = patch["bounds"].as_array().unwrap();
                 let bounds = PixelRect::new(
@@ -1751,7 +2058,11 @@ mod tests {
                 let hex = patch["rgb_hex"].as_str().unwrap();
                 assert_eq!(hex.len(), (bounds.width * bounds.height * 6) as usize);
                 let mut offset = 0;
+
+
                 for y in bounds.y..bounds.bottom() {
+
+
                     for x in bounds.x..bounds.right() {
                         let rgb = [0, 2, 4].map(|channel| {
                             u8::from_str_radix(&hex[offset + channel..offset + channel + 2], 16)
@@ -1776,6 +2087,8 @@ mod tests {
                 "{name}: recorded halo priority"
             );
             assert!(!board_is_empty(&frame).unwrap(), "{name}: occupied board");
+
+
             if name.ends_with("06-STOPPED-Uncertain.png") {
                 let first = PyramidTargetKind::Card { row: 6, column: 2 };
                 let partner = PyramidTargetKind::Card { row: 6, column: 6 };

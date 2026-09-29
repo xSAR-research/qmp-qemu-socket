@@ -98,7 +98,8 @@ A click is delivered as three QMP commands:
 2. left-button down;
 3. left-button up after the configured hold.
 
-TriPeaks DRAW is delivered as qcode `D` down and up with the pointer unchanged.
+TriPeaks and confirmed Klondike Draw 1 use qcode `d` down and up with the pointer unchanged.
+Klondike recycle uses its recognised stock-area click; `d` is not assumed to recycle.
 Pyramid Move, pile and card targets are mouse clicks, never the draw key. The
 removed blank-felt primer click must not be reintroduced without evidence;
 the proven Solver click at each board also establishes guest focus.
@@ -182,3 +183,18 @@ The Draw Targets overlay and prediction marks are painted only on the preview.
 The saved manual PNG always contains the original capture bytes. Undo All
 confirmation remains uncalibrated and is not clicked automatically. See
 `pyramid-execution.md` for the profile measurements and evidence limits.
+
+## Klondike exception to missing-HALO handling
+
+Charlie authorised Klondike-specific Solver recovery on 30 September 2026:
+recognised gameplay with no eligible HALO can receive one Solver activation,
+then a capture immediately after acknowledged button release, without an added
+settle delay. Pointer positioning and button hold remain part of input delivery.
+Recovery is bounded, STOP-aware and never repeats an uncertain operation.
+Later unresolved observations use the editable Klondike recapture interval.
+This policy does not alter Pyramid or TriPeaks recovery rules.
+
+Klondike source detection consumes one immutable RGBA frame in priority order.
+It does not take a separate screenshot for each target class. Each accepted
+result is reused as the next planning frame. No Klondike completion/restart input
+is enabled by this candidate.

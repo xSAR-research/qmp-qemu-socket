@@ -2,24 +2,68 @@
 
 A Rust desktop application for inspecting and controlling a QEMU VM through its
 QMP Unix socket. The current guest is Windows 11 running Microsoft Solitaire &
-Casual Games. TriPeaks and Pyramid actions are guarded by fresh captures and
-visual verification. Both use the same QMP controller and post-game flow; each
-game provides its own target selection and effect checks.
+Casual Games. TriPeaks, Pyramid and Klondike use fresh visual evidence and shared
+QMP/capture facilities, with independent target and effect policies.
 
-The application version is `1.1.0`. `Cargo.toml` supplies the version shown in
-the window title and Parameters.
+This is **v1.2.1, candidate 1**, based on committed v1.2.0 at
+`db506d11b46ce7180cd3be7fe05a66cfa056999e`. `Cargo.toml` supplies the package
+version shown in the window title and Parameters. Beast gameplay acceptance
+is required before promotion.
 
-## Build
+## Build and source spacing
 
-The project requests Rust 1.100.0 in `rust-toolchain.toml`. This is the **nightly**
-channel. Install it with `rustup default nightly`. It is required simply for
-**rustfmt** to use the `unstable_features` flag set in `rustfmt.toml`. `clippy`
-and `cargo test` work fine on stable.
+`rust-toolchain.toml` selects floating `nightly`, with Clippy and Rustfmt
+components. `Cargo.toml` declares edition 2024 and minimum Rust `1.100.0`.
+The channel name is not a dated compiler pin. Record the actual compiler and
+Cargo versions used; stable compatibility has not been established here.
 
 ```text
+rustc --version
+cargo --version
+cargo check --locked
 cargo test --locked
+cargo doc --locked --no-deps --document-private-items
+cargo clippy --locked --all-targets
 cargo build --locked --release
 ```
+
+Do not run `rustfmt` or `cargo fmt` for this candidate. Charlie requested two
+blank lines before Rust definitions (above their documentation/attributes)
+and statement blocks, including existing source. The committed nightly and
+rustfmt configuration are preserved. The candidate's spacing pass inserts
+blank lines and checks that Rust tokens and comments are unchanged.
+
+## Klondike Draw 1
+
+Select **Klondike**, activate the guest Solver and capture a fresh frame.
+Selection priority is **DRAW → RIGHT → tableau bottom upwards → SUIT piles**.
+An ordinary stock draw sends the confirmed `d` shortcut; exhausted-stock recycle
+clicks its recognised highlighted area. RIGHT detection follows the up-to-three
+card fan. A solid highlighted source block receives one click, including a whole
+run or a source from a SUIT pile. The dark dashed destination is never clicked.
+Newly exposed tableau cards reveal automatically.
+
+**Params** provides independent Klondike action-settle and recapture intervals,
+initially **2000 ms** and **1000 ms**, editable from 0 to 5000 ms. They are
+user-approved starting settings, not measured animation timings. Single Step
+sends at most one gameplay operation; Multi-Step defaults to **10**, with a
+finite range of **1–10000**. Timing edits apply to the next run.
+
+The worker validates the initial preview against a fresh frame, sends one
+operation, settles, observes and verifies its effect. The accepted result is
+reused for the next plan. A recognised Klondike scene with no eligible HALO may
+receive one Solver activation, followed immediately by capture with **no added
+post-click delay**. Normal pointer-settle/button-hold and QMP acknowledgements
+still apply. Further unresolved captures are bounded and use the editable
+recapture delay. An initial no-HALO preview permits recovery only: the recovered
+preview is displayed and another explicit Step request is required for gameplay.
+Recovery does not repeat an uncertain gameplay operation.
+
+Completion, autocomplete and restart are unsupported in this candidate.
+Unknown scenes and unresolved effects stop with the latest frame and logs;
+Klondike does not enter the existing three-board or post-game controller.
+See [Klondike candidate notes](docs/klondike-candidate-1.md) for evidence,
+verification boundaries and live checks.
 
 ## QMP connection
 
@@ -64,7 +108,7 @@ sets them to 1000/2000/1000 ms. For a late MOVE halo after cards fly away, incre
 draw/tableau settings. Double-click a number to type milliseconds, or drag it;
 STOP any active run and close the snapshot dialog before editing. Labels identify
 the click that starts the wait: a card-to-MOVE transition uses the card delay.
-This build identifies itself as **v1.2.0**.
+The package-derived candidate label is displayed in the title and Params.
 
 The 1.2.0 baseline refactors the existing Solver-driven controller without
 adding a game mode or self-solving algorithm. Shared post-game handling,
@@ -149,8 +193,8 @@ the PNG on disk retains the original 1920×1080 bytes.
 
 ## Post-game handling
 
-Both profiles use the same visual progress probe and guarded post-game
-sequence. After a verified board completion, the Solver header progress probe
+TriPeaks and Pyramid use the same visual progress probe and guarded post-game
+sequence. Klondike does not enter that controller. After a verified board completion, the Solver header progress probe
 selects redeal or game completion; the session board counter is advisory.
 Before the first score-skip click, fresh frames check whether an actionable
 new board or a terminal dialog has appeared. Two consecutive non-gameplay

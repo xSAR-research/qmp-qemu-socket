@@ -26,6 +26,7 @@ use crate::{
     tracker::{PredictedAction, TableauScanState, analyse_frame_with_state},
 };
 
+
 /// Observe the result of an already-delivered Pyramid action without replaying it.
 ///
 /// `before_series` supplies the planning frame; `settings` fixes settling delays
@@ -62,6 +63,8 @@ pub(super) fn verify_pyramid_action(
             .ok_or_else(|| "Pyramid verification has no planning frame".to_owned())?;
         let expected_final_transition = pyramid::final_tableau_action(&before.frame, kind)
             .map_err(|error| format!("Pyramid final-action analysis failed: {error}"))?;
+
+
         let observation_limit = if expected_final_transition {
             POST_GAME_MAX_OBSERVATION_ROUNDS
         } else {
@@ -75,8 +78,11 @@ pub(super) fn verify_pyramid_action(
         let mut phase_round = 0usize;
         let boards_per_game = scan_state.mode().profile().boards_per_game;
 
+
         loop {
             phase_round += 1;
+
+
             if phase_round > observation_limit {
                 let last_state = last_observation
                     .as_ref()
@@ -108,10 +114,15 @@ pub(super) fn verify_pyramid_action(
                 .ok_or_else(|| "Pyramid result capture contained no frame".to_owned())?;
             let analysis_started = Instant::now();
 
+
             if !observation.gameplay_scene {
                 redeal_no_halo_captures = 0;
                 redeal_confirmation.observe(false, observation.game_progress);
+
+
                 let terminal_visible = if board_completed || expected_final_transition {
+
+
                     match post_game::level_up_overrides_board_progress(true, observation) {
                         Ok(true) => true,
                         Ok(false) => {
@@ -138,6 +149,8 @@ pub(super) fn verify_pyramid_action(
                 } else {
                     false
                 };
+
+
                 if terminal_visible {
                     *completed_boards = boards_per_game;
                     board_completed = true;
@@ -151,6 +164,8 @@ pub(super) fn verify_pyramid_action(
                 send_log(event_tx,
                     "Pyramid result is not a recognised gameplay scene; observing the transition without guest input.".to_owned());
             } else {
+
+
                 if !board_completed
                     && expected_final_transition
                     && pyramid::redeal_after_final_tableau_action(
@@ -160,6 +175,8 @@ pub(super) fn verify_pyramid_action(
                     )
                     .map_err(|error| format!("Pyramid redeal analysis failed: {error}"))?
                 {
+
+
                     // A progress reading during the deal animation is not final.
                     // Require two consecutive fresh frames with restored cards AND
                     // AnotherBoard, without replaying input while they disagree.
@@ -203,6 +220,8 @@ pub(super) fn verify_pyramid_action(
                 } else if !awaiting_redeal {
                     redeal_confirmation.observe(false, observation.game_progress);
                 }
+
+
                 if !effect_verified {
                     let evidence = pyramid::measure_effect(&before.frame, &observation.frame, kind)
                         .map_err(|error| format!("Pyramid effect analysis failed: {error}"))?;
@@ -221,6 +240,8 @@ pub(super) fn verify_pyramid_action(
                             format_prediction_target(observation.prediction),
                         ),
                     );
+
+
                     if effect_verified {
                         changed_pixels = materially_changed_pixels(
                             &before.frame,
@@ -242,6 +263,7 @@ pub(super) fn verify_pyramid_action(
                     }
                 }
 
+
                 if effect_verified {
                     let board_empty =
                         pyramid::board_is_empty(&observation.frame).map_err(|error| {
@@ -251,12 +273,16 @@ pub(super) fn verify_pyramid_action(
                         .map_err(|error| {
                             format!("Pyramid card-presence analysis failed: {error}")
                         })?;
+
+
                     if !board_completed && board_empty {
                         let progress = observation.game_progress.ok_or_else(|| {
                             "Verified empty Pyramid board has no progress-bar classification"
                                 .to_owned()
                         })?;
                         series_complete = progress == GameProgress::GameComplete;
+
+
                         *completed_boards = if series_complete {
                             boards_per_game
                         } else {
@@ -273,6 +299,8 @@ pub(super) fn verify_pyramid_action(
                             ),
                         );
                         profile.validation_effect += analysis_started.elapsed();
+
+
                         if series_complete {
                             return Ok(PredictedAction::NoHighlight);
                         }
@@ -288,6 +316,7 @@ pub(super) fn verify_pyramid_action(
                         continue;
                     }
 
+
                     if awaiting_redeal
                         && redeal_confirmation.observe(cards_visible, observation.game_progress)
                     {
@@ -300,11 +329,16 @@ pub(super) fn verify_pyramid_action(
                             "Pyramid redeal confirmed by two consecutive non-empty gameplay frames with AnotherBoard progress; per-board clicked-card state reset.".to_owned());
                     }
 
+
                     if expected_final_transition && !board_completed {
                         send_log(event_tx,
                             "WAITING: the final-apex effect is verified, but board/game completion is not yet verified. Ignoring transitional halos and recapturing without input.".to_owned());
                     } else if !awaiting_redeal {
+
+
                         if matches!(observation.prediction, PredictedAction::Action(_)) {
+
+
                             let after = if board_completed {
                                 plan_step(observation.prediction).map(|next| next.before())
                             } else {
@@ -316,9 +350,13 @@ pub(super) fn verify_pyramid_action(
                             profile.validation_effect += analysis_started.elapsed();
                             return Ok(after);
                         }
+
+
                         if !matches!(observation.prediction, PredictedAction::NoHighlight) {
                             return Err("Pyramid produced an invalid next-target classification; no further input was sent".to_owned());
                         }
+
+
                         redeal_no_halo_captures = if board_completed
                             && cards_visible
                             && observation.game_progress == Some(GameProgress::AnotherBoard)
@@ -327,6 +365,8 @@ pub(super) fn verify_pyramid_action(
                         } else {
                             0
                         };
+
+
                         if pyramid_solver_recovery_authorised(
                             board_completed,
                             observation.game_progress,
@@ -381,6 +421,8 @@ pub(super) fn verify_pyramid_action(
                 {
                     let next = plan_step(observation.prediction)
                         .map_err(|error| format!("Pyramid fresh-pair plan failed: {error}"))?;
+
+
                     if !matches!(
                         next.input().action().target,
                         ActionTarget::Pyramid(PyramidTargetKind::Left | PyramidTargetKind::Right)
@@ -421,6 +463,7 @@ pub(super) fn verify_pyramid_action(
         }
     })();
 
+
     let after = match result {
         Ok(after) => after,
         Err(error) => {
@@ -434,6 +477,8 @@ pub(super) fn verify_pyramid_action(
             ));
         }
     };
+
+
     let Some(observation) = last_observation else {
         return Err(action_failure(
             action_started,
@@ -459,6 +504,7 @@ pub(super) fn verify_pyramid_action(
     })
 }
 
+
 /// Permit repeated pile halos only outside final-card, completed-board and redeal phases.
 pub(super) fn pyramid_halo_continuation_phase(
     expected_final_transition: bool,
@@ -467,6 +513,7 @@ pub(super) fn pyramid_halo_continuation_phase(
 ) -> bool {
     !expected_final_transition && !board_completed && !awaiting_redeal
 }
+
 
 /// Rescan the same captured pixels after scan-history changes; return detector errors without capturing again.
 fn refresh_observation_prediction(
@@ -480,6 +527,7 @@ fn refresh_observation_prediction(
     Ok(())
 }
 
+
 /// Consecutive independent observations guard redeal against an animated bar.
 /// Effect verification intentionally is not an input: an early verified pile
 /// change must not prevent a later redeal from clearing the old board state.
@@ -489,11 +537,16 @@ pub(super) struct PyramidRedealConfirmation {
     matching_captures: u8,
 }
 
+
 impl PyramidRedealConfirmation {
+
+
     /// Count consecutive fresh frames showing restored cards and AnotherBoard progress.
     ///
     /// Reset on contradictory or missing evidence; report confirmation after two matches.
     pub(super) fn observe(&mut self, restored_cards: bool, progress: Option<GameProgress>) -> bool {
+
+
         self.matching_captures = if restored_cards && progress == Some(GameProgress::AnotherBoard) {
             self.matching_captures.saturating_add(1).min(2)
         } else {
@@ -502,6 +555,7 @@ impl PyramidRedealConfirmation {
         self.matching_captures == 2
     }
 }
+
 
 /// Authorise one Solver recovery only after verified redeal and three settled no-halo observations.
 ///

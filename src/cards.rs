@@ -5,15 +5,20 @@
 
 use crate::geometry::{PixelPoint, PixelRect};
 
+
 /// Number of card positions in the four-row TriPeaks tableau.
 pub const TABLEAU_CARD_COUNT: usize = 28;
+
 
 /// Number of calibrated card positions in each TriPeaks row.
 #[cfg(test)]
 pub const TABLEAU_ROW_LENGTHS: [u8; 4] = [3, 6, 9, 10];
+
+
 /// First flat-array position for each TriPeaks row.
 #[cfg(test)]
 pub const TABLEAU_ROW_STARTS: [usize; 4] = [0, 3, 9, 18];
+
 
 /// Guest-pixel rectangles and input point for one calibrated card slot.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -28,7 +33,10 @@ pub struct CardRegionPixels {
     pub click_point: PixelPoint,
 }
 
+
 impl CardRegionPixels {
+
+
     /// Group the independently calibrated rectangles and click point.
     pub const fn new(
         card_bounds: PixelRect,
@@ -45,6 +53,7 @@ impl CardRegionPixels {
     }
 }
 
+
 /// Validate nesting and QMP conversion of the active calibration in tests.
 #[cfg(test)]
 pub fn validate_card_regions(
@@ -58,17 +67,24 @@ pub fn validate_card_regions(
     pixel_rect_to_qmp(pixels.halo_bounds, frame_width, frame_height)?;
     pixel_rect_to_qmp(pixels.rank_bounds, frame_width, frame_height)?;
     pixel_point_to_qmp(pixels.click_point, frame_width, frame_height)?;
+
+
     if !rect_contains(pixels.halo_bounds, pixels.card_bounds) {
         return Err(CardRegionError::CardOutsideHalo);
     }
+
+
     if !rect_contains(pixels.card_bounds, pixels.rank_bounds) {
         return Err(CardRegionError::RankOutsideCard);
     }
+
+
     if !pixels.card_bounds.contains(pixels.click_point) {
         return Err(CardRegionError::ClickOutsideCard);
     }
     Ok(())
 }
+
 
 /// Require the inner half-open rectangle to fit completely inside the outer.
 #[cfg(test)]
@@ -78,6 +94,7 @@ fn rect_contains(outer: PixelRect, inner: PixelRect) -> bool {
         && inner.right() <= outer.right()
         && inner.bottom() <= outer.bottom()
 }
+
 
 /// Reasons that an audited card region cannot be converted or safely clicked.
 #[cfg(test)]
@@ -97,11 +114,13 @@ pub enum CardRegionError {
     ClickOutsideCard,
 }
 
+
 #[cfg(test)]
 mod tests {
     //! Regression checks for the active card-calibration validation rules.
 
     use super::*;
+
 
     /// Construct nested rectangles for a synthetic calibrated slot.
     fn test_region(x: u32, y: u32) -> CardRegionPixels {
@@ -113,6 +132,7 @@ mod tests {
             card_bounds.centre(),
         )
     }
+
 
     /// Reject invalid nesting and out-of-card clicks before input conversion.
     #[test]

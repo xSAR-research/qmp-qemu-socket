@@ -5,6 +5,7 @@
 //! observations. Game-specific Pyramid results and shared post-game screens
 //! are handled by focused child modules.
 
+mod klondike_execution;
 mod post_game;
 mod pyramid_execution;
 
@@ -45,8 +46,10 @@ use crate::parameters::{
     SNAPSHOT_MAX_PNG_BYTES, SOLVER_MOUSE_HOLD, STEP_ONCE_ACTIONS, STEP_ONCE_INPUT_ENABLED,
 };
 
+
 /// Maximum ordinary Pyramid planning or result observations before a diagnostic stop.
 const PYRAMID_OBSERVATION_LIMIT: usize = 6;
+
 
 /// UI-visible lifecycle state of the background QMP worker.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -72,9 +75,14 @@ pub enum WorkerState {
     Error,
 }
 
+
 impl WorkerState {
+
+
     /// Return the concise UI label for this worker state.
     pub const fn label(self) -> &'static str {
+
+
         // Returns the concise display label for a worker state.
         match self {
             Self::Detached => "Detached",
@@ -89,6 +97,7 @@ impl WorkerState {
         }
     }
 
+
     /// Report whether a capture, validation, input or result-verification operation is active.
     pub const fn is_busy(self) -> bool {
         matches!(
@@ -97,6 +106,7 @@ impl WorkerState {
         )
     }
 }
+
 
 /// Requests serialised by the background worker command loop.
 enum WorkerCommand {
@@ -134,6 +144,7 @@ enum WorkerCommand {
     /// Exit the worker command loop.
     Shutdown,
 }
+
 
 /// Small ordered notifications sent from the worker to the UI.
 pub enum WorkerEvent {
@@ -206,6 +217,7 @@ pub enum WorkerEvent {
     },
 }
 
+
 /// Latest advisory or diagnostic preview transferred through the bounded frame slot.
 pub struct LatestWorkerFrame {
     /// Full decoded capture for display.
@@ -222,6 +234,7 @@ pub struct LatestWorkerFrame {
     pub context: Option<(PathBuf, GameMode)>,
 }
 
+
 /// Single pending preview retained until the UI consumes or replaces it.
 struct PendingWorkerFrame {
     /// Decoded image retained for the preview.
@@ -236,6 +249,7 @@ struct PendingWorkerFrame {
     context: Option<(PathBuf, GameMode)>,
 }
 
+
 /// Mutable contents protected by the latest-preview mutex.
 #[derive(Default)]
 struct LatestFrameState {
@@ -245,6 +259,7 @@ struct LatestFrameState {
     coalesced_frames: usize,
 }
 
+
 /// Shared bounded hand-off slot that prevents preview images accumulating behind a sleeping UI.
 #[derive(Clone, Default)]
 struct LatestFrameSlot {
@@ -252,7 +267,10 @@ struct LatestFrameSlot {
     state: Arc<Mutex<LatestFrameState>>,
 }
 
+
 impl LatestFrameSlot {
+
+
     /// Replace the pending advisory preview and count any frame displaced before the UI consumes it.
     ///
     /// The slot retains at most one full-resolution frame; poisoned locks preserve the
@@ -271,6 +289,8 @@ impl LatestFrameSlot {
             .state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
+
+
         if state
             .pending
             .replace(PendingWorkerFrame {
@@ -285,6 +305,7 @@ impl LatestFrameSlot {
             state.coalesced_frames = state.coalesced_frames.saturating_add(1);
         }
     }
+
 
     /// Remove the latest preview and reset its coalesced-frame count; return `None` when empty.
     fn take(&self) -> Option<LatestWorkerFrame> {
@@ -305,6 +326,7 @@ impl LatestFrameSlot {
     }
 }
 
+
 /// Worker-side delivery of small events and coalesced full-resolution preview frames.
 struct WorkerEventSink {
     /// Ordered event channel to the UI.
@@ -315,11 +337,15 @@ struct WorkerEventSink {
     capture_context: Mutex<Option<(PathBuf, GameMode)>>,
 }
 
+
 impl WorkerEventSink {
+
+
     /// Queue a small worker event; return the channel error if the UI receiver has closed.
     fn send(&self, event: WorkerEvent) -> Result<(), mpsc::SendError<WorkerEvent>> {
         self.events.send(event)
     }
+
 
     /// Publish an advisory frame with its prediction and the current socket/game context.
     fn publish_frame(
@@ -337,6 +363,7 @@ impl WorkerEventSink {
             .publish(frame, prediction, log_prediction, false, context);
     }
 
+
     /// Publish the last observed pixels without granting action authority to their prediction.
     fn publish_diagnostic_frame(&self, frame: CapturedFrame) {
         let context = self
@@ -349,6 +376,7 @@ impl WorkerEventSink {
             .publish(frame, PredictedAction::NoHighlight, false, true, context);
     }
 
+
     /// Set the socket and game identity attached to subsequent preview frames.
     fn set_capture_context(&self, context: Option<(PathBuf, GameMode)>) {
         *self
@@ -357,6 +385,7 @@ impl WorkerEventSink {
             .unwrap_or_else(std::sync::PoisonError::into_inner) = context;
     }
 }
+
 
 /// UI-side command, event and cancellation interface to the background QMP thread.
 pub struct WorkerHandle {
@@ -372,7 +401,10 @@ pub struct WorkerHandle {
     cancel_requested: Arc<AtomicBool>,
 }
 
+
 impl WorkerHandle {
+
+
     /// Start the QMP worker and create its command, event and bounded-preview channels.
     ///
     /// # Panics
@@ -403,6 +435,7 @@ impl WorkerHandle {
         }
     }
 
+
     /// Queue one read-only capture for `socket_path` and `mode`.
     ///
     /// Returns an error if the worker command channel has closed.
@@ -412,6 +445,7 @@ impl WorkerHandle {
             .send(WorkerCommand::CaptureFrame { socket_path, mode })
             .map_err(|error| format!("QMP worker is unavailable: {error}"))
     }
+
 
     /// Queue a fresh capture whose original PNG and decoded preview share `request_id`.
     ///
@@ -432,6 +466,7 @@ impl WorkerHandle {
             .map_err(|error| format!("QMP worker is unavailable: {error}"))
     }
 
+
     /// Queue a guarded run constrained by the approved preview and immutable run settings.
     ///
     /// Clears an earlier STOP request only after mode and compile-time input checks.
@@ -447,9 +482,18 @@ impl WorkerHandle {
         // Requests one guarded run. Every operation requires fresh
         // validation and emits at most one input sequence.
         ensure_input_authorised(mode)?;
+
+
+        if mode == GameMode::Klondike {
+            klondike_execution::validate_operation_limit(settings.operation_limit())?;
+        }
+
+
         if !STEP_ONCE_INPUT_ENABLED {
             return Err("guarded input is disabled at compile time".to_owned());
         }
+
+
         if (settings.is_unbounded() || settings.operation_limit() > STEP_ONCE_ACTIONS)
             && !MULTI_STEP_INPUT_ENABLED
         {
@@ -466,6 +510,7 @@ impl WorkerHandle {
             .map_err(|error| format!("QMP worker is unavailable: {error}"))
     }
 
+
     /// Request cancellation immediately and queue a return to the detached state.
     ///
     /// Returns an error if the worker channel has closed; QEMU remains running.
@@ -477,6 +522,7 @@ impl WorkerHandle {
             .map_err(|error| format!("QMP worker is unavailable: {error}"))
     }
 
+
     /// Queue a local reset of the board counter and scan history without guest input.
     ///
     /// Returns an error if the worker command channel has closed.
@@ -487,11 +533,13 @@ impl WorkerHandle {
             .map_err(|error| format!("QMP worker is unavailable: {error}"))
     }
 
+
     /// Iterate over currently queued events without blocking the UI thread.
     pub fn try_events(&self) -> impl Iterator<Item = WorkerEvent> + '_ {
         // Returns currently queued worker events without blocking the caller.
         self.event_rx.try_iter()
     }
+
 
     /// Take at most one pending preview, including its displaced-frame count.
     pub fn take_latest_frame(&self) -> Option<LatestWorkerFrame> {
@@ -501,17 +549,23 @@ impl WorkerHandle {
     }
 }
 
+
 impl Drop for WorkerHandle {
+
+
     /// Request STOP, send shutdown and join the QMP worker before releasing the handle.
     fn drop(&mut self) {
         // Shuts down and joins the worker thread when its handle is released.
         self.cancel_requested.store(true, Ordering::Release);
         let _ = self.command_tx.send(WorkerCommand::Shutdown);
+
+
         if let Some(join) = self.join.take() {
             let _ = join.join();
         }
     }
 }
+
 
 /// Dispatch queued commands while retaining scan history only for the active socket and game.
 ///
@@ -526,7 +580,11 @@ fn run_worker(
     let mut scan_state = TableauScanState::initial();
     let mut scan_context = None;
     let mut completed_boards = 0usize;
+
+
     while let Ok(command) = command_rx.recv() {
+
+
         match command {
             WorkerCommand::CaptureFrame { socket_path, mode } => {
                 event_tx.set_capture_context(Some((socket_path.clone(), mode)));
@@ -609,6 +667,7 @@ fn run_worker(
     }
 }
 
+
 /// Reset board and scan history only when the socket path or game mode changes.
 fn reset_scan_state_for_context(
     socket_path: &Path,
@@ -617,6 +676,8 @@ fn reset_scan_state_for_context(
     scan_state: &mut TableauScanState,
     completed_boards: &mut usize,
 ) {
+
+
     if scan_context
         .as_ref()
         .map(|(path, active_mode)| (path.as_path(), *active_mode))
@@ -628,12 +689,14 @@ fn reset_scan_state_for_context(
     }
 }
 
+
 /// Reset the current game profile to its initial scan state and zero completed boards.
 fn reset_progress_tracking(scan_state: &mut TableauScanState, completed_boards: &mut usize) {
     // Returns progress tracking to a new game and the profile's initial row scan.
     *scan_state = TableauScanState::for_mode(scan_state.mode());
     *completed_boards = 0;
 }
+
 
 /// Capture one fresh frame without guest input and publish its advisory analysis.
 ///
@@ -655,6 +718,8 @@ fn run_capture(
 
     let result = capture_and_analyse(&socket_path, scan_state, event_tx).and_then(
         |(mut observation, timing)| {
+
+
             if scan_state.mode() == GameMode::Pyramid
                 && observation.gameplay_scene
                 && matches!(observation.prediction, PredictedAction::NoHighlight)
@@ -680,9 +745,13 @@ fn run_capture(
             Ok((observation, timing))
         },
     );
+
+
     match result {
         Ok((observation, timing)) => {
             let dimensions = format!("{}x{}", observation.frame.width, observation.frame.height);
+
+
             if scan_state.mode().calibration_only() {
                 send_log(
                     event_tx,
@@ -700,6 +769,8 @@ fn run_capture(
             }
             event_tx.publish_frame(observation.frame, observation.prediction, true);
             send_state(event_tx, WorkerState::Ready);
+
+
             send_status(
                 event_tx,
                 if scan_state.mode().calibration_only() {
@@ -732,6 +803,7 @@ fn run_capture(
     }
 }
 
+
 /// Capture and publish one original PNG with its decoded frame for manual preview.
 ///
 /// Enforces the profile frame contract; classification remains advisory so
@@ -747,12 +819,16 @@ fn run_prepare_snapshot(
 
     let result = (|| {
         let (mut qmp, probe) = connect_and_probe(&socket_path)?;
+
+
         if !probe.is_running() {
             return Err("snapshot refused because the VM is not running".to_owned());
         }
         send_state(event_tx, WorkerState::Capturing);
         let (frame, png, timing) = capture_screen_with_png(&mut qmp, &socket_path)?;
         let profile = scan_state.mode().profile();
+
+
         if (frame.width, frame.height) != (profile.frame_width, profile.frame_height)
             || !frame.is_layout_valid()
         {
@@ -761,6 +837,7 @@ fn run_prepare_snapshot(
                 profile.frame_width, profile.frame_height, frame.width, frame.height
             ));
         }
+
 
         // Recognition is advisory for saving: dialogs must still be
         // capturable, and an unrecognised scene never authorises input.
@@ -778,6 +855,7 @@ fn run_prepare_snapshot(
         };
         Ok::<_, String>((frame, prediction, png, timing))
     })();
+
 
     match result {
         Ok((frame, prediction, png, timing)) => {
@@ -815,6 +893,7 @@ fn run_prepare_snapshot(
     }
 }
 
+
 /// Run the requested number of guarded actions, or continue until STOP when unbounded.
 ///
 /// Reuses accepted result frames for the next plan and keeps effect-verified
@@ -829,8 +908,24 @@ fn run_execute_steps(
     event_tx: &WorkerEventSink,
     cancel_requested: &AtomicBool,
 ) {
+
+
+    if scan_state.mode() == GameMode::Klondike {
+        klondike_execution::run_klondike_steps(
+            &socket_path,
+            approved_prediction,
+            settings,
+            scan_state,
+            event_tx,
+            cancel_requested,
+        );
+        return;
+    }
+
     let run_started = Instant::now();
     let game_profile = scan_state.mode().profile();
+
+
     if let Err(error) = ensure_input_authorised(scan_state.mode()) {
         send_status(event_tx, "Input disabled".to_owned());
         step_failed_before_input(event_tx, format!("{error}; input sent: 0"));
@@ -852,6 +947,7 @@ fn run_execute_steps(
         ),
     );
 
+
     if scan_state.mode() == GameMode::Pyramid {
         let delays = settings.animation_delays();
         send_log(
@@ -867,6 +963,8 @@ fn run_execute_steps(
     }
 
     let connect_started = Instant::now();
+
+
     let (mut qmp, probe) = match connect_and_probe(&socket_path) {
         Ok(connected) => connected,
         Err(error) => {
@@ -876,10 +974,13 @@ fn run_execute_steps(
     };
     let connect_probe = connect_started.elapsed();
     send_log(event_tx, probe.summary());
+
+
     if let Err(error) = validate_probe(&probe) {
         step_failed_before_input(event_tx, format!("{error}; input sent: 0"));
         return;
     }
+
 
     if reset_completed_series_for_new_run(scan_state, completed_boards) {
         send_log(
@@ -895,8 +996,11 @@ fn run_execute_steps(
     let mut verified_operations = 0usize;
     let mut operation_index = 1usize;
 
+
     loop {
         let progress = format_operation_progress(operation_index, operation_limit);
+
+
         if cancel_requested.load(Ordering::Acquire) {
             send_state(event_tx, WorkerState::Uncertain);
             send_status(event_tx, "Stopped".to_owned());
@@ -916,6 +1020,7 @@ fn run_execute_steps(
             return;
         }
 
+
         match execute_guarded_action(
             &mut qmp,
             &socket_path,
@@ -927,6 +1032,8 @@ fn run_execute_steps(
             cancel_requested,
         ) {
             Ok(success) => {
+
+
                 let acceptance = if success.continued_from_halo {
                     run_profile.halo_operations = run_profile.halo_operations.saturating_add(1);
                     "continued from fresh halo"
@@ -966,6 +1073,7 @@ fn run_execute_steps(
                     ),
                 );
 
+
                 if success.board_completed {
                     send_board_progress(event_tx, scan_state, success.completed_boards);
                     send_log(
@@ -985,7 +1093,11 @@ fn run_execute_steps(
 
                 let mut next_observation = success.observation;
                 let mut next_prediction = success.after;
+
+
                 if success.series_complete {
+
+
                     match post_game::run_post_game_restart(
                         &mut qmp,
                         &socket_path,
@@ -996,6 +1108,8 @@ fn run_execute_steps(
                         cancel_requested,
                     ) {
                         Ok(outcome) => {
+
+
                             let (observation, game_restarted) = match outcome {
                                 post_game::PostGameOutcome::Restarted(observation) => {
                                     (observation, true)
@@ -1007,11 +1121,15 @@ fn run_execute_steps(
                             next_prediction = observation.prediction;
                             next_observation = observation;
                             send_board_progress(event_tx, scan_state, *completed_boards);
+
+
                             if game_restarted {
                                 let _ = event_tx.send(WorkerEvent::GameCompleted);
                             }
                         }
                         Err(error) => {
+
+
                             let state = if cancel_requested.load(Ordering::Acquire) {
                                 WorkerState::Ready
                             } else {
@@ -1032,6 +1150,7 @@ fn run_execute_steps(
                         }
                     }
                 }
+
 
                 if settings
                     .bounded_operation_limit()
@@ -1068,7 +1187,11 @@ fn run_execute_steps(
                     "stopped",
                     failure.profile,
                 );
+
+
                 if let Some(observation) = failure.observation {
+
+
                     match failure.frame_phase {
                         FailureFramePhase::PreAction => send_frame(event_tx, observation),
                         FailureFramePhase::PostAction => {
@@ -1093,11 +1216,14 @@ fn run_execute_steps(
     }
 }
 
+
 /// Reset a fully completed game before a new run; report whether a reset occurred.
 fn reset_completed_series_for_new_run(
     scan_state: &mut TableauScanState,
     completed_boards: &mut usize,
 ) -> bool {
+
+
     if *completed_boards < scan_state.mode().profile().boards_per_game {
         return false;
     }
@@ -1106,10 +1232,12 @@ fn reset_completed_series_for_new_run(
     true
 }
 
+
 /// Publish an advisory copy of a post-action frame without repeating its prediction log.
 fn publish_post_action_observation(event_tx: &WorkerEventSink, observation: &FrameObservation) {
     event_tx.publish_frame(observation.frame.clone(), observation.prediction, false);
 }
+
 
 /// Wait in cancellable slices and return waited time, or the caller-provided STOP message.
 fn wait_or_stop(
@@ -1119,6 +1247,7 @@ fn wait_or_stop(
 ) -> Result<Duration, String> {
     cancellable_wait(duration, cancel_requested).map_err(|_| stopped_message.to_owned())
 }
+
 
 /// Per-stage wall times and capture count for QMP PNG acquisition and analysis.
 #[derive(Clone, Copy, Debug, Default)]
@@ -1137,7 +1266,10 @@ struct CaptureTiming {
     detection: Duration,
 }
 
+
 impl CaptureTiming {
+
+
     /// Accumulate capture counts and per-stage durations from another capture measurement.
     fn add_assign(&mut self, other: Self) {
         self.captures = self.captures.saturating_add(other.captures);
@@ -1148,6 +1280,7 @@ impl CaptureTiming {
         self.detection += other.detection;
     }
 }
+
 
 /// Timing and input-attempt evidence for one guarded action cycle.
 #[derive(Clone, Copy, Debug, Default)]
@@ -1165,6 +1298,7 @@ struct ActionProfile {
     /// Whether this cycle reached guest input delivery.
     input_attempted: bool,
 }
+
 
 /// Aggregate timing and acceptance statistics for a guarded run.
 struct RunProfile {
@@ -1186,7 +1320,10 @@ struct RunProfile {
     action_total_max: Option<Duration>,
 }
 
+
 impl RunProfile {
+
+
     /// Create empty run accounting with the already-measured QMP connection/probe duration.
     const fn new(connect_probe: Duration) -> Self {
         Self {
@@ -1215,9 +1352,12 @@ impl RunProfile {
         }
     }
 
+
     /// Accumulate one validation cycle while measuring min/mean/max only for attempted input.
     fn record(&mut self, profile: ActionProfile) {
         self.cycles = self.cycles.saturating_add(1);
+
+
         if profile.input_attempted {
             self.attempted = self.attempted.saturating_add(1);
             self.action_total_sum += profile.total;
@@ -1237,6 +1377,7 @@ impl RunProfile {
         self.totals.total += profile.total;
     }
 }
+
 
 /// Accepted result of one guarded action, preserving effect and halo acceptance separately.
 struct ActionSuccess {
@@ -1262,6 +1403,7 @@ struct ActionSuccess {
     profile: ActionProfile,
 }
 
+
 /// Whether a retained failure frame preceded or followed guest input.
 #[derive(Clone, Copy)]
 enum FailureFramePhase {
@@ -1270,6 +1412,7 @@ enum FailureFramePhase {
     /// Unverified result frame that must not authorise another action.
     PostAction,
 }
+
 
 /// Stopped action with a diagnostic frame and measured work completed so far.
 struct ActionFailure {
@@ -1285,6 +1428,7 @@ struct ActionFailure {
     profile: ActionProfile,
 }
 
+
 /// Source of planning authority for the next guarded action.
 enum PlanningFrame {
     /// The advisory UI prediction is only a constraint. One fresh capture must
@@ -1294,6 +1438,7 @@ enum PlanningFrame {
     /// settled Pyramid halo rule. It is the next action's immutable plan.
     AcceptedResult(FrameObservation),
 }
+
 
 /// Plan and deliver at most one gameplay input sequence, then observe its result.
 ///
@@ -1315,6 +1460,7 @@ fn execute_guarded_action(
     let mut profile = ActionProfile::default();
     let boards_per_game = scan_state.mode().profile().boards_per_game;
 
+
     if cancel_requested.load(Ordering::Acquire) {
         return Err(action_failure(
             action_started,
@@ -1327,12 +1473,18 @@ fn execute_guarded_action(
     }
 
     send_state(event_tx, WorkerState::Validating);
+
+
     let (mut before_series, plan) = match planning_frame {
         PlanningFrame::InitialConstraint(expected_prediction) => {
             let mut pre_action_round = 1usize;
+
+
             loop {
                 send_status(event_tx, "Screengrab — validating first move".to_owned());
                 let pre_action_scan_state = *scan_state;
+
+
                 let mut candidate_series = match capture_series(
                     qmp,
                     socket_path,
@@ -1341,6 +1493,8 @@ fn execute_guarded_action(
                 ) {
                     Ok(series) => series,
                     Err(error) => {
+
+
                         let state = if cancel_requested.load(Ordering::Acquire) {
                             WorkerState::Ready
                         } else {
@@ -1361,6 +1515,8 @@ fn execute_guarded_action(
                 profile.capture.add_assign(candidate_series.timing);
 
                 let validation_started = Instant::now();
+
+
                 if candidate_series
                     .observations
                     .iter()
@@ -1380,11 +1536,15 @@ fn execute_guarded_action(
                 }
                 let candidate_prediction = candidate_series.observations[0].prediction;
                 let candidate_plan = plan_step(candidate_prediction);
+
+
                 let plan = match candidate_plan {
                     Ok(plan) => plan,
                     Err(error) => {
                         reconcile_observation_series(scan_state, &candidate_series.observations);
                         profile.validation_effect += validation_started.elapsed();
+
+
                         if scan_state.mode() == GameMode::Pyramid
                             && pre_action_round >= PYRAMID_OBSERVATION_LIMIT
                         {
@@ -1399,6 +1559,8 @@ fn execute_guarded_action(
                                 FailureFramePhase::PreAction,
                             ));
                         }
+
+
                         let retry_delay = if scan_state.mode() == GameMode::Pyramid {
                             settings.animation_delays().pyramid_reobserve
                         } else {
@@ -1411,6 +1573,8 @@ fn execute_guarded_action(
                                 retry_delay.as_millis(),
                             ),
                         );
+
+
                         match cancellable_wait(retry_delay, cancel_requested) {
                             Ok(waited) => profile.intentional_wait += waited,
                             Err(waited) => {
@@ -1431,6 +1595,8 @@ fn execute_guarded_action(
                         continue;
                     }
                 };
+
+
                 if plan.before() != expected_prediction {
                     profile.validation_effect += validation_started.elapsed();
                     let observation = candidate_series.observations.pop();
@@ -1463,6 +1629,8 @@ fn execute_guarded_action(
                 observations: vec![observation],
                 timing: CaptureTiming::default(),
             };
+
+
             if !candidate_series.observations[0].gameplay_scene {
                 profile.validation_effect += validation_started.elapsed();
                 let observation = candidate_series.observations.pop();
@@ -1477,6 +1645,8 @@ fn execute_guarded_action(
                 ));
             }
             let candidate_prediction = candidate_series.observations[0].prediction;
+
+
             let plan = match plan_step(candidate_prediction) {
                 Ok(plan) => plan,
                 Err(error) => {
@@ -1499,6 +1669,7 @@ fn execute_guarded_action(
         }
     };
 
+
     if plan.input().action().target.mode() != scan_state.mode() {
         return Err(action_failure(
             action_started,
@@ -1514,6 +1685,8 @@ fn execute_guarded_action(
     let required_changed_pixels = plan.input().minimum_changed_pixels();
     let validation_started = Instant::now();
     reconcile_observation_series(scan_state, &before_series.observations);
+
+
     let plan_description = match format_step_plan(plan) {
         Ok(description) => description,
         Err(error) => {
@@ -1532,6 +1705,7 @@ fn execute_guarded_action(
     profile.validation_effect += validation_started.elapsed();
     send_log(event_tx, plan_description);
 
+
     if cancel_requested.load(Ordering::Acquire) {
         let observation = before_series.observations.pop();
         return Err(action_failure(
@@ -1549,6 +1723,8 @@ fn execute_guarded_action(
         .probe()
         .map_err(|error| format!("QMP pre-input probe failed: {error}"));
     profile.validation_effect += reprobe_started.elapsed();
+
+
     let reprobe = match reprobe {
         Ok(probe) => probe,
         Err(error) => {
@@ -1563,6 +1739,8 @@ fn execute_guarded_action(
             ));
         }
     };
+
+
     if let Err(error) = validate_probe(&reprobe) {
         let observation = before_series.observations.pop();
         return Err(action_failure(
@@ -1574,6 +1752,8 @@ fn execute_guarded_action(
             FailureFramePhase::PreAction,
         ));
     }
+
+
     if cancel_requested.load(Ordering::Acquire) {
         let observation = before_series.observations.pop();
         return Err(action_failure(
@@ -1592,6 +1772,8 @@ fn execute_guarded_action(
     let input_started = Instant::now();
     let input_result = execute_planned_input(qmp, plan, cancel_requested);
     profile.input_wall += input_started.elapsed();
+
+
     if let Err(error) = input_result {
         return Err(action_failure(
             action_started,
@@ -1609,6 +1791,8 @@ fn execute_guarded_action(
     let animation_settle_delay = plan
         .input()
         .animation_settle_delay(settings.animation_delays());
+
+
     if let ActionTarget::Pyramid(kind) = plan.input().action().target {
         send_log(
             event_tx,
@@ -1618,6 +1802,8 @@ fn execute_guarded_action(
             ),
         );
     }
+
+
     match cancellable_wait(animation_settle_delay, cancel_requested) {
         Ok(waited) => profile.intentional_wait += waited,
         Err(waited) => {
@@ -1636,6 +1822,8 @@ fn execute_guarded_action(
 
     send_state(event_tx, WorkerState::Verifying);
     send_status(event_tx, "Verifying move".to_owned());
+
+
     if let ActionTarget::Pyramid(kind) = plan.input().action().target {
         return pyramid_execution::verify_pyramid_action(
             qmp,
@@ -1657,6 +1845,8 @@ fn execute_guarded_action(
     let mut board_changed_pixels = 0usize;
     let mut missing_halo_phase = 0u8;
     let mut solver_recovery_clicks = 0usize;
+
+
     let (after, observation, changed_pixels, board_completed, series_complete) = loop {
         send_log(
             event_tx,
@@ -1665,6 +1855,8 @@ fn execute_guarded_action(
             ),
         );
         let post_action_scan_state = *scan_state;
+
+
         let mut after_series = match capture_series(
             qmp,
             socket_path,
@@ -1697,6 +1889,8 @@ fn execute_guarded_action(
             .iter()
             .map(|observation| observation.prediction)
             .collect();
+
+
         if after_predictions
             .iter()
             .any(|prediction| matches!(prediction, PredictedAction::NoHighlight))
@@ -1704,8 +1898,11 @@ fn execute_guarded_action(
             reconcile_observation_series(scan_state, &after_series.observations);
             let no_highlight_observation = after_series.observations.pop();
 
+
             let level_up_visible = match no_highlight_observation.as_ref() {
                 Some(observation) => {
+
+
                     match post_game::level_up_overrides_board_progress(
                         board_completion_verified,
                         observation,
@@ -1723,6 +1920,8 @@ fn execute_guarded_action(
                                     BOARD_TRANSITION_REOBSERVE_DELAY.as_millis(),
                                 ),
                             );
+
+
                             match cancellable_wait(
                                 BOARD_TRANSITION_REOBSERVE_DELAY,
                                 cancel_requested,
@@ -1761,6 +1960,8 @@ fn execute_guarded_action(
                 }
                 None => false,
             };
+
+
             if level_up_visible {
                 *completed_boards = boards_per_game;
                 profile.validation_effect += verification_started.elapsed();
@@ -1769,6 +1970,8 @@ fn execute_guarded_action(
                     "RECOVERED: Level Up OK is visible during the expected redeal; overriding the stale board-progress classification and entering the game-win sequence."
                         .to_owned(),
                 );
+
+
                 let Some(observation) = no_highlight_observation else {
                     return Err(action_failure(
                         action_started,
@@ -1803,7 +2006,11 @@ fn execute_guarded_action(
                             solver_recovery_clicks,
                         )
                     });
+
+
             if completion_check_authorised {
+
+
                 let completion_changed = match before_series
                     .observations
                     .last()
@@ -1835,12 +2042,16 @@ fn execute_guarded_action(
                         ));
                     }
                 };
+
+
                 if completion_changed >= required_changed_pixels {
                     let game_progress = no_highlight_observation
                         .as_ref()
                         .and_then(|observation| observation.game_progress)
                         .unwrap_or(GameProgress::AnotherBoard);
                     let series_complete = game_progress == GameProgress::GameComplete;
+
+
                     *completed_boards = if series_complete {
                         boards_per_game
                     } else {
@@ -1866,8 +2077,12 @@ fn execute_guarded_action(
                             completed_boards.saturating_add(1),
                         ),
                     );
+
+
                     if series_complete {
                         profile.validation_effect += verification_started.elapsed();
+
+
                         let Some(observation) = no_highlight_observation else {
                             return Err(action_failure(
                                 action_started,
@@ -1899,6 +2114,8 @@ fn execute_guarded_action(
                             settings.animation_delays().board_redeal.as_millis(),
                         ),
                     );
+
+
                     match cancellable_wait(
                         settings.animation_delays().board_redeal,
                         cancel_requested,
@@ -1918,6 +2135,7 @@ fn execute_guarded_action(
                         }
                     }
 
+
                     let reprobe = match qmp.probe() {
                         Ok(probe) => probe,
                         Err(error) => {
@@ -1931,6 +2149,8 @@ fn execute_guarded_action(
                             ));
                         }
                     };
+
+
                     if let Err(error) = validate_probe(&reprobe) {
                         return Err(action_failure(
                             action_started,
@@ -1945,6 +2165,8 @@ fn execute_guarded_action(
                     send_state(event_tx, WorkerState::Acting);
                     send_status(event_tx, "Click Solver".to_owned());
                     let input_started = Instant::now();
+
+
                     if let Err(error) = click_shared_solver(qmp, cancel_requested) {
                         profile.input_wall += input_started.elapsed();
                         return Err(action_failure(
@@ -1967,6 +2189,8 @@ fn execute_guarded_action(
                     );
                     send_state(event_tx, WorkerState::Verifying);
                     send_status(event_tx, "Waiting 1000 ms for Solver HALO".to_owned());
+
+
                     match cancellable_wait(POST_GAME_STAGE_DELAY, cancel_requested) {
                         Ok(waited) => profile.intentional_wait += waited,
                         Err(waited) => {
@@ -1987,6 +2211,8 @@ fn execute_guarded_action(
             }
 
             profile.validation_effect += verification_started.elapsed();
+
+
             if !recognised_gameplay && missing_halo_phase == 1 {
                 missing_halo_phase = 2;
                 send_log(
@@ -1996,6 +2222,8 @@ fn execute_guarded_action(
                         BOARD_TRANSITION_REOBSERVE_DELAY.as_millis(),
                     ),
                 );
+
+
                 match cancellable_wait(BOARD_TRANSITION_REOBSERVE_DELAY, cancel_requested) {
                     Ok(waited) => profile.intentional_wait += waited,
                     Err(waited) => {
@@ -2014,7 +2242,10 @@ fn execute_guarded_action(
                 continue;
             }
 
+
             if recognised_gameplay && missing_halo_phase == 1 {
+
+
                 if cancel_requested.load(Ordering::Acquire) {
                     return Err(action_failure(
                         action_started,
@@ -2032,6 +2263,8 @@ fn execute_guarded_action(
                     format!("Post-action Solver recovery QMP probe failed: {error}")
                 });
                 profile.validation_effect += reprobe_started.elapsed();
+
+
                 let reprobe = match reprobe {
                     Ok(probe) => probe,
                     Err(error) => {
@@ -2045,6 +2278,8 @@ fn execute_guarded_action(
                         ));
                     }
                 };
+
+
                 if let Err(error) = validate_probe(&reprobe) {
                     return Err(action_failure(
                         action_started,
@@ -2059,6 +2294,8 @@ fn execute_guarded_action(
                 send_state(event_tx, WorkerState::Acting);
                 send_status(event_tx, "Click Solver".to_owned());
                 let input_started = Instant::now();
+
+
                 if let Err(error) = click_shared_solver(qmp, cancel_requested) {
                     profile.input_wall += input_started.elapsed();
                     return Err(action_failure(
@@ -2087,6 +2324,8 @@ fn execute_guarded_action(
                 );
                 send_state(event_tx, WorkerState::Verifying);
                 send_status(event_tx, "Waiting 1000 ms for Solver HALO".to_owned());
+
+
                 match cancellable_wait(POST_GAME_STAGE_DELAY, cancel_requested) {
                     Ok(waited) => profile.intentional_wait += waited,
                     Err(waited) => {
@@ -2103,7 +2342,11 @@ fn execute_guarded_action(
                     }
                 }
             } else {
+
+
                 if missing_halo_phase == 2 {
+
+
                     send_log(
                         event_tx,
                         if no_rows_remain {
@@ -2120,6 +2363,8 @@ fn execute_guarded_action(
                             )
                         },
                     );
+
+
                     missing_halo_phase = if no_rows_remain { 2 } else { 0 };
                 } else {
                     send_log(
@@ -2132,11 +2377,14 @@ fn execute_guarded_action(
                     missing_halo_phase = 1;
                 }
 
+
                 let recovery_delay = if missing_halo_phase == 2 && no_rows_remain {
                     BOARD_TRANSITION_REOBSERVE_DELAY
                 } else {
                     NO_HIGHLIGHT_REOBSERVE_DELAY
                 };
+
+
                 match cancellable_wait(recovery_delay, cancel_requested) {
                     Ok(waited) => profile.intentional_wait += waited,
                     Err(waited) => {
@@ -2156,6 +2404,8 @@ fn execute_guarded_action(
             observation_round = observation_round.saturating_add(1);
             continue;
         }
+
+
         let changed_pixels = match before_series
             .observations
             .last()
@@ -2187,6 +2437,8 @@ fn execute_guarded_action(
             }
         };
         let effect_changed = changed_pixels >= required_changed_pixels;
+
+
         if !effect_changed {
             profile.validation_effect += verification_started.elapsed();
             send_log(
@@ -2195,6 +2447,8 @@ fn execute_guarded_action(
                     "WAITING: post-action effect is not visible yet (changed pixels={changed_pixels}, required={required_changed_pixels}); repeating capture/detection only."
                 ),
             );
+
+
             match cancellable_wait(NO_HIGHLIGHT_REOBSERVE_DELAY, cancel_requested) {
                 Ok(waited) => profile.intentional_wait += waited,
                 Err(waited) => {
@@ -2215,7 +2469,10 @@ fn execute_guarded_action(
             continue;
         }
 
+
         if board_completion_verified {
+
+
             let after = match plan_step(after_predictions[0]) {
                 Ok(next_plan) => next_plan.before(),
                 Err(error) => {
@@ -2226,6 +2483,8 @@ fn execute_guarded_action(
                             "WAITING: automatic redeal has not produced a stable next target ({error}); repeating capture/detection only."
                         ),
                     );
+
+
                     match cancellable_wait(NO_HIGHLIGHT_REOBSERVE_DELAY, cancel_requested) {
                         Ok(waited) => profile.intentional_wait += waited,
                         Err(waited) => {
@@ -2248,6 +2507,8 @@ fn execute_guarded_action(
             };
             reconcile_observation_series(scan_state, &after_series.observations);
             profile.validation_effect += verification_started.elapsed();
+
+
             let Some(observation) = after_series.observations.pop() else {
                 return Err(action_failure(
                     action_started,
@@ -2261,6 +2522,7 @@ fn execute_guarded_action(
             break (after, observation, board_changed_pixels, true, false);
         }
 
+
         let after = match verify_post_action(&plan, after_predictions[0], effect_changed) {
             Ok(after) => after,
             Err(error) => {
@@ -2271,6 +2533,8 @@ fn execute_guarded_action(
                         "WAITING: post-action target is not yet verified ({error}); repeating capture/detection only. Guest input will not be retried."
                     ),
                 );
+
+
                 match cancellable_wait(NO_HIGHLIGHT_REOBSERVE_DELAY, cancel_requested) {
                     Ok(waited) => profile.intentional_wait += waited,
                     Err(waited) => {
@@ -2294,6 +2558,8 @@ fn execute_guarded_action(
 
         reconcile_observation_series(scan_state, &after_series.observations);
         profile.validation_effect += verification_started.elapsed();
+
+
         let observation = match after_series.observations.pop() {
             Some(observation) => observation,
             None => {
@@ -2325,6 +2591,7 @@ fn execute_guarded_action(
     })
 }
 
+
 /// Send one held Solver click unless STOP is already requested.
 ///
 /// Returns input wall time or an uncertain-delivery error without automatic retry.
@@ -2332,6 +2599,8 @@ fn click_shared_solver(
     qmp: &mut QmpClient,
     cancel_requested: &AtomicBool,
 ) -> Result<Duration, String> {
+
+
     if cancel_requested.load(Ordering::Acquire) {
         return Err(
             "STOP was requested before the Solver click; no Solver input was sent".to_owned(),
@@ -2348,6 +2617,7 @@ fn click_shared_solver(
     ))?;
     Ok(started.elapsed())
 }
+
 
 /// Finish action timing and retain the stop state, reason and optional last observation.
 fn action_failure(
@@ -2368,24 +2638,33 @@ fn action_failure(
     }
 }
 
+
 /// Require a running VM and a current absolute pointer; return the first failed precondition.
 fn validate_probe(probe: &crate::qmp::QmpProbe) -> Result<(), String> {
+
+
     if !probe.is_running() {
         return Err("VM is not running".to_owned());
     }
+
+
     if probe.current_absolute_pointer_name().is_none() {
         return Err("no current absolute pointer was reported".to_owned());
     }
     Ok(())
 }
 
+
 /// Convert a duration to fractional milliseconds for diagnostic output.
 fn milliseconds(duration: Duration) -> f64 {
     duration.as_secs_f64() * 1_000.0
 }
 
+
 /// Render zero as an unbounded run and a positive value as its operation limit.
 fn format_operation_limit(operation_limit: usize) -> String {
+
+
     if operation_limit == 0 {
         "unbounded (until STOP)".to_owned()
     } else {
@@ -2393,14 +2672,18 @@ fn format_operation_limit(operation_limit: usize) -> String {
     }
 }
 
+
 /// Render the current one-based operation index against a bounded or unbounded limit.
 fn format_operation_progress(operation_index: usize, operation_limit: usize) -> String {
+
+
     if operation_limit == 0 {
         format!("{operation_index}/unbounded")
     } else {
         format!("{operation_index}/{operation_limit}")
     }
 }
+
 
 /// Emit one action timing record, including whether guest input was attempted.
 fn log_action_profile(
@@ -2430,6 +2713,7 @@ fn log_action_profile(
     );
 }
 
+
 /// Emit aggregate timings and separate effect-verified actions from fresh-halo continuations.
 fn log_run_profile(
     event_tx: &WorkerEventSink,
@@ -2440,6 +2724,8 @@ fn log_run_profile(
     profile: &RunProfile,
 ) {
     let requested = format_operation_limit(requested);
+
+
     let mean = if profile.attempted == 0 {
         Duration::ZERO
     } else {
@@ -2470,11 +2756,14 @@ fn log_run_profile(
     );
 }
 
+
 /// Commit row evidence only from one non-ambiguous observation; report whether state changed.
 fn reconcile_observation_series(
     scan_state: &mut TableauScanState,
     observations: &[FrameObservation],
 ) -> bool {
+
+
     match observations {
         [single] if !matches!(single.prediction, PredictedAction::Ambiguous { .. }) => {
             scan_state.reconcile_observation(single.observed_rows)
@@ -2482,6 +2771,7 @@ fn reconcile_observation_series(
         _ => false,
     }
 }
+
 
 /// Require no halo or exposed row after the completion-observation phase.
 ///
@@ -2502,6 +2792,7 @@ fn settled_completion_evidence(
         && (solver_recovery_clicks > 0 || !gameplay_scene)
 }
 
+
 /// Report a guarded-run error known to precede all guest input.
 fn step_failed_before_input(event_tx: &WorkerEventSink, reason: String) {
     send_state(event_tx, WorkerState::Error);
@@ -2510,6 +2801,7 @@ fn step_failed_before_input(event_tx: &WorkerEventSink, reason: String) {
         format!("Guarded run failed closed before input: {reason}"),
     );
 }
+
 
 /// Open a short-lived QMP connection, require a running VM, and analyse one capture.
 ///
@@ -2523,6 +2815,8 @@ fn capture_and_analyse(
     let (mut qmp, probe) = connect_and_probe(socket_path)?;
 
     send_log(event_tx, probe.summary());
+
+
     if !probe.is_running() {
         return Err("capture refused because the VM is not running".to_owned());
     }
@@ -2534,6 +2828,7 @@ fn capture_and_analyse(
     // retained after the event has been constructed.
     Ok((observation, timing))
 }
+
 
 /// Connect to the selected Unix socket and return its live QMP client and capability/state probe.
 ///
@@ -2547,8 +2842,11 @@ fn connect_and_probe(socket_path: &Path) -> Result<(QmpClient, crate::qmp::QmpPr
         .map_err(|error| format!("QMP probe failed: {error}"))
 }
 
+
 /// Reject calibration-only game modes before any guest input can be requested.
 fn ensure_input_authorised(mode: GameMode) -> Result<(), String> {
+
+
     if mode.input_authorised() {
         Ok(())
     } else {
@@ -2557,6 +2855,7 @@ fn ensure_input_authorised(mode: GameMode) -> Result<(), String> {
         ))
     }
 }
+
 
 /// Decoded capture and classifications derived from those exact immutable pixels.
 struct FrameObservation {
@@ -2571,6 +2870,7 @@ struct FrameObservation {
     /// Progress-bar classification; never completion authority by itself.
     game_progress: Option<GameProgress>,
 }
+
 
 /// Capture once using an existing QMP connection, then analyse the decoded frame.
 ///
@@ -2587,6 +2887,7 @@ fn capture_with_client(
     Ok((observation, timing))
 }
 
+
 /// Capture one decoded frame and timings, discarding the original PNG bytes from memory.
 fn capture_screen(
     qmp: &mut QmpClient,
@@ -2595,6 +2896,7 @@ fn capture_screen(
     let (frame, _png, timing) = capture_screen_with_png(qmp, socket_path)?;
     Ok((frame, timing))
 }
+
 
 /// Capture one full-display QMP PNG through a private temporary file and decode its pixels.
 ///
@@ -2625,6 +2927,8 @@ fn capture_screen_with_png(
     let png_size = fs::metadata(capture_artifact.file_name())
         .map_err(|error| format!("PNG size check failed: {error}"))?
         .len();
+
+
     if png_size == 0 || png_size > SNAPSHOT_MAX_PNG_BYTES as u64 {
         return Err(format!(
             "QMP PNG is outside the 1..={SNAPSHOT_MAX_PNG_BYTES} byte limit: {png_size}"
@@ -2636,6 +2940,8 @@ fn capture_screen_with_png(
         .take(SNAPSHOT_MAX_PNG_BYTES as u64 + 1)
         .read_to_end(&mut png)
         .map_err(|error| format!("PNG read failed: {error}"))?;
+
+
     if png.is_empty() || png.len() > SNAPSHOT_MAX_PNG_BYTES {
         return Err("QMP PNG size changed outside the capture limit".to_owned());
     }
@@ -2647,6 +2953,7 @@ fn capture_screen_with_png(
 
     Ok((frame, png, timing))
 }
+
 
 /// Classify one immutable frame under the supplied game and scan state without QMP access.
 ///
@@ -2661,13 +2968,19 @@ fn analyse_captured_frame(
     // cannot send input or capture an implicit replacement frame.
     let detection_started = Instant::now();
     let profile = scan_state.mode().profile();
+
+
     if scan_state.mode().calibration_only() {
+
+
         if (frame.width, frame.height) != (profile.frame_width, profile.frame_height) {
             return Err(format!(
                 "calibration frame must be exactly {}x{}, got {}x{}",
                 profile.frame_width, profile.frame_height, frame.width, frame.height
             ));
         }
+
+
         if !frame.is_layout_valid() {
             return Err("calibration frame has an invalid pixel layout".to_owned());
         }
@@ -2687,10 +3000,18 @@ fn analyse_captured_frame(
     }
     let gameplay_scene = is_gameplay_scene_for_mode(&frame, scan_state.mode())
         .map_err(|error| format!("gameplay-scene analysis failed: {error}"))?;
-    let game_progress = Some(
-        detect_game_progress_for_profile(&frame, profile)
-            .map_err(|error| format!("Solver progress analysis failed: {error}"))?,
-    );
+
+
+    let game_progress = if scan_state.mode() == GameMode::Klondike {
+        None
+    } else {
+        Some(
+            detect_game_progress_for_profile(&frame, profile)
+                .map_err(|error| format!("Solver progress analysis failed: {error}"))?,
+        )
+    };
+
+
     let (prediction, observed_rows) = if gameplay_scene {
         let analysis = analyse_frame_with_state(&frame, scan_state)
             .map_err(|error| format!("frame analysis failed: {error}"))?;
@@ -2712,6 +3033,7 @@ fn analyse_captured_frame(
     ))
 }
 
+
 /// Observations and timings passed to shared action validation.
 struct CaptureSeries {
     /// Current one-frame capture sequence.
@@ -2719,6 +3041,7 @@ struct CaptureSeries {
     /// Acquisition and analysis timing for the sequence.
     timing: CaptureTiming,
 }
+
 
 /// Capture one observation with STOP checks before and after the operation.
 ///
@@ -2730,10 +3053,14 @@ fn capture_series(
     scan_state: &TableauScanState,
     cancel_requested: &AtomicBool,
 ) -> Result<CaptureSeries, String> {
+
+
     if cancel_requested.load(Ordering::Acquire) {
         return Err("STOP was requested before the next capture".to_owned());
     }
     let (observation, timing) = capture_with_client(qmp, socket_path, scan_state)?;
+
+
     if cancel_requested.load(Ordering::Acquire) {
         return Err("STOP was requested after capture".to_owned());
     }
@@ -2743,6 +3070,7 @@ fn capture_series(
         timing,
     })
 }
+
 
 /// Count pixels with a channel delta at least `threshold` inside the effect bounds.
 ///
@@ -2755,15 +3083,21 @@ fn materially_changed_pixels(
     exclusion: Option<PixelRect>,
     threshold: u8,
 ) -> Result<usize, String> {
+
+
     if !before.is_layout_valid() || !after.is_layout_valid() {
         return Err("effect comparison received an invalid frame layout".to_owned());
     }
+
+
     if (before.width, before.height) != (after.width, after.height) {
         return Err(format!(
             "effect comparison dimensions differ: {}x{} versus {}x{}",
             before.width, before.height, after.width, after.height
         ));
     }
+
+
     if bounds.is_empty() || bounds.right() > before.width || bounds.bottom() > before.height {
         return Err(format!(
             "effect ROI ({}, {}, {}, {}) lies outside {}x{}",
@@ -2772,9 +3106,15 @@ fn materially_changed_pixels(
     }
 
     let mut changed = 0usize;
+
+
     for y in bounds.y..bounds.bottom() {
+
+
         for x in bounds.x..bounds.right() {
             let point = crate::geometry::PixelPoint::new(x as i32, y as i32);
+
+
             if exclusion.is_some_and(|excluded| excluded.contains(point)) {
                 continue;
             }
@@ -2782,6 +3122,8 @@ fn materially_changed_pixels(
                 .ok_or_else(|| format!("could not read before pixel ({x}, {y})"))?;
             let after_rgb = pixel_rgb(after, x, y)
                 .ok_or_else(|| format!("could not read after pixel ({x}, {y})"))?;
+
+
             if before_rgb
                 .into_iter()
                 .zip(after_rgb)
@@ -2794,18 +3136,23 @@ fn materially_changed_pixels(
     Ok(changed)
 }
 
+
 /// Publish a pre-action advisory frame and request its prediction be logged.
 fn send_frame(event_tx: &WorkerEventSink, observation: FrameObservation) {
     event_tx.publish_frame(observation.frame, observation.prediction, true);
 }
+
 
 /// Publish an unverified result frame for inspection without approving another action.
 fn send_post_action_frame(event_tx: &WorkerEventSink, observation: FrameObservation) {
     event_tx.publish_diagnostic_frame(observation.frame);
 }
 
+
 /// Describe a predicted target and its input method for detailed diagnostics.
 fn format_prediction_target(prediction: PredictedAction) -> String {
+
+
     match prediction {
         PredictedAction::CalibrationOnly { mode } => format!("{mode} calibration only"),
         PredictedAction::NoHighlight => "no highlight".to_owned(),
@@ -2825,6 +3172,12 @@ fn format_prediction_target(prediction: PredictedAction) -> String {
                 "INVALID tableau row {}, column {} key action",
                 position.row, position.column
             ),
+            (ActionTarget::Klondike(kind), InputOperation::Click(point)) => {
+                format!("CLICK Klondike {kind:?} at ({}, {})", point.x, point.y)
+            }
+            (ActionTarget::Klondike(kind), InputOperation::PressDrawKey) => {
+                format!("Klondike {kind:?} via qcode D; pointer unchanged")
+            }
             (ActionTarget::Pyramid(kind), InputOperation::Click(point)) => {
                 format!("CLICK Pyramid {kind:?} at ({}, {})", point.x, point.y)
             }
@@ -2837,6 +3190,7 @@ fn format_prediction_target(prediction: PredictedAction) -> String {
         }
     }
 }
+
 
 /// Validate effect/click geometry and describe the exact planned QMP input sequence.
 ///
@@ -2851,11 +3205,16 @@ fn format_step_plan(plan: StepPlan) -> Result<String, String> {
     .map_err(|error| format!("invalid action-effect ROI: {error}"))?;
 
     let action = input.action();
+
+
     Ok(match (action.target, input.operation()) {
         (ActionTarget::Bottom { label, .. }, InputOperation::PressDrawKey) => format!(
             "Stable plan: {label} via qcode D; pointer unchanged; gold anchor=({}, {}); commands=2, events=2.",
             action.anchor.x, action.anchor.y
         ),
+        (ActionTarget::Klondike(crate::klondike::KlondikeTarget::Draw), InputOperation::PressDrawKey) => {
+            "Stable plan: Klondike Draw via qcode D; pointer unchanged; commands=2, events=2.".to_owned()
+        }
         (target, InputOperation::Click(click_point)) => {
             let qmp = pixel_point_to_qmp(click_point, NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT)
                 .map_err(|error| error.to_string())?;
@@ -2872,6 +3231,7 @@ fn format_step_plan(plan: StepPlan) -> Result<String, String> {
     })
 }
 
+
 /// Send one planned click or draw-key sequence after a final STOP check.
 ///
 /// Returns QMP errors as uncertain action failures; it does not retry delivery.
@@ -2880,9 +3240,12 @@ fn execute_planned_input(
     plan: StepPlan,
     cancel_requested: &AtomicBool,
 ) -> Result<(), String> {
+
+
     if cancel_requested.load(Ordering::Acquire) {
         return Err("STOP was requested before input".to_owned());
     }
+
 
     match plan.input().operation() {
         InputOperation::Click(point) => qmp
@@ -2895,6 +3258,7 @@ fn execute_planned_input(
     Ok(())
 }
 
+
 /// Wait up to `duration` while checking STOP between short sleep slices.
 ///
 /// Returns the requested duration on completion or elapsed bounded time on cancellation.
@@ -2903,11 +3267,17 @@ fn cancellable_wait(
     cancel_requested: &AtomicBool,
 ) -> Result<Duration, Duration> {
     let started = Instant::now();
+
+
     loop {
+
+
         if cancel_requested.load(Ordering::Acquire) {
             return Err(started.elapsed().min(duration));
         }
         let elapsed = started.elapsed();
+
+
         if elapsed >= duration {
             return Ok(duration);
         }
@@ -2915,13 +3285,17 @@ fn cancellable_wait(
     }
 }
 
+
 /// Guard owning a private temporary QMP PNG path until normal cleanup.
 struct CaptureArtifact {
     /// Exclusively reserved path beside the QMP socket.
     file_name: PathBuf,
 }
 
+
 impl CaptureArtifact {
+
+
     /// Reserve a private regular PNG file beside the QMP socket using exclusive creation.
     ///
     /// Retries name collisions within a fixed budget; returns errors for a missing
@@ -2935,12 +3309,15 @@ impl CaptureArtifact {
             )
         })?;
 
+
         for _ in 0..CAPTURE_NAME_ATTEMPTS {
             let sequence = CAPTURE_SEQUENCE.fetch_add(1, Ordering::Relaxed);
             let file_name = directory.join(format!(
                 ".qmp-qemu-socket-capture-{}-{sequence}.png",
                 std::process::id()
             ));
+
+
             match OpenOptions::new()
                 .write(true)
                 .create_new(true)
@@ -2967,24 +3344,30 @@ impl CaptureArtifact {
         ))
     }
 
+
     /// Borrow the reserved PNG path passed to QMP and subsequent read operations.
     fn file_name(&self) -> &Path {
         &self.file_name
     }
 }
 
+
 impl Drop for CaptureArtifact {
+
+
     /// Attempt normal-cleanup removal of the reserved temporary PNG; ignore removal errors.
     fn drop(&mut self) {
         let _ = fs::remove_file(&self.file_name);
     }
 }
 
+
 /// Send a detailed diagnostic message; ignore a closed UI event receiver.
 fn send_log(event_tx: &WorkerEventSink, message: String) {
     // Sends a log message to the UI without failing if its receiver has closed.
     let _ = event_tx.send(WorkerEvent::Log(message));
 }
+
 
 /// Send concise status text; detailed evidence remains in the log stream.
 fn send_status(event_tx: &WorkerEventSink, message: String) {
@@ -2993,12 +3376,18 @@ fn send_status(event_tx: &WorkerEventSink, message: String) {
     let _ = event_tx.send(WorkerEvent::Status(message));
 }
 
+
 /// Publish completed boards and a current-board number clamped to the game profile.
 fn send_board_progress(
     event_tx: &WorkerEventSink,
     scan_state: &TableauScanState,
     completed_boards: usize,
 ) {
+
+
+    if scan_state.mode() == GameMode::Klondike {
+        return;
+    }
     let boards_per_game = scan_state.mode().profile().boards_per_game;
     let current_board = completed_boards.saturating_add(1).min(boards_per_game);
     let _ = event_tx.send(WorkerEvent::BoardProgress {
@@ -3008,8 +3397,11 @@ fn send_board_progress(
     });
 }
 
+
 /// Render concise action status while preserving target and input-method meaning.
 fn format_action_status(prediction: PredictedAction) -> String {
+
+
     match prediction {
         PredictedAction::CalibrationOnly { mode } => format!("{mode} calibration — input disabled"),
         PredictedAction::Action(action) => match (action.target, action.operation()) {
@@ -3025,6 +3417,12 @@ fn format_action_status(prediction: PredictedAction) -> String {
             (ActionTarget::Tableau(position), InputOperation::PressDrawKey) => {
                 format!("Invalid R{}C{} key action", position.row, position.column)
             }
+            (ActionTarget::Klondike(kind), InputOperation::Click(_)) => {
+                format!("Click Klondike {kind:?}")
+            }
+            (ActionTarget::Klondike(kind), InputOperation::PressDrawKey) => {
+                format!("Draw card — Klondike {kind:?}")
+            }
             (ActionTarget::Pyramid(kind), InputOperation::Click(_)) => {
                 format!("Click Pyramid {kind:?}")
             }
@@ -3038,6 +3436,7 @@ fn format_action_status(prediction: PredictedAction) -> String {
         }
     }
 }
+
 
 /// Publish worker state without treating a closed UI receiver as a worker failure.
 fn send_state(event_tx: &WorkerEventSink, state: WorkerState) {

@@ -11,6 +11,7 @@ use crate::{
     tracker::PredictedAction,
 };
 
+
 /// The single input selected from freshly captured Solver evidence.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PlannedInput(
@@ -18,31 +19,39 @@ pub struct PlannedInput(
     GuidedAction,
 );
 
+
 impl PlannedInput {
+
+
     /// Return the calibrated action carried by this single-input plan.
     pub const fn action(self) -> GuidedAction {
         self.0
     }
+
 
     /// Return the sole non-idempotent operation for this action.
     pub const fn operation(self) -> InputOperation {
         self.0.operation()
     }
 
+
     /// Select the session's immutable delay snapshot for this action type.
     pub const fn animation_settle_delay(self, delays: AnimationSettleDelays) -> Duration {
         self.0.animation_settle_delay(delays)
     }
+
 
     /// Region expected to change if the planned input reached Solitaire.
     pub const fn effect_bounds(self) -> PixelRect {
         self.0.effect_bounds()
     }
 
+
     /// Minimum material change required for this action's effect region.
     pub const fn minimum_changed_pixels(self) -> usize {
         self.0.minimum_changed_pixels()
     }
+
 
     /// Deliberate sleeps performed by QMP input delivery for this action.
     ///
@@ -51,12 +60,14 @@ impl PlannedInput {
         self.0.intentional_input_wait()
     }
 
+
     /// Region excluded from effect comparison because the guest cursor moves
     /// there. Draw leaves the pointer unchanged and therefore introduces no
     /// new cursor movement to exclude from its stock/waste comparison.
     pub const fn effect_exclusion_bounds(self) -> Option<PixelRect> {
         self.0.effect_exclusion_bounds()
     }
+
 
     /// Number of QMP commands emitted by the complete input sequence.
     ///
@@ -66,11 +77,13 @@ impl PlannedInput {
         self.0.qmp_command_count()
     }
 
+
     /// Number of individual input events carried by those QMP commands.
     pub const fn qmp_event_count(self) -> usize {
         self.0.qmp_event_count()
     }
 }
+
 
 /// A one-action plan derived only from a fresh pre-action frame.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -81,17 +94,22 @@ pub struct StepPlan {
     input: PlannedInput,
 }
 
+
 impl StepPlan {
+
+
     /// Return the fresh prediction from which this plan was constructed.
     pub const fn before(self) -> PredictedAction {
         self.before
     }
+
 
     /// Return the sole planned guest-input operation and its verification settings.
     pub const fn input(self) -> PlannedInput {
         self.input
     }
 }
+
 
 /// Reasons a prediction or observed result cannot be accepted as a guarded step.
 #[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
@@ -129,10 +147,16 @@ pub enum StepValidationError {
     /// Supplied Pyramid action differs from its immutable calibrated definition.
     #[error("Pyramid target does not match its calibrated one-click action")]
     InvalidPyramidAction,
+    /// Supplied Klondike source bounds or input differ from the canonical action.
+    #[error("Klondike target does not match its bounded source action")]
+    InvalidKlondikeAction,
 }
+
 
 /// Build one action from exactly one fresh prediction.
 pub fn plan_step(before: PredictedAction) -> Result<StepPlan, StepValidationError> {
+
+
     let input = match before {
         PredictedAction::CalibrationOnly { mode } => {
             return Err(StepValidationError::CalibrationOnly { mode });
@@ -141,7 +165,18 @@ pub fn plan_step(before: PredictedAction) -> Result<StepPlan, StepValidationErro
             return Err(StepValidationError::NoPreActionHighlight);
         }
         PredictedAction::Action(action) => {
+
+
+            if let ActionTarget::Klondike(kind) = action.target
+                && crate::klondike::canonical_action(kind) != Some(action)
+            {
+                return Err(StepValidationError::InvalidKlondikeAction);
+            }
+
+
             if let ActionTarget::Pyramid(kind) = action.target {
+
+
                 if crate::pyramid::action_for_kind(kind) != Some(action) {
                     return Err(StepValidationError::InvalidPyramidAction);
                 }
@@ -156,6 +191,7 @@ pub fn plan_step(before: PredictedAction) -> Result<StepPlan, StepValidationErro
     Ok(StepPlan { before, input })
 }
 
+
 /// Require a fresh post-action prediction and independent effect evidence.
 ///
 /// This verifies observation only. It never authorises a retry if the result
@@ -165,13 +201,19 @@ pub fn verify_post_action(
     after: PredictedAction,
     effect_changed: bool,
 ) -> Result<PredictedAction, StepValidationError> {
+
+
     if let PredictedAction::CalibrationOnly { mode } = after {
         return Err(StepValidationError::CalibrationOnly { mode });
     }
+
+
     if let PredictedAction::Ambiguous { highlight_count } = after {
         return Err(StepValidationError::AmbiguousPostAction { highlight_count });
     }
     let action = plan.input().action();
+
+
     if action.repeat_target_policy() == RepeatTargetPolicy::MustClear
         && matches!(after, PredictedAction::Action(after_action) if action.target == after_action.target)
     {
@@ -179,11 +221,14 @@ pub fn verify_post_action(
             target: action.target,
         });
     }
+
+
     if !effect_changed {
         return Err(StepValidationError::NoObservedEffect);
     }
     Ok(after)
 }
+
 
 #[cfg(test)]
 mod tests {
@@ -198,6 +243,32 @@ mod tests {
             MINIMUM_TABLEAU_CHANGED_PIXELS, MOUSE_HOLD, POINTER_SETTLE_DELAY, TABLEAU_CARD_REGIONS,
         },
     };
+
+
+    /// A Klondike draw key is allowed only with its exact canonical specification.
+    #[test]
+    fn klondike_planning_rejects_forged_input_and_effect_bounds() {
+        let action = crate::klondike::canonical_action(crate::klondike::KlondikeTarget::Draw)
+            .expect("Draw has a canonical action");
+        let plan = plan_step(PredictedAction::Action(action)).unwrap();
+        assert_eq!(plan.input().operation(), InputOperation::PressDrawKey);
+        assert_eq!(plan.input().qmp_command_count(), 2);
+
+        let mut forged = action;
+        forged.specification.operation = InputOperation::Click(PixelPoint::new(456, 199));
+        assert_eq!(
+            plan_step(PredictedAction::Action(forged)),
+            Err(StepValidationError::InvalidKlondikeAction)
+        );
+
+        forged = action;
+        forged.specification.effect_bounds = PixelRect::new(0, 0, 1_920, 1_080);
+        assert_eq!(
+            plan_step(PredictedAction::Action(forged)),
+            Err(StepValidationError::InvalidKlondikeAction)
+        );
+    }
+
 
     /// Verify Pyramid plans reject forged timing or click definitions.
     #[test]
@@ -230,6 +301,7 @@ mod tests {
         );
     }
 
+
     /// Build a test TriPeaks draw prediction using the calibrated bottom-action profile.
     fn draw(anchor_x: i32) -> PredictedAction {
         PredictedAction::Action(
@@ -239,6 +311,7 @@ mod tests {
                 .unwrap(),
         )
     }
+
 
     /// Build a bottom-row TriPeaks test prediction for a one-based column.
     fn tableau(column: u8) -> PredictedAction {
@@ -250,6 +323,7 @@ mod tests {
                 .unwrap(),
         )
     }
+
 
     /// Verify draw input uses only the calibrated key sequence, timing and effect region.
     #[test]
@@ -273,6 +347,7 @@ mod tests {
         assert_eq!(plan.input().qmp_command_count(), 2);
         assert_eq!(plan.input().qmp_event_count(), 2);
     }
+
 
     /// Verify tableau input preserves the calibrated centre, cursor mask and timing.
     #[test]
@@ -309,6 +384,7 @@ mod tests {
         );
     }
 
+
     /// Verify planning rejects absent, ambiguous and calibration-only predictions.
     #[test]
     fn pre_action_validation_refuses_no_action_and_ambiguity() {
@@ -330,11 +406,13 @@ mod tests {
         );
     }
 
+
     /// Verify the plan preserves the supplied fresh prediction unchanged.
     #[test]
     fn single_fresh_capture_is_the_only_planning_input() {
         assert_eq!(plan_step(draw(842)).unwrap().before(), draw(842));
     }
+
 
     /// Verify independently observed material effects accept the next fresh prediction.
     #[test]
@@ -348,6 +426,7 @@ mod tests {
             Ok(PredictedAction::NoHighlight)
         );
     }
+
 
     /// Verify missing effects and ambiguous results never authorise a retry.
     #[test]
@@ -386,6 +465,7 @@ mod tests {
             })
         );
     }
+
 
     /// Verify a consumed TriPeaks tableau target cannot remain highlighted after success.
     #[test]

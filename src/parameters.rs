@@ -7,48 +7,80 @@ use crate::{
     geometry::{PixelPoint, PixelRect},
 };
 
+
 /// Cargo package name displayed in window titles and diagnostic messages.
 pub const APP_NAME: &str = env!("CARGO_PKG_NAME");
+
+
 /// Package version and candidate number shown by the UI and session log.
-pub const RELEASE_LABEL: &str = concat!("v", env!("CARGO_PKG_VERSION"));
+pub const RELEASE_LABEL: &str = concat!("v", env!("CARGO_PKG_VERSION"), ", candidate 1");
+
+
 /// Initial application window width in egui logical points.
 pub const INITIAL_WINDOW_WIDTH: f32 = 1120.0;
+
+
 /// Initial application window height in egui logical points.
 pub const INITIAL_WINDOW_HEIGHT: f32 = 820.0;
+
+
 // A fixed-height log: 40 more logical points is approximately 2.5 monospace
 // lines at the current UI font. Window growth remains available to the image.
 /// Expanded diagnostic output height in egui logical points.
 pub const OUTPUT_PANEL_HEIGHT: f32 = 285.0;
 
+
 // Reserve space below the preview for the collapsed log and EXIT control.
 // A horizontal scrollbar can consume part of the scroll area's outer height.
 /// Logical points reserved below the preview for collapsed output and Exit.
 pub const PREVIEW_FOOTER_RESERVE_POINTS: f32 = 96.0;
+
+
 /// Logical points reserved for the preview horizontal scrollbar.
 pub const PREVIEW_SCROLLBAR_ALLOWANCE_POINTS: f32 = 24.0;
+
+
 /// Minimum preview viewport height in egui logical points.
 pub const MIN_PREVIEW_VIEWPORT_HEIGHT_POINTS: f32 = 260.0;
+
+
 /// Maximum diagnostic lines retained in the rendered output buffer.
 pub const MAX_LOG_LINES: usize = 2_000;
+
 
 // The rendered panel remains bounded while the complete session is retained
 // in diagnostic storage for Copy Output and later diagnosis.
 /// Completed games per visible-log rollover; the session log stays complete.
 pub const VISIBLE_LOG_ROLLOVER_GAMES: usize = 3;
+
+
 /// Prefix used when reserving a unique session log filename.
 pub const SESSION_LOG_FILE_PREFIX: &str = "qmp-qemu-socket-";
+
+
 /// Filename extension of private session diagnostic logs.
 pub const SESSION_LOG_FILE_SUFFIX: &str = ".log";
+
+
 /// Unix permission bits for a newly created private session log.
 pub const SESSION_LOG_MODE: u32 = 0o600;
+
+
 /// Maximum exclusive-create attempts when reserving a session log.
 pub const SESSION_LOG_NAME_ATTEMPTS: usize = 32;
+
+
 /// Maximum sanitised label length, in characters, in a snapshot filename.
 pub const SNAPSHOT_LABEL_MAX_CHARS: usize = 48;
+
+
 /// Maximum exclusive-create attempts when reserving a saved snapshot.
 pub const SNAPSHOT_NAME_ATTEMPTS: usize = 32;
+
+
 /// Maximum original PNG size, in bytes, accepted by manual snapshot capture.
 pub const SNAPSHOT_MAX_PNG_BYTES: usize = 32 * 1024 * 1024;
+
 
 /// Returns the directory used for private session diagnostic logs.
 ///
@@ -57,17 +89,24 @@ pub const SNAPSHOT_MAX_PNG_BYTES: usize = 32 * 1024 * 1024;
 /// 2. `$HOME/tmp` if that directory exists
 /// 3. Standard temporary directory (`/tmp` or `$TMPDIR`)
 pub fn session_log_directory() -> PathBuf {
+
+
     if let Some(dir) = env::var_os("QMP_SESSION_LOG_DIR").filter(|d| !d.is_empty()) {
         return PathBuf::from(dir);
     }
+
+
     if let Some(home) = env::var_os("HOME").filter(|h| !h.is_empty()) {
         let home_tmp = PathBuf::from(home).join("tmp");
+
+
         if home_tmp.is_dir() {
             return home_tmp;
         }
     }
     env::temp_dir()
 }
+
 
 /// Returns the directory used for captured QMP evidence snapshots.
 ///
@@ -77,16 +116,24 @@ pub fn session_log_directory() -> PathBuf {
 /// 3. `$HOME/Pictures` if it exists
 /// 4. Standard temporary directory (`/tmp` or `$TMPDIR`)
 pub fn snapshot_directory() -> PathBuf {
+
+
     if let Some(dir) = env::var_os("QMP_SNAPSHOT_DIR").filter(|d| !d.is_empty()) {
         return PathBuf::from(dir);
     }
+
+
     if let Some(home) = env::var_os("HOME").filter(|h| !h.is_empty()) {
         let home_path = PathBuf::from(home);
         let screenshots = home_path.join("Pictures").join("Screenshots");
+
+
         if screenshots.is_dir() {
             return screenshots;
         }
         let pictures = home_path.join("Pictures");
+
+
         if pictures.is_dir() {
             return pictures;
         }
@@ -94,34 +141,47 @@ pub fn snapshot_directory() -> PathBuf {
     env::temp_dir()
 }
 
+
 // Capture artefacts use one process-wide sequence because several QMP capture
 // paths can reserve files during a long-running session.
 /// Process-wide monotonically increasing suffix for temporary capture filenames.
 pub static CAPTURE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+
 /// Maximum exclusive-create attempts for a temporary QMP capture file.
 pub const CAPTURE_NAME_ATTEMPTS: usize = 32;
+
+
 /// Maximum interval between cancellation checks during intentional waits.
 pub const CANCELLABLE_WAIT_SLICE: Duration = Duration::from_millis(25);
+
 
 // This profile was calibrated against the QMP primary surface at 1920x1080,
 // with Windows display scale and text size both set to 100%.
 /// Calibrated guest framebuffer width in pixels at 100% Windows scaling.
 pub const NOMINAL_FRAME_WIDTH: u32 = 1_920;
+
+
 /// Calibrated guest framebuffer height in pixels at 100% Windows scaling.
 pub const NOMINAL_FRAME_HEIGHT: u32 = 1_080;
+
 
 // Rectangles use half-open (x, y, width, height) guest-pixel bounds. The
 // original target rectangles are deliberately padded detector regions.
 /// Padded TriPeaks tableau detector envelope in guest pixels.
 pub const TARGET_BOARD: PixelRect = PixelRect::new(112, 96, 1_696, 544);
+
+
 // The stock contracts horizontally towards the left as cards are consumed.
 // Keep the visible target overlay and detector lane wide enough to contain
 // every observed position instead of treating the initial deal as immutable.
 /// TriPeaks stock envelope in guest pixels, including its contracting positions.
 pub const TARGET_STOCK: PixelRect = PixelRect::new(700, 665, 280, 217);
 
+
 /// TriPeaks face-up waste envelope in guest pixels.
 pub const TARGET_WASTE: PixelRect = PixelRect::new(1_001, 665, 170, 217);
+
 
 // The moving stock halo is only useful along its lower exterior edge. This
 // narrow lane avoids scanning card artwork while allowing the left edge of the
@@ -129,50 +189,77 @@ pub const TARGET_WASTE: PixelRect = PixelRect::new(1_001, 665, 170, 217);
 /// Guest-pixel strip containing all calibrated stock halo positions.
 pub const STOCK_HALO_SCAN_BOUNDS: PixelRect = PixelRect::new(700, 862, 280, 16);
 
+
 // A draw can change both the contracting stock and the waste card. Verify the
 // union so late-deal draws do not fail merely because the fixed waste interior
 // changed by fewer pixels than an ordinary tableau move.
 /// Guest-pixel union of stock and waste used to verify a TriPeaks draw.
 pub const DRAW_EFFECT_BOUNDS: PixelRect = PixelRect::new(700, 665, 471, 217);
 
+
 // A gameplay scene has a large, stable green-felt patch below the tableau and
 // left of the stock lane. Dialogs and game-selection screens replace this
 // patch with blue or dark backgrounds, providing a conservative scene gate.
 /// Stable TriPeaks felt patch in guest pixels used to reject dialog scenes.
 pub const GAMEPLAY_FELT_PROBE_BOUNDS: PixelRect = PixelRect::new(128, 650, 520, 180);
+
+
 /// Minimum 8-bit green channel for the TriPeaks scene fingerprint.
 pub const GAMEPLAY_FELT_GREEN_MINIMUM: u8 = 90;
+
+
 /// Minimum green-minus-red channel difference for TriPeaks felt.
 pub const GAMEPLAY_FELT_GREEN_RED_DELTA_MINIMUM: u8 = 50;
+
+
 /// Minimum green-minus-blue channel difference for TriPeaks felt.
 pub const GAMEPLAY_FELT_GREEN_BLUE_DELTA_MINIMUM: u8 = 25;
+
+
 /// Minimum felt-pixel share, in thousandths, required for a gameplay scene.
 pub const GAMEPLAY_FELT_REQUIRED_FRACTION_PER_MILLE: u32 = 800;
+
 
 // Tight unions of all calibrated tableau cards and their possible halos.
 /// Tight guest-pixel union of the calibrated TriPeaks card faces.
 #[cfg(test)]
 pub const TABLEAU_PLAY_AREA: PixelRect = PixelRect::new(128, 111, 1_664, 513);
+
+
 /// Guest-pixel union of all calibrated TriPeaks tableau halo envelopes.
 #[cfg(test)]
 pub const TABLEAU_HALO_AREA: PixelRect = PixelRect::new(116, 97, 1_688, 541);
 
+
 /// Calibrated TriPeaks card-face height in guest pixels.
 pub const TABLEAU_CARD_HEIGHT: u32 = 181;
+
+
 /// Horizontal guest-pixel padding around each TriPeaks card face.
 pub const TABLEAU_HALO_MARGIN_X: u32 = 12;
+
+
 /// Vertical guest-pixel padding around each TriPeaks card face.
 pub const TABLEAU_HALO_MARGIN_Y: u32 = 14;
+
+
 /// Rank-region left inset from the TriPeaks card edge in guest pixels.
 pub const CARD_RANK_OFFSET_X: u32 = 3;
+
+
 /// Rank-region top inset from the TriPeaks card edge in guest pixels.
 pub const CARD_RANK_OFFSET_Y: u32 = 7;
+
+
 /// Calibrated TriPeaks rank-region width in guest pixels.
 pub const CARD_RANK_WIDTH: u32 = 25;
+
+
 // Stop at local y=29: the verified rank ink fits through y=28, while suit
 // artwork starts at y=29 and would contaminate a rank-template mask.
 /// Rank-region height in guest pixels, ending before the suit artwork.
 pub const CARD_RANK_HEIGHT: u32 = 22;
+
 
 /// Construct the card, halo, rank and click geometry for one TriPeaks slot.
 const fn tableau_card_region(x: u32, y: u32, width: u32) -> CardRegionPixels {
@@ -194,6 +281,7 @@ const fn tableau_card_region(x: u32, y: u32, width: u32) -> CardRegionPixels {
         card_bounds.centre(),
     )
 }
+
 
 // Row-major TriPeaks layout: 3 cards, 6 cards, 9 cards, then 10 cards. The
 // upper rows are projected from the visible card edges in the verified
@@ -234,15 +322,22 @@ pub const TABLEAU_CARD_REGIONS: [CardRegionPixels; TABLEAU_CARD_COUNT] = [
     tableau_card_region(1_655, 443, 137),
 ];
 
+
 /// Initial TriPeaks stock card-face rectangle in guest pixels.
 #[cfg(test)]
 pub const STOCK_CARD_BOUNDS: PixelRect = PixelRect::new(832, 682, 136, 182);
+
+
 /// Initial TriPeaks stock halo envelope in guest pixels.
 #[cfg(test)]
 pub const STOCK_HALO_BOUNDS: PixelRect = PixelRect::new(820, 668, 160, 210);
+
+
 /// Reserved stock rank region in guest pixels; stock actions do not read it.
 #[cfg(test)]
 pub const STOCK_RANK_BOUNDS: PixelRect = PixelRect::new(835, 689, 25, 22);
+
+
 /// Initial TriPeaks stock geometry used by the profile and calibration checks.
 #[cfg(test)]
 pub const STOCK_CARD_REGION: CardRegionPixels = CardRegionPixels::new(
@@ -252,15 +347,22 @@ pub const STOCK_CARD_REGION: CardRegionPixels = CardRegionPixels::new(
     STOCK_CARD_BOUNDS.centre(),
 );
 
+
 /// TriPeaks waste card-face rectangle in guest pixels.
 #[cfg(test)]
 pub const WASTE_CARD_BOUNDS: PixelRect = PixelRect::new(1_017, 682, 136, 182);
+
+
 /// TriPeaks waste halo envelope in guest pixels.
 #[cfg(test)]
 pub const WASTE_HALO_BOUNDS: PixelRect = PixelRect::new(1_005, 668, 160, 210);
+
+
 /// Calibrated TriPeaks waste rank rectangle in guest pixels.
 #[cfg(test)]
 pub const WASTE_RANK_BOUNDS: PixelRect = PixelRect::new(1_020, 689, 25, 22);
+
+
 /// TriPeaks waste face, halo, rank and centre geometry.
 #[cfg(test)]
 pub const WASTE_CARD_REGION: CardRegionPixels = CardRegionPixels::new(
@@ -270,15 +372,21 @@ pub const WASTE_CARD_REGION: CardRegionPixels = CardRegionPixels::new(
     WASTE_CARD_BOUNDS.centre(),
 );
 
+
 // The audited highlight includes a roughly 120x2 horizontal gold segment
 // outside the card. A long-run detector gives this feature explicit semantics
 // and avoids treating short gold details in card artwork as a halo.
 /// Minimum consecutive gold pixels in a TriPeaks horizontal halo run.
 pub const HALO_GOLD_RUN_MIN: u32 = 80;
+
+
 /// Guest-pixel offset below a TriPeaks card face to its gold halo line.
 pub const HALO_GOLD_LINE_OFFSET_Y: u32 = 6;
+
+
 /// Number of guest-pixel rows sampled for the TriPeaks gold line.
 pub const HALO_GOLD_SCAN_HEIGHT: u32 = 2;
+
 
 // Tableau cards can be rendered a few pixels away from the original
 // calibration and the highlighted border can be darker than the two audited
@@ -288,30 +396,50 @@ pub const HALO_GOLD_SCAN_HEIGHT: u32 = 2;
 // close to the immutable per-slot anchor.
 /// Maximum vertical guest-pixel displacement in the relaxed tableau halo scan.
 pub const TABLEAU_RELAXED_HALO_Y_TOLERANCE: u32 = 8;
+
+
 /// Maximum horizontal guest-pixel displacement of a relaxed halo run start.
 pub const TABLEAU_RELAXED_HALO_START_X_TOLERANCE: u32 = 8;
+
+
 /// Minimum 8-bit red channel accepted by the relaxed tableau gold detector.
 pub const TABLEAU_RELAXED_GOLD_RED_MINIMUM: u8 = 180;
+
+
 /// Minimum 8-bit green channel accepted by the relaxed tableau gold detector.
 pub const TABLEAU_RELAXED_GOLD_GREEN_MINIMUM: u8 = 140;
+
+
 /// Maximum 8-bit blue channel accepted by the relaxed tableau gold detector.
 pub const TABLEAU_RELAXED_GOLD_BLUE_MAXIMUM: u8 = 160;
+
+
 /// Lower red-minus-green channel difference for relaxed tableau gold.
 pub const TABLEAU_RELAXED_GOLD_RED_GREEN_DELTA_MINIMUM: u8 = 15;
+
+
 /// Upper red-minus-green channel difference for relaxed tableau gold.
 pub const TABLEAU_RELAXED_GOLD_RED_GREEN_DELTA_MAXIMUM: u8 = 72;
+
+
 /// Minimum green-minus-blue channel difference for relaxed tableau gold.
 pub const TABLEAU_RELAXED_GOLD_GREEN_BLUE_DELTA_MINIMUM: u8 = 40;
+
 
 // A face-up card presents a continuous near-white patch across this calibrated
 // four-line band. Requiring a rectangular block rejects isolated snow and
 // speckle in the mountain artwork on face-down card backs.
 /// Minimum value in every RGB channel for a TriPeaks white face pixel.
 pub const FACE_UP_WHITE_CHANNEL_MINIMUM: u8 = 250;
+
+
 /// Minimum continuous white block width, in pixels, for row visibility.
 pub const FACE_UP_WHITE_BLOCK_MIN_WIDTH: u32 = 16;
+
+
 /// Height in guest pixels of the TriPeaks white-face probe band.
 pub const FACE_UP_WHITE_SCAN_HEIGHT: u32 = 4;
+
 
 /// TriPeaks row geometry linking narrow face probes to bounded halo scans.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -328,12 +456,16 @@ pub struct TableauRowScanProfile {
     pub halo_scan_bounds: PixelRect,
 }
 
+
 impl TableauRowScanProfile {
+
+
     /// Return the exclusive slot index at the end of this row.
     pub const fn card_end_index(self) -> usize {
         self.first_card_index.saturating_add(self.card_count)
     }
 }
+
 
 // Row envelopes are deliberately half-open framebuffer coordinates. Slot
 // indices let halo detection visit only calibrated cards, while the narrow
@@ -371,20 +503,28 @@ pub const TABLEAU_ROW_SCAN_PROFILES: [TableauRowScanProfile; 4] = [
     },
 ];
 
+
 // Post-action evidence must change materially inside the action's
 // expected effect region. The calibration produced 10,065 >=20-channel changes in the
 // waste interior. This lower bound remains deliberately below that observation
 // while rejecting small pointer, antialiasing, and compression artefacts.
 /// Minimum absolute change in any 8-bit RGB channel to count a changed pixel.
 pub const ACTION_CHANGE_CHANNEL_THRESHOLD: u8 = 20;
+
+
 /// Minimum cursor-excluded changed pixels proving a TriPeaks draw effect.
 pub const MINIMUM_DRAW_CHANGED_PIXELS: usize = 1_024;
+
+
 /// Minimum cursor-excluded changed pixels proving a TriPeaks tableau effect.
 pub const MINIMUM_TABLEAU_CHANGED_PIXELS: usize = 2_048;
+
+
 // The guest cursor is visible in QMP screendumps. Ignore a centred square
 // around a tableau click so cursor relocation cannot prove that the card moved.
 /// Half-width and half-height in pixels of the excluded guest cursor square.
 pub const ACTION_CURSOR_EXCLUSION_HALF_SIZE: u32 = 48;
+
 
 /// Calibrated guest-pixel bounds and click point of a visible control.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -394,6 +534,7 @@ pub struct ControlTarget {
     /// Calibrated guest-pixel point inside the control hit area.
     pub click_point: PixelPoint,
 }
+
 
 /// One recognised visual layout of a post-game control and its paired click.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -405,6 +546,7 @@ pub struct PostGameControlVariant {
     /// Guest-pixel click point permitted only after recognising this variant.
     pub click_point: PixelPoint,
 }
+
 
 /// Ordered control identities used by the shared post-game state machine.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -419,6 +561,7 @@ pub enum PostGameStage {
     Solver,
 }
 
+
 /// Recognition variants and scene requirements for one post-game stage.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PostGameTarget {
@@ -432,7 +575,10 @@ pub struct PostGameTarget {
     pub requires_gameplay_scene: bool,
 }
 
+
 impl PostGameTarget {
+
+
     /// Associate one post-game stage with its recognised layouts and scene gate.
     pub const fn new(
         stage: PostGameStage,
@@ -449,7 +595,10 @@ impl PostGameTarget {
     }
 }
 
+
 impl PostGameControlVariant {
+
+
     /// Pair a layout-specific probe with its calibrated guest-pixel click point.
     pub const fn new(
         label: &'static str,
@@ -464,7 +613,10 @@ impl PostGameControlVariant {
     }
 }
 
+
 impl ControlTarget {
+
+
     /// Construct a calibrated control definition without granting permission to click.
     pub const fn new(bounds: PixelRect, click_point: PixelPoint) -> Self {
         Self {
@@ -474,32 +626,42 @@ impl ControlTarget {
     }
 }
 
+
 // Shared bottom-toolbar controls at the 1920x1080 guest layout, observed in
 // both TriPeaks and Pyramid. Bounds cover the visible icons, not the larger
 // invisible hit areas. Undo All confirmation is a separate, uncalibrated UI.
 /// Shared Solver toolbar icon bounds and click point in guest pixels.
 pub const SHARED_SOLVER_CONTROL: ControlTarget =
     ControlTarget::new(PixelRect::new(585, 959, 35, 36), PixelPoint::new(602, 977));
+
+
 /// Central score-animation region and skip click point in guest pixels.
 pub const SCORE_SKIP_CONTROL: ControlTarget = ControlTarget::new(
     PixelRect::new(760, 360, 400, 360),
     PixelPoint::new(960, 540),
 );
+
+
 // Calibrated from the 1920x1080 Challenge Complete capture. This is reserved
 // for a future challenge flow; the current guarded run does not click it.
 /// Recorded challenge Continue geometry; shown for calibration, never automated.
 pub const CHALLENGE_COMPLETE_CONTINUE_CONTROL: ControlTarget =
     ControlTarget::new(PixelRect::new(805, 844, 308, 72), PixelPoint::new(959, 880));
+
+
 /// Shared Undo All toolbar icon bounds and click point in guest pixels.
 pub const SHARED_UNDO_ALL_CONTROL: ControlTarget = ControlTarget::new(
     PixelRect::new(1_301, 959, 38, 38),
     PixelPoint::new(1_320, 978),
 );
+
+
 /// Shared single Undo toolbar icon bounds and click point in guest pixels.
 pub const SHARED_UNDO_CONTROL: ControlTarget = ControlTarget::new(
     PixelRect::new(1_661, 960, 37, 36),
     PixelPoint::new(1_680, 978),
 );
+
 
 /// One shared definition for both game previews and future control consumers.
 pub const SHARED_TOOLBAR_CONTROLS: [(&str, ControlTarget); 3] = [
@@ -507,6 +669,7 @@ pub const SHARED_TOOLBAR_CONTROLS: [(&str, ControlTarget); 3] = [
     ("Undo All", SHARED_UNDO_ALL_CONTROL),
     ("Undo", SHARED_UNDO_CONTROL),
 ];
+
 
 // Level Up has two observed layouts. Each probe remains paired with the click
 // point calibrated for that layout so recognising one variant can never
@@ -527,13 +690,17 @@ pub const LEVEL_UP_CONTROL_VARIANTS: [PostGameControlVariant; 2] = [
     ),
 ];
 
+
 // On a tall Level Up OK button, gold joins both layout bands across this
 // interior strip. A high gold fraction here and in the left button interior
 // can distinguish one tall button from two unrelated matching probes.
 /// Guest-pixel gold strip joining both probes on a tall Level Up button.
 pub const LEVEL_UP_SHARED_BUTTON_BRIDGE: PixelRect = PixelRect::new(1_010, 775, 50, 25);
+
+
 /// Independent guest-pixel interior patch confirming a tall Level Up button.
 pub const LEVEL_UP_SHARED_BUTTON_INTERIOR: PixelRect = PixelRect::new(945, 792, 115, 22);
+
 
 /// Calibrated New Game button probe and click point in guest pixels.
 pub const NEW_GAME_CONTROL_VARIANTS: [PostGameControlVariant; 1] = [PostGameControlVariant::new(
@@ -542,6 +709,7 @@ pub const NEW_GAME_CONTROL_VARIANTS: [PostGameControlVariant; 1] = [PostGameCont
     PixelPoint::new(792, 840),
 )];
 
+
 /// Calibrated Play button probe and click point in guest pixels.
 pub const PLAY_CONTROL_VARIANTS: [PostGameControlVariant; 1] = [PostGameControlVariant::new(
     "default",
@@ -549,12 +717,14 @@ pub const PLAY_CONTROL_VARIANTS: [PostGameControlVariant; 1] = [PostGameControlV
     PixelPoint::new(705, 905),
 )];
 
+
 /// Shared Solver control represented for post-game stage recognition.
 pub const SOLVER_CONTROL_VARIANTS: [PostGameControlVariant; 1] = [PostGameControlVariant::new(
     "default",
     SHARED_SOLVER_CONTROL.bounds,
     SHARED_SOLVER_CONTROL.click_point,
 )];
+
 
 // The post-game sequence is ordered and fail-closed. Dialog stages use
 // separate patches; the two Level Up layout bands can be part of one tall
@@ -583,16 +753,23 @@ pub const POST_GAME_TARGETS: [PostGameTarget; 4] = [
     ),
 ];
 
+
 // The Solver progress bar's four-pixel interior is at y=86..=89 in the
 // calibrated 1920x1080 guest frame. Sample its middle two rows: y=84..=85
 // is the gold top border, which stays gold even when the remainder is black.
 // The right third is black before the final board and filled on game completion.
 /// Guest-pixel patch inside the right third of the shared progress bar.
 pub const SOLVER_PROGRESS_RIGHT_PROBE: PixelRect = PixelRect::new(1_050, 87, 38, 2);
+
+
 /// Maximum value in every RGB channel classifying a progress pixel as black.
 pub const SOLVER_PROGRESS_BLACK_CHANNEL_MAXIMUM: u8 = 32;
+
+
 /// Black-pixel share, in thousandths, required to classify another board.
 pub const SOLVER_PROGRESS_BLACK_FRACTION_PER_MILLE: u32 = 850;
+
+
 /// Progress-bar calibration shared by TriPeaks and Pyramid completion checks.
 pub const SHARED_SOLVER_PROGRESS_PROFILE: crate::game::GameProgressProfile =
     crate::game::GameProgressProfile {
@@ -601,115 +778,208 @@ pub const SHARED_SOLVER_PROGRESS_PROFILE: crate::game::GameProgressProfile =
         black_fraction_per_mille: SOLVER_PROGRESS_BLACK_FRACTION_PER_MILLE,
     };
 
+
 // Dialog buttons use a gold gradient rather than the exact two-colour halo.
 // The ordered stage machine also requires the correct scene class and band.
 /// Minimum 8-bit red channel accepted as a gold dialog-button pixel.
 pub const DIALOG_GOLD_RED_MINIMUM: u8 = 170;
+
+
 /// Minimum 8-bit green channel accepted as a gold dialog-button pixel.
 pub const DIALOG_GOLD_GREEN_MINIMUM: u8 = 105;
+
+
 /// Maximum 8-bit blue channel accepted as a gold dialog-button pixel.
 pub const DIALOG_GOLD_BLUE_MAXIMUM: u8 = 190;
+
+
 /// Minimum red-minus-green channel difference for a gold dialog button.
 pub const DIALOG_GOLD_RED_GREEN_DELTA_MINIMUM: u8 = 8;
+
+
 /// Minimum green-minus-blue channel difference for a gold dialog button.
 pub const DIALOG_GOLD_GREEN_BLUE_DELTA_MINIMUM: u8 = 18;
+
+
 /// Minimum gold share, in thousandths, inside a recognised dialog probe.
 pub const DIALOG_GOLD_REQUIRED_FRACTION_PER_MILLE: u32 = 80;
+
 
 // Convert a tableau gold-anchor coordinate to the intended card centre. The
 // stock action uses qcode D and must not use this offset.
 /// Horizontal guest-pixel offset from a TriPeaks gold anchor to the card centre.
 pub const CLICK_OFFSET_X: i32 = 61;
+
+
 /// Signed vertical guest-pixel offset from a TriPeaks halo to the card centre.
 pub const CLICK_OFFSET_Y: i32 = -97;
 
+
 /// Audited RGB halo colours used by the exact TriPeaks detector.
 pub const GOLD_RGB_CANDIDATES: [[u8; 3]; 2] = [[237, 208, 109], [236, 207, 106]];
+
+
 /// Maximum absolute 8-bit channel distance from an exact gold sample.
 pub const GOLD_CHANNEL_TOLERANCE: u8 = 2;
+
 
 // Compile-time gates remain independent so Multi-Step authority can be
 // withdrawn without disabling the single-operation path. Runtime execution
 // still revalidates fresh evidence before every planned input.
 /// Compile-time authority gate for a single guarded gameplay operation.
 pub const STEP_ONCE_INPUT_ENABLED: bool = true;
+
+
 /// Independent compile-time authority gate for guarded multi-step execution.
 pub const MULTI_STEP_INPUT_ENABLED: bool = true;
 
+
 /// Gameplay-operation limit for Step Once.
 pub const STEP_ONCE_ACTIONS: usize = 1;
+
+
 /// Zero sentinel meaning no numeric operation limit; STOP remains available.
 pub const UNBOUNDED_MULTI_STEP_ACTIONS: usize = 0;
+
+
 /// Default multi-step operation limit, using the unbounded sentinel.
 pub const DEFAULT_MULTI_STEP_ACTIONS: usize = UNBOUNDED_MULTI_STEP_ACTIONS;
+
+
+/// Finite initial operation budget for the first Klondike candidate.
+pub const KLONDIKE_DEFAULT_MULTI_STEP_ACTIONS: usize = 10;
+
+
+/// Largest selectable Klondike operation budget; zero never means continuous.
+pub const KLONDIKE_MAX_MULTI_STEP_ACTIONS: usize = 10_000;
+
 
 // Allow Microsoft Solitaire's action-specific animation to finish before the
 // first post-action screendump. These constants remain the session defaults;
 // the Params window can tune a bounded copy for the next guarded run.
 /// Smallest editable animation-settle interval in milliseconds.
 pub const MINIMUM_ANIMATION_SETTLE_DELAY_MS: u64 = 0;
+
+
 /// Largest editable animation-settle interval in milliseconds.
 pub const MAXIMUM_ANIMATION_SETTLE_DELAY_MS: u64 = 5_000;
+
+
 /// Default TriPeaks draw-to-capture settling interval in milliseconds.
 pub const DRAW_ANIMATION_SETTLE_DELAY_MS: u64 = 500;
+
+
 /// Default TriPeaks card-to-capture settling interval in milliseconds.
 pub const TABLEAU_ANIMATION_SETTLE_DELAY_MS: u64 = 750;
+
+
 /// Default shared board-redeal settling interval in milliseconds.
 pub const BOARD_REDEAL_SETTLE_DELAY_MS: u64 = 4_000;
+
+
 /// Default Pyramid Move/Recycle-to-capture interval in milliseconds.
 pub const PYRAMID_MOVE_SETTLE_DELAY_MS: u64 = 1_000;
+
+
 /// Default Pyramid card or pile click-to-capture interval in milliseconds.
 pub const PYRAMID_CARD_SETTLE_DELAY_MS: u64 = 2_000;
+
+
 /// Default Pyramid no-halo recapture interval in milliseconds.
 pub const PYRAMID_REOBSERVE_DELAY_MS: u64 = 1_000;
+
+
+/// Initial Klondike action settling interval; adjustable from observed gameplay.
+pub const KLONDIKE_SETTLE_DELAY_MS: u64 = 2_000;
+
+
+/// Initial Klondike input-free result recapture interval in milliseconds.
+pub const KLONDIKE_REOBSERVE_DELAY_MS: u64 = 1_000;
+
+
 /// Default TriPeaks draw settling interval as a typed duration.
 pub const DRAW_ANIMATION_SETTLE_DELAY: Duration =
     Duration::from_millis(DRAW_ANIMATION_SETTLE_DELAY_MS);
+
+
 /// Default TriPeaks tableau settling interval as a typed duration.
 pub const TABLEAU_ANIMATION_SETTLE_DELAY: Duration =
     Duration::from_millis(TABLEAU_ANIMATION_SETTLE_DELAY_MS);
+
+
 /// Default shared board-redeal settling interval as a typed duration.
 pub const BOARD_REDEAL_SETTLE_DELAY: Duration = Duration::from_millis(BOARD_REDEAL_SETTLE_DELAY_MS);
+
+
 // A missing next highlight can be a late animation or an in-board transition.
 // Re-observe without a fixed round limit until a target appears or STOP is
 // pressed; never repeat the guest input that preceded it.
 /// TriPeaks delay between fresh captures while waiting for the next halo.
 pub const NO_HIGHLIGHT_REOBSERVE_DELAY: Duration = Duration::from_millis(150);
+
+
 /// Number of boards in the calibrated shared Solver game flow.
 pub const BOARDS_PER_GAME: usize = 3;
+
+
 /// Settling interval after ordinary post-game control clicks.
 pub const POST_GAME_STAGE_DELAY: Duration = Duration::from_secs(1);
+
+
 // Give the score-counting transition time to finish after each centre click
 // before looking for Level Up OK. Other post-game controls keep their settle.
 /// Delay after score-skip clicks before looking for Level Up.
 pub const LEVEL_UP_APPEAR_DELAY: Duration = Duration::from_secs(3);
+
+
 /// Delay between observations of an unresolved board transition.
 pub const BOARD_TRANSITION_REOBSERVE_DELAY: Duration = Duration::from_secs(2);
+
+
 /// Maximum fresh captures while resolving one post-game stage.
 pub const POST_GAME_MAX_OBSERVATION_ROUNDS: usize = 20;
+
+
 /// Maximum independently recognised clicks for a post-game control.
 pub const POST_GAME_MAX_CLICK_ATTEMPTS: usize = 3;
+
+
 // The initial centre click counts towards this total. A confirmed QMP delivery
 // may be repeated only while Level Up is the expected stage and fresh captures
 // still do not recognise its OK control.
 /// Maximum score-skip clicks, including the initial central click.
 pub const SCORE_SKIP_MAX_CLICK_ATTEMPTS: usize = 3;
+
+
 /// Pause after absolute pointer movement before a gameplay mouse press.
 pub const POINTER_SETTLE_DELAY: Duration = Duration::from_millis(100);
+
+
 /// Ordinary gameplay mouse-button hold duration.
 pub const MOUSE_HOLD: Duration = Duration::from_millis(50);
+
+
 // Post-game controls proved susceptible to a normal 50 ms click. A deliberate
 // hold is paired with fresh visual transition verification before advancing.
 /// Longer button hold used for calibrated post-game controls.
 pub const POST_GAME_MOUSE_HOLD: Duration = Duration::from_millis(500);
+
+
 /// Button hold used when enabling Solver highlighting.
 pub const SOLVER_MOUSE_HOLD: Duration = Duration::from_millis(500);
+
+
 /// Draw-key hold duration between QMP key-down and key-up.
 pub const KEY_HOLD: Duration = Duration::from_millis(20);
+
+
 /// Read/write timeout for ordinary QMP protocol traffic.
 pub const QMP_IO_TIMEOUT: Duration = Duration::from_millis(750);
+
+
 /// Extended QMP timeout for PNG screendump generation.
 pub const QMP_SCREENDUMP_TIMEOUT: Duration = Duration::from_secs(5);
+
 
 /// Per-action durations copied into an immutable execution settings snapshot.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -726,10 +996,17 @@ pub struct AnimationSettleDelays {
     pub pyramid_card: Duration,
     /// Delay before a fresh Pyramid capture when no eligible halo is visible.
     pub pyramid_reobserve: Duration,
+    /// Klondike action-to-capture settling duration.
+    pub klondike_settle: Duration,
+    /// Delay between bounded input-free Klondike result observations.
+    pub klondike_reobserve: Duration,
 }
 
+
 impl AnimationSettleDelays {
-    /// Set TriPeaks and redeal durations from milliseconds, retaining Pyramid defaults.
+
+
+    /// Set TriPeaks and redeal durations, retaining the other modes' defaults.
     pub const fn from_millis(draw_ms: u64, tableau_ms: u64, board_redeal_ms: u64) -> Self {
         Self {
             draw: Duration::from_millis(draw_ms),
@@ -738,8 +1015,11 @@ impl AnimationSettleDelays {
             pyramid_move: Duration::from_millis(PYRAMID_MOVE_SETTLE_DELAY_MS),
             pyramid_card: Duration::from_millis(PYRAMID_CARD_SETTLE_DELAY_MS),
             pyramid_reobserve: Duration::from_millis(PYRAMID_REOBSERVE_DELAY_MS),
+            klondike_settle: Duration::from_millis(KLONDIKE_SETTLE_DELAY_MS),
+            klondike_reobserve: Duration::from_millis(KLONDIKE_REOBSERVE_DELAY_MS),
         }
     }
+
 
     /// Apply the session's Pyramid timing without changing TriPeaks timing.
     /// Clamp here as well as in Params so the worker snapshot stays bounded.
@@ -755,10 +1035,27 @@ impl AnimationSettleDelays {
         self.pyramid_reobserve = bounded(reobserve_ms);
         self
     }
+
+
+    /// Apply bounded Klondike timing without changing another mode's settings.
+    pub fn with_klondike_millis(mut self, settle_ms: u64, reobserve_ms: u64) -> Self {
+        let bounded = |milliseconds: u64| {
+            Duration::from_millis(milliseconds.clamp(
+                MINIMUM_ANIMATION_SETTLE_DELAY_MS,
+                MAXIMUM_ANIMATION_SETTLE_DELAY_MS,
+            ))
+        };
+        self.klondike_settle = bounded(settle_ms);
+        self.klondike_reobserve = bounded(reobserve_ms);
+        self
+    }
 }
 
+
 impl Default for AnimationSettleDelays {
-    /// Return the calibrated default values for a newly created settings snapshot.
+
+
+    /// Return defaults, including the unmeasured Klondike starting values.
     fn default() -> Self {
         Self {
             draw: DRAW_ANIMATION_SETTLE_DELAY,
@@ -767,16 +1064,20 @@ impl Default for AnimationSettleDelays {
             pyramid_move: Duration::from_millis(PYRAMID_MOVE_SETTLE_DELAY_MS),
             pyramid_card: Duration::from_millis(PYRAMID_CARD_SETTLE_DELAY_MS),
             pyramid_reobserve: Duration::from_millis(PYRAMID_REOBSERVE_DELAY_MS),
+            klondike_settle: Duration::from_millis(KLONDIKE_SETTLE_DELAY_MS),
+            klondike_reobserve: Duration::from_millis(KLONDIKE_REOBSERVE_DELAY_MS),
         }
     }
 }
+
 
 /// Immutable parameters captured when a Step Once or Multi-Step run begins.
 ///
 /// Keeping one snapshot prevents live UI edits from changing animation timing
 /// or the authority limit part-way through a run.
 /// An operation limit of zero means that the run continues across completed
-/// games until a fail-closed anomaly or the user pressing STOP.
+/// games until a fail-closed anomaly or the user pressing STOP in the legacy
+/// modes. Klondike independently rejects zero and excessive operation budgets.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct StepRunSettings {
     /// Action timings frozen when the run starts.
@@ -785,7 +1086,10 @@ pub struct StepRunSettings {
     operation_limit: usize,
 }
 
+
 impl StepRunSettings {
+
+
     /// Freeze timing and operation authority for one guarded run.
     pub const fn new(animation_delays: AnimationSettleDelays, operation_limit: usize) -> Self {
         Self {
@@ -794,23 +1098,29 @@ impl StepRunSettings {
         }
     }
 
+
     /// Return the immutable timing values captured when the run began.
     pub const fn animation_delays(self) -> AnimationSettleDelays {
         self.animation_delays
     }
+
 
     /// Return the raw operation limit; zero represents an unbounded run.
     pub const fn operation_limit(self) -> usize {
         self.operation_limit
     }
 
+
     /// Report whether this run uses the zero sentinel for unlimited operations.
     pub const fn is_unbounded(self) -> bool {
         self.operation_limit == UNBOUNDED_MULTI_STEP_ACTIONS
     }
 
+
     /// Return a finite operation count, or None for an unbounded run.
     pub const fn bounded_operation_limit(self) -> Option<usize> {
+
+
         if self.is_unbounded() {
             None
         } else {
@@ -819,18 +1129,25 @@ impl StepRunSettings {
     }
 }
 
+
 impl Default for StepRunSettings {
+
+
     /// Return the calibrated default values for a newly created settings snapshot.
     fn default() -> Self {
         Self::new(AnimationSettleDelays::default(), DEFAULT_MULTI_STEP_ACTIONS)
     }
 }
 
+
 /// Application-specific Unix socket basename used by default path discovery.
 pub const QMP_SOCKET_FILENAME: &str = "qmp-qemu-socket.sock";
 
+
 /// Resolve QMP_SOCKET_PATH first, then runtime-directory and temporary fallbacks.
 pub fn default_qmp_socket_path() -> PathBuf {
+
+
     // An explicit path keeps an existing QEMU launch usable during the socket
     // rename; otherwise use this application's own socket filename.
     if let Some(path) = env::var_os("QMP_SOCKET_PATH").filter(|path| !path.is_empty()) {
@@ -841,10 +1158,14 @@ pub fn default_qmp_socket_path() -> PathBuf {
         .filter(|runtime_dir| !runtime_dir.is_empty())
         .map(PathBuf::from)
         .unwrap_or_else(|| {
+
+
             if let Some(dir) = env::var_os("QMP_RUNTIME_DIR").filter(|d| !d.is_empty()) {
                 PathBuf::from(dir)
             } else if let Some(home) = env::var_os("HOME").filter(|h| !h.is_empty()) {
                 let home_tmp = PathBuf::from(home).join("tmp").join("qemu-runtime");
+
+
                 if home_tmp.is_dir() {
                     home_tmp
                 } else {
@@ -857,6 +1178,7 @@ pub fn default_qmp_socket_path() -> PathBuf {
         .join(QMP_SOCKET_FILENAME)
 }
 
+
 #[cfg(test)]
 mod tests {
     //! Calibration bounds, control ordering and immutable run-setting regressions.
@@ -867,12 +1189,14 @@ mod tests {
         geometry::{QmpPoint, pixel_point_to_qmp},
     };
 
+
     /// Assert that a non-empty calibrated rectangle fits the nominal guest frame.
     fn assert_rect_fits_frame(rect: PixelRect) {
         assert!(!rect.is_empty());
         assert!(rect.right() <= NOMINAL_FRAME_WIDTH);
         assert!(rect.bottom() <= NOMINAL_FRAME_HEIGHT);
     }
+
 
     /// Verify that action-specific defaults and custom timings are not conflated.
     #[test]
@@ -904,6 +1228,7 @@ mod tests {
         assert_eq!(POST_GAME_MOUSE_HOLD, Duration::from_millis(500));
         assert_eq!(SOLVER_MOUSE_HOLD, Duration::from_millis(500));
     }
+
 
     /// Verify timing snapshots and finite versus unbounded operation limits.
     #[test]
@@ -940,6 +1265,7 @@ mod tests {
         );
     }
 
+
     /// Verify Pyramid timing clamping and independent TriPeaks settings.
     #[test]
     fn pyramid_timing_is_bounded_and_snapshotted_without_changing_tripeaks() {
@@ -972,10 +1298,38 @@ mod tests {
         assert_eq!(next_run.board_redeal, Duration::from_millis(2_345));
     }
 
+
+    /// Verify that Klondike settings are bounded and independent in active runs.
+    #[test]
+    fn klondike_timing_and_budget_defaults_are_independent() {
+        let defaults = AnimationSettleDelays::default();
+        assert_eq!(defaults.klondike_settle, Duration::from_millis(2_000));
+        assert_eq!(defaults.klondike_reobserve, Duration::from_millis(1_000));
+        let next_run = AnimationSettleDelays::from_millis(123, 987, 2_345)
+            .with_pyramid_millis(500, 750, 900)
+            .with_klondike_millis(1_500, 250);
+        let active_run = StepRunSettings::new(next_run, KLONDIKE_DEFAULT_MULTI_STEP_ACTIONS);
+        let changed = next_run.with_klondike_millis(0, u64::MAX);
+        assert_eq!(active_run.animation_delays().klondike_settle, Duration::from_millis(1_500));
+        assert_eq!(active_run.animation_delays().klondike_reobserve, Duration::from_millis(250));
+        assert_eq!(changed.klondike_settle, Duration::ZERO);
+        assert_eq!(changed.klondike_reobserve, Duration::from_millis(5_000));
+        assert_eq!(changed.draw, next_run.draw);
+        assert_eq!(changed.tableau, next_run.tableau);
+        assert_eq!(changed.board_redeal, next_run.board_redeal);
+        assert_eq!(changed.pyramid_move, next_run.pyramid_move);
+        assert_eq!(changed.pyramid_card, next_run.pyramid_card);
+        assert_eq!(changed.pyramid_reobserve, next_run.pyramid_reobserve);
+        assert_eq!(active_run.bounded_operation_limit(), Some(10));
+        assert_eq!(KLONDIKE_MAX_MULTI_STEP_ACTIONS, 10_000);
+    }
+
+
     /// Return the last included pixel of a non-empty half-open rectangle.
     fn final_pixel(rect: PixelRect) -> PixelPoint {
         PixelPoint::new((rect.right() - 1) as i32, (rect.bottom() - 1) as i32)
     }
+
 
     /// Lock active geometry and detector thresholds to the audited capture.
     #[test]
@@ -997,6 +1351,7 @@ mod tests {
         assert_eq!(MINIMUM_TABLEAU_CHANGED_PIXELS, 2_048);
         assert_eq!(ACTION_CURSOR_EXCLUSION_HALF_SIZE, 48);
     }
+
 
     /// Verify stage ordering and the calibrated control variants and hit points.
     #[test]
@@ -1058,8 +1413,11 @@ mod tests {
         );
         assert_eq!(BOARD_TRANSITION_REOBSERVE_DELAY, Duration::from_secs(2));
 
+
         for target in POST_GAME_TARGETS {
             assert!(!target.control_variants.is_empty());
+
+
             for variant in target.control_variants {
                 assert_rect_fits_frame(variant.probe_bounds);
                 assert!(variant.click_point.x >= 0);
@@ -1069,6 +1427,7 @@ mod tests {
             }
         }
     }
+
 
     /// Verify half-open bounds of active TriPeaks detector regions.
     #[test]
@@ -1083,6 +1442,8 @@ mod tests {
         assert!(TARGET_STOCK.bottom() <= NOMINAL_FRAME_HEIGHT);
         assert!(TARGET_WASTE.right() <= NOMINAL_FRAME_WIDTH);
         assert!(TARGET_WASTE.bottom() <= NOMINAL_FRAME_HEIGHT);
+
+
         for rect in [
             STOCK_HALO_SCAN_BOUNDS,
             DRAW_EFFECT_BOUNDS,
@@ -1099,6 +1460,7 @@ mod tests {
         assert!(GAMEPLAY_FELT_PROBE_BOUNDS.right() <= TARGET_STOCK.x);
     }
 
+
     /// Verify that the TriPeaks scene gate uses the audited felt thresholds.
     #[test]
     fn gameplay_felt_probe_uses_conservative_green_relationships() {
@@ -1112,6 +1474,7 @@ mod tests {
         assert_eq!(GAMEPLAY_FELT_REQUIRED_FRACTION_PER_MILLE, 800);
         assert!(GAMEPLAY_FELT_REQUIRED_FRACTION_PER_MILLE <= 1_000);
     }
+
 
     /// Verify all TriPeaks slot coordinates against the audited row layout.
     #[test]
@@ -1155,6 +1518,7 @@ mod tests {
         );
     }
 
+
     /// Verify row indexing, probe envelopes and their relationships to card geometry.
     #[test]
     fn row_scan_profiles_match_the_calibrated_bands() {
@@ -1195,6 +1559,7 @@ mod tests {
         assert_eq!(FACE_UP_WHITE_SCAN_HEIGHT, 4);
         assert_eq!(HALO_GOLD_SCAN_HEIGHT, 2);
 
+
         for (row_index, profile) in TABLEAU_ROW_SCAN_PROFILES.iter().enumerate() {
             assert_eq!(profile.row as usize, row_index + 1);
             assert_eq!(profile.first_card_index, TABLEAU_ROW_STARTS[row_index]);
@@ -1219,16 +1584,20 @@ mod tests {
             );
             assert_eq!(profile.halo_scan_bounds.height, HALO_GOLD_SCAN_HEIGHT);
 
+
             for card in cards {
                 assert!(profile.face_probe_bounds.y >= card.card_bounds.y);
                 assert!(profile.face_probe_bounds.bottom() <= card.card_bounds.bottom());
                 assert!(profile.face_probe_bounds.bottom() <= card.click_point.y as u32);
             }
 
+
             if row_index > 0 {
                 let preceding = TABLEAU_ROW_SCAN_PROFILES[row_index - 1];
                 assert!(profile.face_probe_bounds.y >= preceding.halo_scan_bounds.bottom());
             }
+
+
             if let Some(next_row) = TABLEAU_ROW_SCAN_PROFILES.get(row_index + 1) {
                 let next_card_top = TABLEAU_CARD_REGIONS[next_row.first_card_index]
                     .card_bounds
@@ -1238,9 +1607,12 @@ mod tests {
         }
     }
 
+
     /// Verify that each TriPeaks halo anchor maps to its calibrated card centre.
     #[test]
     fn every_tableau_slot_preserves_the_anchor_to_click_invariant() {
+
+
         for regions in TABLEAU_CARD_REGIONS {
             let anchor = PixelPoint::new(
                 regions.card_bounds.x as i32 + 7,
@@ -1253,9 +1625,12 @@ mod tests {
         }
     }
 
+
     /// Verify card-region containment and QMP mapping for all calibrated slots.
     #[test]
     fn every_card_rank_halo_and_click_fits_the_frame() {
+
+
         for pixels in TABLEAU_CARD_REGIONS
             .iter()
             .chain([&STOCK_CARD_REGION, &WASTE_CARD_REGION])
@@ -1281,6 +1656,7 @@ mod tests {
         }
     }
 
+
     /// Verify distinct stock/waste geometry and their audited rank and halo bounds.
     #[test]
     fn stock_and_waste_regions_are_distinct_and_audited() {
@@ -1305,6 +1681,7 @@ mod tests {
         );
     }
 
+
     /// Verify shared toolbar click points map to the recorded QMP coordinates.
     #[test]
     fn control_targets_map_to_the_audited_qmp_coordinates() {
@@ -1313,6 +1690,7 @@ mod tests {
             (SHARED_UNDO_ALL_CONTROL, QmpPoint::new(22_527, 29_672)),
             (SHARED_UNDO_CONTROL, QmpPoint::new(28_671, 29_672)),
         ];
+
 
         for (target, expected_qmp) in cases {
             assert_rect_fits_frame(target.bounds);
@@ -1327,6 +1705,7 @@ mod tests {
             );
         }
     }
+
 
     /// Verify the sample halo anchor plus calibrated offsets gives the card centre.
     #[test]

@@ -10,6 +10,7 @@ use std::{
 
 use crate::parameters::{SNAPSHOT_LABEL_MAX_CHARS, SNAPSHOT_MAX_PNG_BYTES, SNAPSHOT_NAME_ATTEMPTS};
 
+
 /// Exclusive output-file reservation removed on drop unless saving commits it.
 pub struct SnapshotArtifact {
     /// Reserved filesystem path for this snapshot.
@@ -20,9 +21,14 @@ pub struct SnapshotArtifact {
     committed: bool,
 }
 
+
 impl SnapshotArtifact {
+
+
     /// Reserve a private, uniquely named file in an existing snapshot directory.
     pub fn reserve(directory: &Path, label: &str) -> Result<Self, String> {
+
+
         if !directory.is_dir() {
             return Err(format!(
                 "snapshot directory does not exist: {}",
@@ -31,8 +37,12 @@ impl SnapshotArtifact {
         }
         let timestamp = local_timestamp()?;
         let label = safe_label(label);
+
+
         for attempt in 0..SNAPSHOT_NAME_ATTEMPTS {
             let path = directory.join(snapshot_filename(&timestamp, &label, attempt));
+
+
             match OpenOptions::new()
                 .write(true)
                 .create_new(true)
@@ -60,8 +70,11 @@ impl SnapshotArtifact {
         ))
     }
 
+
     /// Write the original PNG bytes, synchronise them and retain the completed file.
     pub fn save(mut self, png: &[u8]) -> Result<PathBuf, String> {
+
+
         if png.is_empty() || png.len() > SNAPSHOT_MAX_PNG_BYTES {
             return Err(format!(
                 "captured PNG must be between 1 and {SNAPSHOT_MAX_PNG_BYTES} bytes"
@@ -81,9 +94,14 @@ impl SnapshotArtifact {
     }
 }
 
+
 impl Drop for SnapshotArtifact {
+
+
     /// Remove an unfinished reservation after closing its file handle.
     fn drop(&mut self) {
+
+
         if !self.committed {
             drop(self.file.take());
             let _ = fs::remove_file(&self.path);
@@ -91,10 +109,15 @@ impl Drop for SnapshotArtifact {
     }
 }
 
+
 /// Reduce a bounded user label to safe ASCII filename components.
 fn safe_label(raw: &str) -> String {
     let mut label = String::new();
+
+
     for ch in raw.chars().take(SNAPSHOT_LABEL_MAX_CHARS) {
+
+
         if ch.is_ascii_alphanumeric() || ch == '_' {
             label.push(ch);
         } else if !label.is_empty() && !label.ends_with('-') {
@@ -104,19 +127,25 @@ fn safe_label(raw: &str) -> String {
     label.trim_end_matches('-').to_owned()
 }
 
+
 /// Combine the timestamp, sanitised label and collision suffix.
 fn snapshot_filename(timestamp: &str, label: &str, attempt: usize) -> String {
+
+
     let name = if label.is_empty() {
         format!("qmp-qemu-socket {timestamp}")
     } else {
         format!("qmp-qemu-socket {timestamp} {label}")
     };
+
+
     if attempt == 0 {
         format!("{name}.png")
     } else {
         format!("{name}-{attempt:02}.png")
     }
 }
+
 
 /// Obtain and validate a local timestamp using a fixed argument to /usr/bin/date.
 fn local_timestamp() -> Result<String, String> {
@@ -126,6 +155,8 @@ fn local_timestamp() -> Result<String, String> {
         .arg("+%y%m%d %H%M%S")
         .output()
         .map_err(|error| format!("could not obtain the local date: {error}"))?;
+
+
     if !output.status.success() {
         return Err(format!("local date command failed: {}", output.status));
     }
@@ -134,6 +165,8 @@ fn local_timestamp() -> Result<String, String> {
         .trim()
         .to_owned();
     let bytes = timestamp.as_bytes();
+
+
     if bytes.len() != 13
         || bytes[6] != b' '
         || !bytes[..6].iter().all(u8::is_ascii_digit)
@@ -144,11 +177,13 @@ fn local_timestamp() -> Result<String, String> {
     Ok(timestamp)
 }
 
+
 #[cfg(test)]
 mod tests {
     //! Bounded naming, exact-byte saving and incomplete-reservation cleanup.
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
+
 
     /// Verify bounded label sanitisation and deterministic collision suffixes.
     #[test]
@@ -169,6 +204,7 @@ mod tests {
             "qmp-qemu-socket 260924 223501 B1-Move-01.png"
         );
     }
+
 
     /// Verify exact-byte saving, unique reservations and cleanup of an abandoned file.
     #[test]

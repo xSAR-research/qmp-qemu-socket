@@ -1,9 +1,9 @@
-# Development conventions for the 1.1.0 baseline
+# Development conventions for v1.2.1 candidate 1
 
-This release keeps the Solver-driven TriPeaks and Pyramid behaviour established
-in v1.0.4 candidate 6. The refactor prepares clear boundaries for additional
-game modes. It does not implement rank recognition, Dijkstra, A*, another game
-mode or a file-free capture backend.
+This candidate extends the committed v1.2.0 Solver-driven controller with
+Klondike. TriPeaks and Pyramid retain their established execution policies.
+Independent card-rank recognition, search and file-free capture are outside
+this candidate.
 
 ## Naming and documentation
 
@@ -34,6 +34,8 @@ item check. These checks complement review of what each comment actually says.
 and effect policy. The worker owns the QMP connection and cancellation state.
 Its `post_game` submodule shares the existing terminal-screen sequence; its
 `pyramid_execution` submodule contains Pyramid-specific result observation.
+Its `klondike_execution` submodule owns bounded Klondike runs and Solver recovery
+without entering the shared terminal controller.
 The UI delegates persistent log I/O to `session_log.rs`.
 
 When adding a mode, supply its profile/detection policy and preserve the shared
@@ -53,48 +55,41 @@ defaults, QMP command policy and manual PNG byte identity during a structural
 refactor. Keep fresh-HALO continuation distinct from proven action effect and
 from board/game completion. A progress-bar reading alone is not a win.
 
+## Source spacing
+
+Charlie's 30 September 2026 instruction requires two blank lines before function,
+struct, enum, trait, type, constant, static, impl, inline-module and macro
+definitions, above attached documentation and attributes. Statement blocks
+(for, while, loop, if, match and bare scope statements) receive the same spacing
+before the enclosing statement. Documentation remains attached to its item.
+
+Apply this convention to existing source as well as new code. Do not run
+`rustfmt` or `cargo fmt` for this candidate. Preserve `rust-toolchain.toml` and
+`rustfmt.toml`; changing those files or the global toolchain is not part of the
+spacing change. A whitespace-only pass must preserve parsed Rust tokens and
+comments and introduce no syntax errors.
+
 ## Local verification
 
-Run from the repository root using the pinned toolchain in `rust-toolchain.toml`.
-Each command is a separate gate; stop on errors.
+Run from the repository root with its selected nightly. Record `rustc --version`
+and `cargo --version`. Each check is independent; stop and retain diagnostics on
+the first error.
 
-```zsh
-echo 'STEP 1: Check formatting'
-cargo fmt --all -- --check
-```
-
-```zsh
-echo 'STEP 2: Check production compilation'
+```text
 cargo check --locked
-```
-
-```zsh
-echo 'STEP 3: Run regression tests'
 cargo test --locked
-```
-
-```zsh
-echo 'STEP 4: Generate private-item documentation'
 cargo doc --locked --no-deps --document-private-items
-```
-
-```zsh
-echo 'STEP 5: Check Clippy diagnostics'
 cargo clippy --locked --all-targets
-```
-
-```zsh
-echo 'STEP 6: Build the release application'
 cargo build --locked --release
 ```
 
-Rustdoc output includes private modules, so IDE hover documentation and generated
-documentation describe the same implementation contracts. `cargo doc` does not
-start the GUI or send guest input.
+No formatter check is included, by Charlie's explicit instruction. Build/test
+results from another host do not prove Beast installation or live guest input.
+The candidate delivery notes record the checks actually executed.
 
-After structural changes, verify both game modes on the Beast: Capture Frame,
-manual Capture PNG, one-step and bounded multi-step input, repeated pile pairs,
-STOP, board redeal and the post-game sequence. Check the output panel expanded
-and collapsed, and verify that Copy Output retains complete session history.
-Charlie signs off the candidate and pushes the tested source to main. That push
-becomes the exact base for the next patch cycle.
+On the Beast, confirm the launched executable identifies candidate 1. Verify
+Capture Frame, exact-byte manual Capture PNG, single-step and bounded multi-step,
+STOP and mode/socket invalidation. Exercise Klondike Draw 1, source transfers,
+RIGHT fan positions, recycle and late/no-HALO recovery. Preserve first-failure
+frames and session logs. Recheck the accepted TriPeaks/Pyramid behaviour before
+Charlie commits and pushes the candidate.

@@ -18,6 +18,7 @@ use crate::pyramid::PyramidTargetKind;
 
 use crate::parameters::{LEVEL_UP_CONTROL_VARIANTS, NEW_GAME_CONTROL_VARIANTS};
 
+
 /// Construct a zero-filled RGBA frame for tests that supply their own scene evidence.
 fn blank_frame(width: u32, height: u32) -> CapturedFrame {
     let stride = width as usize * 4;
@@ -30,6 +31,7 @@ fn blank_frame(width: u32, height: u32) -> CapturedFrame {
     }
 }
 
+
 /// Build a valid TriPeaks draw action using the supplied gold anchor.
 fn draw_prediction(anchor: crate::geometry::PixelPoint) -> PredictedAction {
     PredictedAction::Action(
@@ -39,6 +41,7 @@ fn draw_prediction(anchor: crate::geometry::PixelPoint) -> PredictedAction {
             .unwrap(),
     )
 }
+
 
 /// Check that compact UI labels distinguish draw input and each restart control.
 #[test]
@@ -62,12 +65,14 @@ fn concise_status_labels_preserve_action_and_post_game_meaning() {
     );
 }
 
+
 /// Check that TriPeaks and Pyramid remain enabled for the shared input controller.
 #[test]
 fn both_game_modes_allow_the_shared_guarded_input_path() {
     assert_eq!(ensure_input_authorised(GameMode::TriPeaks), Ok(()));
     assert_eq!(ensure_input_authorised(GameMode::Pyramid), Ok(()));
 }
+
 
 /// Check that an unrecognised Pyramid image cannot create an executable plan.
 #[test]
@@ -85,6 +90,7 @@ fn unknown_pyramid_capture_grants_no_action_authority() {
     assert!(plan_step(observation.prediction).is_err());
 }
 
+
 /// Check that Pyramid rejects captures outside the calibrated 1920×1080 contract.
 #[test]
 fn pyramid_gameplay_requires_the_exact_frame_contract() {
@@ -99,10 +105,13 @@ fn pyramid_gameplay_requires_the_exact_frame_contract() {
     );
 }
 
+
 /// Check every transition-phase combination blocks the ordinary repeated-pair exception.
 #[test]
 fn repeated_pile_halo_cannot_bypass_completion_or_redeal() {
     assert!(pyramid_halo_continuation_phase(false, false, false));
+
+
     for phase in [
         (true, false, false),
         (false, true, false),
@@ -115,6 +124,7 @@ fn repeated_pile_halo_cannot_bypass_completion_or_redeal() {
         assert!(!pyramid_halo_continuation_phase(phase.0, phase.1, phase.2));
     }
 }
+
 
 /// Check that animated full progress cannot confirm a redeal before two matching fresh observations.
 #[test]
@@ -129,11 +139,14 @@ fn pyramid_redeal_waits_through_progress_animation_then_requires_two_fresh_match
     assert!(confirmation.observe(true, Some(GameProgress::AnotherBoard)));
 }
 
+
 /// Check that missing cards or contradictory progress reset the two-frame redeal confirmation.
 #[test]
 fn pyramid_redeal_requires_consecutive_positive_cards_and_progress() {
     let mut confirmation = PyramidRedealConfirmation::default();
     assert!(!confirmation.observe(true, Some(GameProgress::AnotherBoard)));
+
+
     // A modal, missing reading, or contradictory bar breaks confirmation.
     for (cards, progress) in [
         (false, Some(GameProgress::AnotherBoard)),
@@ -144,11 +157,14 @@ fn pyramid_redeal_requires_consecutive_positive_cards_and_progress() {
         assert!(!confirmation.observe(true, Some(GameProgress::AnotherBoard)));
     }
     assert!(confirmation.observe(true, Some(GameProgress::AnotherBoard)));
+
+
     // Missing halo alone is never board evidence, however many captures.
     for _ in 0..POST_GAME_MAX_OBSERVATION_ROUNDS {
         assert!(!confirmation.observe(false, Some(GameProgress::AnotherBoard)));
     }
 }
+
 
 /// Check every guard needed before a single new-board Solver recovery click.
 #[test]
@@ -245,6 +261,7 @@ fn pyramid_solver_recovery_requires_a_verified_redeal_and_three_observations() {
     ));
 }
 
+
 /// Check consumed-card history persists within one context and clears when the socket changes.
 #[test]
 fn pyramid_consumed_slots_survive_same_context_and_reset_on_context_change() {
@@ -281,6 +298,7 @@ fn pyramid_consumed_slots_survive_same_context_and_reset_on_context_change() {
     assert_eq!(completed_boards, 0);
 }
 
+
 /// Check manual progress reset clears consumed Pyramid cards without changing game mode.
 #[test]
 fn explicit_progress_reset_clears_pyramid_consumed_slots() {
@@ -301,10 +319,12 @@ fn explicit_progress_reset_clears_pyramid_consumed_slots() {
     assert_eq!(completed_boards, 0);
 }
 
+
 /// Create a one-row TriPeaks evidence mask for scan-state tests.
 fn row_mask(row: u8) -> RowMask {
     RowMask::single_for(row, GameMode::TriPeaks.profile().tableau_rows.len() as u8).unwrap()
 }
+
 
 /// Wrap caller-supplied target and row evidence in a minimal gameplay observation.
 fn row_observation(
@@ -326,6 +346,7 @@ fn row_observation(
     }
 }
 
+
 /// Paint selected dialog probes gold in a non-gameplay frame for controller tests.
 fn dialog_observation(variants: &[PostGameControlVariant]) -> FrameObservation {
     // Build a non-gameplay frame whose selected dialog-control probes are gold.
@@ -339,9 +360,14 @@ fn dialog_observation(variants: &[PostGameControlVariant]) -> FrameObservation {
         pixels: vec![0; width * height * 4],
     };
 
+
     for variant in variants {
         let probe = variant.probe_bounds;
+
+
         for y in probe.y..probe.bottom() {
+
+
             for x in probe.x..probe.right() {
                 let offset = y as usize * frame.stride + x as usize * 4;
                 frame.pixels[offset..offset + 4].copy_from_slice(&[220, 170, 80, 255]);
@@ -357,6 +383,7 @@ fn dialog_observation(variants: &[PostGameControlVariant]) -> FrameObservation {
         game_progress: Some(GameProgress::GameComplete),
     }
 }
+
 
 /// Check repeated publication retains only the newest preview and records displaced frames.
 #[test]
@@ -395,6 +422,7 @@ fn latest_frame_slot_replaces_stale_full_resolution_previews() {
     assert!(slot.take().is_none());
 }
 
+
 /// Check a diagnostic failure frame cannot retain an actionable prediction.
 #[test]
 fn failed_action_publishes_latest_pixels_without_approving_a_target() {
@@ -418,6 +446,7 @@ fn failed_action_publishes_latest_pixels_without_approving_a_target() {
     assert!(diagnostic.frame.pixels.iter().all(|pixel| *pixel == 71));
 }
 
+
 /// Check completion events report committed board counts immediately and clamp the current board.
 #[test]
 fn board_progress_reports_committed_completion_without_waiting_for_redeal() {
@@ -429,6 +458,8 @@ fn board_progress_reports_committed_completion_without_waiting_for_redeal() {
     };
     let scan_state = TableauScanState::initial();
     send_board_progress(&sink, &scan_state, 1);
+
+
     match rx.try_recv().expect("board-completion event") {
         WorkerEvent::BoardProgress {
             current_board,
@@ -444,6 +475,7 @@ fn board_progress_reports_committed_completion_without_waiting_for_redeal() {
     }
 }
 
+
 /// Check TriPeaks draw diagnostics describe key input without inventing a pointer click.
 #[test]
 fn draw_plan_reports_key_only_input_without_a_pointer_target() {
@@ -455,6 +487,7 @@ fn draw_plan_reports_key_only_input_without_a_pointer_target() {
         Ok("Stable plan: TriPeaks stock DRAW via qcode D; pointer unchanged; gold anchor=(842, 870); commands=2, events=2.".to_owned())
     );
 }
+
 
 /// Check temporary capture creation location, private permissions and normal-cleanup deletion.
 #[test]
@@ -472,6 +505,7 @@ fn capture_artifact_is_private_beside_socket_and_removed_on_drop() {
     assert_eq!(capture_file.parent(), Some(test_directory.as_path()));
     assert!(capture_file.exists());
 
+
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -487,6 +521,7 @@ fn capture_artifact_is_private_beside_socket_and_removed_on_drop() {
     assert!(!capture_file.exists());
     fs::remove_dir(&test_directory).expect("remove worker test directory");
 }
+
 
 /// Check effect counting honours the channel threshold and ignores excluded cursor pixels.
 #[test]
@@ -515,6 +550,7 @@ fn effect_comparison_applies_threshold_and_cursor_exclusion() {
         Ok(2)
     );
 }
+
 
 /// Check lower-row evidence or any actionable halo prevents premature TriPeaks completion.
 #[test]
@@ -563,6 +599,7 @@ fn row_three_halo_forbids_completion_when_row_one_is_empty() {
     ));
 }
 
+
 /// Check Level Up supersedes progress evidence only after board completion is verified.
 #[test]
 fn level_up_dialog_overrides_only_a_verified_redeal_state() {
@@ -578,14 +615,19 @@ fn level_up_dialog_overrides_only_a_verified_redeal_state() {
     );
 }
 
+
 /// Check each calibrated gold probe authorises only its associated dialog stage.
 #[test]
 fn dialog_probes_cannot_authorise_a_different_post_game_stage() {
     let dialog_targets = &POST_GAME_TARGETS[..3];
 
+
     for (expected_index, expected_target) in dialog_targets.iter().copied().enumerate() {
+
+
         for expected_variant in expected_target.control_variants.iter().copied() {
             let observation = dialog_observation(&[expected_variant]);
+
 
             for (actual_index, actual_target) in dialog_targets.iter().copied().enumerate() {
                 assert_eq!(
@@ -596,6 +638,7 @@ fn dialog_probes_cannot_authorise_a_different_post_game_stage() {
         }
     }
 }
+
 
 /// Check disconnected legacy and raised Level Up matches produce an explicit ambiguity error.
 #[test]
@@ -609,15 +652,22 @@ fn level_up_layout_ambiguity_fails_closed() {
     assert!(error.contains("no guest input was sent"));
 }
 
+
 /// Check connected gold probes resolve one tall Level Up button to the proven lower click.
 #[test]
 fn one_tall_level_up_button_connects_both_probes_and_uses_proven_low_click() {
     let mut observation = dialog_observation(&LEVEL_UP_CONTROL_VARIANTS);
+
+
     for bounds in [
         LEVEL_UP_SHARED_BUTTON_BRIDGE,
         LEVEL_UP_SHARED_BUTTON_INTERIOR,
     ] {
+
+
         for y in bounds.y..bounds.bottom() {
+
+
             for x in bounds.x..bounds.right() {
                 let offset = y as usize * observation.frame.stride + x as usize * 4;
                 observation.frame.pixels[offset..offset + 4].copy_from_slice(&[220, 170, 80, 255]);
@@ -632,12 +682,17 @@ fn one_tall_level_up_button_connects_both_probes_and_uses_proven_low_click() {
     assert_eq!(known_post_game_stage(Some(&observation)), Ok(Some(0)));
 }
 
+
 /// Check gold in the probe gap alone cannot resolve an ambiguous Level Up button.
 #[test]
 fn a_gold_bridge_without_the_button_interior_cannot_authorise_a_click() {
     let mut observation = dialog_observation(&LEVEL_UP_CONTROL_VARIANTS);
     let bounds = LEVEL_UP_SHARED_BUTTON_BRIDGE;
+
+
     for y in bounds.y..bounds.bottom() {
+
+
         for x in bounds.x..bounds.right() {
             let offset = y as usize * observation.frame.stride + x as usize * 4;
             observation.frame.pixels[offset..offset + 4].copy_from_slice(&[220, 170, 80, 255]);
@@ -645,6 +700,7 @@ fn a_gold_bridge_without_the_button_interior_cannot_authorise_a_click() {
     }
     assert!(resolve_post_game_target(&observation, POST_GAME_TARGETS[0]).is_err());
 }
+
 
 /// Check the raised Level Up layout uses its calibrated click coordinate.
 #[test]
@@ -661,6 +717,7 @@ fn raised_level_up_resolves_its_own_click_point() {
         crate::geometry::PixelPoint::new(960, 770)
     );
 }
+
 
 /// Check a visible New Game can advance recovery when Level Up was absent.
 #[test]
@@ -682,6 +739,7 @@ fn new_game_can_be_verified_when_level_up_is_missing() {
     );
 }
 
+
 /// Check restart entry selects only proven Level Up/New Game stages and rejects ambiguity.
 #[test]
 fn recognised_terminal_stage_skips_only_the_completed_post_game_steps() {
@@ -695,6 +753,7 @@ fn recognised_terminal_stage_skips_only_the_completed_post_game_steps() {
     let ambiguous = dialog_observation(&LEVEL_UP_CONTROL_VARIANTS);
     assert!(known_post_game_stage(Some(&ambiguous)).is_err());
 }
+
 
 /// Check a still-visible earlier control is identified before input to a later stage.
 #[test]
@@ -715,6 +774,7 @@ fn stale_dialog_is_reported_before_the_expected_later_stage() {
     );
 }
 
+
 /// Check observation and confirmed-click retries stop exactly at their configured limits.
 #[test]
 fn post_game_retry_budgets_stop_at_the_configured_limits() {
@@ -734,9 +794,12 @@ fn post_game_retry_budgets_stop_at_the_configured_limits() {
     assert!(require_post_game_click_retry_budget(POST_GAME_MAX_CLICK_ATTEMPTS, "test").is_err());
 }
 
+
 /// Check the initial score-skip click consumes budget and a fourth attempt is refused.
 #[test]
 fn score_skip_budget_counts_the_initial_click_and_stops_before_a_fourth() {
+
+
     for completed_attempts in 0..SCORE_SKIP_MAX_CLICK_ATTEMPTS {
         assert_eq!(require_score_skip_click_budget(completed_attempts), Ok(()));
     }
@@ -746,6 +809,7 @@ fn score_skip_budget_counts_the_initial_click_and_stops_before_a_fourth() {
     assert!(error.contains("confirmed-delivery score-skip centre clicks"));
     assert!(error.contains("no further guest input was sent"));
 }
+
 
 /// Check score-skip repeats require a second non-gameplay observation while awaiting Level Up.
 #[test]
@@ -772,6 +836,7 @@ fn score_skip_retry_requires_an_input_free_follow_up_capture() {
     ));
 }
 
+
 /// Check invalid frame dimensions and effect rectangles return errors instead of indexing pixels.
 #[test]
 fn effect_comparison_rejects_mismatched_dimensions_and_bounds() {
@@ -794,6 +859,7 @@ fn effect_comparison_rejects_mismatched_dimensions_and_bounds() {
     );
 }
 
+
 /// Check cursor-sized changes alone cannot satisfy the configured action-effect threshold.
 #[test]
 fn cursor_sized_change_does_not_meet_the_material_effect_floor() {
@@ -807,7 +873,11 @@ fn cursor_sized_change_does_not_meet_the_material_effect_floor() {
         pixels: vec![0; width as usize * height as usize * 4],
     };
     let mut after = before.clone();
+
+
     for y in 0..48usize {
+
+
         for x in 0..32usize {
             let offset = y * after.stride + x * 4;
             after.pixels[offset..offset + 3].fill(255);
@@ -825,6 +895,7 @@ fn cursor_sized_change_does_not_meet_the_material_effect_floor() {
     assert_eq!(changed, 32 * 48);
     assert!(changed < crate::parameters::MINIMUM_TABLEAU_CHANGED_PIXELS);
 }
+
 
 /// Check capture-only validation cycles do not inflate attempted-input timing statistics.
 #[test]
@@ -847,6 +918,7 @@ fn run_profile_distinguishes_validation_cycles_from_input_attempts() {
     assert_eq!(profile.action_total_max, Some(Duration::from_millis(20)));
 }
 
+
 /// Check a pre-existing STOP request interrupts a wait immediately.
 #[test]
 fn cancellable_wait_observes_an_existing_stop_request() {
@@ -856,6 +928,7 @@ fn cancellable_wait_observes_an_existing_stop_request() {
     assert!(result.is_err());
     assert!(result.unwrap_err() < Duration::from_secs(1));
 }
+
 
 /// Check one unambiguous frame can update row hints without approving guest input.
 #[test]
@@ -870,6 +943,7 @@ fn single_capture_can_commit_non_authoritative_row_evidence() {
     assert!(reconcile_observation_series(&mut state, &observations));
     assert_eq!(state.active_rows(), row_three);
 }
+
 
 /// Check ambiguous halo analysis leaves the existing row scan unchanged.
 #[test]
@@ -888,6 +962,7 @@ fn ambiguous_single_capture_does_not_change_row_state() {
     ));
     assert_eq!(ambiguous_state, initial);
 }
+
 
 /// Check scan hints reset on socket/game changes and persist within the same context.
 #[test]
@@ -944,6 +1019,7 @@ fn socket_or_mode_change_resets_the_row_hint_but_same_context_preserves_it() {
     );
 }
 
+
 /// Check the manual reset restores initial row hints and zero completed boards.
 #[test]
 fn manual_progress_reset_clears_board_and_row_tracking() {
@@ -956,6 +1032,7 @@ fn manual_progress_reset_clears_board_and_row_tracking() {
     assert_eq!(state, TableauScanState::initial());
     assert_eq!(completed_boards, 0);
 }
+
 
 /// Check a new run resets a completed series while retaining partial-game progress.
 #[test]
@@ -979,4 +1056,32 @@ fn new_actionable_run_resets_only_a_completed_three_board_series() {
     ));
     assert_eq!(state, TableauScanState::initial());
     assert_eq!(completed_boards, 0);
+}
+
+
+/// Klondike unknown scenes cannot inherit the three-board progress detector or action authority.
+#[test]
+fn unknown_klondike_capture_has_no_progress_or_action_authority() {
+    let scan_state = TableauScanState::for_mode(GameMode::Klondike);
+    let (observation, _) = analyse_captured_frame(
+        blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT),
+        &scan_state,
+    ).expect("valid frame layout");
+    assert!(!observation.gameplay_scene);
+    assert_eq!(observation.game_progress, None);
+    assert_eq!(observation.prediction, PredictedAction::NoHighlight);
+}
+
+
+/// Klondike never emits the existing games' shared completed-board counters.
+#[test]
+fn klondike_does_not_publish_three_board_progress() {
+    let (events, receiver) = mpsc::channel();
+    let sink = WorkerEventSink {
+        events,
+        latest_frame: LatestFrameSlot::default(),
+        capture_context: Mutex::new(None),
+    };
+    send_board_progress(&sink, &TableauScanState::for_mode(GameMode::Klondike), 0);
+    assert!(receiver.try_recv().is_err());
 }

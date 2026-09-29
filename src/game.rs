@@ -1,5 +1,5 @@
 //! Shared game contracts for calibrated actions, scene evidence and completion progress.
-//! Mode-specific geometry lives in `tripeaks` and `pyramid`; execution lives in `worker`.
+//! Mode-specific geometry lives in each game's module; execution lives in `worker`.
 
 use std::{fmt, time::Duration};
 
@@ -12,6 +12,7 @@ use crate::{
     },
 };
 
+
 /// User-selectable game identity.
 ///
 /// Each mode supplies its own target detector and effect evidence while the
@@ -23,32 +24,47 @@ pub enum GameMode {
     TriPeaks,
     /// Seven-row tableau with Move, Left and Right priority targets.
     Pyramid,
+    /// Changing seven-column tableau, Draw 1 stock and fanned waste.
+    Klondike,
 }
 
+
 impl GameMode {
+
+
     /// Modes exposed by the game selector, with the default first.
-    pub const AVAILABLE: [Self; 2] = [Self::TriPeaks, Self::Pyramid];
+    pub const AVAILABLE: [Self; 3] = [Self::TriPeaks, Self::Pyramid, Self::Klondike];
+
 
     /// Return the stable game name used in controls and logs.
     pub const fn label(self) -> &'static str {
+
+
         match self {
             Self::TriPeaks => "TriPeaks",
             Self::Pyramid => "Pyramid",
+            Self::Klondike => "Klondike",
         }
     }
+
 
     /// Select the immutable geometry and detection policy for this game.
     pub const fn profile(self) -> &'static GameProfile {
+
+
         match self {
             Self::TriPeaks => &crate::tripeaks::PROFILE,
             Self::Pyramid => &crate::pyramid::PROFILE,
+            Self::Klondike => &crate::klondike::PROFILE,
         }
     }
 
+
     /// Whether this mode has enough approved evidence to send guest input.
     pub const fn input_authorised(self) -> bool {
-        matches!(self, Self::TriPeaks | Self::Pyramid)
+        matches!(self, Self::TriPeaks | Self::Pyramid | Self::Klondike)
     }
+
 
     /// Report whether the mode is limited to preview without authorised input.
     pub const fn calibration_only(self) -> bool {
@@ -56,12 +72,16 @@ impl GameMode {
     }
 }
 
+
 impl fmt::Display for GameMode {
+
+
     /// Format the game using its stable UI label.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(self.label())
     }
 }
+
 
 /// One labelled rectangle drawn over the read-only preview.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -73,6 +93,7 @@ pub struct PreviewTarget {
     /// RGB stroke colour used only for the preview overlay.
     pub colour: [u8; 3],
 }
+
 
 /// Parameters for the coarse gameplay-scene discriminator.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -89,6 +110,7 @@ pub struct GameplaySceneProfile {
     pub required_fraction_per_mille: u32,
 }
 
+
 /// Parameters for the visual three-board progress discriminator.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GameProgressProfile {
@@ -100,6 +122,7 @@ pub struct GameProgressProfile {
     pub black_fraction_per_mille: u32,
 }
 
+
 /// How actionable targets are selected from one immutable frame.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TargetSelectionPolicy {
@@ -108,6 +131,7 @@ pub enum TargetSelectionPolicy {
     /// Stop at the first hit in profile order, then scan rows lower-to-upper.
     FirstByPriority,
 }
+
 
 /// One lower-panel target checked before tableau rows.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -120,6 +144,7 @@ pub struct BottomTargetProfile {
     pub action: ActionSpecification,
 }
 
+
 /// Semantic identity of a calibrated tableau slot, independent of row shape.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TableauTarget {
@@ -130,6 +155,7 @@ pub struct TableauTarget {
     /// One-based card position within the row.
     pub column: u8,
 }
+
 
 /// Stable identity used to compare fresh pre/post Solver recommendations.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -145,24 +171,38 @@ pub enum ActionTarget {
     Tableau(TableauTarget),
     /// A target managed by Pyramid's independent detector.
     Pyramid(crate::pyramid::PyramidTargetKind),
+    /// A source block or stock operation managed by Klondike's detector.
+    Klondike(crate::klondike::KlondikeTarget),
 }
 
+
 impl ActionTarget {
+
+
     /// Identify which game calibration owns this action target.
     pub const fn mode(self) -> GameMode {
+
+
         match self {
             Self::Bottom { .. } | Self::Tableau(_) => GameMode::TriPeaks,
             Self::Pyramid(_) => GameMode::Pyramid,
+            Self::Klondike(_) => GameMode::Klondike,
         }
     }
 }
 
+
 impl fmt::Display for ActionTarget {
+
+
     /// Format the selected target with enough geometry to identify it in logs.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+
+
         match self {
             Self::Bottom { label, .. } => formatter.write_str(label),
             Self::Pyramid(kind) => write!(formatter, "Pyramid {kind}"),
+            Self::Klondike(kind) => write!(formatter, "Klondike {kind}"),
             Self::Tableau(target) => write!(
                 formatter,
                 "tableau row {}, column {}",
@@ -172,14 +212,16 @@ impl fmt::Display for ActionTarget {
     }
 }
 
+
 /// The one non-idempotent guest-input operation selected for an action.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InputOperation {
     /// Move to a calibrated point, press and release the left mouse button.
     Click(PixelPoint),
-    /// Press and release the TriPeaks Draw shortcut.
+    /// Press and release the confirmed Draw shortcut for TriPeaks or Klondike.
     PressDrawKey,
 }
+
 
 /// Per-action settling category selected from the immutable run settings.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -192,7 +234,10 @@ pub enum AnimationClass {
     PyramidMove,
     /// Pyramid tableau or lower-pile card match animation.
     PyramidCard,
+    /// Klondike draw, recycle or source-block transfer animation.
+    Klondike,
 }
+
 
 /// Whether seeing the same target after a verified effect is valid.
 ///
@@ -208,6 +253,7 @@ pub enum RepeatTargetPolicy {
     /// A verified action must no longer recommend the clicked tableau slot.
     MustClear,
 }
+
 
 /// Immutable delivery and verification data attached to a profile target.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -226,6 +272,7 @@ pub struct ActionSpecification {
     pub repeat_target: RepeatTargetPolicy,
 }
 
+
 /// A complete, typed Solver recommendation derived from one frame.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GuidedAction {
@@ -237,50 +284,68 @@ pub struct GuidedAction {
     pub specification: ActionSpecification,
 }
 
+
 impl GuidedAction {
+
+
     /// Return the single guest-input operation associated with the recommendation.
     pub const fn operation(self) -> InputOperation {
         self.specification.operation
     }
+
 
     /// Return the calibrated region used to measure the action's visual effect.
     pub const fn effect_bounds(self) -> PixelRect {
         self.specification.effect_bounds
     }
 
+
     /// Return the profile's required number of materially changed effect pixels.
     pub const fn minimum_changed_pixels(self) -> usize {
         self.specification.minimum_changed_pixels
     }
+
 
     /// Return whether the same recommendation may remain after a verified effect.
     pub const fn repeat_target_policy(self) -> RepeatTargetPolicy {
         self.specification.repeat_target
     }
 
+
     /// Select the configured delay for this action class from the run settings.
     pub const fn animation_settle_delay(self, delays: AnimationSettleDelays) -> Duration {
+
+
         match self.specification.animation_class {
             AnimationClass::Draw => delays.draw,
             AnimationClass::Tableau => delays.tableau,
             AnimationClass::PyramidMove => delays.pyramid_move,
             AnimationClass::PyramidCard => delays.pyramid_card,
+            AnimationClass::Klondike => delays.klondike_settle,
         }
     }
 
+
     /// Total the deliberate key hold or pointer settling and mouse hold time.
     pub fn intentional_input_wait(self) -> Duration {
+
+
         match self.operation() {
             InputOperation::PressDrawKey => KEY_HOLD,
             InputOperation::Click(_) => POINTER_SETTLE_DELAY + MOUSE_HOLD,
         }
     }
 
+
     /// Return the cursor exclusion square for click effects when the profile requests it.
     pub const fn effect_exclusion_bounds(self) -> Option<PixelRect> {
+
+
         let InputOperation::Click(click_point) = self.operation() else {
             return None;
         };
+
+
         if !self.specification.exclude_cursor_from_effect {
             return None;
         }
@@ -294,22 +359,29 @@ impl GuidedAction {
         ))
     }
 
+
     /// Count QMP commands in one successful, unretried input sequence.
     pub const fn qmp_command_count(self) -> usize {
+
+
         match self.operation() {
             InputOperation::PressDrawKey => 2,
             InputOperation::Click(_) => 3,
         }
     }
 
+
     /// Count guest input events carried by one successful input sequence.
     pub const fn qmp_event_count(self) -> usize {
+
+
         match self.operation() {
             InputOperation::PressDrawKey => 2,
             InputOperation::Click(_) => 4,
         }
     }
 }
+
 
 /// The smallest game boundary needed by the guarded controller.
 #[derive(Clone, Copy, Debug)]
@@ -342,19 +414,26 @@ pub struct GameProfile {
     pub tableau_click_offset: PixelPoint,
     /// TriPeaks effect threshold applied to a clicked tableau card.
     pub minimum_tableau_changed_pixels: usize,
-    /// Number of completed boards expected within a game.
+    /// Number of completed boards expected in established terminal controllers.
+    /// Klondike does not read this field or infer completion from it.
     pub boards_per_game: usize,
 }
 
+
 impl GameProfile {
+
+
     /// Return the number of tableau rows represented by the selected mode.
     pub const fn row_count(self) -> u8 {
         self.tableau_row_count
     }
 
+
     /// Build the valid row-bit mask used by calibration and stale-state tests.
     #[cfg(test)]
     pub const fn valid_row_bits(self) -> u8 {
+
+
         if self.row_count() >= u8::BITS as u8 {
             u8::MAX
         } else {
@@ -362,10 +441,13 @@ impl GameProfile {
         }
     }
 
+
     /// Resolve a TriPeaks slot index to its one-based row and column, rejecting missing slots.
     pub fn tableau_target(self, slot_index: usize) -> Option<TableauTarget> {
         self.tableau_rows.iter().find_map(|row| {
             let end = row.card_end_index();
+
+
             if slot_index < row.first_card_index || slot_index >= end {
                 return None;
             }
@@ -377,6 +459,7 @@ impl GameProfile {
             })
         })
     }
+
 
     /// Build the canonical TriPeaks click and effect specification for a calibrated slot.
     pub fn tableau_action(self, slot_index: usize, anchor: PixelPoint) -> Option<GuidedAction> {
@@ -396,6 +479,7 @@ impl GameProfile {
         })
     }
 
+
     /// Build a typed lower-panel action from a checked profile index and observed anchor.
     pub fn bottom_action(self, index: usize, anchor: PixelPoint) -> Option<GuidedAction> {
         let target = *self.bottom_targets.get(index)?;
@@ -411,6 +495,7 @@ impl GameProfile {
     }
 }
 
+
 /// Visual interpretation of the shared progress bar, not independent proof of completion.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GameProgress {
@@ -420,27 +505,49 @@ pub enum GameProgress {
     GameComplete,
 }
 
+
 #[cfg(test)]
 mod tests {
-    //! Profile boundaries and action policies shared by the two game modes.
+    //! Profile boundaries and action policies shared by the game modes.
     use super::*;
+
+
+    /// Klondike cannot inherit the established modes' three-board progress authority.
+    #[test]
+    fn klondike_has_independent_geometry_and_no_shared_progress() {
+        let profile = GameMode::Klondike.profile();
+        assert_eq!(profile.label, "Klondike");
+        assert!(profile.game_progress.is_none());
+        assert!(profile.tableau_cards.is_empty());
+        assert!(profile.tableau_rows.is_empty());
+        let draw = crate::klondike::canonical_action(crate::klondike::KlondikeTarget::Draw)
+            .expect("Draw has a canonical action");
+        assert_eq!(draw.target.mode(), GameMode::Klondike);
+        assert_eq!(draw.operation(), InputOperation::PressDrawKey);
+    }
+
+
     /// Keep the initial mode, selectable modes and authorised calibration contracts stable.
 
     #[test]
-    fn tripeaks_remains_the_default_with_two_executable_modes() {
+    fn tripeaks_remains_the_default_with_three_executable_modes() {
         let mode = GameMode::default();
         let profile = mode.profile();
 
         assert_eq!(mode, GameMode::TriPeaks);
-        assert_eq!(GameMode::AVAILABLE, [GameMode::TriPeaks, GameMode::Pyramid]);
+        assert_eq!(GameMode::AVAILABLE, [GameMode::TriPeaks, GameMode::Pyramid, GameMode::Klondike]);
         assert!(GameMode::TriPeaks.input_authorised());
         assert!(!GameMode::TriPeaks.calibration_only());
         assert!(GameMode::Pyramid.input_authorised());
         assert!(!GameMode::Pyramid.calibration_only());
+        assert!(GameMode::Klondike.input_authorised());
+        assert!(!GameMode::Klondike.calibration_only());
         assert_eq!(profile.label, "TriPeaks");
         assert_eq!(profile.valid_row_bits(), 0b1111);
         assert_eq!(profile.initial_active_rows, 0b1000);
     }
+
+
     /// Keep Pyramid target analysis separate while sharing the accepted progress probe.
 
     #[test]
@@ -462,6 +569,8 @@ mod tests {
             GameMode::Pyramid
         );
     }
+
+
     /// Check TriPeaks repeat policies and per-action configured settling delays.
 
     #[test]

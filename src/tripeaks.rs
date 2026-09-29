@@ -19,6 +19,7 @@ use crate::{
     },
 };
 
+
 /// Board, stock and waste overlays in native TriPeaks frame coordinates.
 pub const PREVIEW_TARGETS: [PreviewTarget; 3] = [
     PreviewTarget {
@@ -38,6 +39,7 @@ pub const PREVIEW_TARGETS: [PreviewTarget; 3] = [
     },
 ];
 
+
 /// TriPeaks stock halo policy: send Draw once, then verify its calibrated effect.
 pub const BOTTOM_TARGETS: [BottomTargetProfile; 1] = [BottomTargetProfile {
     label: "TriPeaks stock DRAW",
@@ -51,6 +53,7 @@ pub const BOTTOM_TARGETS: [BottomTargetProfile; 1] = [BottomTargetProfile {
         repeat_target: RepeatTargetPolicy::Allowed,
     },
 }];
+
 
 /// Complete TriPeaks scene, target, row-scan and action calibration.
 pub const PROFILE: GameProfile = GameProfile {
@@ -76,6 +79,7 @@ pub const PROFILE: GameProfile = GameProfile {
     minimum_tableau_changed_pixels: MINIMUM_TABLEAU_CHANGED_PIXELS,
     boards_per_game: BOARDS_PER_GAME,
 };
+
 
 /// Compile-time checks for the fixed frame size, target counts and three-board game.
 const _: () = {
