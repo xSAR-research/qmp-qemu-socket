@@ -1,6 +1,9 @@
+//! TriPeaks profile assembled from the audited geometry and shared game contracts.
+//! The worker and tracker consume this immutable profile without owning its calibration.
+
 use crate::{
     game::{
-        ActionSpecification, AnimationClass, BottomTargetProfile, GameMode, GameProfile,
+        ActionSpecification, AnimationClass, BottomTargetProfile, GameProfile,
         GameplaySceneProfile, InputOperation, PreviewTarget, RepeatTargetPolicy,
         TargetSelectionPolicy,
     },
@@ -16,6 +19,7 @@ use crate::{
     },
 };
 
+/// Board, stock and waste overlays in native TriPeaks frame coordinates.
 pub const PREVIEW_TARGETS: [PreviewTarget; 3] = [
     PreviewTarget {
         label: "target-board",
@@ -34,6 +38,7 @@ pub const PREVIEW_TARGETS: [PreviewTarget; 3] = [
     },
 ];
 
+/// TriPeaks stock halo policy: send Draw once, then verify its calibrated effect.
 pub const BOTTOM_TARGETS: [BottomTargetProfile; 1] = [BottomTargetProfile {
     label: "TriPeaks stock DRAW",
     halo_scan_bounds: STOCK_HALO_SCAN_BOUNDS,
@@ -47,8 +52,8 @@ pub const BOTTOM_TARGETS: [BottomTargetProfile; 1] = [BottomTargetProfile {
     },
 }];
 
+/// Complete TriPeaks scene, target, row-scan and action calibration.
 pub const PROFILE: GameProfile = GameProfile {
-    mode: GameMode::TriPeaks,
     label: "TriPeaks",
     frame_width: NOMINAL_FRAME_WIDTH,
     frame_height: NOMINAL_FRAME_HEIGHT,
@@ -72,6 +77,7 @@ pub const PROFILE: GameProfile = GameProfile {
     boards_per_game: BOARDS_PER_GAME,
 };
 
+/// Compile-time checks for the fixed frame size, target counts and three-board game.
 const _: () = {
     assert!(PROFILE.frame_width == 1_920);
     assert!(PROFILE.frame_height == 1_080);

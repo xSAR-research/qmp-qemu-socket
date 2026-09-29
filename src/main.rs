@@ -1,6 +1,9 @@
+//! Desktop QMP controller with shared capture/input and per-game HALO policies.
+
+#![warn(missing_docs, clippy::missing_docs_in_private_items)]
+
 mod app;
 mod capture;
-mod card_reader;
 mod cards;
 mod detector;
 mod game;
@@ -8,6 +11,7 @@ mod geometry;
 mod parameters;
 mod pyramid;
 mod qmp;
+mod session_log;
 mod snapshot;
 mod stepper;
 mod tracker;
@@ -18,8 +22,10 @@ use app::QmpQemuSocketApp;
 use eframe::egui;
 use parameters::{APP_NAME, INITIAL_WINDOW_HEIGHT, INITIAL_WINDOW_WIDTH, RELEASE_LABEL};
 
+/// Configure the native window and run the controller until its viewport closes.
+///
+/// Returns the platform error if eframe cannot create or run the native window.
 fn main() -> eframe::Result {
-    // Configure the native window and launch the application.
     let window_title = format!("{APP_NAME} — {RELEASE_LABEL}");
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()

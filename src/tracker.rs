@@ -1,3 +1,6 @@
+//! Mode-aware frame analysis and worker-owned tableau scan hints.
+//! TriPeaks uses bounded row probes; Pyramid delegates to its independent detector.
+
 use thiserror::Error;
 
 use crate::{
@@ -18,11 +21,17 @@ use crate::{
 /// Bit zero represents the top row. A profile may use at most eight rows;
 /// construction keeps every bit outside that profile clear.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct RowMask(u8);
+pub struct RowMask(
+    /// Selected rows, with bit zero representing the top row.
+    u8,
+);
 
 impl RowMask {
+    /// No selected rows; usable as an accumulator but not an active scan state.
     pub const EMPTY: Self = Self(0);
 
+    /// Build a single-row mask for fixtures, rejecting zero and rows outside the profile.
+    #[cfg(test)]
     pub const fn single_for(row: u8, row_count: u8) -> Option<Self> {
         if row == 0 || row > row_count || row > u8::BITS as u8 {
             None
@@ -31,15 +40,7 @@ impl RowMask {
         }
     }
 
-    pub const fn from_bits_for(bits: u8, row_count: u8) -> Option<Self> {
-        let valid = Self::all_for(row_count).0;
-        if bits & !valid == 0 {
-            Some(Self(bits))
-        } else {
-            None
-        }
-    }
-
+    /// Set every supported one-based row bit, with at most eight rows represented.
     pub const fn all_for(row_count: u8) -> Self {
         if row_count >= u8::BITS as u8 {
             Self(u8::MAX)
@@ -50,14 +51,18 @@ impl RowMask {
         }
     }
 
+    /// Expose the compact bit representation for regression-test invariant checks.
+    #[cfg(test)]
     pub const fn bits(self) -> u8 {
         self.0
     }
 
+    /// Report whether no rows are selected.
     pub const fn is_empty(self) -> bool {
         self.0 == 0
     }
 
+    /// Test a one-based row, returning false for rows outside the eight-bit mask.
     pub const fn contains(self, row: u8) -> bool {
         if row == 0 || row > u8::BITS as u8 {
             false
@@ -66,6 +71,7 @@ impl RowMask {
         }
     }
 
+    /// Add a supported row and report whether the mask changed.
     pub fn insert(&mut self, row: u8) -> bool {
         if row == 0 || row > u8::BITS as u8 {
             return false;
@@ -76,14 +82,17 @@ impl RowMask {
         self.0 != previous
     }
 
+    /// Combine selected rows from both masks.
     pub const fn union(self, other: Self) -> Self {
         Self(self.0 | other.0)
     }
 
+    /// Keep only rows absent from the other mask.
     pub const fn difference(self, other: Self) -> Self {
         Self(self.0 & !other.0)
     }
 
+    /// Return the topmost selected row within the profile's row count.
     pub const fn row_upper_for(self, row_count: u8) -> Option<u8> {
         let mut row = 1;
         while row <= row_count {
@@ -95,6 +104,7 @@ impl RowMask {
         None
     }
 
+    /// Return the lowest selected row within the profile's row count.
     pub const fn row_lower_for(self, row_count: u8) -> Option<u8> {
         let mut row = row_count;
         while row > 0 {
@@ -106,6 +116,7 @@ impl RowMask {
         None
     }
 
+    /// Iterate selected profile rows from the bottom towards the top.
     fn rows_lower_to_upper(self, row_count: u8) -> impl Iterator<Item = u8> {
         (1..=row_count).rev().filter(move |row| self.contains(*row))
     }
@@ -118,8 +129,11 @@ impl RowMask {
 /// halo fallback remains available whenever the row window finds no target.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TableauScanState {
+    /// Selected calibration and detector dispatch.
     mode: GameMode,
+    /// Non-empty optimisation hint for tableau row scanning.
     active_rows: RowMask,
+    /// Pyramid-specific record of clicked tableau targets.
     pub pyramid: PyramidBoardState,
 }
 
@@ -129,6 +143,7 @@ impl TableauScanState {
         Self::for_mode(GameMode::TriPeaks)
     }
 
+    /// Create fresh scan hints and an empty Pyramid action record for the selected mode.
     pub const fn for_mode(mode: GameMode) -> Self {
         let profile = mode.profile();
         Self {
@@ -138,11 +153,10 @@ impl TableauScanState {
         }
     }
 
+    /// Construct a non-empty TriPeaks scan state for stale-hint regression fixtures.
+    #[cfg(test)]
     pub const fn from_active_rows(active_rows: RowMask) -> Option<Self> {
-        Self::from_active_rows_for_mode(GameMode::TriPeaks, active_rows)
-    }
-
-    pub const fn from_active_rows_for_mode(mode: GameMode, active_rows: RowMask) -> Option<Self> {
+        let mode = GameMode::TriPeaks;
         let profile = mode.profile();
         if active_rows.is_empty() || active_rows.bits() & !profile.valid_row_bits() != 0 {
             None
@@ -155,10 +169,12 @@ impl TableauScanState {
         }
     }
 
+    /// Identify the game whose calibration owns this scan state.
     pub const fn mode(self) -> GameMode {
         self.mode
     }
 
+    /// Return the current row hint without granting authority to send input.
     pub const fn active_rows(self) -> RowMask {
         self.active_rows
     }
@@ -205,6 +221,7 @@ impl TableauScanState {
 }
 
 impl Default for TableauScanState {
+    /// Start with the default TriPeaks bottom-row scan hint.
     fn default() -> Self {
         Self::initial()
     }
@@ -213,6 +230,7 @@ impl Default for TableauScanState {
 /// Prediction plus independently observed row occupancy for this frame.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FrameAnalysis {
+    /// Current Solver recommendation or a reason no unique action was selected.
     pub prediction: PredictedAction,
     /// A non-empty proposed mask, or `None` when the frame provided no safe
     /// evidence with which to replace/extend the worker's current hint.
@@ -232,80 +250,100 @@ pub enum PredictedAction {
     /// The frame is retained for positioning work, but this mode has no
     /// approved detector or guest-input geometry.
     CalibrationOnly {
+        /// Mode whose calibration is available for preview only.
         mode: GameMode,
     },
+    /// No eligible Solver halo was found in this frame.
     NoHighlight,
+    /// One calibrated action selected by the mode's target policy.
     Action(GuidedAction),
+    /// More than one eligible target exists under a uniqueness policy.
     Ambiguous {
+        /// Total competing targets observed in this immutable frame.
         highlight_count: usize,
     },
 }
 
+/// Frame or calibrated-geometry failure that prevents a trustworthy recommendation.
 #[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
 pub enum TrackerError {
+    /// The capture size differs from the selected game calibration.
     #[error(
         "captured frame must be exactly {expected_width}x{expected_height}, got {actual_width}x{actual_height}"
     )]
     UnexpectedFrameDimensions {
+        /// Width required by the selected game profile.
         expected_width: u32,
+        /// Height required by the selected game profile.
         expected_height: u32,
+        /// Width reported by the captured frame.
         actual_width: u32,
+        /// Height reported by the captured frame.
         actual_height: u32,
     },
+    /// Captured storage or stride cannot represent the declared image.
     #[error("captured frame has an invalid pixel layout")]
     InvalidFrameLayout,
+    /// A checked detector rejected the named probe.
     #[error("{target} halo detection failed: {source}")]
     HaloDetection {
+        /// Probe label that identifies the failed detector.
         target: &'static str,
+        /// Underlying bounds, calibration or storage error.
         #[source]
         source: HaloDetectionError,
     },
+    /// A profile bottom-target index cannot produce an action.
     #[error("bottom-target calibration index {index} has no valid action")]
-    MissingBottomTarget { index: usize },
+    MissingBottomTarget {
+        /// Missing entry in the profile's bottom-target array.
+        index: usize,
+    },
+    /// A profile tableau slot cannot produce a calibrated action.
     #[error("tableau calibration index {index} has no valid position")]
-    MissingTableauPosition { index: usize },
+    MissingTableauPosition {
+        /// Missing entry in the calibrated tableau slots.
+        index: usize,
+    },
+    /// Computing the calibrated halo baseline overflowed.
     #[error("{target} calibrated halo-line coordinate overflows")]
-    HaloLineOverflow { target: &'static str },
+    HaloLineOverflow {
+        /// Probe label reported in the error.
+        target: &'static str,
+    },
+    /// A detected halo does not lie on its calibrated baseline.
     #[error(
         "{target} gold run begins at y={actual_y}, not the calibrated halo line y={expected_y}"
     )]
     UnexpectedHaloLine {
+        /// Probe label whose halo baseline was violated.
         target: &'static str,
+        /// Observed or halo-derived Y coordinate.
         actual_y: i32,
+        /// Audited Y coordinate required by the profile.
         expected_y: i32,
     },
+    /// Adding the audited halo-to-click offset overflowed.
     #[error("tableau gold anchor plus the audited click offset overflows")]
     ClickOffsetOverflow,
+    /// The halo anchor would produce a non-canonical click point.
     #[error(
         "tableau gold anchor maps to ({actual_x}, {actual_y}), not calibrated centre ({expected_x}, {expected_y})"
     )]
     ClickOffsetMismatch {
+        /// X coordinate derived from the observed halo and click offset.
         actual_x: i32,
+        /// Observed or halo-derived Y coordinate.
         actual_y: i32,
+        /// Audited click-centre X coordinate.
         expected_x: i32,
+        /// Audited Y coordinate required by the profile.
         expected_y: i32,
     },
 }
 
-/// Predict the action identified by the Solver halo in one calibrated frame.
-///
-/// The frame must match the audited 1920x1080 profile exactly. Every
-/// qualifying highlight is collected before a result is selected: zero is an
-/// observation, one is actionable metadata, and more than one is explicitly
-/// ambiguous. No guest input is performed here.
-pub fn analyse_frame(frame: &CapturedFrame) -> Result<PredictedAction, TrackerError> {
-    Ok(analyse_frame_with_state(frame, &TableauScanState::initial())?.prediction)
-}
-
-/// Report whether a frame still shows the green gameplay board.
-///
-/// This gate is intentionally separate from [`analyse_frame_with_state`]. The
-/// worker applies it before accepting a halo, while read-only analysis remains
-/// available for diagnostics and detector tests.
-pub fn is_gameplay_scene(frame: &CapturedFrame) -> Result<bool, TrackerError> {
-    is_gameplay_scene_for_mode(frame, GameMode::TriPeaks)
-}
-
+/// Validate frame geometry and apply the selected mode's independent scene gate.
+/// Halo analysis remains available separately for read-only diagnostics.
 pub fn is_gameplay_scene_for_mode(
     frame: &CapturedFrame,
     mode: GameMode,
@@ -349,10 +387,12 @@ pub fn analyse_frame_with_state(
             }
         });
     }
-    analyse_frame_for_profile(frame, state, profile)
+    analyse_tripeaks_frame_for_profile(frame, state, profile)
 }
 
-fn analyse_frame_for_profile(
+/// Collect TriPeaks bottom and tableau candidates with row-hint reconciliation.
+/// The supplied profile controls uniqueness versus priority selection.
+fn analyse_tripeaks_frame_for_profile(
     frame: &CapturedFrame,
     state: &TableauScanState,
     profile: &GameProfile,
@@ -500,6 +540,7 @@ fn analyse_frame_for_profile(
     })
 }
 
+/// Count individually exposed cards inside one valid calibrated TriPeaks row.
 fn count_face_up_cards_in_row(
     frame: &CapturedFrame,
     game: &GameProfile,
@@ -524,6 +565,7 @@ fn count_face_up_cards_in_row(
     Ok(count)
 }
 
+/// Check the white probe band of one valid calibrated TriPeaks row.
 fn row_has_face_up_card(
     frame: &CapturedFrame,
     game: &GameProfile,
@@ -538,6 +580,7 @@ fn row_has_face_up_card(
     })
 }
 
+/// Scan each slot of an unvisited TriPeaks row and retain its calibrated halo candidates.
 fn scan_tableau_row(
     frame: &CapturedFrame,
     game: &GameProfile,
@@ -568,6 +611,7 @@ fn scan_tableau_row(
     Ok(())
 }
 
+/// Verify the TriPeaks halo-to-click offset before constructing a canonical action.
 fn tableau_candidate(
     game: &GameProfile,
     index: usize,
@@ -601,6 +645,7 @@ fn tableau_candidate(
         .ok_or(TrackerError::MissingTableauPosition { index })
 }
 
+/// Require the selected profile's exact dimensions and a complete pixel layout.
 fn validate_frame(frame: &CapturedFrame, profile: &GameProfile) -> Result<(), TrackerError> {
     if (frame.width, frame.height) != (profile.frame_width, profile.frame_height) {
         return Err(TrackerError::UnexpectedFrameDimensions {
@@ -616,6 +661,7 @@ fn validate_frame(frame: &CapturedFrame, profile: &GameProfile) -> Result<(), Tr
     Ok(())
 }
 
+/// Detect a TriPeaks halo and validate its returned Y baseline before using its anchor.
 fn calibrated_tableau_halo_anchor(
     frame: &CapturedFrame,
     regions: CardRegionPixels,
@@ -636,6 +682,7 @@ fn calibrated_tableau_halo_anchor(
     Ok(Some(hit.anchor))
 }
 
+/// Reject overflow or a halo anchor outside the audited exterior baseline.
 fn validate_calibrated_halo_y(
     regions: CardRegionPixels,
     target: &'static str,
@@ -661,6 +708,7 @@ fn validate_calibrated_halo_y(
 
 #[cfg(test)]
 mod tests {
+    //! Frame fixtures exercise calibrated targets, mode dispatch and stale-hint recovery.
     use super::*;
     use crate::{
         capture::PixelFormat,
@@ -670,6 +718,7 @@ mod tests {
             TABLEAU_CARD_REGIONS, TABLEAU_ROW_SCAN_PROFILES,
         },
     };
+    /// Keep Pyramid click history independent from row reconciliation and reset it per board.
 
     #[test]
     fn pyramid_board_record_is_separate_from_tripeaks_row_hints() {
@@ -694,6 +743,7 @@ mod tests {
                 .all(|used| !used)
         );
     }
+    /// Reject non-calibrated Pyramid frame dimensions at the common tracker boundary.
 
     #[test]
     fn pyramid_analysis_rejects_frame_dimensions_before_reading_pixels() {
@@ -705,6 +755,7 @@ mod tests {
         ));
     }
 
+    /// Create a black RGBA fixture with tightly packed rows and no cursor metadata.
     fn blank_frame(width: u32, height: u32) -> CapturedFrame {
         CapturedFrame {
             width,
@@ -712,15 +763,16 @@ mod tests {
             stride: width as usize * 4,
             format: PixelFormat::Rgba8,
             pixels: vec![0; width as usize * height as usize * 4],
-            cursor: None,
         }
     }
 
+    /// Paint one opaque RGB pixel into a valid fixture coordinate.
     fn set_pixel(frame: &mut CapturedFrame, x: u32, y: u32, rgb: [u8; 3]) {
         let offset = y as usize * frame.stride + x as usize * 4;
         frame.pixels[offset..offset + 4].copy_from_slice(&[rgb[0], rgb[1], rgb[2], 255]);
     }
 
+    /// Fill a fixture rectangle for scene and colour-probe checks.
     fn fill_rect(frame: &mut CapturedFrame, bounds: crate::geometry::PixelRect, rgb: [u8; 3]) {
         for y in bounds.y..bounds.bottom() {
             for x in bounds.x..bounds.right() {
@@ -729,6 +781,7 @@ mod tests {
         }
     }
 
+    /// Paint an exact gold halo on a card's audited exterior baseline.
     fn set_calibrated_halo_run(
         frame: &mut CapturedFrame,
         regions: CardRegionPixels,
@@ -741,12 +794,14 @@ mod tests {
         PixelPoint::new(start_x as i32, y as i32)
     }
 
+    /// Paint a TriPeaks slot halo at the X anchor implied by its calibrated click.
     fn set_slot_halo(frame: &mut CapturedFrame, index: usize) -> PixelPoint {
         let regions = TABLEAU_CARD_REGIONS[index];
         let start_x = regions.click_point.x - CLICK_OFFSET_X;
         set_calibrated_halo_run(frame, regions, start_x as u32)
     }
 
+    /// Paint a shifted dark halo while returning its expected canonical anchor.
     fn set_relaxed_slot_halo(
         frame: &mut CapturedFrame,
         index: usize,
@@ -766,6 +821,7 @@ mod tests {
         PixelPoint::new(canonical_x, canonical_y)
     }
 
+    /// Paint enough near-white pixels to expose a TriPeaks row to occupancy probing.
     fn set_face_up_row(frame: &mut CapturedFrame, row: u8) {
         let bounds = TABLEAU_ROW_SCAN_PROFILES[row as usize - 1].face_probe_bounds;
         let start_x = bounds.x + 5;
@@ -776,6 +832,7 @@ mod tests {
         }
     }
 
+    /// Expose one of the three top-row cards without changing its neighbours.
     fn set_top_row_face_up_card(frame: &mut CapturedFrame, index: usize) {
         assert!(index < TABLEAU_ROW_SCAN_PROFILES[0].card_count);
         let profile = &TABLEAU_ROW_SCAN_PROFILES[0];
@@ -787,6 +844,7 @@ mod tests {
         }
     }
 
+    /// Build a fixture mask from distinct valid one-based rows.
     fn row_mask(rows: &[u8]) -> RowMask {
         let mut mask = RowMask::EMPTY;
         for row in rows {
@@ -795,6 +853,7 @@ mod tests {
         mask
     }
 
+    /// Construct the expected TriPeaks stock recommendation from the live profile.
     fn draw_prediction(anchor: PixelPoint) -> PredictedAction {
         PredictedAction::Action(
             GameMode::TriPeaks
@@ -804,6 +863,7 @@ mod tests {
         )
     }
 
+    /// Construct the expected TriPeaks slot recommendation from the live profile.
     fn tableau_prediction(index: usize, anchor: PixelPoint) -> PredictedAction {
         PredictedAction::Action(
             GameMode::TriPeaks
@@ -812,21 +872,32 @@ mod tests {
                 .unwrap(),
         )
     }
+    /// Keep an empty frame a read-only no-highlight observation.
 
     #[test]
     fn reports_no_highlight_for_a_blank_calibrated_frame() {
         let frame = blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT);
 
-        assert_eq!(analyse_frame(&frame), Ok(PredictedAction::NoHighlight));
+        assert_eq!(
+            analyse_frame_with_state(&frame, &TableauScanState::initial())
+                .map(|analysis| analysis.prediction),
+            Ok(PredictedAction::NoHighlight)
+        );
     }
+    /// Select the stock Draw key operation from a calibrated lower-panel halo.
 
     #[test]
     fn reports_draw_for_the_stock_halo() {
         let mut frame = blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT);
         let anchor = set_calibrated_halo_run(&mut frame, STOCK_CARD_REGION, 842);
 
-        assert_eq!(analyse_frame(&frame), Ok(draw_prediction(anchor)));
+        assert_eq!(
+            analyse_frame_with_state(&frame, &TableauScanState::initial())
+                .map(|analysis| analysis.prediction),
+            Ok(draw_prediction(anchor))
+        );
     }
+    /// Keep Draw detection across the audited stock movement lane.
 
     #[test]
     fn reports_draw_after_the_stock_pile_moves_left() {
@@ -841,8 +912,13 @@ mod tests {
         }
         let anchor = PixelPoint::new(start_x as i32, y as i32);
 
-        assert_eq!(analyse_frame(&frame), Ok(draw_prediction(anchor)));
+        assert_eq!(
+            analyse_frame_with_state(&frame, &TableauScanState::initial())
+                .map(|analysis| analysis.prediction),
+            Ok(draw_prediction(anchor))
+        );
     }
+    /// Reject an otherwise long gold run beyond the stock scan boundary.
 
     #[test]
     fn does_not_treat_a_gold_run_outside_the_stock_lane_as_draw() {
@@ -855,32 +931,50 @@ mod tests {
             set_pixel(&mut frame, x, y, GOLD_RGB_CANDIDATES[0]);
         }
 
-        assert_eq!(analyse_frame(&frame), Ok(PredictedAction::NoHighlight));
+        assert_eq!(
+            analyse_frame_with_state(&frame, &TableauScanState::initial())
+                .map(|analysis| analysis.prediction),
+            Ok(PredictedAction::NoHighlight)
+        );
     }
+    /// Accept a calibrated scene probe filled with the expected green felt.
 
     #[test]
     fn accepts_a_green_felt_gameplay_scene() {
         let mut frame = blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT);
         fill_rect(&mut frame, GAMEPLAY_FELT_PROBE_BOUNDS, [20, 140, 60]);
 
-        assert_eq!(is_gameplay_scene(&frame), Ok(true));
+        assert_eq!(
+            is_gameplay_scene_for_mode(&frame, GameMode::TriPeaks),
+            Ok(true)
+        );
     }
+    /// Reject modal-style blue pixels at the gameplay scene gate.
 
     #[test]
     fn rejects_a_blue_dialog_scene() {
         let mut frame = blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT);
         fill_rect(&mut frame, GAMEPLAY_FELT_PROBE_BOUNDS, [25, 70, 150]);
 
-        assert_eq!(is_gameplay_scene(&frame), Ok(false));
+        assert_eq!(
+            is_gameplay_scene_for_mode(&frame, GameMode::TriPeaks),
+            Ok(false)
+        );
     }
+    /// Keep the final bottom-row slot mapped to its canonical click centre.
 
     #[test]
     fn reports_row_four_column_ten_and_its_calibrated_centre() {
         let mut frame = blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT);
         let regions = TABLEAU_CARD_REGIONS[27];
         let anchor = set_calibrated_halo_run(&mut frame, regions, 1_662);
-        assert_eq!(analyse_frame(&frame), Ok(tableau_prediction(27, anchor)));
+        assert_eq!(
+            analyse_frame_with_state(&frame, &TableauScanState::initial())
+                .map(|analysis| analysis.prediction),
+            Ok(tableau_prediction(27, anchor))
+        );
     }
+    /// Fail closed when an exact halo would move input away from the calibrated card centre.
 
     #[test]
     fn rejects_a_shifted_exact_halo_anchor_instead_of_shifting_the_click() {
@@ -889,7 +983,8 @@ mod tests {
         set_calibrated_halo_run(&mut frame, regions, 1_663);
 
         assert_eq!(
-            analyse_frame(&frame),
+            analyse_frame_with_state(&frame, &TableauScanState::initial())
+                .map(|analysis| analysis.prediction),
             Err(TrackerError::ClickOffsetMismatch {
                 actual_x: 1_724,
                 actual_y: 533,
@@ -898,6 +993,7 @@ mod tests {
             })
         );
     }
+    /// Recover the observed dark halo rendering drift through the bounded relaxed path.
 
     #[test]
     fn reports_row_three_card_from_a_dark_halo_shifted_four_pixels() {
@@ -915,6 +1011,7 @@ mod tests {
             })
         );
     }
+    /// Count separately exposed top cards for final-tableau context.
 
     #[test]
     fn counts_individual_face_up_cards_on_the_top_row() {
@@ -944,6 +1041,7 @@ mod tests {
             2
         );
     }
+    /// Preserve ambiguity when stock and tableau both contain eligible halos.
 
     #[test]
     fn reports_multiple_valid_highlights_as_ambiguous() {
@@ -952,10 +1050,12 @@ mod tests {
         set_calibrated_halo_run(&mut frame, TABLEAU_CARD_REGIONS[27], 1_662);
 
         assert_eq!(
-            analyse_frame(&frame),
+            analyse_frame_with_state(&frame, &TableauScanState::initial())
+                .map(|analysis| analysis.prediction),
             Ok(PredictedAction::Ambiguous { highlight_count: 2 })
         );
     }
+    /// Exercise profile priority selection when a bottom target precedes tableau matches.
 
     #[test]
     fn priority_policy_selects_the_first_bottom_target_without_scanning_tableau() {
@@ -966,11 +1066,13 @@ mod tests {
         let mut profile = *GameMode::TriPeaks.profile();
         profile.target_selection = TargetSelectionPolicy::FirstByPriority;
 
-        let analysis = analyse_frame_for_profile(&frame, &TableauScanState::initial(), &profile)
-            .expect("priority analysis");
+        let analysis =
+            analyse_tripeaks_frame_for_profile(&frame, &TableauScanState::initial(), &profile)
+                .expect("priority analysis");
 
         assert_eq!(analysis.prediction, draw_prediction(bottom_anchor));
     }
+    /// Keep priority selection deterministic within a lower tableau row.
 
     #[test]
     fn priority_policy_selects_the_first_card_in_lower_to_upper_scan_order() {
@@ -980,11 +1082,13 @@ mod tests {
         let mut profile = *GameMode::TriPeaks.profile();
         profile.target_selection = TargetSelectionPolicy::FirstByPriority;
 
-        let analysis = analyse_frame_for_profile(&frame, &TableauScanState::initial(), &profile)
-            .expect("priority analysis");
+        let analysis =
+            analyse_tripeaks_frame_for_profile(&frame, &TableauScanState::initial(), &profile)
+                .expect("priority analysis");
 
         assert_eq!(analysis.prediction, tableau_prediction(18, first_anchor));
     }
+    /// Retain non-contiguous row hints and reject an empty scan-state fixture.
 
     #[test]
     fn row_masks_preserve_gaps_and_derive_valid_bounds() {
@@ -996,9 +1100,10 @@ mod tests {
         assert_eq!(mask.row_lower_for(row_count), Some(4));
         assert!(mask.contains(2));
         assert!(!mask.contains(3));
-        assert_eq!(RowMask::from_bits_for(0b1_0000, row_count), None);
+        assert_eq!(RowMask::all_for(row_count).bits(), 0b1111);
         assert_eq!(TableauScanState::from_active_rows(RowMask::EMPTY), None);
     }
+    /// Widen a bottom-row hint when white occupancy reveals an upper-row target.
 
     #[test]
     fn finds_an_upper_row_after_reconciling_white_bands() {
@@ -1015,6 +1120,7 @@ mod tests {
             })
         );
     }
+    /// Preserve gaps while combining independent face-up row observations.
 
     #[test]
     fn white_reconciliation_keeps_non_contiguous_active_rows() {
@@ -1032,6 +1138,7 @@ mod tests {
         assert_eq!(observed.row_lower_for(row_count), Some(4));
         assert!(!observed.contains(3));
     }
+    /// Recover a lower-row target after a stale top-row hint using white probes.
 
     #[test]
     fn stale_row_one_state_recovers_a_row_four_highlight() {
@@ -1044,6 +1151,7 @@ mod tests {
         assert_eq!(analysis.prediction, tableau_prediction(27, anchor));
         assert_eq!(analysis.observed_rows, Some(row_mask(&[4])));
     }
+    /// Find an eligible lower-row halo even when occupancy probes provide no help.
 
     #[test]
     fn fallback_halo_recovers_stale_state_without_white_evidence() {
@@ -1055,6 +1163,7 @@ mod tests {
         assert_eq!(analysis.prediction, tableau_prediction(18, anchor));
         assert_eq!(analysis.observed_rows, Some(row_mask(&[4])));
     }
+    /// Narrow the row hint after independently observing that its lower row is empty.
 
     #[test]
     fn retires_an_empty_lower_row_when_an_upper_active_row_has_the_halo() {
@@ -1071,6 +1180,7 @@ mod tests {
         assert_eq!(state.row_upper(), 3);
         assert_eq!(state.row_lower(), 3);
     }
+    /// Keep simultaneous halos ambiguous when full fallback extends the row window.
 
     #[test]
     fn full_fallback_preserves_cross_row_ambiguity() {
@@ -1086,6 +1196,7 @@ mod tests {
         );
         assert_eq!(analysis.observed_rows, Some(row_mask(&[2, 4])));
     }
+    /// Do not let the relaxed colour path conceal a second valid halo.
 
     #[test]
     fn relaxed_fallback_preserves_cross_row_ambiguity() {
@@ -1101,6 +1212,7 @@ mod tests {
         );
         assert_eq!(analysis.observed_rows, Some(row_mask(&[3, 4])));
     }
+    /// Count every eligible stock and tableau recommendation under uniqueness policy.
 
     #[test]
     fn stock_and_two_tableau_halos_report_three_way_ambiguity() {
@@ -1117,6 +1229,7 @@ mod tests {
         );
         assert_eq!(analysis.observed_rows, Some(row_mask(&[2, 4])));
     }
+    /// Update meaningful row observations without collapsing the hint on missing evidence.
 
     #[test]
     fn observed_mask_transitions_change_state_but_empty_evidence_does_not() {
@@ -1138,6 +1251,7 @@ mod tests {
         assert_eq!(state.active_rows(), narrowed);
         assert_eq!((state.row_upper(), state.row_lower()), (1, 1));
     }
+    /// Apply a fresh row hint once and report no change for repeated or missing observations.
 
     #[test]
     fn single_observation_updates_the_non_authoritative_row_hint() {
@@ -1149,6 +1263,7 @@ mod tests {
         assert!(!state.reconcile_observation(Some(split)));
         assert!(!state.reconcile_observation(None));
     }
+    /// Retain non-contiguous row hints when the entire analysed frame lacks evidence.
 
     #[test]
     fn blank_frame_cannot_collapse_a_multi_row_state() {
@@ -1160,13 +1275,15 @@ mod tests {
         assert_eq!(analysis.prediction, PredictedAction::NoHighlight);
         assert_eq!(analysis.observed_rows, None);
     }
+    /// Reject a frame one pixel too narrow before running any calibrated detector.
 
     #[test]
     fn rejects_a_frame_with_the_wrong_dimensions_before_detection() {
         let frame = blank_frame(NOMINAL_FRAME_WIDTH - 1, NOMINAL_FRAME_HEIGHT);
 
         assert_eq!(
-            analyse_frame(&frame),
+            analyse_frame_with_state(&frame, &TableauScanState::initial())
+                .map(|analysis| analysis.prediction),
             Err(TrackerError::UnexpectedFrameDimensions {
                 expected_width: NOMINAL_FRAME_WIDTH,
                 expected_height: NOMINAL_FRAME_HEIGHT,

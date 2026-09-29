@@ -1,3 +1,5 @@
+//! Reserve and save explicit manual PNG snapshots without replacing existing files.
+
 use std::{
     fs::{self, File, OpenOptions},
     io::{ErrorKind, Write},
@@ -8,13 +10,18 @@ use std::{
 
 use crate::parameters::{SNAPSHOT_LABEL_MAX_CHARS, SNAPSHOT_MAX_PNG_BYTES, SNAPSHOT_NAME_ATTEMPTS};
 
+/// Exclusive output-file reservation removed on drop unless saving commits it.
 pub struct SnapshotArtifact {
+    /// Reserved filesystem path for this snapshot.
     path: PathBuf,
+    /// Open exclusive reservation, held until saving or cleanup.
     file: Option<File>,
+    /// Whether all original PNG bytes have been written and synchronised.
     committed: bool,
 }
 
 impl SnapshotArtifact {
+    /// Reserve a private, uniquely named file in an existing snapshot directory.
     pub fn reserve(directory: &Path, label: &str) -> Result<Self, String> {
         if !directory.is_dir() {
             return Err(format!(
@@ -53,6 +60,7 @@ impl SnapshotArtifact {
         ))
     }
 
+    /// Write the original PNG bytes, synchronise them and retain the completed file.
     pub fn save(mut self, png: &[u8]) -> Result<PathBuf, String> {
         if png.is_empty() || png.len() > SNAPSHOT_MAX_PNG_BYTES {
             return Err(format!(
@@ -74,6 +82,7 @@ impl SnapshotArtifact {
 }
 
 impl Drop for SnapshotArtifact {
+    /// Remove an unfinished reservation after closing its file handle.
     fn drop(&mut self) {
         if !self.committed {
             drop(self.file.take());
@@ -82,6 +91,7 @@ impl Drop for SnapshotArtifact {
     }
 }
 
+/// Reduce a bounded user label to safe ASCII filename components.
 fn safe_label(raw: &str) -> String {
     let mut label = String::new();
     for ch in raw.chars().take(SNAPSHOT_LABEL_MAX_CHARS) {
@@ -94,6 +104,7 @@ fn safe_label(raw: &str) -> String {
     label.trim_end_matches('-').to_owned()
 }
 
+/// Combine the timestamp, sanitised label and collision suffix.
 fn snapshot_filename(timestamp: &str, label: &str, attempt: usize) -> String {
     let name = if label.is_empty() {
         format!("qmp-qemu-socket {timestamp}")
@@ -107,6 +118,7 @@ fn snapshot_filename(timestamp: &str, label: &str, attempt: usize) -> String {
     }
 }
 
+/// Obtain and validate a local timestamp using a fixed argument to /usr/bin/date.
 fn local_timestamp() -> Result<String, String> {
     // Use the host's configured local timezone; Rust's standard library has
     // no local civil-time formatter. No user text is passed to the process.
@@ -134,9 +146,11 @@ fn local_timestamp() -> Result<String, String> {
 
 #[cfg(test)]
 mod tests {
+    //! Bounded naming, exact-byte saving and incomplete-reservation cleanup.
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
 
+    /// Verify bounded label sanitisation and deterministic collision suffixes.
     #[test]
     fn names_are_bounded_and_collision_safe() {
         assert_eq!(safe_label("  B1 / Move, left  "), "B1-Move-left");
@@ -156,16 +170,15 @@ mod tests {
         );
     }
 
+    /// Verify exact-byte saving, unique reservations and cleanup of an abandoned file.
     #[test]
     fn saved_png_bytes_are_unchanged_and_existing_names_are_never_replaced() {
         let nonce = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let directory = std::env::temp_dir().join(format!(
-            "qmp-snapshot-test-{}-{nonce}",
-            std::process::id()
-        ));
+        let directory =
+            std::env::temp_dir().join(format!("qmp-snapshot-test-{}-{nonce}", std::process::id()));
         fs::create_dir(&directory).unwrap();
 
         let first = SnapshotArtifact::reserve(&directory, "B1 Move").unwrap();

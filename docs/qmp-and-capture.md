@@ -110,25 +110,50 @@ If delivery becomes uncertain, the action is never sent again automatically.
 ## Visual verification
 
 QMP acknowledgement proves only that QEMU accepted a command. It does not
-prove that Solitaire acted on it. After the configured settle, the worker
-requires a fresh screenshot showing:
+prove that Solitaire acted on it. After the configured settle, the normal
+effect-verification path requires a fresh screenshot showing:
 
 - the selected profile's effect evidence inside its calibrated region; and
 - a valid resulting gameplay or transition state.
 
 TriPeaks uses material pixel change with cursor exclusion. Pyramid card actions
 add positive card-removal evidence; lower controls require a relevant pile
-change. A selection-only response or uncertain animation does not consume a
-card slot. Pyramid settles for 500 ms per action and uses bounded additional
+change or positive removal of its unique highlighted partner. A selection-only response or uncertain animation does not consume a
+card slot. Pyramid uses editable settle defaults of 1000 ms after Move and
+2000 ms after card or pile clicks, then uses bounded additional
 result observations when necessary, without repeating uncertain input.
+
+Pyramid additionally allows an identical successor Left/Right pair to continue
+from fresh HALOs without proving the previous effect. Both planning and result
+must identify that unique eligible pair with known faces; MOVE cannot be
+highlighted, tableau must remain visible and no final-card/redeal phase may be
+pending. The log distinguishes this route from effect verification. It never
+marks a card consumed or advances a completion counter. Step Once still sends
+one operation; Multi-Step plans the next operation from the accepted frame.
+
+An ordinary Pyramid result without a halo receives its configured repeat
+pause (default 1000 ms) followed
+by another fresh QMP screendump and scan. A missing halo does not request
+Solver activation; only a positively verified redeal to a new board can
+authorise one Solver activation after repeated settled observations. The
+latest unverified post-action frame is displayed for diagnosis and cannot
+approve the next click. Capture Frame obtains new authority for a later run.
 
 The verified result frame is immutable and becomes the next action's planning
 frame. A fresh QMP health/pointer probe remains mandatory immediately before
 the next input.
 
-After every score-panel click, including bounded retries, the worker waits
-three seconds before classifying Level Up OK. A click requires the recognised
-gold control. If a fresh frame instead shows New Game, a second fresh frame
+After a completion signal, a fresh pre-score capture can recover an already
+actionable board before any score-skip click. Two consecutive non-gameplay
+captures are required before the first score-skip click. A gameplay transition
+without a halo is observed again without input. After every score-panel click, including
+bounded retries, the worker waits
+three seconds before classifying Level Up OK. After an unknown first frame,
+it waits and captures again without input before retrying score skip. A click
+requires a recognised gold control; if both Level Up layouts match, a strong
+gold bridge and button interior must prove one tall button; otherwise bounded
+read-only recaptures apply. If a fresh frame instead shows New Game, another
+fresh frame
 must also recognise New Game before that stage's guarded click. Other post-game
 stages retain a one-second inter-stage wait. Challenge Complete Continue is
 calibrated for future use but does not authorise automatic input.

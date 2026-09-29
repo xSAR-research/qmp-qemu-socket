@@ -1,3 +1,6 @@
+//! Checked pixel probes for Solver halos, card faces, gameplay and shared progress.
+//! Detection reads immutable frames and never sends guest input.
+
 use thiserror::Error;
 
 use crate::{
@@ -18,10 +21,32 @@ use crate::{
     },
 };
 
+/// Classify the shared right-third progress probe using the selected profile.
+/// Callers must establish a completion context before acting on this classification.
 pub fn detect_game_progress_for_profile(
     frame: &CapturedFrame,
     profile: &GameProfile,
 ) -> Result<GameProgress, HaloDetectionError> {
+    Ok(measure_game_progress_for_profile(frame, profile)?.classification)
+}
+
+/// Classification and measured pixel counts retained for transition diagnostics.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GameProgressEvidence {
+    /// Progress classification; insufficient by itself to prove a board or game win.
+    pub classification: GameProgress,
+    /// Number of probe pixels at or below the black-channel threshold.
+    pub black_pixels: u32,
+    /// Total number of pixels in the checked probe rectangle.
+    pub total_pixels: u32,
+}
+
+/// Preserve the measured probe counts for transition diagnostics. Classification
+/// thresholds are shared with the existing TriPeaks progress detector.
+pub fn measure_game_progress_for_profile(
+    frame: &CapturedFrame,
+    profile: &GameProfile,
+) -> Result<GameProgressEvidence, HaloDetectionError> {
     if !frame.is_layout_valid() {
         return Err(HaloDetectionError::InvalidFrameLayout);
     }
@@ -50,54 +75,68 @@ pub fn detect_game_progress_for_profile(
         }
     }
 
-    if black_pixels.saturating_mul(1_000)
+    let classification = if black_pixels.saturating_mul(1_000)
         >= total_pixels.saturating_mul(progress.black_fraction_per_mille)
     {
-        Ok(GameProgress::AnotherBoard)
+        GameProgress::AnotherBoard
     } else {
-        Ok(GameProgress::GameComplete)
-    }
+        GameProgress::GameComplete
+    };
+    Ok(GameProgressEvidence {
+        classification,
+        black_pixels,
+        total_pixels,
+    })
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct GoldHit {
-    /// Top-left pixel of the qualifying 2x2 block.
-    pub anchor: PixelPoint,
-}
-
+/// Horizontal gold evidence with the returned calibrated halo anchor.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GoldRunHit {
     /// First pixel in the qualifying horizontal run.
     pub anchor: PixelPoint,
+    /// Number of consecutive qualifying pixels on the matching row.
     pub length: u32,
 }
 
+/// Solid near-white rectangle found inside a face-up card probe.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WhiteBlockHit {
     /// Top-left pixel of the qualifying near-white rectangle.
     pub anchor: PixelPoint,
+    /// Number of consecutive fully white columns.
     pub width: u32,
+    /// Full probe height covered by each accepted column.
     pub height: u32,
 }
 
+/// Invalid calibration or frame geometry that prevents a trustworthy pixel probe.
 #[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
 pub enum HaloDetectionError {
+    /// The selected game has no profile for the requested detector.
     #[error("{target} detector has no calibrated game profile")]
-    MissingProfileCalibration { target: &'static str },
+    MissingProfileCalibration {
+        /// Human-readable detector name used in the error.
+        target: &'static str,
+    },
+    /// Storage length, stride or pixel geometry is inconsistent.
     #[error("captured frame has an invalid pixel layout")]
     InvalidFrameLayout,
+    /// A probe rectangle contains no pixels.
     #[error("detector bounds must be non-empty")]
     EmptyBounds,
+    /// A probe overflows or extends beyond the frame.
     #[error("detector bounds lie outside the captured frame")]
     BoundsOutsideFrame,
+    /// The declared halo rectangle does not enclose its card.
     #[error("card bounds must be contained by halo bounds")]
     CardOutsideHalo,
+    /// The exterior scan lines do not fit the declared halo rectangle.
     #[error("the calibrated halo scan lines must be contained by halo bounds")]
     HaloLinesOutsideHalo,
 }
 
-pub fn is_goldish(rgb: [u8; 3]) -> bool {
-    // Check whether an RGB colour is within tolerance of a gold candidate.
+/// Match the audited gold palette within the configured per-channel tolerance.
+fn is_goldish(rgb: [u8; 3]) -> bool {
     GOLD_RGB_CANDIDATES.iter().any(|candidate| {
         rgb[0].abs_diff(candidate[0]) <= GOLD_CHANNEL_TOLERANCE
             && rgb[1].abs_diff(candidate[1]) <= GOLD_CHANNEL_TOLERANCE
@@ -110,7 +149,7 @@ pub fn is_goldish(rgb: [u8; 3]) -> bool {
 /// This deliberately does not replace [`is_goldish`]. It is used only after
 /// an exact tableau-halo miss, together with strict run length, exterior-strip
 /// and calibrated-start constraints.
-pub fn is_relational_tableau_gold(rgb: [u8; 3]) -> bool {
+fn is_relational_tableau_gold(rgb: [u8; 3]) -> bool {
     let [red, green, blue] = rgb;
     let red_green_delta = i16::from(red) - i16::from(green);
     let green_blue_delta = i16::from(green) - i16::from(blue);
@@ -123,11 +162,13 @@ pub fn is_relational_tableau_gold(rgb: [u8; 3]) -> bool {
         && green_blue_delta >= i16::from(TABLEAU_RELAXED_GOLD_GREEN_BLUE_DELTA_MINIMUM)
 }
 
-pub fn is_near_white(rgb: [u8; 3]) -> bool {
+/// Require every RGB channel to meet the face-up card whiteness threshold.
+fn is_near_white(rgb: [u8; 3]) -> bool {
     rgb.into_iter()
         .all(|channel| channel >= FACE_UP_WHITE_CHANNEL_MINIMUM)
 }
 
+/// Compare a pixel with the profile's felt brightness and colour separation limits.
 fn is_gameplay_felt_green(rgb: [u8; 3], profile: GameplaySceneProfile) -> bool {
     let [red, green, blue] = rgb;
 
@@ -136,6 +177,7 @@ fn is_gameplay_felt_green(rgb: [u8; 3], profile: GameplaySceneProfile) -> bool {
         && i16::from(green) - i16::from(blue) >= i16::from(profile.green_blue_delta_minimum)
 }
 
+/// Recognise the broad gold gradient used by post-game buttons.
 fn is_dialog_gold(rgb: [u8; 3]) -> bool {
     let [red, green, blue] = rgb;
 
@@ -144,43 +186,6 @@ fn is_dialog_gold(rgb: [u8; 3]) -> bool {
         && blue <= DIALOG_GOLD_BLUE_MAXIMUM
         && i16::from(red) - i16::from(green) >= i16::from(DIALOG_GOLD_RED_GREEN_DELTA_MINIMUM)
         && i16::from(green) - i16::from(blue) >= i16::from(DIALOG_GOLD_GREEN_BLUE_DELTA_MINIMUM)
-}
-
-/// Find a qualifying 2x2 gold block using a deterministic row-major scan.
-///
-/// Returning a defined anchor matters while click placement uses a signed
-/// offset. A later milestone can replace this with connected-component bounds
-/// without changing the capture or action-controller interfaces.
-pub fn find_first_gold_block(frame: &CapturedFrame, region: PixelRect) -> Option<GoldHit> {
-    // Find the first qualifying 2x2 gold block within the requested region.
-    if !frame.is_layout_valid() || frame.width < 2 || frame.height < 2 {
-        return None;
-    }
-
-    let left = region.x.min(frame.width);
-    let top = region.y.min(frame.height);
-    let right = region.right().min(frame.width);
-    let bottom = region.bottom().min(frame.height);
-
-    if right.saturating_sub(left) < 2 || bottom.saturating_sub(top) < 2 {
-        return None;
-    }
-
-    for y in top..(bottom - 1) {
-        for x in left..(right - 1) {
-            if is_goldish(pixel_rgb(frame, x, y)?)
-                && is_goldish(pixel_rgb(frame, x + 1, y)?)
-                && is_goldish(pixel_rgb(frame, x, y + 1)?)
-                && is_goldish(pixel_rgb(frame, x + 1, y + 1)?)
-            {
-                return Some(GoldHit {
-                    anchor: PixelPoint::new(x as i32, y as i32),
-                });
-            }
-        }
-    }
-
-    None
 }
 
 /// Find the first long horizontal gold run on a card's calibrated halo lines.
@@ -263,6 +268,8 @@ pub fn find_gold_run_in_bounds(
     Ok(None)
 }
 
+/// Require the calibrated fraction of the scene probe to contain green felt.
+/// Reject missing calibration, invalid frame storage and out-of-frame bounds.
 pub fn has_gameplay_felt_for_profile(
     frame: &CapturedFrame,
     profile: &GameProfile,
@@ -299,6 +306,17 @@ pub fn has_dialog_gold_button(
     frame: &CapturedFrame,
     probe_bounds: PixelRect,
 ) -> Result<bool, HaloDetectionError> {
+    Ok(dialog_gold_fraction_per_mille(frame, probe_bounds)?
+        >= DIALOG_GOLD_REQUIRED_FRACTION_PER_MILLE)
+}
+
+/// Fraction of dialog-gold pixels inside an in-bounds region. The post-game
+/// controller uses a stronger threshold when two layout probes overlap the
+/// same button, while the individual variant probes keep their calibration.
+pub fn dialog_gold_fraction_per_mille(
+    frame: &CapturedFrame,
+    probe_bounds: PixelRect,
+) -> Result<u32, HaloDetectionError> {
     if !frame.is_layout_valid() {
         return Err(HaloDetectionError::InvalidFrameLayout);
     }
@@ -315,8 +333,7 @@ pub fn has_dialog_gold_button(
         }
     }
 
-    Ok(matching_pixels.saturating_mul(1_000)
-        >= total_pixels.saturating_mul(u64::from(DIALOG_GOLD_REQUIRED_FRACTION_PER_MILLE)))
+    Ok((matching_pixels.saturating_mul(1_000) / total_pixels) as u32)
 }
 
 /// Find a tableau halo without allowing rendering drift to move the click.
@@ -432,14 +449,7 @@ pub fn has_face_up_white_block(
     Ok(find_face_up_white_block(frame, probe_bounds)?.is_some())
 }
 
-/// Report whether the calibrated exterior halo contains a qualifying gold run.
-pub fn has_gold_halo(
-    frame: &CapturedFrame,
-    regions: CardRegionPixels,
-) -> Result<bool, HaloDetectionError> {
-    Ok(find_gold_halo_run(frame, regions)?.is_some())
-}
-
+/// Return the first sufficiently long contiguous matching run in a checked row.
 fn find_horizontal_run(
     frame: &CapturedFrame,
     left: u32,
@@ -467,6 +477,7 @@ fn find_horizontal_run(
     (run_length >= minimum_length).then_some((run_start, run_length))
 }
 
+/// Find a matching run whose first pixel lies within the calibrated X tolerance.
 #[allow(clippy::too_many_arguments)]
 fn find_horizontal_run_near_anchor(
     frame: &CapturedFrame,
@@ -501,6 +512,7 @@ fn find_horizontal_run_near_anchor(
         .then_some((run_start, run_length))
 }
 
+/// Derive the fixed TriPeaks halo baseline and X anchor with checked arithmetic.
 fn canonical_tableau_halo_anchor(
     regions: CardRegionPixels,
     click_offset_x: i32,
@@ -521,6 +533,7 @@ fn canonical_tableau_halo_anchor(
     Ok(PixelPoint::new(x, y))
 }
 
+/// Reject empty, overflowing or out-of-frame rectangles and return exclusive edges.
 fn checked_bounds(
     bounds: PixelRect,
     frame: &CapturedFrame,
@@ -544,24 +557,25 @@ fn checked_bounds(
     Ok((right, bottom))
 }
 
+/// Read the RGB channels of one RGBA pixel in a caller-validated frame.
 pub(crate) fn pixel_rgb(frame: &CapturedFrame, x: u32, y: u32) -> Option<[u8; 3]> {
-    // Read one pixel and normalise its channel order to RGB.
     let offset = y as usize * frame.stride + x as usize * 4;
     let pixel = frame.pixels.get(offset..offset + 4)?;
 
     match frame.format {
         PixelFormat::Rgba8 => Some([pixel[0], pixel[1], pixel[2]]),
-        PixelFormat::Bgra8 => Some([pixel[2], pixel[1], pixel[0]]),
     }
 }
 
 #[cfg(test)]
 mod tests {
+    //! Synthetic detector boundaries and recorded progress-probe regression evidence.
     use super::*;
     use crate::parameters::{
         CLICK_OFFSET_X, FACE_UP_WHITE_SCAN_HEIGHT, SOLVER_PROGRESS_RIGHT_PROBE,
     };
 
+    /// Use the TriPeaks click offset when exercising the active tableau halo detector.
     fn find_tableau_halo(
         frame: &CapturedFrame,
         regions: CardRegionPixels,
@@ -569,32 +583,25 @@ mod tests {
         find_tableau_gold_halo_run(frame, regions, CLICK_OFFSET_X)
     }
 
-    fn frame_with_format(width: u32, height: u32, format: PixelFormat) -> CapturedFrame {
-        // Create a blank four-channel frame for detector tests.
+    /// Build a black RGBA test fixture with tightly packed rows.
+    fn rgba_frame(width: u32, height: u32) -> CapturedFrame {
         CapturedFrame {
             width,
             height,
             stride: width as usize * 4,
-            format,
+            format: PixelFormat::Rgba8,
             pixels: vec![0; width as usize * height as usize * 4],
-            cursor: None,
         }
     }
 
-    fn rgba_frame(width: u32, height: u32) -> CapturedFrame {
-        frame_with_format(width, height, PixelFormat::Rgba8)
-    }
-
+    /// Paint one RGBA fixture pixel with opaque alpha.
     fn set_pixel(frame: &mut CapturedFrame, x: u32, y: u32, rgb: [u8; 3]) {
-        // Set one test-frame pixel to the supplied RGB colour.
         let offset = y as usize * frame.stride + x as usize * 4;
-        let pixel = match frame.format {
-            PixelFormat::Rgba8 => [rgb[0], rgb[1], rgb[2], 255],
-            PixelFormat::Bgra8 => [rgb[2], rgb[1], rgb[0], 255],
-        };
+        let pixel = [rgb[0], rgb[1], rgb[2], 255];
         frame.pixels[offset..offset + 4].copy_from_slice(&pixel);
     }
 
+    /// Return a small synthetic card with space for the calibrated exterior halo lines.
     fn card_regions() -> CardRegionPixels {
         CardRegionPixels::new(
             PixelRect::new(40, 40, 120, 140),
@@ -604,10 +611,12 @@ mod tests {
         )
     }
 
+    /// Paint a test halo using the first audited exact gold colour.
     fn set_horizontal_run(frame: &mut CapturedFrame, start_x: u32, y: u32, length: u32) {
         set_coloured_horizontal_run(frame, start_x, y, length, GOLD_RGB_CANDIDATES[0]);
     }
 
+    /// Paint a horizontal fixture run for exact and relaxed colour checks.
     fn set_coloured_horizontal_run(
         frame: &mut CapturedFrame,
         start_x: u32,
@@ -620,6 +629,7 @@ mod tests {
         }
     }
 
+    /// Paint a solid greyscale rectangle for face-up detection boundary tests.
     fn set_white_block(
         frame: &mut CapturedFrame,
         start_x: u32,
@@ -634,32 +644,7 @@ mod tests {
             }
         }
     }
-
-    #[test]
-    fn finds_a_two_by_two_gold_block() {
-        // Verify that a qualifying 2x2 gold block is found at its anchor.
-        let mut frame = rgba_frame(5, 5);
-        for y in 2..=3 {
-            for x in 1..=2 {
-                set_pixel(&mut frame, x, y, GOLD_RGB_CANDIDATES[0]);
-            }
-        }
-
-        let hit = find_first_gold_block(&frame, PixelRect::new(0, 0, 5, 5));
-        assert_eq!(hit.map(|found| found.anchor), Some(PixelPoint::new(1, 2)));
-    }
-
-    #[test]
-    fn rejects_a_single_gold_pixel() {
-        // Verify that one gold pixel does not qualify as a block.
-        let mut frame = rgba_frame(4, 4);
-        set_pixel(&mut frame, 2, 2, GOLD_RGB_CANDIDATES[0]);
-
-        assert_eq!(
-            find_first_gold_block(&frame, PixelRect::new(0, 0, 4, 4)),
-            None
-        );
-    }
+    /// Check the detected anchor and full run length on the first exterior line.
 
     #[test]
     fn finds_a_long_halo_run_below_the_card() {
@@ -673,8 +658,12 @@ mod tests {
                 length: 119,
             }))
         );
-        assert_eq!(has_gold_halo(&frame, card_regions()), Ok(true));
+        assert_eq!(
+            find_gold_halo_run(&frame, card_regions()).map(|hit| hit.is_some()),
+            Ok(true)
+        );
     }
+    /// Keep the minimum accepted halo length inclusive.
 
     #[test]
     fn accepts_a_halo_run_exactly_at_the_minimum_length() {
@@ -689,6 +678,7 @@ mod tests {
             }))
         );
     }
+    /// Keep second-line detections anchored to the audited baseline.
 
     #[test]
     fn canonicalises_a_run_on_the_second_halo_line_to_the_baseline() {
@@ -703,6 +693,7 @@ mod tests {
             }))
         );
     }
+    /// Ensure an exact TriPeaks halo hit keeps its observed anchor.
 
     #[test]
     fn tableau_fast_path_preserves_the_audited_anchor() {
@@ -717,6 +708,7 @@ mod tests {
             }))
         );
     }
+    /// Accept calibrated dark-gold rendering drift without moving the click anchor.
 
     #[test]
     fn tableau_fallback_finds_a_dark_halo_on_a_shifted_exterior_line() {
@@ -731,6 +723,7 @@ mod tests {
             }))
         );
     }
+    /// Accept the inclusive X tolerance while returning the fixed calibrated anchor.
 
     #[test]
     fn tableau_fallback_canonicalises_a_tolerated_fringe_start() {
@@ -746,6 +739,7 @@ mod tests {
             }))
         );
     }
+    /// Reject white, felt, red and other colours outside the relaxed gold relationship.
 
     #[test]
     fn tableau_fallback_rejects_non_gold_channel_relationships() {
@@ -766,6 +760,7 @@ mod tests {
             );
         }
     }
+    /// Reject a long gold run just beyond the permitted start displacement.
 
     #[test]
     fn tableau_fallback_rejects_a_gold_run_starting_outside_x_tolerance() {
@@ -775,6 +770,7 @@ mod tests {
 
         assert_eq!(find_tableau_halo(&frame, card_regions()), Ok(None));
     }
+    /// Accept both exterior strip edges and reject adjacent card or out-of-strip pixels.
 
     #[test]
     fn tableau_fallback_is_bounded_to_the_exterior_strip() {
@@ -797,6 +793,7 @@ mod tests {
             );
         }
     }
+    /// Prevent the exact detector from widening its two-line search.
 
     #[test]
     fn ignores_gold_runs_outside_the_two_calibrated_halo_lines() {
@@ -806,6 +803,7 @@ mod tests {
 
         assert_eq!(find_gold_halo_run(&frame, card_regions()), Ok(None));
     }
+    /// Ensure gold card artwork cannot qualify as an exterior halo.
 
     #[test]
     fn ignores_a_long_gold_run_inside_card_artwork() {
@@ -813,8 +811,12 @@ mod tests {
         set_horizontal_run(&mut frame, 40, 150, 120);
 
         assert_eq!(find_gold_halo_run(&frame, card_regions()), Ok(None));
-        assert_eq!(has_gold_halo(&frame, card_regions()), Ok(false));
+        assert_eq!(
+            find_gold_halo_run(&frame, card_regions()).map(|hit| hit.is_some()),
+            Ok(false)
+        );
     }
+    /// Keep a run one pixel below the minimum ineligible.
 
     #[test]
     fn rejects_an_exterior_run_shorter_than_the_threshold() {
@@ -823,14 +825,7 @@ mod tests {
 
         assert_eq!(find_gold_halo_run(&frame, card_regions()), Ok(None));
     }
-
-    #[test]
-    fn detects_a_halo_in_bgra_frames() {
-        let mut frame = frame_with_format(220, 220, PixelFormat::Bgra8);
-        set_horizontal_run(&mut frame, 41, 186, 119);
-
-        assert_eq!(has_gold_halo(&frame, card_regions()), Ok(true));
-    }
+    /// Check the accepted face-up rectangle geometry and presence result.
 
     #[test]
     fn detects_a_solid_near_white_face_block() {
@@ -855,6 +850,7 @@ mod tests {
         );
         assert_eq!(has_face_up_white_block(&frame, probe), Ok(true));
     }
+    /// Cover inclusive white/width thresholds and a block touching the right edge.
 
     #[test]
     fn white_block_threshold_and_size_boundaries_are_exact() {
@@ -908,6 +904,7 @@ mod tests {
             }))
         );
     }
+    /// Reject insufficient width, incomplete height and scattered bright pixels.
 
     #[test]
     fn rejects_short_partial_and_speckled_white_patterns() {
@@ -941,22 +938,7 @@ mod tests {
         }
         assert_eq!(find_face_up_white_block(&speckled, probe), Ok(None));
     }
-
-    #[test]
-    fn recognises_near_white_in_bgra_frames() {
-        let mut frame = frame_with_format(80, 40, PixelFormat::Bgra8);
-        let probe = PixelRect::new(10, 12, 60, 4);
-        set_white_block(
-            &mut frame,
-            23,
-            12,
-            FACE_UP_WHITE_BLOCK_MIN_WIDTH,
-            4,
-            FACE_UP_WHITE_CHANNEL_MINIMUM,
-        );
-
-        assert_eq!(has_face_up_white_block(&frame, probe), Ok(true));
-    }
+    /// Distinguish a qualifying gold button area from similarly bright neutral pixels.
 
     #[test]
     fn dialog_gold_requires_a_meaningful_gradient_area() {
@@ -974,6 +956,7 @@ mod tests {
         }
         assert_eq!(has_dialog_gold_button(&false_colour, probe), Ok(false));
     }
+    /// Check the black-versus-filled progress classification on the calibrated probe.
 
     #[test]
     fn solver_progress_uses_the_black_right_third_as_another_board() {
@@ -994,6 +977,7 @@ mod tests {
             Ok(GameProgress::GameComplete)
         );
     }
+    /// Keep both game modes on the same inclusive 65-black-pixel boundary.
 
     #[test]
     fn both_modes_share_the_exact_65_of_76_progress_threshold() {
@@ -1013,30 +997,121 @@ mod tests {
                     detect_game_progress_for_profile(&frame, mode.profile()),
                     Ok(expected)
                 );
+                assert_eq!(
+                    measure_game_progress_for_profile(&frame, mode.profile()),
+                    Ok(GameProgressEvidence {
+                        classification: expected,
+                        black_pixels: 76 - coloured_pixels,
+                        total_pixels: 76,
+                    })
+                );
             }
         }
     }
+    /// Replay recorded progress pixels to protect the interior probe from border regressions.
+
+    #[test]
+    fn captured_new_board_progress_samples_the_interior_instead_of_the_gold_border() {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../tests/fixtures/solver-progress-new-board.json"
+        ))
+        .expect("recorded progress pixels must be valid JSON");
+        let mut frame = rgba_frame(1_920, 1_080);
+        let patches = fixture["patches"].as_array().expect("recorded patches");
+        for patch in patches {
+            let bounds = patch["bounds"].as_array().expect("patch bounds");
+            let x = bounds[0].as_u64().unwrap() as u32;
+            let y = bounds[1].as_u64().unwrap() as u32;
+            let width = bounds[2].as_u64().unwrap() as u32;
+            let height = bounds[3].as_u64().unwrap() as u32;
+            let pixels = patch["rgb_hex"].as_str().expect("recorded RGB pixels");
+            assert_eq!(pixels.len(), (width * height * 6) as usize);
+            for offset in 0..width * height {
+                let start = offset as usize * 6;
+                let rgb = std::array::from_fn(|channel| {
+                    let start = start + channel * 2;
+                    u8::from_str_radix(&pixels[start..start + 2], 16).unwrap()
+                });
+                set_pixel(&mut frame, x + offset % width, y + offset / width, rgb);
+            }
+        }
+
+        // The historical coordinates land on gold even on this fresh board.
+        for y in 84..86 {
+            for x in 1_050..1_088 {
+                assert!(pixel_rgb(&frame, x, y).unwrap()[0] > 170);
+            }
+        }
+        for mode in crate::game::GameMode::AVAILABLE {
+            assert_eq!(
+                measure_game_progress_for_profile(&frame, mode.profile()),
+                Ok(GameProgressEvidence {
+                    classification: GameProgress::AnotherBoard,
+                    black_pixels: 76,
+                    total_pixels: 76,
+                })
+            );
+        }
+
+        // Reuse the captured gold interior from the filled left third to model
+        // a fully filled bar. This is synthetic completion evidence, not a
+        // claim that the source screenshot captured a completed game.
+        for y in 87..89 {
+            for offset in 0..38 {
+                let filled_rgb = pixel_rgb(&frame, 830 + offset, y).unwrap();
+                set_pixel(&mut frame, 1_050 + offset, y, filled_rgb);
+            }
+        }
+        for mode in crate::game::GameMode::AVAILABLE {
+            assert_eq!(
+                measure_game_progress_for_profile(&frame, mode.profile()),
+                Ok(GameProgressEvidence {
+                    classification: GameProgress::GameComplete,
+                    black_pixels: 0,
+                    total_pixels: 76,
+                })
+            );
+        }
+    }
+    /// Reject truncated storage and a frame too short to contain the progress probe.
+
+    #[test]
+    fn progress_rejects_incomplete_frames_instead_of_classifying_them() {
+        let mut truncated = rgba_frame(1_920, 1_080);
+        truncated.pixels.truncate(4);
+        for mode in crate::game::GameMode::AVAILABLE {
+            assert_eq!(
+                measure_game_progress_for_profile(&truncated, mode.profile()),
+                Err(HaloDetectionError::InvalidFrameLayout)
+            );
+            assert_eq!(
+                measure_game_progress_for_profile(&rgba_frame(1_920, 88), mode.profile()),
+                Err(HaloDetectionError::BoundsOutsideFrame)
+            );
+        }
+    }
+    /// Exercise invalid storage, out-of-frame probes and improperly nested card geometry.
 
     #[test]
     fn rejects_invalid_layout_and_geometry() {
         let mut invalid_layout = rgba_frame(220, 220);
         invalid_layout.pixels.truncate(4);
         assert_eq!(
-            has_gold_halo(&invalid_layout, card_regions()),
+            find_gold_halo_run(&invalid_layout, card_regions()),
             Err(HaloDetectionError::InvalidFrameLayout)
         );
 
         let mut outside = card_regions();
         outside.halo_bounds = PixelRect::new(28, 26, 300, 168);
         assert_eq!(
-            has_gold_halo(&rgba_frame(220, 220), outside),
+            find_gold_halo_run(&rgba_frame(220, 220), outside),
             Err(HaloDetectionError::BoundsOutsideFrame)
         );
 
         let mut not_nested = card_regions();
         not_nested.halo_bounds = PixelRect::new(50, 50, 100, 100);
         assert_eq!(
-            has_gold_halo(&rgba_frame(220, 220), not_nested),
+            find_gold_halo_run(&rgba_frame(220, 220), not_nested),
             Err(HaloDetectionError::CardOutsideHalo)
         );
 

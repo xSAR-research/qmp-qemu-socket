@@ -1,3 +1,8 @@
+//! Bounded-time QMP command transport and release-safe guest input over a Unix socket.
+//!
+//! Requests carry numeric identifiers; asynchronous events do not satisfy a
+//! request. Failed input receives release-only recovery, never a replayed press.
+
 use std::{
     io::{BufRead, BufReader, Write},
     net::Shutdown,
@@ -17,49 +22,62 @@ use crate::{
     },
 };
 
+/// Transport, protocol, input-recovery and capture-path failures.
 #[derive(Debug, Error)]
 pub enum QmpError {
+    /// The Unix stream could not complete an I/O operation.
     #[error("QMP socket I/O failed: {0}")]
     Io(#[from] std::io::Error),
+    /// A received packet is not valid JSON.
     #[error("invalid JSON from QMP: {0}")]
     Json(#[from] serde_json::Error),
+    /// A packet or connection state violates the expected QMP exchange.
     #[error("invalid QMP protocol response: {0}")]
     Protocol(String),
+    /// QEMU returned an explicit command error.
     #[error("QEMU rejected the command: {0}")]
     Command(String),
+    /// The requested PNG path is not an absolute, UTF-8, NUL-free path.
     #[error("invalid screendump output path: {0}")]
     CapturePath(String),
+    /// The input action failed and a fresh connection could not confirm release.
     #[error("{action}; a fresh QMP connection could not confirm the safety release: {recovery}")]
     InputRecovery {
+        /// Original input failure, retained as the causal error.
         action: Box<QmpError>,
+        /// Failure encountered while confirming a release on a fresh connection.
         recovery: Box<QmpError>,
     },
+    /// The guest input coordinates cannot be mapped into the declared frame.
     #[error(transparent)]
     Geometry(#[from] GeometryError),
 }
 
+/// Raw status and pointer information obtained from QEMU before automation.
 #[derive(Clone, Debug)]
 pub struct QmpProbe {
+    /// Response payload from query-status.
     status: Value,
+    /// Response payload from query-mice.
     mice: Value,
 }
 
 impl QmpProbe {
+    /// Returns QEMU's reported run-state label, or "unknown" when absent.
     pub fn run_state(&self) -> &str {
-        // Returns QEMU's reported run-state label, or "unknown" when absent.
         self.status
             .get("status")
             .and_then(Value::as_str)
             .unwrap_or("unknown")
     }
 
+    /// Reports whether QEMU explicitly says the virtual machine is running.
     pub fn is_running(&self) -> bool {
-        // Reports whether QEMU explicitly says the virtual machine is running.
         self.status.get("running").and_then(Value::as_bool) == Some(true)
     }
 
+    /// Finds the name of the active pointing device when it uses absolute input.
     pub fn current_absolute_pointer_name(&self) -> Option<&str> {
-        // Finds the name of the active pointing device when it uses absolute input.
         self.mice.as_array()?.iter().find_map(|mouse| {
             let current = mouse.get("current").and_then(Value::as_bool) == Some(true);
             let absolute = mouse.get("absolute").and_then(Value::as_bool) == Some(true);
@@ -70,8 +88,8 @@ impl QmpProbe {
         })
     }
 
+    /// Summarises the VM state and active absolute pointer for user-facing logs.
     pub fn summary(&self) -> String {
-        // Summarises the VM state and active absolute pointer for user-facing logs.
         match self.current_absolute_pointer_name() {
             Some(pointer) => format!(
                 "QEMU state={} | active absolute pointer={pointer}",
@@ -89,22 +107,27 @@ impl QmpProbe {
 ///
 /// It intentionally exposes only the commands needed by this application.
 pub struct QmpClient {
+    /// Buffered response reader sharing the connected Unix socket.
     reader: BufReader<UnixStream>,
+    /// Request writer sharing the connected Unix socket.
     writer: UnixStream,
+    /// Socket location reused only for release recovery.
     socket_path: PathBuf,
+    /// Next checked numeric request identifier.
     next_id: u64,
+    /// Whether this connection is still permitted to send normal requests.
     usable: bool,
 }
 
 impl QmpClient {
+    /// Opens a QMP socket, validates its greeting, and enables QMP commands.
     pub fn connect(path: &Path) -> Result<Self, QmpError> {
-        // Opens a QMP socket, validates its greeting, and enables QMP commands.
         let writer = UnixStream::connect(path)?;
         Self::from_connected_stream(path, writer)
     }
 
+    /// Configures an already-connected stream, validates QMP, and enables commands.
     fn from_connected_stream(path: &Path, writer: UnixStream) -> Result<Self, QmpError> {
-        // Configures an already-connected stream, validates QMP, and enables commands.
         writer.set_read_timeout(Some(QMP_IO_TIMEOUT))?;
         writer.set_write_timeout(Some(QMP_IO_TIMEOUT))?;
 
@@ -130,8 +153,8 @@ impl QmpClient {
         Ok(client)
     }
 
+    /// Queries the VM status and available pointing devices.
     pub fn probe(&mut self) -> Result<QmpProbe, QmpError> {
-        // Queries the VM status and available pointing devices.
         let status = self.execute("query-status", None)?;
         let mice = self.execute("query-mice", None)?;
         Ok(QmpProbe { status, mice })
@@ -169,16 +192,18 @@ impl QmpClient {
         }
     }
 
+    /// Sends a normal-duration absolute left click through QMP.
     pub fn click(
         &mut self,
         guest_point: PixelPoint,
         guest_width: u32,
         guest_height: u32,
     ) -> Result<(), QmpError> {
-        // Sends a normal-duration absolute left click through QMP.
         self.click_with_hold(guest_point, guest_width, guest_height, MOUSE_HOLD)
     }
 
+    /// Converts a guest pixel position and sends one absolute left click
+    /// using the caller-selected button-down duration.
     pub fn click_with_hold(
         &mut self,
         guest_point: PixelPoint,
@@ -186,8 +211,6 @@ impl QmpClient {
         guest_height: u32,
         hold: Duration,
     ) -> Result<(), QmpError> {
-        // Converts a guest pixel position and sends one absolute left click
-        // using the caller-selected button-down duration.
         let pixel_x = u32::try_from(guest_point.x).map_err(|_| {
             QmpError::Protocol(format!("negative guest X coordinate: {}", guest_point.x))
         })?;
@@ -225,8 +248,8 @@ impl QmpClient {
         )
     }
 
+    /// Sends a held D-key press and release through QMP.
     pub fn press_draw_key(&mut self) -> Result<(), QmpError> {
-        // Sends a held D-key press and release through QMP.
         self.send_press_release(
             json!({
                 "events": [
@@ -254,15 +277,15 @@ impl QmpClient {
         )
     }
 
+    /// Sends one identified QMP command and returns its matching response payload.
     fn execute(&mut self, command: &str, arguments: Option<Value>) -> Result<Value, QmpError> {
-        // Sends one identified QMP command and returns its matching response payload.
         let id = self.send_request(command, arguments)?;
         let mut responses = self.await_responses(&[id])?;
         Ok(responses.remove(0))
     }
 
+    /// Writes one identified request without waiting for its response.
     fn send_request(&mut self, command: &str, arguments: Option<Value>) -> Result<u64, QmpError> {
-        // Writes one identified request without waiting for its response.
         if !self.usable {
             return Err(QmpError::Protocol(
                 "the QMP connection is no longer usable".to_owned(),
@@ -289,9 +312,9 @@ impl QmpClient {
         Ok(id)
     }
 
+    /// Collects successful responses in request order. A command error is
+    /// returned immediately so release recovery retains the causal failure.
     fn await_responses(&mut self, ids: &[u64]) -> Result<Vec<Value>, QmpError> {
-        // Collects successful responses in request order. A command error is
-        // returned immediately so release recovery retains the causal failure.
         let mut responses = vec![None; ids.len()];
 
         while responses.iter().any(Option::is_none) {
@@ -337,13 +360,13 @@ impl QmpClient {
             .collect())
     }
 
+    /// Never wait for the down response before transmitting the matching up.
     fn send_press_release(
         &mut self,
         down_arguments: Value,
         up_arguments: Value,
         hold: Duration,
     ) -> Result<(), QmpError> {
-        // Never wait for the down response before transmitting the matching up.
         let down_id = match self.send_request("input-send-event", Some(down_arguments)) {
             Ok(id) => id,
             Err(error) => return Err(self.recover_release(up_arguments, error)),
@@ -362,10 +385,10 @@ impl QmpClient {
         }
     }
 
+    /// A failed write or ACK leaves the guest's input state uncertain. Send
+    /// only an idempotent release on the old stream, then close it and
+    /// confirm the release once on a fresh QMP connection. Never retry down.
     fn recover_release(&mut self, up_arguments: Value, action: QmpError) -> QmpError {
-        // A failed write or ACK leaves the guest's input state uncertain. Send
-        // only an idempotent release on the old stream, then close it and
-        // confirm the release once on a fresh QMP connection. Never retry down.
         let _ = self.send_request("input-send-event", Some(up_arguments.clone()));
         self.usable = false;
         let _ = self.writer.shutdown(Shutdown::Both);
@@ -386,8 +409,8 @@ impl QmpClient {
         }
     }
 
+    /// Reads and decodes one newline-delimited JSON packet from QMP.
     fn read_packet(&mut self) -> Result<Value, QmpError> {
-        // Reads and decodes one newline-delimited JSON packet from QMP.
         let mut line = String::new();
         let bytes_read = self.reader.read_line(&mut line)?;
         if bytes_read == 0 {
@@ -398,6 +421,7 @@ impl QmpClient {
     }
 }
 
+/// Validate a capture path before serialising it into a screendump request.
 fn qmp_capture_filename(path: &Path) -> Result<&str, QmpError> {
     if !path.is_absolute() {
         return Err(QmpError::CapturePath(
@@ -419,6 +443,7 @@ fn qmp_capture_filename(path: &Path) -> Result<&str, QmpError> {
 
 #[cfg(test)]
 mod tests {
+    //! Mock transport checks for capture arguments and release-safe input ordering.
     use std::{
         ffi::OsString,
         fs,
@@ -432,22 +457,30 @@ mod tests {
 
     use super::*;
 
+    /// Process-local suffix used to keep concurrent mock socket paths distinct.
     static NEXT_SOCKET_ID: AtomicU64 = AtomicU64::new(1);
 
-    struct SocketFile(PathBuf);
+    /// Filesystem pathname guard for a mock Unix socket.
+    struct SocketFile(
+        /// Socket path removed when the guard is dropped.
+        PathBuf,
+    );
 
     impl Drop for SocketFile {
+        /// Remove the mock socket pathname when the test guard leaves scope.
         fn drop(&mut self) {
             let _ = fs::remove_file(&self.0);
         }
     }
 
+    /// Write and flush one newline-delimited JSON packet from the mock server.
     fn write_packet(stream: &mut UnixStream, packet: &Value) {
         serde_json::to_writer(&mut *stream, packet).expect("serialize mock QMP packet");
         stream.write_all(b"\n").expect("write mock QMP newline");
         stream.flush().expect("flush mock QMP packet");
     }
 
+    /// Read and decode a complete request from the mock QMP client.
     fn read_request(reader: &mut BufReader<UnixStream>) -> Value {
         let mut line = String::new();
         let bytes = reader.read_line(&mut line).expect("read mock QMP request");
@@ -455,6 +488,7 @@ mod tests {
         serde_json::from_str(&line).expect("decode mock QMP request")
     }
 
+    /// Extract the numeric request identifier required by mock responses.
     fn request_id(request: &Value) -> u64 {
         request
             .get("id")
@@ -462,10 +496,12 @@ mod tests {
             .expect("request has numeric id")
     }
 
+    /// Send an empty successful response for the selected request.
     fn acknowledge(stream: &mut UnixStream, request: &Value) {
         write_packet(stream, &json!({ "return": {}, "id": request_id(request) }));
     }
 
+    /// Exchange the greeting and capability negotiation with a test client.
     fn start_mock_qmp(stream: &mut UnixStream, reader: &mut BufReader<UnixStream>) {
         write_packet(
             stream,
@@ -481,6 +517,7 @@ mod tests {
         acknowledge(stream, &capabilities);
     }
 
+    /// Accept a mock connection within a fixed deadline.
     fn accept_with_timeout(listener: &UnixListener) -> UnixStream {
         let deadline = Instant::now() + Duration::from_secs(2);
         loop {
@@ -498,6 +535,7 @@ mod tests {
         }
     }
 
+    /// Require one input event per press or release request and return it.
     fn first_input_event(request: &Value) -> &Value {
         assert_eq!(request["execute"], "input-send-event");
         let events = request["arguments"]["events"]
@@ -507,9 +545,9 @@ mod tests {
         &events[0]
     }
 
+    /// Verifies that only an explicit running status passes the probe check.
     #[test]
     fn probe_requires_qemu_to_report_running() {
-        // Verifies that only an explicit running status passes the probe check.
         let running = QmpProbe {
             status: json!({ "running": true, "status": "running" }),
             mice: json!([]),
@@ -523,9 +561,9 @@ mod tests {
         assert!(!paused.is_running());
     }
 
+    /// Verifies that the probe selects the current absolute pointing device.
     #[test]
     fn probe_accepts_only_the_current_absolute_pointer() {
-        // Verifies that the probe selects the current absolute pointing device.
         let probe = QmpProbe {
             status: json!({ "running": true, "status": "running" }),
             mice: json!([
@@ -537,6 +575,7 @@ mod tests {
         assert_eq!(probe.current_absolute_pointer_name(), Some("tablet"));
     }
 
+    /// Verify PNG command arguments and reject invalid paths before any request.
     #[test]
     fn screendump_uses_png_and_rejects_invalid_paths_before_sending() {
         let (client_stream, mut server_stream) = UnixStream::pair().expect("create socket pair");
@@ -583,6 +622,7 @@ mod tests {
         server.join().expect("mock QMP server completed");
     }
 
+    /// Verify movement ordering and release delivery before either input acknowledgement.
     #[test]
     fn click_and_key_send_release_before_waiting_for_down_ack() {
         let (client_stream, mut server_stream) = UnixStream::pair().expect("create socket pair");
@@ -688,6 +728,7 @@ mod tests {
         server.join().expect("mock QMP server completed");
     }
 
+    /// Verify causal-error retention and release-only recovery without a second press.
     #[test]
     fn command_failure_releases_on_original_and_fresh_connections_without_retrying_down() {
         let socket_file = SocketFile(std::env::temp_dir().join(format!(

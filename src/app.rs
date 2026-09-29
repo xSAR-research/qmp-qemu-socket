@@ -1,10 +1,10 @@
-use std::{
-    fs::{self, File, OpenOptions},
-    io::{self, Write},
-    os::unix::fs::OpenOptionsExt,
-    path::PathBuf,
-    time::{Instant, SystemTime, UNIX_EPOCH},
-};
+//! Desktop controls, read-only previews and diagnostic presentation for the QMP worker.
+//!
+//! Worker events update the UI on its own thread. A preview authorises execution
+//! only while its mode, socket and dimensions remain current; snapshot bytes and
+//! diagnostic frames are retained separately from that authority.
+
+use std::{path::PathBuf, time::Instant};
 
 use eframe::egui::{
     self, Align, Align2, Color32, FontId, Layout, Pos2, Rect, Sense, Stroke, TextBuffer,
@@ -16,7 +16,8 @@ use crate::{
     capture::{CapturedFrame, PixelFormat},
     game::{ActionTarget, GameMode, InputOperation},
     geometry::{PixelPoint, PixelRect},
-    pyramid::{PYRAMID_TARGETS, TABLEAU_CARD_COUNT as PYRAMID_TABLEAU_CARD_COUNT},
+    pyramid::{self, PYRAMID_TARGETS},
+    session_log::SessionLog,
     snapshot::SnapshotArtifact,
     tracker::PredictedAction,
     worker::{WorkerEvent, WorkerHandle, WorkerState},
@@ -32,130 +33,139 @@ use crate::parameters::{
     MULTI_STEP_INPUT_ENABLED, NO_HIGHLIGHT_REOBSERVE_DELAY, NOMINAL_FRAME_HEIGHT,
     NOMINAL_FRAME_WIDTH, OUTPUT_PANEL_HEIGHT, POINTER_SETTLE_DELAY, POST_GAME_MAX_CLICK_ATTEMPTS,
     POST_GAME_MAX_OBSERVATION_ROUNDS, POST_GAME_STAGE_DELAY, POST_GAME_TARGETS,
-    PREVIEW_FOOTER_RESERVE_POINTS, PREVIEW_SCROLLBAR_ALLOWANCE_POINTS, RELEASE_LABEL,
-    SCORE_SKIP_MAX_CLICK_ATTEMPTS, SESSION_LOG_FILE_PREFIX, SESSION_LOG_FILE_SUFFIX,
-    SESSION_LOG_MODE, SESSION_LOG_NAME_ATTEMPTS, SHARED_TOOLBAR_CONTROLS, SNAPSHOT_LABEL_MAX_CHARS,
-    STEP_ONCE_ACTIONS, STEP_ONCE_INPUT_ENABLED, TABLEAU_ANIMATION_SETTLE_DELAY_MS,
-    UNBOUNDED_MULTI_STEP_ACTIONS, VISIBLE_LOG_ROLLOVER_GAMES,
+    PREVIEW_FOOTER_RESERVE_POINTS, PREVIEW_SCROLLBAR_ALLOWANCE_POINTS,
+    PYRAMID_CARD_SETTLE_DELAY_MS, PYRAMID_MOVE_SETTLE_DELAY_MS, PYRAMID_REOBSERVE_DELAY_MS,
+    RELEASE_LABEL, SCORE_SKIP_MAX_CLICK_ATTEMPTS, SHARED_TOOLBAR_CONTROLS,
+    SNAPSHOT_LABEL_MAX_CHARS, STEP_ONCE_ACTIONS, STEP_ONCE_INPUT_ENABLED,
+    TABLEAU_ANIMATION_SETTLE_DELAY_MS, UNBOUNDED_MULTI_STEP_ACTIONS, VISIBLE_LOG_ROLLOVER_GAMES,
 };
 use crate::parameters::{AnimationSettleDelays, StepRunSettings};
 use crate::parameters::{default_qmp_socket_path, session_log_directory, snapshot_directory};
 
-struct SessionLog {
-    path: PathBuf,
-    file: File,
-}
-
+/// Fill colour for setup, capture and snapshot controls.
 const SETUP_BLUE: Color32 = Color32::from_rgb(27, 96, 157);
+/// Fill colour for controls that start an authorised run.
 const ACTION_GREEN: Color32 = Color32::from_rgb(35, 112, 43);
+/// Fill colour for stop and exit controls.
 const STATE_RED: Color32 = Color32::from_rgb(172, 35, 38);
+/// Sub-pixel allowance that corrects f32 round-trip drift at exact pixel boundaries.
 const PREVIEW_MAPPING_FLOAT_EPSILON: f32 = 0.0005;
 
+/// UI ownership of a dispatched run until worker completion or cancellation arrives.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ActiveRun {
+    /// One user-approved input and its resulting observation.
     StepOnce,
+    /// A bounded or continuous sequence using accepted result frames.
     MultiStep,
 }
 
+/// Deferred clipboard operation selected from the snapshot-label context menu.
 enum SnapshotEditAction {
+    /// Copy selected text to the clipboard, then remove it from the label.
     Cut,
+    /// Copy selected text without changing the label.
     Copy,
+    /// Insert sanitised clipboard text within the label length limit.
     Paste,
 }
 
-impl SessionLog {
-    fn create() -> io::Result<Self> {
-        // Creates a private, timestamped backing file for the complete session.
-        // The visible panel can then roll over without losing diagnostic history.
-        let directory = session_log_directory();
-        fs::create_dir_all(&directory)?;
-
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(io::Error::other)?
-            .as_millis();
-
-        for attempt in 0..SESSION_LOG_NAME_ATTEMPTS {
-            let collision_suffix = if attempt == 0 {
-                String::new()
-            } else {
-                format!("-{attempt}")
-            };
-            let path = directory.join(format!(
-                "{SESSION_LOG_FILE_PREFIX}{timestamp}{collision_suffix}{SESSION_LOG_FILE_SUFFIX}"
-            ));
-            match OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .mode(SESSION_LOG_MODE)
-                .open(&path)
-            {
-                Ok(file) => return Ok(Self { path, file }),
-                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
-                Err(error) => return Err(error),
-            }
-        }
-        Err(io::Error::new(
-            io::ErrorKind::AlreadyExists,
-            "could not reserve a unique session log name",
-        ))
-    }
-
-    fn append(&mut self, line: &str) -> io::Result<()> {
-        writeln!(self.file, "{line}")
-    }
-
-    fn complete_text(&mut self) -> io::Result<String> {
-        self.file.flush()?;
-        fs::read_to_string(&self.path)
-    }
-}
-
+/// Owns UI state and submits bounded requests to the independent QMP worker.
 pub struct QmpQemuSocketApp {
+    /// Command sender and event receiver for the background QMP worker.
     worker: WorkerHandle,
+    /// Latest worker state used to gate controls and describe connection progress.
     worker_state: WorkerState,
+    /// Selected calibration and gameplay profile.
     game_mode: GameMode,
+    /// Editable local socket pathname; edits revoke preview authority.
     qmp_socket_path: String,
+    /// Bounded visible tail of timestamped session output.
     log_lines: Vec<String>,
+    /// Whether the detailed-output body occupied space in the previous render.
     output_expanded: bool,
+    /// Complete private session history, absent after creation or write failure.
     session_log: Option<SessionLog>,
+    /// Successfully restarted games counted for visible-output rollover.
     completed_games: usize,
+    /// Monotonic origin for elapsed timestamps in UI-generated log entries.
     started_at: Instant,
+    /// Whether pointer movement paints the guest-pixel alignment crosshair.
     show_coordinates: bool,
+    /// Whether calibrated target rectangles and click markers are overlaid.
     draw_targets: bool,
+    /// Visibility of the editable settings window.
     show_parameters: bool,
+    /// Visibility of the original-PNG review and save dialog.
     show_snapshot_dialog: bool,
+    /// Optional user text sanitised when reserving a snapshot filename.
     snapshot_label: String,
+    /// Wrapping request token used to reject superseded snapshot results.
     snapshot_request_id: u64,
+    /// Whether the current snapshot request is awaiting its worker result.
     snapshot_capture_pending: bool,
+    /// One-shot request to focus the snapshot label after opening the dialog.
     snapshot_focus_pending: bool,
+    /// Character selection retained while the label context menu has focus.
     snapshot_label_selection: Option<egui::text::CCursorRange>,
+    /// Current capture or save error displayed without discarding retryable bytes.
     snapshot_error: Option<String>,
+    /// Original QMP PNG bytes retained for saving exactly the reviewed capture.
     snapshot_png: Option<Vec<u8>>,
+    /// Decoded pixels paired with the retained original PNG.
     snapshot_frame: Option<CapturedFrame>,
+    /// Detector result paired with the snapshot frame.
     snapshot_prediction: Option<PredictedAction>,
+    /// Socket and mode associated with the snapshot request.
     snapshot_context: Option<(PathBuf, GameMode)>,
+    /// Display texture for the snapshot review dialog.
     snapshot_texture: Option<egui::TextureHandle>,
+    /// Host clipboard access used by snapshot-label editing.
     clipboard: Clipboard,
+    /// Latest main-preview texture, independent of pending snapshot pixels.
     capture_texture: Option<egui::TextureHandle>,
+    /// Dimensions of the installed main preview.
     captured_dimensions: Option<(u32, u32)>,
+    /// Socket and mode from which the installed main preview originated.
     preview_context: Option<(PathBuf, GameMode)>,
+    /// Displayed detector result, subject to fresh worker validation before input.
     prediction: Option<PredictedAction>,
+    /// Marks an unverified result frame as inspection-only.
+    diagnostic_preview: bool,
+    /// TriPeaks draw settling delay copied into the next run settings.
     draw_animation_settle_ms: u64,
+    /// TriPeaks tableau settling delay copied into the next run settings.
     tableau_animation_settle_ms: u64,
+    /// Redeal settling delay copied into the next run settings.
     board_redeal_settle_ms: u64,
+    /// Pyramid Move/Recycle settling delay copied into the next run settings.
+    pyramid_move_settle_ms: u64,
+    /// Pyramid card-click settling delay copied into the next run settings.
+    pyramid_card_settle_ms: u64,
+    /// Pyramid no-halo recapture delay copied into the next run settings.
+    pyramid_reobserve_ms: u64,
+    /// Requested operation limit; the configured zero sentinel means continuous.
     multi_step_actions: usize,
+    /// Run ownership retained until the worker reports completion.
     active_run: Option<ActiveRun>,
+    /// Cancellation latch that blocks new requests while STOP is in flight.
     stop_requested: bool,
+    /// Session advisory board index reported by the worker.
     current_board: usize,
+    /// Board count supplied by the selected game profile.
     boards_per_game: usize,
+    /// Whether a detected transition has established the board advisory.
     board_position_established: bool,
+    /// Concise operational message shown outside the detailed output.
     current_status: String,
 }
 
 impl QmpQemuSocketApp {
+    /// Creates UI state, starts the worker and requests one read-only capture.
+    ///
+    /// Uses the display handle for clipboard access. A log-creation failure is
+    /// reported in the visible output and does not prevent the application opening.
     pub fn new(creation_context: &eframe::CreationContext<'_>) -> Self {
-        // Creates the initial UI state and starts its background worker.
         let started_at = Instant::now();
         let qmp_socket_path = default_qmp_socket_path().display().to_string();
         let clipboard = Clipboard::new(
@@ -198,9 +208,13 @@ impl QmpQemuSocketApp {
             captured_dimensions: None,
             preview_context: None,
             prediction: None,
+            diagnostic_preview: false,
             draw_animation_settle_ms: DRAW_ANIMATION_SETTLE_DELAY_MS,
             tableau_animation_settle_ms: TABLEAU_ANIMATION_SETTLE_DELAY_MS,
             board_redeal_settle_ms: BOARD_REDEAL_SETTLE_DELAY_MS,
+            pyramid_move_settle_ms: PYRAMID_MOVE_SETTLE_DELAY_MS,
+            pyramid_card_settle_ms: PYRAMID_CARD_SETTLE_DELAY_MS,
+            pyramid_reobserve_ms: PYRAMID_REOBSERVE_DELAY_MS,
             multi_step_actions: DEFAULT_MULTI_STEP_ACTIONS,
             active_run: None,
             stop_requested: false,
@@ -215,7 +229,7 @@ impl QmpQemuSocketApp {
             crate::parameters::APP_NAME,
             app.game_mode
         ));
-        if let Some(path) = app.session_log.as_ref().map(|log| log.path.clone()) {
+        if let Some(path) = app.session_log.as_ref().map(|log| log.path().to_path_buf()) {
             app.push_log(format!(
                 "Complete session output is being written to {} with mode 0600.",
                 path.display()
@@ -229,18 +243,19 @@ impl QmpQemuSocketApp {
         app.push_log(format!("QMP socket candidate: {}", app.qmp_socket_path));
         app.push_log("Initial Capture Frame is automatic, one-shot and read-only.");
         app.push_log("The preview retains only the latest worker frame; stale full-resolution previews are coalesced while the UI is asleep or occluded.");
-        app.push_log("Step Once and Multi-Step freshly validate the initial displayed prediction, reuse each verified result frame as the next plan, and never retry uncertain guest input.");
+        app.push_log("Step Once and Multi-Step freshly validate the initial displayed prediction and reuse each accepted result frame as the next plan. Pyramid can continue a repeated Left–Right pair from fresh settled halos without claiming the prior effect was proven.");
         app.push_log(format!(
-            "Execution defaults: one initial planning frame plus one fresh verified result frame per action, Multi-Step limit {} (0 means continuous). STOP is visible only while a guarded run is active.",
+            "Execution defaults: one initial planning frame plus fresh result captures after each action, Multi-Step limit {} (0 means continuous). STOP is visible only while a guarded run is active.",
             DEFAULT_MULTI_STEP_ACTIONS,
         ));
         app.request_capture("Startup");
         app
     }
 
+    /// Timestamps a message, appends it to the session file and retains its visible tail.
+    ///
+    /// A write failure disables further file-backed logging and adds a visible warning.
     fn push_log(&mut self, message: impl Into<String>) {
-        // Appends every line to the private session file and keeps only a
-        // bounded working set in the rendered panel.
         let line = format!(
             "[+{:08.3}s] {}",
             self.started_at.elapsed().as_secs_f64(),
@@ -260,6 +275,7 @@ impl QmpQemuSocketApp {
         self.push_visible_log_line(line);
     }
 
+    /// Retains the newest line while evicting enough old lines to respect `MAX_LOG_LINES`.
     fn push_visible_log_line(&mut self, line: String) {
         if self.log_lines.len() >= MAX_LOG_LINES {
             let remove_count = self.log_lines.len() + 1 - MAX_LOG_LINES;
@@ -268,6 +284,9 @@ impl QmpQemuSocketApp {
         self.log_lines.push(line);
     }
 
+    /// Timestamps a housekeeping entry without adding it to the visible panel.
+    ///
+    /// Returns a message on unavailable or failed file logging and disables the failed log.
     fn append_session_only(&mut self, message: impl Into<String>) -> Result<(), String> {
         let line = format!(
             "[+{:08.3}s] {}",
@@ -286,6 +305,9 @@ impl QmpQemuSocketApp {
         result
     }
 
+    /// Returns the complete session file, or the visible tail when no file is available.
+    ///
+    /// A failed read of an existing file is reported rather than silently truncating output.
     fn complete_output(&mut self) -> Result<String, String> {
         match self.session_log.as_mut() {
             Some(log) => log
@@ -295,9 +317,10 @@ impl QmpQemuSocketApp {
         }
     }
 
+    /// Counts a restarted game and periodically clears only the rendered log tail.
+    ///
+    /// Rollover is skipped if its marker cannot be written to the complete session log.
     fn roll_visible_output_after_completed_game(&mut self) {
-        // Counts successfully restarted games and periodically
-        // clears only the rendered panel while preserving the backing file.
         self.completed_games = self.completed_games.saturating_add(1);
         if self.completed_games % VISIBLE_LOG_ROLLOVER_GAMES != 0 {
             return;
@@ -321,8 +344,11 @@ impl QmpQemuSocketApp {
         ));
     }
 
+    /// Applies queued worker events and installs only the latest compatible preview.
+    ///
+    /// Snapshot request tokens reject superseded captures; diagnostic frames remain
+    /// inspection-only even when their pixels and predictions are displayed.
     fn poll_worker(&mut self, context: &egui::Context) {
-        // Applies pending worker state and log events to the UI state.
         let events: Vec<_> = self.worker.try_events().collect();
         for event in events {
             match event {
@@ -402,11 +428,17 @@ impl QmpQemuSocketApp {
                     input_commands,
                     input_events,
                     changed_pixels,
+                    continued_from_halo,
                 } => {
                     self.current_status = display_action(before);
                     let progress = format_operation_progress(operation_index, operation_limit);
+                    let acceptance = if continued_from_halo {
+                        "continued from fresh halo (prior effect unproven)"
+                    } else {
+                        "verified"
+                    };
                     self.push_log(format!(
-                        "Operation {progress} verified: {} -> {}; changed effect pixels={changed_pixels}; QMP commands={input_commands}, input events={input_events}, guest-input retries=0.",
+                        "Operation {progress} {acceptance}: {} -> {}; changed effect pixels={changed_pixels}; QMP commands={input_commands}, input events={input_events}, guest-input retries=0.",
                         concise_prediction(before),
                         concise_prediction(after),
                     ));
@@ -423,12 +455,13 @@ impl QmpQemuSocketApp {
                     prediction,
                     requested_operations,
                     verified_operations,
+                    halo_operations,
                 } => {
                     self.active_run = None;
                     self.current_status = "Ready".to_owned();
                     let requested = format_operation_limit(requested_operations);
                     self.push_log(format!(
-                        "Execution run completed: verified {verified_operations} operation(s) from a {requested} request; final prediction={}; guest-input retries=0.",
+                        "Execution run completed: verified {verified_operations} operation(s), continued from fresh halo {halo_operations} operation(s), from a {requested} request; final prediction={}; guest-input retries=0.",
                         concise_prediction(prediction),
                     ));
                 }
@@ -445,8 +478,9 @@ impl QmpQemuSocketApp {
             if latest.context == Some(self.current_preview_context())
                 && !matches!(
                     self.worker_state,
-                    WorkerState::Detached | WorkerState::Error | WorkerState::Uncertain
+                    WorkerState::Detached | WorkerState::Error
                 )
+                && (self.worker_state != WorkerState::Uncertain || latest.diagnostic)
             {
                 self.install_frame(
                     context,
@@ -455,12 +489,21 @@ impl QmpQemuSocketApp {
                     latest.log_prediction,
                     latest.context,
                 );
+                if latest.diagnostic && self.capture_texture.is_some() {
+                    self.diagnostic_preview = true;
+                    self.prediction = None;
+                    self.push_log("Latest unverified post-action QMP frame is displayed for diagnosis; capture a fresh frame before another run.");
+                }
             } else {
-                self.push_log("Discarded a preview from a different mode/socket or a detached/uncertain worker state.");
+                self.push_log("Discarded a preview from a different mode/socket or a detached/uncertain worker state without a diagnostic frame.");
             }
         }
     }
 
+    /// Validates and uploads a captured frame, retaining its prediction and source context.
+    ///
+    /// When requested, logs the prediction. An invalid layout sets an error state
+    /// and revokes the existing preview instead of displaying unchecked pixels.
     fn install_frame(
         &mut self,
         context: &egui::Context,
@@ -469,7 +512,6 @@ impl QmpQemuSocketApp {
         log_prediction: bool,
         frame_context: Option<(PathBuf, GameMode)>,
     ) {
-        // Uploads a worker-owned frame to egui only after validating its layout.
         let dimensions = (frame.width, frame.height);
         match frame_to_colour_image(&frame) {
             Ok(image) => {
@@ -481,6 +523,7 @@ impl QmpQemuSocketApp {
                 self.captured_dimensions = Some(dimensions);
                 self.preview_context = frame_context;
                 self.prediction = Some(prediction);
+                self.diagnostic_preview = false;
                 if log_prediction {
                     self.push_log(format_prediction(prediction));
                 }
@@ -493,10 +536,12 @@ impl QmpQemuSocketApp {
         }
     }
 
+    /// Returns the trimmed socket pathname and selected mode used to identify captures.
     fn current_preview_context(&self) -> (PathBuf, GameMode) {
         (PathBuf::from(self.qmp_socket_path.trim()), self.game_mode)
     }
 
+    /// Reports whether the displayed frame can authorise a freshly validated run request.
     fn has_current_preview(&self) -> bool {
         preview_is_current(
             self.captured_dimensions,
@@ -504,16 +549,22 @@ impl QmpQemuSocketApp {
             &self.current_preview_context(),
             self.capture_texture.is_some(),
             self.stop_requested,
+            self.diagnostic_preview,
         )
     }
 
+    /// Drops displayed pixels, prediction and source context so they cannot authorise input.
     fn invalidate_preview(&mut self) {
         self.capture_texture = None;
         self.captured_dimensions = None;
         self.preview_context = None;
         self.prediction = None;
+        self.diagnostic_preview = false;
     }
 
+    /// Requests one read-only frame when no run, cancellation or worker operation is active.
+    ///
+    /// `source` labels the request in the log; dispatch failures become visible UI errors.
     fn request_capture(&mut self, source: &str) {
         if self.worker_state.is_busy() || self.active_run.is_some() || self.stop_requested {
             return;
@@ -533,6 +584,10 @@ impl QmpQemuSocketApp {
         }
     }
 
+    /// Starts a fresh snapshot request and clears any superseded review artefact.
+    ///
+    /// Busy or cancelling runs are left untouched. Dispatch errors remain visible
+    /// in the dialog, and the request token prevents old results replacing new ones.
     fn prepare_snapshot(&mut self) {
         if self.worker_state.is_busy() || self.active_run.is_some() || self.stop_requested {
             return;
@@ -565,6 +620,10 @@ impl QmpQemuSocketApp {
         }
     }
 
+    /// Saves the exact retained PNG only after its source context and readiness checks pass.
+    ///
+    /// A successful save installs its decoded frame in the main preview. A failed
+    /// reservation or write retains the bytes and reports the error for a later retry.
     fn save_prepared_snapshot(&mut self, context: &egui::Context) {
         if self.snapshot_capture_pending
             || !controls_are_mutable(self.active_run, self.worker_state, self.stop_requested)
@@ -607,6 +666,7 @@ impl QmpQemuSocketApp {
         }
     }
 
+    /// Closes snapshot review and releases its bytes, decoded frame and pending selection.
     fn close_snapshot_dialog(&mut self) {
         self.show_snapshot_dialog = false;
         self.snapshot_capture_pending = false;
@@ -619,13 +679,16 @@ impl QmpQemuSocketApp {
         self.snapshot_label_selection = None;
     }
 
+    /// Snapshots controls and asks the worker to execute the requested operation limit.
+    ///
+    /// Requires an authorised mode and current actionable preview. STOP and failed
+    /// preconditions refuse dispatch; worker-channel errors release UI run ownership.
     fn dispatch_steps(
         &mut self,
         operation_limit: usize,
         request_name: &str,
         active_run: ActiveRun,
     ) {
-        // Snapshots all execution controls before handing the run to the worker.
         if self.stop_requested {
             self.push_log(format!(
                 "{request_name} refused: STOP is still being processed; guest input sent=0."
@@ -656,6 +719,11 @@ impl QmpQemuSocketApp {
             self.draw_animation_settle_ms,
             self.tableau_animation_settle_ms,
             self.board_redeal_settle_ms,
+        )
+        .with_pyramid_millis(
+            self.pyramid_move_settle_ms,
+            self.pyramid_card_settle_ms,
+            self.pyramid_reobserve_ms,
         );
         let settings = StepRunSettings::new(animation_delays, operation_limit);
         let request_scope = if settings.is_unbounded() {
@@ -668,7 +736,7 @@ impl QmpQemuSocketApp {
         self.active_run = Some(active_run);
         self.current_status = "Validating next move".to_owned();
         self.push_log(format!(
-            "{request_name} requested {request_scope}, starting from approved preview target: {}. The initial target receives one fresh validation capture; each verified result frame then becomes the next planning frame.",
+            "{request_name} requested {request_scope}, starting from approved preview target: {}. The initial target receives one fresh validation capture; each accepted result frame then becomes the next planning frame.",
             concise_prediction(approved_prediction),
         ));
         if let Err(error) =
@@ -682,6 +750,9 @@ impl QmpQemuSocketApp {
         }
     }
 
+    /// Draws mode, capture and execution controls with run-state gating.
+    ///
+    /// Mode or socket changes invalidate the previous preview before it can authorise input.
     fn top_bar(&mut self, ui: &mut egui::Ui) {
         // A mode/socket change invalidates an old frame before any action can use it.
         if self
@@ -825,7 +896,7 @@ impl QmpQemuSocketApp {
                     .on_hover_text(if self.multi_step_actions == UNBOUNDED_MULTI_STEP_ACTIONS {
                         "Run continuously until STOP or the first guarded stop condition"
                     } else {
-                        "Run the configured bounded number of verified actions"
+                        "Run the configured bounded number of actions"
                     })
                     .clicked()
                 {
@@ -835,10 +906,18 @@ impl QmpQemuSocketApp {
         });
     }
 
+    /// Draws the native-scale capture, optional overlays and guest-coordinate inspection.
+    ///
+    /// Pointer clicks here log coordinates only; overlays never modify captured
+    /// pixels or the original PNG retained by the snapshot dialog.
     fn preview(&mut self, ui: &mut egui::Ui) {
-        // Renders the latest QMP capture and reports guest-pixel coordinates.
         ui.heading("QMP capture and target preview");
         match self.captured_dimensions {
+            Some((width, height)) if self.diagnostic_preview => {
+                ui.colored_label(Color32::from_rgb(255, 174, 79), format!(
+                    "Last unverified post-action QMP capture: {width}x{height}. For inspection only; use Capture Frame before another run."
+                ));
+            }
             Some((width, height)) => {
                 ui.label(format!(
                     "Last successful primary-display capture, implicit head 0: {width}x{height}. Displayed prediction is advisory."
@@ -953,9 +1032,11 @@ impl QmpQemuSocketApp {
         }
     }
 
+    /// Draws the collapsible diagnostic tail and complete-history copy controls.
+    ///
+    /// Records the expanded state so the preview can reclaim space when collapsed.
+    /// Manual clearing resets progress only after the worker accepts the reset.
     fn output(&mut self, ui: &mut egui::Ui) {
-        // Keeps complete diagnostics available without making them the primary
-        // operational display.
         ui.separator();
         let output_response = egui::CollapsingHeader::new("Detailed output")
             .default_open(false)
@@ -1022,9 +1103,8 @@ impl QmpQemuSocketApp {
         self.output_expanded = output_response.body_response.is_some();
     }
 
+    /// Shows the concise operational status and advisory board position outside detailed output.
     fn status_panel(&self, ui: &mut egui::Ui) {
-        // Operational state remains short and stable while the detailed trace
-        // continues in the bounded panel and private session file.
         egui::Frame::group(ui.style()).show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
                 if self.game_mode.calibration_only() {
@@ -1043,8 +1123,11 @@ impl QmpQemuSocketApp {
         });
     }
 
+    /// Draws settings and calibration information while the Parameters window is open.
+    ///
+    /// Execution values are editable only while idle and are copied into the next
+    /// run; changing the socket invalidates the prior preview.
     fn parameters_window(&mut self, context: &egui::Context) {
-        // Shows the editable QMP path and current tuning parameters when requested.
         if !self.show_parameters {
             return;
         }
@@ -1080,9 +1163,53 @@ impl QmpQemuSocketApp {
                 let execution_enabled = !self.worker_state.is_busy()
                     && self.active_run.is_none()
                     && !self.show_snapshot_dialog;
+                if execution_enabled {
+                    ui.small("Double-click a number to type milliseconds, or drag to adjust (0–5000 ms).");
+                } else {
+                    ui.small("Timing controls are locked during a run or capture. STOP and close any snapshot dialog to edit the next run.");
+                }
                 ui.add_enabled_ui(execution_enabled, |ui| {
                     if self.game_mode == GameMode::Pyramid {
-                        ui.label("Pyramid action settle: 500 ms");
+                        ui.horizontal(|ui| {
+                            ui.label("After Pyramid MOVE / Recycle click");
+                            ui.add(
+                                egui::DragValue::new(&mut self.pyramid_move_settle_ms)
+                                    .range(
+                                        MINIMUM_ANIMATION_SETTLE_DELAY_MS
+                                            ..=MAXIMUM_ANIMATION_SETTLE_DELAY_MS,
+                                    )
+                                    .speed(10.0)
+                                    .suffix(" ms"),
+                            )
+                            .on_hover_text("Wait after clicking MOVE or Recycle before capturing its result");
+                        });
+                        ui.horizontal(|ui| {
+                            ui.label("After Pyramid card / Left / Right click");
+                            ui.add(
+                                egui::DragValue::new(&mut self.pyramid_card_settle_ms)
+                                    .range(
+                                        MINIMUM_ANIMATION_SETTLE_DELAY_MS
+                                            ..=MAXIMUM_ANIMATION_SETTLE_DELAY_MS,
+                                    )
+                                    .speed(10.0)
+                                    .suffix(" ms"),
+                            )
+                            .on_hover_text("Wait after a card or pile click, including time for the next MOVE halo to appear");
+                        });
+                        ui.small("For a late MOVE halo after a card disappears, increase the card / Left / Right delay above.");
+                        ui.horizontal(|ui| {
+                            ui.label("Pyramid repeat observation settle");
+                            ui.add(
+                                egui::DragValue::new(&mut self.pyramid_reobserve_ms)
+                                    .range(
+                                        MINIMUM_ANIMATION_SETTLE_DELAY_MS
+                                            ..=MAXIMUM_ANIMATION_SETTLE_DELAY_MS,
+                                    )
+                                    .speed(10.0)
+                                    .suffix(" ms"),
+                            )
+                            .on_hover_text("Wait before each fresh capture while the action effect or next halo is still unverified; this sends no gameplay input");
+                        });
                     } else {
                         ui.horizontal(|ui| {
                             ui.label("Draw-class action settle");
@@ -1139,12 +1266,15 @@ impl QmpQemuSocketApp {
                         self.draw_animation_settle_ms = DRAW_ANIMATION_SETTLE_DELAY_MS;
                         self.tableau_animation_settle_ms = TABLEAU_ANIMATION_SETTLE_DELAY_MS;
                         self.board_redeal_settle_ms = BOARD_REDEAL_SETTLE_DELAY_MS;
+                        self.pyramid_move_settle_ms = PYRAMID_MOVE_SETTLE_DELAY_MS;
+                        self.pyramid_card_settle_ms = PYRAMID_CARD_SETTLE_DELAY_MS;
+                        self.pyramid_reobserve_ms = PYRAMID_REOBSERVE_DELAY_MS;
                         self.multi_step_actions = DEFAULT_MULTI_STEP_ACTIONS;
                     }
                 });
                 if self.game_mode == GameMode::Pyramid {
                     ui.small(format!(
-                        "Pyramid uses 500 ms settling per action. Session defaults: board redeal {BOARD_REDEAL_SETTLE_DELAY_MS} ms, Multi-Step {DEFAULT_MULTI_STEP_ACTIONS} (continuous)."
+                        "Session defaults: Pyramid Move/Recycle {PYRAMID_MOVE_SETTLE_DELAY_MS} ms, Card/Left/Right {PYRAMID_CARD_SETTLE_DELAY_MS} ms, repeat observation {PYRAMID_REOBSERVE_DELAY_MS} ms, board redeal {BOARD_REDEAL_SETTLE_DELAY_MS} ms, Multi-Step {DEFAULT_MULTI_STEP_ACTIONS} (continuous). Changes apply to the next run."
                     ));
                 } else {
                     ui.small(format!(
@@ -1152,10 +1282,10 @@ impl QmpQemuSocketApp {
                     ));
                 }
                 if let Some(log) = self.session_log.as_ref() {
-                    ui.small(format!("Complete output: {}", log.path.display()));
+                    ui.small(format!("Complete output: {}", log.path().display()));
                 }
                 ui.small(
-                    "Current verification: one initial fresh planning capture, then each fresh verified result frame is reused for the next plan. Material effect verification remains mandatory. STOP cancels the active run.",
+                    "Current verification: one initial fresh planning capture, then each accepted result frame is reused for the next plan. Pyramid may continue a repeated Left–Right pair from fresh settled halos; this is logged separately from a proven effect. STOP cancels the active run.",
                 );
                 ui.separator();
                 ui.monospace(format!(
@@ -1178,12 +1308,12 @@ impl QmpQemuSocketApp {
                     ui.monospace("guest-input-authorised = true; one guarded click per action");
                     ui.monospace("target-priority = Move, Left, Right, Card");
                     ui.monospace(format!(
-                        "target-slots = {} total, {pyramid_cards} cards (expected {PYRAMID_TABLEAU_CARD_COUNT})",
-                        PYRAMID_TARGETS.len(),
+                        "target-slots = {} total, {pyramid_cards} cards (expected {})",
+                        PYRAMID_TARGETS.len(), pyramid::TABLEAU_CARD_COUNT,
                     ));
                     ui.monospace("halo-probes = fixed 2x2; first eligible target by priority");
                     ui.monospace("card-state = suppress only a clicked card after verified removal");
-                    ui.monospace("Move / Left / Right = repeatable after verified effect");
+                    ui.monospace("Move / Left / Right = repeatable; fresh settled Left–Right halos may authorise the next pair");
                     for target in &PYRAMID_TARGETS {
                         ui.monospace(format!(
                             "{}: bounds {}, hit x={}, y={}, HALO {}",
@@ -1281,7 +1411,7 @@ impl QmpQemuSocketApp {
                     }
                 ));
                 if self.game_mode == GameMode::Pyramid {
-                    ui.monospace("action-verification = card face removed or material lower-pile change");
+                    ui.monospace("action-verification = card removal or material lower-pile change; repeated Left–Right pair may continue from fresh settled halos");
                 } else {
                     ui.monospace(format!(
                         "action-change = channel >= {ACTION_CHANGE_CHANNEL_THRESHOLD}, draw pixels >= {MINIMUM_DRAW_CHANGED_PIXELS}, tableau pixels >= {MINIMUM_TABLEAU_CHANGED_PIXELS}"
@@ -1300,6 +1430,10 @@ impl QmpQemuSocketApp {
         self.show_parameters = open;
     }
 
+    /// Draws original-PNG review, bounded label editing and save/recapture controls.
+    ///
+    /// Clipboard insertion strips control characters and honours the character cap;
+    /// closing or cancelling releases the retained snapshot through one cleanup path.
     fn snapshot_window(&mut self, context: &egui::Context) {
         if !self.show_snapshot_dialog {
             return;
@@ -1480,14 +1614,14 @@ impl QmpQemuSocketApp {
 }
 
 impl eframe::App for QmpQemuSocketApp {
+    /// Drains worker events and schedules the next UI update without blocking on QMP I/O.
     fn logic(&mut self, context: &egui::Context, _frame: &mut eframe::Frame) {
-        // Polls worker events and schedules regular UI repainting.
         self.poll_worker(context);
         context.request_repaint_after(std::time::Duration::from_millis(100));
     }
 
+    /// Renders the main controls and dialogs; EXIT requests worker detachment before closing.
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        // Renders the main application panel and optional parameters window.
         egui::CentralPanel::default().show(ui, |ui| {
             self.top_bar(ui);
             ui.separator();
@@ -1510,6 +1644,9 @@ impl eframe::App for QmpQemuSocketApp {
     }
 }
 
+/// Adds an enabled or disabled coloured button and returns its interaction response.
+///
+/// The bevel reverses when selected or pressed; painting does not alter click handling.
 fn bevel_button(
     ui: &mut egui::Ui,
     label: &str,
@@ -1552,6 +1689,7 @@ fn bevel_button(
     response
 }
 
+/// Returns true only after run ownership, worker activity and cancellation have all cleared.
 fn controls_are_mutable(
     active_run: Option<ActiveRun>,
     state: WorkerState,
@@ -1560,19 +1698,25 @@ fn controls_are_mutable(
     active_run.is_none() && !state.is_busy() && !stop_requested
 }
 
+/// Checks nominal dimensions, texture availability and matching socket/mode authority.
+///
+/// STOP and diagnostic-only previews reject authority even if their other metadata matches.
 fn preview_is_current(
     dimensions: Option<(u32, u32)>,
     preview_context: Option<&(PathBuf, GameMode)>,
     requested_context: &(PathBuf, GameMode),
     has_texture: bool,
     stop_requested: bool,
+    diagnostic_preview: bool,
 ) -> bool {
     dimensions == Some((NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT))
         && preview_context == Some(requested_context)
         && has_texture
         && !stop_requested
+        && !diagnostic_preview
 }
 
+/// Formats the session board advisory without asserting an unobserved initial board number.
 fn board_position_label(
     mode: GameMode,
     current_board: usize,
@@ -1588,6 +1732,10 @@ fn board_position_label(
     }
 }
 
+/// Returns preview height in UI points after reserving footer and expanded-output space.
+///
+/// The height stays between the minimum viewport and native guest height plus
+/// scrollbar allowance; collapsing detailed output removes its reservation.
 fn preview_viewport_height(
     available_height: f32,
     pixels_per_point: f32,
@@ -1606,16 +1754,19 @@ fn preview_viewport_height(
         .min(image_and_scrollbar)
 }
 
+/// Formats a calibrated pixel rectangle for diagnostic and parameter displays.
 fn format_rect(rect: PixelRect) -> String {
-    // Formats a pixel rectangle for log and parameter displays.
     format!(
         "x={}, y={}, width={}, height={}",
         rect.x, rect.y, rect.width, rect.height
     )
 }
 
+/// Converts a validated strided RGBA capture to the tightly packed egui layout.
+///
+/// Returns descriptive errors for invalid buffer layout or checked-size overflow;
+/// row padding is omitted from the separate display buffer.
 fn frame_to_colour_image(frame: &CapturedFrame) -> Result<egui::ColorImage, String> {
-    // Converts a validated strided capture into the tightly packed RGBA layout egui expects.
     if !frame.is_layout_valid() {
         return Err("pixel layout is invalid".to_owned());
     }
@@ -1646,11 +1797,6 @@ fn frame_to_colour_image(frame: &CapturedFrame) -> Result<egui::ColorImage, Stri
 
         match frame.format {
             PixelFormat::Rgba8 => rgba.extend_from_slice(row),
-            PixelFormat::Bgra8 => {
-                for pixel in row.chunks_exact(4) {
-                    rgba.extend_from_slice(&[pixel[2], pixel[1], pixel[0], pixel[3]]);
-                }
-            }
         }
     }
 
@@ -1660,8 +1806,8 @@ fn frame_to_colour_image(frame: &CapturedFrame) -> Result<egui::ColorImage, Stri
     ))
 }
 
+/// Describes detector evidence for the log without claiming an action was executed.
 fn format_prediction(prediction: PredictedAction) -> String {
-    // Summarises one read-only detector result without implying that it was executed.
     match prediction {
         PredictedAction::CalibrationOnly { mode } => format!(
             "{mode} calibration capture ready; detector and guest input are disabled pending approved coordinates."
@@ -1706,6 +1852,7 @@ fn format_prediction(prediction: PredictedAction) -> String {
     }
 }
 
+/// Checks that one concrete prediction belongs to the authorised mode and input method.
 fn prediction_is_actionable(mode: GameMode, prediction: PredictedAction) -> bool {
     let PredictedAction::Action(action) = prediction else {
         return false;
@@ -1719,6 +1866,7 @@ fn prediction_is_actionable(mode: GameMode, prediction: PredictedAction) -> bool
         }
 }
 
+/// Formats a compact target description for request logs, retaining invalid-action warnings.
 fn concise_prediction(prediction: PredictedAction) -> String {
     match prediction {
         PredictedAction::CalibrationOnly { mode } => format!("{mode} calibration only"),
@@ -1754,6 +1902,7 @@ fn concise_prediction(prediction: PredictedAction) -> String {
     }
 }
 
+/// Formats the next-action label for the UI, including calibration and ambiguous states.
 fn display_action(prediction: PredictedAction) -> String {
     match prediction {
         PredictedAction::CalibrationOnly { mode } => format!("{mode} calibration — input disabled"),
@@ -1784,6 +1933,7 @@ fn display_action(prediction: PredictedAction) -> String {
     }
 }
 
+/// Names a fixed operation limit or the configured continuous-run sentinel.
 fn format_operation_limit(operation_limit: usize) -> String {
     if operation_limit == UNBOUNDED_MULTI_STEP_ACTIONS {
         "continuous until STOP".to_owned()
@@ -1792,6 +1942,7 @@ fn format_operation_limit(operation_limit: usize) -> String {
     }
 }
 
+/// Formats an operation index against its fixed limit or an unbounded denominator.
 fn format_operation_progress(operation_index: usize, operation_limit: usize) -> String {
     if operation_limit == UNBOUNDED_MULTI_STEP_ACTIONS {
         format!("{operation_index}/unbounded")
@@ -1800,8 +1951,10 @@ fn format_operation_progress(operation_index: usize, operation_limit: usize) -> 
     }
 }
 
+/// Maps a non-empty preview canvas position into half-open nominal guest coordinates.
+///
+/// Clamps edge positions to the final pixel and compensates for f32 round-trip drift.
 fn preview_to_pixel(canvas: Rect, position: Pos2) -> PixelPoint {
-    // Maps a preview position to half-open nominal-frame pixel coordinates.
     let relative_x = ((position.x - canvas.left()) / canvas.width()).clamp(0.0, 1.0);
     let relative_y = ((position.y - canvas.top()) / canvas.height()).clamp(0.0, 1.0);
     // Compensate only sub-thousandth-pixel f32 round-trip drift at exact
@@ -1815,15 +1968,15 @@ fn preview_to_pixel(canvas: Rect, position: Pos2) -> PixelPoint {
     PixelPoint::new(x, y)
 }
 
+/// Maps a nominal guest pixel into UI points within the supplied preview canvas.
 fn pixel_to_preview(canvas: Rect, point: PixelPoint) -> Pos2 {
-    // Maps nominal-frame pixel coordinates to a position on the preview canvas.
     let x = canvas.left() + point.x as f32 * canvas.width() / NOMINAL_FRAME_WIDTH as f32;
     let y = canvas.top() + point.y as f32 * canvas.height() / NOMINAL_FRAME_HEIGHT as f32;
     Pos2::new(x, y)
 }
 
+/// Maps both edges of a nominal guest rectangle into preview UI coordinates.
 fn rect_to_preview(canvas: Rect, pixel_rect: PixelRect) -> Rect {
-    // Maps a nominal-frame pixel rectangle onto the preview canvas.
     Rect::from_min_max(
         pixel_to_preview(
             canvas,
@@ -1836,6 +1989,7 @@ fn rect_to_preview(canvas: Rect, pixel_rect: PixelRect) -> Rect {
     )
 }
 
+/// Paints a labelled calibrated rectangle without modifying captured frame pixels.
 fn paint_target(
     painter: &egui::Painter,
     canvas: Rect,
@@ -1843,7 +1997,6 @@ fn paint_target(
     colour: Color32,
     label: &str,
 ) {
-    // Draws a labelled target rectangle on the preview canvas.
     let target = rect_to_preview(canvas, pixel_rect);
     paint_outline(painter, target, Stroke::new(2.0, colour));
     painter.text(
@@ -1855,8 +2008,8 @@ fn paint_target(
     );
 }
 
+/// Paints read-only detector evidence and proposed click/key markers on the preview.
 fn paint_prediction(painter: &egui::Painter, canvas: Rect, prediction: PredictedAction) {
-    // Draws detector evidence and the proposed action while remaining read-only.
     let gold = Color32::from_rgb(245, 205, 75);
     let proposal = Color32::from_rgb(255, 80, 210);
 
@@ -1908,6 +2061,7 @@ fn paint_prediction(painter: &egui::Painter, canvas: Rect, prediction: Predicted
     }
 }
 
+/// Paints a small circular marker and adjacent text at a nominal guest pixel.
 fn paint_labeled_marker(
     painter: &egui::Painter,
     canvas: Rect,
@@ -1927,6 +2081,7 @@ fn paint_labeled_marker(
     );
 }
 
+/// Paints a short labelled crosshair at a nominal guest click point.
 fn paint_labeled_crosshair(
     painter: &egui::Painter,
     canvas: Rect,
@@ -1953,16 +2108,16 @@ fn paint_labeled_crosshair(
     );
 }
 
+/// Paints the four edges of a rectangle using the supplied stroke.
 fn paint_outline(painter: &egui::Painter, rect: Rect, stroke: Stroke) {
-    // Draws the four edges of a rectangular outline.
     painter.line_segment([rect.left_top(), rect.right_top()], stroke);
     painter.line_segment([rect.right_top(), rect.right_bottom()], stroke);
     painter.line_segment([rect.right_bottom(), rect.left_bottom()], stroke);
     painter.line_segment([rect.left_bottom(), rect.left_top()], stroke);
 }
 
+/// Paints a subdued calibration grid when no capture texture is available.
 fn paint_grid(painter: &egui::Painter, canvas: Rect) {
-    // Draws a subdued calibration grid across the preview canvas.
     let stroke = Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 14));
     for division in 1..8 {
         let fraction = division as f32 / 8.0;
@@ -1982,8 +2137,8 @@ fn paint_grid(painter: &egui::Painter, canvas: Rect) {
     }
 }
 
+/// Paints horizontal and vertical alignment guides confined to the preview canvas.
 fn paint_crosshair(painter: &egui::Painter, canvas: Rect, point: PixelPoint) {
-    // Draws a full-span alignment guide inside the guest frame only.
     let centre = pixel_to_preview(canvas, point);
     let stroke = Stroke::new(1.5, Color32::WHITE);
     painter.line_segment(
@@ -2004,8 +2159,11 @@ fn paint_crosshair(painter: &egui::Painter, canvas: Rect, point: PixelPoint) {
 
 #[cfg(test)]
 mod tests {
+    //! UI policy and coordinate-mapping regressions independent of a live window.
+
     use super::*;
 
+    /// Constructs a translated canvas at nominal size to exercise coordinate conversions.
     fn test_canvas() -> Rect {
         Rect::from_min_size(
             Pos2::new(25.0, 40.0),
@@ -2013,6 +2171,7 @@ mod tests {
         )
     }
 
+    /// Checks that calibrated guest points survive a pixel-to-preview-to-pixel round trip.
     #[test]
     fn preview_mapping_round_trips_calibrated_points() {
         let canvas = test_canvas();
@@ -2030,6 +2189,7 @@ mod tests {
         }
     }
 
+    /// Checks pixel round trips across fractional and integer host display scales.
     #[test]
     fn native_preview_mapping_round_trips_at_common_wayland_scales() {
         for scale in [1.0_f32, 1.25, 1.5, 1.75, 2.0] {
@@ -2052,6 +2212,7 @@ mod tests {
         }
     }
 
+    /// Checks native-height limits and the reclaimed preview space when output is collapsed.
     #[test]
     fn preview_uses_the_full_guest_height_when_the_host_has_room() {
         assert_eq!(preview_viewport_height(1_400.0, 1.0, false), 1_104.0);
@@ -2061,6 +2222,7 @@ mod tests {
         assert_eq!(preview_viewport_height(1_400.0, 2.0, true), 564.0);
     }
 
+    /// Checks that the inclusive canvas corner maps to the last valid guest pixel.
     #[test]
     fn preview_mapping_clamps_the_bottom_right_edges() {
         let canvas = test_canvas();
@@ -2071,6 +2233,7 @@ mod tests {
         );
     }
 
+    /// Checks mode ownership and input-method gating for actionable preview predictions.
     #[test]
     fn only_concrete_single_predictions_enable_step_once() {
         assert!(!prediction_is_actionable(
@@ -2112,6 +2275,7 @@ mod tests {
         ));
     }
 
+    /// Checks that a zero operation limit is presented as continuous rather than empty.
     #[test]
     fn operation_labels_distinguish_bounded_and_unbounded_runs() {
         assert_eq!(format_operation_limit(0), "continuous until STOP");
@@ -2120,32 +2284,72 @@ mod tests {
         assert_eq!(format_operation_progress(7, 25), "7/25");
     }
 
+    /// Checks that stale, diagnostic, missing and cancelled previews cannot authorise input.
     #[test]
     fn preview_authority_is_revoked_by_mode_socket_size_or_stop() {
         let tri = (PathBuf::from("/tmp/current.sock"), GameMode::TriPeaks);
         let pyramid = (PathBuf::from("/tmp/current.sock"), GameMode::Pyramid);
         let old_socket = (PathBuf::from("/tmp/old.sock"), GameMode::TriPeaks);
         let size = Some((NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT));
-        assert!(preview_is_current(size, Some(&tri), &tri, true, false));
-        assert!(!preview_is_current(size, Some(&tri), &pyramid, true, false));
+        assert!(preview_is_current(
+            size,
+            Some(&tri),
+            &tri,
+            true,
+            false,
+            false
+        ));
+        assert!(!preview_is_current(
+            size,
+            Some(&tri),
+            &tri,
+            true,
+            false,
+            true
+        ));
+        assert!(!preview_is_current(
+            size,
+            Some(&tri),
+            &pyramid,
+            true,
+            false,
+            false
+        ));
         assert!(!preview_is_current(
             size,
             Some(&old_socket),
             &tri,
             true,
-            false
+            false,
+            false,
         ));
         assert!(!preview_is_current(
             Some((640, 480)),
             Some(&tri),
             &tri,
             true,
+            false,
+            false,
+        ));
+        assert!(!preview_is_current(
+            size,
+            Some(&tri),
+            &tri,
+            false,
+            false,
             false
         ));
-        assert!(!preview_is_current(size, Some(&tri), &tri, false, false));
-        assert!(!preview_is_current(size, Some(&tri), &tri, true, true));
+        assert!(!preview_is_current(
+            size,
+            Some(&tri),
+            &tri,
+            true,
+            true,
+            false
+        ));
     }
 
+    /// Checks that worker readiness alone cannot clear run ownership or pending cancellation.
     #[test]
     fn run_controls_are_disabled_until_the_run_is_really_stopped() {
         assert!(controls_are_mutable(None, WorkerState::Ready, false));
@@ -2162,6 +2366,7 @@ mod tests {
         assert!(!controls_are_mutable(None, WorkerState::Ready, true));
     }
 
+    /// Checks that a board position remains explicitly uncertain until a transition establishes it.
     #[test]
     fn board_label_does_not_assert_a_visual_third_from_session_start() {
         assert_eq!(

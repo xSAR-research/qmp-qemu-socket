@@ -1,47 +1,57 @@
-use std::{fs, path::Path};
+//! Decode QMP PNG bytes into checked in-memory pixel frames.
+//!
+//! The worker still obtains those bytes through QMP's temporary PNG file;
+//! this module only performs the in-memory decoding stage.
 
 use image::ImageFormat;
 use thiserror::Error;
 
-use crate::geometry::PixelPoint;
-
+/// PNG decoding and decoded-layout failures.
 #[derive(Debug, Error)]
 pub enum CaptureError {
-    #[error("could not read captured frame: {0}")]
-    Io(#[from] std::io::Error),
+    /// The source bytes could not be decoded as a PNG.
     #[error("could not decode captured PNG: {0}")]
     Decode(#[from] image::ImageError),
+    /// The decoded dimensions cannot be represented as a host byte buffer.
     #[error("decoded frame dimensions overflow host address space: {width}x{height}")]
-    DimensionsOverflow { width: u32, height: u32 },
+    DimensionsOverflow {
+        /// Decoded image width in pixels.
+        width: u32,
+        /// Decoded image height in pixels.
+        height: u32,
+    },
 }
 
+/// Supported byte ordering, with eight bits per channel and four bytes per pixel.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PixelFormat {
+    /// Red, green, blue and alpha, in that byte order.
     Rgba8,
-    Bgra8,
 }
 
+/// Owned pixel buffer and layout metadata for one captured guest image.
 #[derive(Clone, Debug)]
 pub struct CapturedFrame {
+    /// Image width in pixels.
     pub width: u32,
+    /// Image height in pixels.
     pub height: u32,
+    /// Number of bytes between successive image rows.
     pub stride: usize,
+    /// Channel order used by the pixel buffer.
     pub format: PixelFormat,
+    /// Owned row-major image bytes, including any row padding.
     pub pixels: Vec<u8>,
-    /// Optional host cursor metadata for frame sources that supply it.
-    /// QMP PNG capture sets this to `None`; guest cursor pixels, when present,
-    /// remain part of the image and are not separate cursor metadata.
-    pub cursor: Option<PixelPoint>,
 }
 
 impl CapturedFrame {
+    /// Return the packed byte stride for this four-channel frame.
     pub fn minimum_stride(&self) -> usize {
-        // Return the minimum byte stride for a four-channel frame.
         self.width as usize * 4
     }
 
+    /// Check that the stride and buffer cover every declared image row.
     pub fn is_layout_valid(&self) -> bool {
-        // Check that the stride and pixel buffer cover the declared frame.
         let required = self.stride.saturating_mul(self.height as usize);
         self.stride >= self.minimum_stride() && self.pixels.len() >= required
     }
@@ -75,31 +85,15 @@ pub fn decode_png(bytes: &[u8]) -> Result<CapturedFrame, CaptureError> {
         stride,
         format: PixelFormat::Rgba8,
         pixels,
-        cursor: None,
     })
-}
-
-/// Reads and decodes one PNG captured by QEMU.
-pub fn read_png_frame(path: &Path) -> Result<CapturedFrame, CaptureError> {
-    decode_png(&fs::read(path)?)
-}
-
-/// Reserved abstraction for an alternative frame source; currently unused.
-///
-/// The current worker calls QMP `screendump`, reads a temporary PNG and uses
-/// `decode_png` directly. No Portal/PipeWire or file-free backend is implemented.
-pub trait FrameSource: Send {
-    type Error: std::error::Error + Send + Sync + 'static;
-
-    fn start(&mut self) -> Result<(), Self::Error>;
-    fn latest_frame(&mut self) -> Result<Option<CapturedFrame>, Self::Error>;
-    fn stop(&mut self) -> Result<(), Self::Error>;
 }
 
 #[cfg(test)]
 mod tests {
+    //! Exact-byte PNG decoding and invalid-input checks.
     use super::*;
 
+    /// Minimal lossless fixture containing one red pixel and one dark RGB pixel.
     const TWO_PIXEL_RGB_PNG: &[u8] = &[
         0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44,
         0x52, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x7b,
@@ -108,6 +102,7 @@ mod tests {
         0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
     ];
 
+    /// Verify exact RGBA bytes and dimensions after decoding.
     #[test]
     fn png_decode_returns_exact_rgba_layout() {
         let frame = decode_png(TWO_PIXEL_RGB_PNG).expect("decode fixture PNG");
@@ -116,10 +111,10 @@ mod tests {
         assert_eq!(frame.stride, 8);
         assert_eq!(frame.format, PixelFormat::Rgba8);
         assert_eq!(frame.pixels, [255, 0, 0, 255, 1, 2, 3, 255]);
-        assert_eq!(frame.cursor, None);
         assert!(frame.is_layout_valid());
     }
 
+    /// Reject malformed source bytes without constructing a usable frame.
     #[test]
     fn png_decode_rejects_non_png_input() {
         let error = decode_png(b"not a PNG").expect_err("invalid image must fail");

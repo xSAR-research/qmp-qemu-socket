@@ -6,7 +6,7 @@ Casual Games. TriPeaks and Pyramid actions are guarded by fresh captures and
 visual verification. Both use the same QMP controller and post-game flow; each
 game provides its own target selection and effect checks.
 
-The application version is `1.0.3`. `Cargo.toml` supplies the version shown in
+The application version is `1.1.0`. `Cargo.toml` supplies the version shown in
 the window title and Parameters.
 
 ## Build
@@ -39,9 +39,69 @@ with guest display and text scaling at 100%.
 Select **Pyramid**, activate the guest's **Solver**, and capture a fresh frame.
 **Single Step** and **Multiple Steps** require a concrete prediction belonging
 to the selected mode and socket. The worker freshly validates the initial
-prediction, clicks one target, waits 500 ms, and verifies the result. Each
+prediction, clicks one target, waits the configured settle time (default 1000 ms
+after Move or 2000 ms after a card/pile click), and verifies the result. Each
 verified result becomes the next planning frame without another pre-click
 screenshot. **STOP** cancels the active run.
+
+If a verified action has no eligible halo yet, the worker waits the configured
+repeat interval (default 1000 ms) and
+takes another QMP screenshot, up to a bounded limit. It does not click Solver
+on an ordinary halo-free Move, card, Left or Right result. Solver recovery is
+reserved for a positively verified new board with no halo after repeated
+observations. An unverified action stops and displays its latest result frame
+for inspection; use **Capture Frame** for a new approved preview before running
+again.
+
+**Params** exposes separate Pyramid **Move / Recycle**, **Card / Left / Right**,
+and **repeat observation** delays, each editable from 0 to 5000 ms. They are
+session settings captured when the next run starts; Restore execution defaults
+sets them to 1000/2000/1000 ms. For a late MOVE halo after cards fly away, increase
+**Card / Left / Right** and/or **repeat observation**. TriPeaks retains its own
+draw/tableau settings. Double-click a number to type milliseconds, or drag it;
+STOP any active run and close the snapshot dialog before editing. Labels identify
+the click that starts the wait: a card-to-MOVE transition uses the card delay.
+This build identifies itself as **v1.1.0 candidate 2**.
+
+The 1.1.0 baseline refactors the existing Solver-driven controller without
+adding a game mode or self-solving algorithm. Shared post-game handling,
+Pyramid result handling and session-file logging have focused modules. Rustdoc
+comments describe functions and data contracts; unused provisional rank-reader
+and card-history scaffolding has been removed. See [development notes](docs/development.md)
+for naming, documentation and verification conventions.
+
+Candidate 2 removes the unused BGRA pixel format and its conversion branches.
+The current PNG decoder produces RGBA8: eight bits per channel, four bytes per
+pixel. RGBA decoding and padded-row detection checks remain covered by tests.
+
+Pyramid Left/Right verification can also use the positive removal of the single
+other highlighted tableau card from the planning frame. This covers a pile
+replacement whose visible change is too small outside the cursor exclusion.
+When that unique pre-highlighted partner is the opposite pile, verification
+measures both pile interiors together against the 128-pixel minimum, or accepts
+the partner's positive disappearance. This also covers consecutive Left/Right
+pairs whose replacement cards have similar faces. Unrelated pile changes are
+excluded from this additional verification path.
+The detector still requires recognised gameplay and known pile-face evidence;
+a new halo or loss of the old halo alone does not prove the previous effect.
+An identical **LEFT–RIGHT pair may repeat**: after the configured card settle
+and a fresh capture, the same unique eligible pair's HALOs authorise the next
+operation even when its pixels have not changed. A tableau card must remain
+visible, and no final-card, board-complete or redeal phase may be pending.
+This is logged and counted separately as **continued from fresh halo**, without
+claiming removal or advancing a completion counter. Step Once still sends one
+click; Multi-Step plans the next click from that fresh frame. Per-action
+evidence logs include both pile measurements, the unique highlighted partner,
+the qualifying pair's combined count and any removed partner.
+
+A final-apex redeal requires restored cards and `AnotherBoard` progress in two
+consecutive fresh captures. A conflicting progress reading triggers bounded
+input-free recaptures and logs the measured right-probe pixels. Old consumed
+card state is reset before selecting a target on the verified new board. A
+persistent conflict stops for inspection; it never authorises a score click.
+The shared progress probe samples the bar interior at `(1050, 87, 38, 2)`.
+The previous y=84 probe sampled its gold border; the supplied new-board PNG
+provides the regression pixels for this correction.
 
 The priority is **Move → Left → Right → Cards**, with cards scanned left to
 right from row 7 up to the apex. Multiple highlighted cards are expected;
@@ -89,11 +149,19 @@ the PNG on disk retains the original 1920×1080 bytes.
 Both profiles use the same visual progress probe and guarded post-game
 sequence. After a verified board completion, the Solver header progress probe
 selects redeal or game completion; the session board counter is advisory.
-The controller waits three seconds after each score-panel click, including bounded
-retries, before looking for Level Up OK. The general inter-stage wait remains
-one second. When a fresh frame shows New Game already visible instead of Level
-Up, a second fresh frame must confirm New Game before the guarded sequence
-continues. Other ambiguous frames remain subject to bounded retry and STOP.
+Before the first score-skip click, fresh frames check whether an actionable
+new board or a terminal dialog has appeared. Two consecutive non-gameplay
+frames are needed before a score-skip click; other transition frames receive
+bounded input-free recaptures. A recovered old board does not count as a
+completed game in the UI.
+The controller waits three seconds after each score-panel click. If Level Up
+is not yet visible, it makes an input-free follow-up capture before considering
+a bounded score-skip retry. The general inter-stage wait remains one second.
+A tall Level Up OK button may fill both calibrated layout probes; a strong
+gold bridge and button interior must connect them before the lower click point
+is used. Ambiguous layouts are recaptured with a bounded wait and no input.
+When a fresh frame shows New Game already visible instead of Level Up, a
+second fresh frame must confirm New Game before continuing.
 
 Challenge Complete **Continue** geometry is recorded in Params for a future
 challenge flow; no automatic Continue click is enabled.

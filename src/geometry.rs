@@ -1,31 +1,42 @@
+//! Checked conversion between guest-pixel geometry and QMP absolute coordinates.
+
 use thiserror::Error;
 
+/// Maximum value of QEMU's absolute pointing-device coordinate range.
 pub const QMP_ABSOLUTE_MAX: u32 = 0x7fff;
 
+/// Signed guest-pixel point; negative values remain detectable before input.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct PixelPoint {
+    /// Horizontal coordinate, measured from the left edge.
     pub x: i32,
+    /// Vertical coordinate, measured from the top edge.
     pub y: i32,
 }
 
 impl PixelPoint {
+    /// Construct a signed guest-pixel point.
     pub const fn new(x: i32, y: i32) -> Self {
-        // Construct a pixel point from signed coordinates.
         Self { x, y }
     }
 }
 
+/// Half-open guest-pixel rectangle with unsigned origin and dimensions.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct PixelRect {
+    /// Horizontal coordinate, measured from the left edge.
     pub x: u32,
+    /// Vertical coordinate, measured from the top edge.
     pub y: u32,
+    /// Rectangle width in guest pixels.
     pub width: u32,
+    /// Rectangle height in guest pixels.
     pub height: u32,
 }
 
 impl PixelRect {
+    /// Construct a half-open guest-pixel rectangle.
     pub const fn new(x: u32, y: u32, width: u32, height: u32) -> Self {
-        // Construct a pixel rectangle from its origin and dimensions.
         Self {
             x,
             y,
@@ -34,20 +45,22 @@ impl PixelRect {
         }
     }
 
+    /// Return the saturating exclusive right edge.
     pub const fn right(self) -> u32 {
-        // Return the rectangle's exclusive right edge.
         self.x.saturating_add(self.width)
     }
 
+    /// Return the saturating exclusive bottom edge.
     pub const fn bottom(self) -> u32 {
-        // Return the rectangle's exclusive bottom edge.
         self.y.saturating_add(self.height)
     }
 
+    /// Report whether either rectangle dimension is zero.
     pub const fn is_empty(self) -> bool {
         self.width == 0 || self.height == 0
     }
 
+    /// Return the integer midpoint used by calibrated screen targets.
     pub const fn centre(self) -> PixelPoint {
         PixelPoint::new(
             self.x.saturating_add(self.width / 2) as i32,
@@ -55,8 +68,8 @@ impl PixelRect {
         )
     }
 
+    /// Check membership using the rectangle's half-open pixel bounds.
     pub fn contains(self, point: PixelPoint) -> bool {
-        // Check whether a point lies within the rectangle's bounds.
         point.x >= self.x as i32
             && point.y >= self.y as i32
             && point.x < self.right() as i32
@@ -64,26 +77,33 @@ impl PixelRect {
     }
 }
 
+/// Absolute pointing-device coordinate in QEMU's calibrated input range.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct QmpPoint {
+    /// Horizontal coordinate, measured from the left edge.
     pub x: u32,
+    /// Vertical coordinate, measured from the top edge.
     pub y: u32,
 }
 
 impl QmpPoint {
+    /// Construct an absolute QMP point.
     pub const fn new(x: u32, y: u32) -> Self {
         Self { x, y }
     }
 }
 
+/// Inclusive QMP corners corresponding to a half-open pixel rectangle.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct QmpRect {
+    /// QMP coordinate of the first included pixel.
     pub top_left: QmpPoint,
     /// QMP coordinate of the final pixel inside the half-open source rectangle.
     pub bottom_right_inclusive: QmpPoint,
 }
 
 impl QmpRect {
+    /// Construct inclusive QMP corner geometry.
     pub const fn new(top_left: QmpPoint, bottom_right_inclusive: QmpPoint) -> Self {
         Self {
             top_left,
@@ -92,39 +112,60 @@ impl QmpRect {
     }
 }
 
+/// Rejection reasons for coordinates that cannot map safely into the frame.
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum GeometryError {
+    /// The axis contains no pixels.
     #[error("axis extent must be non-zero")]
     InvalidExtent,
+    /// The unsigned coordinate is beyond the declared axis extent.
     #[error("pixel coordinate {pixel} is outside extent {extent}")]
-    PixelOutsideExtent { pixel: u32, extent: u32 },
+    PixelOutsideExtent {
+        /// Rejected unsigned pixel coordinate.
+        pixel: u32,
+        /// Declared number of pixels on this axis.
+        extent: u32,
+    },
+    /// The signed point is negative or beyond the declared frame.
     #[error("pixel point ({x}, {y}) is outside frame {frame_width}x{frame_height}")]
     PixelPointOutsideFrame {
+        /// Rejected horizontal origin or point coordinate.
         x: i32,
+        /// Rejected vertical origin or point coordinate.
         y: i32,
+        /// Declared guest image width.
         frame_width: u32,
+        /// Declared guest image height.
         frame_height: u32,
     },
+    /// At least one rectangle dimension is zero.
     #[error("pixel rectangle must be non-empty")]
     EmptyRectangle,
+    /// Computing an exclusive rectangle edge overflows u32.
     #[error("pixel rectangle overflows the u32 coordinate space")]
     RectangleOverflow,
+    /// The rectangle extends beyond the declared frame.
     #[error(
         "pixel rectangle ({x}, {y}, {width}, {height}) is outside frame {frame_width}x{frame_height}"
     )]
     RectangleOutsideFrame {
+        /// Rejected horizontal origin or point coordinate.
         x: u32,
+        /// Rejected vertical origin or point coordinate.
         y: u32,
+        /// Rejected rectangle width in pixels.
         width: u32,
+        /// Rejected rectangle height in pixels.
         height: u32,
+        /// Declared guest image width.
         frame_width: u32,
+        /// Declared guest image height.
         frame_height: u32,
     },
 }
 
 /// Convert one guest pixel coordinate to QEMU's absolute input range.
 pub fn pixel_to_qmp_axis(pixel: u32, extent: u32) -> Result<u32, GeometryError> {
-    // Scale a pixel coordinate into QEMU's absolute input range.
     if extent == 0 {
         return Err(GeometryError::InvalidExtent);
     }
@@ -202,8 +243,10 @@ pub fn pixel_rect_to_qmp(
 
 #[cfg(test)]
 mod tests {
+    //! Calibrated conversions and coordinate-boundary regression coverage.
     use super::*;
 
+    /// Preserve the established pixel-to-QMP calibration vectors.
     #[test]
     fn matches_audited_calibration_vectors() {
         // QEMU's tablet range is scaled with floor(pixel * 32767 / extent).
@@ -226,12 +269,14 @@ mod tests {
         }
     }
 
+    /// Cover the smallest extent and u32 limits without intermediate overflow.
     #[test]
     fn accepts_one_pixel_extent_and_uses_widened_arithmetic() {
         assert_eq!(pixel_to_qmp_axis(0, 1), Ok(0));
         assert_eq!(pixel_to_qmp_axis(u32::MAX - 1, u32::MAX), Ok(32_766));
     }
 
+    /// Reject empty axes and coordinates at the exclusive frame edge.
     #[test]
     fn rejects_zero_extent_and_coordinates_outside_extent() {
         assert_eq!(pixel_to_qmp_axis(0, 0), Err(GeometryError::InvalidExtent));
@@ -244,6 +289,7 @@ mod tests {
         );
     }
 
+    /// Verify monotonic conversion against the calibrated integer formula.
     #[test]
     fn mapping_is_monotone_and_matches_the_integer_formula() {
         let mut previous = 0;
@@ -257,6 +303,7 @@ mod tests {
         }
     }
 
+    /// Verify inclusive QMP corners use the final included source pixel.
     #[test]
     fn converts_half_open_rect_using_its_last_included_pixel() {
         let rect = PixelRect::new(1_655, 443, 137, 181);
@@ -269,6 +316,7 @@ mod tests {
         );
     }
 
+    /// Exercise empty, overflowing and frame-crossing rectangle failures.
     #[test]
     fn rejects_empty_overflowing_and_out_of_frame_rectangles() {
         assert_eq!(
@@ -292,6 +340,7 @@ mod tests {
         );
     }
 
+    /// Ensure large unsigned rectangle origins are not narrowed through i32.
     #[test]
     fn rectangle_conversion_does_not_narrow_u32_coordinates_to_i32() {
         let rect = PixelRect::new(i32::MAX as u32 + 1, 0, 1, 1);

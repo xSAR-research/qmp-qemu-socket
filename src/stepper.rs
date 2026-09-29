@@ -1,3 +1,5 @@
+//! Single-action planning and shared post-action validation without input retries.
+
 use std::time::Duration;
 
 use thiserror::Error;
@@ -11,9 +13,13 @@ use crate::{
 
 /// The single input selected from freshly captured Solver evidence.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct PlannedInput(GuidedAction);
+pub struct PlannedInput(
+    /// Canonical action definition selected from the fresh prediction.
+    GuidedAction,
+);
 
 impl PlannedInput {
+    /// Return the calibrated action carried by this single-input plan.
     pub const fn action(self) -> GuidedAction {
         self.0
     }
@@ -69,34 +75,58 @@ impl PlannedInput {
 /// A one-action plan derived only from a fresh pre-action frame.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct StepPlan {
+    /// Fresh prediction that authorised construction of this single-action plan.
     before: PredictedAction,
+    /// Canonical action to deliver once and then observe.
     input: PlannedInput,
 }
 
 impl StepPlan {
+    /// Return the fresh prediction from which this plan was constructed.
     pub const fn before(self) -> PredictedAction {
         self.before
     }
 
+    /// Return the sole planned guest-input operation and its verification settings.
     pub const fn input(self) -> PlannedInput {
         self.input
     }
 }
 
+/// Reasons a prediction or observed result cannot be accepted as a guarded step.
 #[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
 pub enum StepValidationError {
+    /// Selected mode has no permission to emit guest input.
     #[error("{mode} is available for read-only calibration only; guest input is disabled")]
-    CalibrationOnly { mode: GameMode },
+    CalibrationOnly {
+        /// Mode whose profile permits only read-only calibration.
+        mode: GameMode,
+    },
+    /// The planning capture contains no eligible Solver halo.
     #[error("pre-action validation found no Solver highlight")]
     NoPreActionHighlight,
+    /// The planning capture does not select a unique authorised action.
     #[error("pre-action validation found {highlight_count} Solver highlights")]
-    AmbiguousPreAction { highlight_count: usize },
+    AmbiguousPreAction {
+        /// Number of conflicting eligible highlights before input.
+        highlight_count: usize,
+    },
+    /// The result capture does not select a unique next action.
     #[error("post-action validation found {highlight_count} Solver highlights")]
-    AmbiguousPostAction { highlight_count: usize },
+    AmbiguousPostAction {
+        /// Number of conflicting eligible highlights after input.
+        highlight_count: usize,
+    },
+    /// A target whose policy requires disappearance remains recommended.
     #[error("post-action still recommends {target}")]
-    TargetStillHighlighted { target: ActionTarget },
+    TargetStillHighlighted {
+        /// Previously clicked target that has not cleared its highlight.
+        target: ActionTarget,
+    },
+    /// Independent effect evidence is insufficient to prove the previous action.
     #[error("post-action effect region did not change materially; action result is uncertain")]
     NoObservedEffect,
+    /// Supplied Pyramid action differs from its immutable calibrated definition.
     #[error("Pyramid target does not match its calibrated one-click action")]
     InvalidPyramidAction,
 }
@@ -157,6 +187,8 @@ pub fn verify_post_action(
 
 #[cfg(test)]
 mod tests {
+    //! Planning authority, action geometry and no-retry validation regressions.
+
     use super::*;
     use crate::{
         game::GameMode,
@@ -167,6 +199,7 @@ mod tests {
         },
     };
 
+    /// Verify Pyramid plans reject forged timing or click definitions.
     #[test]
     fn pyramid_plan_requires_the_canonical_single_mouse_click() {
         use crate::pyramid::{PyramidTargetKind, action_for_kind};
@@ -180,7 +213,7 @@ mod tests {
         assert_eq!(
             plan.input()
                 .animation_settle_delay(AnimationSettleDelays::default()),
-            Duration::from_millis(500)
+            Duration::from_millis(1_000)
         );
 
         let mut forged = action;
@@ -197,6 +230,7 @@ mod tests {
         );
     }
 
+    /// Build a test TriPeaks draw prediction using the calibrated bottom-action profile.
     fn draw(anchor_x: i32) -> PredictedAction {
         PredictedAction::Action(
             GameMode::TriPeaks
@@ -206,6 +240,7 @@ mod tests {
         )
     }
 
+    /// Build a bottom-row TriPeaks test prediction for a one-based column.
     fn tableau(column: u8) -> PredictedAction {
         let index = 18 + column as usize - 1;
         PredictedAction::Action(
@@ -216,6 +251,7 @@ mod tests {
         )
     }
 
+    /// Verify draw input uses only the calibrated key sequence, timing and effect region.
     #[test]
     fn fresh_draw_uses_only_the_qcode_sequence() {
         let plan = plan_step(draw(842)).unwrap();
@@ -238,6 +274,7 @@ mod tests {
         assert_eq!(plan.input().qmp_event_count(), 2);
     }
 
+    /// Verify tableau input preserves the calibrated centre, cursor mask and timing.
     #[test]
     fn fresh_tableau_action_uses_only_the_canonical_card_centre() {
         let predicted = tableau(10);
@@ -272,6 +309,7 @@ mod tests {
         );
     }
 
+    /// Verify planning rejects absent, ambiguous and calibration-only predictions.
     #[test]
     fn pre_action_validation_refuses_no_action_and_ambiguity() {
         assert_eq!(
@@ -292,11 +330,13 @@ mod tests {
         );
     }
 
+    /// Verify the plan preserves the supplied fresh prediction unchanged.
     #[test]
     fn single_fresh_capture_is_the_only_planning_input() {
         assert_eq!(plan_step(draw(842)).unwrap().before(), draw(842));
     }
 
+    /// Verify independently observed material effects accept the next fresh prediction.
     #[test]
     fn changed_fresh_post_action_is_verified() {
         let plan = plan_step(tableau(10)).unwrap();
@@ -309,6 +349,7 @@ mod tests {
         );
     }
 
+    /// Verify missing effects and ambiguous results never authorise a retry.
     #[test]
     fn post_action_validation_never_turns_uncertainty_into_a_retry() {
         let before = draw(842);
@@ -346,6 +387,7 @@ mod tests {
         );
     }
 
+    /// Verify a consumed TriPeaks tableau target cannot remain highlighted after success.
     #[test]
     fn tableau_target_must_not_remain_the_recommended_target() {
         let before = tableau(10);

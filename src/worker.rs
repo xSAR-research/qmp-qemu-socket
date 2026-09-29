@@ -1,3 +1,13 @@
+//! Background QMP orchestration, guarded input, capture and UI event delivery.
+//!
+//! Captures use temporary PNG files that are read, decoded and removed during
+//! normal cleanup. Preview frames are coalesced; input is authorised from fresh
+//! observations. Game-specific Pyramid results and shared post-game screens
+//! are handled by focused child modules.
+
+mod post_game;
+mod pyramid_execution;
+
 use std::{
     fs::{self, OpenOptions},
     io::{ErrorKind, Read},
@@ -14,10 +24,10 @@ use std::{
 
 use crate::{
     capture::{CapturedFrame, decode_png},
-    detector::{detect_game_progress_for_profile, has_dialog_gold_button, pixel_rgb},
+    detector::{detect_game_progress_for_profile, pixel_rgb},
     game::{ActionTarget, GameMode, GameProgress, InputOperation},
     geometry::{PixelRect, pixel_point_to_qmp, pixel_rect_to_qmp},
-    pyramid::{self, PyramidTargetKind},
+    pyramid,
     qmp::QmpClient,
     stepper::{StepPlan, plan_step, verify_post_action},
     tracker::{
@@ -26,35 +36,44 @@ use crate::{
     },
 };
 
+use crate::parameters::StepRunSettings;
 use crate::parameters::{
     ACTION_CHANGE_CHANNEL_THRESHOLD, BOARD_TRANSITION_REOBSERVE_DELAY, CANCELLABLE_WAIT_SLICE,
-    CAPTURE_NAME_ATTEMPTS, CAPTURE_SEQUENCE, LEVEL_UP_APPEAR_DELAY, MULTI_STEP_INPUT_ENABLED,
+    CAPTURE_NAME_ATTEMPTS, CAPTURE_SEQUENCE, MULTI_STEP_INPUT_ENABLED,
     NO_HIGHLIGHT_REOBSERVE_DELAY, NOMINAL_FRAME_HEIGHT, NOMINAL_FRAME_WIDTH,
-    POST_GAME_MAX_CLICK_ATTEMPTS, POST_GAME_MAX_OBSERVATION_ROUNDS, POST_GAME_MOUSE_HOLD,
-    POST_GAME_STAGE_DELAY, POST_GAME_TARGETS, SCORE_SKIP_CONTROL, SCORE_SKIP_MAX_CLICK_ATTEMPTS,
-    SHARED_SOLVER_CONTROL, SNAPSHOT_MAX_PNG_BYTES, SOLVER_MOUSE_HOLD, STEP_ONCE_ACTIONS,
-    STEP_ONCE_INPUT_ENABLED,
+    POST_GAME_MAX_OBSERVATION_ROUNDS, POST_GAME_STAGE_DELAY, SHARED_SOLVER_CONTROL,
+    SNAPSHOT_MAX_PNG_BYTES, SOLVER_MOUSE_HOLD, STEP_ONCE_ACTIONS, STEP_ONCE_INPUT_ENABLED,
 };
-use crate::parameters::{PostGameControlVariant, PostGameStage, PostGameTarget, StepRunSettings};
 
+/// Maximum ordinary Pyramid planning or result observations before a diagnostic stop.
 const PYRAMID_OBSERVATION_LIMIT: usize = 6;
-const PYRAMID_SETTLE_DELAY: Duration = Duration::from_millis(500);
 
+/// UI-visible lifecycle state of the background QMP worker.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum WorkerState {
+    /// No active capture context or retained QMP connection.
     #[default]
     Detached,
+    /// Opening and probing the selected QMP socket.
     Connecting,
+    /// Waiting for a fresh QMP screendump.
     Capturing,
+    /// Checking scene and action preconditions.
     Validating,
+    /// Delivering one authorised guest input sequence.
     Acting,
+    /// Observing an action or screen transition.
     Verifying,
+    /// Idle and available for a new request.
     Ready,
+    /// Stopped because observations or input outcome need inspection.
     Uncertain,
+    /// A connection, capture or pre-input validation failed.
     Error,
 }
 
 impl WorkerState {
+    /// Return the concise UI label for this worker state.
     pub const fn label(self) -> &'static str {
         // Returns the concise display label for a worker state.
         match self {
@@ -70,6 +89,7 @@ impl WorkerState {
         }
     }
 
+    /// Report whether a capture, validation, input or result-verification operation is active.
     pub const fn is_busy(self) -> bool {
         matches!(
             self,
@@ -78,96 +98,171 @@ impl WorkerState {
     }
 }
 
+/// Requests serialised by the background worker command loop.
 enum WorkerCommand {
+    /// Capture and analyse a read-only advisory preview.
     CaptureFrame {
+        /// Selected QMP Unix socket.
         socket_path: PathBuf,
+        /// Game profile used for capture and detection.
         mode: GameMode,
     },
+    /// Capture original PNG bytes and decoded pixels for manual saving.
     PrepareSnapshot {
+        /// Selected QMP Unix socket.
         socket_path: PathBuf,
+        /// Game profile used for capture and detection.
         mode: GameMode,
+        /// UI request identifier used to reject stale responses.
         request_id: u64,
     },
+    /// Run guarded input using an approved preview and fixed settings.
     ExecuteSteps {
+        /// Selected QMP Unix socket.
         socket_path: PathBuf,
+        /// Game profile used for capture and detection.
         mode: GameMode,
+        /// Preview prediction that the first fresh planning frame must reproduce.
         approved_prediction: PredictedAction,
+        /// Immutable operation limit and animation timings for this run.
         settings: StepRunSettings,
     },
+    /// Clear local board and scan history without touching the guest.
     ResetProgress,
+    /// Stop the current run and discard its capture context.
     Disconnect,
+    /// Exit the worker command loop.
     Shutdown,
 }
 
+/// Small ordered notifications sent from the worker to the UI.
 pub enum WorkerEvent {
+    /// Detailed diagnostic text for visible and session logs.
     Log(String),
+    /// Concise current-operation text for the status area.
     Status(String),
+    /// One fresh original PNG and its decoded preview are ready.
     SnapshotPrepared {
+        /// Manual snapshot request identifier.
         request_id: u64,
+        /// Socket/game identity under which the snapshot was captured.
         context: (PathBuf, GameMode),
+        /// Decoded pixels from this exact capture.
         frame: CapturedFrame,
+        /// Original PNG bytes matching the preview frame.
         png: Vec<u8>,
+        /// Advisory prediction from the accompanying capture.
         prediction: PredictedAction,
     },
+    /// The identified manual snapshot could not be prepared.
     SnapshotPreparationFailed {
+        /// Manual snapshot request identifier.
         request_id: u64,
+        /// Capture/preparation failure description.
         error: String,
     },
+    /// Committed board counters for the current game profile.
     BoardProgress {
+        /// Current board number clamped to the profile limit.
         current_board: usize,
+        /// Number of positively completed boards in this session.
         completed_boards: usize,
+        /// Number of boards defined by the active game profile.
         boards_per_game: usize,
     },
+    /// Current lifecycle state of the worker.
     State(WorkerState),
+    /// One action was effect-verified or accepted from a fresh repeated halo pair.
     ActionCompleted {
+        /// One-based action index within the requested run.
         operation_index: usize,
+        /// Requested action count; zero denotes an unbounded run.
         operation_limit: usize,
+        /// Planning prediction for the delivered input.
         before: PredictedAction,
+        /// Accepted prediction from a fresh result frame.
         after: PredictedAction,
+        /// Number of QMP commands in the planned gameplay input.
         input_commands: usize,
+        /// Number of guest input events in the planned sequence.
         input_events: usize,
+        /// Diagnostic count of materially changed effect pixels.
         changed_pixels: usize,
+        /// True when a fresh halo pair authorised continuation without proving the prior effect.
+        continued_from_halo: bool,
     },
+    /// The shared post-game controller verified a restarted game.
     GameCompleted,
+    /// A bounded run reached its requested action count.
     RunCompleted {
+        /// Advisory prediction from the accompanying capture.
         prediction: PredictedAction,
+        /// Requested count for the completed bounded run.
         requested_operations: usize,
+        /// Actions accepted through positive effect verification.
         verified_operations: usize,
+        /// Actions continued from a fresh repeated LEFT/RIGHT halo pair.
+        halo_operations: usize,
     },
 }
 
+/// Latest advisory or diagnostic preview transferred through the bounded frame slot.
 pub struct LatestWorkerFrame {
+    /// Full decoded capture for display.
     pub frame: CapturedFrame,
+    /// Advisory target; diagnostic frames carry no action authority.
     pub prediction: PredictedAction,
+    /// Whether the UI should log the displayed prediction.
     pub log_prediction: bool,
+    /// Whether the frame is retained solely to inspect a failed result.
+    pub diagnostic: bool,
+    /// Older pending previews replaced since the last UI consumption.
     pub coalesced_frames: usize,
+    /// Socket/game identity associated with the frame.
     pub context: Option<(PathBuf, GameMode)>,
 }
 
+/// Single pending preview retained until the UI consumes or replaces it.
 struct PendingWorkerFrame {
+    /// Decoded image retained for the preview.
     frame: CapturedFrame,
+    /// Advisory target attached to this frame.
     prediction: PredictedAction,
+    /// Request prediction logging when displayed.
     log_prediction: bool,
+    /// Mark unverified result pixels for inspection only.
+    diagnostic: bool,
+    /// Socket/game identity used for the capture.
     context: Option<(PathBuf, GameMode)>,
 }
 
+/// Mutable contents protected by the latest-preview mutex.
 #[derive(Default)]
 struct LatestFrameState {
+    /// At most one full-resolution frame awaiting consumption.
     pending: Option<PendingWorkerFrame>,
+    /// Number of pending frames replaced since the last take.
     coalesced_frames: usize,
 }
 
+/// Shared bounded hand-off slot that prevents preview images accumulating behind a sleeping UI.
 #[derive(Clone, Default)]
 struct LatestFrameSlot {
+    /// Mutex-protected single preview and replacement count.
     state: Arc<Mutex<LatestFrameState>>,
 }
 
 impl LatestFrameSlot {
+    /// Replace the pending advisory preview and count any frame displaced before the UI consumes it.
+    ///
+    /// The slot retains at most one full-resolution frame; poisoned locks preserve the
+    /// latest recoverable state rather than terminating the worker.
     fn publish(
         &self,
         frame: CapturedFrame,
         prediction: PredictedAction,
         log_prediction: bool,
+        diagnostic: bool,
         context: Option<(PathBuf, GameMode)>,
     ) {
         // Preview frames are advisory. Replacing a stale pending frame keeps
@@ -182,6 +277,7 @@ impl LatestFrameSlot {
                 frame,
                 prediction,
                 log_prediction,
+                diagnostic,
                 context,
             })
             .is_some()
@@ -190,6 +286,7 @@ impl LatestFrameSlot {
         }
     }
 
+    /// Remove the latest preview and reset its coalesced-frame count; return `None` when empty.
     fn take(&self) -> Option<LatestWorkerFrame> {
         let mut state = self
             .state
@@ -201,23 +298,30 @@ impl LatestFrameSlot {
             frame: pending.frame,
             prediction: pending.prediction,
             log_prediction: pending.log_prediction,
+            diagnostic: pending.diagnostic,
             coalesced_frames,
             context: pending.context,
         })
     }
 }
 
+/// Worker-side delivery of small events and coalesced full-resolution preview frames.
 struct WorkerEventSink {
+    /// Ordered event channel to the UI.
     events: Sender<WorkerEvent>,
+    /// Single-frame slot for high-volume image updates.
     latest_frame: LatestFrameSlot,
+    /// Current socket/game identity attached to preview publications.
     capture_context: Mutex<Option<(PathBuf, GameMode)>>,
 }
 
 impl WorkerEventSink {
+    /// Queue a small worker event; return the channel error if the UI receiver has closed.
     fn send(&self, event: WorkerEvent) -> Result<(), mpsc::SendError<WorkerEvent>> {
         self.events.send(event)
     }
 
+    /// Publish an advisory frame with its prediction and the current socket/game context.
     fn publish_frame(
         &self,
         frame: CapturedFrame,
@@ -230,9 +334,22 @@ impl WorkerEventSink {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone();
         self.latest_frame
-            .publish(frame, prediction, log_prediction, context);
+            .publish(frame, prediction, log_prediction, false, context);
     }
 
+    /// Publish the last observed pixels without granting action authority to their prediction.
+    fn publish_diagnostic_frame(&self, frame: CapturedFrame) {
+        let context = self
+            .capture_context
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
+        // Preserve the exact last observed pixels, without approving a target.
+        self.latest_frame
+            .publish(frame, PredictedAction::NoHighlight, false, true, context);
+    }
+
+    /// Set the socket and game identity attached to subsequent preview frames.
     fn set_capture_context(&self, context: Option<(PathBuf, GameMode)>) {
         *self
             .capture_context
@@ -241,15 +358,25 @@ impl WorkerEventSink {
     }
 }
 
+/// UI-side command, event and cancellation interface to the background QMP thread.
 pub struct WorkerHandle {
+    /// Queue for serialised worker requests.
     command_tx: Sender<WorkerCommand>,
+    /// Receiver for ordered small worker events.
     event_rx: Receiver<WorkerEvent>,
+    /// Shared slot for the newest preview.
     latest_frame: LatestFrameSlot,
+    /// Thread handle consumed during shutdown.
     join: Option<JoinHandle<()>>,
+    /// Atomic STOP flag checked around captures, waits and input.
     cancel_requested: Arc<AtomicBool>,
 }
 
 impl WorkerHandle {
+    /// Start the QMP worker and create its command, event and bounded-preview channels.
+    ///
+    /// # Panics
+    /// Panics if the operating system cannot create the worker thread.
     pub fn spawn() -> Self {
         // Starts the QMP worker thread and creates its command and event channels.
         let (command_tx, command_rx) = mpsc::channel();
@@ -276,6 +403,9 @@ impl WorkerHandle {
         }
     }
 
+    /// Queue one read-only capture for `socket_path` and `mode`.
+    ///
+    /// Returns an error if the worker command channel has closed.
     pub fn capture_frame(&self, socket_path: PathBuf, mode: GameMode) -> Result<(), String> {
         // Requests one read-only QMP screendump and frame analysis.
         self.command_tx
@@ -283,6 +413,10 @@ impl WorkerHandle {
             .map_err(|error| format!("QMP worker is unavailable: {error}"))
     }
 
+    /// Queue a fresh capture whose original PNG and decoded preview share `request_id`.
+    ///
+    /// The UI uses the request ID and socket/game context to reject stale responses.
+    /// Returns an error if the worker command channel has closed.
     pub fn prepare_snapshot(
         &self,
         socket_path: PathBuf,
@@ -298,6 +432,11 @@ impl WorkerHandle {
             .map_err(|error| format!("QMP worker is unavailable: {error}"))
     }
 
+    /// Queue a guarded run constrained by the approved preview and immutable run settings.
+    ///
+    /// Clears an earlier STOP request only after mode and compile-time input checks.
+    /// Returns an error for disabled input or an unavailable worker; this method
+    /// does not itself send guest input.
     pub fn execute_steps(
         &self,
         socket_path: PathBuf,
@@ -327,6 +466,9 @@ impl WorkerHandle {
             .map_err(|error| format!("QMP worker is unavailable: {error}"))
     }
 
+    /// Request cancellation immediately and queue a return to the detached state.
+    ///
+    /// Returns an error if the worker channel has closed; QEMU remains running.
     pub fn disconnect(&self) -> Result<(), String> {
         // Requests that the worker return to its detached state.
         self.cancel_requested.store(true, Ordering::Release);
@@ -335,6 +477,9 @@ impl WorkerHandle {
             .map_err(|error| format!("QMP worker is unavailable: {error}"))
     }
 
+    /// Queue a local reset of the board counter and scan history without guest input.
+    ///
+    /// Returns an error if the worker command channel has closed.
     pub fn reset_progress(&self) -> Result<(), String> {
         // Resets the board counter and bounded row scan without touching QMP.
         self.command_tx
@@ -342,11 +487,13 @@ impl WorkerHandle {
             .map_err(|error| format!("QMP worker is unavailable: {error}"))
     }
 
+    /// Iterate over currently queued events without blocking the UI thread.
     pub fn try_events(&self) -> impl Iterator<Item = WorkerEvent> + '_ {
         // Returns currently queued worker events without blocking the caller.
         self.event_rx.try_iter()
     }
 
+    /// Take at most one pending preview, including its displaced-frame count.
     pub fn take_latest_frame(&self) -> Option<LatestWorkerFrame> {
         // Takes at most one preview frame, together with the number of stale
         // previews replaced since the UI last consumed one.
@@ -355,6 +502,7 @@ impl WorkerHandle {
 }
 
 impl Drop for WorkerHandle {
+    /// Request STOP, send shutdown and join the QMP worker before releasing the handle.
     fn drop(&mut self) {
         // Shuts down and joins the worker thread when its handle is released.
         self.cancel_requested.store(true, Ordering::Release);
@@ -365,6 +513,10 @@ impl Drop for WorkerHandle {
     }
 }
 
+/// Dispatch queued commands while retaining scan history only for the active socket and game.
+///
+/// QMP connections belong to individual capture or execution transactions.
+/// Shutdown or a closed command channel ends the thread.
 fn run_worker(
     command_rx: Receiver<WorkerCommand>,
     event_tx: WorkerEventSink,
@@ -457,6 +609,7 @@ fn run_worker(
     }
 }
 
+/// Reset board and scan history only when the socket path or game mode changes.
 fn reset_scan_state_for_context(
     socket_path: &Path,
     mode: GameMode,
@@ -475,12 +628,17 @@ fn reset_scan_state_for_context(
     }
 }
 
+/// Reset the current game profile to its initial scan state and zero completed boards.
 fn reset_progress_tracking(scan_state: &mut TableauScanState, completed_boards: &mut usize) {
     // Returns progress tracking to a new game and the profile's initial row scan.
     *scan_state = TableauScanState::for_mode(scan_state.mode());
     *completed_boards = 0;
 }
 
+/// Capture one fresh frame without guest input and publish its advisory analysis.
+///
+/// A reappeared Pyramid card may clear stale per-board history. Capture errors
+/// are reported through worker events rather than returned to the dispatcher.
 fn run_capture(
     socket_path: PathBuf,
     scan_state: &mut TableauScanState,
@@ -574,6 +732,10 @@ fn run_capture(
     }
 }
 
+/// Capture and publish one original PNG with its decoded frame for manual preview.
+///
+/// Enforces the profile frame contract; classification remains advisory so
+/// dialogs can be saved. Reports success or failure with the supplied request ID.
 fn run_prepare_snapshot(
     socket_path: PathBuf,
     scan_state: &TableauScanState,
@@ -653,6 +815,11 @@ fn run_prepare_snapshot(
     }
 }
 
+/// Run the requested number of guarded actions, or continue until STOP when unbounded.
+///
+/// Reuses accepted result frames for the next plan and keeps effect-verified
+/// actions separate from fresh-halo continuations. Failures publish the last
+/// observation and stop; completed games enter the shared restart controller.
 fn run_execute_steps(
     socket_path: PathBuf,
     approved_prediction: PredictedAction,
@@ -684,6 +851,20 @@ fn run_execute_steps(
             format_prediction_target(approved_prediction),
         ),
     );
+
+    if scan_state.mode() == GameMode::Pyramid {
+        let delays = settings.animation_delays();
+        send_log(
+            event_tx,
+            format!(
+                "Pyramid timing snapshot: Move/Recycle={} ms, Card/Left/Right={} ms, repeat observation={} ms, board redeal={} ms. Params edits apply to the next run.",
+                delays.pyramid_move.as_millis(),
+                delays.pyramid_card.as_millis(),
+                delays.pyramid_reobserve.as_millis(),
+                delays.board_redeal.as_millis(),
+            ),
+        );
+    }
 
     let connect_started = Instant::now();
     let (mut qmp, probe) = match connect_and_probe(&socket_path) {
@@ -746,13 +927,19 @@ fn run_execute_steps(
             cancel_requested,
         ) {
             Ok(success) => {
-                verified_operations = verified_operations.saturating_add(1);
+                let acceptance = if success.continued_from_halo {
+                    run_profile.halo_operations = run_profile.halo_operations.saturating_add(1);
+                    "continued from fresh halo"
+                } else {
+                    verified_operations = verified_operations.saturating_add(1);
+                    "verified"
+                };
                 run_profile.record(success.profile);
                 log_action_profile(
                     event_tx,
                     operation_index,
                     operation_limit,
-                    "verified",
+                    acceptance,
                     success.profile,
                 );
                 let input_commands = success.plan.input().qmp_command_count();
@@ -765,16 +952,17 @@ fn run_execute_steps(
                     input_commands,
                     input_events,
                     changed_pixels: success.changed_pixels,
+                    continued_from_halo: success.continued_from_halo,
                 });
                 send_log(
                     event_tx,
                     format!(
-                        "Action {progress} verified after {} post-action observation round(s): {} -> {}; changed effect pixels={}, required={}, QMP commands={input_commands}, input events={input_events}, guest-input retries=0.",
+                        "Action {progress} {acceptance} after {} post-action observation round(s): {} -> {}; changed effect pixels={}, effect proven={}, QMP commands={input_commands}, input events={input_events}, guest-input retries=0.",
                         success.observation_rounds,
                         format_prediction_target(success.plan.before()),
                         format_prediction_target(success.after),
                         success.changed_pixels,
-                        success.plan.input().minimum_changed_pixels(),
+                        !success.continued_from_halo,
                     ),
                 );
 
@@ -798,7 +986,7 @@ fn run_execute_steps(
                 let mut next_observation = success.observation;
                 let mut next_prediction = success.after;
                 if success.series_complete {
-                    match run_post_game_restart(
+                    match post_game::run_post_game_restart(
                         &mut qmp,
                         &socket_path,
                         (scan_state.mode() == GameMode::Pyramid).then_some(&next_observation),
@@ -807,11 +995,21 @@ fn run_execute_steps(
                         event_tx,
                         cancel_requested,
                     ) {
-                        Ok(observation) => {
+                        Ok(outcome) => {
+                            let (observation, game_restarted) = match outcome {
+                                post_game::PostGameOutcome::Restarted(observation) => {
+                                    (observation, true)
+                                }
+                                post_game::PostGameOutcome::RecoveredGameplay(observation) => {
+                                    (observation, false)
+                                }
+                            };
                             next_prediction = observation.prediction;
                             next_observation = observation;
                             send_board_progress(event_tx, scan_state, *completed_boards);
-                            let _ = event_tx.send(WorkerEvent::GameCompleted);
+                            if game_restarted {
+                                let _ = event_tx.send(WorkerEvent::GameCompleted);
+                            }
                         }
                         Err(error) => {
                             let state = if cancel_requested.load(Ordering::Acquire) {
@@ -844,6 +1042,7 @@ fn run_execute_steps(
                         prediction: next_prediction,
                         requested_operations: operation_limit,
                         verified_operations,
+                        halo_operations: run_profile.halo_operations,
                     });
                     send_state(event_tx, WorkerState::Ready);
                     send_status(event_tx, "Ready".to_owned());
@@ -858,7 +1057,7 @@ fn run_execute_steps(
                     return;
                 }
                 operation_index = operation_index.saturating_add(1);
-                planning_frame = PlanningFrame::VerifiedResult(next_observation);
+                planning_frame = PlanningFrame::AcceptedResult(next_observation);
             }
             Err(failure) => {
                 run_profile.record(failure.profile);
@@ -894,6 +1093,7 @@ fn run_execute_steps(
     }
 }
 
+/// Reset a fully completed game before a new run; report whether a reset occurred.
 fn reset_completed_series_for_new_run(
     scan_state: &mut TableauScanState,
     completed_boards: &mut usize,
@@ -906,676 +1106,12 @@ fn reset_completed_series_for_new_run(
     true
 }
 
-fn run_post_game_restart(
-    qmp: &mut QmpClient,
-    socket_path: &Path,
-    initial_observation: Option<&FrameObservation>,
-    scan_state: &mut TableauScanState,
-    completed_boards: &mut usize,
-    event_tx: &WorkerEventSink,
-    cancel_requested: &AtomicBool,
-) -> Result<FrameObservation, String> {
-    // Advances the verified end-of-game UI through OK, New Game, Play, and Solver.
-    // Every control uses a deliberate hold; an earlier dialog is retried if a
-    // fresh capture proves that its prior click was not accepted. Observation
-    // and confirmed-delivery click retries are both explicitly bounded.
-    let transition_started = Instant::now();
-    let mut capture_timing = CaptureTiming::default();
-    let mut intentional_wait = Duration::ZERO;
-    let mut input_wall = Duration::ZERO;
-    let boards_per_game = scan_state.mode().profile().boards_per_game;
-    let known_terminal_stage = known_post_game_stage(initial_observation)?;
-
-    *scan_state = TableauScanState::for_mode(scan_state.mode());
-    send_state(event_tx, WorkerState::Verifying);
-    let mut score_skip_click_attempts = 0usize;
-    if known_terminal_stage.is_none() {
-        send_status(
-            event_tx,
-            format!(
-                "Detected end of game — waiting {} ms",
-                POST_GAME_STAGE_DELAY.as_millis()
-            ),
-        );
-        send_log(
-            event_tx,
-            format!(
-                "The {boards_per_game}-board game is complete; waiting {} ms before clicking the centre score panel to skip score counting.",
-                POST_GAME_STAGE_DELAY.as_millis(),
-            ),
-        );
-        intentional_wait += wait_or_stop(
-            POST_GAME_STAGE_DELAY,
-            cancel_requested,
-            "STOP was requested before the score-skip click.",
-        )?;
-
-        send_state(event_tx, WorkerState::Acting);
-        send_status(event_tx, "Skip score counting".to_owned());
-        input_wall += send_score_skip_click(qmp, cancel_requested, score_skip_click_attempts)?;
-        score_skip_click_attempts = score_skip_click_attempts.saturating_add(1);
-        send_log(
-            event_tx,
-            format!(
-                "Score-counting panel click attempt {score_skip_click_attempts}/{SCORE_SKIP_MAX_CLICK_ATTEMPTS} sent at guest pixel ({}, {}) with a {} ms hold; waiting {} ms before classifying the Level Up screen.",
-                SCORE_SKIP_CONTROL.click_point.x,
-                SCORE_SKIP_CONTROL.click_point.y,
-                POST_GAME_MOUSE_HOLD.as_millis(),
-                LEVEL_UP_APPEAR_DELAY.as_millis(),
-            ),
-        );
-        send_state(event_tx, WorkerState::Verifying);
-        send_status(
-            event_tx,
-            format!(
-                "Waiting {} ms for Level Up",
-                LEVEL_UP_APPEAR_DELAY.as_millis()
-            ),
-        );
-        intentional_wait += wait_or_stop(
-            LEVEL_UP_APPEAR_DELAY,
-            cancel_requested,
-            "STOP was requested during the post-score-skip wait.",
-        )?;
-    } else {
-        send_log(event_tx,
-            "A verified terminal dialog is already visible; entering the shared post-game controller at that stage without a score-skip click.".to_owned());
-    }
-
-    let mut click_attempts = [0usize; POST_GAME_TARGETS.len()];
-    let mut recovery_solver_click_attempts = 0usize;
-    let mut target_index = known_terminal_stage.unwrap_or(0);
-    while let Some(target) = POST_GAME_TARGETS.get(target_index).copied() {
-        let mut observation_round = 1usize;
-        let matched_variant = loop {
-            send_status(event_tx, format!("Waiting for {}", target.label));
-            let (observation, timing) =
-                capture_with_client(qmp, socket_path, scan_state).map_err(|error| {
-                    format!(
-                        "Post-game {} capture failed before input: {error}.",
-                        target.label
-                    )
-                })?;
-            capture_timing.add_assign(timing);
-            publish_post_action_observation(event_tx, &observation);
-
-            if observation.gameplay_scene
-                && matches!(observation.prediction, PredictedAction::Action(_))
-            {
-                *completed_boards = 0;
-                *scan_state = TableauScanState::for_mode(scan_state.mode());
-                let _ = scan_state.reconcile_observation(observation.observed_rows);
-                send_log(
-                    event_tx,
-                    format!(
-                        "RECOVERED: expected post-game stage {} but an actionable all-row HALO was found; abandoning the stale board counter and resuming normal play.",
-                        target.label,
-                    ),
-                );
-                return Ok(observation);
-            }
-
-            if let Some((stale_index, stale_target, stale_variant)) =
-                earlier_visible_post_game_target(&observation, target_index)?
-            {
-                require_post_game_observation_retry_budget(observation_round, target.label)?;
-                require_post_game_click_retry_budget(
-                    click_attempts[stale_index],
-                    stale_target.label,
-                )?;
-                let reprobe = qmp.probe().map_err(|error| {
-                    format!(
-                        "Post-game stale {} variant {} QMP probe failed while waiting for {}: {error}",
-                        stale_target.label, stale_variant.label, target.label,
-                    )
-                })?;
-                validate_probe(&reprobe).map_err(|error| {
-                    format!(
-                        "Post-game stale {} variant {} retry refused by the fresh QMP probe: {error}",
-                        stale_target.label, stale_variant.label,
-                    )
-                })?;
-
-                send_state(event_tx, WorkerState::Acting);
-                send_status(
-                    event_tx,
-                    post_game_click_status(stale_target.stage).to_owned(),
-                );
-                let input_started = Instant::now();
-                qmp.click_with_hold(
-                    stale_variant.click_point,
-                    NOMINAL_FRAME_WIDTH,
-                    NOMINAL_FRAME_HEIGHT,
-                    POST_GAME_MOUSE_HOLD,
-                )
-                .map_err(|error| {
-                    format!(
-                        "Post-game stale {} variant {} retry result is uncertain: {error}. No further input followed the uncertain QMP result.",
-                        stale_target.label, stale_variant.label,
-                    )
-                })?;
-                input_wall += input_started.elapsed();
-                click_attempts[stale_index] = click_attempts[stale_index].saturating_add(1);
-                send_log(
-                    event_tx,
-                    format!(
-                        "RETRY: post-game stage {} variant {} remains visible while waiting for {}; click attempt {} sent at guest pixel ({}, {}) with a {} ms hold. Awaiting a verified screen transition.",
-                        stale_target.label,
-                        stale_variant.label,
-                        target.label,
-                        click_attempts[stale_index],
-                        stale_variant.click_point.x,
-                        stale_variant.click_point.y,
-                        POST_GAME_MOUSE_HOLD.as_millis(),
-                    ),
-                );
-                send_state(event_tx, WorkerState::Verifying);
-                intentional_wait += wait_or_stop(
-                    POST_GAME_STAGE_DELAY,
-                    cancel_requested,
-                    "STOP was requested after retrying a stale post-game stage.",
-                )?;
-                observation_round = observation_round.saturating_add(1);
-                continue;
-            }
-
-            if let Some(variant) = resolve_post_game_target(&observation, target)? {
-                break Some(variant);
-            }
-
-            if target.stage == PostGameStage::LevelUpOk
-                && new_game_visible_while_awaiting_level_up(&observation)?
-            {
-                send_log(
-                    event_tx,
-                    "RECOVERED: Level Up OK is absent but the New Game control is visible in a fresh non-gameplay frame. Waiting for a second capture to verify New Game before sending input."
-                        .to_owned(),
-                );
-                intentional_wait += wait_or_stop(
-                    POST_GAME_STAGE_DELAY,
-                    cancel_requested,
-                    "STOP was requested while verifying the New Game transition.",
-                )?;
-                break None;
-            }
-
-            if observation.gameplay_scene
-                && matches!(observation.prediction, PredictedAction::NoHighlight)
-                && target.stage != PostGameStage::Solver
-            {
-                require_post_game_observation_retry_budget(observation_round, target.label)?;
-                require_post_game_click_retry_budget(
-                    recovery_solver_click_attempts,
-                    "recovery Solver",
-                )?;
-                let reprobe = qmp.probe().map_err(|error| {
-                    format!("Post-game recovery Solver QMP probe failed: {error}")
-                })?;
-                validate_probe(&reprobe)
-                    .map_err(|error| format!("Post-game recovery Solver click refused: {error}"))?;
-                send_state(event_tx, WorkerState::Acting);
-                send_status(event_tx, "Click Solver".to_owned());
-                let input_started = Instant::now();
-                click_shared_solver(qmp, cancel_requested)
-                .map_err(|error| {
-                    format!(
-                        "Post-game recovery Solver click is uncertain: {error}. No automatic input retry followed the uncertain QMP result."
-                    )
-                })?;
-                input_wall += input_started.elapsed();
-                recovery_solver_click_attempts = recovery_solver_click_attempts.saturating_add(1);
-                send_log(
-                    event_tx,
-                    format!(
-                        "RECOVERY: expected post-game stage {} but found a gameplay board without a HALO; Solver click attempt {} sent with a {} ms hold before re-orientation.",
-                        target.label,
-                        recovery_solver_click_attempts,
-                        SOLVER_MOUSE_HOLD.as_millis(),
-                    ),
-                );
-                send_state(event_tx, WorkerState::Verifying);
-                intentional_wait += wait_or_stop(
-                    POST_GAME_STAGE_DELAY,
-                    cancel_requested,
-                    "STOP was requested after the post-game recovery Solver click.",
-                )?;
-                observation_round = observation_round.saturating_add(1);
-                continue;
-            }
-
-            require_post_game_observation_retry_budget(observation_round, target.label)?;
-            if score_skip_retry_is_authorised(target.stage, observation.gameplay_scene) {
-                send_state(event_tx, WorkerState::Acting);
-                send_status(event_tx, "Skip score counting".to_owned());
-                input_wall +=
-                    send_score_skip_click(qmp, cancel_requested, score_skip_click_attempts)?;
-                score_skip_click_attempts = score_skip_click_attempts.saturating_add(1);
-                send_log(
-                    event_tx,
-                    format!(
-                        "RETRY: post-game stage {} was not recognised on observation round {observation_round}; score-skip centre click attempt {score_skip_click_attempts}/{SCORE_SKIP_MAX_CLICK_ATTEMPTS} was sent at guest pixel ({}, {}) with a {} ms hold. Waiting {} ms before the next capture; press STOP to end the loop.",
-                        target.label,
-                        SCORE_SKIP_CONTROL.click_point.x,
-                        SCORE_SKIP_CONTROL.click_point.y,
-                        POST_GAME_MOUSE_HOLD.as_millis(),
-                        LEVEL_UP_APPEAR_DELAY.as_millis(),
-                    ),
-                );
-                send_state(event_tx, WorkerState::Verifying);
-                intentional_wait += wait_or_stop(
-                    LEVEL_UP_APPEAR_DELAY,
-                    cancel_requested,
-                    "STOP was requested while waiting after a score-skip retry.",
-                )?;
-                observation_round = observation_round.saturating_add(1);
-                continue;
-            }
-
-            send_log(
-                event_tx,
-                format!(
-                    "WAITING: post-game stage {} was not recognised on observation round {observation_round}; allowing the guest to animate for {} ms before the next capture. Press STOP to end the loop.",
-                    target.label,
-                    BOARD_TRANSITION_REOBSERVE_DELAY.as_millis(),
-                ),
-            );
-            intentional_wait += wait_or_stop(
-                BOARD_TRANSITION_REOBSERVE_DELAY,
-                cancel_requested,
-                "STOP was requested while waiting for the next post-game screen.",
-            )?;
-            observation_round = observation_round.saturating_add(1);
-        };
-
-        let Some(matched_variant) = matched_variant else {
-            target_index += 1;
-            continue;
-        };
-
-        let reprobe = qmp
-            .probe()
-            .map_err(|error| format!("Post-game {} QMP probe failed: {error}", target.label))?;
-        validate_probe(&reprobe).map_err(|error| {
-            format!(
-                "Post-game {} click refused by the fresh QMP probe: {error}",
-                target.label
-            )
-        })?;
-
-        send_state(event_tx, WorkerState::Acting);
-        send_status(event_tx, post_game_click_status(target.stage).to_owned());
-        let input_started = Instant::now();
-        let mouse_hold = if target.stage == PostGameStage::Solver {
-            SOLVER_MOUSE_HOLD
-        } else {
-            POST_GAME_MOUSE_HOLD
-        };
-        qmp.click_with_hold(
-            matched_variant.click_point,
-            NOMINAL_FRAME_WIDTH,
-            NOMINAL_FRAME_HEIGHT,
-            mouse_hold,
-        )
-        .map_err(|error| {
-            format!(
-                "Post-game {} click result is uncertain: {error}. The click was not retried.",
-                target.label
-            )
-        })?;
-        input_wall += input_started.elapsed();
-        click_attempts[target_index] = click_attempts[target_index].saturating_add(1);
-        if target.stage == PostGameStage::Solver {
-            send_log(
-                event_tx,
-                format!(
-                    "Post-game stage Solver variant {} recognised; click attempt {} sent at guest pixel ({}, {}) with a {} ms hold; QMP commands=3, input events=4. Awaiting HALO confirmation.",
-                    matched_variant.label,
-                    click_attempts[target_index],
-                    matched_variant.click_point.x,
-                    matched_variant.click_point.y,
-                    SOLVER_MOUSE_HOLD.as_millis(),
-                ),
-            );
-        } else {
-            send_log(
-                event_tx,
-                format!(
-                    "Post-game stage {} variant {} recognised; click attempt {} sent at guest pixel ({}, {}) with a {} ms hold; QMP commands=3, input events=4. Awaiting a fresh capture proving the next stage.",
-                    target.label,
-                    matched_variant.label,
-                    click_attempts[target_index],
-                    matched_variant.click_point.x,
-                    matched_variant.click_point.y,
-                    POST_GAME_MOUSE_HOLD.as_millis(),
-                ),
-            );
-        }
-
-        send_state(event_tx, WorkerState::Verifying);
-        send_status(
-            event_tx,
-            format!(
-                "Waiting {} ms for the next game state",
-                POST_GAME_STAGE_DELAY.as_millis()
-            ),
-        );
-        intentional_wait += wait_or_stop(
-            POST_GAME_STAGE_DELAY,
-            cancel_requested,
-            "STOP was requested during the one-second post-game stage wait.",
-        )?;
-        target_index += 1;
-    }
-
-    let solver_target = POST_GAME_TARGETS
-        .iter()
-        .find(|target| target.stage == PostGameStage::Solver)
-        .copied()
-        .ok_or_else(|| "Post-game Solver target is not configured.".to_owned())?;
-    let [solver_variant] = solver_target.control_variants else {
-        return Err("Post-game Solver must have exactly one control variant.".to_owned());
-    };
-    let solver_variant = *solver_variant;
-    let mut halo_round = 1usize;
-    let mut solver_click_attempts = 1usize;
-    let observation = loop {
-        let (observation, timing) = capture_with_client(qmp, socket_path, scan_state)
-            .map_err(|error| format!("First post-Solver HALO capture failed: {error}"))?;
-        capture_timing.add_assign(timing);
-        publish_post_action_observation(event_tx, &observation);
-
-        if observation.gameplay_scene
-            && matches!(observation.prediction, PredictedAction::Action(_))
-        {
-            break observation;
-        }
-
-        if observation.gameplay_scene
-            && matches!(observation.prediction, PredictedAction::NoHighlight)
-        {
-            require_post_game_observation_retry_budget(halo_round, "post-Solver HALO")?;
-            require_post_game_click_retry_budget(solver_click_attempts, "Solver")?;
-            let reprobe = qmp
-                .probe()
-                .map_err(|error| format!("Post-game Solver retry QMP probe failed: {error}"))?;
-            validate_probe(&reprobe).map_err(|error| {
-                format!("Post-game Solver retry refused by the fresh QMP probe: {error}")
-            })?;
-
-            send_state(event_tx, WorkerState::Acting);
-            send_status(event_tx, "Click Solver".to_owned());
-            let input_started = Instant::now();
-            qmp.click_with_hold(
-                solver_variant.click_point,
-                NOMINAL_FRAME_WIDTH,
-                NOMINAL_FRAME_HEIGHT,
-                SOLVER_MOUSE_HOLD,
-            )
-            .map_err(|error| {
-                format!(
-                    "Post-game Solver retry result is uncertain: {error}. No automatic input retry followed this uncertain QMP result."
-                )
-            })?;
-            input_wall += input_started.elapsed();
-            solver_click_attempts = solver_click_attempts.saturating_add(1);
-            send_log(
-                event_tx,
-                format!(
-                    "No actionable HALO was visible on observation round {halo_round}; Solver click attempt {solver_click_attempts} sent at guest pixel ({}, {}) with a {} ms hold. Awaiting HALO confirmation; press STOP to end the loop.",
-                    solver_variant.click_point.x,
-                    solver_variant.click_point.y,
-                    SOLVER_MOUSE_HOLD.as_millis(),
-                ),
-            );
-
-            send_state(event_tx, WorkerState::Verifying);
-            intentional_wait += wait_or_stop(
-                POST_GAME_STAGE_DELAY,
-                cancel_requested,
-                "STOP was requested while waiting after a Solver retry.",
-            )?;
-        } else {
-            require_post_game_observation_retry_budget(halo_round, "post-Solver HALO")?;
-            send_log(
-                event_tx,
-                format!(
-                    "WAITING: no actionable HALO is visible on observation round {halo_round}, but the Solver control is not safe to retry in this frame; allowing {} ms before the next transition capture. Press STOP to end the loop.",
-                    BOARD_TRANSITION_REOBSERVE_DELAY.as_millis(),
-                ),
-            );
-            intentional_wait += wait_or_stop(
-                BOARD_TRANSITION_REOBSERVE_DELAY,
-                cancel_requested,
-                "STOP was requested while waiting for a safe Solver retry frame.",
-            )?;
-        }
-
-        halo_round = halo_round.saturating_add(1);
-    };
-
-    *completed_boards = 0;
-    *scan_state = TableauScanState::for_mode(scan_state.mode());
-    let _ = scan_state.reconcile_observation(observation.observed_rows);
-    send_board_progress(event_tx, scan_state, *completed_boards);
-    send_status(event_tx, "Board 1 ready".to_owned());
-    send_log(
-        event_tx,
-        format!(
-            "Post-game restart verified: first HALO acquired after {halo_round} post-Solver observation round(s) and {solver_click_attempts} Solver click attempt(s); board counter reset to 0/{boards_per_game}."
-        ),
-    );
-    send_log(
-        event_tx,
-        format!(
-            "PROFILE post-game restart: captures={}, reserve={:.1} ms, screendump={:.1} ms, read={:.1} ms, decode={:.1} ms, detection={:.1} ms, input-wall(inclusive)={:.1} ms, intentional-waits={:.1} ms, total={:.1} ms.",
-            capture_timing.captures,
-            milliseconds(capture_timing.reserve),
-            milliseconds(capture_timing.screendump),
-            milliseconds(capture_timing.file_read),
-            milliseconds(capture_timing.decode),
-            milliseconds(capture_timing.detection),
-            milliseconds(input_wall),
-            milliseconds(intentional_wait),
-            milliseconds(transition_started.elapsed()),
-        ),
-    );
-
-    Ok(observation)
-}
-
-fn resolve_post_game_target(
-    observation: &FrameObservation,
-    target: PostGameTarget,
-) -> Result<Option<PostGameControlVariant>, String> {
-    // Resolve the exact control variant that supplied fresh visual authority.
-    // Multiple matching variants are ambiguous and must never select a click.
-    if target.requires_gameplay_scene {
-        let [variant] = target.control_variants else {
-            return Err(format!(
-                "{} must have exactly one gameplay control variant",
-                target.label
-            ));
-        };
-        return Ok((observation.gameplay_scene
-            && target.stage == PostGameStage::Solver
-            && matches!(observation.prediction, PredictedAction::NoHighlight))
-        .then_some(*variant));
-    }
-
-    if observation.gameplay_scene {
-        return Ok(None);
-    }
-
-    if target.control_variants.is_empty() {
-        return Err(format!(
-            "{} has no configured control variants",
-            target.label
-        ));
-    }
-
-    let mut matched_variant: Option<PostGameControlVariant> = None;
-    for variant in target.control_variants.iter().copied() {
-        let is_visible =
-            has_dialog_gold_button(&observation.frame, variant.probe_bounds).map_err(|error| {
-                format!(
-                    "{} variant {} target analysis failed: {error}",
-                    target.label, variant.label
-                )
-            })?;
-        if !is_visible {
-            continue;
-        }
-
-        if let Some(previous) = matched_variant {
-            return Err(format!(
-                "{} target is ambiguous: variants {} and {} both matched; no guest input was sent",
-                target.label, previous.label, variant.label
-            ));
-        }
-        matched_variant = Some(variant);
-    }
-
-    Ok(matched_variant)
-}
-
-fn earlier_visible_post_game_target(
-    observation: &FrameObservation,
-    expected_target_index: usize,
-) -> Result<Option<(usize, PostGameTarget, PostGameControlVariant)>, String> {
-    // A QMP acknowledgement proves delivery, not that the guest accepted the
-    // click. Re-detect earlier controls before authorising a later-stage click.
-    let earlier_targets = POST_GAME_TARGETS
-        .get(..expected_target_index)
-        .ok_or_else(|| format!("invalid post-game target index: {expected_target_index}"))?;
-    for (index, target) in earlier_targets.iter().copied().enumerate().rev() {
-        if let Some(variant) = resolve_post_game_target(observation, target)? {
-            return Ok(Some((index, target, variant)));
-        }
-    }
-
-    Ok(None)
-}
-
-fn level_up_overrides_board_progress(
-    board_completion_verified: bool,
-    observation: &FrameObservation,
-) -> Result<bool, String> {
-    // A recognised Level Up dialog is stronger evidence than the earlier
-    // progress-bar branch and prevents a stale redeal state from looping.
-    if !board_completion_verified {
-        return Ok(false);
-    }
-
-    Ok(resolve_post_game_target(observation, POST_GAME_TARGETS[0])?.is_some())
-}
-
-fn known_post_game_stage(observation: Option<&FrameObservation>) -> Result<Option<usize>, String> {
-    let Some(observation) = observation else {
-        return Ok(None);
-    };
-    if resolve_post_game_target(observation, POST_GAME_TARGETS[0])?.is_some() {
-        return Ok(Some(0));
-    }
-    if new_game_visible_while_awaiting_level_up(observation)? {
-        return Ok(Some(1));
-    }
-    Ok(None)
-}
-
-fn new_game_visible_while_awaiting_level_up(
-    observation: &FrameObservation,
-) -> Result<bool, String> {
-    Ok(resolve_post_game_target(observation, POST_GAME_TARGETS[1])?.is_some())
-}
-
-fn require_post_game_observation_retry_budget(
-    observation_round: usize,
-    target_label: &str,
-) -> Result<(), String> {
-    if observation_round < POST_GAME_MAX_OBSERVATION_ROUNDS {
-        return Ok(());
-    }
-
-    Err(format!(
-        "Post-game {target_label} was not safely resolved after {observation_round} observation rounds; the bounded retry budget is exhausted and no further guest input was sent."
-    ))
-}
-
-fn require_post_game_click_retry_budget(
-    completed_attempts: usize,
-    target_label: &str,
-) -> Result<(), String> {
-    if completed_attempts < POST_GAME_MAX_CLICK_ATTEMPTS {
-        return Ok(());
-    }
-
-    Err(format!(
-        "Post-game {target_label} remained visible after {completed_attempts} confirmed-delivery click attempts; the bounded click budget is exhausted and no further guest input was sent."
-    ))
-}
-
-fn require_score_skip_click_budget(completed_attempts: usize) -> Result<(), String> {
-    if completed_attempts < SCORE_SKIP_MAX_CLICK_ATTEMPTS {
-        return Ok(());
-    }
-
-    Err(format!(
-        "Level Up remained unrecognised after {completed_attempts} confirmed-delivery score-skip centre clicks; the bounded score-skip budget is exhausted and no further guest input was sent."
-    ))
-}
-
-// Context may authorise another centre click only while waiting for Level Up
-// on a non-gameplay frame. An ambiguous gameplay frame must remain input-free.
-fn score_skip_retry_is_authorised(expected_stage: PostGameStage, gameplay_scene: bool) -> bool {
-    expected_stage == PostGameStage::LevelUpOk && !gameplay_scene
-}
-
-fn send_score_skip_click(
-    qmp: &mut QmpClient,
-    cancel_requested: &AtomicBool,
-    completed_attempts: usize,
-) -> Result<Duration, String> {
-    require_score_skip_click_budget(completed_attempts)?;
-    let attempt = completed_attempts.saturating_add(1);
-
-    if cancel_requested.load(Ordering::Acquire) {
-        return Err(format!(
-            "STOP was requested before score-skip click attempt {attempt}; no guest input was sent."
-        ));
-    }
-
-    let reprobe = qmp
-        .probe()
-        .map_err(|error| format!("Score-skip click attempt {attempt} QMP probe failed: {error}"))?;
-    validate_probe(&reprobe).map_err(|error| {
-        format!("Score-skip click attempt {attempt} was refused by the fresh QMP probe: {error}")
-    })?;
-
-    if cancel_requested.load(Ordering::Acquire) {
-        return Err(format!(
-            "STOP was requested after the score-skip probe and before click attempt {attempt}; no guest input was sent."
-        ));
-    }
-
-    let input_started = Instant::now();
-    qmp.click_with_hold(
-        SCORE_SKIP_CONTROL.click_point,
-        NOMINAL_FRAME_WIDTH,
-        NOMINAL_FRAME_HEIGHT,
-        POST_GAME_MOUSE_HOLD,
-    )
-    .map_err(|error| {
-        format!(
-            "Score-skip click attempt {attempt} result is uncertain: {error}. No automatic retry followed the uncertain QMP result."
-        )
-    })?;
-    Ok(input_started.elapsed())
-}
-
+/// Publish an advisory copy of a post-action frame without repeating its prediction log.
 fn publish_post_action_observation(event_tx: &WorkerEventSink, observation: &FrameObservation) {
     event_tx.publish_frame(observation.frame.clone(), observation.prediction, false);
 }
 
+/// Wait in cancellable slices and return waited time, or the caller-provided STOP message.
 fn wait_or_stop(
     duration: Duration,
     cancel_requested: &AtomicBool,
@@ -1584,17 +1120,25 @@ fn wait_or_stop(
     cancellable_wait(duration, cancel_requested).map_err(|_| stopped_message.to_owned())
 }
 
+/// Per-stage wall times and capture count for QMP PNG acquisition and analysis.
 #[derive(Clone, Copy, Debug, Default)]
 struct CaptureTiming {
+    /// Number of fresh QMP screendumps represented.
     captures: usize,
+    /// Time reserving private temporary capture paths.
     reserve: Duration,
+    /// Time waiting for QMP to write PNG output.
     screendump: Duration,
+    /// Time reading the bounded original PNG bytes.
     file_read: Duration,
+    /// Time decoding PNG into RGBA pixels.
     decode: Duration,
+    /// Time classifying scene, progress and targets.
     detection: Duration,
 }
 
 impl CaptureTiming {
+    /// Accumulate capture counts and per-stage durations from another capture measurement.
     fn add_assign(&mut self, other: Self) {
         self.captures = self.captures.saturating_add(other.captures);
         self.reserve += other.reserve;
@@ -1605,32 +1149,51 @@ impl CaptureTiming {
     }
 }
 
+/// Timing and input-attempt evidence for one guarded action cycle.
 #[derive(Clone, Copy, Debug, Default)]
 struct ActionProfile {
+    /// Accumulated fresh-capture stage times.
     capture: CaptureTiming,
+    /// Time evaluating planning, effects and transitions.
     validation_effect: Duration,
+    /// Wall time spent delivering input, including deliberate holds.
     input_wall: Duration,
+    /// Configured settling and cancellation-aware waits.
     intentional_wait: Duration,
+    /// Complete action-cycle wall time.
     total: Duration,
+    /// Whether this cycle reached guest input delivery.
     input_attempted: bool,
 }
 
+/// Aggregate timing and acceptance statistics for a guarded run.
 struct RunProfile {
+    /// Initial QMP connection and probe wall time.
     connect_probe: Duration,
+    /// Validation/action cycles recorded, including those stopping before input.
     cycles: usize,
+    /// Cycles that attempted guest input.
     attempted: usize,
+    /// Accepted fresh-halo continuations without proven previous effects.
+    halo_operations: usize,
+    /// Sum of component timings across all cycles.
     totals: ActionProfile,
+    /// Total wall time for cycles that attempted input.
     action_total_sum: Duration,
+    /// Shortest attempted-input cycle, absent before any attempt.
     action_total_min: Option<Duration>,
+    /// Longest attempted-input cycle, absent before any attempt.
     action_total_max: Option<Duration>,
 }
 
 impl RunProfile {
+    /// Create empty run accounting with the already-measured QMP connection/probe duration.
     const fn new(connect_probe: Duration) -> Self {
         Self {
             connect_probe,
             cycles: 0,
             attempted: 0,
+            halo_operations: 0,
             totals: ActionProfile {
                 capture: CaptureTiming {
                     captures: 0,
@@ -1652,6 +1215,7 @@ impl RunProfile {
         }
     }
 
+    /// Accumulate one validation cycle while measuring min/mean/max only for attempted input.
     fn record(&mut self, profile: ActionProfile) {
         self.cycles = self.cycles.saturating_add(1);
         if profile.input_attempted {
@@ -1674,41 +1238,69 @@ impl RunProfile {
     }
 }
 
+/// Accepted result of one guarded action, preserving effect and halo acceptance separately.
 struct ActionSuccess {
+    /// Immutable plan whose input was delivered.
     plan: StepPlan,
+    /// Accepted next-action prediction.
     after: PredictedAction,
+    /// Fresh result frame reused by the next planning cycle.
     observation: FrameObservation,
+    /// Diagnostic effect-region change count.
     changed_pixels: usize,
+    /// True when continuation was authorised without a proven prior effect.
+    continued_from_halo: bool,
+    /// Number of post-action captures required for acceptance.
     observation_rounds: usize,
+    /// Whether this action positively completed a board.
     board_completed: bool,
+    /// Whether the game is ready for terminal-screen handling.
     series_complete: bool,
+    /// Committed board count after this result.
     completed_boards: usize,
+    /// Measured stages and total action duration.
     profile: ActionProfile,
 }
 
+/// Whether a retained failure frame preceded or followed guest input.
 #[derive(Clone, Copy)]
 enum FailureFramePhase {
+    /// Advisory planning frame captured before the attempted action.
     PreAction,
+    /// Unverified result frame that must not authorise another action.
     PostAction,
 }
 
+/// Stopped action with a diagnostic frame and measured work completed so far.
 struct ActionFailure {
+    /// UI lifecycle state selected for the failure.
     state: WorkerState,
+    /// Detailed stop reason.
     message: String,
+    /// Latest available frame, if capture progressed far enough.
     observation: Option<FrameObservation>,
+    /// Distinguishes advisory planning from unverified result pixels.
     frame_phase: FailureFramePhase,
+    /// Timings including work before the stop.
     profile: ActionProfile,
 }
 
+/// Source of planning authority for the next guarded action.
 enum PlanningFrame {
     /// The advisory UI prediction is only a constraint. One fresh capture must
     /// reproduce it before the first input in a run.
     InitialConstraint(PredictedAction),
-    /// A fresh post-action frame whose effect and resulting state were already
-    /// verified. It is the next action's immutable planning frame.
-    VerifiedResult(FrameObservation),
+    /// A fresh post-action frame accepted through effect verification or the
+    /// settled Pyramid halo rule. It is the next action's immutable plan.
+    AcceptedResult(FrameObservation),
 }
 
+/// Plan and deliver at most one gameplay input sequence, then observe its result.
+///
+/// A first planning capture must match the approved preview; later plans reuse
+/// accepted fresh results. Pyramid result handling is delegated to its verifier.
+/// Returns an accepted action with timings, or a failure retaining the latest
+/// frame and whether it preceded input. Uncertain input is never replayed here.
 fn execute_guarded_action(
     qmp: &mut QmpClient,
     socket_path: &Path,
@@ -1808,7 +1400,7 @@ fn execute_guarded_action(
                             ));
                         }
                         let retry_delay = if scan_state.mode() == GameMode::Pyramid {
-                            PYRAMID_SETTLE_DELAY
+                            settings.animation_delays().pyramid_reobserve
                         } else {
                             NO_HIGHLIGHT_REOBSERVE_DELAY
                         };
@@ -1859,11 +1451,11 @@ fn execute_guarded_action(
                 break (candidate_series, plan);
             }
         }
-        PlanningFrame::VerifiedResult(observation) => {
-            send_status(event_tx, "Planning from verified result".to_owned());
+        PlanningFrame::AcceptedResult(observation) => {
+            send_status(event_tx, "Planning from accepted result".to_owned());
             send_log(
                 event_tx,
-                "Reusing the prior action's fresh verified result frame as the next planning frame; redundant pre-action screendump=0."
+                "Reusing the prior action's fresh accepted result frame as the next planning frame; redundant pre-action screendump=0."
                     .to_owned(),
             );
             let validation_started = Instant::now();
@@ -2017,6 +1609,15 @@ fn execute_guarded_action(
     let animation_settle_delay = plan
         .input()
         .animation_settle_delay(settings.animation_delays());
+    if let ActionTarget::Pyramid(kind) = plan.input().action().target {
+        send_log(
+            event_tx,
+            format!(
+                "Pyramid {kind:?} input delivered once; waiting {} ms before the first result capture.",
+                animation_settle_delay.as_millis(),
+            ),
+        );
+    }
     match cancellable_wait(animation_settle_delay, cancel_requested) {
         Ok(waited) => profile.intentional_wait += waited,
         Err(waited) => {
@@ -2036,7 +1637,7 @@ fn execute_guarded_action(
     send_state(event_tx, WorkerState::Verifying);
     send_status(event_tx, "Verifying move".to_owned());
     if let ActionTarget::Pyramid(kind) = plan.input().action().target {
-        return verify_pyramid_action(
+        return pyramid_execution::verify_pyramid_action(
             qmp,
             socket_path,
             before_series,
@@ -2105,9 +1706,44 @@ fn execute_guarded_action(
 
             let level_up_visible = match no_highlight_observation.as_ref() {
                 Some(observation) => {
-                    match level_up_overrides_board_progress(board_completion_verified, observation)
-                    {
+                    match post_game::level_up_overrides_board_progress(
+                        board_completion_verified,
+                        observation,
+                    ) {
                         Ok(visible) => visible,
+                        Err(error)
+                            if post_game::is_level_up_ambiguity(&error)
+                                && observation_round < POST_GAME_MAX_OBSERVATION_ROUNDS =>
+                        {
+                            profile.validation_effect += verification_started.elapsed();
+                            send_log(
+                                event_tx,
+                                format!(
+                                    "WAITING: {error}; repeating the completed-board Level Up capture in {} ms without input.",
+                                    BOARD_TRANSITION_REOBSERVE_DELAY.as_millis(),
+                                ),
+                            );
+                            match cancellable_wait(
+                                BOARD_TRANSITION_REOBSERVE_DELAY,
+                                cancel_requested,
+                            ) {
+                                Ok(waited) => profile.intentional_wait += waited,
+                                Err(waited) => {
+                                    profile.intentional_wait += waited;
+                                    return Err(action_failure(
+                                        action_started,
+                                        profile,
+                                        WorkerState::Ready,
+                                        "STOP was requested during ambiguous Level Up re-observation."
+                                            .to_owned(),
+                                        no_highlight_observation,
+                                        FailureFramePhase::PostAction,
+                                    ));
+                                }
+                            }
+                            observation_round = observation_round.saturating_add(1);
+                            continue;
+                        }
                         Err(error) => {
                             profile.validation_effect += verification_started.elapsed();
                             return Err(action_failure(
@@ -2681,6 +2317,7 @@ fn execute_guarded_action(
         observation,
         changed_pixels,
         observation_rounds: observation_round,
+        continued_from_halo: false,
         board_completed,
         series_complete,
         completed_boards: *completed_boards,
@@ -2688,311 +2325,9 @@ fn execute_guarded_action(
     })
 }
 
-fn verify_pyramid_action(
-    qmp: &mut QmpClient,
-    socket_path: &Path,
-    mut before_series: CaptureSeries,
-    plan: StepPlan,
-    kind: PyramidTargetKind,
-    settings: StepRunSettings,
-    scan_state: &mut TableauScanState,
-    completed_boards: &mut usize,
-    event_tx: &WorkerEventSink,
-    cancel_requested: &AtomicBool,
-    action_started: Instant,
-    mut profile: ActionProfile,
-) -> Result<ActionSuccess, ActionFailure> {
-    // Input planning and delivery are shared. Pyramid supplies only its
-    // semantic effect and board-transition evidence to this bounded verifier.
-    let mut last_observation = None;
-    let mut observation_rounds = 0usize;
-    let mut changed_pixels = 0usize;
-    let mut board_completed = false;
-    let mut series_complete = false;
-    let result = (|| -> Result<PredictedAction, String> {
-        let before = before_series
-            .observations
-            .pop()
-            .ok_or_else(|| "Pyramid verification has no planning frame".to_owned())?;
-        let expected_final_transition = pyramid::final_tableau_action(&before.frame, kind)
-            .map_err(|error| format!("Pyramid final-action analysis failed: {error}"))?;
-        let observation_limit = if expected_final_transition {
-            POST_GAME_MAX_OBSERVATION_ROUNDS
-        } else {
-            PYRAMID_OBSERVATION_LIMIT
-        };
-        let mut effect_verified = false;
-        let mut awaiting_redeal = false;
-        let mut solver_recovery_sent = false;
-        let mut phase_round = 0usize;
-        let boards_per_game = scan_state.mode().profile().boards_per_game;
-
-        loop {
-            phase_round += 1;
-            if phase_round > observation_limit {
-                return Err(format!(
-                    "Pyramid verification stopped after {observation_limit} observations in this phase; effect verified={effect_verified}, awaiting redeal={awaiting_redeal}. No card or Move input was retried. Inspect the attached result frame before another run."
-                ));
-            }
-            observation_rounds += 1;
-            send_log(
-                event_tx,
-                format!(
-                    "Pyramid result observation {observation_rounds} (phase {phase_round}/{observation_limit}); one fresh capture, no replay of the previous card or Move input."
-                ),
-            );
-            let mut series = capture_series(qmp, socket_path, scan_state, cancel_requested)?;
-            profile.capture.add_assign(series.timing);
-            last_observation = series.observations.pop();
-            let observation = last_observation
-                .as_mut()
-                .ok_or_else(|| "Pyramid result capture contained no frame".to_owned())?;
-            let analysis_started = Instant::now();
-
-            if !observation.gameplay_scene {
-                if (board_completed || expected_final_transition)
-                    && (level_up_overrides_board_progress(true, observation)?
-                        || new_game_visible_while_awaiting_level_up(observation)?)
-                {
-                    *completed_boards = boards_per_game;
-                    board_completed = true;
-                    series_complete = true;
-                    profile.validation_effect += analysis_started.elapsed();
-                    send_log(event_tx,
-                        "Pyramid final-tableau action followed by a recognised terminal dialog confirms game completion; the shared post-game controller will resume at the visible stage.".to_owned());
-                    return Ok(PredictedAction::NoHighlight);
-                }
-                profile.validation_effect += analysis_started.elapsed();
-                send_log(event_tx,
-                    "Pyramid result is not a recognised gameplay scene; observing the transition without guest input.".to_owned());
-            } else {
-                if !effect_verified
-                    && expected_final_transition
-                    && pyramid::redeal_after_final_tableau_action(
-                        &before.frame,
-                        &observation.frame,
-                        kind,
-                    )
-                    .map_err(|error| format!("Pyramid redeal analysis failed: {error}"))?
-                {
-                    if observation.game_progress != Some(GameProgress::AnotherBoard) {
-                        return Err("A fresh Pyramid board appeared after the final-tableau action, but the progress bar contradicts redeal; input stopped for inspection".to_owned());
-                    }
-                    *completed_boards = completed_boards
-                        .saturating_add(1)
-                        .min(boards_per_game.saturating_sub(1));
-                    board_completed = true;
-                    effect_verified = true;
-                    *scan_state = TableauScanState::for_mode(GameMode::Pyramid);
-                    refresh_observation_prediction(observation, scan_state)?;
-                    send_board_progress(event_tx, scan_state, *completed_boards);
-                    send_log(event_tx,
-                        "Pyramid automatic redeal verified: the planning frame had only the highlighted apex remaining, and the fresh result has new positive bottom-row cards with AnotherBoard progress. Per-board state reset; no new-board slot was marked consumed.".to_owned());
-                }
-                if !effect_verified {
-                    effect_verified =
-                        pyramid::verify_effect(&before.frame, &observation.frame, kind)
-                            .map_err(|error| format!("Pyramid effect analysis failed: {error}"))?;
-                    if effect_verified {
-                        changed_pixels = materially_changed_pixels(
-                            &before.frame,
-                            &observation.frame,
-                            plan.input().effect_bounds(),
-                            plan.input().effect_exclusion_bounds(),
-                            ACTION_CHANGE_CHANNEL_THRESHOLD,
-                        )?;
-                        // Only the clicked card is retired. An unclicked
-                        // partner and all three lower controls remain eligible.
-                        scan_state.pyramid.mark_removed(kind);
-                        refresh_observation_prediction(observation, scan_state)?;
-                        send_log(
-                            event_tx,
-                            format!(
-                                "Pyramid effect verified for {kind:?}; clicked-card state updated and the same result frame rescanned. Changed effect pixels={changed_pixels}."
-                            ),
-                        );
-                    }
-                }
-
-                if effect_verified {
-                    let board_empty =
-                        pyramid::board_is_empty(&observation.frame).map_err(|error| {
-                            format!("Pyramid board-presence analysis failed: {error}")
-                        })?;
-                    let cards_visible = pyramid::has_visible_tableau_card(&observation.frame)
-                        .map_err(|error| {
-                            format!("Pyramid card-presence analysis failed: {error}")
-                        })?;
-                    if !board_completed && board_empty {
-                        let progress = observation.game_progress.ok_or_else(|| {
-                            "Verified empty Pyramid board has no progress-bar classification"
-                                .to_owned()
-                        })?;
-                        series_complete = progress == GameProgress::GameComplete;
-                        *completed_boards = if series_complete {
-                            boards_per_game
-                        } else {
-                            completed_boards
-                                .saturating_add(1)
-                                .min(boards_per_game.saturating_sub(1))
-                        };
-                        board_completed = true;
-                        send_board_progress(event_tx, scan_state, *completed_boards);
-                        send_log(
-                            event_tx,
-                            format!(
-                                "Pyramid board completion verified by the action effect and positive empty-tableau evidence; shared progress bar={progress:?}."
-                            ),
-                        );
-                        profile.validation_effect += analysis_started.elapsed();
-                        if series_complete {
-                            return Ok(PredictedAction::NoHighlight);
-                        }
-                        awaiting_redeal = true;
-                        phase_round = 0;
-                        solver_recovery_sent = false;
-                        send_status(event_tx, "Waiting for Pyramid redeal".to_owned());
-                        profile.intentional_wait += wait_or_stop(
-                            settings.animation_delays().board_redeal,
-                            cancel_requested,
-                            "STOP was requested during the Pyramid redeal wait; the completed-board input was not retried.",
-                        )?;
-                        continue;
-                    }
-
-                    if awaiting_redeal && cards_visible {
-                        // The preceding board was positively empty. Fresh
-                        // gameplay with cards now proves a new board exists.
-                        *scan_state = TableauScanState::for_mode(GameMode::Pyramid);
-                        refresh_observation_prediction(observation, scan_state)?;
-                        awaiting_redeal = false;
-                        send_log(event_tx,
-                            "Pyramid redeal confirmed by a fresh non-empty gameplay frame; per-board clicked-card state reset.".to_owned());
-                    }
-
-                    if !awaiting_redeal {
-                        if matches!(observation.prediction, PredictedAction::Action(_)) {
-                            let after = if board_completed {
-                                plan_step(observation.prediction).map(|next| next.before())
-                            } else {
-                                verify_post_action(&plan, observation.prediction, true)
-                            }
-                            .map_err(|error| {
-                                format!("Pyramid next-target validation failed: {error}")
-                            })?;
-                            profile.validation_effect += analysis_started.elapsed();
-                            return Ok(after);
-                        }
-                        if !matches!(observation.prediction, PredictedAction::NoHighlight) {
-                            return Err("Pyramid produced an invalid next-target classification; no further input was sent".to_owned());
-                        }
-                        if pyramid_solver_recovery_authorised(
-                            observation.gameplay_scene,
-                            effect_verified,
-                            board_empty,
-                            cards_visible,
-                            phase_round,
-                            solver_recovery_sent,
-                        ) {
-                            profile.validation_effect += analysis_started.elapsed();
-                            let probe_started = Instant::now();
-                            let probe = qmp.probe().map_err(|error| {
-                                format!("Pyramid Solver recovery QMP probe failed: {error}")
-                            })?;
-                            validate_probe(&probe)?;
-                            profile.validation_effect += probe_started.elapsed();
-                            send_state(event_tx, WorkerState::Acting);
-                            send_status(event_tx, "Click Solver".to_owned());
-                            profile.input_wall += click_shared_solver(qmp, cancel_requested)?;
-                            profile.intentional_wait += SOLVER_MOUSE_HOLD;
-                            solver_recovery_sent = true;
-                            send_log(event_tx,
-                                "Pyramid action effect is verified and a non-empty gameplay scene has no halo; one shared Solver activation was sent. No Move, recycle or card input was inferred from the missing halo.".to_owned());
-                            send_state(event_tx, WorkerState::Verifying);
-                            profile.intentional_wait += wait_or_stop(
-                                PYRAMID_SETTLE_DELAY,
-                                cancel_requested,
-                                "STOP was requested after Pyramid Solver activation; input was not retried.",
-                            )?;
-                            continue;
-                        }
-                    }
-                }
-                profile.validation_effect += analysis_started.elapsed();
-            }
-
-            profile.intentional_wait += wait_or_stop(
-                PYRAMID_SETTLE_DELAY,
-                cancel_requested,
-                "STOP was requested during Pyramid result verification; the action was not retried.",
-            )?;
-        }
-    })();
-
-    let after = match result {
-        Ok(after) => after,
-        Err(error) => {
-            return Err(action_failure(
-                action_started,
-                profile,
-                WorkerState::Uncertain,
-                error,
-                last_observation,
-                FailureFramePhase::PostAction,
-            ));
-        }
-    };
-    let Some(observation) = last_observation else {
-        return Err(action_failure(
-            action_started,
-            profile,
-            WorkerState::Uncertain,
-            "Pyramid verification completed without a result frame".to_owned(),
-            None,
-            FailureFramePhase::PostAction,
-        ));
-    };
-    profile.total = action_started.elapsed();
-    Ok(ActionSuccess {
-        plan,
-        after,
-        observation,
-        changed_pixels,
-        observation_rounds,
-        board_completed,
-        series_complete,
-        completed_boards: *completed_boards,
-        profile,
-    })
-}
-
-fn refresh_observation_prediction(
-    observation: &mut FrameObservation,
-    scan_state: &TableauScanState,
-) -> Result<(), String> {
-    let analysis = analyse_frame_with_state(&observation.frame, scan_state)
-        .map_err(|error| format!("Result-frame rescan failed: {error}"))?;
-    observation.prediction = analysis.prediction;
-    observation.observed_rows = analysis.observed_rows;
-    Ok(())
-}
-
-fn pyramid_solver_recovery_authorised(
-    gameplay_scene: bool,
-    effect_verified: bool,
-    board_empty: bool,
-    cards_visible: bool,
-    observation_round: usize,
-    solver_already_sent: bool,
-) -> bool {
-    gameplay_scene
-        && effect_verified
-        && !board_empty
-        && cards_visible
-        && observation_round >= 2
-        && !solver_already_sent
-}
-
+/// Send one held Solver click unless STOP is already requested.
+///
+/// Returns input wall time or an uncertain-delivery error without automatic retry.
 fn click_shared_solver(
     qmp: &mut QmpClient,
     cancel_requested: &AtomicBool,
@@ -3014,6 +2349,7 @@ fn click_shared_solver(
     Ok(started.elapsed())
 }
 
+/// Finish action timing and retain the stop state, reason and optional last observation.
 fn action_failure(
     action_started: Instant,
     mut profile: ActionProfile,
@@ -3032,6 +2368,7 @@ fn action_failure(
     }
 }
 
+/// Require a running VM and a current absolute pointer; return the first failed precondition.
 fn validate_probe(probe: &crate::qmp::QmpProbe) -> Result<(), String> {
     if !probe.is_running() {
         return Err("VM is not running".to_owned());
@@ -3042,10 +2379,12 @@ fn validate_probe(probe: &crate::qmp::QmpProbe) -> Result<(), String> {
     Ok(())
 }
 
+/// Convert a duration to fractional milliseconds for diagnostic output.
 fn milliseconds(duration: Duration) -> f64 {
     duration.as_secs_f64() * 1_000.0
 }
 
+/// Render zero as an unbounded run and a positive value as its operation limit.
 fn format_operation_limit(operation_limit: usize) -> String {
     if operation_limit == 0 {
         "unbounded (until STOP)".to_owned()
@@ -3054,6 +2393,7 @@ fn format_operation_limit(operation_limit: usize) -> String {
     }
 }
 
+/// Render the current one-based operation index against a bounded or unbounded limit.
 fn format_operation_progress(operation_index: usize, operation_limit: usize) -> String {
     if operation_limit == 0 {
         format!("{operation_index}/unbounded")
@@ -3062,6 +2402,7 @@ fn format_operation_progress(operation_index: usize, operation_limit: usize) -> 
     }
 }
 
+/// Emit one action timing record, including whether guest input was attempted.
 fn log_action_profile(
     event_tx: &WorkerEventSink,
     operation_index: usize,
@@ -3089,6 +2430,7 @@ fn log_action_profile(
     );
 }
 
+/// Emit aggregate timings and separate effect-verified actions from fresh-halo continuations.
 fn log_run_profile(
     event_tx: &WorkerEventSink,
     status: &str,
@@ -3106,9 +2448,10 @@ fn log_run_profile(
     send_log(
         event_tx,
         format!(
-            "PROFILE run ({status}): requested={requested}, cycles={}, attempted={}, verified={verified}, captures={}, connect/probe={:.1} ms, reserve={:.1} ms, screendump={:.1} ms, read={:.1} ms, decode={:.1} ms, detection={:.1} ms, validation/effect={:.1} ms, input-wall(inclusive)={:.1} ms, intentional-waits={:.1} ms, action min/mean/max={:.1}/{:.1}/{:.1} ms, wall={:.1} ms.",
+            "PROFILE run ({status}): requested={requested}, cycles={}, attempted={}, verified={verified}, continued-from-halo={}, captures={}, connect/probe={:.1} ms, reserve={:.1} ms, screendump={:.1} ms, read={:.1} ms, decode={:.1} ms, detection={:.1} ms, validation/effect={:.1} ms, input-wall(inclusive)={:.1} ms, intentional-waits={:.1} ms, action min/mean/max={:.1}/{:.1}/{:.1} ms, wall={:.1} ms.",
             profile.cycles,
             profile.attempted,
+            profile.halo_operations,
             profile.totals.capture.captures,
             milliseconds(profile.connect_probe),
             milliseconds(profile.totals.capture.reserve),
@@ -3127,6 +2470,7 @@ fn log_run_profile(
     );
 }
 
+/// Commit row evidence only from one non-ambiguous observation; report whether state changed.
 fn reconcile_observation_series(
     scan_state: &mut TableauScanState,
     observations: &[FrameObservation],
@@ -3139,6 +2483,10 @@ fn reconcile_observation_series(
     }
 }
 
+/// Require no halo or exposed row after the completion-observation phase.
+///
+/// A gameplay frame additionally requires an attempted Solver recovery; absent
+/// rows alone cannot declare completion while an actionable halo remains.
 fn settled_completion_evidence(
     prediction: PredictedAction,
     observed_rows: Option<RowMask>,
@@ -3154,6 +2502,7 @@ fn settled_completion_evidence(
         && (solver_recovery_clicks > 0 || !gameplay_scene)
 }
 
+/// Report a guarded-run error known to precede all guest input.
 fn step_failed_before_input(event_tx: &WorkerEventSink, reason: String) {
     send_state(event_tx, WorkerState::Error);
     send_log(
@@ -3162,6 +2511,10 @@ fn step_failed_before_input(event_tx: &WorkerEventSink, reason: String) {
     );
 }
 
+/// Open a short-lived QMP connection, require a running VM, and analyse one capture.
+///
+/// Returns the observation and capture timings; connection, capture or detector
+/// failures return a labelled error without guest input.
 fn capture_and_analyse(
     socket_path: &Path,
     scan_state: &TableauScanState,
@@ -3182,6 +2535,9 @@ fn capture_and_analyse(
     Ok((observation, timing))
 }
 
+/// Connect to the selected Unix socket and return its live QMP client and capability/state probe.
+///
+/// Connection, handshake and probe failures return a labelled diagnostic error.
 fn connect_and_probe(socket_path: &Path) -> Result<(QmpClient, crate::qmp::QmpProbe), String> {
     QmpClient::connect(socket_path)
         .and_then(|mut qmp| {
@@ -3191,6 +2547,7 @@ fn connect_and_probe(socket_path: &Path) -> Result<(QmpClient, crate::qmp::QmpPr
         .map_err(|error| format!("QMP probe failed: {error}"))
 }
 
+/// Reject calibration-only game modes before any guest input can be requested.
 fn ensure_input_authorised(mode: GameMode) -> Result<(), String> {
     if mode.input_authorised() {
         Ok(())
@@ -3201,14 +2558,23 @@ fn ensure_input_authorised(mode: GameMode) -> Result<(), String> {
     }
 }
 
+/// Decoded capture and classifications derived from those exact immutable pixels.
 struct FrameObservation {
+    /// Captured guest pixels.
     frame: CapturedFrame,
+    /// Eligible next target or a non-actionable classification.
     prediction: PredictedAction,
+    /// Positive row evidence, when available.
     observed_rows: Option<RowMask>,
+    /// Whether the calibrated gameplay-scene probes matched.
     gameplay_scene: bool,
+    /// Progress-bar classification; never completion authority by itself.
     game_progress: Option<GameProgress>,
 }
 
+/// Capture once using an existing QMP connection, then analyse the decoded frame.
+///
+/// Returns observation and stage timings, propagating file, decode and detector errors.
 fn capture_with_client(
     qmp: &mut QmpClient,
     socket_path: &Path,
@@ -3221,6 +2587,7 @@ fn capture_with_client(
     Ok((observation, timing))
 }
 
+/// Capture one decoded frame and timings, discarding the original PNG bytes from memory.
 fn capture_screen(
     qmp: &mut QmpClient,
     socket_path: &Path,
@@ -3229,6 +2596,11 @@ fn capture_screen(
     Ok((frame, timing))
 }
 
+/// Capture one full-display QMP PNG through a private temporary file and decode its pixels.
+///
+/// Returns the decoded frame, original bytes and timings for manual preview/save.
+/// The file guard removes the temporary PNG on normal cleanup. Empty/oversized
+/// files, capture failures, I/O failures and decode errors are rejected.
 fn capture_screen_with_png(
     qmp: &mut QmpClient,
     socket_path: &Path,
@@ -3276,6 +2648,11 @@ fn capture_screen_with_png(
     Ok((frame, png, timing))
 }
 
+/// Classify one immutable frame under the supplied game and scan state without QMP access.
+///
+/// Calibration frames receive no input authority. Other modes require scene,
+/// progress and halo analysis; invalid dimensions/layout or detector failures
+/// return an error. The returned duration measures detection only.
 fn analyse_captured_frame(
     frame: CapturedFrame,
     scan_state: &TableauScanState,
@@ -3335,11 +2712,18 @@ fn analyse_captured_frame(
     ))
 }
 
+/// Observations and timings passed to shared action validation.
 struct CaptureSeries {
+    /// Current one-frame capture sequence.
     observations: Vec<FrameObservation>,
+    /// Acquisition and analysis timing for the sequence.
     timing: CaptureTiming,
 }
 
+/// Capture one observation with STOP checks before and after the operation.
+///
+/// The series shape supports shared validation logic; it currently contains
+/// exactly one frame. Cancellation and capture errors are returned to the caller.
 fn capture_series(
     qmp: &mut QmpClient,
     socket_path: &Path,
@@ -3360,6 +2744,10 @@ fn capture_series(
     })
 }
 
+/// Count pixels with a channel delta at least `threshold` inside the effect bounds.
+///
+/// Pixels inside the optional cursor exclusion do not count. Invalid layouts,
+/// mismatched dimensions, out-of-frame bounds and unreadable pixels return errors.
 fn materially_changed_pixels(
     before: &CapturedFrame,
     after: &CapturedFrame,
@@ -3406,14 +2794,17 @@ fn materially_changed_pixels(
     Ok(changed)
 }
 
+/// Publish a pre-action advisory frame and request its prediction be logged.
 fn send_frame(event_tx: &WorkerEventSink, observation: FrameObservation) {
     event_tx.publish_frame(observation.frame, observation.prediction, true);
 }
 
+/// Publish an unverified result frame for inspection without approving another action.
 fn send_post_action_frame(event_tx: &WorkerEventSink, observation: FrameObservation) {
-    event_tx.publish_frame(observation.frame, observation.prediction, false);
+    event_tx.publish_diagnostic_frame(observation.frame);
 }
 
+/// Describe a predicted target and its input method for detailed diagnostics.
 fn format_prediction_target(prediction: PredictedAction) -> String {
     match prediction {
         PredictedAction::CalibrationOnly { mode } => format!("{mode} calibration only"),
@@ -3447,6 +2838,9 @@ fn format_prediction_target(prediction: PredictedAction) -> String {
     }
 }
 
+/// Validate effect/click geometry and describe the exact planned QMP input sequence.
+///
+/// Returns an error for invalid bounds, coordinates or an unsupported key target.
 fn format_step_plan(plan: StepPlan) -> Result<String, String> {
     let input = plan.input();
     pixel_rect_to_qmp(
@@ -3478,6 +2872,9 @@ fn format_step_plan(plan: StepPlan) -> Result<String, String> {
     })
 }
 
+/// Send one planned click or draw-key sequence after a final STOP check.
+///
+/// Returns QMP errors as uncertain action failures; it does not retry delivery.
 fn execute_planned_input(
     qmp: &mut QmpClient,
     plan: StepPlan,
@@ -3498,6 +2895,9 @@ fn execute_planned_input(
     Ok(())
 }
 
+/// Wait up to `duration` while checking STOP between short sleep slices.
+///
+/// Returns the requested duration on completion or elapsed bounded time on cancellation.
 fn cancellable_wait(
     duration: Duration,
     cancel_requested: &AtomicBool,
@@ -3515,11 +2915,17 @@ fn cancellable_wait(
     }
 }
 
+/// Guard owning a private temporary QMP PNG path until normal cleanup.
 struct CaptureArtifact {
+    /// Exclusively reserved path beside the QMP socket.
     file_name: PathBuf,
 }
 
 impl CaptureArtifact {
+    /// Reserve a private regular PNG file beside the QMP socket using exclusive creation.
+    ///
+    /// Retries name collisions within a fixed budget; returns errors for a missing
+    /// parent, exhausted names or other file-system failures.
     fn reserve_beside(socket_path: &Path) -> Result<Self, String> {
         // Reserve a private, collision-resistant regular file in the QMP socket directory.
         let directory = socket_path.parent().ok_or_else(|| {
@@ -3561,28 +2967,33 @@ impl CaptureArtifact {
         ))
     }
 
+    /// Borrow the reserved PNG path passed to QMP and subsequent read operations.
     fn file_name(&self) -> &Path {
         &self.file_name
     }
 }
 
 impl Drop for CaptureArtifact {
+    /// Attempt normal-cleanup removal of the reserved temporary PNG; ignore removal errors.
     fn drop(&mut self) {
         let _ = fs::remove_file(&self.file_name);
     }
 }
 
+/// Send a detailed diagnostic message; ignore a closed UI event receiver.
 fn send_log(event_tx: &WorkerEventSink, message: String) {
     // Sends a log message to the UI without failing if its receiver has closed.
     let _ = event_tx.send(WorkerEvent::Log(message));
 }
 
+/// Send concise status text; detailed evidence remains in the log stream.
 fn send_status(event_tx: &WorkerEventSink, message: String) {
     // Status updates are deliberately concise; detailed diagnostics continue
     // through the private and visible logs.
     let _ = event_tx.send(WorkerEvent::Status(message));
 }
 
+/// Publish completed boards and a current-board number clamped to the game profile.
 fn send_board_progress(
     event_tx: &WorkerEventSink,
     scan_state: &TableauScanState,
@@ -3597,6 +3008,7 @@ fn send_board_progress(
     });
 }
 
+/// Render concise action status while preserving target and input-method meaning.
 fn format_action_status(prediction: PredictedAction) -> String {
     match prediction {
         PredictedAction::CalibrationOnly { mode } => format!("{mode} calibration — input disabled"),
@@ -3627,771 +3039,11 @@ fn format_action_status(prediction: PredictedAction) -> String {
     }
 }
 
-const fn post_game_click_status(stage: PostGameStage) -> &'static str {
-    match stage {
-        PostGameStage::LevelUpOk => "Click Level Up OK",
-        PostGameStage::NewGame => "Start New Game",
-        PostGameStage::Play => "Click Play",
-        PostGameStage::Solver => "Click Solver",
-    }
-}
-
+/// Publish worker state without treating a closed UI receiver as a worker failure.
 fn send_state(event_tx: &WorkerEventSink, state: WorkerState) {
     // Sends a worker state update without failing if its receiver has closed.
     let _ = event_tx.send(WorkerEvent::State(state));
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::parameters::{LEVEL_UP_CONTROL_VARIANTS, NEW_GAME_CONTROL_VARIANTS};
-
-    fn blank_frame(width: u32, height: u32) -> CapturedFrame {
-        let stride = width as usize * 4;
-        CapturedFrame {
-            width,
-            height,
-            stride,
-            format: crate::capture::PixelFormat::Rgba8,
-            pixels: vec![0; stride * height as usize],
-            cursor: None,
-        }
-    }
-
-    fn draw_prediction(anchor: crate::geometry::PixelPoint) -> PredictedAction {
-        PredictedAction::Action(
-            GameMode::TriPeaks
-                .profile()
-                .bottom_action(0, anchor)
-                .unwrap(),
-        )
-    }
-
-    #[test]
-    fn concise_status_labels_preserve_action_and_post_game_meaning() {
-        assert_eq!(
-            format_action_status(draw_prediction(crate::geometry::PixelPoint::new(842, 870))),
-            "Draw card — TriPeaks stock DRAW"
-        );
-        assert_eq!(
-            post_game_click_status(PostGameStage::LevelUpOk),
-            "Click Level Up OK"
-        );
-        assert_eq!(
-            post_game_click_status(PostGameStage::NewGame),
-            "Start New Game"
-        );
-        assert_eq!(post_game_click_status(PostGameStage::Play), "Click Play");
-        assert_eq!(
-            post_game_click_status(PostGameStage::Solver),
-            "Click Solver"
-        );
-    }
-
-    #[test]
-    fn both_game_modes_allow_the_shared_guarded_input_path() {
-        assert_eq!(ensure_input_authorised(GameMode::TriPeaks), Ok(()));
-        assert_eq!(ensure_input_authorised(GameMode::Pyramid), Ok(()));
-    }
-
-    #[test]
-    fn unknown_pyramid_capture_grants_no_action_authority() {
-        let scan_state = TableauScanState::for_mode(GameMode::Pyramid);
-        let (observation, _) = analyse_captured_frame(
-            blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT),
-            &scan_state,
-        )
-        .unwrap();
-
-        assert_eq!(observation.prediction, PredictedAction::NoHighlight);
-        assert_eq!(observation.observed_rows, None);
-        assert!(!observation.gameplay_scene);
-        assert!(plan_step(observation.prediction).is_err());
-    }
-
-    #[test]
-    fn pyramid_gameplay_requires_the_exact_frame_contract() {
-        let scan_state = TableauScanState::for_mode(GameMode::Pyramid);
-        let error = analyse_captured_frame(blank_frame(1_280, 720), &scan_state)
-            .err()
-            .unwrap();
-
-        assert_eq!(
-            error,
-            "gameplay-scene analysis failed: captured frame must be exactly 1920x1080, got 1280x720"
-        );
-    }
-
-    #[test]
-    fn pyramid_missing_halo_alone_cannot_authorise_solver_recovery() {
-        assert!(pyramid_solver_recovery_authorised(
-            true, true, false, true, 2, false
-        ));
-        assert!(!pyramid_solver_recovery_authorised(
-            false, true, false, true, 2, false
-        ));
-        assert!(!pyramid_solver_recovery_authorised(
-            true, false, false, true, 2, false
-        ));
-        assert!(!pyramid_solver_recovery_authorised(
-            true, true, true, true, 2, false
-        ));
-        assert!(!pyramid_solver_recovery_authorised(
-            true, true, false, false, 2, false
-        ));
-        assert!(!pyramid_solver_recovery_authorised(
-            true, true, false, true, 1, false
-        ));
-        assert!(!pyramid_solver_recovery_authorised(
-            true, true, false, true, 2, true
-        ));
-    }
-
-    #[test]
-    fn pyramid_consumed_slots_survive_same_context_and_reset_on_context_change() {
-        let socket = PathBuf::from("/test/first.sock");
-        let mut context = Some((socket.clone(), GameMode::Pyramid));
-        let mut state = TableauScanState::for_mode(GameMode::Pyramid);
-        let removed = PyramidTargetKind::Card { row: 7, column: 1 };
-        state.pyramid.mark_removed(removed);
-        let mut completed_boards = 1;
-        reset_scan_state_for_context(
-            &socket,
-            GameMode::Pyramid,
-            &mut context,
-            &mut state,
-            &mut completed_boards,
-        );
-        assert!(state.pyramid.clicked_target_slots[removed.slot_index().unwrap()]);
-        assert_eq!(completed_boards, 1);
-
-        reset_scan_state_for_context(
-            Path::new("/test/second.sock"),
-            GameMode::Pyramid,
-            &mut context,
-            &mut state,
-            &mut completed_boards,
-        );
-        assert!(
-            state
-                .pyramid
-                .clicked_target_slots
-                .iter()
-                .all(|clicked| !clicked)
-        );
-        assert_eq!(completed_boards, 0);
-    }
-
-    #[test]
-    fn explicit_progress_reset_clears_pyramid_consumed_slots() {
-        let mut state = TableauScanState::for_mode(GameMode::Pyramid);
-        state
-            .pyramid
-            .mark_removed(PyramidTargetKind::Card { row: 1, column: 1 });
-        let mut completed_boards = 2;
-        reset_progress_tracking(&mut state, &mut completed_boards);
-        assert_eq!(state.mode(), GameMode::Pyramid);
-        assert!(
-            state
-                .pyramid
-                .clicked_target_slots
-                .iter()
-                .all(|clicked| !clicked)
-        );
-        assert_eq!(completed_boards, 0);
-    }
-
-    fn row_mask(row: u8) -> RowMask {
-        RowMask::single_for(row, GameMode::TriPeaks.profile().tableau_rows.len() as u8).unwrap()
-    }
-
-    fn row_observation(
-        prediction: PredictedAction,
-        observed_rows: Option<RowMask>,
-    ) -> FrameObservation {
-        FrameObservation {
-            frame: CapturedFrame {
-                width: 1,
-                height: 1,
-                stride: 4,
-                format: crate::capture::PixelFormat::Rgba8,
-                pixels: vec![0; 4],
-                cursor: None,
-            },
-            prediction,
-            observed_rows,
-            gameplay_scene: true,
-            game_progress: Some(GameProgress::AnotherBoard),
-        }
-    }
-
-    fn dialog_observation(variants: &[PostGameControlVariant]) -> FrameObservation {
-        // Build a non-gameplay frame whose selected dialog-control probes are gold.
-        let width = NOMINAL_FRAME_WIDTH as usize;
-        let height = NOMINAL_FRAME_HEIGHT as usize;
-        let mut frame = CapturedFrame {
-            width: NOMINAL_FRAME_WIDTH,
-            height: NOMINAL_FRAME_HEIGHT,
-            stride: width * 4,
-            format: crate::capture::PixelFormat::Rgba8,
-            pixels: vec![0; width * height * 4],
-            cursor: None,
-        };
-
-        for variant in variants {
-            let probe = variant.probe_bounds;
-            for y in probe.y..probe.bottom() {
-                for x in probe.x..probe.right() {
-                    let offset = y as usize * frame.stride + x as usize * 4;
-                    frame.pixels[offset..offset + 4].copy_from_slice(&[220, 170, 80, 255]);
-                }
-            }
-        }
-
-        FrameObservation {
-            frame,
-            prediction: PredictedAction::NoHighlight,
-            observed_rows: None,
-            gameplay_scene: false,
-            game_progress: Some(GameProgress::GameComplete),
-        }
-    }
-
-    #[test]
-    fn latest_frame_slot_replaces_stale_full_resolution_previews() {
-        let slot = LatestFrameSlot::default();
-        let first = row_observation(PredictedAction::NoHighlight, None);
-        let second_prediction = draw_prediction(crate::geometry::PixelPoint::new(7, 9));
-        let mut second = row_observation(second_prediction, None);
-        second.frame.pixels.fill(2);
-
-        slot.publish(
-            first.frame,
-            first.prediction,
-            false,
-            Some((PathBuf::from("/tmp/old-qmp.sock"), GameMode::TriPeaks)),
-        );
-        slot.publish(
-            second.frame,
-            second.prediction,
-            true,
-            Some((PathBuf::from("/tmp/new-qmp.sock"), GameMode::Pyramid)),
-        );
-
-        let latest = slot.take().expect("latest preview");
-        assert_eq!(latest.frame.pixels, vec![2; 4]);
-        assert_eq!(latest.prediction, second_prediction);
-        assert!(latest.log_prediction);
-        assert_eq!(latest.coalesced_frames, 1);
-        assert_eq!(
-            latest.context,
-            Some((PathBuf::from("/tmp/new-qmp.sock"), GameMode::Pyramid))
-        );
-        assert!(slot.take().is_none());
-    }
-
-    #[test]
-    fn board_progress_reports_committed_completion_without_waiting_for_redeal() {
-        let (tx, rx) = mpsc::channel();
-        let sink = WorkerEventSink {
-            events: tx,
-            latest_frame: LatestFrameSlot::default(),
-            capture_context: Mutex::new(None),
-        };
-        let scan_state = TableauScanState::initial();
-        send_board_progress(&sink, &scan_state, 1);
-        match rx.try_recv().expect("board-completion event") {
-            WorkerEvent::BoardProgress {
-                current_board,
-                completed_boards,
-                boards_per_game,
-            } => {
-                assert_eq!(
-                    (current_board, completed_boards, boards_per_game),
-                    (2, 1, 3)
-                );
-            }
-            _ => panic!("expected a board-completion event"),
-        }
-    }
-
-    #[test]
-    fn draw_plan_reports_key_only_input_without_a_pointer_target() {
-        let prediction = draw_prediction(crate::geometry::PixelPoint::new(842, 870));
-        let plan = plan_step(prediction).expect("key-only draw plan");
-
-        assert_eq!(
-            format_step_plan(plan),
-            Ok("Stable plan: TriPeaks stock DRAW via qcode D; pointer unchanged; gold anchor=(842, 870); commands=2, events=2.".to_owned())
-        );
-    }
-
-    #[test]
-    fn capture_artifact_is_private_beside_socket_and_removed_on_drop() {
-        let test_directory = std::env::temp_dir().join(format!(
-            "solitaire-worker-test-{}-{}",
-            std::process::id(),
-            CAPTURE_SEQUENCE.fetch_add(1, Ordering::Relaxed)
-        ));
-        fs::create_dir(&test_directory).expect("create worker test directory");
-        let socket_path = test_directory.join("qmp.sock");
-
-        let artifact =
-            CaptureArtifact::reserve_beside(&socket_path).expect("reserve capture artifact");
-        let capture_file = artifact.file_name().to_owned();
-        assert_eq!(capture_file.parent(), Some(test_directory.as_path()));
-        assert!(capture_file.exists());
-
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let mode = fs::metadata(&capture_file)
-                .expect("capture metadata")
-                .permissions()
-                .mode()
-                & 0o777;
-            assert_eq!(mode, 0o600);
-        }
-
-        drop(artifact);
-        assert!(!capture_file.exists());
-        fs::remove_dir(&test_directory).expect("remove worker test directory");
-    }
-
-    #[test]
-    fn effect_comparison_applies_threshold_and_cursor_exclusion() {
-        let before = CapturedFrame {
-            width: 3,
-            height: 2,
-            stride: 12,
-            format: crate::capture::PixelFormat::Rgba8,
-            pixels: vec![0; 24],
-            cursor: None,
-        };
-        let mut after = before.clone();
-        after.pixels[0] = 19;
-        after.pixels[4] = 20;
-        after.pixels[8] = 100;
-        after.pixels[12 + 2] = 21;
-
-        assert_eq!(
-            materially_changed_pixels(
-                &before,
-                &after,
-                PixelRect::new(0, 0, 3, 2),
-                Some(PixelRect::new(2, 0, 1, 1)),
-                20,
-            ),
-            Ok(2)
-        );
-    }
-
-    #[test]
-    fn row_three_halo_forbids_completion_when_row_one_is_empty() {
-        let row_three_halo = PredictedAction::Action(
-            GameMode::TriPeaks
-                .profile()
-                .tableau_action(9, crate::geometry::PixelPoint::new(296, 630))
-                .unwrap(),
-        );
-
-        assert!(!settled_completion_evidence(
-            row_three_halo,
-            Some(row_mask(3)),
-            true,
-            2,
-            1,
-        ));
-        assert!(!settled_completion_evidence(
-            PredictedAction::NoHighlight,
-            Some(row_mask(3)),
-            true,
-            2,
-            1,
-        ));
-        assert!(settled_completion_evidence(
-            PredictedAction::NoHighlight,
-            None,
-            true,
-            2,
-            1,
-        ));
-        assert!(!settled_completion_evidence(
-            PredictedAction::NoHighlight,
-            None,
-            true,
-            1,
-            0,
-        ));
-        assert!(settled_completion_evidence(
-            PredictedAction::NoHighlight,
-            None,
-            false,
-            2,
-            0,
-        ));
-    }
-
-    #[test]
-    fn level_up_dialog_overrides_only_a_verified_redeal_state() {
-        let observation = dialog_observation(&[LEVEL_UP_CONTROL_VARIANTS[1]]);
-
-        assert_eq!(
-            level_up_overrides_board_progress(false, &observation),
-            Ok(false)
-        );
-        assert_eq!(
-            level_up_overrides_board_progress(true, &observation),
-            Ok(true)
-        );
-    }
-
-    #[test]
-    fn dialog_probes_cannot_authorise_a_different_post_game_stage() {
-        let dialog_targets = &POST_GAME_TARGETS[..3];
-
-        for (expected_index, expected_target) in dialog_targets.iter().copied().enumerate() {
-            for expected_variant in expected_target.control_variants.iter().copied() {
-                let observation = dialog_observation(&[expected_variant]);
-
-                for (actual_index, actual_target) in dialog_targets.iter().copied().enumerate() {
-                    assert_eq!(
-                        resolve_post_game_target(&observation, actual_target),
-                        Ok((expected_index == actual_index).then_some(expected_variant))
-                    );
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn level_up_layout_ambiguity_fails_closed() {
-        let observation = dialog_observation(&LEVEL_UP_CONTROL_VARIANTS);
-        let error = resolve_post_game_target(&observation, POST_GAME_TARGETS[0])
-            .expect_err("both Level Up layouts must be ambiguous");
-
-        assert!(error.contains("legacy-low"));
-        assert!(error.contains("raised"));
-        assert!(error.contains("no guest input was sent"));
-    }
-
-    #[test]
-    fn raised_level_up_resolves_its_own_click_point() {
-        let raised = LEVEL_UP_CONTROL_VARIANTS[1];
-        let observation = dialog_observation(&[raised]);
-
-        assert_eq!(
-            resolve_post_game_target(&observation, POST_GAME_TARGETS[0]),
-            Ok(Some(raised))
-        );
-        assert_eq!(
-            raised.click_point,
-            crate::geometry::PixelPoint::new(960, 770)
-        );
-    }
-
-    #[test]
-    fn new_game_can_be_verified_when_level_up_is_missing() {
-        let new_game = dialog_observation(&[NEW_GAME_CONTROL_VARIANTS[0]]);
-        assert_eq!(
-            resolve_post_game_target(&new_game, POST_GAME_TARGETS[0]),
-            Ok(None)
-        );
-        assert_eq!(
-            new_game_visible_while_awaiting_level_up(&new_game),
-            Ok(true)
-        );
-
-        let level_up = dialog_observation(&[LEVEL_UP_CONTROL_VARIANTS[1]]);
-        assert_eq!(
-            new_game_visible_while_awaiting_level_up(&level_up),
-            Ok(false)
-        );
-    }
-
-    #[test]
-    fn recognised_terminal_stage_skips_only_the_completed_post_game_steps() {
-        assert_eq!(known_post_game_stage(None), Ok(None));
-        let unknown = dialog_observation(&[]);
-        assert_eq!(known_post_game_stage(Some(&unknown)), Ok(None));
-        let level_up = dialog_observation(&[LEVEL_UP_CONTROL_VARIANTS[0]]);
-        assert_eq!(known_post_game_stage(Some(&level_up)), Ok(Some(0)));
-        let new_game = dialog_observation(&[NEW_GAME_CONTROL_VARIANTS[0]]);
-        assert_eq!(known_post_game_stage(Some(&new_game)), Ok(Some(1)));
-        let ambiguous = dialog_observation(&LEVEL_UP_CONTROL_VARIANTS);
-        assert!(known_post_game_stage(Some(&ambiguous)).is_err());
-    }
-
-    #[test]
-    fn stale_dialog_is_reported_before_the_expected_later_stage() {
-        let raised = LEVEL_UP_CONTROL_VARIANTS[1];
-        let level_up = dialog_observation(&[raised]);
-        assert_eq!(
-            earlier_visible_post_game_target(&level_up, 1),
-            Ok(Some((0, POST_GAME_TARGETS[0], raised)))
-        );
-
-        let new_game_variant = NEW_GAME_CONTROL_VARIANTS[0];
-        let new_game = dialog_observation(&[new_game_variant]);
-        assert_eq!(earlier_visible_post_game_target(&new_game, 1), Ok(None));
-        assert_eq!(
-            earlier_visible_post_game_target(&new_game, 2),
-            Ok(Some((1, POST_GAME_TARGETS[1], new_game_variant)))
-        );
-    }
-
-    #[test]
-    fn post_game_retry_budgets_stop_at_the_configured_limits() {
-        assert_eq!(
-            require_post_game_observation_retry_budget(
-                POST_GAME_MAX_OBSERVATION_ROUNDS - 1,
-                "test"
-            ),
-            Ok(())
-        );
-        assert!(
-            require_post_game_observation_retry_budget(POST_GAME_MAX_OBSERVATION_ROUNDS, "test")
-                .is_err()
-        );
-
-        assert_eq!(
-            require_post_game_click_retry_budget(POST_GAME_MAX_CLICK_ATTEMPTS - 1, "test"),
-            Ok(())
-        );
-        assert!(
-            require_post_game_click_retry_budget(POST_GAME_MAX_CLICK_ATTEMPTS, "test").is_err()
-        );
-    }
-
-    #[test]
-    fn score_skip_budget_counts_the_initial_click_and_stops_before_a_fourth() {
-        for completed_attempts in 0..SCORE_SKIP_MAX_CLICK_ATTEMPTS {
-            assert_eq!(require_score_skip_click_budget(completed_attempts), Ok(()));
-        }
-
-        let error = require_score_skip_click_budget(SCORE_SKIP_MAX_CLICK_ATTEMPTS)
-            .expect_err("a fourth score-skip click must be refused");
-        assert!(error.contains("confirmed-delivery score-skip centre clicks"));
-        assert!(error.contains("no further guest input was sent"));
-    }
-
-    #[test]
-    fn score_skip_retry_is_limited_to_non_gameplay_frames_awaiting_level_up() {
-        assert!(score_skip_retry_is_authorised(
-            PostGameStage::LevelUpOk,
-            false
-        ));
-        assert!(!score_skip_retry_is_authorised(
-            PostGameStage::LevelUpOk,
-            true
-        ));
-        assert!(!score_skip_retry_is_authorised(
-            PostGameStage::NewGame,
-            false
-        ));
-    }
-
-    #[test]
-    fn effect_comparison_rejects_mismatched_dimensions_and_bounds() {
-        let before = CapturedFrame {
-            width: 2,
-            height: 1,
-            stride: 8,
-            format: crate::capture::PixelFormat::Rgba8,
-            pixels: vec![0; 8],
-            cursor: None,
-        };
-        let mut after = before.clone();
-        after.width = 1;
-        after.stride = 4;
-
-        assert!(
-            materially_changed_pixels(&before, &after, PixelRect::new(0, 0, 1, 1), None, 20,)
-                .is_err()
-        );
-        assert!(
-            materially_changed_pixels(&before, &before, PixelRect::new(1, 0, 2, 1), None, 20,)
-                .is_err()
-        );
-    }
-
-    #[test]
-    fn cursor_sized_change_does_not_meet_the_material_effect_floor() {
-        let width = 64;
-        let height = 64;
-        let before = CapturedFrame {
-            width,
-            height,
-            stride: width as usize * 4,
-            format: crate::capture::PixelFormat::Rgba8,
-            pixels: vec![0; width as usize * height as usize * 4],
-            cursor: None,
-        };
-        let mut after = before.clone();
-        for y in 0..48usize {
-            for x in 0..32usize {
-                let offset = y * after.stride + x * 4;
-                after.pixels[offset..offset + 3].fill(255);
-            }
-        }
-
-        let changed = materially_changed_pixels(
-            &before,
-            &after,
-            PixelRect::new(0, 0, width, height),
-            None,
-            ACTION_CHANGE_CHANNEL_THRESHOLD,
-        )
-        .unwrap();
-        assert_eq!(changed, 32 * 48);
-        assert!(changed < crate::parameters::MINIMUM_TABLEAU_CHANGED_PIXELS);
-    }
-
-    #[test]
-    fn run_profile_distinguishes_validation_cycles_from_input_attempts() {
-        let mut profile = RunProfile::new(Duration::from_millis(7));
-        profile.record(ActionProfile {
-            total: Duration::from_millis(10),
-            ..ActionProfile::default()
-        });
-        profile.record(ActionProfile {
-            total: Duration::from_millis(20),
-            input_attempted: true,
-            ..ActionProfile::default()
-        });
-
-        assert_eq!(profile.cycles, 2);
-        assert_eq!(profile.attempted, 1);
-        assert_eq!(profile.action_total_sum, Duration::from_millis(20));
-        assert_eq!(profile.action_total_min, Some(Duration::from_millis(20)));
-        assert_eq!(profile.action_total_max, Some(Duration::from_millis(20)));
-    }
-
-    #[test]
-    fn cancellable_wait_observes_an_existing_stop_request() {
-        let cancelled = AtomicBool::new(true);
-        let result = cancellable_wait(Duration::from_secs(1), &cancelled);
-
-        assert!(result.is_err());
-        assert!(result.unwrap_err() < Duration::from_secs(1));
-    }
-
-    #[test]
-    fn single_capture_can_commit_non_authoritative_row_evidence() {
-        let mut state = TableauScanState::initial();
-        let row_three = row_mask(3);
-        let observations = [row_observation(
-            PredictedAction::NoHighlight,
-            Some(row_three),
-        )];
-
-        assert!(reconcile_observation_series(&mut state, &observations));
-        assert_eq!(state.active_rows(), row_three);
-    }
-
-    #[test]
-    fn ambiguous_single_capture_does_not_change_row_state() {
-        let initial = TableauScanState::initial();
-        let row_three = row_mask(3);
-
-        let mut ambiguous_state = initial;
-        let ambiguous = [row_observation(
-            PredictedAction::Ambiguous { highlight_count: 2 },
-            Some(row_three),
-        )];
-        assert!(!reconcile_observation_series(
-            &mut ambiguous_state,
-            &ambiguous
-        ));
-        assert_eq!(ambiguous_state, initial);
-    }
-
-    #[test]
-    fn socket_or_mode_change_resets_the_row_hint_but_same_context_preserves_it() {
-        let first_socket = PathBuf::from("/tmp/solitaire-a.sock");
-        let second_socket = PathBuf::from("/tmp/solitaire-b.sock");
-        let row_three = row_mask(3);
-        let mut state = TableauScanState::from_active_rows(row_three).unwrap();
-        let mut remembered_context = None;
-        let mut completed_boards = 2;
-
-        reset_scan_state_for_context(
-            &first_socket,
-            GameMode::TriPeaks,
-            &mut remembered_context,
-            &mut state,
-            &mut completed_boards,
-        );
-        assert_eq!(state, TableauScanState::initial());
-        assert_eq!(completed_boards, 0);
-        assert_eq!(
-            remembered_context
-                .as_ref()
-                .map(|(path, mode)| (path.as_path(), *mode)),
-            Some((first_socket.as_path(), GameMode::TriPeaks))
-        );
-
-        state = TableauScanState::from_active_rows(row_three).unwrap();
-        completed_boards = 1;
-        reset_scan_state_for_context(
-            &first_socket,
-            GameMode::TriPeaks,
-            &mut remembered_context,
-            &mut state,
-            &mut completed_boards,
-        );
-        assert_eq!(state.active_rows(), row_three);
-        assert_eq!(completed_boards, 1);
-
-        reset_scan_state_for_context(
-            &second_socket,
-            GameMode::TriPeaks,
-            &mut remembered_context,
-            &mut state,
-            &mut completed_boards,
-        );
-        assert_eq!(state, TableauScanState::initial());
-        assert_eq!(completed_boards, 0);
-        assert_eq!(
-            remembered_context
-                .as_ref()
-                .map(|(path, mode)| (path.as_path(), *mode)),
-            Some((second_socket.as_path(), GameMode::TriPeaks))
-        );
-    }
-
-    #[test]
-    fn manual_progress_reset_clears_board_and_row_tracking() {
-        let row_two = row_mask(2);
-        let mut state = TableauScanState::from_active_rows(row_two).unwrap();
-        let mut completed_boards = 2usize;
-
-        reset_progress_tracking(&mut state, &mut completed_boards);
-
-        assert_eq!(state, TableauScanState::initial());
-        assert_eq!(completed_boards, 0);
-    }
-
-    #[test]
-    fn new_actionable_run_resets_only_a_completed_three_board_series() {
-        let row_three = row_mask(3);
-        let mut state = TableauScanState::from_active_rows(row_three).unwrap();
-        let boards_per_game = state.mode().profile().boards_per_game;
-        let mut completed_boards = boards_per_game - 1;
-
-        assert!(!reset_completed_series_for_new_run(
-            &mut state,
-            &mut completed_boards,
-        ));
-        assert_eq!(state.active_rows(), row_three);
-        assert_eq!(completed_boards, boards_per_game - 1);
-
-        completed_boards = boards_per_game;
-        assert!(reset_completed_series_for_new_run(
-            &mut state,
-            &mut completed_boards,
-        ));
-        assert_eq!(state, TableauScanState::initial());
-        assert_eq!(completed_boards, 0);
-    }
-}
+mod tests;
