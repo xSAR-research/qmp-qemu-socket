@@ -11,7 +11,10 @@ the window title and Parameters.
 
 ## Build
 
-The project requests Rust 1.98.1 in `rust-toolchain.toml`.
+The project requests Rust 1.100.0 in `rust-toolchain.toml`. This is the **nightly**
+channel. Install it with `rustup default nightly`. It is required simply for
+**rustfmt** to use the `unstable_features` flag set in `rustfmt.toml`. `clippy`
+and `cargo test` work fine on stable.
 
 ```text
 cargo test --locked
@@ -61,16 +64,16 @@ sets them to 1000/2000/1000 ms. For a late MOVE halo after cards fly away, incre
 draw/tableau settings. Double-click a number to type milliseconds, or drag it;
 STOP any active run and close the snapshot dialog before editing. Labels identify
 the click that starts the wait: a card-to-MOVE transition uses the card delay.
-This build identifies itself as **v1.1.0 candidate 2**.
+This build identifies itself as **v1.2.0**.
 
-The 1.1.0 baseline refactors the existing Solver-driven controller without
+The 1.2.0 baseline refactors the existing Solver-driven controller without
 adding a game mode or self-solving algorithm. Shared post-game handling,
 Pyramid result handling and session-file logging have focused modules. Rustdoc
 comments describe functions and data contracts; unused provisional rank-reader
 and card-history scaffolding has been removed. See [development notes](docs/development.md)
 for naming, documentation and verification conventions.
 
-Candidate 2 removes the unused BGRA pixel format and its conversion branches.
+Candidate 2 removed the unused BGRA pixel format and its conversion branches.
 The current PNG decoder produces RGBA8: eight bits per channel, four bytes per
 pixel. RGBA decoding and padded-row detection checks remain covered by tests.
 
@@ -116,9 +119,9 @@ observation. Mode/socket changes and **Clear Output** invalidate retained
 progress; a confirmed new board also resets its card state.
 If a guarded run stopped across a missed redeal, **Capture Frame** can recover
 without cycling Game Type: a fresh halo on a card previously verified removed
-invalidates the old board record. The same frame is rescanned without another
-screendump or guest input. The separate automatic transition fault is tracked
-in issue #7.
+invalidates the old board record. The same frame is re-scanned without another
+screen dump or guest input. The separate automatic transition fault was tracked
+in issue #7 and is now resolved.
 
 **Detailed output** uses a fixed panel height, increased by about 2.5 lines.
 When opened it reserves that space from the preview; further window growth
@@ -135,7 +138,7 @@ capture remains a separate requirement that needs implementation and measurement
 Click **Capture PNG** to request one fresh read-only QMP screenshot. The dialog
 displays that capture while you enter an optional label. The label field has
 keyboard focus; Enter or **Save PNG** writes the exact captured PNG bytes without
-another screendump. Right-click the field for Cut, Copy and Paste. **Recapture**
+another screen dump. Right-click the field for Cut, Copy and Paste. **Recapture**
 replaces the pending image, while **Cancel** discards it without saving.
 
 The default output directory is `$HOME/Pictures/Screenshots`, then

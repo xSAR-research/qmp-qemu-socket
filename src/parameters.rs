@@ -10,7 +10,7 @@ use crate::{
 /// Cargo package name displayed in window titles and diagnostic messages.
 pub const APP_NAME: &str = env!("CARGO_PKG_NAME");
 /// Package version and candidate number shown by the UI and session log.
-pub const RELEASE_LABEL: &str = concat!("v", env!("CARGO_PKG_VERSION"), " candidate 2");
+pub const RELEASE_LABEL: &str = concat!("v", env!("CARGO_PKG_VERSION"));
 /// Initial application window width in egui logical points.
 pub const INITIAL_WINDOW_WIDTH: f32 = 1120.0;
 /// Initial application window height in egui logical points.

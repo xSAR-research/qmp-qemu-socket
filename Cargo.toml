@@ -2,7 +2,7 @@
 name = "qmp-qemu-socket"
 version = "1.2.0"
 edition = "2024"
-rust-version = "1.98.1"
+rust-version = "1.100.0"
 description = "A guarded QEMU/QMP controller operating on a Windows 11 VM running `Solitaire & Casual Games` application. This is to experiment with remote control and optimised screen image processing. Also Dijkstra/A* algorithm implementation for solving games."
 publish = false
 
@@ -13,7 +13,11 @@ eframe = { version = "0.36.2", default-features = false, features = [
     "wayland",
     "x11",
 ] }
-egui-winit = { version = "0.36.2", default-features = false, features = ["clipboard", "wayland", "x11"] }
+egui-winit = { version = "0.36.2", default-features = false, features = [
+    "clipboard",
+    "wayland",
+    "x11",
+] }
 image = { version = "0.25.10", default-features = false, features = ["png"] }
 raw-window-handle = "0.6.2"
 serde_json = "1.0.151"
