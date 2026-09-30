@@ -1,7 +1,7 @@
-# Development conventions for v1.2.1 candidate 1
+# Development conventions for v1.2.2 candidate 2
 
-This candidate extends the committed v1.2.0 Solver-driven controller with
-Klondike. TriPeaks and Pyramid retain their established execution policies.
+This candidate corrects the committed v1.2.1 Klondike controller.
+TriPeaks and Pyramid retain their established execution policies.
 Independent card-rank recognition, search and file-free capture are outside
 this candidate.
 
@@ -34,8 +34,9 @@ item check. These checks complement review of what each comment actually says.
 and effect policy. The worker owns the QMP connection and cancellation state.
 Its `post_game` submodule shares the existing terminal-screen sequence; its
 `pyramid_execution` submodule contains Pyramid-specific result observation.
-Its `klondike_execution` submodule owns bounded Klondike runs and Solver recovery
-without entering the shared terminal controller.
+Its `klondike_execution` submodule owns finite or continuous Klondike runs with
+bounded per-action recovery. The separate Solve button is a one-shot request
+followed by result review, without entering the shared terminal controller.
 The UI delegates persistent log I/O to `session_log.rs`.
 
 When adding a mode, supply its profile/detection policy and preserve the shared
@@ -87,9 +88,15 @@ No formatter check is included, by Charlie's explicit instruction. Build/test
 results from another host do not prove Beast installation or live guest input.
 The candidate delivery notes record the checks actually executed.
 
-On the Beast, confirm the launched executable identifies candidate 1. Verify
-Capture Frame, exact-byte manual Capture PNG, single-step and bounded multi-step,
-STOP and mode/socket invalidation. Exercise Klondike Draw 1, source transfers,
-RIGHT fan positions, recycle and late/no-HALO recovery. Preserve first-failure
+On the Beast, confirm the launched executable identifies candidate 2. Verify
+Capture Frame, exact-byte manual Capture PNG, single-step, finite and continuous
+multi-step, STOP and mode/socket invalidation. Exercise Klondike Draw 1, source
+transfers, RIGHT fan positions, recycle, Solve and late/no-HALO recovery. Preserve first-failure
 frames and session logs. Recheck the accepted TriPeaks/Pyramid behaviour before
 Charlie commits and pushes the candidate.
+
+For candidate 2, verify the complete source bounds on the supplied tall run and
+its single click above the toolbar. The reconstructed Draw pair is not a
+successful RIGHT transfer pair. Replay success supports the existing input
+contract; an intermittent RIGHT no-op still needs live diagnosis. Logged pointer,
+hold, action-settle and measured I/O times are separate quantities.

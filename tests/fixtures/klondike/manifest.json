@@ -1,5 +1,5 @@
 {
-  "description": "Derived sparse regression fixtures. Listed half-open rectangles preserve original RGBA pixels exactly at original coordinates. All unlisted pixels are opaque black, no resizing. These are test fixtures, not substitute original screenshot evidence.",
+  "description": "Derived sparse regression fixtures. Listed half-open rectangles preserve original RGBA pixels exactly at original coordinates. All unlisted pixels are opaque black, no resizing. These are test fixtures, not substitute original screenshot evidence. Per-file retained_rectangles_xyxy overrides the default rectangle list.",
   "frame": [
     1920,
     1080
@@ -114,6 +114,201 @@
       "source_sha256": "fc7dbc8327bcb37dc7a9f7b61cc1990fd82908ba7551bd46157cd68146b851c8",
       "fixture_sha256": "fac0972b5dcc777a42cd9d5c6578ae101e686fb5eaf83b4c4cac678c0475acc0",
       "bytes": 1443447
+    },
+    {
+      "fixture": "K13.png",
+      "source": "qmp-qemu-socket 260930 034141 Solve-available.png",
+      "source_sha256": "c3c0554066405b51ca553b53a634076e076b6b8c77c03150e630a67e54c83dc6",
+      "fixture_sha256": "cd4d06663bed7c45dc58d6d373b8668a9e31551d2fef31aba95bb54c3d7e352d",
+      "bytes": 1846376
+    },
+    {
+      "fixture": "K14.png",
+      "source": "qmp-qemu-socket 260930 034428 Stopped-Uncertain.png",
+      "source_sha256": "aca044b4d9d05636208a97b0e226fdc866c0c0df8bc2d4ba47a78c8aa4801168",
+      "fixture_sha256": "0092d0b0a7d973712b0a763d88d18da309dda9652f6ee07faca5b0413f77cc06",
+      "bytes": 1560165
+    },
+    {
+      "fixture": "K15.png",
+      "source": "qmp-qemu-socket 260930 034701 Failed-to-recycle.png",
+      "source_sha256": "385e6662ffa3a7605d0ad55870819291974908080db93a5d4b207d594eb4bc30",
+      "fixture_sha256": "e483a32f67d5b47386532d4c3cea036365358716b09dfd4e967db655636bf17d",
+      "bytes": 1453241
+    },
+    {
+      "fixture": "K16.png",
+      "source": "qmp-qemu-socket 260930 050143 Fail.png",
+      "source_sha256": "7029fa1496b29f756f06659cb8f08ff6c571667e644f6d4cea7efae9bad8c1d6",
+      "fixture_sha256": "27542f3f592f6680021f3b67aef212d6440a114144682e6ccafa1bc1f42ab6a7",
+      "bytes": 1614241,
+      "source_bytes": 3379478,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          378,
+          100,
+          1540,
+          1033
+        ],
+        [
+          160,
+          310,
+          176,
+          326
+        ],
+        [
+          1730,
+          310,
+          1746,
+          326
+        ],
+        [
+          824,
+          34,
+          1096,
+          92
+        ]
+      ],
+      "observation": "Result after the reported zero-change RIGHT click; no successful RIGHT transfer is established. Retained pixels are identical to K18."
+    },
+    {
+      "fixture": "K17.png",
+      "source": "qmp-qemu-socket 260930 055422 1-step-before-fail.png",
+      "source_sha256": "a21d73ab5c494c76e69474699308f1a5742054d49c024dea953b0f0e8820d16b",
+      "fixture_sha256": "8cb82c5e85421ef5f9227a6e020398c0a52cb8543de289160946fd1fbbe51c43",
+      "bytes": 1636049,
+      "source_bytes": 3398848,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          378,
+          100,
+          1540,
+          1033
+        ],
+        [
+          160,
+          310,
+          176,
+          326
+        ],
+        [
+          1730,
+          310,
+          1746,
+          326
+        ],
+        [
+          824,
+          34,
+          1096,
+          92
+        ]
+      ],
+      "observation": "Charlie replayed this state after Undo: highlighted Draw with Queen-hearts in RIGHT."
+    },
+    {
+      "fixture": "K18.png",
+      "source": "qmp-qemu-socket 260930 055442 Step-where-it-failed.png",
+      "source_sha256": "16574b92e46e9512be19f9ebc5940068c024a8fc50ac2d1aee48a6730605b905",
+      "fixture_sha256": "27542f3f592f6680021f3b67aef212d6440a114144682e6ccafa1bc1f42ab6a7",
+      "bytes": 1614241,
+      "source_bytes": 3379738,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          378,
+          100,
+          1540,
+          1033
+        ],
+        [
+          160,
+          310,
+          176,
+          326
+        ],
+        [
+          1730,
+          310,
+          1746,
+          326
+        ],
+        [
+          824,
+          34,
+          1096,
+          92
+        ]
+      ],
+      "observation": "After replayed Draw: 2-hearts at highlighted RIGHT fan offset 1. K17/K18 is an action pair; retained pixels are identical to K16."
+    },
+    {
+      "fixture": "K19.png",
+      "source": "qmp-qemu-socket 260930 055856 Failed-to-detect-big-HALO.png",
+      "source_sha256": "862f3dc754b7501beaf6bbcac4686c7109c5fb6a1015a6b21c07c8503ed8cb63",
+      "fixture_sha256": "b20d0dc00ada36faeab80f0336d380dbeb8f14b8b825535be69f32c2123649cd",
+      "bytes": 1615109,
+      "source_bytes": 3386420,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          378,
+          100,
+          1540,
+          1033
+        ],
+        [
+          160,
+          310,
+          176,
+          326
+        ],
+        [
+          1730,
+          310,
+          1746,
+          326
+        ],
+        [
+          824,
+          34,
+          1096,
+          92
+        ]
+      ],
+      "observation": "Large column-6 K-diamonds through 6-clubs source reaches the translucent toolbar; target rows390..953, click1296,430. No after-move frame supplied."
     }
-  ]
+  ],
+  "solve_control_template": {
+    "file": "src/klondike-solve-control.rgb",
+    "source_fixture": "K13.png",
+    "half_open_bounds_xyxy": [
+      562,
+      143,
+      686,
+      256
+    ],
+    "sample_step": 4,
+    "order": "row-major RGB8",
+    "samples": 899,
+    "sha256": "c00c77412a57caa4f0c88d17f5205c8c3052c85ab51140c8e275babb044a83e8"
+  }
 }

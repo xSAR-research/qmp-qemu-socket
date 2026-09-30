@@ -13,7 +13,7 @@ pub const APP_NAME: &str = env!("CARGO_PKG_NAME");
 
 
 /// Package version and candidate number shown by the UI and session log.
-pub const RELEASE_LABEL: &str = concat!("v", env!("CARGO_PKG_VERSION"), ", candidate 1");
+pub const RELEASE_LABEL: &str = concat!("v", env!("CARGO_PKG_VERSION"), ", candidate 2");
 
 
 /// Initial application window width in egui logical points.
@@ -89,8 +89,6 @@ pub const SNAPSHOT_MAX_PNG_BYTES: usize = 32 * 1024 * 1024;
 /// 2. `$HOME/tmp` if that directory exists
 /// 3. Standard temporary directory (`/tmp` or `$TMPDIR`)
 pub fn session_log_directory() -> PathBuf {
-
-
     if let Some(dir) = env::var_os("QMP_SESSION_LOG_DIR").filter(|d| !d.is_empty()) {
         return PathBuf::from(dir);
     }
@@ -116,8 +114,6 @@ pub fn session_log_directory() -> PathBuf {
 /// 3. `$HOME/Pictures` if it exists
 /// 4. Standard temporary directory (`/tmp` or `$TMPDIR`)
 pub fn snapshot_directory() -> PathBuf {
-
-
     if let Some(dir) = env::var_os("QMP_SNAPSHOT_DIR").filter(|d| !d.is_empty()) {
         return PathBuf::from(dir);
     }
@@ -198,7 +194,7 @@ pub const DRAW_EFFECT_BOUNDS: PixelRect = PixelRect::new(700, 665, 471, 217);
 
 
 // A gameplay scene has a large, stable green-felt patch below the tableau and
-// left of the stock lane. Dialogs and game-selection screens replace this
+// left of the stock lane. Dialog and game-selection screens replace this
 // patch with blue or dark backgrounds, providing a conservative scene gate.
 /// Stable TriPeaks felt patch in guest pixels used to reject dialog scenes.
 pub const GAMEPLAY_FELT_PROBE_BOUNDS: PixelRect = PixelRect::new(128, 650, 520, 180);
@@ -458,8 +454,6 @@ pub struct TableauRowScanProfile {
 
 
 impl TableauRowScanProfile {
-
-
     /// Return the exclusive slot index at the end of this row.
     pub const fn card_end_index(self) -> usize {
         self.first_card_index.saturating_add(self.card_count)
@@ -520,7 +514,7 @@ pub const MINIMUM_DRAW_CHANGED_PIXELS: usize = 1_024;
 pub const MINIMUM_TABLEAU_CHANGED_PIXELS: usize = 2_048;
 
 
-// The guest cursor is visible in QMP screendumps. Ignore a centred square
+// The guest cursor is visible in QMP screen dumps. Ignore a centred square
 // around a tableau click so cursor relocation cannot prove that the card moved.
 /// Half-width and half-height in pixels of the excluded guest cursor square.
 pub const ACTION_CURSOR_EXCLUSION_HALF_SIZE: u32 = 48;
@@ -577,8 +571,6 @@ pub struct PostGameTarget {
 
 
 impl PostGameTarget {
-
-
     /// Associate one post-game stage with its recognised layouts and scene gate.
     pub const fn new(
         stage: PostGameStage,
@@ -597,8 +589,6 @@ impl PostGameTarget {
 
 
 impl PostGameControlVariant {
-
-
     /// Pair a layout-specific probe with its calibrated guest-pixel click point.
     pub const fn new(
         label: &'static str,
@@ -615,8 +605,6 @@ impl PostGameControlVariant {
 
 
 impl ControlTarget {
-
-
     /// Construct a calibrated control definition without granting permission to click.
     pub const fn new(bounds: PixelRect, click_point: PixelPoint) -> Self {
         Self {
@@ -846,16 +834,16 @@ pub const UNBOUNDED_MULTI_STEP_ACTIONS: usize = 0;
 pub const DEFAULT_MULTI_STEP_ACTIONS: usize = UNBOUNDED_MULTI_STEP_ACTIONS;
 
 
-/// Finite initial operation budget for the first Klondike candidate.
+/// Initial Klondike operation budget; zero remains available for continuous runs.
 pub const KLONDIKE_DEFAULT_MULTI_STEP_ACTIONS: usize = 10;
 
 
-/// Largest selectable Klondike operation budget; zero never means continuous.
+/// Largest finite Klondike operation budget; zero means continuous until stopped.
 pub const KLONDIKE_MAX_MULTI_STEP_ACTIONS: usize = 10_000;
 
 
 // Allow Microsoft Solitaire's action-specific animation to finish before the
-// first post-action screendump. These constants remain the session defaults;
+// first post-action screen dump. These constants remain the session defaults;
 // the Params window can tune a bounded copy for the next guarded run.
 /// Smallest editable animation-settle interval in milliseconds.
 pub const MINIMUM_ANIMATION_SETTLE_DELAY_MS: u64 = 0;
@@ -889,8 +877,8 @@ pub const PYRAMID_CARD_SETTLE_DELAY_MS: u64 = 2_000;
 pub const PYRAMID_REOBSERVE_DELAY_MS: u64 = 1_000;
 
 
-/// Initial Klondike action settling interval; adjustable from observed gameplay.
-pub const KLONDIKE_SETTLE_DELAY_MS: u64 = 2_000;
+/// Klondike action settling interval selected from Charlie's Beast gameplay.
+pub const KLONDIKE_SETTLE_DELAY_MS: u64 = 750;
 
 
 /// Initial Klondike input-free result recapture interval in milliseconds.
@@ -977,7 +965,7 @@ pub const KEY_HOLD: Duration = Duration::from_millis(20);
 pub const QMP_IO_TIMEOUT: Duration = Duration::from_millis(750);
 
 
-/// Extended QMP timeout for PNG screendump generation.
+/// Extended QMP timeout for PNG screen dump generation.
 pub const QMP_SCREENDUMP_TIMEOUT: Duration = Duration::from_secs(5);
 
 
@@ -1004,8 +992,6 @@ pub struct AnimationSettleDelays {
 
 
 impl AnimationSettleDelays {
-
-
     /// Set TriPeaks and redeal durations, retaining the other modes' defaults.
     pub const fn from_millis(draw_ms: u64, tableau_ms: u64, board_redeal_ms: u64) -> Self {
         Self {
@@ -1053,9 +1039,7 @@ impl AnimationSettleDelays {
 
 
 impl Default for AnimationSettleDelays {
-
-
-    /// Return defaults, including the unmeasured Klondike starting values.
+    /// Return per-mode defaults, including the observed Klondike action interval.
     fn default() -> Self {
         Self {
             draw: DRAW_ANIMATION_SETTLE_DELAY,
@@ -1075,9 +1059,9 @@ impl Default for AnimationSettleDelays {
 ///
 /// Keeping one snapshot prevents live UI edits from changing animation timing
 /// or the authority limit part-way through a run.
-/// An operation limit of zero means that the run continues across completed
-/// games until a fail-closed anomaly or the user pressing STOP in the legacy
-/// modes. Klondike independently rejects zero and excessive operation budgets.
+/// An operation limit of zero means continuous operation until STOP or a guarded
+/// stop condition. TriPeaks and Pyramid may continue across completed games;
+/// Klondike stops after its Solve control or an unsupported scene and never restarts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct StepRunSettings {
     /// Action timings frozen when the run starts.
@@ -1088,8 +1072,6 @@ pub struct StepRunSettings {
 
 
 impl StepRunSettings {
-
-
     /// Freeze timing and operation authority for one guarded run.
     pub const fn new(animation_delays: AnimationSettleDelays, operation_limit: usize) -> Self {
         Self {
@@ -1119,8 +1101,6 @@ impl StepRunSettings {
 
     /// Return a finite operation count, or None for an unbounded run.
     pub const fn bounded_operation_limit(self) -> Option<usize> {
-
-
         if self.is_unbounded() {
             None
         } else {
@@ -1131,8 +1111,6 @@ impl StepRunSettings {
 
 
 impl Default for StepRunSettings {
-
-
     /// Return the calibrated default values for a newly created settings snapshot.
     fn default() -> Self {
         Self::new(AnimationSettleDelays::default(), DEFAULT_MULTI_STEP_ACTIONS)
@@ -1146,8 +1124,6 @@ pub const QMP_SOCKET_FILENAME: &str = "qmp-qemu-socket.sock";
 
 /// Resolve QMP_SOCKET_PATH first, then runtime-directory and temporary fallbacks.
 pub fn default_qmp_socket_path() -> PathBuf {
-
-
     // An explicit path keeps an existing QEMU launch usable during the socket
     // rename; otherwise use this application's own socket filename.
     if let Some(path) = env::var_os("QMP_SOCKET_PATH").filter(|path| !path.is_empty()) {
@@ -1158,8 +1134,6 @@ pub fn default_qmp_socket_path() -> PathBuf {
         .filter(|runtime_dir| !runtime_dir.is_empty())
         .map(PathBuf::from)
         .unwrap_or_else(|| {
-
-
             if let Some(dir) = env::var_os("QMP_RUNTIME_DIR").filter(|d| !d.is_empty()) {
                 PathBuf::from(dir)
             } else if let Some(home) = env::var_os("HOME").filter(|h| !h.is_empty()) {
@@ -1303,15 +1277,21 @@ mod tests {
     #[test]
     fn klondike_timing_and_budget_defaults_are_independent() {
         let defaults = AnimationSettleDelays::default();
-        assert_eq!(defaults.klondike_settle, Duration::from_millis(2_000));
+        assert_eq!(defaults.klondike_settle, Duration::from_millis(750));
         assert_eq!(defaults.klondike_reobserve, Duration::from_millis(1_000));
         let next_run = AnimationSettleDelays::from_millis(123, 987, 2_345)
             .with_pyramid_millis(500, 750, 900)
             .with_klondike_millis(1_500, 250);
         let active_run = StepRunSettings::new(next_run, KLONDIKE_DEFAULT_MULTI_STEP_ACTIONS);
         let changed = next_run.with_klondike_millis(0, u64::MAX);
-        assert_eq!(active_run.animation_delays().klondike_settle, Duration::from_millis(1_500));
-        assert_eq!(active_run.animation_delays().klondike_reobserve, Duration::from_millis(250));
+        assert_eq!(
+            active_run.animation_delays().klondike_settle,
+            Duration::from_millis(1_500)
+        );
+        assert_eq!(
+            active_run.animation_delays().klondike_reobserve,
+            Duration::from_millis(250)
+        );
         assert_eq!(changed.klondike_settle, Duration::ZERO);
         assert_eq!(changed.klondike_reobserve, Duration::from_millis(5_000));
         assert_eq!(changed.draw, next_run.draw);
@@ -1322,6 +1302,13 @@ mod tests {
         assert_eq!(changed.pyramid_reobserve, next_run.pyramid_reobserve);
         assert_eq!(active_run.bounded_operation_limit(), Some(10));
         assert_eq!(KLONDIKE_MAX_MULTI_STEP_ACTIONS, 10_000);
+        let continuous_run = StepRunSettings::new(defaults, UNBOUNDED_MULTI_STEP_ACTIONS);
+        assert!(continuous_run.is_unbounded());
+        assert_eq!(continuous_run.bounded_operation_limit(), None);
+        assert_eq!(
+            continuous_run.animation_delays().klondike_settle,
+            Duration::from_millis(750)
+        );
     }
 
 
@@ -1611,8 +1598,6 @@ mod tests {
     /// Verify that each TriPeaks halo anchor maps to its calibrated card centre.
     #[test]
     fn every_tableau_slot_preserves_the_anchor_to_click_invariant() {
-
-
         for regions in TABLEAU_CARD_REGIONS {
             let anchor = PixelPoint::new(
                 regions.card_bounds.x as i32 + 7,
@@ -1629,8 +1614,6 @@ mod tests {
     /// Verify card-region containment and QMP mapping for all calibrated slots.
     #[test]
     fn every_card_rank_halo_and_click_fits_the_frame() {
-
-
         for pixels in TABLEAU_CARD_REGIONS
             .iter()
             .chain([&STOCK_CARD_REGION, &WASTE_CARD_REGION])

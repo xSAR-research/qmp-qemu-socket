@@ -1,0 +1,19 @@
+{
+  "folders": [
+    {
+      "path": ".",
+    },
+  ],
+  "settings": {
+    "cSpell.words": [
+      "mille",
+      "nonblocking",
+      "qcode",
+      "redeal",
+      "reobserve",
+      "RGBA",
+      "screendump",
+      "tripeaks"
+    ],
+  },
+}

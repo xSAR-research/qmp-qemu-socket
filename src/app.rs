@@ -160,7 +160,7 @@ pub struct QmpQemuSocketApp {
     klondike_settle_ms: u64,
     /// Klondike bounded recapture delay copied into the next run settings.
     klondike_reobserve_ms: u64,
-    /// Separate finite Klondike operation budget; other modes retain their settings.
+    /// Separate Klondike operation budget, with zero meaning continuous.
     klondike_multi_step_actions: usize,
     /// Requested operation limit; the configured zero sentinel means continuous.
     multi_step_actions: usize,
@@ -561,7 +561,11 @@ impl QmpQemuSocketApp {
                 if latest.diagnostic && self.capture_texture.is_some() {
                     self.diagnostic_preview = true;
                     self.prediction = None;
-                    self.push_log("Latest unverified post-action QMP frame is displayed for diagnosis; capture a fresh frame before another run.");
+
+
+                    if !self.worker_state.is_busy() {
+                        self.push_log("Latest QMP result frame is displayed for inspection only; capture a fresh frame before another run.");
+                    }
                 }
             } else {
                 self.push_log("Discarded a preview from a different mode/socket, an error state, or a detached/uncertain worker state without a diagnostic frame.");
@@ -832,15 +836,13 @@ impl QmpQemuSocketApp {
         .with_klondike_millis(self.klondike_settle_ms, self.klondike_reobserve_ms);
 
 
-        let operation_limit = if self.game_mode == GameMode::Klondike {
-            operation_limit.clamp(1, KLONDIKE_MAX_MULTI_STEP_ACTIONS)
-        } else {
-            operation_limit
-        };
+        let operation_limit = normalise_operation_limit(self.game_mode, operation_limit);
         let settings = StepRunSettings::new(animation_delays, operation_limit);
 
 
-        let request_scope = if settings.is_unbounded() {
+        let request_scope = if settings.is_unbounded() && self.game_mode == GameMode::Klondike {
+            "continuously until STOP, Solve result review or a guarded stop condition".to_owned()
+        } else if settings.is_unbounded() {
             "continuously until STOP or a fail-closed anomaly".to_owned()
         } else {
             format!("for up to {} operation(s)", settings.operation_limit())
@@ -879,7 +881,7 @@ impl QmpQemuSocketApp {
 
 
         if self.game_mode == GameMode::Klondike {
-            self.klondike_multi_step_actions.clamp(1, KLONDIKE_MAX_MULTI_STEP_ACTIONS)
+            normalise_operation_limit(self.game_mode, self.klondike_multi_step_actions)
         } else {
             self.multi_step_actions
         }
@@ -1059,6 +1061,8 @@ impl QmpQemuSocketApp {
                 if bevel_button(ui, "Single Step", ACTION_GREEN, false, STEP_ONCE_INPUT_ENABLED && action_available)
                     .on_hover_text(if self.game_mode == GameMode::Klondike && self.prediction == Some(PredictedAction::NoHighlight) {
                         "Refresh Solver once on a freshly validated Klondike board, capture immediately, then stop for review; no gameplay action"
+                    } else if prediction_is_klondike_solve(self.prediction) {
+                        "Click the freshly recognised Solve control once, wait and capture, then stop for result review; no win or restart is assumed"
                     } else {
                         "Execute one freshly validated guarded action; require a changed effect and valid resulting state"
                     })
@@ -1070,7 +1074,11 @@ impl QmpQemuSocketApp {
 
                 if bevel_button(ui, "Multiple Steps", ACTION_GREEN, false, MULTI_STEP_INPUT_ENABLED && action_available)
                     .on_hover_text(if self.game_mode == GameMode::Klondike && self.prediction == Some(PredictedAction::NoHighlight) {
-                        "Refresh Solver once and stop for review; press again after a valid target appears to start bounded gameplay"
+                        "Refresh Solver once and stop for review; press again after a valid target appears to start the configured gameplay run"
+                    } else if prediction_is_klondike_solve(self.prediction) {
+                        "Click Solve once and stop for result review, regardless of the requested operation count"
+                    } else if self.game_mode == GameMode::Klondike && self.selected_multi_step_actions() == UNBOUNDED_MULTI_STEP_ACTIONS {
+                        "Run continuously until STOP, Solve result review or a guarded stop condition; no automatic restart"
                     } else if self.selected_multi_step_actions() == UNBOUNDED_MULTI_STEP_ACTIONS {
                         "Run continuously until STOP or the first guarded stop condition"
                     } else {
@@ -1096,7 +1104,7 @@ impl QmpQemuSocketApp {
         match self.captured_dimensions {
             Some((width, height)) if self.diagnostic_preview => {
                 ui.colored_label(Color32::from_rgb(255, 174, 79), format!(
-                    "Last unverified post-action QMP capture: {width}x{height}. For inspection only; use Capture Frame before another run."
+                    "QMP result capture: {width}x{height}. {}", diagnostic_preview_status(self.worker_state)
                 ));
             }
             Some((width, height)) => {
@@ -1401,14 +1409,14 @@ impl QmpQemuSocketApp {
 
                     if self.game_mode == GameMode::Klondike {
                         ui.horizontal(|ui| {
-                            ui.label("After Klondike card / Draw / Recycle action");
+                            ui.label("After Klondike card / Draw / Recycle / Solve action");
                             ui.add(
                                 egui::DragValue::new(&mut self.klondike_settle_ms)
                                     .range(MINIMUM_ANIMATION_SETTLE_DELAY_MS..=MAXIMUM_ANIMATION_SETTLE_DELAY_MS)
                                     .speed(10.0)
                                     .suffix(" ms"),
                             )
-                            .on_hover_text("Wait after one delivered gameplay operation before capturing its result");
+                            .on_hover_text("Wait before the result capture; default 750 ms from Beast gameplay. Solve then stops for result review");
                         });
                         ui.horizontal(|ui| {
                             ui.label("Klondike repeat observation settle");
@@ -1420,7 +1428,7 @@ impl QmpQemuSocketApp {
                             )
                             .on_hover_text("Delay between bounded input-free result captures; Solver refresh itself has no additional capture delay");
                         });
-                        ui.small("Draw 1; automatic reveal. Completion and restart are not automated.");
+                        ui.small("Draw 1; automatic reveal. Solve is clicked once, then its result is captured for review. Win detection and restart are not automated.");
                     } else if self.game_mode == GameMode::Pyramid {
                         ui.horizontal(|ui| {
                             ui.label("After Pyramid MOVE / Recycle click");
@@ -1509,10 +1517,10 @@ impl QmpQemuSocketApp {
                         if self.game_mode == GameMode::Klondike {
                             ui.add(
                                 egui::DragValue::new(&mut self.klondike_multi_step_actions)
-                                    .range(1..=KLONDIKE_MAX_MULTI_STEP_ACTIONS)
+                                    .range(UNBOUNDED_MULTI_STEP_ACTIONS..=KLONDIKE_MAX_MULTI_STEP_ACTIONS)
                                     .speed(1.0),
                             )
-                            .on_hover_text("Klondike always uses a finite gameplay-action limit; STOP remains available");
+                            .on_hover_text("0 runs continuously until STOP, Solve result review or a guarded stop condition; positive values limit gameplay actions. Klondike does not restart automatically");
                         } else {
                             ui.add(egui::DragValue::new(&mut self.multi_step_actions).speed(1.0))
                                 .on_hover_text("0 runs continuously across games until STOP or a fail-closed anomaly; positive values are exact gameplay-action limits");
@@ -1520,7 +1528,9 @@ impl QmpQemuSocketApp {
                     });
 
 
-                    if self.selected_multi_step_actions() == UNBOUNDED_MULTI_STEP_ACTIONS {
+                    if self.game_mode == GameMode::Klondike && self.selected_multi_step_actions() == UNBOUNDED_MULTI_STEP_ACTIONS {
+                        ui.small("Multi-Step 0: continuous until STOP, Solve result review or a guarded stop condition. No automatic restart.");
+                    } else if self.selected_multi_step_actions() == UNBOUNDED_MULTI_STEP_ACTIONS {
                         ui.small("Multi-Step is unbounded: run until STOP or a guarded stop condition.");
                     }
 
@@ -1542,7 +1552,7 @@ impl QmpQemuSocketApp {
 
                 if self.game_mode == GameMode::Klondike {
                     ui.small(format!(
-                        "Klondike initial settings: action {KLONDIKE_SETTLE_DELAY_MS} ms, repeat observation {KLONDIKE_REOBSERVE_DELAY_MS} ms, Multi-Step {KLONDIKE_DEFAULT_MULTI_STEP_ACTIONS}. Timings are starting values for testing, not measured animation durations. Changes apply to the next run."
+                        "Klondike defaults: action {KLONDIKE_SETTLE_DELAY_MS} ms from Beast gameplay, repeat observation {KLONDIKE_REOBSERVE_DELAY_MS} ms, Multi-Step {KLONDIKE_DEFAULT_MULTI_STEP_ACTIONS} (0 = continuous). Editable timings apply to the next run."
                     ));
                     ui.small("No-HALO recovery refreshes Solver once only on a recognised board, then captures immediately. A request starting without a target stops for review before any card or draw action.");
                 } else if self.game_mode == GameMode::Pyramid {
@@ -1584,10 +1594,11 @@ impl QmpQemuSocketApp {
 
                 if self.game_mode == GameMode::Klondike {
                     ui.monospace("guest-input-authorised = true; one guarded operation per action");
-                    ui.monospace("target-priority = Draw/Recycle, Right waste, tableau bottom-up, foundations");
+                    ui.monospace("target-priority = Draw/Recycle, Solve control, Right waste, tableau bottom-up, foundations");
                     ui.monospace("source = continuous gold border with card interior; dashed destinations are excluded");
                     ui.monospace("tableau = dynamic highlighted source block, clicked once; no drag");
                     ui.monospace("Draw = qcode D; Recycle = click on independently recognised empty stock");
+                    ui.monospace("Solve = independently recognised upper finish control; one click, capture, stop for review");
                 } else if self.game_mode == GameMode::Pyramid {
                     let pyramid_cards = PYRAMID_TARGETS
                         .iter()
@@ -1648,7 +1659,7 @@ impl QmpQemuSocketApp {
 
                 if self.game_mode == GameMode::Klondike {
                     ui.monospace("no-highlight-recovery = bounded Solver refresh; never implies draw or completion");
-                    ui.monospace("completion / restart = unsupported; retain latest frame and stop");
+                    ui.monospace("Solve result = diagnostic only; win detection / restart = unsupported");
                 } else if self.game_mode == GameMode::Pyramid {
                     ui.monospace("no-highlight-recovery = bounded; never implies Move or completion");
                 } else {
@@ -2062,6 +2073,30 @@ fn controls_are_mutable(
 }
 
 
+/// Bound finite Klondike requests while preserving zero as continuous operation.
+fn normalise_operation_limit(mode: GameMode, requested: usize) -> usize {
+
+
+    if mode == GameMode::Klondike {
+        requested.min(KLONDIKE_MAX_MULTI_STEP_ACTIONS)
+    } else {
+        requested
+    }
+}
+
+
+/// Describe inspection-only pixels without treating an in-progress capture as a failure.
+fn diagnostic_preview_status(state: WorkerState) -> &'static str {
+
+
+    if state.is_busy() {
+        "Verification in progress; this frame does not authorise another run."
+    } else {
+        "For inspection only; use Capture Frame before another run."
+    }
+}
+
+
 /// Retain inspection-only pixels after STOP while rejecting advisory input authority.
 ///
 /// The caller separately requires a matching mode and socket. Diagnostic frames
@@ -2213,6 +2248,10 @@ fn format_prediction(prediction: PredictedAction) -> String {
                 .to_owned()
         }
         PredictedAction::Action(action) => match (action.target, action.operation()) {
+            (ActionTarget::Klondike(crate::klondike::KlondikeTarget::Solve), InputOperation::Click(point)) => format!(
+                "Prediction: click Klondike Solve control at ({}, {}) once, capture and stop for result review; completion is not assumed; input sent=0.",
+                point.x, point.y,
+            ),
             (ActionTarget::Bottom { label, .. }, InputOperation::PressDrawKey) => format!(
                 "Prediction: {label} with qcode D; gold anchor=({}, {}); input sent=0.",
                 action.anchor.x, action.anchor.y
@@ -2254,6 +2293,18 @@ fn format_prediction(prediction: PredictedAction) -> String {
             "Prediction refused: {highlight_count} calibrated highlights were found; input sent=0."
         ),
     }
+}
+
+
+/// Distinguish the automatic-finish Solve control from the bottom Solver hint control.
+fn prediction_is_klondike_solve(prediction: Option<PredictedAction>) -> bool {
+    matches!(
+        prediction,
+        Some(PredictedAction::Action(crate::game::GuidedAction {
+            target: ActionTarget::Klondike(crate::klondike::KlondikeTarget::Solve),
+            ..
+        }))
+    )
 }
 
 
@@ -2786,6 +2837,43 @@ mod tests {
         assert_eq!(format_operation_limit(25), "25-operation");
         assert_eq!(format_operation_progress(7, 0), "7/unbounded");
         assert_eq!(format_operation_progress(7, 25), "7/25");
+    }
+
+
+    /// The value used by selection and dispatch preserves continuous Klondike authority.
+    #[test]
+    fn klondike_limits_preserve_zero_without_changing_other_modes() {
+        assert_eq!(normalise_operation_limit(GameMode::Klondike, 0), 0);
+        assert_eq!(normalise_operation_limit(GameMode::Klondike, 1), 1);
+        assert_eq!(normalise_operation_limit(GameMode::Klondike, 10), 10);
+        assert_eq!(normalise_operation_limit(GameMode::Klondike, usize::MAX), 10_000);
+        assert_eq!(normalise_operation_limit(GameMode::TriPeaks, usize::MAX), usize::MAX);
+        assert_eq!(normalise_operation_limit(GameMode::Pyramid, 0), 0);
+    }
+
+
+    /// Solve is an actionable control whose wording promises only one click and result review.
+    #[test]
+    fn klondike_solve_prediction_is_distinct_from_solver_recovery() {
+        let solve = PredictedAction::Action(
+            crate::klondike::canonical_action(crate::klondike::KlondikeTarget::Solve).unwrap(),
+        );
+        assert!(prediction_is_klondike_solve(Some(solve)));
+        assert!(prediction_is_actionable(GameMode::Klondike, solve));
+        assert!(!prediction_is_klondike_solve(Some(PredictedAction::NoHighlight)));
+        assert!(!prediction_is_klondike_solve(None));
+        assert!(format_prediction(solve).contains("stop for result review"));
+        assert!(format_prediction(solve).contains("completion is not assumed"));
+    }
+
+
+    /// Diagnostic progress is described as verification until a terminal state arrives.
+    #[test]
+    fn diagnostic_preview_status_distinguishes_progress_from_a_stop() {
+        assert!(diagnostic_preview_status(WorkerState::Verifying).starts_with("Verification in progress"));
+        assert!(diagnostic_preview_status(WorkerState::Capturing).starts_with("Verification in progress"));
+        assert!(diagnostic_preview_status(WorkerState::Uncertain).contains("Capture Frame"));
+        assert!(diagnostic_preview_status(WorkerState::Detached).contains("Capture Frame"));
     }
 
 

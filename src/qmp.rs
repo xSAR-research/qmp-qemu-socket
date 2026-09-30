@@ -66,8 +66,6 @@ pub struct QmpProbe {
 
 
 impl QmpProbe {
-
-
     /// Returns QEMU's reported run-state label, or "unknown" when absent.
     pub fn run_state(&self) -> &str {
         self.status
@@ -98,8 +96,6 @@ impl QmpProbe {
 
     /// Summarises the VM state and active absolute pointer for user-facing logs.
     pub fn summary(&self) -> String {
-
-
         match self.current_absolute_pointer_name() {
             Some(pointer) => format!(
                 "QEMU state={} | active absolute pointer={pointer}",
@@ -132,8 +128,6 @@ pub struct QmpClient {
 
 
 impl QmpClient {
-
-
     /// Opens a QMP socket, validates its greeting, and enables QMP commands.
     pub fn connect(path: &Path) -> Result<Self, QmpError> {
         let writer = UnixStream::connect(path)?;
@@ -311,8 +305,6 @@ impl QmpClient {
 
     /// Writes one identified request without waiting for its response.
     fn send_request(&mut self, command: &str, arguments: Option<Value>) -> Result<u64, QmpError> {
-
-
         if !self.usable {
             return Err(QmpError::Protocol(
                 "the QMP connection is no longer usable".to_owned(),
@@ -402,8 +394,6 @@ impl QmpClient {
         up_arguments: Value,
         hold: Duration,
     ) -> Result<(), QmpError> {
-
-
         let down_id = match self.send_request("input-send-event", Some(down_arguments)) {
             Ok(id) => id,
             Err(error) => return Err(self.recover_release(up_arguments, error)),
@@ -468,8 +458,6 @@ impl QmpClient {
 
 /// Validate a capture path before serialising it into a screendump request.
 fn qmp_capture_filename(path: &Path) -> Result<&str, QmpError> {
-
-
     if !path.is_absolute() {
         return Err(QmpError::CapturePath(
             "the path must be absolute".to_owned(),
@@ -520,8 +508,6 @@ mod tests {
 
 
     impl Drop for SocketFile {
-
-
         /// Remove the mock socket pathname when the test guard leaves scope.
         fn drop(&mut self) {
             let _ = fs::remove_file(&self.0);
@@ -584,8 +570,6 @@ mod tests {
 
 
         loop {
-
-
             match listener.accept() {
                 Ok((stream, _)) => return stream,
                 Err(error) if error.kind() == ErrorKind::WouldBlock => {

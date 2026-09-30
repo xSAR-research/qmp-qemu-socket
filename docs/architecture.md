@@ -8,7 +8,7 @@
 | `session_log.rs` | private session-file creation, append and complete-history reads |
 | `game.rs` | small game/profile boundary and typed actions |
 | `tripeaks.rs` | validated TriPeaks profile assembly |
-| `klondike.rs` | Klondike dynamic source blocks, stock/recycle, RIGHT fan and effect evidence |
+| `klondike.rs` | Klondike dynamic source blocks, stock/recycle, RIGHT fan, Solve control and effect evidence |
 | `pyramid.rs` | Pyramid targets, fixed halo probes, priority and action-effect evidence |
 | `parameters.rs` | fixed geometry, colour values, delays, limits and release label |
 | `capture.rs` | decoded immutable frame representation |
@@ -22,7 +22,7 @@
 | `worker.rs` | worker commands/events, capture, guarded execution, timing and cancellation |
 | `worker/post_game.rs` | shared score, Level Up, New Game, Play and Solver progression |
 | `worker/pyramid_execution.rs` | Pyramid effect, fresh-pair continuation and redeal checks |
-| `worker/klondike_execution.rs` | Bounded Klondike execution and immediate-capture Solver recovery; no terminal flow |
+| `worker/klondike_execution.rs` | Finite/continuous Klondike execution, bounded Solver recovery and one-shot Solve review; no shared terminal flow |
 | `worker/tests.rs` | worker regression cases, including transition and cancellation guards |
 
 ---
@@ -163,17 +163,23 @@ height increases the image area instead of stretching the log.
 
 Klondike uses an independent controller and no three-board progress probe.
 Its dynamic target identity includes the highlighted source geometry. It follows
-DRAW, RIGHT, tableau bottom-up and SUIT priority, using a key for ordinary draw
+DRAW/RECYCLE, Solve or RIGHT, tableau bottom-up and SUIT priority, using a key for ordinary draw
 and a single source click for transfers/recycle. Solid-source validation rejects
 the dark dashed landing guide. Source blocks can change height after every move.
+The outline search includes the evidenced overlap with the toolbar. Interior
+crossbars cannot close a source while its exterior rails continue below.
+Input and material-effect bounds remain above the toolbar even when the visual
+source outline extends into it.
 
-All Klondike runs have a finite gameplay action limit; zero is rejected in the
-worker as well as excluded by the UI. One recognised no-HALO context can request
+Klondike supports finite gameplay limits and zero for continuous operation.
+Every unresolved action has a bounded recovery allowance. One recognised no-HALO context can request
 one Solver activation and an immediate capture, followed by bounded delayed
 observations. A recovery never proves the preceding gameplay effect. Unknown
-scenes, uncertain input and unresolved effects stop, without terminal clicks.
+scenes, uncertain input and unresolved effects stop. The independently recognised
+Solve button in RIGHT's place permits one auto-finish request followed by fresh
+capture and a mandatory stop for review. No win or restart is inferred.
 An initial no-HALO approval is recovery-only and cannot initiate gameplay.
-See `klondike-candidate-1.md` for evidence and known limitations.
+See `klondike-v1.2.2-candidate-2.md` for current evidence and limitations.
 
 ## State and bounds
 
@@ -191,7 +197,8 @@ See `klondike-candidate-1.md` for evidence and known limitations.
 - The visible log is bounded; the complete private session log remains on
   disk.
 - TriPeaks/Pyramid Multi-Step defaults to continuous (`0`) and is STOP-cancellable.
-- Klondike Multi-Step defaults to 10 and permits only 1–10000 gameplay actions.
+- Klondike Multi-Step defaults to 10; 1–10000 bounds actions and 0 runs continuously.
+- Klondike Solve always ends its run after one request and fresh result capture.
 - Transition retries and click attempts are bounded.
 - Advisory session counters never override visual transition evidence.
 - STOP and application exit detach locally; neither shuts down QEMU or Windows.

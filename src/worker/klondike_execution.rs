@@ -1,15 +1,16 @@
-//! Bounded Klondike execution and one-shot Solver refresh from fresh scene evidence.
+//! Klondike execution with bounded recovery and one-shot Solve requests.
 //!
-//! Gameplay actions, Solver refreshes and read-only observations have separate
-//! finite budgets. An uncertain gameplay input is never replayed. This module
-//! deliberately has no game-completion, restart or three-board progression path.
+//! Zero requests continuous gameplay until STOP, uncertainty or the Solve endpoint.
+//! Every unresolved context has finite Solver-refresh and observation budgets.
+//! An uncertain input is never replayed. Solve is requested once and its result
+//! retained for inspection; this module never infers completion or restart.
 
-use std::{path::Path, sync::atomic::{AtomicBool, Ordering}, time::Duration};
+use std::{path::Path, sync::atomic::{AtomicBool, Ordering}, time::{Duration, Instant}};
 
 use super::{
-    FrameObservation, WorkerEvent, WorkerEventSink, WorkerState, capture_series,
+    FrameObservation, WorkerEvent, WorkerEventSink, WorkerState, analyse_captured_frame, capture_screen,
     connect_and_probe, execute_planned_input, format_action_status, format_prediction_target,
-    format_step_plan, materially_changed_pixels, send_log, send_state,
+    format_step_plan, materially_changed_pixels, milliseconds, send_log, send_state,
     send_status, validate_probe, wait_or_stop,
 };
 use crate::{
@@ -17,8 +18,8 @@ use crate::{
     game::{ActionTarget, GuidedAction},
     klondike,
     parameters::{
-        ACTION_CHANGE_CHANNEL_THRESHOLD, KLONDIKE_MAX_MULTI_STEP_ACTIONS,
-        NOMINAL_FRAME_HEIGHT, NOMINAL_FRAME_WIDTH, SOLVER_MOUSE_HOLD, StepRunSettings,
+        ACTION_CHANGE_CHANNEL_THRESHOLD, KEY_HOLD, KLONDIKE_MAX_MULTI_STEP_ACTIONS, MOUSE_HOLD,
+        NOMINAL_FRAME_HEIGHT, NOMINAL_FRAME_WIDTH, POINTER_SETTLE_DELAY, SOLVER_MOUSE_HOLD, StepRunSettings,
     },
     qmp::QmpClient,
     stepper::{StepPlan, plan_step},
@@ -30,23 +31,40 @@ use crate::{
 const REOBSERVATION_LIMIT: usize = 3;
 
 
-/// Validate the finite gameplay-action budget before connecting or clearing STOP.
+/// Accept continuous zero or a finite gameplay-action budget before connecting or clearing STOP.
 pub(super) fn validate_operation_limit(limit: usize) -> Result<(), String> {
 
 
-    if !(1..=KLONDIKE_MAX_MULTI_STEP_ACTIONS).contains(&limit) {
+    if limit > KLONDIKE_MAX_MULTI_STEP_ACTIONS {
         return Err(format!(
-            "Klondike requires 1..={KLONDIKE_MAX_MULTI_STEP_ACTIONS} gameplay actions; requested {limit}"
+            "Klondike requires 0 for continuous play or 1..={KLONDIKE_MAX_MULTI_STEP_ACTIONS} gameplay actions; requested {limit}"
         ));
     }
     Ok(())
 }
 
 
+/// Preserve decoded pixels separately from whether their analysis can authorise input.
+enum CaptureResult {
+    /// The frame was classified successfully with no pending STOP.
+    Classified(FrameObservation),
+    /// Pixels were decoded, but classification or a late STOP prevents action authority.
+    Diagnostic {
+        /// Latest decoded pixels retained for inspection even when analysis fails.
+        frame: CapturedFrame,
+        /// The cause returned after retaining the diagnostic frame.
+        reason: String,
+    },
+}
+
+
 /// Private boundary for deterministic controller tests using the production state machine.
 trait KlondikeIo {
     /// Acquire and classify exactly one new frame, checking cancellation.
-    fn capture(&mut self) -> Result<FrameObservation, String>;
+    fn capture(&mut self) -> Result<CaptureResult, String>;
+
+    /// Acquire a diagnostic-only Solve result without action classification or discarding a late STOP frame.
+    fn capture_diagnostic(&mut self) -> Result<CapturedFrame, String>;
 
     /// Revalidate VM state and the current QEMU HID Tablet immediately before input.
     fn probe(&mut self) -> Result<(), String>;
@@ -68,7 +86,8 @@ trait KlondikeIo {
         after: &CapturedFrame,
         action: GuidedAction,
     ) -> Result<bool, String> {
-        klondike::verify_effect(before, after, action)
+        klondike::inspect_effect(before, after, action)
+            .map(|evidence| evidence.verified)
             .map_err(|error| format!("Klondike effect analysis failed: {error}"))
     }
 }
@@ -84,17 +103,30 @@ struct QmpKlondikeIo<'a> {
     scan_state: &'a TableauScanState,
     /// Cooperative cancellation flag, checked before input and observations.
     cancel_requested: &'a AtomicBool,
+    /// Bounded UI output and complete session log for effect-evidence diagnostics.
+    event_tx: &'a WorkerEventSink,
 }
 
 
 impl KlondikeIo for QmpKlondikeIo<'_> {
 
 
-    fn capture(&mut self) -> Result<FrameObservation, String> {
-        capture_series(self.qmp, self.socket_path, self.scan_state, self.cancel_requested)?
-            .observations
-            .pop()
-            .ok_or_else(|| "Klondike capture returned no frame".to_owned())
+    fn capture(&mut self) -> Result<CaptureResult, String> {
+        require_running(self.cancel_requested)?;
+        let started = Instant::now();
+        let (frame, timing) = capture_screen(self.qmp, self.socket_path)?;
+        let result = classify_captured_result(frame, self.scan_state, self.cancel_requested);
+        send_log(self.event_tx, format!(
+            "PROFILE Klondike observation: acquisition and classification={:.1} ms; screendump={:.1} ms, decode={:.1} ms.",
+            milliseconds(started.elapsed()), milliseconds(timing.screendump), milliseconds(timing.decode),
+        ));
+        Ok(result)
+    }
+
+
+    fn capture_diagnostic(&mut self) -> Result<CapturedFrame, String> {
+        require_running(self.cancel_requested)?;
+        capture_screen(self.qmp, self.socket_path).map(|(frame, _timing)| frame)
     }
 
 
@@ -112,7 +144,13 @@ impl KlondikeIo for QmpKlondikeIo<'_> {
 
 
     fn input(&mut self, plan: StepPlan) -> Result<(), String> {
-        execute_planned_input(self.qmp, plan, self.cancel_requested)
+        let started = Instant::now();
+        let result = execute_planned_input(self.qmp, plan, self.cancel_requested);
+        send_log(self.event_tx, format!(
+            "PROFILE Klondike input: {:.1} ms through QMP response handling; acknowledged={}; guest effect requires the next observation.",
+            milliseconds(started.elapsed()), result.is_ok(),
+        ));
+        result
     }
 
 
@@ -134,20 +172,38 @@ impl KlondikeIo for QmpKlondikeIo<'_> {
             "STOP was requested during Klondike settling; no input was retried",
         ).map(|_| ())
     }
+
+
+    fn effect(
+        &mut self,
+        before: &CapturedFrame,
+        after: &CapturedFrame,
+        action: GuidedAction,
+    ) -> Result<bool, String> {
+        let evidence = klondike::inspect_effect(before, after, action)
+            .map_err(|error| format!("Klondike effect analysis failed: {error}"))?;
+        send_log(self.event_tx, format!("Klondike effect evidence for {}: {evidence}", action.target));
+        Ok(evidence.verified)
+    }
 }
 
 
-/// Successful endpoint: a bounded action count or a recovery-only fresh preview.
+/// Explicit endpoint without inferring the guest game has completed.
 #[derive(Debug, PartialEq, Eq)]
 enum RunOutcome {
     /// All requested gameplay actions have independently verified effects.
     Completed(usize),
     /// Solver refresh produced a preview that requires another explicit user run.
     RecoveryOnly,
+    /// Solve was requested once; its newly captured result remains unverified.
+    SolveRequested {
+        /// Gameplay effects proven before the separate, unverified Solve request.
+        previous_verified: usize,
+    },
 }
 
 
-/// Run Klondike under an independent finite policy using shared capture and QMP facilities.
+/// Run finite or continuous Klondike play using shared capture and QMP facilities.
 ///
 /// Latest frames are retained on every stop. Unknown scenes cannot authorise
 /// input, and no completion or restart is inferred from a missing HALO.
@@ -168,7 +224,7 @@ pub(super) fn run_klondike_steps(
         let (mut qmp, probe) = connect_and_probe(socket_path)?;
         validate_probe(&probe)?;
         send_log(event_tx, probe.summary());
-        let mut io = QmpKlondikeIo { qmp: &mut qmp, socket_path, scan_state, cancel_requested };
+        let mut io = QmpKlondikeIo { qmp: &mut qmp, socket_path, scan_state, cancel_requested, event_tx };
         drive_run(
             &mut io, approved_prediction, settings, event_tx, cancel_requested,
             &mut latest, &mut input_attempted,
@@ -204,6 +260,16 @@ pub(super) fn run_klondike_steps(
             send_status(event_tx, "Solver refreshed — review next move".to_owned());
             send_log(event_tx, "Klondike Solver recovery produced a new preview. Gameplay inputs sent: 0. Review the preview and press Step Once or Multi-Step again to authorise that action.".to_owned());
         }
+        Ok(RunOutcome::SolveRequested { previous_verified }) => {
+
+
+            if let Some(observation) = latest {
+                event_tx.publish_diagnostic_frame(observation.frame);
+            }
+            send_state(event_tx, WorkerState::Uncertain);
+            send_status(event_tx, "Solve requested — inspect result".to_owned());
+            send_log(event_tx, format!("Klondike Solve requested once after {previous_verified} independently verified gameplay action(s). The settled result is diagnostic only: Solve effect, win and completion remain unverified. No further input was sent."));
+        }
         Err(error) => {
 
 
@@ -235,10 +301,16 @@ fn drive_run(
     require_running(cancel_requested)?;
     require_klondike_prediction(approved_prediction, true)?;
     let delays = settings.animation_delays();
+    let requested_actions = settings.bounded_operation_limit()
+        .map_or_else(|| "continuous until STOP, uncertainty or Solve".to_owned(), |limit| format!("{limit} gameplay action(s)"));
     send_log(event_tx, format!(
-        "Klondike requested {} gameplay action(s), settle={} ms, reobserve={} ms. Draw uses qcode D; recycle and card sources use one click. Solver refresh: one per unresolved context, at most {} per run; next capture is immediate, without a deliberate settle delay.",
-        settings.operation_limit(), delays.klondike_settle.as_millis(),
-        delays.klondike_reobserve.as_millis(), settings.operation_limit() + 1,
+        "Klondike requested {requested_actions}, settle={} ms, reobserve={} ms. Draw uses qcode D; recycle and card sources use one click. Solver refresh: one per unresolved context, followed by at most {REOBSERVATION_LIMIT} delayed observations; the first capture is immediate. Solve is clicked once, settled and captured, then execution stops with its result unverified.",
+        delays.klondike_settle.as_millis(), delays.klondike_reobserve.as_millis(),
+    ));
+    send_log(event_tx, format!(
+        "Klondike input intervals: pointer settle={} ms, gameplay mouse hold={} ms, Draw key hold={} ms. The editable action settle={} ms begins after input acknowledgement; observation time is additional.",
+        POINTER_SETTLE_DELAY.as_millis(), MOUSE_HOLD.as_millis(), KEY_HOLD.as_millis(),
+        delays.klondike_settle.as_millis(),
     ));
     send_state(event_tx, WorkerState::Validating);
     send_status(event_tx, "Validating Klondike preview".to_owned());
@@ -265,14 +337,24 @@ fn drive_run(
     }
 
 
-    for operation_index in 1..=settings.operation_limit() {
+    let mut verified_operations = 0usize;
+
+
+    loop {
         require_running(cancel_requested)?;
+
+
+        if settings.bounded_operation_limit().is_some_and(|limit| verified_operations >= limit) {
+            return Ok(RunOutcome::Completed(verified_operations));
+        }
+        let operation_index = next_counter(verified_operations, "gameplay action")?;
         let observation = latest.as_ref().ok_or_else(|| "Klondike planning frame is missing".to_owned())?;
         require_scene(observation)?;
         require_klondike_prediction(observation.prediction, false)?;
         let plan = plan_step(observation.prediction).map_err(|error| format!("Klondike plan rejected: {error}"))?;
         send_log(event_tx, format_step_plan(plan)?);
         let before = observation.frame.clone();
+        let solve_requested = matches!(plan.input().action().target, ActionTarget::Klondike(klondike::KlondikeTarget::Solve));
         io.probe()?;
         require_running(cancel_requested)?;
         send_state(event_tx, WorkerState::Acting);
@@ -281,8 +363,22 @@ fn drive_run(
         io.input(plan).map_err(|error| format!("gameplay input outcome is uncertain: {error}"))?;
         io.wait(delays.klondike_settle)?;
         send_state(event_tx, WorkerState::Verifying);
-        send_status(event_tx, "Verifying Klondike move".to_owned());
+
+
+        send_status(event_tx, if solve_requested { "Capturing Solve result" } else { "Verifying Klondike move" }.to_owned());
+
+
+        if solve_requested {
+            // The observed control authorises this click, not a predicted end screen.
+            // Retain the decoded result before checking late STOP, without analysis.
+            let frame = io.capture_diagnostic()?;
+            event_tx.publish_diagnostic_frame(frame.clone());
+            *latest = Some(diagnostic_observation(frame));
+            require_running(cancel_requested)?;
+            return Ok(RunOutcome::SolveRequested { previous_verified: verified_operations });
+        }
         capture_latest(io, latest, event_tx)?;
+        require_running(cancel_requested)?;
         let mut context_refreshed = false;
         let mut delayed_observations = 0usize;
 
@@ -317,11 +413,13 @@ fn drive_run(
                     changed_pixels,
                     continued_from_halo: false,
                 });
+                let run_bound = settings.bounded_operation_limit()
+                    .map_or_else(|| "continuous".to_owned(), |limit| limit.to_string());
                 send_log(event_tx, format!(
-                    "Klondike action {operation_index}/{} effect verified; {} -> {}; changed effect pixels={changed_pixels}; Solver refreshes={solver_refreshes}. Fresh HALO alone never verifies the previous action.",
-                    settings.operation_limit(), format_prediction_target(plan.before()),
-                    format_prediction_target(current.prediction),
+                    "Klondike action {operation_index}/{run_bound} effect verified; {} -> {}; changed effect pixels={changed_pixels}; Solver refreshes={solver_refreshes}. Fresh HALO alone never verifies the previous action.",
+                    format_prediction_target(plan.before()), format_prediction_target(current.prediction),
                 ));
+                verified_operations = operation_index;
                 break;
             }
 
@@ -337,14 +435,21 @@ fn drive_run(
             capture_latest(io, latest, event_tx)?;
         }
     }
-    Ok(RunOutcome::Completed(settings.operation_limit()))
+}
+
+
+/// Advance a cumulative diagnostic counter without permitting wraparound during continuous play.
+fn next_counter(current: usize, label: &str) -> Result<usize, String> {
+    current.checked_add(1)
+        .ok_or_else(|| format!("Klondike {label} counter exhausted; stopping before further input"))
 }
 
 
 /// Send at most one Solver click per unresolved context and capture immediately.
 ///
-/// The caller controls its per-context flag; the additional total bound guards
-/// accidental future calls. Fresh scene, cancellation and tablet probes precede input.
+/// The caller controls its per-context flag; finite runs also enforce a total bound.
+/// Continuous runs retain checked cumulative counters and bounded per-context recovery.
+/// Fresh scene, cancellation and tablet probes precede input.
 fn refresh_solver(
     io: &mut impl KlondikeIo,
     latest: &mut Option<FrameObservation>,
@@ -363,13 +468,14 @@ fn refresh_solver(
     }
 
 
-    if *refreshes > settings.operation_limit() {
+    if settings.bounded_operation_limit().is_some_and(|limit| *refreshes > limit) {
         return Err("Klondike total Solver-refresh budget exhausted".to_owned());
     }
+    let next_refresh = next_counter(*refreshes, "Solver refresh")?;
     require_running(cancel_requested)?;
     io.probe()?;
     require_running(cancel_requested)?;
-    *refreshes += 1;
+    *refreshes = next_refresh;
     *input_attempted = true;
     send_state(event_tx, WorkerState::Acting);
     send_status(event_tx, "Refreshing Klondike Solver".to_owned());
@@ -413,22 +519,68 @@ fn await_target(
 }
 
 
-/// Publish every fresh observation for responsive preview without granting new input authority.
+/// Classify decoded pixels while preserving them if analysis fails or STOP arrives late.
 ///
-/// A failed capture leaves the prior observation intact. The single-frame mailbox
-/// coalesces previews, while the run retains its exact source/result frames.
+/// Classification owns its frame, so one temporary clone retains the original
+/// pixels for the error path. This boundary is local to Klondike.
+fn classify_captured_result(
+    frame: CapturedFrame,
+    scan_state: &TableauScanState,
+    cancel_requested: &AtomicBool,
+) -> CaptureResult {
+
+
+    if let Err(reason) = require_running(cancel_requested) {
+        return CaptureResult::Diagnostic { frame, reason };
+    }
+    let analysed = analyse_captured_frame(frame.clone(), scan_state);
+
+
+    match analysed {
+        Ok((observation, _detection)) => {
+
+
+            if let Err(reason) = require_running(cancel_requested) {
+                CaptureResult::Diagnostic { frame, reason }
+            } else {
+                CaptureResult::Classified(observation)
+            }
+        }
+        Err(reason) => CaptureResult::Diagnostic { frame, reason },
+    }
+}
+
+
+/// Wrap diagnostic pixels without a prediction, gameplay scene or completion authority.
+fn diagnostic_observation(frame: CapturedFrame) -> FrameObservation {
+    FrameObservation {
+        frame,
+        prediction: PredictedAction::NoHighlight,
+        observed_rows: None,
+        gameplay_scene: false,
+        game_progress: None,
+    }
+}
+
+
+/// Retain and publish every decoded frame before propagating analysis or late STOP errors.
+///
+/// Acquisition/decode failures leave the prior frame intact because no newer
+/// usable pixels exist. Diagnostic results never grant input authority.
 fn capture_latest(
     io: &mut impl KlondikeIo,
     latest: &mut Option<FrameObservation>,
     event_tx: &WorkerEventSink,
 ) -> Result<(), String> {
-    *latest = Some(io.capture()?);
 
 
-    if let Some(observation) = latest.as_ref() {
-        event_tx.publish_diagnostic_frame(observation.frame.clone());
-    }
-    Ok(())
+    let (observation, result) = match io.capture()? {
+        CaptureResult::Classified(observation) => (observation, Ok(())),
+        CaptureResult::Diagnostic { frame, reason } => (diagnostic_observation(frame), Err(reason)),
+    };
+    event_tx.publish_diagnostic_frame(observation.frame.clone());
+    *latest = Some(observation);
+    result
 }
 
 

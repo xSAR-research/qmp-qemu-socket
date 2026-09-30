@@ -196,5 +196,7 @@ This policy does not alter Pyramid or TriPeaks recovery rules.
 
 Klondike source detection consumes one immutable RGBA frame in priority order.
 It does not take a separate screenshot for each target class. Each accepted
-result is reused as the next planning frame. No Klondike completion/restart input
-is enabled by this candidate.
+result is reused as the next planning frame. A separately recognised upper Solve
+button permits one auto-finish request, normal configurable settling and a fresh
+capture, then stops for result review. It never triggers Solver recovery or an
+input retry after that click. No verified-completion/restart sequence is enabled.

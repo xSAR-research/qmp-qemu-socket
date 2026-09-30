@@ -1,6 +1,6 @@
 //! Klondike Draw 1 Solver targets and conservative, mode-owned effect evidence.
 //!
-//! Geometry is measured from Charlie's 1920x1080 captures K01-K12. A source
+//! Geometry is measured from Charlie's 1920x1080 captures K01-K19. A source
 //! needs a continuous lower gold edge, matching exterior rails and a bright
 //! card interior. Dashed dark destinations never grant click authority. The
 //! outline primitive groups a connected run into one target. No card ranks,
@@ -44,8 +44,17 @@ const UPPER_Y: u32 = 112;
 const TABLEAU_Y: u32 = 342;
 
 
-/// Exclusive lower limit, above the guest toolbar and all input controls.
-const TABLEAU_BOTTOM: u32 = 936;
+/// Exclusive destination-effect bound retained above all guest toolbar pixels.
+const TABLEAU_EFFECT_BOTTOM: u32 = 936;
+
+
+/// First toolbar-dimmed card row measured in K19; source proof excludes this row.
+const TOOLBAR_TOP: u32 = 947;
+
+
+/// Exclusive outline scan limit covering K19's closed source border under the
+/// translucent toolbar. This extends recognition, never the input/proof region.
+const TABLEAU_OUTLINE_BOTTOM: u32 = 963;
 
 
 /// Card fan advances by this many pixels, capped at two advances.
@@ -65,6 +74,20 @@ const MINIMUM_CONTENT_CHANGE: usize = 512;
 pub const SOLVER_CLICK: PixelPoint = PixelPoint::new(600, 990);
 
 
+/// The separate completion-request button measured in K13; not the Solver icon.
+const SOLVE_BOUNDS: PixelRect = PixelRect::new(562, 143, 124, 113);
+
+
+/// Original RGB8 samples on a four-pixel lattice over the entire Solve button.
+/// The fixture manifest records provenance; no image is decoded during detection.
+const SOLVE_TEMPLATE: &[u8; 2_697] = include_bytes!("klondike-solve-control.rgb");
+
+
+/// Required paper/ink changes in each of two opposed RIGHT-card corner patches.
+/// Both corners must retain white paper; a dark guide cannot prove replacement.
+const MINIMUM_CORNER_CHANGE: usize = 48;
+
+
 /// Geometry-bearing target identity; no persistent card-rank state is implied.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum KlondikeTarget {
@@ -72,6 +95,8 @@ pub enum KlondikeTarget {
     Draw,
     /// Highlighted empty stock, delivered as one click on the recycle area.
     Recycle,
+    /// Evidenced Solve control; one click requests completion and requires review.
+    Solve,
     /// Highlighted top waste card; offset is zero, one or two fan advances.
     Waste {
         /// Number of 28-pixel advances from the first waste-card origin.
@@ -104,6 +129,7 @@ impl fmt::Display for KlondikeTarget {
         match self {
             Self::Draw => formatter.write_str("Draw 1"),
             Self::Recycle => formatter.write_str("stock recycle"),
+            Self::Solve => formatter.write_str("Solve control (result requires review)"),
             Self::Waste { offset } => write!(formatter, "RIGHT (fan offset {offset})"),
             Self::Tableau { column, top, bottom } => {
                 write!(formatter, "tableau column {column}, rows {top}..{bottom}")
@@ -122,13 +148,13 @@ const PREVIEW_TARGETS: [PreviewTarget; 3] = [
         colour: [255, 192, 48],
     },
     PreviewTarget {
-        label: "KL RIGHT",
+        label: "KL RIGHT / Solve",
         bounds: WASTE_BOUNDS,
         colour: [255, 192, 48],
     },
     PreviewTarget {
         label: "KL tableau: dynamic source blocks",
-        bounds: PixelRect::new(390, TABLEAU_Y, 1_140, TABLEAU_BOTTOM - TABLEAU_Y),
+        bounds: PixelRect::new(390, TABLEAU_Y, 1_140, TABLEAU_OUTLINE_BOTTOM - TABLEAU_Y),
         colour: [80, 190, 255],
     },
 ];
@@ -320,6 +346,46 @@ fn has_solver_banner(frame: &CapturedFrame) -> bool {
 }
 
 
+/// Match K13's control shape, check mark, lettering and colours at native scale.
+/// Every four-pixel sample is compared; require 98% within 24 RGB levels both
+/// overall and separately in the glyph area. Empty stock is a separate guard.
+fn has_solve_control(frame: &CapturedFrame) -> bool {
+    let stock_inside = PixelRect::new(406, 130, 100, 139);
+
+
+    if !fraction_at_least(frame, stock_inside, is_felt, 900) {
+        return false;
+    }
+
+    let mut matched = 0_u32;
+    let mut glyph_matched = 0_u32;
+    let mut glyph_samples = 0_u32;
+    let mut sample = 0;
+
+
+    for y in (SOLVE_BOUNDS.y..SOLVE_BOUNDS.y + SOLVE_BOUNDS.height).step_by(4) {
+
+
+        for x in (SOLVE_BOUNDS.x..SOLVE_BOUNDS.x + SOLVE_BOUNDS.width).step_by(4) {
+            let expected = &SOLVE_TEMPLATE[sample..sample + 3];
+            sample += 3;
+            let agrees = pixel_rgb(frame, x, y).is_some_and(|actual| {
+                actual.into_iter().zip(expected).all(|(a, b)| a.abs_diff(*b) <= 24)
+            });
+            matched += u32::from(agrees);
+
+
+            if (590..660).contains(&x) && (160..236).contains(&y) {
+                glyph_samples += 1;
+                glyph_matched += u32::from(agrees);
+            }
+        }
+    }
+
+    matched * 100 >= 899 * 98 && glyph_matched * 100 >= glyph_samples * 98
+}
+
+
 /// Find a bright source card/run inside a dynamic vertical scan envelope.
 ///
 /// This reusable primitive starts at the bottom, requires a 96-pixel continuous
@@ -327,6 +393,8 @@ fn has_solver_banner(frame: &CapturedFrame) -> bool {
 /// paper above the bottom. A black destination interior fails even if some gold
 /// dashes align. Card-rank artwork is not required to be white at one exact pixel.
 /// The returned rectangle groups all connected highlighted cards as one action.
+/// An interior crossbar cannot close a block while its exterior rails continue.
+/// K19 permits a darker closed edge only in the measured toolbar overlap strip.
 pub fn find_solid_card_source(
     frame: &CapturedFrame,
     scan: PixelRect,
@@ -351,19 +419,40 @@ fn find_solid_outline(
 
     let x = scan.x;
     let right = x + scan.width;
+    let bottom = scan.y + scan.height;
+    let paired_rails = |row| {
+        (x - 9..x).any(|xx| pixel_rgb(frame, xx, row).is_some_and(is_rail_gold))
+            && (right..right + 10).any(|xx| pixel_rgb(frame, xx, row).is_some_and(is_rail_gold))
+    };
 
 
-    for y in (scan.y..scan.y + scan.height).rev() {
+    // The last scanned row must show both rails ending. Otherwise an internal
+    // crossbar near a clipped scan boundary could masquerade as the lower edge.
+    // K19's right rail ends at y958; its first wholly clear row is y959.
+    if (x - 9..x).any(|xx| pixel_rgb(frame, xx, bottom - 1).is_some_and(is_rail_gold))
+        || (right..right + 10).any(|xx| pixel_rgb(frame, xx, bottom - 1).is_some_and(is_rail_gold))
+    {
+        return Ok(None);
+    }
+
+    let last_rail_row = (scan.y..bottom).rev().find(|&row| paired_rails(row));
+
+
+    for y in (scan.y..bottom).rev() {
+        let lower_edge = |rgb| is_edge_gold(rgb)
+            || (require_card_face && (TOOLBAR_TOP..TABLEAU_OUTLINE_BOTTOM).contains(&y)
+                && is_rail_gold(rgb));
 
 
         if y < scan.y + 170
-            || !pixel_rgb(frame, x + scan.width / 2, y).is_some_and(is_edge_gold)
+            || !pixel_rgb(frame, x + scan.width / 2, y).is_some_and(lower_edge)
+            || last_rail_row.is_some_and(|row| row >= y + 10)
         {
             continue;
         }
 
 
-        if !(x + 18..right - 18).all(|xx| pixel_rgb(frame, xx, y).is_some_and(is_edge_gold)) {
+        if !(x + 18..right - 18).all(|xx| pixel_rgb(frame, xx, y).is_some_and(lower_edge)) {
             continue;
         }
 
@@ -373,13 +462,9 @@ fn find_solid_outline(
 
 
         for row in (scan.y..y - 9).rev() {
-            let left_rail = (x - 9..x).any(|xx| pixel_rgb(frame, xx, row).is_some_and(is_rail_gold));
-            let right_rail = (right..right + 10).any(|xx| {
-                pixel_rgb(frame, xx, row).is_some_and(is_rail_gold)
-            });
 
 
-            if left_rail && right_rail {
+            if paired_rails(row) {
                 top = row;
                 gap = 0;
                 matched_rows += 1;
@@ -396,7 +481,18 @@ fn find_solid_outline(
         let height = y + 1 - top;
 
 
-        if !(180..=600).contains(&height) || matched_rows * 100 < (height - 10) * 85 {
+        if !(180..=600).contains(&height) || top == scan.y
+            || matched_rows * 100 < (height - 10) * 85 {
+            continue;
+        }
+
+        // A clipped rail segment or an interruption cannot invent a new source top.
+        let closed_top = (top.saturating_sub(10).max(scan.y)..=top).any(|row| {
+            (x + 18..right - 18).all(|xx| pixel_rgb(frame, xx, row).is_some_and(is_edge_gold))
+        });
+
+
+        if !closed_top {
             continue;
         }
 
@@ -424,6 +520,10 @@ pub fn canonical_action(target: KlondikeTarget) -> Option<GuidedAction> {
             InputOperation::Click(PixelPoint::new(456, 199)),
             PixelRect::new(390, UPPER_Y, 356, CARD_HEIGHT),
         ),
+        KlondikeTarget::Solve => (
+            InputOperation::Click(PixelPoint::new(624, 199)),
+            SOLVE_BOUNDS,
+        ),
         KlondikeTarget::Waste { offset } if offset <= 2 => {
             let x = 558 + WASTE_FAN_STEP * u32::from(offset);
             (
@@ -433,13 +533,14 @@ pub fn canonical_action(target: KlondikeTarget) -> Option<GuidedAction> {
         }
         KlondikeTarget::Tableau { column, top, bottom }
             if (1..=7).contains(&column) && top >= 332
-                && u32::from(bottom) <= TABLEAU_BOTTOM
+                && u32::from(bottom) <= TABLEAU_OUTLINE_BOTTOM
+                && u32::from(top) + 40 < TOOLBAR_TOP
                 && bottom.checked_sub(top).is_some_and(|height| (180..=600).contains(&height)) =>
         {
             let x = FIRST_COLUMN_X + COLUMN_PITCH * u32::from(column - 1);
             (
                 InputOperation::Click(PixelPoint::new((x + CARD_WIDTH / 2) as i32, i32::from(top) + 40)),
-                PixelRect::new(x, u32::from(top), CARD_WIDTH, u32::from(bottom - top)),
+                PixelRect::new(x, u32::from(top), CARD_WIDTH, u32::from(bottom).min(TOOLBAR_TOP) - u32::from(top)),
             )
         }
         KlondikeTarget::Foundation { column } if (1..=4).contains(&column) => {
@@ -473,12 +574,12 @@ pub fn canonical_action(target: KlondikeTarget) -> Option<GuidedAction> {
 }
 
 
-/// Select DRAW, RIGHT, the lowest tableau source, then SUIT, from one frame.
+/// Select DRAW, Solve/RIGHT, the lowest tableau source, then SUIT, from one frame.
 /// Source run grouping never treats each outlined card as a separate action.
 pub fn analyse(frame: &CapturedFrame) -> Result<FrameAnalysis, HaloDetectionError> {
 
 
-    let target = if is_gameplay_scene(frame)? && has_solver_banner(frame) {
+    let target = if is_gameplay_scene(frame)? {
         select_target(frame)?
     } else {
         None
@@ -493,9 +594,10 @@ pub fn analyse(frame: &CapturedFrame) -> Result<FrameAnalysis, HaloDetectionErro
 /// Apply the approved priority without granting authority on an unclassified stock.
 fn select_target(frame: &CapturedFrame) -> Result<Option<KlondikeTarget>, HaloDetectionError> {
     let upper_scan = |x| PixelRect::new(x, 100, CARD_WIDTH, 204);
+    let solver_active = has_solver_banner(frame);
 
 
-    if find_solid_outline(frame, upper_scan(390), false)?.is_some() {
+    if solver_active && find_solid_outline(frame, upper_scan(390), false)?.is_some() {
         let inside = PixelRect::new(406, 130, 100, 139);
 
 
@@ -514,6 +616,16 @@ fn select_target(frame: &CapturedFrame) -> Result<Option<KlondikeTarget>, HaloDe
     }
 
 
+    if has_solve_control(frame) {
+        return Ok(Some(KlondikeTarget::Solve));
+    }
+
+
+    if !solver_active {
+        return Ok(None);
+    }
+
+
     for offset in (0..=2_u8).rev() {
 
 
@@ -527,7 +639,7 @@ fn select_target(frame: &CapturedFrame) -> Result<Option<KlondikeTarget>, HaloDe
 
     for column in 1..=7_u8 {
         let x = FIRST_COLUMN_X + COLUMN_PITCH * u32::from(column - 1);
-        let scan = PixelRect::new(x, 332, CARD_WIDTH, TABLEAU_BOTTOM - 332);
+        let scan = PixelRect::new(x, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332);
 
 
         if let Some(bounds) = find_solid_card_source(frame, scan)? {
@@ -622,66 +734,214 @@ fn content_changes(
 }
 
 
+/// Black or red printed detail; this does not identify a card rank or suit.
+fn is_card_ink([red, green, blue]: [u8; 3]) -> bool {
+    (red <= 180 && green <= 180 && blue <= 180)
+        || (red >= 140 && green <= 130 && blue <= 130)
+}
+
+
+/// Evidence that a RIGHT card was replaced by another card at the same fan slot.
+/// Opposed corner probes include detail lost by the ordinary 16-pixel inset.
+/// Both sides must retain white paper before and after; guide dimming fails.
+/// Excluding the commanded cursor area and requiring both corners rejects a
+/// pointer-only change. The separate destination change is still mandatory.
+fn waste_identity_changes(
+    before: &CapturedFrame,
+    after: &CapturedFrame,
+    source: PixelRect,
+    action: GuidedAction,
+) -> [usize; 2] {
+    let patches = [
+        PixelRect::new(source.x + 5, UPPER_Y + 5, 28, 44),
+        PixelRect::new(source.x + 99, UPPER_Y + 126, 28, 44),
+    ];
+
+
+    let InputOperation::Click(point) = action.operation() else { return [0, 0]; };
+
+    patches.map(|bounds| {
+
+
+        if !fraction_at_least(before, bounds, is_white, 500)
+            || !fraction_at_least(after, bounds, is_white, 500)
+        {
+            return 0;
+        }
+
+        let mut changed = 0;
+
+
+        for y in bounds.y..bounds.y + bounds.height {
+
+
+            for x in bounds.x..bounds.x + bounds.width {
+
+
+                if (i64::from(x) - i64::from(point.x)).abs() < 48
+                    && (i64::from(y) - i64::from(point.y)).abs() < 48
+                {
+                    continue;
+                }
+
+
+                let Some(first) = pixel_rgb(before, x, y) else { continue; };
+
+
+                let Some(second) = pixel_rgb(after, x, y) else { continue; };
+
+
+                if ((is_white(first) && is_card_ink(second))
+                    || (is_card_ink(first) && is_white(second)))
+                    && first.into_iter().zip(second).any(|(a, b)| a.abs_diff(b) >= 48)
+                {
+                    changed += 1;
+                }
+            }
+        }
+
+        changed
+    })
+}
+
+
+/// Measured effect evidence, including rejected counts for private session logs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct EffectEvidence {
+    /// True only when all target-specific source/destination conditions pass.
+    pub verified: bool,
+    /// Interior source pixels changing materially outside gold and cursor masks.
+    pub source_changed: usize,
+    /// Source pixels positively revealing white paper or green felt.
+    pub source_positive: usize,
+    /// Total paper/ink changes in the two retained-white RIGHT corner patches.
+    pub source_identity_changed: usize,
+    /// Per-corner paper/ink counts; both must pass the independent corner bound.
+    pub source_identity_corners: [usize; 2],
+    /// Largest eligible destination interior change; waste count for stock input.
+    pub destination_changed: usize,
+    /// Explicit acceptance/refusal reason; unknown scenes never imply completion.
+    pub reason: &'static str,
+}
+
+
+impl fmt::Display for EffectEvidence {
+
+
+    /// Keep all authority-bearing measurements on one readable log line.
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "verified={}; source changed={}, positive={} (required {}), RIGHT corner ink/paper={:?} (each required {}), destination changed={} (required {}); {}",
+            self.verified, self.source_changed, self.source_positive,
+            MINIMUM_CONTENT_CHANGE, self.source_identity_corners,
+            MINIMUM_CORNER_CHANGE, self.destination_changed, MINIMUM_CONTENT_CHANGE,
+            self.reason,
+        )
+    }
+}
+
+
 /// Verify positive source and destination changes without copying another game's
 /// repeated-HALO exception. Draw needs changed waste content; recycle needs the
-/// stock back to reappear and the waste to empty. Unknown end screens fail closed.
-pub fn verify_effect(
+/// stock back to reappear and the waste to empty. RIGHT can also show a changed
+/// printed identity in two white-paper corners. Solve results require review.
+pub fn inspect_effect(
     before: &CapturedFrame,
     after: &CapturedFrame,
     action: GuidedAction,
-) -> Result<bool, HaloDetectionError> {
+) -> Result<EffectEvidence, HaloDetectionError> {
     validate_frame(before)?;
     validate_frame(after)?;
+    let mut evidence = EffectEvidence {
+        verified: false,
+        source_changed: 0,
+        source_positive: 0,
+        source_identity_changed: 0,
+        source_identity_corners: [0, 0],
+        destination_changed: 0,
+        reason: "target is not a Klondike action",
+    };
 
 
-    let ActionTarget::Klondike(target) = action.target else { return Ok(false); };
+    let ActionTarget::Klondike(target) = action.target else { return Ok(evidence); };
 
 
     if canonical_action(target) != Some(action)
         || analyse(before)?.prediction != PredictedAction::Action(action)
-        || !is_gameplay_scene(after)?
     {
-        return Ok(false);
+        evidence.reason = "before frame does not reproduce the canonical action";
+        return Ok(evidence);
+    }
+
+
+    if matches!(target, KlondikeTarget::Solve) {
+        evidence.reason = "Solve result requires review; no completion detector is established";
+        return Ok(evidence);
+    }
+
+
+    if !is_gameplay_scene(after)? {
+        evidence.reason = "result scene does not match the calibrated gameplay layout";
+        return Ok(evidence);
     }
 
 
     if matches!(target, KlondikeTarget::Draw) {
-        return Ok(content_changes(before, after, WASTE_BOUNDS, action, false) >= MINIMUM_CONTENT_CHANGE);
+        evidence.destination_changed = content_changes(before, after, WASTE_BOUNDS, action, false);
+        evidence.verified = evidence.destination_changed >= MINIMUM_CONTENT_CHANGE;
+        evidence.reason = "Draw requires material waste-content change";
+        return Ok(evidence);
     }
 
 
     if matches!(target, KlondikeTarget::Recycle) {
         let stock_inside = PixelRect::new(406, 130, 100, 139);
         let waste_inside = PixelRect::new(574, 130, 156, 139);
-        return Ok(
-            fraction_at_least(before, stock_inside, is_felt, 900)
-                && fraction_at_least(after, stock_inside, is_back, 500)
-                && fraction_at_least(after, waste_inside, is_felt, 950)
-                && content_changes(before, after, WASTE_BOUNDS, action, false) >= MINIMUM_CONTENT_CHANGE,
-        );
+        evidence.destination_changed = content_changes(before, after, WASTE_BOUNDS, action, false);
+        evidence.verified = fraction_at_least(before, stock_inside, is_felt, 900)
+            && fraction_at_least(after, stock_inside, is_back, 500)
+            && fraction_at_least(after, waste_inside, is_felt, 950)
+            && evidence.destination_changed >= MINIMUM_CONTENT_CHANGE;
+        evidence.reason = "Recycle requires blue stock, empty waste and material waste change";
+        return Ok(evidence);
     }
 
     let source = action.effect_bounds();
+    evidence.source_changed = content_changes(before, after, source, action, false);
+    evidence.source_positive = content_changes(before, after, source, action, true);
 
 
-    if content_changes(before, after, source, action, true) < MINIMUM_CONTENT_CHANGE {
-        return Ok(false);
+    if matches!(target, KlondikeTarget::Waste { .. }) {
+        evidence.source_identity_corners = waste_identity_changes(before, after, source, action);
+        evidence.source_identity_changed = evidence.source_identity_corners.into_iter().sum();
     }
 
     let tableau = (0..7).map(|column| {
-        PixelRect::new(FIRST_COLUMN_X + COLUMN_PITCH * column, TABLEAU_Y, CARD_WIDTH, TABLEAU_BOTTOM - TABLEAU_Y)
+        PixelRect::new(FIRST_COLUMN_X + COLUMN_PITCH * column, TABLEAU_Y, CARD_WIDTH, TABLEAU_EFFECT_BOTTOM - TABLEAU_Y)
     });
     let foundations = (0..4).map(|column| {
         PixelRect::new(894 + COLUMN_PITCH * column, UPPER_Y, CARD_WIDTH, CARD_HEIGHT)
     });
-    let destination_changed = tableau.chain(foundations).any(|bounds| {
+    evidence.destination_changed = tableau.chain(foundations).map(|bounds| {
         let same_source_column = bounds.x == source.x
             && ((bounds.y >= TABLEAU_Y && source.y >= 332) || bounds.y == source.y);
-        !same_source_column
-            && content_changes(before, after, bounds, action, false) >= MINIMUM_CONTENT_CHANGE
-    });
 
-    Ok(destination_changed)
+
+        if same_source_column { 0 } else { content_changes(before, after, bounds, action, false) }
+    }).max().unwrap_or(0);
+    let source_verified = evidence.source_positive >= MINIMUM_CONTENT_CHANGE
+        || evidence.source_identity_corners.into_iter().all(|count| count >= MINIMUM_CORNER_CHANGE);
+    evidence.verified = source_verified && evidence.destination_changed >= MINIMUM_CONTENT_CHANGE;
+
+
+    evidence.reason = match (source_verified, evidence.destination_changed >= MINIMUM_CONTENT_CHANGE) {
+        (false, _) => "source removal/replacement not established; fresh HALO is insufficient",
+        (true, false) => "source changed, but no independent destination change was established",
+        (true, true) => "independent source and destination changes established",
+    };
+
+    Ok(evidence)
 }
 
 
@@ -691,6 +951,16 @@ mod tests {
 
     use super::*;
     use crate::capture::decode_png;
+
+
+    /// Retain concise boolean assertions while production logs structured evidence.
+    fn verify_effect(
+        before: &CapturedFrame,
+        after: &CapturedFrame,
+        action: GuidedAction,
+    ) -> Result<bool, HaloDetectionError> {
+        inspect_effect(before, after, action).map(|evidence| evidence.verified)
+    }
 
 
     /// Read a sparse fixture whose retained pixels are exact original screenshot bytes.
@@ -765,7 +1035,234 @@ mod tests {
     }
 
 
-    /// All twelve captures retain the evidenced board; K01 has no action while Solver is off.
+    /// Arrange genuine card pixels into an explicitly synthetic RIGHT transfer.
+    /// K14 supplies 2-diamonds/2-clubs; K15 supplies A-spades/J-clubs. Neither
+    /// screenshot has the preceding live frame, so this is a controlled repro.
+    fn synthetic_right_replacement(number: u8, foundation_x: u32) -> (CapturedFrame, CapturedFrame) {
+        let observed = fixture(number);
+        let mut before = active_without_highlight();
+        add_upper_source(&mut before, 614);
+        copy_region(
+            &observed, &mut before,
+            PixelRect::new(foundation_x, UPPER_Y, CARD_WIDTH, CARD_HEIGHT),
+            PixelPoint::new(614, UPPER_Y as i32),
+        );
+        let mut after = before.clone();
+        copy_region(
+            &observed, &mut after,
+            PixelRect::new(614, UPPER_Y, CARD_WIDTH, CARD_HEIGHT),
+            PixelPoint::new(614, UPPER_Y as i32),
+        );
+        copy_region(
+            &observed, &mut after,
+            PixelRect::new(foundation_x, UPPER_Y, CARD_WIDTH, CARD_HEIGHT),
+            PixelPoint::new(foundation_x as i32, UPPER_Y as i32),
+        );
+        (before, after)
+    }
+
+
+    /// Card-to-card replacement can have few newly white pixels outside the
+    /// cursor mask. Printed detail in both corners supplies independent proof.
+    #[test]
+    fn right_replacements_use_two_white_paper_corners_and_a_destination() {
+
+
+        for (number, foundation_x) in [(14, 894), (15, 1_398)] {
+            let (before, after) = synthetic_right_replacement(number, foundation_x);
+            let planned = action(&before);
+            assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Waste { offset: 2 }));
+            let evidence = inspect_effect(&before, &after, planned).unwrap();
+            assert!(evidence.source_positive < MINIMUM_CONTENT_CHANGE, "old source gate should reject: {evidence}");
+            assert!(evidence.source_identity_corners.into_iter().all(|count| count >= MINIMUM_CORNER_CHANGE), "{evidence}");
+            assert!(evidence.destination_changed >= MINIMUM_CONTENT_CHANGE, "{evidence}");
+            assert!(evidence.verified, "{evidence}");
+
+            let mut source_only = after;
+            copy_region(
+                &before, &mut source_only,
+                PixelRect::new(foundation_x, UPPER_Y, CARD_WIDTH, CARD_HEIGHT),
+                PixelPoint::new(foundation_x as i32, UPPER_Y as i32),
+            );
+            let incomplete = inspect_effect(&before, &source_only, planned).unwrap();
+            assert!(!incomplete.verified, "{incomplete}");
+            assert_eq!(incomplete.destination_changed, 0);
+        }
+    }
+
+
+    /// Centre/corner pointer changes, one changed corner and dark guide changes
+    /// never become proof, even when the destination independently changes.
+    #[test]
+    fn right_corner_proof_rejects_cursor_single_corner_and_dark_guides() {
+        let (before, completed) = synthetic_right_replacement(14, 894);
+        let planned = action(&before);
+        let mut destination_only = before.clone();
+        copy_region(&completed, &mut destination_only, PixelRect::new(894, UPPER_Y, CARD_WIDTH, CARD_HEIGHT), PixelPoint::new(894, UPPER_Y as i32));
+        assert!(!verify_effect(&before, &destination_only, planned).unwrap());
+
+
+        for patch in [
+            PixelRect::new(660, 179, 40, 40),
+            PixelRect::new(619, 117, 24, 40),
+            PixelRect::new(713, 238, 24, 40),
+        ] {
+            let mut cursor = destination_only.clone();
+            paint(&mut cursor, patch, [0, 0, 0]);
+            assert!(!verify_effect(&before, &cursor, planned).unwrap());
+        }
+
+        let mut one_corner = destination_only.clone();
+        copy_region(&completed, &mut one_corner, PixelRect::new(619, 117, 28, 44), PixelPoint::new(619, 117));
+        assert!(!verify_effect(&before, &one_corner, planned).unwrap());
+
+        let mut dark_guide = destination_only;
+        paint(&mut dark_guide, PixelRect::new(614, UPPER_Y, CARD_WIDTH, CARD_HEIGHT), [0, 0, 0]);
+        let report = inspect_effect(&before, &dark_guide, planned).unwrap();
+        assert_eq!(report.source_identity_corners, [0, 0]);
+        assert!(!report.verified);
+    }
+
+
+    /// Solve is a separately evidenced control; the toolbar Solver is not one.
+    /// Shape/glyph corruption, a changed stock or an overlay withdraw authority.
+    #[test]
+    fn solve_control_requires_its_measured_artwork_empty_stock_and_scene() {
+        let frame = fixture(13);
+        let planned = action(&frame);
+        assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Solve));
+        assert_eq!(planned.operation(), InputOperation::Click(PixelPoint::new(624, 199)));
+        assert!(!inspect_effect(&frame, &frame, planned).unwrap().verified);
+        let mut solver_off = frame.clone();
+        paint(&mut solver_off, PixelRect::new(824, 34, 272, 58), [0, 0, 0]);
+        assert_eq!(action(&solver_off), planned);
+
+
+        for corruption in [
+            PixelRect::new(590, 212, 70, 24),
+            PixelRect::new(598, 160, 58, 42),
+            PixelRect::new(562, 143, 10, 113),
+        ] {
+            let mut damaged = frame.clone();
+            paint(&mut damaged, corruption, [12, 62, 40]);
+            assert_ne!(analyse(&damaged).unwrap().prediction, PredictedAction::Action(planned));
+        }
+
+        let mut occupied = frame.clone();
+        copy_region(&fixture(1), &mut occupied, PixelRect::new(390, UPPER_Y, CARD_WIDTH, CARD_HEIGHT), PixelPoint::new(390, UPPER_Y as i32));
+        assert_ne!(analyse(&occupied).unwrap().prediction, PredictedAction::Action(planned));
+        let mut overlay = frame.clone();
+        paint(&mut overlay, PixelRect::new(820, 600, 400, 200), [20, 20, 20]);
+        assert_eq!(analyse(&overlay).unwrap().prediction, PredictedAction::NoHighlight);
+
+        let mut draw = frame;
+        copy_region(&fixture(3), &mut draw, PixelRect::new(378, 100, 164, 204), PixelPoint::new(378, 100));
+        assert_eq!(action(&draw).target, ActionTarget::Klondike(KlondikeTarget::Draw));
+    }
+
+
+    /// K19's eight-card source extends under the translucent toolbar. Its whole
+    /// connected run is one target and its click remains on the unobscured King.
+    #[test]
+    fn long_source_below_toolbar_remains_one_safe_upper_click() {
+        let frame = fixture(19);
+        let planned = action(&frame);
+        assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
+            column: 6, top: 390, bottom: 953,
+        }));
+        assert_eq!(planned.operation(), InputOperation::Click(PixelPoint::new(1_296, 430)));
+        assert_eq!(planned.effect_bounds(), PixelRect::new(1_230, 390, CARD_WIDTH, 557));
+        assert!(planned.effect_bounds().y + planned.effect_bounds().height <= TOOLBAR_TOP);
+        assert_eq!(find_solid_card_source(
+            &frame, PixelRect::new(1_230, 332, CARD_WIDTH, 936 - 332),
+        ).unwrap(), None, "an internal crossbar must not close a truncated scan");
+        assert!(canonical_action(KlondikeTarget::Tableau {
+            column: 6, top: 390, bottom: TABLEAU_OUTLINE_BOTTOM as u16 + 1,
+        }).is_none());
+        assert!(canonical_action(KlondikeTarget::Tableau {
+            column: 6, top: 350, bottom: 953,
+        }).is_none(), "unobserved runs exceeding the existing 600-pixel bound stay unsupported");
+    }
+
+
+    /// A scan ending on an internal crossbar still clips the exterior rails.
+    /// K19 has at least one rail on every row390..958 and neither from959;
+    /// require observed termination even when a crossbar is near the scan end.
+    #[test]
+    fn internal_crossbars_near_scan_end_cannot_close_clipped_rails() {
+        let frame = fixture(19);
+
+
+        for bottom in 570..=959 {
+            assert_eq!(find_solid_card_source(
+                &frame, PixelRect::new(1_230, 332, CARD_WIDTH, bottom - 332),
+            ).unwrap(), None, "truncated scan ending at row{bottom}");
+        }
+
+
+        for bottom in 960..=TABLEAU_OUTLINE_BOTTOM {
+            assert_eq!(find_solid_card_source(
+                &frame, PixelRect::new(1_230, 332, CARD_WIDTH, bottom - 332),
+            ).unwrap(), Some(PixelRect::new(1_230, 390, CARD_WIDTH, 563)),
+                "closed source with visible rail termination at row{bottom}");
+        }
+    }
+
+
+    /// Clipping either end, removing a closing edge or breaking a rail cannot
+    /// turn an internal card crossbar into the complete eight-card source.
+    #[test]
+    fn long_source_requires_both_closed_ends_and_connected_rails() {
+        let frame = fixture(19);
+
+
+        for corruption in [
+            PixelRect::new(1_218, 940, 156, 23),
+            PixelRect::new(1_218, 380, 156, 31),
+            PixelRect::new(1_296, TOOLBAR_TOP, 1, TABLEAU_OUTLINE_BOTTOM - TOOLBAR_TOP),
+            PixelRect::new(1_218, 620, 12, 24),
+        ] {
+            let mut damaged = frame.clone();
+            paint(&mut damaged, corruption, [12, 82, 45]);
+            assert_eq!(analyse(&damaged).unwrap().prediction, PredictedAction::NoHighlight, "{corruption:?}");
+        }
+
+        let mut toolbar_only = frame;
+        paint(&mut toolbar_only, PixelRect::new(1_218, 380, 156, TOOLBAR_TOP - 380), [12, 82, 45]);
+        assert_eq!(analyse(&toolbar_only).unwrap().prediction, PredictedAction::NoHighlight);
+    }
+
+
+    /// The overlap strip supplies outline recognition only. Changes to the
+    /// toolbar cannot prove either side of a move, including this long source.
+    #[test]
+    fn toolbar_changes_do_not_prove_long_source_or_destination_effects() {
+        let before = fixture(19);
+        let planned = action(&before);
+        let mut after = before.clone();
+        paint(&mut after, PixelRect::new(378, TOOLBAR_TOP, 1_162, 1_033 - TOOLBAR_TOP), [255, 255, 255]);
+        let evidence = inspect_effect(&before, &after, planned).unwrap();
+        assert!(!evidence.verified, "{evidence}");
+        assert_eq!(evidence.source_changed, 0);
+        assert_eq!(evidence.source_positive, 0);
+        assert_eq!(evidence.destination_changed, 0);
+    }
+
+
+    /// Charlie's replay returns to the identical retained board/toolbar pixels.
+    /// It verifies the preceding Draw, not a successful RIGHT-card transfer.
+    #[test]
+    fn replay_reproduces_right_target_without_proving_its_transfer() {
+        let stopped = fixture(16);
+        let replayed = fixture(18);
+        assert_eq!(stopped.pixels, replayed.pixels);
+        let planned = action(&replayed);
+        assert_eq!(planned.operation(), InputOperation::Click(PixelPoint::new(652, 199)));
+        assert!(!inspect_effect(&stopped, &replayed, planned).unwrap().verified);
+    }
+
+
+    /// All nineteen captures retain the board; K01 has no action while Solver is off.
     #[test]
     fn all_original_pixel_fixtures_match_expected_targets() {
         let expected = [
@@ -781,6 +1278,13 @@ mod tests {
             Some(KlondikeTarget::Tableau { column: 5, top: 372, bottom: 671 }),
             Some(KlondikeTarget::Draw),
             Some(KlondikeTarget::Recycle),
+            Some(KlondikeTarget::Solve),
+            Some(KlondikeTarget::Draw),
+            Some(KlondikeTarget::Recycle),
+            Some(KlondikeTarget::Waste { offset: 1 }),
+            Some(KlondikeTarget::Draw),
+            Some(KlondikeTarget::Waste { offset: 1 }),
+            Some(KlondikeTarget::Tableau { column: 6, top: 390, bottom: 953 }),
         ];
 
 
@@ -798,10 +1302,10 @@ mod tests {
 
     /// Each actual before/after pair proves an effect; intermediate timestamps are not paired.
     #[test]
-    fn all_five_recorded_action_pairs_have_independent_effects() {
+    fn all_six_recorded_action_pairs_have_independent_effects() {
 
 
-        for (before_number, after_number) in [(2, 3), (4, 5), (6, 7), (8, 9), (10, 11)] {
+        for (before_number, after_number) in [(2, 3), (4, 5), (6, 7), (8, 9), (10, 11), (17, 18)] {
             let before = fixture(before_number);
             let after = fixture(after_number);
             assert!(verify_effect(&before, &after, action(&before)).unwrap(), "K{before_number:02}->K{after_number:02}");

@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.2.2 — 2026-09-30 (candidate 2; Beast verification pending)
+
+- Correct tall Klondike source bounds where a run overlaps the dimmed toolbar.
+  Reject internal card edges while connected side rails continue below them.
+- Keep the source click and effect evidence above toolbar controls.
+- Add original-pixel regressions for the reconstructed Draw pair, the unchanged
+  RIGHT failure scene and the tall highlighted run.
+- Log existing pointer/hold/settle intervals and measured input/capture times
+  to support diagnosis of intermittent no-op inputs without changing timings.
+- Support guarded installation over the exact uncommitted candidate 1 contents,
+  with backups and rollback to the actual pre-install state.
+
+
+## 1.2.2 — 2026-09-30 (candidate 1; Beast verification pending)
+
+- Restore Klondike Multi-Step `0 = continuous`, with bounded recovery per action,
+  STOP checks and checked operation counters.
+- Set the editable Klondike action-settle default to 750 ms; retain the independent
+  1000 ms recapture default and update control wording.
+- Correct a demonstrated RIGHT-pile effect-verification blind spot using two
+  opposite card-corner comparisons plus independent destination evidence.
+- Add source/destination proof diagnostics for unresolved effects.
+- Recognise the separately evidenced Solve button; request auto-finish once,
+  capture its result and stop for review without claiming completion or restart.
+- Preserve Charlie's committed Rust minimum 1.101.0, nightly settings, source
+  spacing, existing-game policies and original PNG saving contract.
+
+
 ## 1.2.1 — 2026-09-30 (candidate 1; Beast verification pending)
 
 - Add the Solver-driven Klondike Draw 1 profile, dynamic source-block detection,

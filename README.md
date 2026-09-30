@@ -5,15 +5,15 @@ QMP Unix socket. The current guest is Windows 11 running Microsoft Solitaire &
 Casual Games. TriPeaks, Pyramid and Klondike use fresh visual evidence and shared
 QMP/capture facilities, with independent target and effect policies.
 
-This is **v1.2.1, candidate 1**, based on committed v1.2.0 at
-`db506d11b46ce7180cd3be7fe05a66cfa056999e`. `Cargo.toml` supplies the package
+This is **v1.2.2, candidate 2**, based on committed v1.2.1 at
+`1cc57c21e696759b5d61bbcee24b96a733e9c430`. `Cargo.toml` supplies the package
 version shown in the window title and Parameters. Beast gameplay acceptance
 is required before promotion.
 
 ## Build and source spacing
 
 `rust-toolchain.toml` selects floating `nightly`, with Clippy and Rustfmt
-components. `Cargo.toml` declares edition 2024 and minimum Rust `1.100.0`.
+components. `Cargo.toml` declares edition 2024 and minimum Rust `1.101.0`.
 The channel name is not a dated compiler pin. Record the actual compiler and
 Cargo versions used; stable compatibility has not been established here.
 
@@ -36,18 +36,25 @@ blank lines and checks that Rust tokens and comments are unchanged.
 ## Klondike Draw 1
 
 Select **Klondike**, activate the guest Solver and capture a fresh frame.
-Selection priority is **DRAW → RIGHT → tableau bottom upwards → SUIT piles**.
+Selection priority is **DRAW/RECYCLE → Solve or RIGHT → tableau bottom upwards → SUIT piles**.
 An ordinary stock draw sends the confirmed `d` shortcut; exhausted-stock recycle
 clicks its recognised highlighted area. RIGHT detection follows the up-to-three
 card fan. A solid highlighted source block receives one click, including a whole
 run or a source from a SUIT pile. The dark dashed destination is never clicked.
 Newly exposed tableau cards reveal automatically.
 
+Tall source runs can overlap the upper part of the guest toolbar. Klondike
+recognises the measured dimmed closing edge and rejects internal card edges
+while the side rails continue below them. The source click stays above the
+toolbar; toolbar pixels cannot supply move-verification evidence.
+
 **Params** provides independent Klondike action-settle and recapture intervals,
-initially **2000 ms** and **1000 ms**, editable from 0 to 5000 ms. They are
+initially **750 ms** and **1000 ms**, editable from 0 to 5000 ms. They are
 user-approved starting settings, not measured animation timings. Single Step
 sends at most one gameplay operation; Multi-Step defaults to **10**, with a
-finite range of **1–10000**. Timing edits apply to the next run.
+positive range of **1–10000**, plus **0 = continuous until STOP or a guarded
+stop condition**. Recovery remains bounded for each action in continuous mode.
+Timing edits apply to the next run.
 
 The worker validates the initial preview against a fresh frame, sends one
 operation, settles, observes and verifies its effect. The accepted result is
@@ -59,10 +66,21 @@ recapture delay. An initial no-HALO preview permits recovery only: the recovered
 preview is displayed and another explicit Step request is required for gameplay.
 Recovery does not repeat an uncertain gameplay operation.
 
-Completion, autocomplete and restart are unsupported in this candidate.
+The separate **Solve** button can replace RIGHT when the guest offers automatic
+finishing. Its measured button appearance authorises one click, followed by
+settling and a fresh capture. The run then stops for result review, including
+in continuous mode; it does not claim a verified win or send further input.
+The lower-toolbar **Solver** control remains the hint/recommendation control.
+
+Transfer verification requires source and destination changes. For RIGHT, a
+bounded comparison of both opposite card corners also recognises replacement
+faces with little changed central artwork. It compares pixels without decoding
+ranks or suits. Logs record the separate proof measurements on unresolved effects.
+
+Verified completion and restart are unsupported in this candidate.
 Unknown scenes and unresolved effects stop with the latest frame and logs;
 Klondike does not enter the existing three-board or post-game controller.
-See [Klondike candidate notes](docs/klondike-candidate-1.md) for evidence,
+See [Klondike correction notes](docs/klondike-v1.2.2-candidate-2.md) for evidence,
 verification boundaries and live checks.
 
 ## QMP connection
