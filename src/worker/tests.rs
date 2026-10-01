@@ -7,7 +7,8 @@ use super::post_game::{
     require_score_skip_click_budget, resolve_post_game_target, score_skip_retry_is_authorised,
 };
 use super::pyramid_execution::{
-    PyramidRedealConfirmation, pyramid_halo_continuation_phase, pyramid_solver_recovery_authorised,
+    PyramidRedealConfirmation, PyramidSolverRecoveryEvidence, pyramid_halo_continuation_phase,
+    pyramid_solver_recovery_authorised,
 };
 use super::*;
 use crate::parameters::{
@@ -169,96 +170,31 @@ fn pyramid_redeal_requires_consecutive_positive_cards_and_progress() {
 /// Check every guard needed before a single new-board Solver recovery click.
 #[test]
 fn pyramid_solver_recovery_requires_a_verified_redeal_and_three_observations() {
-    assert!(pyramid_solver_recovery_authorised(
-        true,
-        Some(GameProgress::AnotherBoard),
-        true,
-        true,
-        false,
-        true,
-        3,
-        false
-    ));
-    assert!(!pyramid_solver_recovery_authorised(
-        false,
-        Some(GameProgress::AnotherBoard),
-        true,
-        true,
-        false,
-        true,
-        3,
-        false
-    ));
-    assert!(!pyramid_solver_recovery_authorised(
-        true,
-        Some(GameProgress::GameComplete),
-        true,
-        true,
-        false,
-        true,
-        3,
-        false
-    ));
-    assert!(!pyramid_solver_recovery_authorised(
-        true,
-        Some(GameProgress::AnotherBoard),
-        false,
-        true,
-        false,
-        true,
-        3,
-        false
-    ));
-    assert!(!pyramid_solver_recovery_authorised(
-        true,
-        Some(GameProgress::AnotherBoard),
-        true,
-        false,
-        false,
-        true,
-        3,
-        false
-    ));
-    assert!(!pyramid_solver_recovery_authorised(
-        true,
-        Some(GameProgress::AnotherBoard),
-        true,
-        true,
-        true,
-        true,
-        3,
-        false
-    ));
-    assert!(!pyramid_solver_recovery_authorised(
-        true,
-        Some(GameProgress::AnotherBoard),
-        true,
-        true,
-        false,
-        false,
-        3,
-        false
-    ));
-    assert!(!pyramid_solver_recovery_authorised(
-        true,
-        Some(GameProgress::AnotherBoard),
-        true,
-        true,
-        false,
-        true,
-        2,
-        false
-    ));
-    assert!(!pyramid_solver_recovery_authorised(
-        true,
-        Some(GameProgress::AnotherBoard),
-        true,
-        true,
-        false,
-        true,
-        3,
-        true
-    ));
+    let accepted = PyramidSolverRecoveryEvidence {
+        verified_redeal: true,
+        progress: Some(GameProgress::AnotherBoard),
+        gameplay_scene: true,
+        effect_verified: true,
+        board_empty: false,
+        cards_visible: true,
+        observation_round: 3,
+        solver_already_sent: false,
+    };
+    assert!(pyramid_solver_recovery_authorised(accepted));
+
+
+    for rejected in [
+        PyramidSolverRecoveryEvidence { verified_redeal: false, ..accepted },
+        PyramidSolverRecoveryEvidence { progress: Some(GameProgress::GameComplete), ..accepted },
+        PyramidSolverRecoveryEvidence { gameplay_scene: false, ..accepted },
+        PyramidSolverRecoveryEvidence { effect_verified: false, ..accepted },
+        PyramidSolverRecoveryEvidence { board_empty: true, ..accepted },
+        PyramidSolverRecoveryEvidence { cards_visible: false, ..accepted },
+        PyramidSolverRecoveryEvidence { observation_round: 2, ..accepted },
+        PyramidSolverRecoveryEvidence { solver_already_sent: true, ..accepted },
+    ] {
+        assert!(!pyramid_solver_recovery_authorised(rejected));
+    }
 }
 
 

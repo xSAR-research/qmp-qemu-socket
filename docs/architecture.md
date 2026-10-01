@@ -9,6 +9,7 @@
 | `game.rs` | small game/profile boundary and typed actions |
 | `tripeaks.rs` | validated TriPeaks profile assembly |
 | `klondike.rs` | Klondike dynamic source blocks, stock/recycle, RIGHT fan, Solve control and effect evidence |
+| `klondike_terminal.rs` | Klondike completed-game scenes, terminal controls and fresh Draw 1 deal recognition |
 | `pyramid.rs` | Pyramid targets, fixed halo probes, priority and action-effect evidence |
 | `parameters.rs` | fixed geometry, colour values, delays, limits and release label |
 | `capture.rs` | decoded immutable frame representation |
@@ -22,7 +23,7 @@
 | `worker.rs` | worker commands/events, capture, guarded execution, timing and cancellation |
 | `worker/post_game.rs` | shared score, Level Up, New Game, Play and Solver progression |
 | `worker/pyramid_execution.rs` | Pyramid effect, fresh-pair continuation and redeal checks |
-| `worker/klondike_execution.rs` | Finite/continuous Klondike execution, bounded Solver recovery and one-shot Solve review; no shared terminal flow |
+| `worker/klondike_execution.rs` | Klondike execution, bounded recovery, independent completion and continuous terminal progression |
 | `worker/tests.rs` | worker regression cases, including transition and cancellation guards |
 
 ---
@@ -51,8 +52,9 @@ flowchart TD
 The initial UI prediction is advisory. The first input requires a fresh frame
 that reproduces it. Thereafter, the result frame has already been captured
 after settling and accepted through the selected game's result policy. An
-effect-verified state or Pyramid's strictly qualified repeated Left/Right HALO
-pair becomes the next action's planning frame. Fresh-HALO continuation is
+effect-verified state, Pyramid's strictly qualified repeated Left/Right HALO
+pair, or Klondike's source-supported fresh recommendation becomes the next
+action's planning frame. Fresh-HALO continuation is
 recorded separately and does not claim the previous effect was proven. The
 worker still checks STOP and
 freshly probes VM/pointer state before each input.
@@ -163,23 +165,73 @@ height increases the image area instead of stretching the log.
 
 Klondike uses an independent controller and no three-board progress probe.
 Its dynamic target identity includes the highlighted source geometry. It follows
-DRAW/RECYCLE, Solve or RIGHT, tableau bottom-up and SUIT priority, using a key for ordinary draw
+DRAW/RECYCLE, RIGHT HALO, RIGHT Solve, tableau bottom-up and SUIT priority, using a key for ordinary draw
 and a single source click for transfers/recycle. Solid-source validation rejects
 the dark dashed landing guide. Source blocks can change height after every move.
 The outline search includes the evidenced overlap with the toolbar. Interior
 crossbars cannot close a source while its exterior rails continue below.
 Input and material-effect bounds remain above the toolbar even when the visual
-source outline extends into it.
+source outline extends into it. The measured deeper run closes at rows988–990;
+the lower-edge check excludes only Undo All's observed x1308..1336,y988..991
+overlap, requiring all remaining edge pixels and the existing complete-outline
+guards. Face evidence is sampled above row 947.
+
+Tableau effect verification accepts white card paper changing to the measured
+green felt dimmed beneath a destination guide. That removal evidence is counted
+separately from bright replacement pixels and still requires material change at
+an independent destination. Neutral grey, opaque black and a fresh source HALO
+alone do not establish removal. Same-column automatic reveal also receives a
+bounded source-face replacement comparison, still requiring independent
+destination change. Upper SUIT returns use the corresponding fixed card-corner
+replacement proof or bidirectional printed-detail changes over stable bright
+paper, still with independent material source and destination bounds. A dimmed
+occupied foundation can prove a small red printed-content transition while its
+guide and surrounding neutral paper remain stable; this is an alternative to
+the unchanged ordinary destination threshold. These checks compare pixels without
+recognising card ranks or suits.
 
 Klondike supports finite gameplay limits and zero for continuous operation.
 Every unresolved action has a bounded recovery allowance. One recognised no-HALO context can request
 one Solver activation and an immediate capture, followed by bounded delayed
 observations. A recovery never proves the preceding gameplay effect. Unknown
-scenes, uncertain input and unresolved effects stop. The independently recognised
-Solve button in RIGHT's place permits one auto-finish request followed by fresh
-capture and a mandatory stop for review. No win or restart is inferred.
-An initial no-HALO approval is recovery-only and cannot initiate gameplay.
-See `klondike-v1.2.2-candidate-2.md` for current evidence and limitations.
+scenes and uncertain input stop. An unresolved ordinary card effect may continue
+only from an independently supported fresh recommendation: source-removal or
+replacement proof is required for a HALO target; a recognised next Solve control
+has its own authority. The route is disabled after Solver refresh and excludes
+Draw/recycle. Acknowledged actions consume finite budget slots, with strict
+verification and continuation counters kept separate. It does not infer previous
+effect or completion. Other unresolved results stop. The independently recognised
+Solve button in RIGHT's place permits one auto-finish request followed by its
+separate animation delay and bounded read-only completion observations. No Solve
+or uncertain gameplay input is retried. An initial changed preview returns a
+fresh approved prediction for review without guest input; an exact approved
+no-HALO match permits recovery only and cannot initiate gameplay.
+
+One Klondike board is one game. Two consecutive fresh frames must show either
+an intact active Solver banner with all 76 calibrated right-interior pixels gold
+and zero black, or positively recognised completed-game artwork. Overlay or
+ordinary background black absence is insufficient. Finite runs stop before
+terminal input. Continuous runs alone may advance through the mode-owned
+score-skip, Level Up OK, New Game, Draw 1 Play and fresh-board Solver sequence.
+Each recognised control is clicked once, settled and freshly observed; missing
+or unchanged stages receive bounded input-free recaptures. Unexpected recognised
+stages stop. Only a fresh actionable new Solver board publishes
+`KlondikeGameCompleted` and resumes gameplay. Shared three-board policies remain
+separate. See `klondike-v1.2.3-candidate-5.md` for evidence and limitations.
+
+A complete 180..190-pixel single-card outline with its normal lower proof corner
+crossing the toolbar can use a
+separate source proof with two full 28-by-44 visible patches. The normal upper
+corner stays at source-top+5; the lower-right patch is anchored at proof-bottom−44.
+Both stay above row 947 and require 50% white paper and at least 48 changes in each
+print direction. The route additionally requires 512 material source changes.
+It supplies source replacement for acknowledged, settled, supported fresh-HALO
+continuation only; it does not enter complete-effect verification. The ordinary
+clipped-corner refusal and existing complete-effect policy remain unchanged.
+Stack expansion is handled by the observed pixel transition; no rank or suit is
+decoded. In K39/K40 the generic destination count 1298 comes from the next HALO's
+shading; the actual receiving foundation changes only 318 pixels. Neither is
+promoted to complete-effect proof by this new route.
 
 ## State and bounds
 
@@ -197,8 +249,9 @@ See `klondike-v1.2.2-candidate-2.md` for current evidence and limitations.
 - The visible log is bounded; the complete private session log remains on
   disk.
 - TriPeaks/Pyramid Multi-Step defaults to continuous (`0`) and is STOP-cancellable.
-- Klondike Multi-Step defaults to 10; 1–10000 bounds actions and 0 runs continuously.
-- Klondike Solve always ends its run after one request and fresh result capture.
+- Klondike Multi-Step defaults to 0; 1–10000 bounds actions and 0 runs continuously.
+- Klondike Solve sends one request, then bounded read-only completion observations;
+  terminal progression requires continuous authority and independent win proof.
 - Transition retries and click attempts are bounded.
 - Advisory session counters never override visual transition evidence.
 - STOP and application exit detach locally; neither shuts down QEMU or Windows.

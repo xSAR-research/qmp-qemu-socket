@@ -196,7 +196,24 @@ This policy does not alter Pyramid or TriPeaks recovery rules.
 
 Klondike source detection consumes one immutable RGBA frame in priority order.
 It does not take a separate screenshot for each target class. Each accepted
-result is reused as the next planning frame. A separately recognised upper Solve
-button permits one auto-finish request, normal configurable settling and a fresh
-capture, then stops for result review. It never triggers Solver recovery or an
-input retry after that click. No verified-completion/restart sequence is enabled.
+result is reused as the next planning frame. Initial validation must reproduce
+the approved target before any gameplay or no-HALO Solver recovery input. A
+changed target publishes the fresh prediction for another explicit review and
+Step request, with zero guest input.
+
+A separately recognised upper Solve button permits one auto-finish request,
+its own editable animation delay and bounded read-only completion captures.
+It never triggers Solver recovery or an input retry after that click. One board
+is one Klondike game; two fresh positive observations independently establish
+completion. The active Solver banner requires every calibrated right-interior
+pixel gold and none black; completed-game artwork provides a separate positive
+proof. Background and overlays cannot satisfy completion through black absence.
+
+Only continuous authority permits the independently recognised Klondike
+score-skip → Level Up OK → New Game → Draw 1 Play → fresh-board Solver sequence.
+Each control receives a QMP health/tablet probe and STOP check, one input,
+existing calibrated hold/settle timings, then fresh observation. The Klondike
+Play button is higher than the shared three-board calibration and remains
+mode-specific. Missing or unchanged stages receive at most three delayed
+input-free observations; no uncertain or unchanged control is clicked again.
+Gameplay resumes only from the freshly recognised actionable next Solver board.

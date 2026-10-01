@@ -174,12 +174,10 @@ pub fn plan_step(before: PredictedAction) -> Result<StepPlan, StepValidationErro
             }
 
 
-            if let ActionTarget::Pyramid(kind) = action.target {
-
-
-                if crate::pyramid::action_for_kind(kind) != Some(action) {
-                    return Err(StepValidationError::InvalidPyramidAction);
-                }
+            if let ActionTarget::Pyramid(kind) = action.target
+                && crate::pyramid::action_for_kind(kind) != Some(action)
+            {
+                return Err(StepValidationError::InvalidPyramidAction);
             }
             PlannedInput(action)
         }

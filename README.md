@@ -5,8 +5,8 @@ QMP Unix socket. The current guest is Windows 11 running Microsoft Solitaire &
 Casual Games. TriPeaks, Pyramid and Klondike use fresh visual evidence and shared
 QMP/capture facilities, with independent target and effect policies.
 
-This is **v1.2.2, candidate 2**, based on committed v1.2.1 at
-`1cc57c21e696759b5d61bbcee24b96a733e9c430`. `Cargo.toml` supplies the package
+This is **v1.2.3, candidate 5**, based on committed v1.2.2 at
+`bcce7515979e2c4520b02f39e9c4d4d1bb019d7f`. `Cargo.toml` supplies the package
 version shown in the window title and Parameters. Beast gameplay acceptance
 is required before promotion.
 
@@ -36,7 +36,8 @@ blank lines and checks that Rust tokens and comments are unchanged.
 ## Klondike Draw 1
 
 Select **Klondike**, activate the guest Solver and capture a fresh frame.
-Selection priority is **DRAW/RECYCLE → Solve or RIGHT → tableau bottom upwards → SUIT piles**.
+Selection priority is **DRAW/RECYCLE → RIGHT HALO → RIGHT Solve → tableau bottom
+upwards → SUIT piles → completion evidence**.
 An ordinary stock draw sends the confirmed `d` shortcut; exhausted-stock recycle
 clicks its recognised highlighted area. RIGHT detection follows the up-to-three
 card fan. A solid highlighted source block receives one click, including a whole
@@ -46,42 +47,88 @@ Newly exposed tableau cards reveal automatically.
 Tall source runs can overlap the upper part of the guest toolbar. Klondike
 recognises the measured dimmed closing edge and rejects internal card edges
 while the side rails continue below them. The source click stays above the
-toolbar; toolbar pixels cannot supply move-verification evidence.
+toolbar; toolbar pixels cannot supply move-verification evidence. The newly
+measured nine-card run reaches row 990. Its closing edge is partly covered by
+Undo All: only the measured 28-by-3 overlap is excluded, with every remaining
+edge pixel, connected side rails, closed top and above-toolbar face still required.
 
-**Params** provides independent Klondike action-settle and recapture intervals,
-initially **750 ms** and **1000 ms**, editable from 0 to 5000 ms. They are
+**Params** provides independent Klondike card/draw/recycle, Solve-animation and
+recapture intervals, initially **750/750/1000 ms**, editable from 0 to 5000 ms. They are
 user-approved starting settings, not measured animation timings. Single Step
-sends at most one gameplay operation; Multi-Step defaults to **10**, with a
+sends at most one gameplay operation; Multi-Step defaults to **0**, with a
 positive range of **1–10000**, plus **0 = continuous until STOP or a guarded
 stop condition**. Recovery remains bounded for each action in continuous mode.
 Timing edits apply to the next run.
 
 The worker validates the initial preview against a fresh frame, sends one
-operation, settles, observes and verifies its effect. The accepted result is
+operation, settles and observes its result. An accepted result is
 reused for the next plan. A recognised Klondike scene with no eligible HALO may
 receive one Solver activation, followed immediately by capture with **no added
 post-click delay**. Normal pointer-settle/button-hold and QMP acknowledgements
 still apply. Further unresolved captures are bounded and use the editable
-recapture delay. An initial no-HALO preview permits recovery only: the recovered
+recapture delay. A changed initial target sends no input and publishes a fresh
+actionable preview for review; another explicit Step request validates it again.
+An approved no-HALO preview permits recovery only: the recovered
 preview is displayed and another explicit Step request is required for gameplay.
 Recovery does not repeat an uncertain gameplay operation.
 
 The separate **Solve** button can replace RIGHT when the guest offers automatic
-finishing. Its measured button appearance authorises one click, followed by
-settling and a fresh capture. The run then stops for result review, including
-in continuous mode; it does not claim a verified win or send further input.
+finishing. Its measured button appearance authorises one click, followed by its
+separate editable animation delay and bounded read-only completion observations.
+An unresolved result stops for review without retrying Solve or Solver.
 The lower-toolbar **Solver** control remains the hint/recommendation control.
 
-Transfer verification requires source and destination changes. For RIGHT, a
+Transfer verification requires source and destination changes. For RIGHT and
+SUIT returns, a
 bounded comparison of both opposite card corners also recognises replacement
 faces with little changed central artwork. It compares pixels without decoding
 ranks or suits. Logs record the separate proof measurements on unresolved effects.
 
-Verified completion and restart are unsupported in this candidate.
-Unknown scenes and unresolved effects stop with the latest frame and logs;
-Klondike does not enter the existing three-board or post-game controller.
-See [Klondike correction notes](docs/klondike-v1.2.2-candidate-2.md) for evidence,
+Tableau removal can leave green felt dimmed beneath the next dashed destination
+guide. A separate measured white-paper-to-dimmed-felt check recognises this
+effect while retaining independent destination evidence. Neutral card darkening,
+opaque black guides and a fresh HALO alone do not establish removal. A separate
+source-face comparison covers a transfer that automatically reveals a replacement
+card in the same column; it retains independent destination evidence and does not
+read ranks. Existing SUIT-return sources can also use guarded bright-paper
+replacement proof with independent material source and destination bounds.
+A separate foundation-recipient proof covers a small red printed-content
+change beneath an unchanged dark landing guide, retaining the source gate and
+stable surrounding paper. The generic 512-pixel destination gate is preserved for a verified effect.
+For a complete single-card source whose normal lower proof corner overlaps the toolbar,
+a separate visible-patch route uses two full 28-by-44 patches above the toolbar.
+Both patches retain white paper and require both printing/clearing directions.
+This route additionally requires 512 material source pixels. It supplies source
+replacement for the separately counted fresh-HALO continuation only; it cannot
+verify the complete move or supply receiver/completion evidence.
+The ordinary corner check still refuses clipped patches.
+
+Klondike also permits a separately counted continuation after an acknowledged
+card-source click and its configured settle: a supported fresh HALO may authorise
+the next action when the existing source-removal/replacement proof passes, even
+if the recipient change is too small to prove the previous effect. A repeated
+source is eligible under that same source proof; an unchanged card or HALO alone
+is insufficient. A freshly recognised Solve control may also become the next
+plan without proving the preceding card moved. Neither route retries the previous
+input, advances completion counters or applies after a Solver refresh. Draw and
+recycle keep their effect checks. Every acknowledged action consumes one finite
+budget slot; verified and continued operations are reported separately.
+
+**One Klondike board is one game.** A win requires two fresh positive observations:
+either an intact active Solver banner with every calibrated right-interior pixel
+gold and none black, or independently recognised completed-game artwork. No black
+on a green background or blue overlay is insufficient. Finite runs stop at the
+confirmed win. Only continuous Multi-Step **0** may then advance through the
+recognised score-skip, Level Up OK, New Game, Draw 1 Play and fresh-board Solver
+stages, one guarded click each, before resuming from a fresh actionable board.
+Unknown stages and unresolved effects stop with the latest frame and logs.
+Klondike owns these controls independently of the shared three-board controller.
+See [Klondike correction notes](docs/klondike-v1.2.3-candidate-5.md) for evidence,
 verification boundaries and live checks.
+
+FreeCell's supplied screenshots have completed evidence intake only. Its distinct
+geometry, automatic foundation transfers and terminal Play button are recorded
+in [FreeCell Gate 1](docs/freecell-gate-1.md); no FreeCell mode is enabled here.
 
 ## QMP connection
 
@@ -212,7 +259,8 @@ the PNG on disk retains the original 1920×1080 bytes.
 ## Post-game handling
 
 TriPeaks and Pyramid use the same visual progress probe and guarded post-game
-sequence. Klondike does not enter that controller. After a verified board completion, the Solver header progress probe
+sequence. Klondike uses its separate one-board policy described above. After a
+verified TriPeaks/Pyramid board completion, the Solver header progress probe
 selects redeal or game completion; the session board counter is advisory.
 Before the first score-skip click, fresh frames check whether an actionable
 new board or a terminal dialog has appeared. Two consecutive non-gameplay

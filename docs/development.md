@@ -1,6 +1,7 @@
-# Development conventions for v1.2.2 candidate 2
+# Development conventions for v1.2.3 candidate 5
 
-This candidate corrects the committed v1.2.1 Klondike controller.
+This candidate corrects unpushed v1.2.3 candidate 4 against the same committed
+v1.2.2 candidate 2 base.
 TriPeaks and Pyramid retain their established execution policies.
 Independent card-rank recognition, search and file-free capture are outside
 this candidate.
@@ -35,8 +36,11 @@ and effect policy. The worker owns the QMP connection and cancellation state.
 Its `post_game` submodule shares the existing terminal-screen sequence; its
 `pyramid_execution` submodule contains Pyramid-specific result observation.
 Its `klondike_execution` submodule owns finite or continuous Klondike runs with
-bounded per-action recovery. The separate Solve button is a one-shot request
-followed by result review, without entering the shared terminal controller.
+bounded per-action recovery and independently verified single-board completion.
+`klondike_terminal.rs` owns the evidenced terminal controls. The separate Solve
+button is clicked once before bounded completion observations; only continuous
+runs may restart through fresh recognised stages. The shared terminal controller
+retains the existing TriPeaks/Pyramid policy and coordinates.
 The UI delegates persistent log I/O to `session_log.rs`.
 
 When adding a mode, supply its profile/detection policy and preserve the shared
@@ -88,15 +92,69 @@ No formatter check is included, by Charlie's explicit instruction. Build/test
 results from another host do not prove Beast installation or live guest input.
 The candidate delivery notes record the checks actually executed.
 
-On the Beast, confirm the launched executable identifies candidate 2. Verify
+On the Beast, confirm the launched executable identifies v1.2.3, candidate 5. Verify
 Capture Frame, exact-byte manual Capture PNG, single-step, finite and continuous
 multi-step, STOP and mode/socket invalidation. Exercise Klondike Draw 1, source
 transfers, RIGHT fan positions, recycle, Solve and late/no-HALO recovery. Preserve first-failure
 frames and session logs. Recheck the accepted TriPeaks/Pyramid behaviour before
 Charlie commits and pushes the candidate.
 
-For candidate 2, verify the complete source bounds on the supplied tall run and
+For the inherited tall-run behaviour, verify the complete source bounds and
 its single click above the toolbar. The reconstructed Draw pair is not a
 successful RIGHT transfer pair. Replay success supports the existing input
 contract; an intermittent RIGHT no-op still needs live diagnosis. Logged pointer,
 hold, action-settle and measured I/O times are separate quantities.
+
+For v1.2.3, replay the three-spades foundation transfer and a last-card removal
+leaving a dashed guide over an empty column. The source-removal check must
+recognise dimmed green felt without accepting unchanged cards darkened by a
+new recommendation. Verify Single Step, continuous mode and STOP, preserving
+the first failure frame and full log. Card and recapture timings remain editable.
+
+Candidate 2 also covers a same-column replacement face after automatic reveal,
+the zero-input changed-preview endpoint, the default continuous limit and the
+five supplied terminal scenes. Verify the new separate Solve delay, finite-run
+stop before terminal input, and continuous score → Level Up → New Game → Play →
+Solver progression. Unknown or unchanged stages must stop after bounded read-only
+observations without another control click. All five input controls remain live
+Beast checks; fixture recognition is not a runtime input test.
+
+Remove compiler/Clippy diagnostics by preserving behaviour in the affected code.
+Use compile-time assertions for fixed configuration invariants, named evidence
+records for grouped recovery guards and boxed failure payloads for large error
+variants. Do not introduce warning suppression or run a formatter. The candidate
+review records actual compiler versions and warning counts.
+
+Candidate 3 adds the measured 3-hearts recipient transition under a persistent
+foundation guide and extends upper-card replacement evidence to SUIT returns,
+including stable-paper changes in both printed-detail directions.
+The generic material thresholds remain. Test the real RIGHT pair and adverse
+guide/paper/source/destination/mask cases. SUIT return tests are explicitly
+synthetic. Its named screenshot arrived after candidate 3 validation, but shows
+the source recommendation only; an actual before/result pair remains a Beast
+verification requirement. See `klondike-v1.2.3-candidate-3.md`.
+
+FreeCell is evidence intake only in `freecell-gate-1.md`. Its implementation follows
+Klondike acceptance/promotion and a new authorised cycle; do not introduce dormant
+mode code or claim Klondike calibration establishes FreeCell input behaviour.
+
+Candidate 4 separates source-supported fresh-HALO continuation from strict effect
+verification. Test finite budgets and reported counts, repeated-source replacement,
+unchanged/cursor-only refusals, independent Solve handoff, and prohibition after
+uncertain input or Solver refresh. The real black-pip RIGHT pair changes only 251
+recipient pixels; it continues without being called verified. Extend the tall-run
+case to the measured closing edge partly covered by Undo All. Require the remaining
+edge, paired rails, closed top and white face; test gaps outside the exact overlap,
+clipped borders and toolbar input/effect bounds. Preserve K19 recognition.
+See `klondike-v1.2.3-candidate-4.md` for provenance and live acceptance limits.
+
+Candidate 5 covers a bottom single-card transfer whose source stays mostly white
+as the remaining stack spreads. A normal lower corner crosses the toolbar, so the
+ordinary corner function keeps its refusal. A separate pair of full visible
+patches must retain both paper/ink directions, positive paper and material source.
+This new source proof supports fresh-HALO continuation only; a complete effect
+remains unverified. Test restoration of either patch, source-only replacement
+without complete verification, receiver-only changes, one-way shading/whitening, masks, insufficient material,
+run geometry and malformed frames. No toolbar pixels may supply effect proof.
+The controller, action budgets, timing defaults and completion policy are unchanged.
+See `klondike-v1.2.3-candidate-5.md` for native measurements and Beast checks.

@@ -236,6 +236,8 @@ pub enum AnimationClass {
     PyramidCard,
     /// Klondike draw, recycle or source-block transfer animation.
     Klondike,
+    /// Klondike auto-finish animation, with its own editable settling interval.
+    KlondikeSolve,
 }
 
 
@@ -322,6 +324,7 @@ impl GuidedAction {
             AnimationClass::PyramidMove => delays.pyramid_move,
             AnimationClass::PyramidCard => delays.pyramid_card,
             AnimationClass::Klondike => delays.klondike_settle,
+            AnimationClass::KlondikeSolve => delays.klondike_solve,
         }
     }
 
@@ -414,8 +417,8 @@ pub struct GameProfile {
     pub tableau_click_offset: PixelPoint,
     /// TriPeaks effect threshold applied to a clicked tableau card.
     pub minimum_tableau_changed_pixels: usize,
-    /// Number of completed boards expected in established terminal controllers.
-    /// Klondike does not read this field or infer completion from it.
+    /// Number of completed boards in a game; Klondike's single-board policy is
+    /// independently verified and never enters the shared terminal controller.
     pub boards_per_game: usize,
 }
 
@@ -529,6 +532,7 @@ mod tests {
 
     /// Keep the initial mode, selectable modes and authorised calibration contracts stable.
 
+
     #[test]
     fn tripeaks_remains_the_default_with_three_executable_modes() {
         let mode = GameMode::default();
@@ -549,6 +553,7 @@ mod tests {
 
 
     /// Keep Pyramid target analysis separate while sharing the accepted progress probe.
+
 
     #[test]
     fn pyramid_uses_its_own_detector_and_the_shared_progress_calibration() {
@@ -572,6 +577,7 @@ mod tests {
 
 
     /// Check TriPeaks repeat policies and per-action configured settling delays.
+
 
     #[test]
     fn repeated_bottom_actions_and_tableau_actions_have_distinct_policies() {

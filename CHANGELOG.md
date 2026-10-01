@@ -1,5 +1,81 @@
 # Changelog
 
+## 1.2.3 — 2026-10-01 (candidate 5; Beast verification pending)
+
+- Continue from the recorded bottom-card replacement after the remaining tableau
+  stack spreads, using two full visible proof patches above the toolbar.
+- Preserve ordinary clipped-corner refusal, directional/paper thresholds and
+  the 512-pixel source gate; keep this new route separate from complete-effect
+  verification because the next HALO's shading is not receiver proof.
+- Add the native before/result pair and adverse source, receiver, patch, shading,
+  cursor, gold, toolbar, material and geometry checks.
+- Preserve candidate 4 continuation, Solve, budgets, timings, STOP, shared modes
+  and exact-byte PNG saving; deliver exact candidate 4 upgrade and rollback.
+
+## 1.2.3 — 2026-10-01 (candidate 4; Beast verification pending)
+
+- Continue from a supported fresh Klondike recommendation after an acknowledged
+  card-source action when its existing source proof passes; keep the previous
+  effect unverified if independent receiver evidence is insufficient.
+- Permit an independently recognised next Solve control to become the next plan,
+  retaining one-shot input, its separate settle and independent completion checks.
+- Count each acknowledged action against finite limits and report verified and
+  continued operations separately; unchanged cards and uncertain input stop.
+- Recognise the measured nine-card run closing at rows 988–990, accounting only
+  for the exact Undo All overlap while preserving complete-border and input bounds.
+- Add the real black-pip RIGHT pair, Solve priority and deeper-run pixel fixtures
+  with adverse controller/geometry checks and explicit runtime limits.
+- Deliver complete guarded candidate 3 upgrade and rollback to its actual contents;
+  preserve timings, continuous defaults, shared modes and original PNG saving.
+
+## 1.2.3 — 2026-10-01 (candidate 3; Beast verification pending)
+
+- Recognise the measured 3-hearts foundation recipient change under a persistent
+  dark landing guide, preserving the ordinary source/destination thresholds.
+- Extend fixed upper-card replacement-corner evidence to existing SUIT-source
+  returns, adding guarded bidirectional printed-detail changes over stable bright
+  paper with separate destination proof and explicit synthetic-test limits.
+- Add the actual reconstructed RIGHT pair with native-pixel provenance and
+  adverse guide, mask, source-only and destination-only checks.
+- Retain candidate 2 completion, continuous defaults, editable timings, STOP,
+  warning fixes and established TriPeaks/Pyramid behaviour.
+- Deliver a guarded exact candidate 2 upgrade and rollback to its actual contents.
+- Record FreeCell Gate 1 evidence; FreeCell implementation remains a later gate.
+
+
+## 1.2.3 — 2026-10-01 (candidate 2; Beast verification pending)
+
+- Recognise an evidenced tableau transfer with automatic white-face replacement
+  in the same column, retaining both source identity and independent destination
+  evidence without lowering the existing material-change thresholds.
+- Return a changed initial preview for review with zero guest input; preserve
+  exact fresh approval before gameplay or no-HALO Solver recovery.
+- Default Klondike Actions per Multi-Step to 0, continuous until STOP or a guarded
+  stop. Add an independently editable Solve animation interval.
+- Detect one-board Klondike game completion from two fresh positive observations;
+  require intact full-gold/zero-black progress or completed-game artwork.
+- Enable the evidenced score-skip, Level Up OK, New Game, Draw 1 Play and fresh
+  Solver sequence only for continuous runs, one guarded control input per stage.
+- Preserve shared TriPeaks/Pyramid completion policies and input coordinates.
+- Correct compiler/Clippy diagnostics without new warning suppression or a
+  formatter, preserving Charlie's source spacing and nightly configuration.
+- Supply complete-file installation against the same committed base, accepting
+  the exact installed candidate 1 and backing up the actual starting contents.
+
+
+## 1.2.3 — 2026-09-30 (candidate 1; Beast verification pending)
+
+- Recognise tableau card removal exposing green felt dimmed beneath a dashed
+  destination guide, retaining independent source and destination evidence.
+- Log dimmed-felt removal counts separately from bright replacement pixels.
+- Add original-pixel regression scenes for the repeated three-spades refusal
+  and the later empty-column result, with explicit evidence limits.
+- Preserve the accepted tall-run geometry, editable timings, continuous mode,
+  bounded observations, STOP and one-shot Solve result review.
+- Build guarded complete-file installation records for committed v1.2.2 at
+  `bcce7515979e2c4520b02f39e9c4d4d1bb019d7f`.
+
+
 ## 1.2.2 — 2026-09-30 (candidate 2; Beast verification pending)
 
 - Correct tall Klondike source bounds where a run overlaps the dimmed toolbar.

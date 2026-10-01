@@ -135,7 +135,7 @@ enum WorkerCommand {
         /// Preview prediction that the first fresh planning frame must reproduce.
         approved_prediction: PredictedAction,
         /// Immutable operation limit and animation timings for this run.
-        settings: StepRunSettings,
+        settings: Box<StepRunSettings>,
     },
     /// Clear local board and scan history without touching the guest.
     ResetProgress,
@@ -199,11 +199,13 @@ pub enum WorkerEvent {
         input_events: usize,
         /// Diagnostic count of materially changed effect pixels.
         changed_pixels: usize,
-        /// True when a fresh halo pair authorised continuation without proving the prior effect.
+        /// True when mode-owned fresh evidence authorised continuation without proving the prior effect.
         continued_from_halo: bool,
     },
     /// The shared post-game controller verified a restarted game.
     GameCompleted,
+    /// Klondike independently verified one game win and the next actionable Solver board.
+    KlondikeGameCompleted,
     /// A bounded run reached its requested action count.
     RunCompleted {
         /// Advisory prediction from the accompanying capture.
@@ -212,7 +214,7 @@ pub enum WorkerEvent {
         requested_operations: usize,
         /// Actions accepted through positive effect verification.
         verified_operations: usize,
-        /// Actions continued from a fresh repeated LEFT/RIGHT halo pair.
+        /// Actions continued through the selected mode's guarded fresh-evidence policy.
         halo_operations: usize,
     },
 }
@@ -341,9 +343,9 @@ struct WorkerEventSink {
 impl WorkerEventSink {
 
 
-    /// Queue a small worker event; return the channel error if the UI receiver has closed.
-    fn send(&self, event: WorkerEvent) -> Result<(), mpsc::SendError<WorkerEvent>> {
-        self.events.send(event)
+    /// Queue a small worker event; retain failed delivery in a boxed channel error.
+    fn send(&self, event: WorkerEvent) -> Result<(), Box<mpsc::SendError<WorkerEvent>>> {
+        self.events.send(event).map_err(Box::new)
     }
 
 
@@ -505,7 +507,7 @@ impl WorkerHandle {
                 socket_path,
                 mode,
                 approved_prediction,
-                settings,
+                settings: Box::new(settings),
             })
             .map_err(|error| format!("QMP worker is unavailable: {error}"))
     }
@@ -637,7 +639,7 @@ fn run_worker(
                 run_execute_steps(
                     socket_path,
                     approved_prediction,
-                    settings,
+                    *settings,
                     &mut scan_state,
                     &mut completed_boards,
                     &event_tx,
@@ -773,6 +775,8 @@ fn run_capture(
 
             send_status(
                 event_tx,
+
+
                 if scan_state.mode().calibration_only() {
                     format!("{} calibration capture ready", scan_state.mode())
                 } else {
@@ -1023,13 +1027,15 @@ fn run_execute_steps(
 
         match execute_guarded_action(
             &mut qmp,
-            &socket_path,
             planning_frame,
             settings,
             scan_state,
             completed_boards,
-            event_tx,
-            cancel_requested,
+            GuardedActionContext {
+                socket_path: &socket_path,
+                event_tx,
+                cancel_requested,
+            },
         ) {
             Ok(success) => {
 
@@ -1082,6 +1088,8 @@ fn run_execute_steps(
                             "Board counter: {}/{} completed in this solver session{}.",
                             success.completed_boards,
                             boards_per_game,
+
+
                             if success.series_complete {
                                 "; game complete"
                             } else {
@@ -1440,6 +1448,18 @@ enum PlanningFrame {
 }
 
 
+/// Immutable connection, publication and cancellation references for one guarded action.
+#[derive(Clone, Copy)]
+struct GuardedActionContext<'a> {
+    /// Selected QMP socket used for the action and every result capture.
+    socket_path: &'a Path,
+    /// Ordered event sink and coalesced latest-frame mailbox.
+    event_tx: &'a WorkerEventSink,
+    /// Cooperative STOP flag checked before input and during waits.
+    cancel_requested: &'a AtomicBool,
+}
+
+
 /// Plan and deliver at most one gameplay input sequence, then observe its result.
 ///
 /// A first planning capture must match the approved preview; later plans reuse
@@ -1448,14 +1468,17 @@ enum PlanningFrame {
 /// frame and whether it preceded input. Uncertain input is never replayed here.
 fn execute_guarded_action(
     qmp: &mut QmpClient,
-    socket_path: &Path,
     planning_frame: PlanningFrame,
     settings: StepRunSettings,
     scan_state: &mut TableauScanState,
     completed_boards: &mut usize,
-    event_tx: &WorkerEventSink,
-    cancel_requested: &AtomicBool,
-) -> Result<ActionSuccess, ActionFailure> {
+    context: GuardedActionContext<'_>,
+) -> Result<ActionSuccess, Box<ActionFailure>> {
+    let GuardedActionContext {
+        socket_path,
+        event_tx,
+        cancel_requested,
+    } = context;
     let action_started = Instant::now();
     let mut profile = ActionProfile::default();
     let boards_per_game = scan_state.mode().profile().boards_per_game;
@@ -1827,17 +1850,17 @@ fn execute_guarded_action(
     if let ActionTarget::Pyramid(kind) = plan.input().action().target {
         return pyramid_execution::verify_pyramid_action(
             qmp,
-            socket_path,
-            before_series,
-            plan,
-            kind,
+            pyramid_execution::PyramidActionVerification {
+                before_series,
+                plan,
+                kind,
+                action_started,
+                profile,
+            },
             settings,
             scan_state,
             completed_boards,
-            event_tx,
-            cancel_requested,
-            action_started,
-            profile,
+            context,
         );
     }
     let mut observation_round = 1usize;
@@ -1909,6 +1932,8 @@ fn execute_guarded_action(
                     ) {
                         Ok(visible) => visible,
                         Err(error)
+
+
                             if post_game::is_level_up_ambiguity(&error)
                                 && observation_round < POST_GAME_MAX_OBSERVATION_ROUNDS =>
                         {
@@ -2349,6 +2374,8 @@ fn execute_guarded_action(
 
                     send_log(
                         event_tx,
+
+
                         if no_rows_remain {
                             format!(
                                 "No HALO or exposed card was found after Solver, but completion evidence is not yet settled; repeating the transition capture in {} ms.",
@@ -2627,15 +2654,15 @@ fn action_failure(
     message: String,
     observation: Option<FrameObservation>,
     frame_phase: FailureFramePhase,
-) -> ActionFailure {
+) -> Box<ActionFailure> {
     profile.total = action_started.elapsed();
-    ActionFailure {
+    Box::new(ActionFailure {
         state,
         message,
         observation,
         frame_phase,
         profile,
-    }
+    })
 }
 
 
@@ -2698,6 +2725,8 @@ fn log_action_profile(
         event_tx,
         format!(
             "PROFILE action {progress} ({status}): input-attempted={}, captures={}, reserve={:.1} ms, screendump={:.1} ms, read={:.1} ms, decode={:.1} ms, detection={:.1} ms, validation/effect={:.1} ms, input-wall(inclusive)={:.1} ms, intentional-waits={:.1} ms, total={:.1} ms.",
+
+
             if profile.input_attempted { "yes" } else { "no" },
             profile.capture.captures,
             milliseconds(profile.capture.reserve),

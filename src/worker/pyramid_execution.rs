@@ -4,11 +4,11 @@
 //! fresh results, preserving the distinction between effect proof and a newly
 //! authorised LEFT/RIGHT pair while keeping completion/redeal guards separate.
 
-use std::{path::Path, sync::atomic::AtomicBool, time::Instant};
+use std::time::Instant;
 
 use super::{
     ActionFailure, ActionProfile, ActionSuccess, CaptureSeries, FailureFramePhase,
-    FrameObservation, PYRAMID_OBSERVATION_LIMIT, WorkerEventSink, WorkerState, action_failure,
+    FrameObservation, GuardedActionContext, PYRAMID_OBSERVATION_LIMIT, WorkerState, action_failure,
     capture_series, click_shared_solver, format_prediction_target, materially_changed_pixels,
     post_game, send_board_progress, send_log, send_state, send_status, validate_probe,
     wait_or_stop,
@@ -27,27 +27,48 @@ use crate::{
 };
 
 
+/// Delivered Pyramid action and its immutable planning evidence and accumulated timing.
+pub(super) struct PyramidActionVerification {
+    /// Fresh planning capture from before this action's single input sequence.
+    pub(super) before_series: CaptureSeries,
+    /// Validated typed input whose outcome is now being observed.
+    pub(super) plan: StepPlan,
+    /// Pyramid target used for effect and final-apex interpretation.
+    pub(super) kind: PyramidTargetKind,
+    /// Start of the shared planning/input cycle for total timing.
+    pub(super) action_started: Instant,
+    /// Work already measured before result verification began.
+    pub(super) profile: ActionProfile,
+}
+
+
 /// Observe the result of an already-delivered Pyramid action without replaying it.
 ///
-/// `before_series` supplies the planning frame; `settings` fixes settling delays
+/// `verification` supplies planning and delivery evidence; `settings` fixes settling delays
 /// for the run. Result observations verify effects, bounded redeals and terminal
 /// dialogs, or allow a fresh repeated LEFT/RIGHT halo pair during ordinary play.
 /// Returns accepted evidence and counters, or a failure with the latest frame.
 /// Fresh-halo continuation never proves an effect or increments completion.
 pub(super) fn verify_pyramid_action(
     qmp: &mut QmpClient,
-    socket_path: &Path,
-    mut before_series: CaptureSeries,
-    plan: StepPlan,
-    kind: PyramidTargetKind,
+    verification: PyramidActionVerification,
     settings: StepRunSettings,
     scan_state: &mut TableauScanState,
     completed_boards: &mut usize,
-    event_tx: &WorkerEventSink,
-    cancel_requested: &AtomicBool,
-    action_started: Instant,
-    mut profile: ActionProfile,
-) -> Result<ActionSuccess, ActionFailure> {
+    context: GuardedActionContext<'_>,
+) -> Result<ActionSuccess, Box<ActionFailure>> {
+    let PyramidActionVerification {
+        mut before_series,
+        plan,
+        kind,
+        action_started,
+        mut profile,
+    } = verification;
+    let GuardedActionContext {
+        socket_path,
+        event_tx,
+        cancel_requested,
+    } = context;
     // Input planning and delivery are shared. Pyramid supplies only its
     // semantic effect and board-transition evidence to this bounded verifier.
     let mut last_observation = None;
@@ -367,16 +388,16 @@ pub(super) fn verify_pyramid_action(
                         };
 
 
-                        if pyramid_solver_recovery_authorised(
-                            board_completed,
-                            observation.game_progress,
-                            observation.gameplay_scene,
+                        if pyramid_solver_recovery_authorised(PyramidSolverRecoveryEvidence {
+                            verified_redeal: board_completed,
+                            progress: observation.game_progress,
+                            gameplay_scene: observation.gameplay_scene,
                             effect_verified,
                             board_empty,
                             cards_visible,
-                            redeal_no_halo_captures,
-                            solver_recovery_sent,
-                        ) {
+                            observation_round: redeal_no_halo_captures,
+                            solver_already_sent: solver_recovery_sent,
+                        }) {
                             profile.validation_effect += analysis_started.elapsed();
                             let probe_started = Instant::now();
                             let probe = qmp.probe().map_err(|error| {
@@ -557,26 +578,39 @@ impl PyramidRedealConfirmation {
 }
 
 
+/// Independent scene and transition guards required before a Pyramid Solver recovery.
+#[derive(Clone, Copy)]
+pub(super) struct PyramidSolverRecoveryEvidence {
+    /// Positive board-completion and restored-board evidence already accepted.
+    pub(super) verified_redeal: bool,
+    /// Fresh progress reading that must identify another board.
+    pub(super) progress: Option<GameProgress>,
+    /// Fresh frame passed the Pyramid gameplay scene gate.
+    pub(super) gameplay_scene: bool,
+    /// The prior gameplay action's effect was independently verified.
+    pub(super) effect_verified: bool,
+    /// True while no playable tableau cards remain.
+    pub(super) board_empty: bool,
+    /// Positive restored-card evidence is visible in the fresh capture.
+    pub(super) cards_visible: bool,
+    /// Consecutive settled no-HALO observations on the restored board.
+    pub(super) observation_round: usize,
+    /// A Solver recovery input has already been attempted in this context.
+    pub(super) solver_already_sent: bool,
+}
+
+
 /// Authorise one Solver recovery only after verified redeal and three settled no-halo observations.
 ///
 /// The caller supplies scene, card, effect and progress evidence; ordinary
 /// missing halos and previously attempted Solver recovery cannot qualify.
-pub(super) fn pyramid_solver_recovery_authorised(
-    verified_redeal: bool,
-    progress: Option<GameProgress>,
-    gameplay_scene: bool,
-    effect_verified: bool,
-    board_empty: bool,
-    cards_visible: bool,
-    observation_round: usize,
-    solver_already_sent: bool,
-) -> bool {
-    verified_redeal
-        && progress == Some(GameProgress::AnotherBoard)
-        && gameplay_scene
-        && effect_verified
-        && !board_empty
-        && cards_visible
-        && observation_round >= 3
-        && !solver_already_sent
+pub(super) fn pyramid_solver_recovery_authorised(evidence: PyramidSolverRecoveryEvidence) -> bool {
+    evidence.verified_redeal
+        && evidence.progress == Some(GameProgress::AnotherBoard)
+        && evidence.gameplay_scene
+        && evidence.effect_verified
+        && !evidence.board_empty
+        && evidence.cards_visible
+        && evidence.observation_round >= 3
+        && !evidence.solver_already_sent
 }

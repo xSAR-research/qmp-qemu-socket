@@ -295,6 +295,816 @@
         ]
       ],
       "observation": "Large column-6 K-diamonds through 6-clubs source reaches the translucent toolbar; target rows390..953, click1296,430. No after-move frame supplied."
+    },
+    {
+      "fixture": "K20.png",
+      "source": "qmp-qemu-socket 260930 225837 Two-moves-before-fail.png",
+      "source_sha256": "b40e577a3836fd10695deb308353c813ea80ecd3875e13d7729155d339ec320a",
+      "fixture_sha256": "c8fecf8671a779eefce7d0164d2736dbf3d9dac555077aa547054a9e0346ee57",
+      "bytes": 1687670,
+      "source_bytes": 3456410,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          378,
+          100,
+          1540,
+          1033
+        ],
+        [
+          160,
+          310,
+          176,
+          326
+        ],
+        [
+          1730,
+          310,
+          1746,
+          326
+        ],
+        [
+          824,
+          34,
+          1096,
+          92
+        ]
+      ],
+      "observation": "Undo reconstruction two actions before first stop: highlighted RIGHT 2-spades. K20/K21 is a replayed RIGHT-to-foundation pair."
+    },
+    {
+      "fixture": "K21.png",
+      "source": "qmp-qemu-socket 260930 225821 Move-before-fail.png",
+      "source_sha256": "e1c3fddd87d10882387862110c6c5c10aedcabcb1b1b00d393a585c5100003bf",
+      "fixture_sha256": "c53843de485fca75953ba8113b82e0ef83d259640c33b571e383fcec84dcd43a",
+      "bytes": 1697653,
+      "source_bytes": 3467607,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          378,
+          100,
+          1540,
+          1033
+        ],
+        [
+          160,
+          310,
+          176,
+          326
+        ],
+        [
+          1730,
+          310,
+          1746,
+          326
+        ],
+        [
+          824,
+          34,
+          1096,
+          92
+        ]
+      ],
+      "observation": "Undo reconstruction immediately before first stop: highlighted tableau column-5 3-spades. K21/K22 is the actual reconstructed tableau-to-foundation action pair."
+    },
+    {
+      "fixture": "K22.png",
+      "source": "qmp-qemu-socket 260930 225614 Move-fail.png",
+      "source_sha256": "b60467d760fc20d78837ebc64edbc16fa52d0984af88d72f1c4b9d8a377c94f0",
+      "fixture_sha256": "61dde366779e05c9f2db0286b7e93506fa4b0b919927d56824b2e11d9ccdc7e3",
+      "bytes": 1700381,
+      "source_bytes": 3471029,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          378,
+          100,
+          1540,
+          1033
+        ],
+        [
+          160,
+          310,
+          176,
+          326
+        ],
+        [
+          1730,
+          310,
+          1746,
+          326
+        ],
+        [
+          824,
+          34,
+          1096,
+          92
+        ]
+      ],
+      "observation": "First stopped result: 3-spades reached foundation 2; the exposed column-5 felt is darkened by the next dashed destination guide and column-6 3-clubs is highlighted."
+    },
+    {
+      "fixture": "K23.png",
+      "source": "qmp-qemu-socket 260930 230232 Second-Fail.png",
+      "source_sha256": "4bf764b6f086f93ef118340b5762853895ba4e15edeb1dd40b3c2ae60d5aef8a",
+      "fixture_sha256": "5f063f1206e7a9928ed03af62084fbf9e227095c94cde18fecc549255f6a551e",
+      "bytes": 1646863,
+      "source_bytes": 3410573,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          378,
+          100,
+          1540,
+          1033
+        ],
+        [
+          160,
+          310,
+          176,
+          326
+        ],
+        [
+          1730,
+          310,
+          1746,
+          326
+        ],
+        [
+          824,
+          34,
+          1096,
+          92
+        ]
+      ],
+      "observation": "Second stopped result: column 6 is empty under a dark dashed destination guide; column-4 King-spades is highlighted. No original preceding action frame was supplied; any reconstructed before frame is explicitly synthetic."
+    },
+    {
+      "fixture": "K24.png",
+      "source": "qmp-qemu-socket 261001 025337 Repeat-Fail-after-undo.png",
+      "source_sha256": "36edfbd42d0483ffdb2b05c71f469be480f6bbe7069707e85e6372c1bc64ac46",
+      "fixture_sha256": "edc4f8a2f48e51fe11fce5581f487c11104bea7fe4d76c61812f425c3f9b9520",
+      "bytes": 1698080,
+      "source_bytes": 3461558,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          378,
+          100,
+          1540,
+          1033
+        ],
+        [
+          160,
+          310,
+          176,
+          326
+        ],
+        [
+          1730,
+          310,
+          1746,
+          326
+        ],
+        [
+          824,
+          34,
+          1096,
+          92
+        ]
+      ],
+      "observation": "Read-only stop after Undo: highlighted tableau column-5 3-spades. The log says fresh target differed from the older RIGHT preview and guest input attempted=false; this capture is not an action-result pair."
+    },
+    {
+      "fixture": "K25.png",
+      "source": "qmp-qemu-socket 261001 030153 SOLVE-Icon-available-to-complete-game.png",
+      "source_sha256": "0df5c10e6d7fb7d2ef3f2bce7ea9312e32f776637113a298962b67bbb0b3ac4a",
+      "fixture_sha256": "3f0fe74686e104a5e79745b83ab014cdd0b5b336d5b635692e5057d791d748d4",
+      "bytes": 1832402,
+      "source_bytes": 3612096,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          378,
+          100,
+          1540,
+          1033
+        ],
+        [
+          160,
+          310,
+          176,
+          326
+        ],
+        [
+          1730,
+          310,
+          1746,
+          326
+        ],
+        [
+          824,
+          34,
+          1096,
+          92
+        ]
+      ],
+      "observation": "Solve control available while a tableau source remains highlighted. The measured right progress probe has 56 black and 20 positively gold pixels out of 76, so this is unfinished, not a positive game-win capture."
+    },
+    {
+      "fixture": "K26.png",
+      "source": "1 - GAME-WIN.png",
+      "source_sha256": "d93e4f3eeb1b397bc7594ac030e1f2f19959d38b63c621dab14d15c5e7011cf5",
+      "fixture_sha256": "0b86241cdc3a0a278cac4cf12268dad6214f96e1ec49d236b3583eff021011e5",
+      "bytes": 891892,
+      "source_bytes": 1941789,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          260,
+          34,
+          1660,
+          1033
+        ],
+        [
+          160,
+          310,
+          176,
+          326
+        ],
+        [
+          1730,
+          310,
+          1746,
+          326
+        ]
+      ],
+      "observation": "Actual completed Klondike Congratulations/score-counting screen. Four foundations behind the overlay contain Kings and the tableau is empty; Click anywhere to skip is visible. No Perfect frame or full-gold progress bar is present."
+    },
+    {
+      "fixture": "K27.png",
+      "source": "2 - LEVEL-UP.png",
+      "source_sha256": "88ff37bfca00e64af96b129c7c74e2f13759227ba5d90762fb9395f0728fddc3",
+      "fixture_sha256": "90d69ff7971d7dd4adc7de865bc46dc301a7a100bff34f3e6dabddda6e1922aa",
+      "bytes": 1015781,
+      "source_bytes": 1812861,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          260,
+          34,
+          1660,
+          1033
+        ],
+        [
+          160,
+          310,
+          176,
+          326
+        ],
+        [
+          1730,
+          310,
+          1746,
+          326
+        ]
+      ],
+      "observation": "Actual Klondike LEVEL-UP screen with KLONDIKE LEVEL 42, Skilled and gold OK button, shown over the same completed one-board background."
+    },
+    {
+      "fixture": "K28.png",
+      "source": "3 - NEW-GAME.png",
+      "source_sha256": "949c3b7b2d8ef31ac7eda32ad70c635b46332f735e17b49fd3fa32fddc567c4a",
+      "fixture_sha256": "da448c5f26d61bd2800629d12e9bfc79d87861307fb61caa64cd4f98299d0d8d",
+      "bytes": 895663,
+      "source_bytes": 1946085,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          260,
+          34,
+          1660,
+          1033
+        ],
+        [
+          160,
+          310,
+          176,
+          326
+        ],
+        [
+          1730,
+          310,
+          1746,
+          326
+        ]
+      ],
+      "observation": "Actual Congratulations completed result with gold New Game and blue Home controls over the completed one-board background."
+    },
+    {
+      "fixture": "K29.png",
+      "source": "4 - GAME-PLAY.png",
+      "source_sha256": "731b94a1f9db4d003eea619b05fabf7d5b7ce20a2f9be89ae9139cb1c2c496f4",
+      "fixture_sha256": "7d133ac78302f41c9d9d993648cecdb3bb77b200bf8d9680dfe8d05444f4002d",
+      "bytes": 1179718,
+      "source_bytes": 2377994,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          260,
+          34,
+          1660,
+          1033
+        ],
+        [
+          160,
+          310,
+          176,
+          326
+        ],
+        [
+          1730,
+          310,
+          1746,
+          326
+        ]
+      ],
+      "observation": "Actual Klondike Standard (Draw 1) game setup, Grandmaster selected, gold Play and blue Cancel. This is setup, not game-win evidence or an already active game."
+    },
+    {
+      "fixture": "K30.png",
+      "source": "5 - READY-FOR-SOLVER.png",
+      "source_sha256": "4c85cf59e11ce93f452145d2e2a86dd50e99aa2dee9f4378d60d19ce3054e6da",
+      "fixture_sha256": "b5bcdfbc0108d98a5a5d5859867cb0389cc1ad2e19b26cae50bc498af6fd6e22",
+      "bytes": 2374706,
+      "source_bytes": 3829058,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          260,
+          34,
+          1660,
+          1033
+        ],
+        [
+          160,
+          310,
+          176,
+          326
+        ],
+        [
+          1730,
+          310,
+          1746,
+          326
+        ]
+      ],
+      "observation": "Actual newly dealt Klondike board, Solver off, four empty foundations and seven tableau columns. Read-only gameplay scene evidence; zero black at the old top probe is not completion because there is no active Solver bar."
+    },
+    {
+      "fixture": "K31.png",
+      "source": "qmp-qemu-socket 261001 033735 before-fail.png",
+      "source_sha256": "f19347942e91322c7af2b472384e4ced1ac0266b59d12d8e92d9c6ffba51cbea",
+      "fixture_sha256": "506b5681ea863826811156c3b07b07c209c7d2c371535111c8afc4daf38c6fa3",
+      "bytes": 1828571,
+      "source_bytes": 3601444,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          378,
+          100,
+          1540,
+          1033
+        ],
+        [
+          160,
+          310,
+          176,
+          326
+        ],
+        [
+          1730,
+          310,
+          1746,
+          326
+        ],
+        [
+          824,
+          34,
+          1096,
+          92
+        ]
+      ],
+      "observation": "Undo reconstruction before the new reported effect refusal: highlighted tableau column-7 2-clubs at rows425..615, next destination below column-3 3-diamonds. This before was reconstructed after the earlier result timestamp, not a chronological automated input trace."
+    },
+    {
+      "fixture": "K32.png",
+      "source": "qmp-qemu-socket 261001 033314 Fail-card-was-at-the-same-position.png",
+      "source_sha256": "44dfd1c5afad2498cc5afbc587e1e2ce4e71bb3b94dc04d694b9233fdc40d0ab",
+      "fixture_sha256": "e82cbb6e0258a56f8b0d04ee1f76cbcd088e0f2cbf6627a66ad79aeea31b9f63",
+      "bytes": 1827743,
+      "source_bytes": 3599663,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          378,
+          100,
+          1540,
+          1033
+        ],
+        [
+          160,
+          310,
+          176,
+          326
+        ],
+        [
+          1730,
+          310,
+          1746,
+          326
+        ],
+        [
+          824,
+          34,
+          1096,
+          92
+        ]
+      ],
+      "observation": "Actual result of successful transfer: 2-clubs below 3-diamonds in column 3; newly revealed King-spades is highlighted at column-7 rows407..597. The runtime log reports3984/428/9 source changed/ordinary positive/dimmed-felt pixels; this later Undo-reconstructed before image is not the exact logged initial frame. Both reproduced positive classes remain below512. Independently changed paper/ink corners supply replacement evidence without reading a rank."
+    },
+    {
+      "fixture": "K33.png",
+      "source": "qmp-qemu-socket 261001 045349 Move-before-Fail.png",
+      "source_sha256": "1dcf54ded3891ac0bc2cf63436dd1686f04971e8b000ff8b62dca63e95551f08",
+      "fixture_sha256": "404ddc029ccd213f1d2b64eb455cd3b51e0a083c6937c0c1c9c717ae824caa35",
+      "bytes": 1621017,
+      "source_bytes": 3442166,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          378,
+          100,
+          1540,
+          1033
+        ],
+        [
+          160,
+          310,
+          176,
+          326
+        ],
+        [
+          1730,
+          310,
+          1746,
+          326
+        ],
+        [
+          824,
+          34,
+          1096,
+          92
+        ]
+      ],
+      "observation": "Undo reconstruction before successful transfer: highlighted RIGHT 3-hearts at fan offset2, dark dashed occupied Foundation1 2-hearts. This later timestamp is not the original automated initial frame."
+    },
+    {
+      "fixture": "K34.png",
+      "source": "qmp-qemu-socket 261001 045324 Fail-unnecessary-card-detection-stall.png",
+      "source_sha256": "7c9a3eebb84838ec5540eba53b70e4673ba18de0e7c77638c5d6c63325169b1b",
+      "fixture_sha256": "d9a7b4467a26562b72e4013969085a26e3f5e24784a6315a1c69d4644e27ecfb",
+      "bytes": 1625631,
+      "source_bytes": 3447295,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          378,
+          100,
+          1540,
+          1033
+        ],
+        [
+          160,
+          310,
+          176,
+          326
+        ],
+        [
+          1730,
+          310,
+          1746,
+          326
+        ],
+        [
+          824,
+          34,
+          1096,
+          92
+        ]
+      ],
+      "observation": "Stopped successful result: 3-hearts reached Foundation1 and4-hearts is the next highlighted RIGHT card at the same fan offset2. Foundation1 remains under an unchanged dark dashed guide for the next4-hearts recommendation. Its reproduced generic destination delta360 matches the runtime log, but reconstructed source counts are not asserted as the runtime initial frame."
+    },
+    {
+      "fixture": "K35.png",
+      "source": "qmp-qemu-socket 261001 062949 Move-before-fail.png",
+      "source_sha256": "1137c7323da3724815df85f52758ad78ed0ee18c6859a931371cd2d748c844fd",
+      "fixture_sha256": "8d2031d9d9adf2026fc9283c56152d504c3eeb336100b24bb32221ba41008481",
+      "bytes": 1713007,
+      "source_bytes": 3534929,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          378,
+          100,
+          1540,
+          1033
+        ],
+        [
+          160,
+          310,
+          176,
+          326
+        ],
+        [
+          1730,
+          310,
+          1746,
+          326
+        ],
+        [
+          824,
+          34,
+          1096,
+          92
+        ]
+      ],
+      "observation": "Undo reconstruction before the latest RIGHT recipient refusal: highlighted8-spades at fanoffset1 and Foundation4 dimmed7-spades under the next guide. This later timestamp is not the chronological automated initial frame."
+    },
+    {
+      "fixture": "K36.png",
+      "source": "qmp-qemu-socket 261001 062853 Fail.png",
+      "source_sha256": "d80d01fd939f5e377205c60f469458f0498d385d745a36711d4bc7032fda82cc",
+      "fixture_sha256": "987a6d3b7aa6ee99f421847765aea059d88e51e4e2cbc0a8889af1277024db57",
+      "bytes": 1718458,
+      "source_bytes": 3539890,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          378,
+          100,
+          1540,
+          1033
+        ],
+        [
+          160,
+          310,
+          176,
+          326
+        ],
+        [
+          1730,
+          310,
+          1746,
+          326
+        ],
+        [
+          824,
+          34,
+          1096,
+          92
+        ]
+      ],
+      "observation": "Stopped successful result:8-spades received by Foundation4, now under a dark dashed guide for9-spades;9-spades is highlighted at RIGHT fanoffset0. Generic recipient change251 reproduces the runtime log. Existing source replacement is sufficient for a separate fresh-HALO continuation policy; the preceding complete effect remains unverified."
+    },
+    {
+      "fixture": "K37.png",
+      "source": "qmp-qemu-socket 261001 063331 No-detecting-Solve.png",
+      "source_sha256": "0cf1dc05a63d20eaf9378e6e10c49544e426741699cc7aa7b40c43b7b862f450",
+      "fixture_sha256": "6562dd6b2d312349ec7d717906601a8e879333a8f1f551cff7b5ddc3041ceef3",
+      "bytes": 1912418,
+      "source_bytes": 3761005,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          378,
+          100,
+          1540,
+          1033
+        ],
+        [
+          160,
+          310,
+          176,
+          326
+        ],
+        [
+          1730,
+          310,
+          1746,
+          326
+        ],
+        [
+          824,
+          34,
+          1096,
+          92
+        ]
+      ],
+      "observation": "Solve artwork is independently present while tableau column1 J-hearts remains highlighted. All existing Solve guards pass: template899/899,glyph342/342,empty-stockfelt13900/13900. The extended log confirms Solve detection was blocked by the old card-effect gate, then detected on freshCapture and clicked once; this is not a failed Solve recogniser."
+    },
+    {
+      "fixture": "K38.png",
+      "source": "qmp-qemu-socket 261001 064037 HALO-goes-into-the-lower-bounds-of-the-screen.png",
+      "source_sha256": "b58a7fa82711d04e0223abdf4ba15ea1fbe7904f8975b3986c2dd2479e97ef29",
+      "fixture_sha256": "eb3b0223999e1da2565ecd6354b6c194cbeca043c1077cb7b1faf653acb46a81",
+      "bytes": 1643334,
+      "source_bytes": 3429759,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          378,
+          100,
+          1540,
+          1033
+        ],
+        [
+          160,
+          310,
+          176,
+          326
+        ],
+        [
+          1730,
+          310,
+          1746,
+          326
+        ],
+        [
+          824,
+          34,
+          1096,
+          92
+        ]
+      ],
+      "observation": "Nine-card column6 Q-clubs/J-diamonds/10-spades/9-hearts/8-spades/7-hearts/6-clubs/5-hearts/4-clubs connected source extends beneath toolbar. Paired rails span407..987, lowerborder988..990 and clear exteriorrowsfollow. UndoAll icon obscures x1308..1336 on these three loweredge rows; positive red icon artwork and all68 remaining edge pixels are required. White face proof remains above947; canonicalclick1296,447 and effectROIstop947."
+    },
+    {
+      "fixture": "K39.png",
+      "source": "qmp-qemu-socket 261001 075229 Move-before.png",
+      "source_sha256": "96d24e83d4fe7678baed1f90d1b7deded6172dda43d3f753e804d21f294595cd",
+      "fixture_sha256": "b038b45c9f111a8dde3cd98605a8fba21beca6b0b08713e48bec6550eea81476",
+      "bytes": 1631394,
+      "source_bytes": 3382622,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          378,
+          100,
+          1540,
+          1033
+        ],
+        [
+          160,
+          310,
+          176,
+          326
+        ],
+        [
+          1730,
+          310,
+          1746,
+          326
+        ],
+        [
+          824,
+          34,
+          1096,
+          92
+        ]
+      ],
+      "observation": "Before card transfer: highlighted complete single-card column 3 4-clubs source rows799..989 partly beneath the toolbar; occupied foundation 4 contains 3-clubs under a dark destination guide. Supplied native before frame, not asserted byte-identical to the runtime planning capture."
+    },
+    {
+      "fixture": "K40.png",
+      "source": "qmp-qemu-socket 261001 075722 Fail.png",
+      "source_sha256": "766bfa00819a2b7a3ad588375ec95d8ee4b2d2d65708db8bff24c5f441043649",
+      "fixture_sha256": "34f8ca32419632c10157265babe90327cec4c701362b90d38b0e0cfcc66ba2f9",
+      "bytes": 1633926,
+      "source_bytes": 3387803,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          378,
+          100,
+          1540,
+          1033
+        ],
+        [
+          160,
+          310,
+          176,
+          326
+        ],
+        [
+          1730,
+          310,
+          1746,
+          326
+        ],
+        [
+          824,
+          34,
+          1096,
+          92
+        ]
+      ],
+      "observation": "Result of reported transfer: foundation 4 now shows 4-clubs under a dark guide; column 3 bottom is 5-hearts after the stack expands, and the next source is column 6 5-clubs rows372..562. Source material824 reproduces the log; actual receiving-foundation change318 is below512. Broad separated-change1298 comes solely from the next column 6 HALO shadow (printed face unchanged), not receiving-card proof. Standard lower-right identity corner925..969 crosses toolbar947 and remains unavailable. Two full visible patches support source replacement and guarded fresh-HALO continuation only, never complete effect verification."
     }
   ],
   "solve_control_template": {

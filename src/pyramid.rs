@@ -1255,17 +1255,15 @@ mod tests {
             for other in PYRAMID_TARGETS {
 
 
-                if let PyramidTargetKind::Card { row: other_row, .. } = other.kind {
-
-
-                    if other_row > row {
-                        assert!(
-                            !other.bounds.contains(target.click_point),
-                            "{} overlaps {}",
-                            target.label,
-                            other.label
-                        );
-                    }
+                if let PyramidTargetKind::Card { row: other_row, .. } = other.kind
+                    && other_row > row
+                {
+                    assert!(
+                        !other.bounds.contains(target.click_point),
+                        "{} overlaps {}",
+                        target.label,
+                        other.label
+                    );
                 }
             }
         }
@@ -1911,6 +1909,8 @@ mod tests {
             assert_eq!(action.operation(), InputOperation::Click(slot.click_point));
             assert_eq!(
                 action.animation_settle_delay(custom_delays),
+
+
                 if slot.kind == PyramidTargetKind::Move {
                     std::time::Duration::from_millis(725)
                 } else {
@@ -1919,6 +1919,8 @@ mod tests {
             );
             assert_eq!(
                 action.repeat_target_policy(),
+
+
                 if slot.kind.is_card() {
                     RepeatTargetPolicy::MustClear
                 } else {
