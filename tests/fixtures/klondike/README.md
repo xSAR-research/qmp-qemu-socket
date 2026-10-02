@@ -79,7 +79,7 @@ boundary against K23's original darkened empty-column pixels. Guide-only
 darkening, unchanged frames, source-only changes, cursor pixels, gold and
 bottom-toolbar pixels cannot establish a completed transfer.
 
-The production `src/klondike-solve-control.rgb` contains 899 RGB8 samples from
+The production `src/klondike-solve-control.rgb` contains 899 RGB 8 samples from
 K13, on a four-pixel lattice over the measured Solve control. The manifest
 records its exact bounds and hash. Matching requires the control outline,
 check-mark/letter artwork and colours, plus a separately empty stock and
@@ -360,3 +360,39 @@ when the independent source-material gate refuses continuation evidence. Source-
 replacement passes source evidence but remains unverified as a complete effect;
 the actual 318-pixel recipient alone establishes neither source nor effect. No rank or
 suit is decoded, and no new action, timing or completion behaviour is enabled.
+
+## v1.2.4 candidate 1 additions
+
+- K41: ten-card column 6 source from rows390..994; closing gold at991..993 is
+  partially hidden by Undo All. Complete source height604, safe click1296,430;
+  effect evidence stops at947. Prior col3 move was verified in the supplied log.
+- K42: Solve is visible alongside a tableau J-spades HALO. The stable interior
+  and glyph pass existing tolerance; outer-border positive red warming reaches
+ 26 levels rather than24. This is a recorded appearance variant, not a priority
+  change or evidence of a failed guest click.
+- K43: settled Congratulations level46 with click-anywhere-to-skip. All existing
+  terminal signatures pass. This PNG was captured10.211s after Solve ACK, after
+  the old observation budget had ended at5.641s; earlier transient frames were
+  not supplied. It does not establish the exact time the dialog became stable.
+
+Each derivative retains the same native-coordinate rectangles as its corresponding
+prior fixture class. The manifest records original and derived SHA-256 hashes.
+No image is resized; originals remain separate from these sparse test fixtures.
+
+## v1.2.4 candidate 2 additions
+
+K44–K49 retain their original native pixels in the manifest's rectangles.
+K44's complete column1 source needs the measured14-pixel right scan; K47's
+settled column4 run already passes. Their logs rejected earlier unsupported
+result scenes that were not saved. K45 is an earlier RIGHT Queen-clubs Undo
+reconstruction, not the immediate predecessor of K46's bottom-card action.
+The native K45→K44 transfer is reconstructed evidence only. The separate
+contracted-source regression explicitly synthesises the prior4-diamonds face,
+retains K46 result artwork and tests the log-derived print/geometry guards.
+
+K48's existing Solve recogniser matches all899 artwork/342 glyph samples and
+13,900 stockfelt pixels; further live refusals need the new same-observation
+measurements. K49 Level Up exposes both a variable textshadow and later warm
+fireworks. A controlled derivative removes only fireworks context to isolate
+shadow refusal; mixed title/label/button/foundation guards remain required.
+No derivative is presented as an original successful QMP input trace.

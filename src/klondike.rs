@@ -1,6 +1,6 @@
 //! Klondike Draw 1 Solver targets and conservative, mode-owned effect evidence.
 //!
-//! Geometry is measured from Charlie's 1920x1080 captures K01-K40. A source
+//! Geometry is measured from Charlie's 1920x1080 captures K01-K48. A source
 //! needs a continuous lower gold edge, matching exterior rails and a bright
 //! card interior. Dashed dark destinations never grant click authority. The
 //! outline primitive groups a connected run into one target. No card ranks,
@@ -58,20 +58,37 @@ const TABLEAU_EFFECT_BOTTOM: u32 = 936;
 const TOOLBAR_TOP: u32 = 947;
 
 
-/// Exclusive scan limit including K38's lower border and subsequent clear rows.
-/// K38's exterior rails end at row987 and its lower border ends at row990.
+/// Exclusive scan limit including K41's lower border and terminated side rails.
+/// K38's rails end at row987; K41's end at row990 before its row993 lower edge.
 /// This remains above the Windows taskbar and never extends input/proof bounds.
 const TABLEAU_OUTLINE_BOTTOM: u32 = 994;
 
 
-/// Measured Undo All icon/shadow over K38's three lower source-border rows.
-/// Only these 28 by 3 pixels may be unavailable to lower-edge recognition;
+/// Measured Undo All icon/shadow over K38/K41's lower source-border rows.
+/// Only these 28 by 6 pixels may be unavailable to lower-edge recognition;
 /// every remaining edge pixel, closed top and exterior rail is still required.
-const TOOLBAR_EDGE_OCCLUSION: PixelRect = PixelRect::new(1_308, 988, 28, 3);
+const TOOLBAR_EDGE_OCCLUSION: PixelRect = PixelRect::new(1_308, 988, 28, 6);
+
+
+/// Largest complete source measured in K41: rows 390..994, including its edge.
+/// This changes recognition height only; input and effect stay above the toolbar.
+const MAXIMUM_SOURCE_HEIGHT: u32 = 604;
+
+
+/// K44's complete tableau source face starts fourteen pixels right of its slot.
+/// This second scan retains the same card width and all closed-outline guards;
+/// the canonical column-centre click remains inside its first highlighted card.
+const TABLEAU_SOURCE_RIGHT_OFFSET: u32 = 14;
+
+
+/// K46's replacement single-card source is twenty-six pixels higher after spread.
+/// This exact measured contraction can support continuation only, never effect
+/// verification, and only with independent material and opposed print evidence.
+const VISIBLE_SOURCE_CONTRACTION: u16 = 26;
 
 
 /// Red Undo All artwork independently visible over K38's border occlusion.
-/// K38 supplies 68 matching pixels here; missing control artwork removes the mask.
+/// K38/K41 each supply 68 matching pixels; missing artwork removes the mask.
 const TOOLBAR_ICON_SUPPORT: PixelRect = PixelRect::new(1_314, 980, 14, 11);
 
 
@@ -99,6 +116,11 @@ const SOLVE_BOUNDS: PixelRect = PixelRect::new(562, 143, 124, 113);
 /// Original RGB8 samples on a four-pixel lattice over the entire Solve button.
 /// The fixture manifest records provenance; no image is decoded during detection.
 const SOLVE_TEMPLATE: &[u8; 2_697] = include_bytes!("klondike-solve-control.rgb");
+
+
+/// All 483 K42 interior samples fit the original tolerance while its outer frame
+/// warms by up to 26 red levels. The interior keeps its symmetric 24-level limit.
+const SOLVE_STABLE_INTERIOR: PixelRect = PixelRect::new(578, 159, 92, 81);
 
 
 /// Interior right progress-bar probe, measured at the same native coordinates
@@ -478,16 +500,53 @@ pub fn completion_evidence(
 }
 
 
-/// Match K13's control shape, check mark, lettering and colours at native scale.
-/// Every four-pixel sample is compared; require 98% within 24 RGB levels both
-/// overall and separately in the glyph area. Empty stock is a separate guard.
-fn has_solve_control(frame: &CapturedFrame) -> bool {
-    let stock_inside = PixelRect::new(406, 130, 100, 139);
+/// Read-only Solve-artwork and empty-stock measurements, separate from scene
+/// validation, priority, fresh action validation and input authority.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SolveEvidence {
+    /// Artwork and empty-stock guards pass; the caller still needs its scene.
+    pub available: bool,
+    /// Empty-stock interior pixels satisfying the existing green-felt predicate.
+    pub stock_felt_pixels: u32,
+    /// All 13,900 pixels in the complete calibrated empty-stock probe.
+    pub stock_probe_pixels: u32,
+    /// Four-pixel-lattice samples within the existing artwork colour tolerance.
+    pub artwork_matched: u32,
+    /// All 899 samples over the measured complete Solve control.
+    pub artwork_samples: u32,
+    /// Matching samples inside the separately guarded check mark/lettering area.
+    pub glyph_matched: u32,
+    /// All 342 samples in that original glyph area.
+    pub glyph_samples: u32,
+}
 
 
-    if !fraction_at_least(frame, stock_inside, is_felt, 900) {
-        return false;
+impl fmt::Display for SolveEvidence {
+
+
+    /// Preserve the exact classification counts needed to diagnose live refusal.
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter,
+            "Solve candidate={}; empty-stock felt={}/{} (required 90%); artwork={}/{} and glyph={}/{} (each required 98%); scene and target priority remain separate",
+            self.available, self.stock_felt_pixels, self.stock_probe_pixels,
+            self.artwork_matched, self.artwork_samples, self.glyph_matched, self.glyph_samples,
+        )
     }
+}
+
+
+/// Measure K13's native control shape and empty stock without granting input.
+/// The exact recogniser is unchanged: require 98% within 24 RGB levels overall
+/// and separately in the glyph area, with K42's two extra positive border-red
+/// levels only. All samples are measured even when empty-stock support fails,
+/// allowing the worker to report the actual rejected observation. Malformed
+/// storage or non-native geometry returns the existing detection error.
+pub fn inspect_solve_control(frame: &CapturedFrame) -> Result<SolveEvidence, HaloDetectionError> {
+    validate_frame(frame)?;
+    let stock_inside = PixelRect::new(406, 130, 100, 139);
+    let stock_felt_pixels = count_pixels(frame, stock_inside, is_felt);
+    let stock_probe_pixels = stock_inside.width * stock_inside.height;
+
 
     let mut matched = 0_u32;
     let mut glyph_matched = 0_u32;
@@ -502,7 +561,11 @@ fn has_solve_control(frame: &CapturedFrame) -> bool {
             let expected = &SOLVE_TEMPLATE[sample..sample + 3];
             sample += 3;
             let agrees = pixel_rgb(frame, x, y).is_some_and(|actual| {
-                actual.into_iter().zip(expected).all(|(a, b)| a.abs_diff(*b) <= 24)
+                let ordinary_match = actual.into_iter().zip(expected).all(|(a, b)| a.abs_diff(*b) <= 24);
+                let border_warming = !SOLVE_STABLE_INTERIOR.contains(PixelPoint::new(x as i32, y as i32))
+                    && (25..=26).contains(&(i16::from(actual[0]) - i16::from(expected[0])))
+                    && actual[1].abs_diff(expected[1]) <= 24 && actual[2].abs_diff(expected[2]) <= 24;
+                ordinary_match || border_warming
             });
             matched += u32::from(agrees);
 
@@ -514,7 +577,19 @@ fn has_solve_control(frame: &CapturedFrame) -> bool {
         }
     }
 
-    matched * 100 >= 899 * 98 && glyph_matched * 100 >= glyph_samples * 98
+    let available = stock_felt_pixels * 1_000 >= stock_probe_pixels * 900
+        && matched * 100 >= 899 * 98 && glyph_matched * 100 >= glyph_samples * 98;
+    Ok(SolveEvidence {
+        available, stock_felt_pixels, stock_probe_pixels,
+        artwork_matched: matched, artwork_samples: 899, glyph_matched, glyph_samples,
+    })
+}
+
+
+
+/// Reuse the measured artwork result after the caller has validated its scene.
+fn has_solve_control(frame: &CapturedFrame) -> bool {
+    inspect_solve_control(frame).is_ok_and(|evidence| evidence.available)
 }
 
 
@@ -522,14 +597,14 @@ fn has_solve_control(frame: &CapturedFrame) -> bool {
 ///
 /// This primitive starts at the bottom, normally requires a continuous 96-pixel
 /// lower edge, follows both exterior rails and probes paper above the toolbar.
-/// Only K38's measured column-6 icon overlap may obscure 28 lower-edge pixels;
+/// Only K38/K41's measured column-6 icon overlap may obscure 28 lower-edge pixels;
 /// positive icon artwork and all remaining 68 gold pixels are then mandatory.
 /// A black destination interior fails even if some gold
 /// dashes align. Card-rank artwork is not required to be white at one exact pixel.
 /// The returned rectangle groups all connected highlighted cards as one action.
 /// An interior crossbar cannot close a block while its exterior rails continue.
-/// K19/K38 permit darker closed edges in the measured toolbar overlap strip.
-/// K38's known icon occlusion cannot provide an edge, top or rail of its own.
+/// K19/K38/K41 permit darker closed edges in the measured toolbar overlap strip.
+/// The known icon occlusion cannot provide an edge, top or rail of its own.
 pub fn find_solid_card_source(
     frame: &CapturedFrame,
     scan: PixelRect,
@@ -563,7 +638,7 @@ fn find_solid_outline(
 
     // The last scanned row must show both rails ending. Otherwise an internal
     // crossbar near a clipped scan boundary could masquerade as the lower edge.
-    // K19's last rail row is958; K38's is987. Subsequent clear rows are observed.
+    // K19's last rail row is958; K38's is987; K41's is990. The rails then end.
     if (x - 9..x).any(|xx| pixel_rgb(frame, xx, bottom - 1).is_some_and(is_rail_gold))
         || (right..right + 10).any(|xx| pixel_rgb(frame, xx, bottom - 1).is_some_and(is_rail_gold))
     {
@@ -636,7 +711,7 @@ fn find_solid_outline(
         let height = y + 1 - top;
 
 
-        if !(180..=600).contains(&height) || top == scan.y
+        if !(180..=MAXIMUM_SOURCE_HEIGHT).contains(&height) || top == scan.y
             || matched_rows * 100 < (height - 10) * 85 {
             continue;
         }
@@ -667,6 +742,25 @@ fn find_solid_outline(
 }
 
 
+/// Recognise the nominal tableau outline or K44's measured horizontal offset.
+/// Upper piles never use this fallback. Both scans keep the complete top/lower
+/// edges, paired rails, paper and toolbar bounds required by the same primitive.
+fn find_tableau_source(
+    frame: &CapturedFrame,
+    scan: PixelRect,
+) -> Result<Option<PixelRect>, HaloDetectionError> {
+
+
+    if let Some(bounds) = find_solid_card_source(frame, scan)? {
+        return Ok(Some(bounds));
+    }
+
+    find_solid_card_source(frame, PixelRect::new(
+        scan.x + TABLEAU_SOURCE_RIGHT_OFFSET, scan.y, scan.width, scan.height,
+    ))
+}
+
+
 /// Build the immutable operation for a valid target; reject forged dynamic geometry.
 pub fn canonical_action(target: KlondikeTarget) -> Option<GuidedAction> {
 
@@ -694,7 +788,7 @@ pub fn canonical_action(target: KlondikeTarget) -> Option<GuidedAction> {
             if (1..=7).contains(&column) && top >= 332
                 && u32::from(bottom) <= TABLEAU_OUTLINE_BOTTOM
                 && u32::from(top) + 40 < TOOLBAR_TOP
-                && bottom.checked_sub(top).is_some_and(|height| (180..=600).contains(&height)) =>
+                && bottom.checked_sub(top).is_some_and(|height| (180..=MAXIMUM_SOURCE_HEIGHT).contains(&u32::from(height))) =>
         {
             let x = FIRST_COLUMN_X + COLUMN_PITCH * u32::from(column - 1);
             (
@@ -810,7 +904,7 @@ fn select_target(frame: &CapturedFrame) -> Result<Option<KlondikeTarget>, HaloDe
         let scan = PixelRect::new(x, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332);
 
 
-        if let Some(bounds) = find_solid_card_source(frame, scan)? {
+        if let Some(bounds) = find_tableau_source(frame, scan)? {
             let target = KlondikeTarget::Tableau {
                 column,
                 top: bounds.y as u16,
@@ -1198,6 +1292,51 @@ fn retained_bright_paper_field(
 }
 
 
+/// A contracted single-card outline can support the existing fresh-HALO path.
+/// K46 retains two complete paper-supported patches, but printed detail is not
+/// evenly divided between their corners. Both print directions must occur in
+/// each patch, each patch must supply 96 changed print pixels, and each direction
+/// must supply 96 across the opposed pair. The original 512 material-pixel guard
+/// remains. Only the measured equal 26-pixel shift of a same-column 190-pixel
+/// outline qualifies; it cannot prove a recipient or a verified complete effect.
+fn visible_contracted_source_replaced(
+    after: &CapturedFrame,
+    action: GuidedAction,
+    material: usize,
+    directions: [[usize; 2]; 2],
+) -> Result<bool, HaloDetectionError> {
+    let ActionTarget::Klondike(KlondikeTarget::Tableau { column, top, bottom }) = action.target else {
+        return Ok(false);
+    };
+
+
+    if material < MINIMUM_CONTENT_CHANGE
+        || bottom.checked_sub(top) != Some(190)
+        || u32::from(bottom) <= TOOLBAR_TOP
+        || !directions.into_iter().all(|[new_ink, cleared_ink]| {
+            new_ink > 0 && cleared_ink > 0
+                && new_ink + cleared_ink >= MINIMUM_CORNER_CHANGE * 2
+        })
+        || directions[0][0] + directions[1][0] < MINIMUM_CORNER_CHANGE * 2
+        || directions[0][1] + directions[1][1] < MINIMUM_CORNER_CHANGE * 2
+    {
+        return Ok(false);
+    }
+
+
+    let PredictedAction::Action(next) = analyse(after)?.prediction else { return Ok(false); };
+
+
+    let ActionTarget::Klondike(KlondikeTarget::Tableau {
+        column: next_column, top: next_top, bottom: next_bottom,
+    }) = next.target else { return Ok(false); };
+
+    Ok(column == next_column
+        && top.checked_sub(next_top) == Some(VISIBLE_SOURCE_CONTRACTION)
+        && bottom.checked_sub(next_bottom) == Some(VISIBLE_SOURCE_CONTRACTION))
+}
+
+
 /// SUIT source replacement evidence in the fixed bright upper-card face.
 /// It needs independent material source and tableau recipient change; printed
 /// detail alone cannot establish input effect or game completion.
@@ -1507,11 +1646,11 @@ impl fmt::Display for EffectEvidence {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             formatter,
-            "verified={}; source replaced={}; source changed={}, positive={}, dimmed felt={} (each source proof requires {}), card corner ink/paper={:?} (each required {}), corner [paper-to-ink, ink-to-paper]={:?} (tableau/SUIT each required {}), visible-tableau full-patch directions={:?} (each required {} plus source 512; continuation only), bright-SUIT print={:?}, destination changed={} (required {}), dimmed-foundation print={:?}; {}",
+            "verified={}; source replaced={}; source changed={}, positive={}, dimmed felt={} (each source proof requires {}), card corner ink/paper={:?} (each required {}), corner [paper-to-ink, ink-to-paper]={:?} (tableau/SUIT each required {}), visible-tableau full-patch directions={:?} (ordinary each {}, contracted-outline opposed totals {}; source 512; continuation only), bright-SUIT print={:?}, destination changed={} (required {}), dimmed-foundation print={:?}; {}",
             self.verified, self.source_replaced, self.source_changed, self.source_positive,
             self.source_dimmed_felt, MINIMUM_CONTENT_CHANGE, self.source_identity_corners,
             MINIMUM_CORNER_CHANGE, self.source_identity_directions, MINIMUM_CORNER_CHANGE,
-            self.source_visible_identity_directions, MINIMUM_CORNER_CHANGE,
+            self.source_visible_identity_directions, MINIMUM_CORNER_CHANGE, MINIMUM_CORNER_CHANGE * 2,
             self.source_foundation_print,
             self.destination_changed, MINIMUM_CONTENT_CHANGE, self.destination_print,
             self.reason,
@@ -1662,13 +1801,18 @@ pub fn inspect_effect(
     let source_verified = evidence.source_positive >= MINIMUM_CONTENT_CHANGE
         || evidence.source_dimmed_felt >= MINIMUM_CONTENT_CHANGE || identity_verified
         || evidence.source_foundation_print.verified;
-    evidence.source_replaced = source_verified || visible_source_replaced;
+    let contracted_source_replaced = visible_contracted_source_replaced(
+        after, action, evidence.source_changed, evidence.source_visible_identity_directions,
+    )?;
+    evidence.source_replaced = source_verified || visible_source_replaced || contracted_source_replaced;
     let destination_verified = evidence.destination_changed >= MINIMUM_CONTENT_CHANGE
         || (evidence.destination_print.verified && evidence.source_changed >= MINIMUM_CONTENT_CHANGE);
     evidence.verified = source_verified && destination_verified;
 
 
     evidence.reason = match (source_verified, destination_verified) {
+        (false, _) if contracted_source_replaced =>
+            "opposed print and a 26-pixel contracted same-column outline support fresh-HALO continuation only; complete effect unverified",
         (false, _) if visible_source_replaced =>
             "two full visible patches establish source replacement for fresh-HALO continuation only; recipient and complete effect unverified",
         (false, _) => "source removal/replacement not established; fresh HALO is insufficient",
@@ -1918,8 +2062,8 @@ mod tests {
             column: 6, top: 390, bottom: TABLEAU_OUTLINE_BOTTOM as u16 + 1,
         }).is_none());
         assert!(canonical_action(KlondikeTarget::Tableau {
-            column: 6, top: 350, bottom: 953,
-        }).is_none(), "unobserved runs exceeding the existing 600-pixel bound stay unsupported");
+            column: 6, top: 348, bottom: 953,
+        }).is_none(), "unobserved runs exceeding the measured 604-pixel bound stay unsupported");
     }
 
 
@@ -3038,8 +3182,8 @@ mod tests {
         assert_eq!(report.destination_changed, 0);
         assert!(!report.source_replaced && !report.verified, "{report}");
         assert!(canonical_action(KlondikeTarget::Tableau { column: 6, top: 407, bottom: TABLEAU_OUTLINE_BOTTOM as u16 + 1 }).is_none());
-        assert!(canonical_action(KlondikeTarget::Tableau { column: 6, top: 390, bottom: 994 }).is_none(),
-            "the unchanged 600-pixel maximum rejects uncalibrated taller runs");
+        assert!(canonical_action(KlondikeTarget::Tableau { column: 6, top: 389, bottom: 994 }).is_none(),
+            "the measured 604-pixel maximum rejects uncalibrated taller runs");
         let mut malformed = before;
         malformed.pixels.truncate(4);
         assert_eq!(find_solid_card_source(&malformed, PixelRect::new(1_230, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)),
@@ -3272,4 +3416,415 @@ mod tests {
         malformed.pixels.truncate(4);
         assert_eq!(inspect_effect(&before, &malformed, planned), Err(HaloDetectionError::InvalidFrameLayout));
     }
+
+
+    /// K41's ten-card block adds three lower-border rows and is 604 pixels tall.
+    /// The measured source supplies one safe click; the toolbar supplies no effect.
+    #[test]
+    fn recorded_ten_card_source_keeps_one_upper_click_and_excludes_toolbar_effects() {
+        let before = fixture(41);
+        let planned = action(&before);
+        assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
+            column: 6, top: 390, bottom: 994,
+        }));
+        assert_eq!(planned.operation(), InputOperation::Click(PixelPoint::new(1_296, 430)));
+        assert_eq!(planned.effect_bounds(), PixelRect::new(1_230, 390, CARD_WIDTH, 557));
+        assert_eq!(count_pixels(&before, TOOLBAR_ICON_SUPPORT, is_toolbar_undo_red), 68);
+        assert_eq!(find_solid_card_source(&before, PixelRect::new(1_230, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)).unwrap(),
+            Some(PixelRect::new(1_230, 390, CARD_WIDTH, MAXIMUM_SOURCE_HEIGHT)));
+        assert!(!completion_evidence(&before).unwrap().complete_candidate);
+        let mut toolbar_changed = before.clone();
+        paint(&mut toolbar_changed, PixelRect::new(378, TOOLBAR_TOP, 1_162, 1_033 - TOOLBAR_TOP), [255, 255, 255]);
+        let report = inspect_effect(&before, &toolbar_changed, planned).unwrap();
+        assert_eq!(report.source_changed, 0);
+        assert_eq!(report.destination_changed, 0);
+        assert!(!report.source_replaced && !report.verified, "{report}");
+        assert!(canonical_action(KlondikeTarget::Tableau { column: 6, top: 389, bottom: 994 }).is_none());
+        assert!(canonical_action(KlondikeTarget::Tableau { column: 6, top: 390, bottom: 995 }).is_none());
+    }
+
+
+    /// K41's mask only covers the measured Undo All overlap. Cropping, broken
+    /// visible edges, absent icon, interrupted rails/top and dark paper still fail.
+    #[test]
+    fn ten_card_source_requires_complete_measured_outline_and_visible_paper() {
+        let frame = fixture(41);
+
+
+        for bottom in 930..TABLEAU_OUTLINE_BOTTOM {
+            assert_eq!(find_solid_card_source(&frame, PixelRect::new(1_230, 332, CARD_WIDTH, bottom - 332)).unwrap(), None,
+                "the icon mask cannot complete a cropped scan ending at row{bottom}");
+        }
+
+
+        for corruption in [
+            PixelRect::new(1_248, 988, 1, 6),
+            PixelRect::new(1_307, 988, 1, 6),
+            TOOLBAR_ICON_SUPPORT,
+            PixelRect::new(1_218, 975, 156, TABLEAU_OUTLINE_BOTTOM - 975),
+            PixelRect::new(1_218, 380, 156, 31),
+            PixelRect::new(1_218, 620, 12, 24),
+            PixelRect::new(1_248, 911, 96, 12),
+        ] {
+            let mut damaged = frame.clone();
+            paint(&mut damaged, corruption, [12, 82, 45]);
+            assert_eq!(analyse(&damaged).unwrap().prediction, PredictedAction::NoHighlight, "{corruption:?}");
+        }
+
+        let mut malformed = frame;
+        malformed.pixels.truncate(4);
+        assert_eq!(find_solid_card_source(&malformed, PixelRect::new(1_230, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)),
+            Err(HaloDetectionError::InvalidFrameLayout));
+    }
+
+
+    /// Increasing the calibrated run height cannot let decoration, a recipient
+    /// guide or an internal crossbar substitute for the connected source outline.
+    #[test]
+    fn ten_card_source_rejects_floating_gold_dashed_guides_and_internal_edges() {
+        let frame = fixture(41);
+        let mut empty = frame.clone();
+        paint(&mut empty, PixelRect::new(1_218, 380, 156, TABLEAU_OUTLINE_BOTTOM - 380), [12, 82, 45]);
+        let mut floating = empty.clone();
+        paint(&mut floating, PixelRect::new(1_248, 993, 96, 1), [170, 120, 75]);
+        copy_region(&frame, &mut floating, TOOLBAR_ICON_SUPPORT, PixelPoint::new(TOOLBAR_ICON_SUPPORT.x as i32, TOOLBAR_ICON_SUPPORT.y as i32));
+        assert_eq!(analyse(&floating).unwrap().prediction, PredictedAction::NoHighlight);
+        let mut dashed = empty.clone();
+        copy_region(&frame, &mut dashed, PixelRect::new(726, 342, CARD_WIDTH, CARD_HEIGHT), PixelPoint::new(1_230, 390));
+        assert_eq!(analyse(&dashed).unwrap().prediction, PredictedAction::NoHighlight);
+
+
+        for rgb in [[0, 0, 0], [255, 255, 255]] {
+            let mut cursor = empty.clone();
+            paint(&mut cursor, PixelRect::new(1_276, 410, 40, 60), rgb);
+            assert_eq!(analyse(&cursor).unwrap().prediction, PredictedAction::NoHighlight);
+        }
+
+        let mut internal_edge = frame;
+        paint(&mut internal_edge, PixelRect::new(1_218, 975, 156, TABLEAU_OUTLINE_BOTTOM - 975), [12, 82, 45]);
+        paint(&mut internal_edge, PixelRect::new(1_248, 944, 96, 1), [170, 120, 75]);
+        assert_eq!(analyse(&internal_edge).unwrap().prediction, PredictedAction::NoHighlight);
+    }
+
+
+    /// Alter only the template sample's red channel for a bounded adverse probe.
+    /// Unrepresentable values are left untouched rather than clamped into evidence.
+    fn shift_solve_sample_red(frame: &mut CapturedFrame, border: bool, delta: i16) {
+        let mut sample = 0;
+
+
+        for y in (SOLVE_BOUNDS.y..SOLVE_BOUNDS.bottom()).step_by(4) {
+
+
+            for x in (SOLVE_BOUNDS.x..SOLVE_BOUNDS.right()).step_by(4) {
+                let expected = &SOLVE_TEMPLATE[sample..sample + 3];
+                sample += 3;
+
+
+                if SOLVE_STABLE_INTERIOR.contains(PixelPoint::new(x as i32, y as i32)) == border {
+                    continue;
+                }
+
+
+                if let Ok(red) = u8::try_from(i16::from(expected[0]) + delta) {
+                    paint(frame, PixelRect::new(x, y, 1, 1), [red, expected[1], expected[2]]);
+                }
+            }
+        }
+    }
+
+
+    /// K42's warmer frame fails the old tolerance at 198 border samples while
+    /// all 342 glyph samples match. Solve keeps priority over the remaining Jack.
+    #[test]
+    fn recorded_solve_border_warming_preserves_priority_without_widening_interior() {
+        let frame = fixture(42);
+        assert!(has_solve_control(&frame));
+        assert_eq!(action(&frame).target, ActionTarget::Klondike(KlondikeTarget::Solve));
+        assert!(find_solid_card_source(&frame, PixelRect::new(558, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)).unwrap().is_some());
+
+
+        for (border, delta) in [(true, 27), (true, -25), (false, 25)] {
+            let mut damaged = frame.clone();
+            shift_solve_sample_red(&mut damaged, border, delta);
+            assert!(!has_solve_control(&damaged), "border={border}, red delta={delta}");
+            assert_ne!(action(&damaged).target, ActionTarget::Klondike(KlondikeTarget::Solve));
+        }
+    }
+
+
+    /// Positive warmer-border evidence does not authorise incomplete controls,
+    /// occupied stock, overlaid scenes or a cursor hiding the check mark/text.
+    #[test]
+    fn warmer_solve_control_still_requires_border_glyph_stock_and_scene() {
+        let frame = fixture(42);
+
+
+        for corruption in [
+            PixelRect::new(590, 212, 70, 24),
+            PixelRect::new(598, 160, 58, 42),
+            PixelRect::new(562, 143, 10, 113),
+        ] {
+            let mut damaged = frame.clone();
+            paint(&mut damaged, corruption, [12, 62, 40]);
+            assert!(!has_solve_control(&damaged), "{corruption:?}");
+        }
+
+
+        for rgb in [[0, 0, 0], [255, 255, 255]] {
+            let mut cursor = frame.clone();
+            paint(&mut cursor, PixelRect::new(590, 160, 70, 76), rgb);
+            assert!(!has_solve_control(&cursor));
+        }
+
+        let mut occupied = frame.clone();
+        copy_region(&fixture(1), &mut occupied, PixelRect::new(390, UPPER_Y, CARD_WIDTH, CARD_HEIGHT), PixelPoint::new(390, UPPER_Y as i32));
+        assert!(!has_solve_control(&occupied));
+        let mut overlay = frame;
+        paint(&mut overlay, PixelRect::new(820, 600, 400, 200), [20, 20, 20]);
+        assert_eq!(analyse(&overlay).unwrap().prediction, PredictedAction::NoHighlight);
+    }
+
+
+    /// K44 displaces one complete source fourteen pixels right of its slot.
+    /// The fixed primitive still refuses it; only the bounded tableau scan adds
+    /// this evidenced offset and keeps the canonical click inside the source.
+    #[test]
+    fn recorded_right_shifted_run_uses_one_safe_column_centre_click() {
+        let frame = fixture(44);
+        assert!(is_gameplay_scene(&frame).unwrap());
+        let scan = PixelRect::new(390, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332);
+        assert_eq!(find_solid_card_source(&frame, scan).unwrap(), None);
+        assert_eq!(find_tableau_source(&frame, scan).unwrap(),
+            Some(PixelRect::new(404, 442, CARD_WIDTH, 464)));
+        let planned = action(&frame);
+        assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
+            column: 1, top: 442, bottom: 906,
+        }));
+        assert_eq!(planned.operation(), InputOperation::Click(PixelPoint::new(456, 482)));
+        assert_eq!(planned.effect_bounds(), PixelRect::new(390, 442, CARD_WIDTH, 464));
+        let report = inspect_effect(&frame, &frame, planned).unwrap();
+        assert!(!report.source_replaced && !report.verified, "unchanged source: {report}");
+    }
+
+
+    /// K45 is the earlier RIGHT Queen recommendation leading to K44's shifted
+    /// six-card source. It is not the missing pre-action image for K46's later
+    /// bottom-card transfer. This native pair proves its own separate move.
+    #[test]
+    fn recorded_queen_transfer_leads_to_the_right_shifted_six_card_source() {
+        let before = fixture(45);
+        let after = fixture(44);
+        let planned = action(&before);
+        assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Waste { offset: 2 }));
+        let report = inspect_effect(&before, &after, planned).unwrap();
+        assert!(report.source_replaced && report.verified, "{report}");
+        assert!(report.destination_changed >= MINIMUM_CONTENT_CHANGE, "{report}");
+        assert_eq!(action(&after).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
+            column: 1, top: 442, bottom: 906,
+        }));
+    }
+
+
+    /// The offset cannot supply its own missing edge, rail, paper or scene.
+    #[test]
+    fn shifted_tableau_run_keeps_closed_geometry_paper_and_scene_guards() {
+        let frame = fixture(44);
+
+
+        for bounds in [
+            PixelRect::new(422, 897, 96, 9),
+            PixelRect::new(395, 540, 9, 24),
+            PixelRect::new(422, 432, 96, 12),
+            PixelRect::new(422, 868, 96, 12),
+        ] {
+            let mut damaged = frame.clone();
+            paint(&mut damaged, bounds, [12, 82, 45]);
+            assert_eq!(analyse(&damaged).unwrap().prediction, PredictedAction::NoHighlight, "{bounds:?}");
+        }
+        let mut unsupported = frame.clone();
+        paint(&mut unsupported, PixelRect::new(160, 310, 16, 16), [0, 0, 0]);
+        assert_eq!(analyse(&unsupported).unwrap().prediction, PredictedAction::NoHighlight);
+        let mut shifted_farther = frame.clone();
+        paint(&mut shifted_farther, PixelRect::new(378, 430, 184, 486), [12, 82, 45]);
+        copy_region(&frame, &mut shifted_farther, PixelRect::new(395, 432, 154, 480), PixelPoint::new(425, 432));
+        assert_eq!(analyse(&shifted_farther).unwrap().prediction, PredictedAction::NoHighlight);
+    }
+
+
+    /// The later manual K47 capture already has a canonical connected run;
+    /// the earlier unsupported worker frame was not saved as this PNG.
+    #[test]
+    fn recorded_third_stop_capture_already_has_one_complete_four_card_source() {
+        let frame = fixture(47);
+        assert!(is_gameplay_scene(&frame).unwrap());
+        assert_eq!(find_solid_card_source(&frame, PixelRect::new(894, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)).unwrap(),
+            Some(PixelRect::new(894, 555, CARD_WIDTH, 354)));
+        assert_eq!(action(&frame).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
+            column: 4, top: 555, bottom: 909,
+        }));
+    }
+
+
+    /// K48 matches every existing artwork sample. Its priority failure cannot
+    /// justify wider colour tolerances; keep the full original recogniser.
+    #[test]
+    fn recorded_later_solve_capture_is_already_recognised_before_tableau() {
+        let frame = fixture(48);
+        assert!(is_gameplay_scene(&frame).unwrap());
+        assert!(has_solve_control(&frame));
+        assert!(find_solid_card_source(&frame, PixelRect::new(390, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)).unwrap().is_some());
+        assert_eq!(action(&frame).target, ActionTarget::Klondike(KlondikeTarget::Solve));
+    }
+
+
+    /// Exercise the logged counts against the actual later K46 outline. These
+    /// counts came from unsaved worker frames; this is not a native move pair.
+    #[test]
+    fn logged_bottom_print_counts_need_material_opposed_print_and_exact_contraction() {
+        let frame = fixture(46);
+        let planned = canonical_action(KlondikeTarget::Tableau { column: 1, top: 799, bottom: 989 }).unwrap();
+        assert_eq!(action(&frame).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
+            column: 1, top: 773, bottom: 963,
+        }));
+        assert!(visible_contracted_source_replaced(&frame, planned, 687, [[36, 207], [142, 58]]).unwrap());
+
+
+        for counts in [
+            [[0, 207], [142, 58]], [[36, 0], [142, 58]],
+            [[36, 207], [0, 58]], [[36, 207], [142, 0]],
+            [[1, 94], [142, 58]], [[36, 207], [58, 58]],
+            [[36, 37], [142, 58]], [[36, 207], [47, 48]],
+        ] {
+            assert!(!visible_contracted_source_replaced(&frame, planned, 687, counts).unwrap(), "{counts:?}");
+        }
+        assert!(!visible_contracted_source_replaced(&frame, planned, 511, [[36, 207], [142, 58]]).unwrap());
+
+
+        for target in [
+            KlondikeTarget::Tableau { column: 1, top: 798, bottom: 988 },
+            KlondikeTarget::Tableau { column: 1, top: 800, bottom: 990 },
+            KlondikeTarget::Tableau { column: 2, top: 799, bottom: 989 },
+            KlondikeTarget::Tableau { column: 1, top: 773, bottom: 963 },
+            KlondikeTarget::Waste { offset: 0 }, KlondikeTarget::Foundation { column: 1 },
+        ] {
+            let different = canonical_action(target).unwrap();
+            assert!(!visible_contracted_source_replaced(&frame, different, 687, [[36, 207], [142, 58]]).unwrap(), "{target:?}");
+        }
+        let mut malformed = frame.clone();
+        malformed.pixels.truncate(1);
+        assert!(visible_contracted_source_replaced(&malformed, planned, 687, [[36, 207], [142, 58]]).is_err());
+    }
+
+
+    /// Reconstruct a deliberately synthetic previous four-diamond source from
+    /// native K39 rails and K44 card artwork over K46's later board. The true
+    /// pre-action frame was not captured, so no live effect is inferred here.
+    fn synthetic_bottom_contraction() -> (CapturedFrame, CapturedFrame, GuidedAction) {
+        let after = fixture(46);
+        let mut before = after.clone();
+        paint(&mut before, PixelRect::new(378, 760, 156, 234), [12, 82, 45]);
+        copy_region(&fixture(39), &mut before, PixelRect::new(716, 799, 154, 190), PixelPoint::new(380, 799));
+        copy_region(&fixture(44), &mut before, PixelRect::new(614, UPPER_Y, CARD_WIDTH, CARD_HEIGHT), PixelPoint::new(390, 805));
+        let planned = action(&before);
+        assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
+            column: 1, top: 799, bottom: 989,
+        }));
+        (before, after, planned)
+    }
+
+
+    /// Exercise production pixel exclusions before the contracted-outline route;
+    /// no independent recipient or complete effect is invented by this pair.
+    #[test]
+    fn synthetic_bottom_contraction_supports_continuation_only() {
+        let (before, after, planned) = synthetic_bottom_contraction();
+        let report = inspect_effect(&before, &after, planned).unwrap();
+        println!("synthetic contraction: {report}");
+        assert!(report.source_replaced && !report.verified, "{report}");
+        assert!(report.source_changed >= MINIMUM_CONTENT_CHANGE, "{report}");
+        assert!(report.source_visible_identity_directions.into_iter().flatten().any(|count| count < MINIMUM_CORNER_CHANGE), "old per-corner route must remain insufficient: {report}");
+        assert!(!inspect_effect(&before, &before, planned).unwrap().source_replaced);
+    }
+
+
+    /// The translated recogniser retains a conservative fixed source ROI. It
+    /// must not borrow a receiver or decoration to establish source replacement.
+    #[test]
+    fn shifted_source_effect_roi_keeps_removal_recipient_and_mask_separation() {
+        let before = fixture(44);
+        let planned = action(&before);
+        let mut source_only = before.clone();
+        paint(&mut source_only, PixelRect::new(395, 432, 154, 480), [12, 82, 45]);
+        let report = inspect_effect(&before, &source_only, planned).unwrap();
+        assert!(report.source_replaced && !report.verified, "{report}");
+        assert!(report.source_positive >= MINIMUM_CONTENT_CHANGE, "{report}");
+        let mut receiver_only = before.clone();
+        paint(&mut receiver_only, PixelRect::new(1_078, 130, 100, 139), [245, 245, 245]);
+        let report = inspect_effect(&before, &receiver_only, planned).unwrap();
+        assert!(report.destination_changed >= MINIMUM_CONTENT_CHANGE, "{report}");
+        assert!(!report.source_replaced && !report.verified, "{report}");
+
+
+        for (bounds, rgb) in [
+            (PixelRect::new(440, 466, 32, 32), [0, 0, 0]),
+            (PixelRect::new(406, 470, 96, 32), [170, 120, 75]),
+            (PixelRect::new(390, TOOLBAR_TOP, 132, 44), [0, 0, 0]),
+        ] {
+            let mut masked = before.clone();
+            paint(&mut masked, bounds, rgb);
+            let report = inspect_effect(&before, &masked, planned).unwrap();
+            assert!(!report.source_replaced && !report.verified, "{bounds:?}: {report}");
+        }
+    }
+
+
+    /// Contracted-source continuation still needs two independent full patches;
+    /// erasing one patch or recolouring either paper support fails the pixel path.
+    #[test]
+    fn synthetic_contraction_keeps_opposed_patch_paper_and_cursor_guards() {
+        let (before, after, planned) = synthetic_bottom_contraction();
+
+
+        for patch in [PixelRect::new(395, 804, 28, 44), PixelRect::new(489, 903, 28, 44)] {
+            let mut restored = after.clone();
+            copy_region(&before, &mut restored, patch, PixelPoint::new(patch.x as i32, patch.y as i32));
+            paint(&mut restored, PixelRect::new(430, 891, 40, 10), [190, 190, 190]);
+            let report = inspect_effect(&before, &restored, planned).unwrap();
+            assert!(report.source_changed >= MINIMUM_CONTENT_CHANGE, "{report}");
+            assert!(!report.source_replaced && !report.verified, "restored {patch:?}: {report}");
+            let mut dark = after.clone();
+            paint(&mut dark, patch, [170, 120, 75]);
+            let report = inspect_effect(&before, &dark, planned).unwrap();
+            assert!(!report.source_replaced && !report.verified, "dark {patch:?}: {report}");
+        }
+        let mut cursor_only = before.clone();
+        paint(&mut cursor_only, PixelRect::new(440, 823, 32, 32), [0, 0, 0]);
+        let report = inspect_effect(&before, &cursor_only, planned).unwrap();
+        assert!(!report.source_replaced && !report.verified, "{report}");
+        let mut malformed = after;
+        malformed.pixels.truncate(1);
+        assert!(inspect_effect(&before, &malformed, planned).is_err());
+    }
+
+
+    /// The public diagnostic preserves every original candidate count even when
+    /// stock support fails, and never grants scene or input authority itself.
+    #[test]
+    fn solve_diagnostic_reports_full_artwork_and_independent_empty_stock_guard() {
+        let frame = fixture(48);
+        assert_eq!(inspect_solve_control(&frame).unwrap(), SolveEvidence {
+            available: true, stock_felt_pixels: 13_900, stock_probe_pixels: 13_900,
+            artwork_matched: 899, artwork_samples: 899, glyph_matched: 342, glyph_samples: 342,
+        });
+        let mut stock_occupied = frame.clone();
+        copy_region(&fixture(1), &mut stock_occupied, PixelRect::new(390, UPPER_Y, CARD_WIDTH, CARD_HEIGHT), PixelPoint::new(390, UPPER_Y as i32));
+        let report = inspect_solve_control(&stock_occupied).unwrap();
+        assert!(!report.available && report.stock_felt_pixels < 12_510, "{report}");
+        assert_eq!((report.artwork_matched, report.glyph_matched), (899, 342));
+        let mut malformed = frame;
+        malformed.pixels.truncate(1);
+        assert!(inspect_solve_control(&malformed).is_err());
+    }
+
 }

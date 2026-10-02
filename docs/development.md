@@ -1,7 +1,7 @@
-# Development conventions for v1.2.3 candidate 5
+# Development conventions for v1.2.4 candidate 2
 
-This candidate corrects unpushed v1.2.3 candidate 4 against the same committed
-v1.2.2 candidate 2 base.
+This candidate corrects committed v1.2.3 candidate 5 at
+`d9ad2cdf536165bb99ae4e02dabc49f7a9fa7227`.
 TriPeaks and Pyramid retain their established execution policies.
 Independent card-rank recognition, search and file-free capture are outside
 this candidate.
@@ -92,7 +92,7 @@ No formatter check is included, by Charlie's explicit instruction. Build/test
 results from another host do not prove Beast installation or live guest input.
 The candidate delivery notes record the checks actually executed.
 
-On the Beast, confirm the launched executable identifies v1.2.3, candidate 5. Verify
+On the Beast, confirm the launched executable identifies v1.2.4, candidate 2. Verify
 Capture Frame, exact-byte manual Capture PNG, single-step, finite and continuous
 multi-step, STOP and mode/socket invalidation. Exercise Klondike Draw 1, source
 transfers, RIGHT fan positions, recycle, Solve and late/no-HALO recovery. Preserve first-failure
@@ -158,3 +158,20 @@ without complete verification, receiver-only changes, one-way shading/whitening,
 run geometry and malformed frames. No toolbar pixels may supply effect proof.
 The controller, action budgets, timing defaults and completion policy are unchanged.
 See `klondike-v1.2.3-candidate-5.md` for native measurements and Beast checks.
+
+Version 1.2.4 candidate 1 adds K41–K43. Verify the 604-pixel source, the
+warmer Solve border and input-free completion across animation into the settled
+Congratulations screen. The longer Solve wait uses the existing 20-round
+post-game bound and current editable re-observation timing; this is not a fixed
+20-second timeout. Card recovery and terminal-control advancement retain their
+existing bounds. All new source keeps the requested spacing without a formatter.
+
+Version 1.2.4 candidate 2 retains the same exact Git base and adds K44–K49.
+Test the displaced native source, persistent/transient unsupported results, the
+source-supported contracted-card continuation and both early/late Level Up
+recognition. The provided earlier rollback screenshot is not the original
+planning frame for the last bottom-card action; that regression combines native
+result pixels, runtime counts and an explicitly synthetic predecessor.
+Do not claim K48 establishes the missing live Solve failure: its settled artwork
+already passes. Inspect new per-observation Solve diagnostics in the next run.
+No input may be replayed after uncertain delivery or unsupported-scene recovery.

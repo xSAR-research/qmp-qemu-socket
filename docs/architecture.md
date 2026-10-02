@@ -202,7 +202,9 @@ Draw/recycle. Acknowledged actions consume finite budget slots, with strict
 verification and continuation counters kept separate. It does not infer previous
 effect or completion. Other unresolved results stop. The independently recognised
 Solve button in RIGHT's place permits one auto-finish request followed by its
-separate animation delay and bounded read-only completion observations. No Solve
+separate animation delay and up to 20 delayed read-only completion observations
+at the editable Klondike re-observation interval. This reuses the existing
+post-game bound; ordinary card recovery retains three delayed observations. No Solve
 or uncertain gameplay input is retried. An initial changed preview returns a
 fresh approved prediction for review without guest input; an exact approved
 no-HALO match permits recovery only and cannot initiate gameplay.
@@ -284,3 +286,9 @@ filesystem is not supported by this capture design.
 | QMP absolute | top-left, integer `0..=32767` per axis | Guest pointer input |
 
 Host desktop coordinates never enter the QMP transform.
+
+Candidate2 keeps unsupported post-action recapture inside Klondike's existing
+shared result-observation budget. It retains the original action frame and plan,
+skips effect/input analysis on unsupported scenes, and evaluates only fresh
+supported results. Source-supported continuation does not upgrade the preceding
+move to verified. Solve diagnostic counts have no input or completion authority.

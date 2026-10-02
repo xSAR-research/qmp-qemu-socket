@@ -25,7 +25,8 @@ use crate::{
     klondike,
     parameters::{
         ACTION_CHANGE_CHANNEL_THRESHOLD, KEY_HOLD, KLONDIKE_MAX_MULTI_STEP_ACTIONS, MOUSE_HOLD,
-        NOMINAL_FRAME_HEIGHT, NOMINAL_FRAME_WIDTH, POINTER_SETTLE_DELAY, SOLVER_MOUSE_HOLD, StepRunSettings,
+        NOMINAL_FRAME_HEIGHT, NOMINAL_FRAME_WIDTH, POINTER_SETTLE_DELAY, POST_GAME_MAX_OBSERVATION_ROUNDS,
+        SOLVER_MOUSE_HOLD, StepRunSettings,
     },
     qmp::QmpClient,
     stepper::{StepPlan, plan_step},
@@ -35,6 +36,21 @@ use crate::{
 
 /// Maximum delayed observations after an immediate result or Solver capture.
 const REOBSERVATION_LIMIT: usize = 3;
+
+
+/// An acknowledged Solve starts the existing bounded post-game observation budget.
+/// Card recovery retains its shorter limit; no new timing or input is introduced.
+const SOLVE_COMPLETION_REOBSERVATION_LIMIT: usize = POST_GAME_MAX_OBSERVATION_ROUNDS;
+
+
+/// Why the worker is observing completion without sending further input.
+#[derive(Clone, Copy)]
+enum CompletionWait {
+    /// An ordinary observation already supplied the first positive candidate.
+    ConfirmCandidate,
+    /// Solve was acknowledged once; animation may precede any win evidence.
+    AfterSolve,
+}
 
 
 /// Accept continuous zero or a finite gameplay-action budget before connecting or clearing STOP.
@@ -162,6 +178,19 @@ impl KlondikeIo for QmpKlondikeIo<'_> {
             "PROFILE Klondike observation: acquisition and classification={:.1} ms; screendump={:.1} ms, decode={:.1} ms.",
             milliseconds(started.elapsed()), milliseconds(timing.screendump), milliseconds(timing.decode),
         ));
+
+
+        if let CaptureResult::Classified(observation) = &result {
+
+
+            match klondike::inspect_solve_control(&observation.frame) {
+                Ok(evidence) => send_log(self.event_tx, format!(
+                    "Klondike Solve evidence: {evidence}; gameplay scene={}; selected={}",
+                    observation.gameplay_scene, format_prediction_target(observation.prediction),
+                )),
+                Err(error) => send_log(self.event_tx, format!("Klondike Solve diagnostic unavailable: {error}")),
+            }
+        }
         Ok(result)
     }
 
@@ -399,7 +428,7 @@ fn drive_run(
     let requested_actions = settings.bounded_operation_limit()
         .map_or_else(|| "continuous until STOP, uncertainty or game win".to_owned(), |limit| format!("{limit} gameplay action(s)"));
     send_log(event_tx, format!(
-        "Klondike requested {requested_actions}, settle={} ms, Solve animation settle={} ms, reobserve={} ms. Draw uses qcode D; recycle and card sources use one click. Solver refresh: one per unresolved context, followed by at most {REOBSERVATION_LIMIT} delayed observations; the first capture is immediate. Solve is clicked once, separately settled and checked with bounded input-free captures; one board is one game. Only continuous Multi-Step 0 advances through independently recognised terminal controls.",
+        "Klondike requested {requested_actions}, settle={} ms, Solve animation settle={} ms, reobserve={} ms. Draw uses qcode D; recycle and card sources use one click. Solver refresh: one per unresolved context, followed by at most {REOBSERVATION_LIMIT} delayed observations; the first capture is immediate. Solve is clicked once, separately settled and checked with up to {SOLVE_COMPLETION_REOBSERVATION_LIMIT} delayed input-free completion captures; two consecutive positives are required and card recovery keeps its own shorter budget. One board is one game. Only continuous Multi-Step 0 advances through independently recognised terminal controls.",
         delays.klondike_settle.as_millis(), delays.klondike_solve.as_millis(), delays.klondike_reobserve.as_millis(),
     ));
     send_log(event_tx, format!(
@@ -424,7 +453,7 @@ fn drive_run(
     {
 
 
-        if !await_completion(io, latest, settings, event_tx, cancel_requested, true)? {
+        if !await_completion(io, latest, settings, event_tx, cancel_requested, CompletionWait::ConfirmCandidate)? {
             return Err("initial completion candidate was not confirmed within bounded read-only observations; no input sent".to_owned());
         }
 
@@ -504,7 +533,7 @@ fn drive_run(
         if solve_requested {
             // Completion checks cannot authorise another Solve or recovery input.
             let complete = await_completion(
-                io, latest, settings, event_tx, cancel_requested, false,
+                io, latest, settings, event_tx, cancel_requested, CompletionWait::AfterSolve,
             )?;
 
 
@@ -532,8 +561,21 @@ fn drive_run(
                 && io.completion(&current.frame)?;
 
 
-            if !completion_candidate {
-                require_scene(current)?;
+            if !completion_candidate && !current.gameplay_scene {
+
+
+                if delayed_observations >= REOBSERVATION_LIMIT {
+                    return Err(format!(
+                        "unsupported Klondike scene persisted through {delayed_observations} delayed input-free result captures; the previous gameplay input was not replayed",
+                    ));
+                }
+                delayed_observations += 1;
+                send_log(event_tx, format!(
+                    "Klondike unsupported result re-observation {delayed_observations}/{REOBSERVATION_LIMIT}: scene not established; gameplay, Solver and terminal input sent=0; previous effect remains pending",
+                ));
+                io.wait(delays.klondike_reobserve)?;
+                capture_latest(io, latest, event_tx)?;
+                continue;
             }
             let effect = io.effect(&before, &current.frame, plan.input().action())?;
             let effect_verified = effect.verified;
@@ -550,7 +592,7 @@ fn drive_run(
                 };
 
 
-                if await_completion(io, latest, settings, event_tx, cancel_requested, true)? {
+                if await_completion(io, latest, settings, event_tx, cancel_requested, CompletionWait::ConfirmCandidate)? {
 
 
                     if effect_verified {
@@ -824,14 +866,22 @@ fn report_continued_action(
 /// result immediately after the caller's Solve settle. Each newly decoded frame
 /// replaces `latest` before STOP or analysis errors can end the run. No action is
 /// classified or sent, and a non-candidate resets the confirmation count.
+/// Acknowledged Solve uses the existing longer post-game observation bound;
+/// an ordinary candidate retains the card-recovery bound. Neither budget resets.
 fn await_completion(
     io: &mut impl KlondikeIo,
     latest: &mut Option<FrameObservation>,
     settings: StepRunSettings,
     event_tx: &WorkerEventSink,
     cancel_requested: &AtomicBool,
-    known_candidate: bool,
+    context: CompletionWait,
 ) -> Result<bool, String> {
+
+
+    let (known_candidate, reobservation_limit) = match context {
+        CompletionWait::ConfirmCandidate => (true, REOBSERVATION_LIMIT),
+        CompletionWait::AfterSolve => (false, SOLVE_COMPLETION_REOBSERVATION_LIMIT),
+    };
     let mut consecutive = usize::from(known_candidate);
     let mut delayed_observations = usize::from(known_candidate);
 
@@ -850,7 +900,7 @@ fn await_completion(
         let candidate = io.completion(&latest.as_ref().expect("fresh completion frame").frame)?;
         consecutive = if candidate { consecutive + 1 } else { 0 };
         send_log(event_tx, format!(
-            "Klondike completion observation: candidate={candidate}, consecutive={consecutive}/2; delayed captures={delayed_observations}/{REOBSERVATION_LIMIT}; guest input sent=0",
+            "Klondike completion observation: candidate={candidate}, consecutive={consecutive}/2; delayed captures={delayed_observations}/{reobservation_limit}; guest input sent=0",
         ));
 
 
@@ -860,7 +910,7 @@ fn await_completion(
         }
 
 
-        if delayed_observations >= REOBSERVATION_LIMIT {
+        if delayed_observations >= reobservation_limit {
             return Ok(false);
         }
         delayed_observations += 1;

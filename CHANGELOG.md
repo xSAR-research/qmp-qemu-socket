@@ -1,5 +1,38 @@
 # Changelog
 
+## 1.2.4 — 2026-10-03 (candidate 2; Beast verification pending)
+
+- Recognise K44's measured horizontal tableau-source displacement using a second
+  bounded scan with the existing closed-outline and safe-click requirements.
+- Re-observe unsupported post-action scenes input-free within the existing shared
+  three-capture recovery budget, preserving the pending action and STOP.
+- Allow the measured contracted bottom-card source to support qualified fresh-HALO
+  continuation through spatially aggregated bidirectional print evidence; keep
+  complete-effect verification unchanged and the previous move unverified.
+- Replace a variable Level Up text-shadow probe with stable artwork, permit the
+  measured warm fireworks only at four context points, and require mixed OK
+  lettering/background evidence.
+- Record exact Solve stock/artwork/glyph counts and selected target on each run
+  observation. K48 already passes the recogniser; no further colour relaxation
+  or claim that the unseen live refusal is resolved.
+- Add K44–K49 native-coordinate regressions and adverse/controller coverage.
+- Deliver complete files against the same exact base or complete candidate 1,
+  with guarded preview, backups, content verification and rollback.
+
+## 1.2.4 — 2026-10-02 (candidate 1; Beast verification pending)
+
+- Recognise the evidenced 604-pixel ten-card source and its closing edge beneath
+  Undo All, keeping click/effect bounds above the toolbar.
+- Accept the measured positive red warming of the Solve border while preserving
+  inner artwork, glyph, scene, empty-stock and selection-priority checks.
+- Use the existing post-game observation bound after acknowledged Solve instead
+  of the short card-recovery budget; require two consecutive fresh win positives.
+- Add native K41–K43 regression evidence and negative/controller coverage.
+- Preserve timings, one-board Klondike completion, existing terminal controls,
+  TriPeaks/Pyramid behaviour, STOP, uncertain-input handling and original PNGs.
+- Deliver complete files against d9ad2cdf536165bb99ae4e02dabc49f7a9fa7227 with
+  guarded preview, backups, content verification and rollback.
+
 ## 1.2.3 — 2026-10-01 (candidate 5; Beast verification pending)
 
 - Continue from the recorded bottom-card replacement after the remaining tableau

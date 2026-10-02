@@ -5,8 +5,8 @@ QMP Unix socket. The current guest is Windows 11 running Microsoft Solitaire &
 Casual Games. TriPeaks, Pyramid and Klondike use fresh visual evidence and shared
 QMP/capture facilities, with independent target and effect policies.
 
-This is **v1.2.3, candidate 5**, based on committed v1.2.2 at
-`bcce7515979e2c4520b02f39e9c4d4d1bb019d7f`. `Cargo.toml` supplies the package
+This is **v1.2.4, candidate 2**, based on committed v1.2.3 candidate 5 at
+`d9ad2cdf536165bb99ae4e02dabc49f7a9fa7227`. `Cargo.toml` supplies the package
 version shown in the window title and Parameters. Beast gameplay acceptance
 is required before promotion.
 
@@ -74,7 +74,10 @@ Recovery does not repeat an uncertain gameplay operation.
 
 The separate **Solve** button can replace RIGHT when the guest offers automatic
 finishing. Its measured button appearance authorises one click, followed by its
-separate editable animation delay and bounded read-only completion observations.
+separate editable animation delay and up to 20 delayed read-only completion
+observations, using the existing post-game bound and editable Klondike
+re-observation interval. Two consecutive positive observations are still required;
+ordinary card recovery retains its three-observation bound.
 An unresolved result stops for review without retrying Solve or Solver.
 The lower-toolbar **Solver** control remains the hint/recommendation control.
 
@@ -292,3 +295,32 @@ input contracts, and `docs/pyramid-execution.md` for Pyramid geometry,
 verification rules and evidence limits. The candidate review records tests
 actually run; live King, pair, pile, recycle and transition checks remain part
 of Beast acceptance.
+
+## v1.2.4 candidate 1 evidence
+
+The latest ten-card column 6 source is 604 pixels high and closes at rows
+991–993 beneath Undo All. Detection accepts only the measured overlap; its click
+and effect proof remain above the toolbar. Solve recognition also accepts the
+recorded positive red warming of its outer border without widening its inner
+artwork, glyph, empty-stock or scene checks. Priority is unchanged.
+
+The new settled Congratulations frame passes the existing terminal signatures.
+The prior short Solve completion budget expired before that frame was captured.
+This candidate uses the existing longer post-game observation bound after Solve,
+with no additional gameplay or Solver input while waiting. See
+[the candidate notes](docs/klondike-v1.2.4-candidate-1.md) for evidence and limits.
+
+## v1.2.4 candidate 2 evidence
+
+K44–K49 cover a horizontally displaced source, the later bottom-card failure,
+Solve availability and Level Up at level 49. Unsupported post-action frames now
+receive bounded input-free recapture before refusal. Bottom-card continuation
+retains independent source evidence and remains distinct from full effect proof.
+The Level Up signature avoids the measured text shadow and admits narrowly
+bounded warm particle lighting. Timings and the terminal advancement budget stay.
+
+The supplied settled Solve frame already selects Solve with candidate 1. Candidate2
+logs empty-stock, artwork and glyph counts alongside scene/selected target for
+fresh run observations, so another live refusal can be diagnosed without guessing
+at later screenshot pixels. See [the candidate notes](docs/klondike-v1.2.4-candidate-2.md)
+for provenance, bounded policies and Beast checks.

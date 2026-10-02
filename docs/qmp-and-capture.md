@@ -202,7 +202,9 @@ changed target publishes the fresh prediction for another explicit review and
 Step request, with zero guest input.
 
 A separately recognised upper Solve button permits one auto-finish request,
-its own editable animation delay and bounded read-only completion captures.
+its own editable animation delay and up to 20 delayed read-only completion
+captures at the editable Klondike re-observation interval. The bound is inherited
+from the existing post-game observation limit, independent of card recovery.
 It never triggers Solver recovery or an input retry after that click. One board
 is one Klondike game; two fresh positive observations independently establish
 completion. The active Solver banner requires every calibrated right-interior
@@ -217,3 +219,9 @@ Play button is higher than the shared three-board calibration and remains
 mode-specific. Missing or unchanged stages receive at most three delayed
 input-free observations; no uncertain or unchanged control is clicked again.
 Gameplay resumes only from the freshly recognised actionable next Solver board.
+
+Candidate2 adds input-free result recapture for a temporarily unsupported
+Klondike scene. Capture/decode failures still stop immediately; this does not
+retry QMP delivery. Exact stock/artwork/glyph Solve measurements are logged from
+run observations. Later manual PNGs remain separate evidence and cannot be
+assumed byte-identical to an earlier automatic result frame.

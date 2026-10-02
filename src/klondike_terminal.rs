@@ -1,6 +1,10 @@
 //! Klondike's evidenced one-board win dialogs and restart controls.
 //!
 //! K26-K30 provide the native 1920x1080 scene, title and button signatures.
+//! K43 confirms the Congratulations signature on a later level and reward frame.
+//! K49 records the same Level Up controls under warm animated fireworks. Only
+//! the four empty-tableau context samples permit measured red/green particle
+//! lighting; their blue limit and full-RGB foundation context remain independent.
 //! Stable RGB artwork is checked directly; changing level, score, XP and card
 //! ranks are not read. A recognised terminal stage grants only its measured
 //! click. The worker still owns fresh validation, cancellation, delivery and
@@ -131,6 +135,14 @@ const ARTWORK_CHANNEL_TOLERANCE: u8 = 18;
 const BOARD_CONTEXT_CHANNEL_TOLERANCE: u8 = 8;
 
 
+/// Largest measured positive red shift at the four K49 side-tableau samples.
+const LEVEL_UP_FIREWORK_RED_INCREASE: u8 = 53;
+
+
+/// Largest measured positive green shift at the four K49 side-tableau samples.
+const LEVEL_UP_FIREWORK_GREEN_INCREASE: u8 = 17;
+
+
 /// Original stable artwork samples from K26; numeric level/score text is excluded.
 const CONGRATULATIONS_TITLE: [RgbSample; 10] = [
     RgbSample::new(728, 239, [252, 254, 254]),
@@ -203,6 +215,17 @@ const LEVEL_UP_OK: [RgbSample; 10] = [
     RgbSample::new(971, 807, [7, 7, 4]),
     RgbSample::new(976, 817, [0, 0, 0]),
     RgbSample::new(975, 804, [0, 0, 0]),
+];
+
+
+/// Positive gold inside/between the OK letters, identical or one red level apart
+/// in K27/K49. These samples reject an erased flat-black glyph area while the
+/// surrounding button corners remain intact.
+const LEVEL_UP_OK_BACKGROUND: [RgbSample; 4] = [
+    RgbSample::new(943, 810, [235, 219, 124]),
+    RgbSample::new(943, 816, [229, 189, 82]),
+    RgbSample::new(961, 804, [246, 234, 161]),
+    RgbSample::new(961, 820, [211, 164, 62]),
 ];
 
 
@@ -309,12 +332,18 @@ const COMPLETED_BOARD_CONTEXT: [RgbSample; 8] = [
 ];
 
 
-/// Measured static scene/control samples from K27, outside changing labels.
-const LEVEL_UP_BOARD_CONTEXT: [RgbSample; 8] = [
+/// Four dimmed occupied-foundation margins from K27, unchanged by K49 fireworks.
+const LEVEL_UP_FOUNDATION_CONTEXT: [RgbSample; 4] = [
     RgbSample::new(930, 117, [8, 11, 22]),
     RgbSample::new(1098, 117, [8, 11, 21]),
     RgbSample::new(1266, 117, [9, 10, 21]),
     RgbSample::new(1434, 117, [9, 10, 19]),
+];
+
+
+/// Empty side-tableau samples from K27; K49's warm particle lighting changes
+/// red and green by up to 53 and 17 while preserving each recorded blue channel.
+const LEVEL_UP_EMPTY_TABLEAU_CONTEXT: [RgbSample; 4] = [
     RgbSample::new(410, 440, [3, 10, 22]),
     RgbSample::new(1500, 440, [3, 10, 23]),
     RgbSample::new(450, 600, [3, 11, 26]),
@@ -454,12 +483,14 @@ const LEVEL_UP_TITLE_BACKGROUND: [RgbSample; 7] = [
 
 
 /// Original non-letter samples distinguish the title from a flat white patch.
+/// The stable gap at (888, 632) is identical in K27/K49; its neighbouring shadow
+/// at (884, 632) varied with background lighting and is not immutable artwork.
 const LEVEL_UP_KLONDIKE_BACKGROUND: [RgbSample; 8] = [
     RgbSample::new(771, 633, [23, 58, 93]),
     RgbSample::new(800, 619, [22, 58, 93]),
     RgbSample::new(827, 631, [33, 71, 105]),
     RgbSample::new(855, 617, [26, 63, 95]),
-    RgbSample::new(884, 632, [1, 2, 3]),
+    RgbSample::new(888, 632, [45, 81, 112]),
     RgbSample::new(906, 619, [37, 75, 105]),
     RgbSample::new(931, 632, [52, 89, 121]),
     RgbSample::new(961, 619, [21, 62, 94]),
@@ -513,6 +544,26 @@ fn matches_artwork(frame: &CapturedFrame, samples: &[RgbSample]) -> bool {
 /// and empty side tableau. These paper samples exclude card ranks and suits.
 fn has_completed_board_context(frame: &CapturedFrame, samples: &[RgbSample]) -> bool {
     matches_samples(frame, samples, BOARD_CONTEXT_CHANNEL_TOLERANCE)
+}
+
+
+/// Preserve full-RGB occupied-foundation proof and the measured dark-blue empty
+/// tableau context. K49's warm fireworks alter the latter's red/green channels.
+/// The red/green allowance is positive-only and capped by this supplied frame;
+/// white paper, erased black context and a shifted blue backdrop still fail.
+/// This exception applies only with the separate Level Up title, game label and
+/// complete OK control signatures; it cannot establish a generic modal or win.
+fn has_completed_level_up_context(frame: &CapturedFrame) -> bool {
+    has_completed_board_context(frame, &LEVEL_UP_FOUNDATION_CONTEXT)
+        && LEVEL_UP_EMPTY_TABLEAU_CONTEXT.iter().all(|sample| {
+            pixel_rgb(frame, sample.x, sample.y).is_some_and(|actual| {
+                actual[2].abs_diff(sample.rgb[2]) <= BOARD_CONTEXT_CHANNEL_TOLERANCE
+                    && actual[0] >= sample.rgb[0].saturating_sub(BOARD_CONTEXT_CHANNEL_TOLERANCE)
+                    && actual[0] <= sample.rgb[0].saturating_add(LEVEL_UP_FIREWORK_RED_INCREASE)
+                    && actual[1] >= sample.rgb[1].saturating_sub(BOARD_CONTEXT_CHANNEL_TOLERANCE)
+                    && actual[1] <= sample.rgb[1].saturating_add(LEVEL_UP_FIREWORK_GREEN_INCREASE)
+            })
+        })
 }
 
 
@@ -591,7 +642,7 @@ fn has_fresh_deal(frame: &CapturedFrame) -> Result<bool, HaloDetectionError> {
 }
 
 
-/// Recognise only the five supplied native scenes; unknown/shifted layouts return
+/// Recognise only the five evidenced native stage layouts; unknown/shifted scenes return
 /// `None`. Malformed frame storage or dimensions return the parent layout error.
 /// Classification is read-only and each returned stage needs fresh worker validation.
 pub(crate) fn classify_terminal(
@@ -624,8 +675,9 @@ pub(crate) fn classify_terminal(
         && matches_artwork(frame, &LEVEL_UP_KLONDIKE)
         && matches_artwork(frame, &LEVEL_UP_KLONDIKE_BACKGROUND)
         && matches_artwork(frame, &LEVEL_UP_OK)
+        && matches_artwork(frame, &LEVEL_UP_OK_BACKGROUND)
         && matches_artwork(frame, &LEVEL_UP_BUTTON_BODY)
-        && has_completed_board_context(frame, &LEVEL_UP_BOARD_CONTEXT)
+        && has_completed_level_up_context(frame)
     {
         return Ok(Some(TerminalStage::LevelUp));
     }
@@ -671,6 +723,8 @@ mod tests {
             28 => include_bytes!("../tests/fixtures/klondike/K28.png"),
             29 => include_bytes!("../tests/fixtures/klondike/K29.png"),
             30 => include_bytes!("../tests/fixtures/klondike/K30.png"),
+            43 => include_bytes!("../tests/fixtures/klondike/K43.png"),
+            49 => include_bytes!("../tests/fixtures/klondike/K49.png"),
             _ => panic!("unknown terminal fixture"),
         };
         decode_png(png).expect("decode recorded terminal PNG")
@@ -705,6 +759,119 @@ mod tests {
         for (number, stage) in (26..=30).zip(stages) {
             assert_eq!(classify_terminal(&fixture(number)).unwrap(), Some(stage), "K{number}");
             assert_eq!(stage.demonstrates_game_win(), number <= 28);
+        }
+    }
+
+
+    /// K43 was captured after the failed bounded Solve wait. Its settled level-46
+    /// Congratulations scene is recognised by the original unmodified signature.
+    #[test]
+    fn later_level_congratulations_retains_the_existing_signature() {
+        let frame = fixture(43);
+        assert_eq!(classify_terminal(&frame).unwrap(), Some(TerminalStage::ScoreCounting));
+        let mut changed_rewards = frame.clone();
+        paint(&mut changed_rewards, PixelRect::new(640, 340, 640, 430), [0, 0, 0]);
+        assert_eq!(classify_terminal(&changed_rewards).unwrap(), Some(TerminalStage::ScoreCounting));
+    }
+
+
+    /// The later frame still requires its title, skip caption and completed-board
+    /// context. A changed level does not weaken any original evidence requirement.
+    #[test]
+    fn later_congratulations_requires_title_control_and_completed_context() {
+        let bounds = [PixelRect::new(700, 200, 520, 55),
+            PixelRect::new(795, 839, 332, 31), PixelRect::new(894, 112, 132, 26)];
+
+
+        for bounds in bounds {
+            let mut frame = fixture(43);
+            paint(&mut frame, bounds, [0, 0, 0]);
+            assert_eq!(classify_terminal(&frame).unwrap(), None);
+        }
+    }
+
+
+    /// K49 retains the original visible Level Up authority despite measured warm
+    /// fireworks and a variable neighbouring text shadow. Reward numbers remain
+    /// excluded, so their update cannot erase or create the recognised OK action.
+    #[test]
+    fn later_level_up_with_fireworks_retains_its_control_signature() {
+        let frame = fixture(49);
+        assert_eq!(classify_terminal(&frame).unwrap(), Some(TerminalStage::LevelUp));
+        assert_eq!(TerminalStage::LevelUp.click_point(), PixelPoint::new(960, 795));
+        let mut changed_level = frame.clone();
+        paint(&mut changed_level, PixelRect::new(1_110, 610, 60, 38), [0, 0, 0]);
+        assert_eq!(classify_terminal(&changed_level).unwrap(), Some(TerminalStage::LevelUp));
+    }
+
+
+    /// Restoring only K49's animated side context to K27 values isolates the
+    /// shadow rejection independently of fireworks. This controlled derivative
+    /// does not claim to reproduce any unrecorded early worker observation.
+    #[test]
+    fn later_level_up_shadow_is_independent_of_fireworks_context() {
+        let mut frame = fixture(49);
+
+
+        for sample in LEVEL_UP_EMPTY_TABLEAU_CONTEXT {
+            paint(&mut frame, PixelRect::new(sample.x, sample.y, 1, 1), sample.rgb);
+        }
+        let discarded_shadow = [RgbSample::new(884, 632, [1, 2, 3])];
+        assert!(!matches_artwork(&frame, &discarded_shadow));
+        assert!(has_completed_level_up_context(&frame));
+        assert_eq!(classify_terminal(&frame).unwrap(), Some(TerminalStage::LevelUp));
+    }
+
+
+    /// The measured warm context allowance never bypasses the mixed title,
+    /// Klondike label, OK glyph, gold control or any occupied-foundation sample.
+    #[test]
+    fn later_level_up_requires_its_independent_title_control_and_foundations() {
+        let bounds = [PixelRect::new(804, 185, 315, 46),
+            PixelRect::new(760, 610, 220, 35), PixelRect::new(930, 800, 50, 24),
+            PixelRect::new(840, 775, 240, 75)];
+
+
+        for bounds in bounds {
+            let mut frame = fixture(49);
+            paint(&mut frame, bounds, [0, 0, 0]);
+            assert_eq!(classify_terminal(&frame).unwrap(), None);
+        }
+
+
+        for sample in LEVEL_UP_FOUNDATION_CONTEXT {
+            let mut frame = fixture(49);
+            paint(&mut frame, PixelRect::new(sample.x, sample.y, 1, 1), [0, 0, 0]);
+            assert_eq!(classify_terminal(&frame).unwrap(), None);
+        }
+
+
+        for rgb in [[0, 0, 0], [255, 255, 255]] {
+            let mut frame = fixture(49);
+            paint(&mut frame, PixelRect::new(760, 610, 220, 35), rgb);
+            assert_eq!(classify_terminal(&frame).unwrap(), None);
+        }
+    }
+
+
+    /// Each empty-tableau point retains its dark blue signature and finite warm
+    /// lighting limits. Black, white and isolated blue patches cannot grant OK.
+    #[test]
+    fn fireworks_context_rejects_outside_measured_colour_support() {
+
+
+        for sample in LEVEL_UP_EMPTY_TABLEAU_CONTEXT {
+            let unsupported = [[0, 0, 0], [255, 255, 255], [0, 0, sample.rgb[2]],
+                [sample.rgb[0] + LEVEL_UP_FIREWORK_RED_INCREASE + 1, sample.rgb[1], sample.rgb[2]],
+                [sample.rgb[0], sample.rgb[1] + LEVEL_UP_FIREWORK_GREEN_INCREASE + 1, sample.rgb[2]],
+                [sample.rgb[0], sample.rgb[1], sample.rgb[2] + BOARD_CONTEXT_CHANNEL_TOLERANCE + 1]];
+
+
+            for rgb in unsupported {
+                let mut frame = fixture(49);
+                paint(&mut frame, PixelRect::new(sample.x, sample.y, 1, 1), rgb);
+                assert_eq!(classify_terminal(&frame).unwrap(), None, "unsupported context {rgb:?}");
+            }
         }
     }
 

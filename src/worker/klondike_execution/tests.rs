@@ -48,6 +48,8 @@ struct FakeIo<'a> {
     probes_before_stop: usize,
     /// Set STOP during the settle wait to test interruption after one gameplay input.
     stop_on_wait: Option<&'a AtomicBool>,
+    /// Permit this many waits before STOP, distinguishing settle from recapture.
+    waits_before_stop: usize,
     /// Set STOP after an ordinary fresh capture has acquired pixels.
     stop_on_capture: Option<&'a AtomicBool>,
     /// Set STOP after the diagnostic pixels are acquired but before the controller receives them.
@@ -155,7 +157,9 @@ impl KlondikeIo for FakeIo<'_> {
         self.waits.push(duration);
 
 
-        if let Some(stop) = self.stop_on_wait {
+        if let Some(stop) = self.stop_on_wait
+            && self.waits.len() > self.waits_before_stop
+        {
             stop.store(true, Ordering::Release);
             return Err("STOP during wait".to_owned());
         }
@@ -217,6 +221,7 @@ fn fake<'a>(states: &[(PredictedAction, bool)]) -> FakeIo<'a> {
         stop_on_probe: None,
         probes_before_stop: 0,
         stop_on_wait: None,
+        waits_before_stop: 0,
         stop_on_capture: None,
         stop_on_diagnostic_capture: None,
     }
@@ -422,7 +427,7 @@ fn stop_before_capture_and_after_probe_prevents_input() {
         frames: VecDeque::from([observation(draw(), true)]),
         trace: Vec::new(), proven_effect: false, proven_source_replacement: false, effect_verdicts: VecDeque::new(), inputs: Vec::new(), effect_checks: 0,
         completion_candidates: VecDeque::new(), completion_checks: 0, waits: Vec::new(), terminal_stages: VecDeque::new(), terminal_inputs: Vec::new(), capture_failure: None, fail_input: false, fail_solver: false,
-        stop_on_probe: Some(&stop), probes_before_stop: 0, stop_on_wait: None,
+        stop_on_probe: Some(&stop), probes_before_stop: 0, stop_on_wait: None, waits_before_stop: 0,
         stop_on_capture: None,
         stop_on_diagnostic_capture: None,
     };
@@ -440,7 +445,7 @@ fn stop_during_settle_preserves_uncertain_input_without_next_capture() {
         frames: VecDeque::from([observation(draw(), true)]),
         trace: Vec::new(), proven_effect: false, proven_source_replacement: false, effect_verdicts: VecDeque::new(), inputs: Vec::new(), effect_checks: 0,
         completion_candidates: VecDeque::new(), completion_checks: 0, waits: Vec::new(), terminal_stages: VecDeque::new(), terminal_inputs: Vec::new(), capture_failure: None, fail_input: false, fail_solver: false,
-        stop_on_probe: None, probes_before_stop: 0, stop_on_wait: Some(&stop),
+        stop_on_probe: None, probes_before_stop: 0, stop_on_wait: Some(&stop), waits_before_stop: 0,
         stop_on_capture: None,
         stop_on_diagnostic_capture: None,
     };
@@ -452,14 +457,71 @@ fn stop_during_settle_preserves_uncertain_input_without_next_capture() {
 }
 
 
-/// An unsupported post-action screen gets no Solver, completion or restart input.
+/// Persistent unsupported result scenes exhaust the shared read-only budget.
 #[test]
 fn unknown_result_scene_stops_without_terminal_inputs() {
-    let mut io = fake(&[(draw(), true), (PredictedAction::NoHighlight, false)]);
+    let mut states = vec![(draw(), true)];
+    states.extend([(PredictedAction::NoHighlight, false); REOBSERVATION_LIMIT + 1]);
+    let mut io = fake(&states);
     let (result, input_attempted, _) = exercise(&mut io, draw(), 2, &AtomicBool::new(false));
     assert!(result.unwrap_err().contains("unsupported Klondike scene"));
-    assert_eq!(io.trace, ["capture", "probe", "input", "wait", "capture"]);
+    assert_eq!(io.inputs, [draw()]);
+    assert_eq!(io.effect_checks, 0);
+    assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), REOBSERVATION_LIMIT + 2);
+    assert!(!io.trace.contains(&"solver"));
+    assert!(io.terminal_inputs.is_empty());
     assert!(input_attempted);
+}
+
+
+/// A settled supported result can prove the original action after a scene gap.
+#[test]
+fn unsupported_result_recaptures_before_evaluating_the_original_effect() {
+    let mut io = fake(&[(draw(), true), (PredictedAction::NoHighlight, false), (draw(), true)]);
+    io.proven_effect = true;
+    let (result, attempted, latest) = exercise(&mut io, draw(), 1, &AtomicBool::new(false));
+    assert!(matches!(result, Ok(RunOutcome::Completed { verified: 1, halo: 0 })));
+    assert!(attempted);
+    assert_eq!(io.inputs, [draw()]);
+    assert_eq!(io.effect_checks, 1);
+    assert_eq!(io.trace, ["capture", "probe", "input", "wait", "capture", "wait", "capture"]);
+    assert!(!io.trace.contains(&"solver"));
+    assert!(latest.unwrap().gameplay_scene);
+}
+
+
+/// A scene gap and later unchanged HALO share one finite budget without replay.
+#[test]
+fn unsupported_result_does_not_reset_effect_reobservation_budget() {
+    let mut states = vec![(draw(), true), (PredictedAction::NoHighlight, false)];
+    states.extend([(draw(), true); REOBSERVATION_LIMIT]);
+    let mut io = fake(&states);
+    let (result, _, _) = exercise(&mut io, draw(), 2, &AtomicBool::new(false));
+    assert!(result.unwrap_err().contains("previous effect verified=false"));
+    assert_eq!(io.inputs, [draw()]);
+    assert_eq!(io.effect_checks, REOBSERVATION_LIMIT);
+    assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), REOBSERVATION_LIMIT + 2);
+    assert!(!io.trace.contains(&"solver"));
+    assert!(io.terminal_inputs.is_empty());
+}
+
+
+/// STOP during unsupported-scene recovery retains the frame and sends no retry.
+#[test]
+fn stop_interrupts_unsupported_result_reobservation() {
+    let stop = AtomicBool::new(false);
+    let mut io = fake(&[(draw(), true), (PredictedAction::NoHighlight, false)]);
+    io.stop_on_wait = Some(&stop);
+    io.waits_before_stop = 1;
+    let (result, attempted, latest) = exercise(&mut io, draw(), 2, &stop);
+    assert!(result.unwrap_err().contains("STOP"));
+    assert!(attempted);
+    assert_eq!(io.inputs, [draw()]);
+    assert_eq!(io.effect_checks, 0);
+    assert_eq!(io.trace, ["capture", "probe", "input", "wait", "capture", "wait"]);
+    assert!(!latest.unwrap().gameplay_scene);
+    assert!(!io.trace.contains(&"solver"));
+    assert!(io.terminal_inputs.is_empty());
 }
 
 
@@ -546,14 +608,14 @@ fn unresolved_solve_is_requested_once_then_stops_without_effect_or_recovery() {
 
         for result_scene in [(solve, true), (PredictedAction::NoHighlight, true), (PredictedAction::NoHighlight, false)] {
             let mut states = vec![(solve, true)];
-            states.extend([result_scene; REOBSERVATION_LIMIT + 1]);
+            states.extend([result_scene; SOLVE_COMPLETION_REOBSERVATION_LIMIT + 1]);
             let mut io = fake(&states);
             io.proven_effect = true;
             let (result, input_attempted, latest) = exercise(&mut io, solve, limit, &AtomicBool::new(false));
             assert_eq!(result, Ok(RunOutcome::SolveRequested { previous_verified: 0, previous_halo: 0 }));
             assert_eq!(io.trace.iter().filter(|entry| **entry == "input").count(), 1);
-            assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), REOBSERVATION_LIMIT + 2);
-            assert_eq!(io.completion_checks, REOBSERVATION_LIMIT + 1);
+            assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), SOLVE_COMPLETION_REOBSERVATION_LIMIT + 2);
+            assert_eq!(io.completion_checks, SOLVE_COMPLETION_REOBSERVATION_LIMIT + 1);
             assert_eq!(io.effect_checks, 0);
             assert_eq!(io.waits[0], AnimationSettleDelays::default().klondike_solve);
             assert!(io.terminal_inputs.is_empty());
@@ -586,7 +648,7 @@ fn unexpected_initial_solve_is_not_clicked() {
 fn continuous_move_then_solve_reports_only_previous_verified_moves() {
     let solve = PredictedAction::Action(klondike::canonical_action(KlondikeTarget::Solve).unwrap());
     let mut states = vec![(draw(), true), (solve, true)];
-    states.extend([(PredictedAction::NoHighlight, false); REOBSERVATION_LIMIT + 1]);
+    states.extend([(PredictedAction::NoHighlight, false); SOLVE_COMPLETION_REOBSERVATION_LIMIT + 1]);
     let mut io = fake(&states);
     io.proven_effect = true;
     let (result, _, _) = exercise(&mut io, draw(), 0, &AtomicBool::new(false));
@@ -795,13 +857,59 @@ fn solve_completion_resets_after_an_incomplete_frame() {
 fn solve_completion_never_accepts_a_single_positive_frame() {
     let solve = PredictedAction::Action(klondike::canonical_action(KlondikeTarget::Solve).unwrap());
     let mut states = vec![(solve, true)];
-    states.extend([(PredictedAction::NoHighlight, false); REOBSERVATION_LIMIT + 1]);
+    states.extend([(PredictedAction::NoHighlight, false); SOLVE_COMPLETION_REOBSERVATION_LIMIT + 1]);
     let mut io = fake(&states);
     io.completion_candidates = VecDeque::from([true, false, false, false]);
     let (result, _, _) = exercise(&mut io, solve, 0, &AtomicBool::new(false));
     assert_eq!(result, Ok(RunOutcome::SolveRequested { previous_verified: 0, previous_halo: 0 }));
-    assert_eq!(io.completion_checks, 4);
+    assert_eq!(io.completion_checks, SOLVE_COMPLETION_REOBSERVATION_LIMIT + 1);
     assert!(io.terminal_inputs.is_empty());
+}
+
+
+/// The observed false/true/false/false transition must not consume Solve's entire
+/// win budget. Later settled positive frames confirm one game without more input.
+#[test]
+fn solve_waits_through_observed_transition_before_confirming_settled_win() {
+    let solve = PredictedAction::Action(klondike::canonical_action(KlondikeTarget::Solve).unwrap());
+    let mut states = vec![(solve, true)];
+    states.extend([(PredictedAction::NoHighlight, false); 8]);
+    let mut io = fake(&states);
+    io.completion_candidates = VecDeque::from([false, true, false, false, false, false, true, true]);
+    let delays = AnimationSettleDelays::default().with_klondike_millis(750, 1_500);
+    let (result, attempted, latest) = exercise_with_settings(
+        &mut io, solve, StepRunSettings::new(delays, 1), &AtomicBool::new(false),
+    );
+    assert_eq!(result, Ok(RunOutcome::GameWon { previous_verified: 0, previous_halo: 0 }));
+    assert_eq!(io.completion_checks, 8);
+    assert_eq!(io.inputs, [solve]);
+    assert_eq!(io.waits[0], delays.klondike_solve);
+    assert!(io.waits[1..].iter().all(|delay| *delay == delays.klondike_reobserve));
+    assert!(attempted);
+    assert!(latest.is_some());
+    assert!(io.terminal_inputs.is_empty());
+    assert!(!io.trace.contains(&"solver"));
+    assert_eq!(io.effect_checks, 0);
+}
+
+
+/// Isolated positives never extend Solve's total budget or authorise a restart.
+#[test]
+fn intermittent_win_candidates_cannot_keep_solve_wait_alive_indefinitely() {
+    let solve = PredictedAction::Action(klondike::canonical_action(KlondikeTarget::Solve).unwrap());
+    let mut states = vec![(solve, true)];
+    states.extend([(PredictedAction::NoHighlight, false); SOLVE_COMPLETION_REOBSERVATION_LIMIT + 1]);
+    let mut io = fake(&states);
+    io.completion_candidates = (0..=SOLVE_COMPLETION_REOBSERVATION_LIMIT)
+        .map(|index| index % 2 == 0).collect();
+    let (result, _, latest) = exercise(&mut io, solve, 0, &AtomicBool::new(false));
+    assert_eq!(result, Ok(RunOutcome::SolveRequested { previous_verified: 0, previous_halo: 0 }));
+    assert_eq!(io.completion_checks, SOLVE_COMPLETION_REOBSERVATION_LIMIT + 1);
+    assert_eq!(io.inputs, [solve]);
+    assert_eq!(io.waits.len(), SOLVE_COMPLETION_REOBSERVATION_LIMIT + 1);
+    assert!(io.terminal_inputs.is_empty());
+    assert!(!io.trace.contains(&"solver"));
+    assert!(latest.is_some());
 }
 
 
@@ -847,10 +955,10 @@ fn continuous_solve_advances_one_board_terminal_cycle_then_obeys_stop() {
     let solve = PredictedAction::Action(klondike::canonical_action(KlondikeTarget::Solve).unwrap());
     let stop = AtomicBool::new(false);
     let mut states = vec![(solve, true)];
-    states.extend([(PredictedAction::NoHighlight, false); 6]);
+    states.extend([(PredictedAction::NoHighlight, false); 12]);
     states.push((draw(), true));
     let mut io = fake(&states);
-    io.completion_candidates = VecDeque::from([true, true]);
+    io.completion_candidates = VecDeque::from([false, true, false, false, false, false, true, true]);
     let stages = [TerminalStage::ScoreCounting, TerminalStage::LevelUp, TerminalStage::NewGame, TerminalStage::Play, TerminalStage::SolverReady];
     io.terminal_stages = stages.into_iter().map(Some).collect();
     io.stop_on_probe = Some(&stop);
@@ -860,7 +968,7 @@ fn continuous_solve_advances_one_board_terminal_cycle_then_obeys_stop() {
     assert!(input_attempted);
     assert_eq!(io.terminal_inputs, stages);
     assert_eq!(io.trace.iter().filter(|entry| **entry == "input").count(), 1);
-    assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), 8);
+    assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), 14);
     assert_eq!(io.trace.iter().filter(|entry| **entry == "probe").count(), 7);
     assert_eq!(latest.unwrap().prediction, draw());
     assert!(!io.trace.contains(&"solver"));
@@ -1126,7 +1234,7 @@ fn fresh_solve_handoff_clicks_new_control_once_without_verifying_old_card() {
 
     for limit in [0, 2] {
         let mut states = vec![(right, true), (solve, true)];
-        states.extend([(PredictedAction::NoHighlight, false); REOBSERVATION_LIMIT + 1]);
+        states.extend([(PredictedAction::NoHighlight, false); SOLVE_COMPLETION_REOBSERVATION_LIMIT + 1]);
         let mut io = fake(&states);
         let (result, _, _) = exercise(&mut io, right, limit, &AtomicBool::new(false));
         assert_eq!(result, Ok(RunOutcome::SolveRequested { previous_verified: 0, previous_halo: 1 }));
@@ -1134,7 +1242,7 @@ fn fresh_solve_handoff_clicks_new_control_once_without_verifying_old_card() {
         assert_eq!(io.effect_checks, 1);
         assert_eq!(io.waits[0], AnimationSettleDelays::default().klondike_settle);
         assert_eq!(io.waits[1], AnimationSettleDelays::default().klondike_solve);
-        assert_eq!(io.completion_checks, REOBSERVATION_LIMIT + 1);
+        assert_eq!(io.completion_checks, SOLVE_COMPLETION_REOBSERVATION_LIMIT + 1);
         assert!(io.terminal_inputs.is_empty());
         assert!(!io.trace.contains(&"solver"));
     }
@@ -1147,7 +1255,9 @@ fn fresh_solve_handoff_clicks_new_control_once_without_verifying_old_card() {
 fn continuation_rejects_unknown_scene_and_solver_refreshed_target() {
     let right = PredictedAction::Action(klondike::canonical_action(KlondikeTarget::Waste { offset: 1 }).unwrap());
     let solve = PredictedAction::Action(klondike::canonical_action(KlondikeTarget::Solve).unwrap());
-    let mut unknown = fake(&[(right, true), (solve, false)]);
+    let mut states = vec![(right, true)];
+    states.extend([(solve, false); REOBSERVATION_LIMIT + 1]);
+    let mut unknown = fake(&states);
     unknown.proven_source_replacement = true;
     let (result, _, _) = exercise(&mut unknown, right, 2, &AtomicBool::new(false));
     assert!(result.unwrap_err().contains("unsupported Klondike scene"));

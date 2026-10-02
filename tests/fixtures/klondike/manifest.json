@@ -1105,6 +1105,264 @@
         ]
       ],
       "observation": "Result of reported transfer: foundation 4 now shows 4-clubs under a dark guide; column 3 bottom is 5-hearts after the stack expands, and the next source is column 6 5-clubs rows372..562. Source material824 reproduces the log; actual receiving-foundation change318 is below512. Broad separated-change1298 comes solely from the next column 6 HALO shadow (printed face unchanged), not receiving-card proof. Standard lower-right identity corner925..969 crosses toolbar947 and remains unavailable. Two full visible patches support source replacement and guarded fresh-HALO continuation only, never complete effect verification."
+    },
+    {
+      "fixture": "K41.png",
+      "source": "qmp-qemu-socket 261002 225934 FAIL-Out-of-bounds.png",
+      "source_sha256": "f779e42c9254ff079b4038fe7ce70943eae4a3189e3b4b546a6290b11f1550de",
+      "fixture_sha256": "fc325f91ed508273b196c4ec6ba524fc6984d76949bc09be364ad5202c000ca7",
+      "bytes": 1632516,
+      "source_bytes": 3410862,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          378,
+          100,
+          1540,
+          1033
+        ],
+        [
+          160,
+          310,
+          176,
+          326
+        ],
+        [
+          1730,
+          310,
+          1746,
+          326
+        ],
+        [
+          824,
+          34,
+          1096,
+          92
+        ]
+      ],
+      "observation": "Ten-card column6 King-diamonds through4-clubs source extends to y994; its closing edge at991..993 is partly hidden by UndoAll. Source height604 exceeds the prior600 limit. Prior col3 move was verified; next target was missed. Original capture occurs after the worker stopped, not a runtime result-frame export."
+    },
+    {
+      "fixture": "K42.png",
+      "source": "qmp-qemu-socket 261002 230407 SOLVE-appeared-but-not-detected.png",
+      "source_sha256": "6eeb1ece83209c14d461d4b7241f1296bb8579c14fbf3cf51eab585bba12f8b9",
+      "fixture_sha256": "37844cc0242f13ebce0a4d1ad4234ee4f093973e589c34809c5f317e5cba0937",
+      "bytes": 1986212,
+      "source_bytes": 3782802,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          378,
+          100,
+          1540,
+          1033
+        ],
+        [
+          160,
+          310,
+          176,
+          326
+        ],
+        [
+          1730,
+          310,
+          1746,
+          326
+        ],
+        [
+          824,
+          34,
+          1096,
+          92
+        ]
+      ],
+      "observation": "Solve appears while column2 J-spades remains highlighted. Stable inner artwork and glyph samples pass, while outer border red warming reaches26 rather than24 RGB levels. Later validation recognised Solve and sent no input until the refreshed prediction was authorised."
+    },
+    {
+      "fixture": "K43.png",
+      "source": "qmp-qemu-socket 261002 230440 GAME-WIN-not-detected.png",
+      "source_sha256": "276d04b7f65a9cc640133155c23e6f69a42e6572503a9545af3627fca1ab28cb",
+      "fixture_sha256": "7057bda0ec0da53b4a40971138d2b1b20739255c28b71797222d3fc04422dee1",
+      "bytes": 922692,
+      "source_bytes": 1987795,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          260,
+          34,
+          1660,
+          1033
+        ],
+        [
+          160,
+          310,
+          176,
+          326
+        ],
+        [
+          1730,
+          310,
+          1746,
+          326
+        ]
+      ],
+      "observation": "Settled Congratulations level46 with click-anywhere-to-skip. All existing title, caption and completed-board signatures pass. Capture at+127.913s is10.211s after Solve acknowledgement; the previous completion budget exhausted at+123.343s. This original does not represent earlier transitional worker frames."
+    },
+    {
+      "fixture": "K44.png",
+      "source": "qmp-qemu-socket 261003 002937 FAIL.png",
+      "source_sha256": "bb0a889d1735943236a676cb67b717424ad590ca01f24b78b367735ed7ef02c2",
+      "fixture_sha256": "dc49353cccdca08c0cb14fd470f37182143805d920c7bf6272307121b84e3211",
+      "bytes": 2346145,
+      "source_bytes": 3454208,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          150,
+          32,
+          1770,
+          994
+        ]
+      ],
+      "observation": "Later settled frame has a highlighted six-card column 1 run. The worker rejected an earlier result as unsupported; that exact worker frame was not saved."
+    },
+    {
+      "fixture": "K45.png",
+      "source": "qmp-qemu-socket 261003 003435 Move-Before-Second-Fail.png",
+      "source_sha256": "749402617f46d99fa2344b58d843dc0ca5d9ccb8c18d63fa3d7992dbbf1c5254",
+      "fixture_sha256": "303cace5875d88343f84abf9a5d029f29ceebbf51acf31cc61634144a1d6aa49",
+      "bytes": 2425035,
+      "source_bytes": 3550041,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          150,
+          32,
+          1770,
+          994
+        ]
+      ],
+      "observation": "Earlier Undo reconstruction highlights RIGHT Queen-clubs and its tableau destination. It is not an immediate before-frame for the final column 1 source operation."
+    },
+    {
+      "fixture": "K46.png",
+      "source": "qmp-qemu-socket 261003 003717 Second-Fail.png",
+      "source_sha256": "6edea1879b9a29de87bb6b197fd006bf4d0bc6d8b804bbada703bde2363db007",
+      "fixture_sha256": "999a89c4946175c8ff684cbc98ce0ce1c6f7642574d37e7290a88bf6691d7515",
+      "bytes": 2323585,
+      "source_bytes": 3424289,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          150,
+          32,
+          1770,
+          994
+        ]
+      ],
+      "observation": "Settled result has highlighted column 1 five-diamonds after the logged four-diamonds source at rows799..989. Runtime source proof was refused despite separated recipient changes. No immediate original planning frame was supplied."
+    },
+    {
+      "fixture": "K47.png",
+      "source": "qmp-qemu-socket 261003 004332 Third-Fail.png",
+      "source_sha256": "10cea4fe9e7b32b32f04743676314c24a34d4ba634871e4f1964daabe2f63149",
+      "fixture_sha256": "d411989ac6da8a4e7bdc51602865fa473f565148b429a69989203ea9ba1da707",
+      "bytes": 2360211,
+      "source_bytes": 3467682,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          150,
+          32,
+          1770,
+          994
+        ]
+      ],
+      "observation": "Later settled frame has a highlighted column 4 run nine-clubs through six-hearts. Worker rejected an earlier result as unsupported; the exact rejected worker frame was not saved."
+    },
+    {
+      "fixture": "K48.png",
+      "source": "qmp-qemu-socket 261003 010639 Solve-has-been-showing-for-several-moves.png",
+      "source_sha256": "eb6e2171262d3fb409b4429e4964af190d1292f4d8664f7330ae4ee98972ae69",
+      "fixture_sha256": "9e44327ad3a56e59709bd1bd6e303574d35714723cfbb19f5a502b2036e51159",
+      "bytes": 2648205,
+      "source_bytes": 3799840,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          150,
+          32,
+          1770,
+          994
+        ]
+      ],
+      "observation": "Solve control visibly available in RIGHT while a column 1 King-hearts source remains highlighted. Snapshot follows STOP; it is not an earlier automatic result-frame export."
+    },
+    {
+      "fixture": "K49.png",
+      "source": "qmp-qemu-socket 261003 011039 LEVEL-UP.png",
+      "source_sha256": "eed2a8a7df4a6f331cf7a82e1b69559c69cd732edc7cd7c52bd28642cb30c3f0",
+      "fixture_sha256": "43d6cec36c384091f1154bdb9e9a1038c8847372af4bcad39903dcaa21835611",
+      "bytes": 1146874,
+      "source_bytes": 2166457,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          260,
+          34,
+          1660,
+          1033
+        ],
+        [
+          160,
+          310,
+          176,
+          326
+        ],
+        [
+          1730,
+          310,
+          1746,
+          326
+        ]
+      ],
+      "observation": "Level Up modal for Klondike level 49 with OK control and animated fireworks. GAME WIN had already been confirmed and score skip acknowledged; settled modal recognition is the reported failure."
     }
   ],
   "solve_control_template": {
