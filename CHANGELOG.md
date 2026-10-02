@@ -42,7 +42,6 @@
 - Deliver a guarded exact candidate 2 upgrade and rollback to its actual contents.
 - Record FreeCell Gate 1 evidence; FreeCell implementation remains a later gate.
 
-
 ## 1.2.3 — 2026-10-01 (candidate 2; Beast verification pending)
 
 - Recognise an evidenced tableau transfer with automatic white-face replacement
@@ -62,7 +61,6 @@
 - Supply complete-file installation against the same committed base, accepting
   the exact installed candidate 1 and backing up the actual starting contents.
 
-
 ## 1.2.3 — 2026-09-30 (candidate 1; Beast verification pending)
 
 - Recognise tableau card removal exposing green felt dimmed beneath a dashed
@@ -75,7 +73,6 @@
 - Build guarded complete-file installation records for committed v1.2.2 at
   `bcce7515979e2c4520b02f39e9c4d4d1bb019d7f`.
 
-
 ## 1.2.2 — 2026-09-30 (candidate 2; Beast verification pending)
 
 - Correct tall Klondike source bounds where a run overlaps the dimmed toolbar.
@@ -87,7 +84,6 @@
   to support diagnosis of intermittent no-op inputs without changing timings.
 - Support guarded installation over the exact uncommitted candidate 1 contents,
   with backups and rollback to the actual pre-install state.
-
 
 ## 1.2.2 — 2026-09-30 (candidate 1; Beast verification pending)
 
@@ -103,7 +99,6 @@
 - Preserve Charlie's committed Rust minimum 1.101.0, nightly settings, source
   spacing, existing-game policies and original PNG saving contract.
 
-
 ## 1.2.1 — 2026-09-30 (candidate 1; Beast verification pending)
 
 - Add the Solver-driven Klondike Draw 1 profile, dynamic source-block detection,
@@ -116,7 +111,6 @@
   existing and new Rust source without running a formatter.
 - Keep nightly, rustfmt configuration and dependency versions unchanged.
 
-
 ## 1.0.1 — 2026-09-26 (candidate; Beast verification pending)
 
 - Record all 28 Pyramid card envelopes and hit points, plus Left, Move/Recycle and Right, from Issue #1's 1920x1080 screenshots.
@@ -128,7 +122,6 @@
 ## 1.0.0 — 2026-09-26
 
 The following behaviour was already present in the 1.0.0 base commit:
-
 
 - Allow the Level Up screen three seconds to settle after the score panel click. If a fresh frame already shows New Game, require a second capture of that stage before acting on it.
 - Capture a fresh QMP PNG when Capture PNG is clicked, preview that image, and save precisely those original bytes when Save PNG or Enter is used. Add field focus and a Cut/Copy/Paste context menu.
