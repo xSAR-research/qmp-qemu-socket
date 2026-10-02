@@ -1,9 +1,15 @@
 # qmp-qemu-socket
 
-A Rust desktop application for inspecting and controlling a QEMU VM through its
-QMP Unix socket. The current guest is Windows 11 running Microsoft Solitaire &
-Casual Games. TriPeaks, Pyramid and Klondike use fresh visual evidence and shared
-QMP/capture facilities, with independent target and effect policies.
+Rust desktop agent for **vision** (calibrated detectors and effect proofs),
+**allow-listed QMP↔QEMU control**, and an **egui** UI. It connects to an
+existing QEMU QMP Unix socket, captures the guest display, and issues only
+guarded mouse/keyboard actions the policy allows. It does not launch QEMU or
+create the socket.
+
+Microsoft Solitaire & Casual Games modes used here — TriPeaks, Pyramid and
+Klondike — are **disposable guest fixtures** for exercising capture, detection
+and guarded input on shared QMP facilities. They are not the product. Each
+fixture keeps independent target and effect policies.
 
 This is **v1.2.5, candidate 1**, based on committed v1.2.4 candidate 2 at
 `eb18478b59b29b00bd5c1e11f1a30348226a5f61`. `Cargo.toml` supplies the package
@@ -209,9 +215,8 @@ operation even when its pixels have not changed. A tableau card must remain
 visible, and no final-card, board-complete or redeal phase may be pending.
 This is logged and counted separately as **continued from fresh halo**, without
 claiming removal or advancing a completion counter. Step Once still sends one
-click; Multi-Step plans the next click from that fresh frame. Per-action
-evidence logs include both pile measurements, the unique highlighted partner,
-the qualifying pair's combined count and any removed partner.
+click; Multi-Step plans the next click from that fresh frame. Per-action evidence
+logs include both pile measurements, the unique highlighted partner, the qualifying pair's combined count and any removed partner.
 
 A final-apex redeal requires restored cards and `AnotherBoard` progress in two
 consecutive fresh captures. A conflicting progress reading triggers bounded
@@ -274,8 +279,7 @@ new board or a terminal dialog has appeared. Two consecutive non-gameplay
 frames are needed before a score-skip click; other transition frames receive
 bounded input-free recaptures. A recovered old board does not count as a
 completed game in the UI.
-The controller waits three seconds after each score-panel click. If Level Up
-is not yet visible, it makes an input-free follow-up capture before considering
+The controller waits three seconds after each score-panel click. If Level Up is not yet visible, it makes an input-free follow-up capture before considering
 a bounded score-skip retry. The general inter-stage wait remains one second.
 A tall Level Up OK button may fill both calibrated layout probes; a strong
 gold bridge and button interior must connect them before the lower click point
