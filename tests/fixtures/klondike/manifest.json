@@ -1363,6 +1363,84 @@
         ]
       ],
       "observation": "Level Up modal for Klondike level 49 with OK control and animated fireworks. GAME WIN had already been confirmed and score skip acknowledged; settled modal recognition is the reported failure."
+    },
+    {
+      "fixture": "K50.png",
+      "source": "qmp-qemu-socket 261003 025107 Move-before-Fail.png",
+      "source_sha256": "ad600682d68a16db47118cc101e14c3968cac141dfcf2b325da47bfd0d1b21ef",
+      "fixture_sha256": "a9d27560fa281ca3caca9c9861d8bbac6ed626d860459c2bcfb8884d06370539",
+      "bytes": 2355091,
+      "source_bytes": 3437468,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          150,
+          32,
+          1770,
+          994
+        ]
+      ],
+      "observation": "Reconstructed Undo predecessor: column 1 bottom 4-clubs recommendation; observed later after stopping, not the exact worker planning PNG."
+    },
+    {
+      "fixture": "K51.png",
+      "source": "qmp-qemu-socket 261003 025029 FAIL.png",
+      "source_sha256": "7522e861d6216fcaf9484c67cbf4dc4a9be293ced28cc374055a29343f084cdc",
+      "fixture_sha256": "a970f2606acb162c9574db67bf4391794cbab4c7ef4e7a2f489f3f9240c56e82",
+      "bytes": 2359139,
+      "source_bytes": 3444233,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          150,
+          32,
+          1770,
+          994
+        ]
+      ],
+      "observation": "Stopped result: 4-clubs now in foundation 4; exposed 5-diamonds column 1; next highlighted 5-clubs column 3."
+    },
+    {
+      "fixture": "K52.png",
+      "source": "qmp-qemu-socket 261003 025443 LEVEL-UP.png",
+      "source_sha256": "e5f4d9a952f4016790d02400979368edf819f94416e6ee218d091f04266a0eb6",
+      "fixture_sha256": "2e12c08593972ef117765da4947e1fc693ae2d77d3531f2308a637cff4f4a405",
+      "bytes": 1023620,
+      "source_bytes": 1828156,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          260,
+          34,
+          1660,
+          1033
+        ],
+        [
+          160,
+          310,
+          176,
+          326
+        ],
+        [
+          1730,
+          310,
+          1746,
+          326
+        ]
+      ],
+      "observation": "Klondike Level 51 Level Up, original screenshot saved after terminal recognition stalled; dynamic label alignment variant."
     }
   ],
   "solve_control_template": {

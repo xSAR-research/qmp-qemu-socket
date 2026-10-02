@@ -874,7 +874,11 @@ impl QmpQemuSocketApp {
         if self.game_mode == GameMode::Klondike
             && approved_prediction == PredictedAction::NoHighlight
         {
-            self.push_log("Klondike initial no-HALO request checks completion read-only first. Continuous Multi-Step 0 may advance a confirmed one-board win through calibrated terminal controls. Otherwise freshly reproduce the approved no-HALO board, refresh Solver once and stop for preview review; no card or draw action is authorised by recovery.");
+            self.push_log(if settings.is_unbounded() {
+                "Klondike initial no-HALO request checks completion read-only first. Continuous Multi-Step 0 may advance a confirmed one-board win through calibrated terminal controls. Otherwise freshly reproduce the approved no-HALO board, refresh Solver once and capture immediately, then use bounded editable observation waits until a valid fresh target permits continuous play. Missing HALOs never authorise card or draw input."
+            } else {
+                "Klondike initial no-HALO request checks completion read-only first. Otherwise freshly reproduce the approved no-HALO board, refresh Solver once and stop for preview review; finite requests require a new explicit gameplay request."
+            });
         }
 
 
@@ -1085,7 +1089,12 @@ impl QmpQemuSocketApp {
 
 
                 if bevel_button(ui, "Multiple Steps", ACTION_GREEN, false, MULTI_STEP_INPUT_ENABLED && action_available)
-                    .on_hover_text(if self.game_mode == GameMode::Klondike && self.prediction == Some(PredictedAction::NoHighlight) {
+                    .on_hover_text(if self.game_mode == GameMode::Klondike
+                        && self.prediction == Some(PredictedAction::NoHighlight)
+                        && self.selected_multi_step_actions() == UNBOUNDED_MULTI_STEP_ACTIONS
+                    {
+                        "Check fresh completion first; otherwise reproduce the approved no-HALO board, refresh Solver once and continue only after bounded captures establish a valid fresh target"
+                    } else if self.game_mode == GameMode::Klondike && self.prediction == Some(PredictedAction::NoHighlight) {
                         "Check fresh completion first; otherwise refresh Solver once and stop for review before another explicit gameplay request"
                     } else if prediction_is_klondike_solve(self.prediction) {
                         "Click Solve once, settle and check completion; only continuous Multi-Step 0 advances through verified terminal controls"
@@ -1577,7 +1586,7 @@ impl QmpQemuSocketApp {
                     ui.small(format!(
                         "Klondike defaults: action {KLONDIKE_SETTLE_DELAY_MS} ms from Beast gameplay, Solve animation {KLONDIKE_SOLVE_SETTLE_DELAY_MS} ms, repeat observation {KLONDIKE_REOBSERVE_DELAY_MS} ms, Multi-Step {KLONDIKE_DEFAULT_MULTI_STEP_ACTIONS} (0 = continuous). Editable timings apply to the next run."
                     ));
-                    ui.small("A full Solver progress candidate is confirmed read-only before recovery. Otherwise the approved no-HALO board may refresh Solver once and stops for review before any card or draw action.");
+                    ui.small("A full Solver progress candidate is confirmed read-only before recovery. On the approved no-HALO board, one Solver refresh is followed by bounded fresh captures. Multi-Step 0 continues once a valid target appears; finite runs and Single Step stop for preview review.");
                 } else if self.game_mode == GameMode::Pyramid {
                     ui.small(format!(
                         "Session defaults: Pyramid Move/Recycle {PYRAMID_MOVE_SETTLE_DELAY_MS} ms, Card/Left/Right {PYRAMID_CARD_SETTLE_DELAY_MS} ms, repeat observation {PYRAMID_REOBSERVE_DELAY_MS} ms, board redeal {BOARD_REDEAL_SETTLE_DELAY_MS} ms, Multi-Step {DEFAULT_MULTI_STEP_ACTIONS} (continuous). Changes apply to the next run."

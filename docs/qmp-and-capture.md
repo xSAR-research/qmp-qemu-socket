@@ -225,3 +225,17 @@ Klondike scene. Capture/decode failures still stop immediately; this does not
 retry QMP delivery. Exact stock/artwork/glyph Solve measurements are logged from
 run observations. Later manual PNGs remain separate evidence and cannot be
 assumed byte-identical to an earlier automatic result frame.
+
+## v1.2.5 Klondike diagnostics and initial recovery
+
+Each guarded Klondike observation reports the stable Solve interior and glyph
+counts separately from outer artwork, together with the selected target.
+Terminal evidence identifies recognised stages and scene/artwork guard results.
+These are read-only classifications of the same fresh captured frame.
+
+An exact no-HALO initial validation can enable Solver once through its own scene
+and input guards. Immediate capture and bounded delayed captures remain. A
+continuous request resumes from a freshly recognised target; finite requests
+return the preview for explicit approval. No missing HALO authorises a Draw or
+card click, and a QMP acknowledgement does not establish the previous game effect.
+Capture and exact-byte manual saving are unchanged.

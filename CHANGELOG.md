@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.2.5 — 2026-10-03 (candidate 1; Beast verification pending)
+
+- Recognise Solve from stable interior/lettering with empty-stock and scene guards,
+  independently of its animated outer ring; retain full artwork diagnostics.
+- Add source-supported continuation for the measured bottom 4-clubs transfer
+  followed by a different tableau source, with stable paper/printed-detail guards.
+  The prior complete effect remains unverified; generic thresholds are unchanged.
+- Recognise the coherent two-pixel Level Up label shift and log terminal guards.
+- Continue active Multi-Step 0 from a fresh target after one initial Solver
+  activation; Single Step/finite recovery still returns the preview for review.
+- Add K50–K52 native-coordinate regression evidence and adverse/controller cases.
+- Deliver full affected files and a guarded installer against exact pushed main
+  eb18478b59b29b00bd5c1e11f1a30348226a5f61. No predecessor candidate authority.
+
 ## 1.2.4 — 2026-10-03 (candidate 2; Beast verification pending)
 
 - Recognise K44's measured horizontal tableau-source displacement using a second

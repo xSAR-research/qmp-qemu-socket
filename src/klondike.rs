@@ -118,8 +118,9 @@ const SOLVE_BOUNDS: PixelRect = PixelRect::new(562, 143, 124, 113);
 const SOLVE_TEMPLATE: &[u8; 2_697] = include_bytes!("klondike-solve-control.rgb");
 
 
-/// All 483 K42 interior samples fit the original tolerance while its outer frame
-/// warms by up to 26 red levels. The interior keeps its symmetric 24-level limit.
+/// The 483 measured button-face samples retain the check mark, lettering and
+/// dark background while excluding the animated gold frame. K13/K25/K37/K42/K48
+/// match every sample within the original symmetric 24-level RGB tolerance.
 const SOLVE_STABLE_INTERIOR: PixelRect = PixelRect::new(578, 159, 92, 81);
 
 
@@ -504,16 +505,20 @@ pub fn completion_evidence(
 /// validation, priority, fresh action validation and input authority.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SolveEvidence {
-    /// Artwork and empty-stock guards pass; the caller still needs its scene.
+    /// Stable button-face, glyph and empty-stock guards pass; scene is separate.
     pub available: bool,
     /// Empty-stock interior pixels satisfying the existing green-felt predicate.
     pub stock_felt_pixels: u32,
     /// All 13,900 pixels in the complete calibrated empty-stock probe.
     pub stock_probe_pixels: u32,
-    /// Four-pixel-lattice samples within the existing artwork colour tolerance.
+    /// Whole-control samples matching the original settled artwork; diagnostic only.
     pub artwork_matched: u32,
     /// All 899 samples over the measured complete Solve control.
     pub artwork_samples: u32,
+    /// Matching samples in the stable button face, excluding its animated frame.
+    pub interior_matched: u32,
+    /// All 483 samples in the measured stable interior.
+    pub interior_samples: u32,
     /// Matching samples inside the separately guarded check mark/lettering area.
     pub glyph_matched: u32,
     /// All 342 samples in that original glyph area.
@@ -527,20 +532,22 @@ impl fmt::Display for SolveEvidence {
     /// Preserve the exact classification counts needed to diagnose live refusal.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(formatter,
-            "Solve candidate={}; empty-stock felt={}/{} (required 90%); artwork={}/{} and glyph={}/{} (each required 98%); scene and target priority remain separate",
+            "Solve candidate={}; empty-stock felt={}/{} (required 90%); stable interior={}/{} and glyph={}/{} (each required 98%); full artwork={}/{} (diagnostic only, animated frame excluded from authority); scene and target priority remain separate",
             self.available, self.stock_felt_pixels, self.stock_probe_pixels,
-            self.artwork_matched, self.artwork_samples, self.glyph_matched, self.glyph_samples,
+            self.interior_matched, self.interior_samples, self.glyph_matched, self.glyph_samples,
+            self.artwork_matched, self.artwork_samples,
         )
     }
 }
 
 
-/// Measure K13's native control shape and empty stock without granting input.
-/// The exact recogniser is unchanged: require 98% within 24 RGB levels overall
-/// and separately in the glyph area, with K42's two extra positive border-red
-/// levels only. All samples are measured even when empty-stock support fails,
-/// allowing the worker to report the actual rejected observation. Malformed
-/// storage or non-native geometry returns the existing detection error.
+/// Measure K13's stable button face and empty stock without granting input.
+/// Require 98% within the original 24 RGB levels in both the 483-sample interior
+/// and the separate 342-sample check mark/lettering area. The full animated gold
+/// frame remains diagnostic only: runtime observations repeatedly retain every
+/// glyph sample while its outer artwork changes. All samples are measured even
+/// when stock support fails. Scene, priority and fresh-input checks remain with
+/// the caller. Malformed storage or non-native geometry is a detection error.
 pub fn inspect_solve_control(frame: &CapturedFrame) -> Result<SolveEvidence, HaloDetectionError> {
     validate_frame(frame)?;
     let stock_inside = PixelRect::new(406, 130, 100, 139);
@@ -549,6 +556,8 @@ pub fn inspect_solve_control(frame: &CapturedFrame) -> Result<SolveEvidence, Hal
 
 
     let mut matched = 0_u32;
+    let mut interior_matched = 0_u32;
+    let mut interior_samples = 0_u32;
     let mut glyph_matched = 0_u32;
     let mut glyph_samples = 0_u32;
     let mut sample = 0;
@@ -560,14 +569,22 @@ pub fn inspect_solve_control(frame: &CapturedFrame) -> Result<SolveEvidence, Hal
         for x in (SOLVE_BOUNDS.x..SOLVE_BOUNDS.x + SOLVE_BOUNDS.width).step_by(4) {
             let expected = &SOLVE_TEMPLATE[sample..sample + 3];
             sample += 3;
-            let agrees = pixel_rgb(frame, x, y).is_some_and(|actual| {
+            let interior = SOLVE_STABLE_INTERIOR.contains(PixelPoint::new(x as i32, y as i32));
+            let actual = pixel_rgb(frame, x, y);
+            let agrees = actual.is_some_and(|actual| {
                 let ordinary_match = actual.into_iter().zip(expected).all(|(a, b)| a.abs_diff(*b) <= 24);
-                let border_warming = !SOLVE_STABLE_INTERIOR.contains(PixelPoint::new(x as i32, y as i32))
+                let border_warming = !interior
                     && (25..=26).contains(&(i16::from(actual[0]) - i16::from(expected[0])))
                     && actual[1].abs_diff(expected[1]) <= 24 && actual[2].abs_diff(expected[2]) <= 24;
                 ordinary_match || border_warming
             });
             matched += u32::from(agrees);
+
+
+            if interior {
+                interior_samples += 1;
+                interior_matched += u32::from(agrees);
+            }
 
 
             if (590..660).contains(&x) && (160..236).contains(&y) {
@@ -578,10 +595,12 @@ pub fn inspect_solve_control(frame: &CapturedFrame) -> Result<SolveEvidence, Hal
     }
 
     let available = stock_felt_pixels * 1_000 >= stock_probe_pixels * 900
-        && matched * 100 >= 899 * 98 && glyph_matched * 100 >= glyph_samples * 98;
+        && interior_matched * 100 >= interior_samples * 98
+        && glyph_matched * 100 >= glyph_samples * 98;
     Ok(SolveEvidence {
         available, stock_felt_pixels, stock_probe_pixels,
-        artwork_matched: matched, artwork_samples: 899, glyph_matched, glyph_samples,
+        artwork_matched: matched, artwork_samples: 899, interior_matched, interior_samples,
+        glyph_matched, glyph_samples,
     })
 }
 
@@ -1292,6 +1311,35 @@ fn retained_bright_paper_field(
 }
 
 
+/// Whether two fully visible opposed patches establish balanced printed change.
+/// Material source and exact 190-pixel toolbar-overlap geometry remain required.
+/// Both directions must occur in each patch, each patch must supply 96 print
+/// changes, and the opposed pair must supply 96 changes in each direction.
+/// This predicate alone does not establish a recipient or complete effect.
+fn visible_opposed_print_supported(
+    action: GuidedAction,
+    material: usize,
+    directions: [[usize; 2]; 2],
+) -> bool {
+
+
+    let ActionTarget::Klondike(target @ KlondikeTarget::Tableau { top, bottom, .. }) = action.target else {
+        return false;
+    };
+
+    canonical_action(target) == Some(action)
+        && material >= MINIMUM_CONTENT_CHANGE
+        && bottom.checked_sub(top) == Some(190)
+        && u32::from(bottom) > TOOLBAR_TOP
+        && directions.into_iter().all(|[new_ink, cleared_ink]| {
+            new_ink > 0 && cleared_ink > 0
+                && new_ink + cleared_ink >= MINIMUM_CORNER_CHANGE * 2
+        })
+        && directions[0][0] + directions[1][0] >= MINIMUM_CORNER_CHANGE * 2
+        && directions[0][1] + directions[1][1] >= MINIMUM_CORNER_CHANGE * 2
+}
+
+
 /// A contracted single-card outline can support the existing fresh-HALO path.
 /// K46 retains two complete paper-supported patches, but printed detail is not
 /// evenly divided between their corners. Both print directions must occur in
@@ -1310,16 +1358,7 @@ fn visible_contracted_source_replaced(
     };
 
 
-    if material < MINIMUM_CONTENT_CHANGE
-        || bottom.checked_sub(top) != Some(190)
-        || u32::from(bottom) <= TOOLBAR_TOP
-        || !directions.into_iter().all(|[new_ink, cleared_ink]| {
-            new_ink > 0 && cleared_ink > 0
-                && new_ink + cleared_ink >= MINIMUM_CORNER_CHANGE * 2
-        })
-        || directions[0][0] + directions[1][0] < MINIMUM_CORNER_CHANGE * 2
-        || directions[0][1] + directions[1][1] < MINIMUM_CORNER_CHANGE * 2
-    {
+    if !visible_opposed_print_supported(action, material, directions) {
         return Ok(false);
     }
 
@@ -1337,9 +1376,9 @@ fn visible_contracted_source_replaced(
 }
 
 
-/// SUIT source replacement evidence in the fixed bright upper-card face.
-/// It needs independent material source and tableau recipient change; printed
-/// detail alone cannot establish input effect or game completion.
+/// Bright neutral source replacement for fixed SUIT and constrained bottom faces.
+/// This record supplies source proof only. Complete effect still needs separate
+/// recipient proof; printed detail alone establishes neither effect nor completion.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct FoundationSourceEvidence {
     /// Newly printed red/black detail outside the commanded cursor mask.
@@ -1357,8 +1396,10 @@ pub struct FoundationSourceEvidence {
 }
 
 
-/// Recognise printed replacement in an occupied SUIT source whose background
-/// remains bright and neutral. The source's material 512-pixel gate is retained.
+/// Recognise printed replacement in an occupied bright neutral source interior.
+/// SUIT uses its fixed upper-card face. The separately constrained visible-bottom
+/// route uses only its complete inset above the toolbar and receives continuation
+/// authority, never full effect verification. The 512-pixel gate is retained.
 /// Both red/black print directions use the existing 48-pixel detail bound and
 /// exclude gold and the commanded cursor. Neutral-field stability rejects
 /// guide fading/recolouring without counting antialiased ink edges as paper.
@@ -1628,6 +1669,11 @@ pub struct EffectEvidence {
     /// single-card tableau overlap. With material source proof these counts
     /// support continuation only, never complete source/recipient verification.
     pub source_visible_identity_directions: [[usize; 2]; 2],
+    /// Stable bright-paper printed replacement in the complete above-toolbar
+    /// source inset. Only exact 190-pixel single-card overlap is eligible.
+    /// Combined with opposed patches and a fresh target, this supports only
+    /// continuation; material non-source change is not recipient proof.
+    pub source_visible_print: FoundationSourceEvidence,
     /// Fixed bright SUIT face replacement; zero for all other source classes.
     pub source_foundation_print: FoundationSourceEvidence,
     /// Largest eligible destination interior change; waste count for stock input.
@@ -1646,12 +1692,12 @@ impl fmt::Display for EffectEvidence {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             formatter,
-            "verified={}; source replaced={}; source changed={}, positive={}, dimmed felt={} (each source proof requires {}), card corner ink/paper={:?} (each required {}), corner [paper-to-ink, ink-to-paper]={:?} (tableau/SUIT each required {}), visible-tableau full-patch directions={:?} (ordinary each {}, contracted-outline opposed totals {}; source 512; continuation only), bright-SUIT print={:?}, destination changed={} (required {}), dimmed-foundation print={:?}; {}",
+            "verified={}; source replaced={}; source changed={}, positive={}, dimmed felt={} (each source proof requires {}), card corner ink/paper={:?} (each required {}), corner [paper-to-ink, ink-to-paper]={:?} (tableau/SUIT each required {}), visible-tableau full-patch directions={:?} (ordinary each {}, contracted-outline opposed totals {}; source 512; continuation only), visible-bottom stable print={:?}, bright-SUIT print={:?}, destination changed={} (required {}), dimmed-foundation print={:?}; {}",
             self.verified, self.source_replaced, self.source_changed, self.source_positive,
             self.source_dimmed_felt, MINIMUM_CONTENT_CHANGE, self.source_identity_corners,
             MINIMUM_CORNER_CHANGE, self.source_identity_directions, MINIMUM_CORNER_CHANGE,
             self.source_visible_identity_directions, MINIMUM_CORNER_CHANGE, MINIMUM_CORNER_CHANGE * 2,
-            self.source_foundation_print,
+            self.source_visible_print, self.source_foundation_print,
             self.destination_changed, MINIMUM_CONTENT_CHANGE, self.destination_print,
             self.reason,
         )
@@ -1671,7 +1717,11 @@ impl fmt::Display for EffectEvidence {
 /// card effect proof.
 /// A complete single card crossing the toolbar may use two full visible print
 /// patches above it plus 512 changed source pixels for separate continuation
-/// evidence only. It never changes ordinary complete-effect verification.
+/// evidence only. K50/K51 additionally support uneven opposed patches through
+/// independent stable-paper printed replacement, material change outside the
+/// source and a valid fresh target. Non-source change may include a new HALO
+/// shadow, so this fallback remains continuation only. It never changes ordinary
+/// complete-effect verification.
 pub fn inspect_effect(
     before: &CapturedFrame,
     after: &CapturedFrame,
@@ -1689,6 +1739,7 @@ pub fn inspect_effect(
         source_identity_corners: [0, 0],
         source_identity_directions: [[0, 0], [0, 0]],
         source_visible_identity_directions: [[0, 0], [0, 0]],
+        source_visible_print: FoundationSourceEvidence::default(),
         source_foundation_print: FoundationSourceEvidence::default(),
         destination_changed: 0,
         destination_print: FoundationPrintEvidence::default(),
@@ -1747,6 +1798,15 @@ pub fn inspect_effect(
     if matches!(target, KlondikeTarget::Tableau { .. }) {
         evidence.source_dimmed_felt = tableau_dimmed_felt_changes(before, after, source, action);
         evidence.source_visible_identity_directions = tableau_visible_identity_changes(before, after, source, action);
+
+
+        if visible_opposed_print_supported(action, evidence.source_changed,
+            evidence.source_visible_identity_directions)
+        {
+            evidence.source_visible_print = foundation_source_print_changes(
+                before, after, source, action, evidence.source_changed,
+            );
+        }
     }
 
 
@@ -1804,7 +1864,11 @@ pub fn inspect_effect(
     let contracted_source_replaced = visible_contracted_source_replaced(
         after, action, evidence.source_changed, evidence.source_visible_identity_directions,
     )?;
-    evidence.source_replaced = source_verified || visible_source_replaced || contracted_source_replaced;
+    let stable_visible_source_replaced = evidence.source_visible_print.verified
+        && evidence.destination_changed >= MINIMUM_CONTENT_CHANGE
+        && matches!(analyse(after)?.prediction, PredictedAction::Action(_));
+    evidence.source_replaced = source_verified || visible_source_replaced
+        || contracted_source_replaced || stable_visible_source_replaced;
     let destination_verified = evidence.destination_changed >= MINIMUM_CONTENT_CHANGE
         || (evidence.destination_print.verified && evidence.source_changed >= MINIMUM_CONTENT_CHANGE);
     evidence.verified = source_verified && destination_verified;
@@ -1815,6 +1879,8 @@ pub fn inspect_effect(
             "opposed print and a 26-pixel contracted same-column outline support fresh-HALO continuation only; complete effect unverified",
         (false, _) if visible_source_replaced =>
             "two full visible patches establish source replacement for fresh-HALO continuation only; recipient and complete effect unverified",
+        (false, _) if stable_visible_source_replaced =>
+            "stable bright-paper replacement and opposed visible print support fresh-HALO continuation; material non-source change is not recipient proof; complete effect unverified",
         (false, _) => "source removal/replacement not established; fresh HALO is insufficient",
         (true, false) => "source changed, but no independent destination change was established",
         (true, true) if evidence.destination_changed < MINIMUM_CONTENT_CHANGE =>
@@ -2006,7 +2072,7 @@ mod tests {
 
 
     /// Solve is a separately evidenced control; the toolbar Solver is not one.
-    /// Shape/glyph corruption, a changed stock or an overlay withdraw authority.
+    /// Face/glyph corruption, a changed stock or an overlay withdraw authority.
     #[test]
     fn solve_control_requires_its_measured_artwork_empty_stock_and_scene() {
         let frame = fixture(13);
@@ -2020,14 +2086,14 @@ mod tests {
         assert_eq!(action(&solver_off), planned);
 
 
-        for corruption in [
-            PixelRect::new(590, 212, 70, 24),
-            PixelRect::new(598, 160, 58, 42),
-            PixelRect::new(562, 143, 10, 113),
+        for (corruption, rgb) in [
+            (PixelRect::new(590, 212, 70, 24), [12, 62, 40]),
+            (PixelRect::new(598, 160, 58, 42), [12, 62, 40]),
+            (PixelRect::new(578, 159, 8, 81), [255, 255, 255]),
         ] {
             let mut damaged = frame.clone();
-            paint(&mut damaged, corruption, [12, 62, 40]);
-            assert_ne!(analyse(&damaged).unwrap().prediction, PredictedAction::Action(planned));
+            paint(&mut damaged, corruption, rgb);
+            assert_ne!(analyse(&damaged).unwrap().prediction, PredictedAction::Action(planned), "{corruption:?}");
         }
 
         let mut occupied = frame.clone();
@@ -3534,40 +3600,53 @@ mod tests {
     }
 
 
-    /// K42's warmer frame fails the old tolerance at 198 border samples while
-    /// all 342 glyph samples match. Solve keeps priority over the remaining Jack.
+    /// The settled warmer frame retains the stable face and glyphs. Outer-frame
+    /// colour no longer grants authority; the interior tolerance stays unchanged.
     #[test]
-    fn recorded_solve_border_warming_preserves_priority_without_widening_interior() {
+    fn solve_animation_frame_does_not_change_interior_colour_tolerance() {
         let frame = fixture(42);
         assert!(has_solve_control(&frame));
         assert_eq!(action(&frame).target, ActionTarget::Klondike(KlondikeTarget::Solve));
         assert!(find_solid_card_source(&frame, PixelRect::new(558, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)).unwrap().is_some());
 
 
-        for (border, delta) in [(true, 27), (true, -25), (false, 25)] {
+        for delta in [27, -25] {
             let mut damaged = frame.clone();
-            shift_solve_sample_red(&mut damaged, border, delta);
-            assert!(!has_solve_control(&damaged), "border={border}, red delta={delta}");
-            assert_ne!(action(&damaged).target, ActionTarget::Klondike(KlondikeTarget::Solve));
+            shift_solve_sample_red(&mut damaged, true, delta);
+            assert!(has_solve_control(&damaged), "outer-frame red delta={delta}");
+            assert_eq!(action(&damaged).target, ActionTarget::Klondike(KlondikeTarget::Solve));
         }
+
+        let mut damaged = frame;
+        shift_solve_sample_red(&mut damaged, false, 25);
+        assert!(!has_solve_control(&damaged));
+        assert_ne!(action(&damaged).target, ActionTarget::Klondike(KlondikeTarget::Solve));
     }
 
 
-    /// Positive warmer-border evidence does not authorise incomplete controls,
-    /// occupied stock, overlaid scenes or a cursor hiding the check mark/text.
+    /// A stable face still needs the check mark, word and independent empty stock.
+    /// An overlay or cursor withdrawing the face never authorises a Solve click.
     #[test]
-    fn warmer_solve_control_still_requires_border_glyph_stock_and_scene() {
+    fn solve_control_still_requires_interior_glyph_stock_and_scene() {
         let frame = fixture(42);
 
 
-        for corruption in [
-            PixelRect::new(590, 212, 70, 24),
-            PixelRect::new(598, 160, 58, 42),
-            PixelRect::new(562, 143, 10, 113),
+        for (corruption, rgb) in [
+            (PixelRect::new(590, 212, 70, 24), [12, 62, 40]),
+            (PixelRect::new(598, 160, 58, 42), [12, 62, 40]),
+            (PixelRect::new(578, 159, 8, 81), [255, 255, 255]),
         ] {
             let mut damaged = frame.clone();
-            paint(&mut damaged, corruption, [12, 62, 40]);
-            assert!(!has_solve_control(&damaged), "{corruption:?}");
+            paint(&mut damaged, corruption, rgb);
+            let report = inspect_solve_control(&damaged).unwrap();
+            assert!(!report.available, "{corruption:?}: {report}");
+
+
+            if rgb == [255, 255, 255] {
+                // The word/check mark still match; independently missing dark
+                // face samples must withdraw authority despite intact glyphs.
+                assert_eq!((report.interior_matched, report.glyph_matched), (441, 342));
+            }
         }
 
 
@@ -3666,8 +3745,8 @@ mod tests {
     }
 
 
-    /// K48 matches every existing artwork sample. Its priority failure cannot
-    /// justify wider colour tolerances; keep the full original recogniser.
+    /// K48 matches the stable face without wider colour tolerances, and keeps
+    /// Solve ahead of the still-valid remaining tableau source.
     #[test]
     fn recorded_later_solve_capture_is_already_recognised_before_tableau() {
         let frame = fixture(48);
@@ -3808,14 +3887,15 @@ mod tests {
     }
 
 
-    /// The public diagnostic preserves every original candidate count even when
-    /// stock support fails, and never grants scene or input authority itself.
+    /// Diagnostics retain the whole-frame count beside the stable authoritative
+    /// interior even when stock support fails; they never grant scene/input rights.
     #[test]
     fn solve_diagnostic_reports_full_artwork_and_independent_empty_stock_guard() {
         let frame = fixture(48);
         assert_eq!(inspect_solve_control(&frame).unwrap(), SolveEvidence {
             available: true, stock_felt_pixels: 13_900, stock_probe_pixels: 13_900,
-            artwork_matched: 899, artwork_samples: 899, glyph_matched: 342, glyph_samples: 342,
+            artwork_matched: 899, artwork_samples: 899, interior_matched: 483, interior_samples: 483,
+            glyph_matched: 342, glyph_samples: 342,
         });
         let mut stock_occupied = frame.clone();
         copy_region(&fixture(1), &mut stock_occupied, PixelRect::new(390, UPPER_Y, CARD_WIDTH, CARD_HEIGHT), PixelPoint::new(390, UPPER_Y as i32));
@@ -3825,6 +3905,169 @@ mod tests {
         let mut malformed = frame;
         malformed.pixels.truncate(1);
         assert!(inspect_solve_control(&malformed).is_err());
+    }
+
+
+    /// Remove only the exterior of the settled K48 control. This is a controlled
+    /// derivative, not a captured animation phase; its unchanged native interior
+    /// must select Solve before the genuine remaining tableau HALO.
+    #[test]
+    fn solve_control_without_gold_animation_frame_preserves_tableau_priority() {
+        let recorded = fixture(48);
+
+
+        for rgb in [[12, 82, 45], [0, 0, 0], [255, 255, 255]] {
+            let mut derivative = recorded.clone();
+            paint(&mut derivative, SOLVE_BOUNDS, rgb);
+            copy_region(&recorded, &mut derivative, SOLVE_STABLE_INTERIOR,
+                PixelPoint::new(SOLVE_STABLE_INTERIOR.x as i32, SOLVE_STABLE_INTERIOR.y as i32));
+            let report = inspect_solve_control(&derivative).unwrap();
+            assert!(report.available, "{report}");
+            assert!(report.artwork_matched * 100 < report.artwork_samples * 98, "{report}");
+            assert_eq!((report.interior_matched, report.glyph_matched), (483, 342));
+            assert!(find_solid_card_source(&derivative,
+                PixelRect::new(390, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)).unwrap().is_some());
+            assert_eq!(action(&derivative).target, ActionTarget::Klondike(KlondikeTarget::Solve));
+        }
+    }
+
+
+    /// All native recorded controls match; every other supplied frame lacks the
+    /// stable face. This includes card/waste scenes, terminal decoration and empty
+    /// outlines, without generalising gold colour into a completion-request button.
+    #[test]
+    fn stable_solve_face_is_specific_across_the_original_recorded_corpus() {
+
+
+        for number in 1..=49 {
+            let report = inspect_solve_control(&fixture(number)).unwrap();
+            assert_eq!(report.available, [13, 25, 37, 42, 48].contains(&number), "K{number:02}: {report}");
+        }
+    }
+
+
+    /// Charlie reconstructed the preceding 4-clubs source using Undo after the
+    /// stopped run. Native K50/K51 pixels show 5-diamonds exposed in column 1
+    /// and the next 5-clubs source in column 3. They are not the saved worker
+    /// frames, whose corner counts differ slightly from this later attachment.
+    #[test]
+    fn recorded_bottom_club_removal_continues_to_a_different_tableau_column() {
+        let before = fixture(50);
+        let after = fixture(51);
+        let planned = action(&before);
+        assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
+            column: 1, top: 799, bottom: 989,
+        }));
+        assert_eq!(action(&after).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
+            column: 3, top: 610, bottom: 800,
+        }));
+        let report = inspect_effect(&before, &after, planned).unwrap();
+        assert_eq!(report.source_changed, 687, "{report}");
+        assert_eq!(report.source_positive, 61, "{report}");
+        assert_eq!(report.source_identity_directions, [[0, 0], [0, 0]], "clipped ordinary corners stay unavailable");
+        assert_eq!(report.source_visible_identity_directions, [[35, 209], [141, 58]], "{report}");
+        assert_eq!(report.source_visible_print.new_ink, 550, "{report}");
+        assert_eq!(report.source_visible_print.cleared_ink, 54, "{report}");
+        assert_eq!(report.source_visible_print.stable_paper, 3_925, "{report}");
+        assert_eq!(report.source_visible_print.changed_paper_fields, 0, "{report}");
+        assert!(report.source_visible_print.paper_supported && report.source_visible_print.verified, "{report}");
+        assert_eq!(report.destination_changed, 1_244, "next HALO shadow supplies the broad diagnostic: {report}");
+        assert_eq!(content_changes(&before, &after, PixelRect::new(1_398, UPPER_Y, CARD_WIDTH, CARD_HEIGHT), planned, false),
+            318, "the actual receiving foundation does not meet the general recipient bound");
+        assert!(report.source_replaced && !report.verified, "continuation remains separate from complete effect: {report}");
+        assert!(!inspect_effect(&before, &before, planned).unwrap().source_replaced);
+    }
+
+
+    /// Material outside the source is only an extra restriction. A new HALO
+    /// shadow or receiving foundation without source proof cannot grant either
+    /// continuation or complete effect. Stable source print without that fresh
+    /// non-source context also leaves the narrower fallback unavailable.
+    #[test]
+    fn stable_bottom_print_fallback_requires_independent_source_and_fresh_context() {
+        let before = fixture(50);
+        let completed = fixture(51);
+        let planned = action(&before);
+        let source = planned.effect_bounds();
+        let mut source_only = before.clone();
+        copy_region(&completed, &mut source_only, source, PixelPoint::new(source.x as i32, source.y as i32));
+        let report = inspect_effect(&before, &source_only, planned).unwrap();
+        assert!(report.source_visible_print.verified, "{report}");
+        assert_eq!(report.destination_changed, 0, "{report}");
+        assert!(!report.source_replaced && !report.verified, "{report}");
+        let mut halo_only = before.clone();
+        copy_region(&completed, &mut halo_only, PixelRect::new(716, 600, 154, 212), PixelPoint::new(716, 600));
+        let report = inspect_effect(&before, &halo_only, planned).unwrap();
+        assert_eq!(report.source_changed, 0, "{report}");
+        assert_eq!(report.destination_changed, 1_244, "{report}");
+        assert!(!report.source_replaced && !report.verified, "{report}");
+        let mut recipient_and_halo = halo_only;
+        copy_region(&completed, &mut recipient_and_halo,
+            PixelRect::new(1_398, UPPER_Y, CARD_WIDTH, CARD_HEIGHT), PixelPoint::new(1_398, UPPER_Y as i32));
+        let report = inspect_effect(&before, &recipient_and_halo, planned).unwrap();
+        assert_eq!(report.source_changed, 0, "{report}");
+        assert!(!report.source_replaced && !report.verified, "{report}");
+    }
+
+
+    /// Both visible patches and unchanged neutral paper fields remain mandatory.
+    /// A neutral bright-paper fade is rejected even though it keeps the native
+    /// opposed print counts, 512 material source pixels and the fresh target.
+    #[test]
+    fn stable_bottom_print_fallback_rejects_missing_patches_and_paper_fading() {
+        let before = fixture(50);
+        let completed = fixture(51);
+        let planned = action(&before);
+
+
+        for patch in [PixelRect::new(395, 804, 28, 44), PixelRect::new(489, 903, 28, 44)] {
+            let mut one_patch = completed.clone();
+            copy_region(&before, &mut one_patch, patch, PixelPoint::new(patch.x as i32, patch.y as i32));
+            paint(&mut one_patch, PixelRect::new(425, 888, 40, 20), [190, 190, 190]);
+            let report = inspect_effect(&before, &one_patch, planned).unwrap();
+            assert!(report.source_changed >= MINIMUM_CONTENT_CHANGE, "{report}");
+            assert!(!report.source_replaced && !report.verified, "restored patch {patch:?}: {report}");
+        }
+        let mut faded = completed.clone();
+        paint(&mut faded, PixelRect::new(425, 888, 20, 6), [230, 230, 230]);
+        let report = inspect_effect(&before, &faded, planned).unwrap();
+        assert_eq!(report.source_visible_identity_directions, [[35, 209], [141, 58]], "print itself is retained: {report}");
+        assert!(report.source_visible_print.changed_paper_fields > 0, "{report}");
+        assert!(!report.source_replaced && !report.verified, "paper-field fading is not replacement: {report}");
+    }
+
+
+    /// The fallback uses neither gold, cursor nor toolbar change. Neutral guide
+    /// darkening and whitening have one-way print changes and remain refused,
+    /// even when the valid later HALO and actual receiving foundation are retained.
+    #[test]
+    fn stable_bottom_print_fallback_refuses_cursor_guides_and_toolbar_changes() {
+        let before = fixture(50);
+        let completed = fixture(51);
+        let planned = action(&before);
+        let mut outside_source = before.clone();
+        copy_region(&completed, &mut outside_source, PixelRect::new(716, 600, 154, 212), PixelPoint::new(716, 600));
+        copy_region(&completed, &mut outside_source,
+            PixelRect::new(1_398, UPPER_Y, CARD_WIDTH, CARD_HEIGHT), PixelPoint::new(1_398, UPPER_Y as i32));
+
+
+        for (name, bounds, rgb) in [
+            ("cursor", PixelRect::new(409, 792, 94, 94), [0, 0, 0]),
+            ("white cursor", PixelRect::new(409, 792, 94, 94), [255, 255, 255]),
+            ("gold", planned.effect_bounds(), [230, 185, 70]),
+            ("neutral guide", planned.effect_bounds(), [32, 32, 32]),
+            ("neutral fading", planned.effect_bounds(), [190, 190, 190]),
+            ("whitening", planned.effect_bounds(), [255, 255, 255]),
+            ("toolbar", PixelRect::new(390, TOOLBAR_TOP, CARD_WIDTH, 86), [255, 255, 255]),
+        ] {
+            let mut after = outside_source.clone();
+            paint(&mut after, bounds, rgb);
+            let report = inspect_effect(&before, &after, planned).unwrap();
+            assert!(!report.source_replaced && !report.verified, "{name}: {report}");
+        }
+        let mut malformed = completed;
+        malformed.pixels.truncate(1);
+        assert!(inspect_effect(&before, &malformed, planned).is_err());
     }
 
 }

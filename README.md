@@ -5,8 +5,8 @@ QMP Unix socket. The current guest is Windows 11 running Microsoft Solitaire &
 Casual Games. TriPeaks, Pyramid and Klondike use fresh visual evidence and shared
 QMP/capture facilities, with independent target and effect policies.
 
-This is **v1.2.4, candidate 2**, based on committed v1.2.3 candidate 5 at
-`d9ad2cdf536165bb99ae4e02dabc49f7a9fa7227`. `Cargo.toml` supplies the package
+This is **v1.2.5, candidate 1**, based on committed v1.2.4 candidate 2 at
+`eb18478b59b29b00bd5c1e11f1a30348226a5f61`. `Cargo.toml` supplies the package
 version shown in the window title and Parameters. Beast gameplay acceptance
 is required before promotion.
 
@@ -68,12 +68,16 @@ post-click delay**. Normal pointer-settle/button-hold and QMP acknowledgements
 still apply. Further unresolved captures are bounded and use the editable
 recapture delay. A changed initial target sends no input and publishes a fresh
 actionable preview for review; another explicit Step request validates it again.
-An approved no-HALO preview permits recovery only: the recovered
-preview is displayed and another explicit Step request is required for gameplay.
+An approved no-HALO preview permits one guarded Solver activation. In continuous
+Multi-Step 0, a freshly observed valid target then continues the active run.
+Single Step and finite runs display the recovered preview for another explicit
+Step request before gameplay.
 Recovery does not repeat an uncertain gameplay operation.
 
 The separate **Solve** button can replace RIGHT when the guest offers automatic
-finishing. Its measured button appearance authorises one click, followed by its
+finishing. Its stable button interior and complete lettering, with empty stock and a
+recognised scene, authorise one click without waiting for the animated outer HALO.
+The click is followed by its
 separate editable animation delay and up to 20 delayed read-only completion
 observations, using the existing post-game bound and editable Klondike
 re-observation interval. Two consecutive positive observations are still required;
@@ -324,3 +328,19 @@ logs empty-stock, artwork and glyph counts alongside scene/selected target for
 fresh run observations, so another live refusal can be diagnosed without guessing
 at later screenshot pixels. See [the candidate notes](docs/klondike-v1.2.4-candidate-2.md)
 for provenance, bounded policies and Beast checks.
+
+## v1.2.5 candidate 1 evidence
+
+K50/K51 reconstruct the bottom 4-clubs transfer to SUIT after an Undo. The next
+source is 5-clubs in column 3; the exposed card in column 1 is 5-diamonds. The
+source retains mostly white paper and uneven printed-detail changes. A narrowly
+guarded stable-paper comparison can support continuation to the fresh HALO;
+the prior complete effect remains unverified. No rank or suit is read by code.
+
+New Solve diagnostics show complete lettering repeatedly passing while the full
+button template fails. Detection now uses the stable interior and lettering,
+with stock and scene guards, independently of the animated outer ring. K52
+adds the measured two-pixel centred Level Up label shift. Terminal diagnostics
+report recognised stages and named guard failures. Exact frames after the last
+reported OK click were not supplied, so their refusal remains a live check.
+See [candidate notes](docs/klondike-v1.2.5-candidate-1.md).

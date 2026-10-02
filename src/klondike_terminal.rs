@@ -2,6 +2,9 @@
 //!
 //! K26-K30 provide the native 1920x1080 scene, title and button signatures.
 //! K43 confirms the Congratulations signature on a later level and reward frame.
+//! K52 retains the same OK geometry while the centre-aligned game label moves
+//! two native pixels right as the level number changes. The complete mixed label
+//! signature uses one coherent evidenced position; numeric text remains excluded.
 //! K49 records the same Level Up controls under warm animated fireworks. Only
 //! the four empty-tableau context samples permit measured red/green particle
 //! lighting; their blue limit and full-RGB foundation context remain independent.
@@ -186,6 +189,12 @@ const LEVEL_UP_TITLE: [RgbSample; 10] = [
     RgbSample::new(1069, 217, [255, 255, 255]),
     RgbSample::new(1103, 199, [255, 255, 255]),
 ];
+
+
+/// Evidenced horizontal positions of the complete centre-aligned game label.
+/// K27/K49 use zero; K52 changes the level text width and shifts it two pixels.
+/// No free-position search or different offsets per sample are permitted.
+const LEVEL_UP_LABEL_OFFSETS: [u32; 2] = [0, 2];
 
 
 /// Original stable artwork samples from K27; numeric level/score text is excluded.
@@ -523,13 +532,41 @@ const PLAY_DRAW_ONE_BACKGROUND: [RgbSample; 8] = [
 ];
 
 
+/// Count immutable samples within tolerance at one coherent horizontal offset.
+/// A missing pixel never contributes evidence. The caller validates native frame
+/// storage; checked addition retains a fail-closed bound for translated samples.
+fn count_samples(
+    frame: &CapturedFrame,
+    samples: &[RgbSample],
+    tolerance: u8,
+    horizontal_offset: u32,
+) -> usize {
+    samples.iter().filter(|sample| {
+        sample.x.checked_add(horizontal_offset)
+            .and_then(|x| pixel_rgb(frame, x, sample.y))
+            .is_some_and(|actual| {
+                actual.into_iter().zip(sample.rgb)
+                    .all(|(channel, expected)| channel.abs_diff(expected) <= tolerance)
+            })
+    }).count()
+}
+
+
 /// Compare all channels of every immutable sample; a missing pixel fails closed.
 fn matches_samples(frame: &CapturedFrame, samples: &[RgbSample], tolerance: u8) -> bool {
-    samples.iter().all(|sample| {
-        pixel_rgb(frame, sample.x, sample.y).is_some_and(|actual| {
-            actual.into_iter().zip(sample.rgb)
-                .all(|(channel, expected)| channel.abs_diff(expected) <= tolerance)
-        })
+    count_samples(frame, samples, tolerance, 0) == samples.len()
+}
+
+
+/// Require both printed game text and its mixed background at one measured
+/// position. This excludes moving level digits and refuses flat or independently
+/// shifted partial signatures while retaining the original scene/control guards.
+fn level_up_label_offset(frame: &CapturedFrame) -> Option<u32> {
+    LEVEL_UP_LABEL_OFFSETS.into_iter().find(|offset| {
+        count_samples(frame, &LEVEL_UP_KLONDIKE, ARTWORK_CHANNEL_TOLERANCE, *offset)
+            == LEVEL_UP_KLONDIKE.len()
+            && count_samples(frame, &LEVEL_UP_KLONDIKE_BACKGROUND,
+                ARTWORK_CHANNEL_TOLERANCE, *offset) == LEVEL_UP_KLONDIKE_BACKGROUND.len()
     })
 }
 
@@ -555,15 +592,21 @@ fn has_completed_board_context(frame: &CapturedFrame, samples: &[RgbSample]) -> 
 /// complete OK control signatures; it cannot establish a generic modal or win.
 fn has_completed_level_up_context(frame: &CapturedFrame) -> bool {
     has_completed_board_context(frame, &LEVEL_UP_FOUNDATION_CONTEXT)
-        && LEVEL_UP_EMPTY_TABLEAU_CONTEXT.iter().all(|sample| {
-            pixel_rgb(frame, sample.x, sample.y).is_some_and(|actual| {
-                actual[2].abs_diff(sample.rgb[2]) <= BOARD_CONTEXT_CHANNEL_TOLERANCE
-                    && actual[0] >= sample.rgb[0].saturating_sub(BOARD_CONTEXT_CHANNEL_TOLERANCE)
-                    && actual[0] <= sample.rgb[0].saturating_add(LEVEL_UP_FIREWORK_RED_INCREASE)
-                    && actual[1] >= sample.rgb[1].saturating_sub(BOARD_CONTEXT_CHANNEL_TOLERANCE)
-                    && actual[1] <= sample.rgb[1].saturating_add(LEVEL_UP_FIREWORK_GREEN_INCREASE)
-            })
-        })
+        && LEVEL_UP_EMPTY_TABLEAU_CONTEXT.iter()
+            .all(|sample| matches_level_up_empty_sample(frame, sample))
+}
+
+
+/// One independently dimmed empty-tableau point with the measured finite warm
+/// particle allowance; neither arbitrary black nor bright paper supplies proof.
+fn matches_level_up_empty_sample(frame: &CapturedFrame, sample: &RgbSample) -> bool {
+    pixel_rgb(frame, sample.x, sample.y).is_some_and(|actual| {
+        actual[2].abs_diff(sample.rgb[2]) <= BOARD_CONTEXT_CHANNEL_TOLERANCE
+            && actual[0] >= sample.rgb[0].saturating_sub(BOARD_CONTEXT_CHANNEL_TOLERANCE)
+            && actual[0] <= sample.rgb[0].saturating_add(LEVEL_UP_FIREWORK_RED_INCREASE)
+            && actual[1] >= sample.rgb[1].saturating_sub(BOARD_CONTEXT_CHANNEL_TOLERANCE)
+            && actual[1] <= sample.rgb[1].saturating_add(LEVEL_UP_FIREWORK_GREEN_INCREASE)
+    })
 }
 
 
@@ -672,8 +715,7 @@ pub(crate) fn classify_terminal(
 
     if matches_artwork(frame, &LEVEL_UP_TITLE)
         && matches_artwork(frame, &LEVEL_UP_TITLE_BACKGROUND)
-        && matches_artwork(frame, &LEVEL_UP_KLONDIKE)
-        && matches_artwork(frame, &LEVEL_UP_KLONDIKE_BACKGROUND)
+        && level_up_label_offset(frame).is_some()
         && matches_artwork(frame, &LEVEL_UP_OK)
         && matches_artwork(frame, &LEVEL_UP_OK_BACKGROUND)
         && matches_artwork(frame, &LEVEL_UP_BUTTON_BODY)
@@ -706,6 +748,124 @@ pub(crate) fn classify_terminal(
 }
 
 
+/// Matched and required samples for one independently required terminal guard.
+#[derive(Clone, Copy, Debug)]
+struct SignatureEvidence {
+    /// Native sample count within the unchanged guard's colour tolerance.
+    matched: usize,
+    /// Total sample count, all of which the corresponding guard requires.
+    required: usize,
+}
+
+
+impl SignatureEvidence {
+
+
+    /// Record immutable samples without granting input or changing any tolerance.
+    fn inspect(frame: &CapturedFrame, samples: &[RgbSample], tolerance: u8, offset: u32) -> Self {
+        Self { matched: count_samples(frame, samples, tolerance, offset), required: samples.len() }
+    }
+}
+
+
+impl fmt::Display for SignatureEvidence {
+
+
+    /// Keep the actual match count next to its unchanged required count.
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{}/{}", self.matched, self.required)
+    }
+}
+
+
+/// Read-only named terminal guards for diagnosing frames absent from attachments.
+/// Counts are observational evidence only; `classify_terminal` remains the sole
+/// scene authority and the worker still grants exactly one fresh control input.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct TerminalEvidence {
+    /// Congratulations letter samples and non-letter ribbon contrast together.
+    congratulations_ribbon: [SignatureEvidence; 2],
+    /// Stable Congratulations frame artwork outside score and level text.
+    congratulations_frame: SignatureEvidence,
+    /// Occupied foundations and empty side tableau behind Congratulations.
+    congratulations_context: SignatureEvidence,
+    /// Counting-stage skip caption and body; both are independently required.
+    score_control: [SignatureEvidence; 2],
+    /// New Game letters, Home letters and paired control body evidence.
+    new_game_control: [SignatureEvidence; 3],
+    /// Level Up title letters and non-letter ribbon contrast together.
+    level_up_title: [SignatureEvidence; 2],
+    /// Label letters/background for coherent offsets zero and two respectively.
+    level_up_label: [[SignatureEvidence; 2]; 2],
+    /// Level Up OK glyph, internal gold contrast and external button body.
+    level_up_control: [SignatureEvidence; 3],
+    /// Independently dimmed occupied foundation context behind Level Up.
+    level_up_foundations: SignatureEvidence,
+    /// Empty side-tableau points under their finite warm-particle guard.
+    level_up_tableau: SignatureEvidence,
+}
+
+
+impl fmt::Display for TerminalEvidence {
+
+
+    /// Surface the refused scene guard without inferring missing worker pixels.
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter,
+            "Congratulations title={}/{}, frame={}, completed context={}, skip={}/{}, New Game={}/{}/{}; Level Up title={}/{}, label +0={}/{}, label +2={}/{}, OK={}/{}/{}, foundations={}, empty tableau={}",
+            self.congratulations_ribbon[0], self.congratulations_ribbon[1],
+            self.congratulations_frame, self.congratulations_context,
+            self.score_control[0], self.score_control[1],
+            self.new_game_control[0], self.new_game_control[1], self.new_game_control[2],
+            self.level_up_title[0], self.level_up_title[1],
+            self.level_up_label[0][0], self.level_up_label[0][1],
+            self.level_up_label[1][0], self.level_up_label[1][1],
+            self.level_up_control[0], self.level_up_control[1], self.level_up_control[2],
+            self.level_up_foundations, self.level_up_tableau)
+    }
+}
+
+
+/// Inspect every named Congratulations/Level Up guard on one valid native frame.
+/// This deliberately evaluates refused alternatives too, so delayed observations
+/// explain a stop after a previously recognised control without another click.
+/// Malformed storage or unsupported dimensions return the existing layout error.
+pub(crate) fn inspect_terminal_evidence(
+    frame: &CapturedFrame,
+) -> Result<TerminalEvidence, HaloDetectionError> {
+    super::validate_frame(frame)?;
+    let artwork = |samples: &[RgbSample]| {
+        SignatureEvidence::inspect(frame, samples, ARTWORK_CHANNEL_TOLERANCE, 0)
+    };
+    let label = LEVEL_UP_LABEL_OFFSETS.map(|offset| {
+        [SignatureEvidence::inspect(frame, &LEVEL_UP_KLONDIKE, ARTWORK_CHANNEL_TOLERANCE, offset),
+            SignatureEvidence::inspect(frame, &LEVEL_UP_KLONDIKE_BACKGROUND,
+                ARTWORK_CHANNEL_TOLERANCE, offset)]
+    });
+    Ok(TerminalEvidence {
+        congratulations_ribbon: [artwork(&CONGRATULATIONS_TITLE),
+            artwork(&CONGRATULATIONS_TITLE_BACKGROUND)],
+        congratulations_frame: artwork(&CONGRATULATIONS_FRAME),
+        congratulations_context: SignatureEvidence::inspect(frame, &COMPLETED_BOARD_CONTEXT,
+            BOARD_CONTEXT_CHANNEL_TOLERANCE, 0),
+        score_control: [artwork(&SCORE_SKIP_CAPTION), artwork(&SCORE_SKIP_BODY)],
+        new_game_control: [artwork(&NEW_GAME_TEXT), artwork(&NEW_GAME_HOME),
+            artwork(&NEW_GAME_BUTTON_BODY)],
+        level_up_title: [artwork(&LEVEL_UP_TITLE), artwork(&LEVEL_UP_TITLE_BACKGROUND)],
+        level_up_label: label,
+        level_up_control: [artwork(&LEVEL_UP_OK), artwork(&LEVEL_UP_OK_BACKGROUND),
+            artwork(&LEVEL_UP_BUTTON_BODY)],
+        level_up_foundations: SignatureEvidence::inspect(frame, &LEVEL_UP_FOUNDATION_CONTEXT,
+            BOARD_CONTEXT_CHANNEL_TOLERANCE, 0),
+        level_up_tableau: SignatureEvidence {
+            matched: LEVEL_UP_EMPTY_TABLEAU_CONTEXT.iter()
+                .filter(|sample| matches_level_up_empty_sample(frame, sample)).count(),
+            required: LEVEL_UP_EMPTY_TABLEAU_CONTEXT.len(),
+        },
+    })
+}
+
+
 #[cfg(test)]
 mod tests {
     //! Original scene signatures, rejected controls, bounds and editable timing.
@@ -725,6 +885,7 @@ mod tests {
             30 => include_bytes!("../tests/fixtures/klondike/K30.png"),
             43 => include_bytes!("../tests/fixtures/klondike/K43.png"),
             49 => include_bytes!("../tests/fixtures/klondike/K49.png"),
+            52 => include_bytes!("../tests/fixtures/klondike/K52.png"),
             _ => panic!("unknown terminal fixture"),
         };
         decode_png(png).expect("decode recorded terminal PNG")
@@ -802,6 +963,130 @@ mod tests {
         let mut changed_level = frame.clone();
         paint(&mut changed_level, PixelRect::new(1_110, 610, 60, 38), [0, 0, 0]);
         assert_eq!(classify_terminal(&changed_level).unwrap(), Some(TerminalStage::LevelUp));
+    }
+
+
+    /// K52 changes the centred label position by two pixels while every measured
+    /// title, OK glyph, button-body and occupied-board context guard still passes.
+    /// The prior whole-scene refusal must not change the already valid click.
+    #[test]
+    fn later_level_number_uses_the_measured_coherent_label_position() {
+        let frame = fixture(52);
+        assert!(!matches_artwork(&frame, &LEVEL_UP_KLONDIKE));
+        assert!(!matches_artwork(&frame, &LEVEL_UP_KLONDIKE_BACKGROUND));
+        assert_eq!(level_up_label_offset(&frame), Some(2));
+        assert!(matches_artwork(&frame, &LEVEL_UP_TITLE));
+        assert!(matches_artwork(&frame, &LEVEL_UP_OK));
+        assert!(matches_artwork(&frame, &LEVEL_UP_OK_BACKGROUND));
+        assert!(matches_artwork(&frame, &LEVEL_UP_BUTTON_BODY));
+        assert!(has_completed_level_up_context(&frame));
+        assert_eq!(classify_terminal(&frame).unwrap(), Some(TerminalStage::LevelUp));
+        assert_eq!(TerminalStage::LevelUp.click_point(), PixelPoint::new(960, 795));
+        let mut changed_level = frame.clone();
+        paint(&mut changed_level, PixelRect::new(1_110, 610, 60, 38), [0, 0, 0]);
+        assert_eq!(classify_terminal(&changed_level).unwrap(), Some(TerminalStage::LevelUp));
+    }
+
+
+    /// Recognition cannot combine nominal-position letters with background at
+    /// the translated position; both independent patterns must share one offset.
+    #[test]
+    fn level_up_label_patterns_must_have_one_coherent_position() {
+        let mut frame = fixture(52);
+        paint(&mut frame, PixelRect::new(760, 610, 220, 35), [0, 0, 0]);
+
+
+        for sample in LEVEL_UP_KLONDIKE {
+            paint(&mut frame, PixelRect::new(sample.x, sample.y, 1, 1), sample.rgb);
+        }
+
+
+        for sample in LEVEL_UP_KLONDIKE_BACKGROUND {
+            paint(&mut frame, PixelRect::new(sample.x + 2, sample.y, 1, 1), sample.rgb);
+        }
+        assert!(matches_artwork(&frame, &LEVEL_UP_KLONDIKE));
+        assert_eq!(count_samples(&frame, &LEVEL_UP_KLONDIKE_BACKGROUND,
+            ARTWORK_CHANNEL_TOLERANCE, 2), LEVEL_UP_KLONDIKE_BACKGROUND.len());
+        assert_eq!(level_up_label_offset(&frame), None);
+        assert_eq!(classify_terminal(&frame).unwrap(), None);
+    }
+
+
+    /// Only the two supplied centre positions are permitted. A further synthetic
+    /// label shift leaves all other real scene pixels intact but grants no OK.
+    #[test]
+    fn unmeasured_label_position_does_not_authorise_the_control() {
+        let original = fixture(52);
+        let mut shifted = original.clone();
+        paint(&mut shifted, PixelRect::new(760, 610, 222, 35), [0, 0, 0]);
+
+
+        for y in 610..645usize {
+            let source = y * original.stride + 760 * 4;
+            let destination = y * shifted.stride + 762 * 4;
+            shifted.pixels[destination..destination + 220 * 4]
+                .copy_from_slice(&original.pixels[source..source + 220 * 4]);
+        }
+        assert!(matches_artwork(&shifted, &LEVEL_UP_TITLE));
+        assert!(matches_artwork(&shifted, &LEVEL_UP_OK));
+        assert_eq!(level_up_label_offset(&shifted), None);
+        assert_eq!(classify_terminal(&shifted).unwrap(), None);
+    }
+
+
+    /// The shifted label never bypasses a visible title/control, mixed game name,
+    /// foundation or empty-tableau guard. These are controlled adverse derivatives.
+    #[test]
+    fn shifted_label_still_requires_every_independent_scene_guard() {
+        let bounds = [PixelRect::new(804, 185, 315, 46),
+            PixelRect::new(760, 610, 222, 35), PixelRect::new(930, 800, 50, 24),
+            PixelRect::new(840, 775, 240, 75)];
+
+
+        for bounds in bounds {
+
+
+            for rgb in [[0, 0, 0], [255, 255, 255]] {
+                let mut frame = fixture(52);
+                paint(&mut frame, bounds, rgb);
+                assert_eq!(classify_terminal(&frame).unwrap(), None);
+            }
+        }
+
+
+        for sample in LEVEL_UP_FOUNDATION_CONTEXT {
+            let mut frame = fixture(52);
+            paint(&mut frame, PixelRect::new(sample.x, sample.y, 1, 1), [0, 0, 0]);
+            assert_eq!(classify_terminal(&frame).unwrap(), None);
+        }
+
+
+        for sample in LEVEL_UP_EMPTY_TABLEAU_CONTEXT {
+            let mut frame = fixture(52);
+            paint(&mut frame, PixelRect::new(sample.x, sample.y, 1, 1), [255, 255, 255]);
+            assert_eq!(classify_terminal(&frame).unwrap(), None);
+        }
+    }
+
+
+    /// Named diagnostic counts distinguish the coherent label from independently
+    /// required controls. Inspection cannot establish authority on malformed frames.
+    #[test]
+    fn terminal_evidence_reports_each_guard_and_rejects_bad_storage() {
+        let frame = fixture(52);
+        let evidence = inspect_terminal_evidence(&frame).unwrap();
+        assert_eq!(evidence.level_up_title[0].matched, LEVEL_UP_TITLE.len());
+        assert_eq!(evidence.level_up_label[0][0].matched, 6);
+        assert_eq!(evidence.level_up_label[1][0].matched, LEVEL_UP_KLONDIKE.len());
+        assert_eq!(evidence.level_up_label[1][1].matched, LEVEL_UP_KLONDIKE_BACKGROUND.len());
+        assert_eq!(evidence.level_up_control[0].matched, LEVEL_UP_OK.len());
+        assert_eq!(evidence.level_up_foundations.matched, LEVEL_UP_FOUNDATION_CONTEXT.len());
+        assert_eq!(evidence.level_up_tableau.matched, LEVEL_UP_EMPTY_TABLEAU_CONTEXT.len());
+        assert!(evidence.to_string().contains("label +2=10/10/8/8"));
+        let mut invalid = frame;
+        invalid.pixels.clear();
+        assert!(matches!(inspect_terminal_evidence(&invalid),
+            Err(HaloDetectionError::InvalidFrameLayout)));
     }
 
 

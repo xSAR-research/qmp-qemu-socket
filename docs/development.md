@@ -1,7 +1,7 @@
-# Development conventions for v1.2.4 candidate 2
+# Development conventions for v1.2.5 candidate 1
 
-This candidate corrects committed v1.2.3 candidate 5 at
-`d9ad2cdf536165bb99ae4e02dabc49f7a9fa7227`.
+This candidate corrects committed v1.2.4 candidate 2 at
+`eb18478b59b29b00bd5c1e11f1a30348226a5f61`.
 TriPeaks and Pyramid retain their established execution policies.
 Independent card-rank recognition, search and file-free capture are outside
 this candidate.
@@ -92,7 +92,7 @@ No formatter check is included, by Charlie's explicit instruction. Build/test
 results from another host do not prove Beast installation or live guest input.
 The candidate delivery notes record the checks actually executed.
 
-On the Beast, confirm the launched executable identifies v1.2.4, candidate 2. Verify
+On the Beast, confirm the launched executable identifies v1.2.5, candidate 1. Verify
 Capture Frame, exact-byte manual Capture PNG, single-step, finite and continuous
 multi-step, STOP and mode/socket invalidation. Exercise Klondike Draw 1, source
 transfers, RIGHT fan positions, recycle, Solve and late/no-HALO recovery. Preserve first-failure
@@ -175,3 +175,10 @@ result pixels, runtime counts and an explicitly synthetic predecessor.
 Do not claim K48 establishes the missing live Solve failure: its settled artwork
 already passes. Inspect new per-observation Solve diagnostics in the next run.
 No input may be replayed after uncertain delivery or unsupported-scene recovery.
+
+Version 1.2.5 candidate 1 adds K50–K52 and corrects continuous initial Solver
+recovery. Preserve the finite-run review endpoint. Test stable Solve lettering
+with a removed/changed outer ring, unknown scenes and intact stock refusals,
+coherent Level Up label alignment, and source-supported bottom-card continuation.
+Retain unchanged/cursor/guide/paper/mask refusals and strict-effect distinctions.
+The unrecorded frames after the last Level Up OK click remain unverified.

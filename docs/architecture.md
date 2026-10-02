@@ -207,7 +207,9 @@ at the editable Klondike re-observation interval. This reuses the existing
 post-game bound; ordinary card recovery retains three delayed observations. No Solve
 or uncertain gameplay input is retried. An initial changed preview returns a
 fresh approved prediction for review without guest input; an exact approved
-no-HALO match permits recovery only and cannot initiate gameplay.
+no-HALO match permits one independently guarded Solver activation. An unbounded
+request continues from its fresh recovered target; finite requests publish it for
+review. Uncertain input is never replayed.
 
 One Klondike board is one game. Two consecutive fresh frames must show either
 an intact active Solver banner with all 76 calibrated right-interior pixels gold
@@ -292,3 +294,15 @@ shared result-observation budget. It retains the original action frame and plan,
 skips effect/input analysis on unsupported scenes, and evaluates only fresh
 supported results. Source-supported continuation does not upgrade the preceding
 move to verified. Solve diagnostic counts have no input or completion authority.
+
+## v1.2.5 correction boundary
+
+The Solve recogniser retains empty-stock, stable interior, complete glyph and
+scene/priority guards. Animated outer-ring template agreement is diagnostic only.
+A bottom single-card source with uneven print changes can support continuation
+only through the bounded stable-paper and bidirectional-print checks; strict
+complete-effect verification is unchanged. This does not decode ranks or suits.
+Level Up label variants match an entire coherent signature at the evidenced
+nominal or two-pixel horizontal offset, never a mixture of individual probes.
+Terminal evidence logs identify named guard failures on the same fresh frame.
+All input, effect-proof and completion authorities remain separate.

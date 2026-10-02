@@ -10,6 +10,9 @@
 //! bounded read-only completion observations. One board is one Klondike game;
 //! completion requires two fresh positive observations. Only an authorised continuous
 //! run may advance through the separately calibrated terminal controls.
+//! A continuous request may also start from an approved no-HALO board: reproduce
+//! that board freshly, refresh Solver once and observe a valid target before play.
+//! Finite requests retain the separate recovered-preview review endpoint.
 
 use std::{path::Path, sync::atomic::{AtomicBool, Ordering}, time::{Duration, Instant}};
 
@@ -244,6 +247,21 @@ impl KlondikeIo for QmpKlondikeIo<'_> {
     }
 
 
+    fn terminal_stage(&mut self, frame: &CapturedFrame) -> Result<Option<klondike::terminal::TerminalStage>, String> {
+        let stage = klondike::terminal::classify_terminal(frame)
+            .map_err(|error| format!("Klondike terminal analysis failed: {error}"))?;
+
+
+        match klondike::terminal::inspect_terminal_evidence(frame) {
+            Ok(evidence) => send_log(self.event_tx, format!(
+                "Klondike terminal evidence: {evidence}; selected={stage:?}; guard counts do not grant input authority",
+            )),
+            Err(error) => send_log(self.event_tx, format!("Klondike terminal diagnostic unavailable: {error}")),
+        }
+        Ok(stage)
+    }
+
+
     fn terminal_input(&mut self, stage: klondike::terminal::TerminalStage) -> Result<(), String> {
         require_running(self.cancel_requested)?;
         self.qmp.click_with_hold(
@@ -287,7 +305,7 @@ enum RunOutcome {
     },
     /// Initial read-only validation found a different canonical target requiring explicit review.
     PreviewChanged,
-    /// Solver refresh produced a preview that requires another explicit user run.
+    /// A finite request's Solver refresh produced a preview requiring another user run.
     RecoveryOnly,
     /// One board is one game, confirmed by two fresh mode-owned completion observations.
     GameWon {
@@ -489,7 +507,15 @@ fn drive_run(
             // Recovery is authorised only when the explicit no-HALO preview is reproduced.
             refresh_solver(io, latest, &mut solver_refreshes, settings, event_tx, cancel_requested, input_attempted)?;
             await_target(io, latest, settings, event_tx, cancel_requested)?;
-            return Ok(RunOutcome::RecoveryOnly);
+
+
+            if !settings.is_unbounded() {
+                return Ok(RunOutcome::RecoveryOnly);
+            }
+            send_log(event_tx, format!(
+                "Klondike initial Solver recovery established fresh target {}. The active continuous Multi-Step 0 request authorises play from this captured frame; gameplay inputs sent so far=0. Each action still requires its own VM/tablet probe and STOP check.",
+                format_prediction_target(latest.as_ref().expect("fresh recovered planning capture").prediction),
+            ));
         }
     }
 
@@ -992,6 +1018,11 @@ fn await_target(
         if attempt == REOBSERVATION_LIMIT {
             break;
         }
+        send_status(event_tx, "Waiting for Klondike Solver target".to_owned());
+        send_log(event_tx, format!(
+            "Klondike initial Solver recovery re-observation {}/{REOBSERVATION_LIMIT}: no HALO; waiting {} ms before a fresh input-free capture; no gameplay or further Solver input authorised",
+            attempt + 1, settings.animation_delays().klondike_reobserve.as_millis(),
+        ));
         io.wait(settings.animation_delays().klondike_reobserve)?;
         capture_latest(io, latest, event_tx)?;
     }

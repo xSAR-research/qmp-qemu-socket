@@ -298,48 +298,165 @@ fn limits_fail_before_io() {
 /// Gold absence on an unknown scene cannot authorise the user's Solver recovery rule.
 #[test]
 fn unknown_initial_scene_sends_no_input() {
-    let mut io = fake(&[(PredictedAction::NoHighlight, false)]);
-    let (result, _, latest) = exercise(&mut io, PredictedAction::NoHighlight, 1, &AtomicBool::new(false));
-    assert!(result.unwrap_err().contains("unsupported Klondike scene"));
-    assert_eq!(io.trace, ["capture"]);
-    assert!(latest.is_some());
+
+
+    for limit in [0, 1] {
+        let mut io = fake(&[(PredictedAction::NoHighlight, false)]);
+        let (result, _, latest) = exercise(&mut io, PredictedAction::NoHighlight, limit, &AtomicBool::new(false));
+        assert!(result.unwrap_err().contains("unsupported Klondike scene"));
+        assert_eq!(io.trace, ["capture"]);
+        assert!(latest.is_some());
+    }
 }
 
 
-/// Solver refresh must be immediately followed by capture, and initial recovery never plays a move.
+/// Finite no-HALO requests refresh once and retain explicit recovered-preview review.
 #[test]
-fn initial_solver_refresh_captures_immediately_and_requires_a_new_run() {
+fn initial_finite_solver_refresh_captures_immediately_and_requires_a_new_run() {
+
+
+    for limit in [1, 2] {
+        let mut io = fake(&[(PredictedAction::NoHighlight, true), (draw(), true)]);
+        let (result, _, _) = exercise(&mut io, PredictedAction::NoHighlight, limit, &AtomicBool::new(false));
+        assert_eq!(result, Ok(RunOutcome::RecoveryOnly));
+        assert_eq!(io.trace, ["capture", "probe", "solver", "capture"]);
+        assert!(io.inputs.is_empty());
+    }
+}
+
+
+/// An active continuous request uses the freshly recovered target without a second user run.
+#[test]
+fn initial_continuous_solver_recovery_plays_fresh_target_after_immediate_capture() {
+    let stop = AtomicBool::new(false);
+    let mut io = fake(&[(PredictedAction::NoHighlight, true), (draw(), true), (draw(), true)]);
+    io.proven_effect = true;
+    io.stop_on_probe = Some(&stop);
+    io.probes_before_stop = 2;
+    let (result, input_attempted, latest) = exercise(&mut io, PredictedAction::NoHighlight, 0, &stop);
+    assert!(result.unwrap_err().contains("STOP"));
+    assert!(input_attempted);
+    assert_eq!(io.trace, ["capture", "probe", "solver", "capture", "probe", "input", "wait", "capture", "probe"]);
+    assert_eq!(io.inputs, [draw()]);
+    assert_eq!(io.effect_checks, 1);
+    assert_eq!(latest.unwrap().prediction, draw());
+}
+
+
+/// Late initial HALOs receive editable input-free waits before continuous gameplay starts.
+#[test]
+fn initial_continuous_solver_recovery_waits_for_a_delayed_fresh_target() {
+    let stop = AtomicBool::new(false);
+    let mut io = fake(&[
+        (PredictedAction::NoHighlight, true), (PredictedAction::NoHighlight, true),
+        (PredictedAction::NoHighlight, true), (draw(), true), (draw(), true),
+    ]);
+    io.proven_effect = true;
+    io.stop_on_probe = Some(&stop);
+    io.probes_before_stop = 2;
+    let delays = AnimationSettleDelays::default().with_klondike_millis(750, 250);
+    let (result, _, latest) = exercise_with_settings(
+        &mut io, PredictedAction::NoHighlight, StepRunSettings::new(delays, 0), &stop,
+    );
+    assert!(result.unwrap_err().contains("STOP"));
+    assert_eq!(io.trace, [
+        "capture", "probe", "solver", "capture", "wait", "capture", "wait", "capture",
+        "probe", "input", "wait", "capture", "probe",
+    ]);
+    assert_eq!(io.waits, [Duration::from_millis(250), Duration::from_millis(250), Duration::from_millis(750)]);
+    assert_eq!(io.inputs, [draw()]);
+    assert_eq!(latest.unwrap().prediction, draw());
+}
+
+
+/// Solver activation cannot turn unsupported or ambiguous recovered pixels into input authority.
+#[test]
+fn initial_continuous_recovery_refuses_unsupported_or_ambiguous_results() {
+
+
+    for (prediction, scene) in [
+        (draw(), false), (PredictedAction::Ambiguous { highlight_count: 2 }, true),
+    ] {
+        let mut io = fake(&[(PredictedAction::NoHighlight, true), (prediction, scene)]);
+        let (result, input_attempted, latest) = exercise(&mut io, PredictedAction::NoHighlight, 0, &AtomicBool::new(false));
+        assert!(result.is_err());
+        assert!(input_attempted);
+        assert_eq!(io.trace, ["capture", "probe", "solver", "capture"]);
+        assert!(io.inputs.is_empty());
+        assert_eq!(latest.unwrap().prediction, prediction);
+    }
+}
+
+
+/// STOP during a late-HALO wait or the final gameplay probe prevents the recovered action.
+#[test]
+fn initial_continuous_recovery_honours_stop_before_gameplay() {
+    let stop = AtomicBool::new(false);
+    let mut io = fake(&[(PredictedAction::NoHighlight, true), (PredictedAction::NoHighlight, true)]);
+    io.stop_on_wait = Some(&stop);
+    let (result, _, latest) = exercise(&mut io, PredictedAction::NoHighlight, 0, &stop);
+    assert!(result.unwrap_err().contains("STOP"));
+    assert_eq!(io.trace, ["capture", "probe", "solver", "capture", "wait"]);
+    assert!(io.inputs.is_empty());
+    assert_eq!(latest.unwrap().prediction, PredictedAction::NoHighlight);
+    let stop = AtomicBool::new(false);
     let mut io = fake(&[(PredictedAction::NoHighlight, true), (draw(), true)]);
-    let (result, _, _) = exercise(&mut io, PredictedAction::NoHighlight, 1, &AtomicBool::new(false));
-    assert_eq!(result, Ok(RunOutcome::RecoveryOnly));
-    assert_eq!(io.trace, ["capture", "probe", "solver", "capture"]);
+    io.stop_on_probe = Some(&stop);
+    io.probes_before_stop = 1;
+    let (result, _, latest) = exercise(&mut io, PredictedAction::NoHighlight, 0, &stop);
+    assert!(result.unwrap_err().contains("STOP"));
+    assert_eq!(io.trace, ["capture", "probe", "solver", "capture", "probe"]);
+    assert!(io.inputs.is_empty());
+    assert_eq!(latest.unwrap().prediction, draw());
+}
+
+
+/// Uncertain recovered gameplay input is attempted once and receives no retry or capture.
+#[test]
+fn initial_continuous_recovery_never_replays_uncertain_gameplay() {
+    let mut io = fake(&[(PredictedAction::NoHighlight, true), (draw(), true)]);
+    io.fail_input = true;
+    let (result, input_attempted, latest) = exercise(&mut io, PredictedAction::NoHighlight, 0, &AtomicBool::new(false));
+    assert!(result.unwrap_err().contains("gameplay input outcome is uncertain"));
+    assert!(input_attempted);
+    assert_eq!(io.trace, ["capture", "probe", "solver", "capture", "probe", "input"]);
+    assert_eq!(io.inputs, [draw()]);
+    assert_eq!(latest.unwrap().prediction, draw());
 }
 
 
 /// Persistent missing HALOs use one Solver input and a finite number of read-only observations.
 #[test]
 fn missing_halo_recovery_is_bounded_and_never_replays_solver() {
-    let states = vec![(PredictedAction::NoHighlight, true); REOBSERVATION_LIMIT + 2];
-    let mut io = fake(&states);
-    let (result, input_attempted, latest) = exercise(&mut io, PredictedAction::NoHighlight, 1, &AtomicBool::new(false));
-    assert!(result.unwrap_err().contains("bounded input-free observations"));
-    assert_eq!(io.trace.iter().filter(|entry| **entry == "solver").count(), 1);
-    assert_eq!(io.trace.iter().filter(|entry| **entry == "input").count(), 0);
-    assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), REOBSERVATION_LIMIT + 2);
-    assert!(input_attempted);
-    assert!(latest.is_some());
+
+
+    for limit in [0, 1] {
+        let states = vec![(PredictedAction::NoHighlight, true); REOBSERVATION_LIMIT + 2];
+        let mut io = fake(&states);
+        let (result, input_attempted, latest) = exercise(&mut io, PredictedAction::NoHighlight, limit, &AtomicBool::new(false));
+        assert!(result.unwrap_err().contains("bounded input-free observations"));
+        assert_eq!(io.trace.iter().filter(|entry| **entry == "solver").count(), 1);
+        assert_eq!(io.trace.iter().filter(|entry| **entry == "input").count(), 0);
+        assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), REOBSERVATION_LIMIT + 2);
+        assert!(input_attempted);
+        assert!(latest.is_some());
+    }
 }
 
 
 /// A changed advisory preview cannot authorise a newly appeared target on the first capture.
 #[test]
 fn initial_changed_prediction_requires_explicit_fresh_approval() {
-    let mut io = fake(&[(draw(), true)]);
-    let (result, input_attempted, latest) = exercise(&mut io, PredictedAction::NoHighlight, 1, &AtomicBool::new(false));
-    assert_eq!(result, Ok(RunOutcome::PreviewChanged));
-    assert_eq!(io.trace, ["capture"]);
-    assert!(!input_attempted);
-    assert_eq!(latest.unwrap().prediction, draw());
+
+
+    for limit in [0, 1] {
+        let mut io = fake(&[(draw(), true)]);
+        let (result, input_attempted, latest) = exercise(&mut io, PredictedAction::NoHighlight, limit, &AtomicBool::new(false));
+        assert_eq!(result, Ok(RunOutcome::PreviewChanged));
+        assert_eq!(io.trace, ["capture"]);
+        assert!(!input_attempted);
+        assert_eq!(latest.unwrap().prediction, draw());
+    }
 }
 
 
@@ -406,12 +523,16 @@ fn uncertain_input_stops_and_preserves_last_frame() {
 /// Uncertain Solver delivery cannot trigger an immediate retry disguised as recovery.
 #[test]
 fn uncertain_solver_stops_without_retry_or_capture() {
-    let mut io = fake(&[(PredictedAction::NoHighlight, true)]);
-    io.fail_solver = true;
-    let (result, input_attempted, _) = exercise(&mut io, PredictedAction::NoHighlight, 1, &AtomicBool::new(false));
-    assert!(result.unwrap_err().contains("uncertain Solver"));
-    assert_eq!(io.trace, ["capture", "probe", "solver"]);
-    assert!(input_attempted);
+
+
+    for limit in [0, 1] {
+        let mut io = fake(&[(PredictedAction::NoHighlight, true)]);
+        io.fail_solver = true;
+        let (result, input_attempted, _) = exercise(&mut io, PredictedAction::NoHighlight, limit, &AtomicBool::new(false));
+        assert!(result.unwrap_err().contains("uncertain Solver"));
+        assert_eq!(io.trace, ["capture", "probe", "solver"]);
+        assert!(input_attempted);
+    }
 }
 
 

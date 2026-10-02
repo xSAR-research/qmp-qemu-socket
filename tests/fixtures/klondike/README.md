@@ -396,3 +396,17 @@ measurements. K49 Level Up exposes both a variable textshadow and later warm
 fireworks. A controlled derivative removes only fireworks context to isolate
 shadow refusal; mixed title/label/button/foundation guards remain required.
 No derivative is presented as an original successful QMP input trace.
+
+## v1.2.5 candidate 1 additions
+
+K50 is the Undo reconstruction of the pre-transfer recommendation, captured
+after the stopped run. K51 shows 4-clubs on SUIT 4, 5-diamonds exposed in column 1
+and a new 5-clubs source in column 3. Their attached original bytes are retained
+separately; the fixtures preserve native RGBA pixels in the listed rectangles.
+They are not the exact original worker capture pair. No code recognises ranks.
+
+K52 records the centred KLONDIKE label shifted two pixels at level 51. Stable
+button geometry is unchanged. The other log records a recognised OK click and
+later unrecognised frames that were not supplied; K52 does not establish those
+frames or prove that click failed. Solve animation tests use explicitly
+controlled derivatives of previously supplied artwork, not invented live frames.
