@@ -1441,6 +1441,40 @@
         ]
       ],
       "observation": "Klondike Level 51 Level Up, original screenshot saved after terminal recognition stalled; dynamic label alignment variant."
+    },
+    {
+      "fixture": "K53.png",
+      "source": "qmp-qemu-socket 261003 041743 Fail-New-Game.png",
+      "source_sha256": "7b184349f68eefdbe3eb5c608295f9d1164e01697ea895ad9892d72b21df4d44",
+      "fixture_sha256": "9763d4f9d34b1508fe94850120819124eb6059fa76e375858f227aeba8929332",
+      "bytes": 909101,
+      "source_bytes": 1968107,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          260,
+          34,
+          1660,
+          1033
+        ],
+        [
+          160,
+          310,
+          176,
+          326
+        ],
+        [
+          1730,
+          310,
+          1746,
+          326
+        ]
+      ],
+      "observation": "Settled Congratulations level 53 with New Game and Home. Log confirms no New Game input: scene and letters passed while button body stayed at 5/6; last pointer follows the Level Up OK click. Later read-only save, not exact prior worker PNG."
     }
   ],
   "solve_control_template": {

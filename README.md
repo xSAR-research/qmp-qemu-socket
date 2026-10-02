@@ -14,8 +14,8 @@ the real purpose. Each fixture keeps independent target and effect policies.
 The target is to build in Dijkstra / A* shortest path problem solving rather
 than using the **Solver**, this will benefit drone route planning experience.
 
-This is **v1.2.5, candidate 1**, based on committed v1.2.4 candidate 2 at
-`eb18478b59b29b00bd5c1e11f1a30348226a5f61`. `Cargo.toml` supplies the package
+This is **v1.2.6, candidate 2**, based on commit
+`f9167a025e69026dc589a241b265c5ce9dc1cc8b` (package v1.2.5). `Cargo.toml` supplies the package
 version shown in the window title and Parameters. Beast gameplay acceptance
 is required before promotion.
 
@@ -351,3 +351,19 @@ adds the measured two-pixel centred Level Up label shift. Terminal diagnostics
 report recognised stages and named guard failures. Exact frames after the last
 reported OK click were not supplied, so their refusal remains a live check.
 See [candidate notes](docs/klondike-v1.2.5-candidate-1.md).
+
+
+## v1.2.6 candidate 2 installation recovery
+
+The previous candidate was not applied: its preview and apply both refused the
+changed HEAD, and the subsequent build/test/launch remained v1.2.5. This delivery
+rebuilds exact-base/content records for f9167a0 while preserving the revised
+project-purpose opening above. Download hashes prove package integrity; they
+do not establish installation or executable identity. The candidate commands
+verify installed source before each build/test/run step. Stop on any failure.
+
+This candidate includes the prior measured New Game pointer-probe correction
+and bounded read-only settling of a nearly recognised Solve control. Full Solve
+input authority, STOP, mode/socket invalidation and uncertain-input refusal
+remain. See `docs/klondike-v1.2.6-candidate-1.md` for the original evidence and
+`docs/klondike-v1.2.6-candidate-2.md` for recovery and current verification limits.

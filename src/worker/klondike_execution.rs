@@ -13,6 +13,8 @@
 //! A continuous request may also start from an approved no-HALO board: reproduce
 //! that board freshly, refresh Solver once and observe a valid target before play.
 //! Finite requests retain the separate recovered-preview review endpoint.
+//! Strong, incomplete Solve artwork defers lower tableau/foundation input through
+//! at most three input-free observations. It never weakens Solve click authority.
 
 use std::{path::Path, sync::atomic::{AtomicBool, Ordering}, time::{Duration, Instant}};
 
@@ -460,6 +462,7 @@ fn drive_run(
     let fresh_prediction = latest.as_ref().expect("fresh planning capture").prediction;
     let mut solver_refreshes = 0usize;
     let mut initial_restarted = false;
+    let preserve_initial_target = matches!(fresh_prediction, PredictedAction::Action(_));
 
 
     require_klondike_prediction(fresh_prediction, true)?;
@@ -533,6 +536,19 @@ fn drive_run(
 
         if settings.bounded_operation_limit().is_some_and(|limit| completed_operations >= limit) {
             return Ok(RunOutcome::Completed { verified: verified_operations, halo: halo_operations });
+        }
+        await_pending_solve(io, latest, settings, event_tx, cancel_requested)?;
+
+
+        if completed_operations == 0 && !initial_restarted && preserve_initial_target
+            && latest.as_ref().expect("fresh settled planning capture").prediction != approved_prediction
+        {
+            send_log(event_tx, format!(
+                "Klondike preview changed during input-free Solve settling: fresh target {} differs from approved preview {}; guest input sent=0; review the refreshed prediction before another run",
+                format_prediction_target(latest.as_ref().expect("fresh settled planning capture").prediction),
+                format_prediction_target(approved_prediction),
+            ));
+            return Ok(RunOutcome::PreviewChanged);
         }
         let operation_index = next_counter(completed_operations, "gameplay action")?;
         let observation = latest.as_ref().ok_or_else(|| "Klondike planning frame is missing".to_owned())?;
@@ -670,6 +686,62 @@ fn drive_run(
             io.wait(delays.klondike_reobserve)?;
             capture_latest(io, latest, event_tx)?;
         }
+    }
+}
+
+
+/// Defer lower card input while strong Solve lettering awaits its existing face guard.
+/// The preceding action has already been evaluated and counted before this planning
+/// context starts. DRAW, RIGHT and a fully recognised Solve retain priority. Each
+/// recapture replaces the planning frame; disappearing candidates grant no Solver
+/// refresh or stale-target replay. Unknown scenes and malformed storage stop.
+fn await_pending_solve(
+    io: &mut impl KlondikeIo,
+    latest: &mut Option<FrameObservation>,
+    settings: StepRunSettings,
+    event_tx: &WorkerEventSink,
+    cancel_requested: &AtomicBool,
+) -> Result<(), String> {
+    let mut delayed_observations = 0usize;
+
+
+    loop {
+        require_running(cancel_requested)?;
+        let current = latest.as_ref().ok_or_else(|| "Klondike Solve settling has no fresh planning frame".to_owned())?;
+        require_scene(current)?;
+        require_klondike_prediction(current.prediction, true)?;
+
+
+        if !matches!(current.prediction, PredictedAction::Action(GuidedAction {
+            target: ActionTarget::Klondike(klondike::KlondikeTarget::Tableau { .. }
+                | klondike::KlondikeTarget::Foundation { .. }), ..
+        })) {
+            return Ok(());
+        }
+        let evidence = klondike::inspect_solve_control(&current.frame)
+            .map_err(|error| format!("Klondike pending Solve analysis failed: {error}"))?;
+
+
+        if !evidence.awaiting_settle() {
+            return Ok(());
+        }
+
+
+        if delayed_observations == REOBSERVATION_LIMIT {
+            return Err(format!(
+                "pending Klondike Solve remained below its input guard after {delayed_observations} delayed input-free planning captures; no lower-priority card or Solve input authorised",
+            ));
+        }
+        send_state(event_tx, WorkerState::Verifying);
+        send_status(event_tx, "Waiting for Klondike Solve artwork".to_owned());
+        send_log(event_tx, format!(
+            "Klondike pending Solve re-observation {}/{REOBSERVATION_LIMIT}: {evidence}; lower-priority target {} deferred; waiting {} ms; guest input sent=0",
+            delayed_observations + 1, format_prediction_target(current.prediction),
+            settings.animation_delays().klondike_reobserve.as_millis(),
+        ));
+        delayed_observations += 1;
+        io.wait(settings.animation_delays().klondike_reobserve)?;
+        capture_latest(io, latest, event_tx)?;
     }
 }
 

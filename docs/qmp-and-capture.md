@@ -239,3 +239,21 @@ continuous request resumes from a freshly recognised target; finite requests
 return the preview for explicit approval. No missing HALO authorises a Draw or
 card click, and a QMP acknowledgement does not establish the previous game effect.
 Capture and exact-byte manual saving are unchanged.
+
+## v1.2.6 pending Solve observations
+
+Pending Solve uses the existing editable Klondike re-observation delay for at
+most three fresh input-free captures before lower-priority tableau/SUIT input.
+The weaker diagnostic predicate can only request observation; the existing full
+Solve predicate is required before a click. Persistent or unsupported evidence
+stops without another gameplay, Solver or terminal event. Previous accepted
+action effect and finite action counts are not recomputed by this planning wait.
+Capture architecture and original-byte manual saving are unchanged.
+
+
+Candidate 2 installation checks distinguish download integrity, exact-base
+installation and executable identity. `--verify-installed` checks complete
+candidate source before Cargo/launch commands and refuses old or mixed files.
+The application still reports its Cargo package and candidate label at startup.
+Capture/QMP policy is unchanged. The hearts Undo attachment contains a transient
+duplicated source card; it cannot substitute for a settled fresh pre-click PNG.

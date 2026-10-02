@@ -8,6 +8,9 @@
 //! K49 records the same Level Up controls under warm animated fireworks. Only
 //! the four empty-tableau context samples permit measured red/green particle
 //! lighting; their blue limit and full-RGB foundation context remain independent.
+//! K53 retains New Game/Home artwork while the pointer from Level Up OK covers
+//! the Home button's former upper-body sample. Its replacement uses identical
+//! measured pixels in K28/K53 outside the recorded pointer, with no relaxed guard.
 //! Stable RGB artwork is checked directly; changing level, score, XP and card
 //! ranks are not read. A recognised terminal stage grants only its measured
 //! click. The worker still owns fresh validation, cancellation, delivery and
@@ -390,12 +393,15 @@ const LEVEL_UP_BUTTON_BODY: [RgbSample; 4] = [
 
 
 /// Measured static scene/control samples from K28, outside changing labels.
+/// The Home upper-body point at (1020, 827) is identical in K28/K53 and outside
+/// K53's pointer at (959..=992, 794..=842). The old (990, 827) sample landed on
+/// that cursor's shadow after Level Up OK; all six body samples remain required.
 const NEW_GAME_BUTTON_BODY: [RgbSample; 6] = [
     RgbSample::new(645, 827, [252, 249, 223]),
     RgbSample::new(922, 827, [252, 249, 223]),
     RgbSample::new(645, 878, [194, 137, 42]),
     RgbSample::new(922, 878, [195, 138, 47]),
-    RgbSample::new(990, 827, [27, 85, 166]),
+    RgbSample::new(1020, 827, [27, 86, 171]),
     RgbSample::new(1267, 878, [36, 114, 188]),
 ];
 
@@ -886,6 +892,7 @@ mod tests {
             43 => include_bytes!("../tests/fixtures/klondike/K43.png"),
             49 => include_bytes!("../tests/fixtures/klondike/K49.png"),
             52 => include_bytes!("../tests/fixtures/klondike/K52.png"),
+            53 => include_bytes!("../tests/fixtures/klondike/K53.png"),
             _ => panic!("unknown terminal fixture"),
         };
         decode_png(png).expect("decode recorded terminal PNG")
@@ -933,6 +940,102 @@ mod tests {
         let mut changed_rewards = frame.clone();
         paint(&mut changed_rewards, PixelRect::new(640, 340, 640, 430), [0, 0, 0]);
         assert_eq!(classify_terminal(&changed_rewards).unwrap(), Some(TerminalStage::ScoreCounting));
+    }
+
+
+    /// K53 follows an acknowledged Level Up OK click and retains its pointer.
+    /// Only the former Home body sample is shadowed; the replacement remains
+    /// identical in both originals while all modal, glyph and body guards pass.
+    #[test]
+    fn new_game_with_the_prior_ok_pointer_retains_its_control_signature() {
+        let discarded_body_point = [RgbSample::new(990, 827, [27, 85, 166])];
+
+
+        for number in [28, 53] {
+            let frame = fixture(number);
+            assert!(has_completed_congratulations(&frame));
+            assert!(matches_artwork(&frame, &NEW_GAME_TEXT));
+            assert!(matches_artwork(&frame, &NEW_GAME_HOME));
+            assert!(matches_artwork(&frame, &NEW_GAME_BUTTON_BODY));
+            assert_eq!(classify_terminal(&frame).unwrap(), Some(TerminalStage::NewGame));
+            let evidence = inspect_terminal_evidence(&frame).unwrap();
+            assert_eq!(evidence.new_game_control[2].matched, 6);
+            assert_eq!(matches_artwork(&frame, &discarded_body_point), number == 28);
+        }
+        assert_eq!(TerminalStage::NewGame.click_point(), PixelPoint::new(792, 840));
+    }
+
+
+    /// A measured cursor shadow at the discarded point never erases New Game.
+    /// The required replacement point still fails closed if independently erased;
+    /// this relocates one probe rather than accepting an arbitrary missing sample.
+    #[test]
+    fn cursor_shadow_does_not_relax_the_required_new_game_body() {
+        let mut shadowed = fixture(28);
+        paint(&mut shadowed, PixelRect::new(990, 827, 1, 1), [10, 32, 62]);
+        assert_eq!(classify_terminal(&shadowed).unwrap(), Some(TerminalStage::NewGame));
+        paint(&mut shadowed, PixelRect::new(1020, 827, 1, 1), [10, 32, 62]);
+        assert_eq!(classify_terminal(&shadowed).unwrap(), None);
+        assert_eq!(inspect_terminal_evidence(&shadowed).unwrap().new_game_control[2].matched, 5);
+    }
+
+
+    /// Occluding printed New Game with the native K53 cursor still refuses input.
+    /// This controlled derivative transfers only K28/K53 differences in the
+    /// recorded pointer box; it does not erase a required text guard by policy.
+    #[test]
+    fn new_game_cursor_occlusion_of_the_label_is_not_ignored() {
+        let original = fixture(28);
+        let pointer = fixture(53);
+        let mut occluded = original.clone();
+
+
+        for y in 0..49usize {
+
+
+            for x in 0..34usize {
+                let source = (794 + y) * original.stride + (959 + x) * 4;
+
+
+                if original.pixels[source..source + 3] != pointer.pixels[source..source + 3] {
+                    let destination = (838 + y) * occluded.stride + (760 + x) * 4;
+                    occluded.pixels[destination..destination + 3]
+                        .copy_from_slice(&pointer.pixels[source..source + 3]);
+                }
+            }
+        }
+        assert!(has_completed_congratulations(&occluded));
+        assert!(matches_artwork(&occluded, &NEW_GAME_BUTTON_BODY));
+        assert!(!matches_artwork(&occluded, &NEW_GAME_TEXT));
+        assert_eq!(classify_terminal(&occluded).unwrap(), None);
+    }
+
+
+    /// K53 still needs both visible controls, its modal frame and the completed
+    /// Klondike background. Empty or flat-colour controls and unrelated modal
+    /// context cannot become New Game merely because its cursor is harmless.
+    #[test]
+    fn pointer_safe_new_game_requires_its_independent_scene_and_controls() {
+        let bounds = [PixelRect::new(631, 815, 310, 75),
+            PixelRect::new(974, 815, 310, 75), PixelRect::new(500, 136, 920, 12),
+            PixelRect::new(894, 112, 132, 26), PixelRect::new(700, 200, 520, 55)];
+
+
+        for bounds in bounds {
+
+
+            for rgb in [[0, 0, 0], [240, 190, 90], [255, 255, 255]] {
+                let mut frame = fixture(53);
+                paint(&mut frame, bounds, rgb);
+                assert_eq!(classify_terminal(&frame).unwrap(), None);
+            }
+        }
+        let mut wrong_size = fixture(53);
+        wrong_size.height = 1_079;
+        assert!(matches!(classify_terminal(&wrong_size), Err(HaloDetectionError::BoundsOutsideFrame)));
+        let mut invalid_storage = fixture(53);
+        invalid_storage.pixels.clear();
+        assert!(matches!(classify_terminal(&invalid_storage), Err(HaloDetectionError::InvalidFrameLayout)));
     }
 
 

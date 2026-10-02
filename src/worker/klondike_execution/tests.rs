@@ -228,6 +228,91 @@ fn fake<'a>(states: &[(PredictedAction, bool)]) -> FakeIo<'a> {
 }
 
 
+/// Preserve native K48 pixels while withdrawing 24 stable non-glyph samples.
+/// The unretained early worker pixels are unknown; this controlled derivative
+/// reproduces only the logged 459/483 face and 342/342 glyph counts. Production
+/// scene and target classification supplies both observations used by the worker.
+fn pending_solve_pair() -> (FrameObservation, FrameObservation) {
+    let bytes = include_bytes!("../../../tests/fixtures/klondike/K48.png");
+    let settled = crate::capture::decode_png(bytes).expect("decode native Solve fixture");
+    let mut pending = settled.clone();
+    let mut changed = 0;
+
+
+    for y in (143..256).step_by(4) {
+
+
+        for x in (562..686).step_by(4) {
+
+
+            if changed < 24 && (578..670).contains(&x) && (159..240).contains(&y)
+                && !((590..660).contains(&x) && (160..236).contains(&y))
+            {
+                let offset = y as usize * pending.stride + x as usize * 4;
+                pending.pixels[offset..offset + 3].copy_from_slice(&[255, 255, 255]);
+                changed += 1;
+            }
+        }
+    }
+    assert_eq!(changed, 24);
+    let evidence = klondike::inspect_solve_control(&pending).unwrap();
+    assert_eq!((evidence.interior_matched, evidence.glyph_matched), (459, 342));
+    assert!(evidence.awaiting_settle() && !evidence.available);
+    (native_observation(pending), native_observation(settled))
+}
+
+
+/// Classify unchanged native geometry without replacing pixel guards with a mock.
+fn native_observation(frame: CapturedFrame) -> FrameObservation {
+    FrameObservation {
+        prediction: klondike::analyse(&frame).expect("classify evidence pixels").prediction,
+        gameplay_scene: klondike::is_gameplay_scene(&frame).expect("validate evidence scene"),
+        frame,
+        observed_rows: None,
+        game_progress: None,
+    }
+}
+
+
+/// Duplicate a test observation without changing shared worker ownership contracts.
+fn copy_observation(source: &FrameObservation) -> FrameObservation {
+    FrameObservation {
+        frame: source.frame.clone(),
+        prediction: source.prediction,
+        observed_rows: source.observed_rows,
+        gameplay_scene: source.gameplay_scene,
+        game_progress: source.game_progress,
+    }
+}
+
+
+/// Remove only the pending button to model a disappearing candidate on a fresh frame.
+/// This is an explicitly controlled derivative, not a captured live transition.
+fn absent_solve_observation(pending: &FrameObservation) -> FrameObservation {
+    let mut frame = pending.frame.clone();
+
+
+    for y in 143..256 {
+
+
+        for x in 562..686 {
+            let offset = y * frame.stride + x * 4;
+            frame.pixels[offset..offset + 3].copy_from_slice(&[12, 82, 45]);
+        }
+    }
+    assert!(!klondike::inspect_solve_control(&frame).unwrap().awaiting_settle());
+    native_observation(frame)
+}
+
+
+/// Supply already classified full frames while keeping effect verdicts independent.
+fn fake_frames<'a>(frames: Vec<FrameObservation>) -> FakeIo<'a> {
+    let mut io = fake(&[]);
+    io.frames = frames.into();
+    io
+}
+
+
 /// Run with the production event sink and return the whether any guest input was attempted.
 fn exercise(
     io: &mut impl KlondikeIo,
@@ -1459,4 +1544,332 @@ fn halo_counts_remain_separate_from_independently_confirmed_win() {
     assert_eq!(io.inputs, [right, right]);
     assert_eq!(io.completion_checks, 2);
     assert!(io.terminal_inputs.is_empty());
+}
+
+
+/// Three read-only planning captures settle the logged pending counts before Solve.
+/// The prior Draw verdict is consumed before waiting; no lower tableau input occurs.
+#[test]
+fn pending_solve_settles_before_lower_tableau_input() {
+    let (pending, settled) = pending_solve_pair();
+    let solve = settled.prediction;
+    let mut io = fake_frames(vec![
+        observation(draw(), true), copy_observation(&pending), copy_observation(&pending), pending,
+        settled, observation(PredictedAction::NoHighlight, false),
+        observation(PredictedAction::NoHighlight, false),
+    ]);
+    io.proven_effect = true;
+    io.completion_candidates = VecDeque::from([true, true]);
+    let delays = AnimationSettleDelays::default().with_klondike_millis(750, 1_250);
+    let (result, input_attempted, _) = exercise_with_settings(
+        &mut io, draw(), StepRunSettings::new(delays, 2), &AtomicBool::new(false),
+    );
+    assert_eq!(result, Ok(RunOutcome::GameWon { previous_verified: 1, previous_halo: 0 }));
+    assert_eq!(io.inputs, [draw(), solve]);
+    assert_eq!(io.effect_checks, 1, "pending captures cannot replace the accepted result verdict");
+    assert_eq!(io.waits, [
+        delays.klondike_settle, delays.klondike_reobserve, delays.klondike_reobserve,
+        delays.klondike_reobserve, delays.klondike_solve, delays.klondike_reobserve,
+    ]);
+    assert!(input_attempted && io.frames.is_empty());
+    assert!(!io.trace.contains(&"solver") && io.terminal_inputs.is_empty());
+}
+
+
+/// Persistent partial artwork exhausts one three-capture planning budget without input.
+#[test]
+fn persistent_pending_solve_stops_without_lower_card_or_solve_input() {
+    let (pending, _) = pending_solve_pair();
+    let lower = pending.prediction;
+    let mut io = fake_frames(vec![
+        observation(draw(), true), copy_observation(&pending), copy_observation(&pending), copy_observation(&pending), pending,
+    ]);
+    io.proven_effect = true;
+    let (result, input_attempted, latest) = exercise(&mut io, draw(), 0, &AtomicBool::new(false));
+    assert!(result.unwrap_err().contains("after 3 delayed input-free planning captures"));
+    assert_eq!(io.inputs, [draw()]);
+    assert_eq!(io.effect_checks, 1);
+    assert_eq!(io.waits.len(), 4);
+    assert_eq!(latest.unwrap().prediction, lower);
+    assert!(input_attempted && io.frames.is_empty() && !io.trace.contains(&"solver"));
+}
+
+
+/// A disappeared candidate resumes only from its newly classified lower target.
+#[test]
+fn disappearing_pending_solve_uses_fresh_lower_target_without_solver_refresh() {
+    let (pending, _) = pending_solve_pair();
+    let absent = absent_solve_observation(&pending);
+    let lower = absent.prediction;
+    assert!(matches!(lower, PredictedAction::Action(GuidedAction {
+        target: ActionTarget::Klondike(KlondikeTarget::Tableau { .. }), ..
+    })));
+    let mut io = fake_frames(vec![observation(draw(), true), pending, absent, observation(draw(), true)]);
+    io.proven_effect = true;
+    let (result, _, latest) = exercise(&mut io, draw(), 2, &AtomicBool::new(false));
+    assert_eq!(result, Ok(RunOutcome::Completed { verified: 2, halo: 0 }));
+    assert_eq!(io.inputs, [draw(), lower]);
+    assert_eq!(io.effect_checks, 2);
+    assert_eq!(io.waits.len(), 3);
+    assert_eq!(latest.unwrap().prediction, draw());
+    assert!(!io.trace.contains(&"solver"));
+}
+
+
+/// Typed DRAW/Recycle/RIGHT priority is retained even beside pending Solve pixels.
+/// These adapters inject the higher target separately; detector priority has its own tests.
+#[test]
+fn pending_solve_never_defers_higher_priority_draw_recycle_or_right() {
+    let (pending, _) = pending_solve_pair();
+
+
+    for target in [KlondikeTarget::Draw, KlondikeTarget::Recycle, KlondikeTarget::Waste { offset: 1 }] {
+        let higher = PredictedAction::Action(klondike::canonical_action(target).unwrap());
+        let mut planning = copy_observation(&pending);
+        planning.prediction = higher;
+        let mut io = fake_frames(vec![planning, observation(draw(), true)]);
+        io.proven_effect = true;
+        let (result, _, _) = exercise(&mut io, higher, 1, &AtomicBool::new(false));
+        assert_eq!(result, Ok(RunOutcome::Completed { verified: 1, halo: 0 }));
+        assert_eq!(io.inputs, [higher]);
+        assert_eq!(io.waits, [AnimationSettleDelays::default().klondike_settle]);
+        assert!(io.frames.is_empty());
+    }
+}
+
+
+/// A foundation source is also lower priority than stable pending Solve lettering.
+#[test]
+fn pending_solve_defers_foundation_source_input() {
+    let (mut pending, _) = pending_solve_pair();
+    let foundation = PredictedAction::Action(klondike::canonical_action(KlondikeTarget::Foundation { column: 3 }).unwrap());
+    pending.prediction = foundation;
+    let mut io = fake_frames(vec![copy_observation(&pending), copy_observation(&pending), copy_observation(&pending), pending]);
+    let (result, input_attempted, _) = exercise(&mut io, foundation, 1, &AtomicBool::new(false));
+    assert!(result.unwrap_err().contains("pending Klondike Solve"));
+    assert!(!input_attempted && io.inputs.is_empty());
+    assert_eq!(io.waits.len(), REOBSERVATION_LIMIT);
+}
+
+
+/// Finite action budgets finish before planning-only Solve observations are started.
+#[test]
+fn final_step_does_not_wait_for_pending_solve_after_its_budget_is_consumed() {
+    let (pending, _) = pending_solve_pair();
+    let lower = pending.prediction;
+    let mut io = fake_frames(vec![observation(draw(), true), pending]);
+    io.proven_effect = true;
+    let (result, _, latest) = exercise(&mut io, draw(), 1, &AtomicBool::new(false));
+    assert_eq!(result, Ok(RunOutcome::Completed { verified: 1, halo: 0 }));
+    assert_eq!(io.inputs, [draw()]);
+    assert_eq!(io.waits, [AnimationSettleDelays::default().klondike_settle]);
+    assert_eq!(latest.unwrap().prediction, lower);
+    assert!(io.frames.is_empty());
+}
+
+
+/// Pending artwork cannot change an initial approved card into authorised Solve input.
+#[test]
+fn initial_pending_solve_settling_preserves_changed_preview_review() {
+    let (pending, settled) = pending_solve_pair();
+    let approved = pending.prediction;
+    let solve = settled.prediction;
+
+
+    for limit in [0, 1, 2] {
+        let mut io = fake_frames(vec![copy_observation(&pending), copy_observation(&settled)]);
+        let (result, input_attempted, latest) = exercise(&mut io, approved, limit, &AtomicBool::new(false));
+        assert_eq!(result, Ok(RunOutcome::PreviewChanged));
+        assert!(!input_attempted && io.inputs.is_empty());
+        assert_eq!(latest.unwrap().prediction, solve);
+        assert_eq!(io.trace, ["capture", "wait", "capture"]);
+    }
+}
+
+
+/// Continuous initial Solver recovery already authorises its freshly settled target.
+#[test]
+fn initial_continuous_solver_recovery_can_settle_pending_solve_before_play() {
+    let stop = AtomicBool::new(false);
+    let (pending, settled) = pending_solve_pair();
+    let solve = settled.prediction;
+    let mut io = fake_frames(vec![
+        observation(PredictedAction::NoHighlight, true), pending, settled,
+        observation(PredictedAction::NoHighlight, false), observation(PredictedAction::NoHighlight, false),
+    ]);
+    io.completion_candidates = VecDeque::from([false, true, true]);
+    io.terminal_stages = VecDeque::from([Some(klondike::terminal::TerminalStage::ScoreCounting)]);
+    io.stop_on_probe = Some(&stop);
+    io.probes_before_stop = 2;
+    let (result, input_attempted, _) = exercise(&mut io, PredictedAction::NoHighlight, 0, &stop);
+    assert!(result.unwrap_err().contains("STOP"));
+    assert!(input_attempted);
+    assert_eq!(io.inputs, [solve]);
+    assert_eq!(io.trace.iter().filter(|entry| **entry == "solver").count(), 1);
+    assert_eq!(io.effect_checks, 0);
+    assert!(io.terminal_inputs.is_empty() && io.frames.is_empty());
+}
+
+
+/// STOP during pending artwork observation or the final fresh probe forbids Solve.
+#[test]
+fn pending_solve_wait_and_final_probe_obey_stop_without_replaying_input() {
+
+
+    for stop_during_wait in [true, false] {
+        let stop = AtomicBool::new(false);
+        let (pending, settled) = pending_solve_pair();
+        let mut io = fake_frames(vec![observation(draw(), true), pending, settled]);
+        io.proven_effect = true;
+
+
+        if stop_during_wait {
+            io.stop_on_wait = Some(&stop);
+            io.waits_before_stop = 1;
+        } else {
+            io.stop_on_probe = Some(&stop);
+            io.probes_before_stop = 1;
+        }
+        let (result, _, _) = exercise(&mut io, draw(), 0, &stop);
+        assert!(result.unwrap_err().contains("STOP"));
+        assert_eq!(io.inputs, [draw()]);
+        assert_eq!(io.effect_checks, 1);
+        assert!(!io.trace.contains(&"solver"));
+    }
+}
+
+
+/// Losing a candidate to no HALO or an unsupported scene cannot trigger recovery input.
+#[test]
+fn pending_solve_disappearance_to_missing_or_unsupported_scene_stops_without_solver() {
+
+
+    for supported_scene in [true, false] {
+        let (pending, _) = pending_solve_pair();
+        let mut io = fake_frames(vec![
+            observation(draw(), true), pending,
+            observation(PredictedAction::NoHighlight, supported_scene),
+        ]);
+        io.proven_effect = true;
+        let (result, _, latest) = exercise(&mut io, draw(), 0, &AtomicBool::new(false));
+        assert!(result.is_err());
+        assert_eq!(io.inputs, [draw()]);
+        assert!(!io.trace.contains(&"solver"));
+        assert_eq!(latest.unwrap().prediction, PredictedAction::NoHighlight);
+        assert_eq!(io.waits.len(), 2);
+    }
+}
+
+
+/// Malformed recapture storage is retained and cannot authorise a lower card click.
+#[test]
+fn pending_solve_recapture_with_malformed_storage_stops_with_latest_pixels() {
+    let (pending, _) = pending_solve_pair();
+    let mut malformed = copy_observation(&pending);
+    malformed.frame.pixels.truncate(1);
+    let mut io = fake_frames(vec![observation(draw(), true), pending, malformed]);
+    io.proven_effect = true;
+    let (result, _, latest) = exercise(&mut io, draw(), 0, &AtomicBool::new(false));
+    assert!(result.unwrap_err().contains("pending Solve analysis failed"));
+    assert_eq!(io.inputs, [draw()]);
+    assert_eq!(latest.unwrap().frame.pixels.len(), 1);
+    assert!(!io.trace.contains(&"solver"));
+}
+
+
+/// Captured pixels survive an analysis failure encountered during pending settling.
+#[test]
+fn pending_solve_capture_analysis_error_retains_the_new_diagnostic_frame() {
+    let (pending, settled) = pending_solve_pair();
+    let mut io = fake_frames(vec![settled]);
+    io.capture_failure = Some("simulated pending recapture analysis failure");
+    let mut latest = Some(pending);
+    let result = await_pending_solve(
+        &mut io, &mut latest, StepRunSettings::new(AnimationSettleDelays::default(), 0),
+        &event_sink(), &AtomicBool::new(false),
+    );
+    assert!(result.unwrap_err().contains("simulated pending recapture analysis failure"));
+    assert!(latest.unwrap().frame.is_layout_valid());
+    assert_eq!(io.trace, ["wait", "capture"]);
+    assert!(io.inputs.is_empty());
+}
+
+
+/// Pending recaptures keep source-supported continuation separate from proven effect.
+#[test]
+fn pending_solve_wait_keeps_the_prior_unverified_source_verdict_separate() {
+    let (pending, settled) = pending_solve_pair();
+    let right = PredictedAction::Action(klondike::canonical_action(KlondikeTarget::Waste { offset: 1 }).unwrap());
+    let solve = settled.prediction;
+    let mut io = fake_frames(vec![
+        observation(right, true), pending, settled,
+        observation(PredictedAction::NoHighlight, false), observation(PredictedAction::NoHighlight, false),
+    ]);
+    io.proven_source_replacement = true;
+    io.completion_candidates = VecDeque::from([true, true]);
+    let (result, _, _) = exercise(&mut io, right, 2, &AtomicBool::new(false));
+    assert_eq!(result, Ok(RunOutcome::GameWon { previous_verified: 0, previous_halo: 1 }));
+    assert_eq!(io.inputs, [right, solve]);
+    assert_eq!(io.effect_checks, 1);
+    assert!(!io.trace.contains(&"solver"));
+}
+
+
+/// A recognised new-game cycle retains the active continuous request after settling.
+/// Its new Solve target is not compared against the previous game's approved preview.
+#[test]
+fn restarted_continuous_game_can_settle_pending_solve_before_its_next_action() {
+    use klondike::terminal::TerminalStage;
+    let stop = AtomicBool::new(false);
+    let (pending, settled) = pending_solve_pair();
+    let solve = settled.prediction;
+    let mut frames = vec![observation(solve, true)];
+    frames.extend((0..6).map(|_| observation(PredictedAction::NoHighlight, false)));
+    frames.extend([
+        pending, settled, observation(PredictedAction::NoHighlight, false),
+        observation(PredictedAction::NoHighlight, false),
+    ]);
+    let mut io = fake_frames(frames);
+    io.completion_candidates = VecDeque::from([true, true, true, true]);
+    let stages = [TerminalStage::ScoreCounting, TerminalStage::LevelUp, TerminalStage::NewGame,
+        TerminalStage::Play, TerminalStage::SolverReady];
+    io.terminal_stages = stages.into_iter().chain([TerminalStage::ScoreCounting]).map(Some).collect();
+    io.stop_on_probe = Some(&stop);
+    io.probes_before_stop = 7;
+    let (result, input_attempted, _) = exercise(&mut io, solve, 0, &stop);
+    assert!(result.unwrap_err().contains("STOP"));
+    assert!(input_attempted);
+    assert_eq!(io.inputs, [solve, solve]);
+    assert_eq!(io.terminal_inputs, stages);
+    assert_eq!(io.effect_checks, 0);
+    assert!(io.frames.is_empty() && !io.trace.contains(&"solver"));
+}
+
+
+/// An uncertain gameplay delivery stops before pending result pixels are acquired.
+/// An uncertain settled Solve also stops after one attempt without completion captures.
+#[test]
+fn pending_solve_policy_never_recaptures_or_replays_after_uncertain_input() {
+    let (pending, settled) = pending_solve_pair();
+    let mut ordinary = fake_frames(vec![observation(draw(), true), copy_observation(&pending)]);
+    ordinary.fail_input = true;
+    let (result, input_attempted, _) = exercise(&mut ordinary, draw(), 0, &AtomicBool::new(false));
+    assert!(result.unwrap_err().contains("outcome is uncertain"));
+    assert!(input_attempted);
+    assert_eq!(ordinary.trace, ["capture", "probe", "input"]);
+    assert_eq!(ordinary.inputs, [draw()]);
+    assert_eq!(ordinary.frames.len(), 1);
+    let solve = settled.prediction;
+    let mut recovered = fake_frames(vec![
+        observation(PredictedAction::NoHighlight, true), pending, settled,
+        observation(PredictedAction::NoHighlight, false),
+    ]);
+    recovered.fail_input = true;
+    let (result, input_attempted, _) = exercise(&mut recovered, PredictedAction::NoHighlight, 0, &AtomicBool::new(false));
+    assert!(result.unwrap_err().contains("outcome is uncertain"));
+    assert!(input_attempted);
+    assert_eq!(recovered.inputs, [solve]);
+    assert_eq!(recovered.trace, ["capture", "probe", "solver", "capture", "wait", "capture", "probe", "input"]);
+    assert_eq!(recovered.frames.len(), 1);
+    assert_eq!(recovered.effect_checks, 0);
 }

@@ -1,7 +1,7 @@
-# Development conventions for v1.2.5 candidate 1
+# Development conventions for v1.2.6 candidate 2
 
-This candidate corrects committed v1.2.4 candidate 2 at
-`eb18478b59b29b00bd5c1e11f1a30348226a5f61`.
+This candidate corrects commit `f9167a025e69026dc589a241b265c5ce9dc1cc8b`,
+whose package/runtime source remains v1.2.5 despite its commit label.
 TriPeaks and Pyramid retain their established execution policies.
 Independent card-rank recognition, search and file-free capture are outside
 this candidate.
@@ -92,7 +92,7 @@ No formatter check is included, by Charlie's explicit instruction. Build/test
 results from another host do not prove Beast installation or live guest input.
 The candidate delivery notes record the checks actually executed.
 
-On the Beast, confirm the launched executable identifies v1.2.5, candidate 1. Verify
+On the Beast, confirm the launched executable identifies v1.2.6, candidate 2. Verify
 Capture Frame, exact-byte manual Capture PNG, single-step, finite and continuous
 multi-step, STOP and mode/socket invalidation. Exercise Klondike Draw 1, source
 transfers, RIGHT fan positions, recycle, Solve and late/no-HALO recovery. Preserve first-failure
@@ -182,3 +182,29 @@ with a removed/changed outer ring, unknown scenes and intact stock refusals,
 coherent Level Up label alignment, and source-supported bottom-card continuation.
 Retain unchanged/cursor/guide/paper/mask refusals and strict-effect distinctions.
 The unrecorded frames after the last Level Up OK click remain unverified.
+
+Version 1.2.6 candidate 1 adds native K53 and fixes the Home body sample covered
+by the last OK pointer. Preserve all six required body probes and independent
+modal/label/completed-board guards. A pending Solve face grants observation
+authority only; it never grants input at the lower 95% interior threshold.
+Test full availability after bounded captures, disappearance, persistence,
+initial changed-preview review, finite budgets, priority, STOP and input errors.
+Early Solve pixels were not saved; controlled test derivatives are not original
+worker captures. Verify the complete new-game/deal/Solver sequence on the Beast.
+
+
+Candidate 2 rebuilds the installer records for f9167a0 after both candidate-1
+preview/apply refused a changed HEAD. Preserve Charlie's README purpose edits.
+Require `--verify-installed` before every Cargo or launch block; download hashes
+do not prove installation. Its read-only check requires complete candidate bytes
+and modes, the exact base HEAD and an unchanged affected index, and refuses the
+complete old base as well as unknown/mixed content. It does not create evidence
+directories or change repository files.
+
+The latest hearts stop occurred on RIGHT 5-hearts to SUIT, exposing 8-hearts;
+6-hearts is the next tableau recommendation. Logged source change is only 98
+pixels with 7 reverse corner print pixels. The Undo reconstruction contains a
+separate gold-outlined 5-hearts over the table, so it is not an accepted fresh
+Waste planning frame. No source threshold is changed from this evidence. Obtain
+a settled original pre-click PNG and one-action result/log before authorising a
+new source-effect policy. See `klondike-v1.2.6-candidate-2.md`.

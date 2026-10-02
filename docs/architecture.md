@@ -306,3 +306,26 @@ Level Up label variants match an entire coherent signature at the evidenced
 nominal or two-pixel horizontal offset, never a mixture of individual probes.
 Terminal evidence logs identify named guard failures on the same fresh frame.
 All input, effect-proof and completion authorities remain separate.
+
+## v1.2.6 observation and terminal guards
+
+A strong but incomplete Solve interior can suspend lower-priority tableau/SUIT
+planning for one bounded context of at most three input-free captures. Existing
+DRAW/RIGHT priority, strict Solve availability, previous effect proof and action
+budgets remain separate. A first approved actionable preview changed by waiting
+requires review before input. Continuous recovered/new-game targets retain their
+existing fresh-target authority. No-HALO disappearance cannot trigger speculative
+Solver input in this pending context.
+
+K53 moves one Home body colour probe beyond the measured post-OK cursor edge.
+The six-of-six body policy, modal/background/lettering checks and actual New Game
+click point remain unchanged. No cursor position alone establishes a scene.
+
+
+Version 1.2.6 candidate 2 is based on actual package 1.2.5 source at f9167a0.
+The previous candidate was not installed because its exact HEAD guard refused
+both preview and apply. The measured New Game and pending-Solve changes are
+reapplied as the candidate patch; f9167a0 is the base authority. A read-only
+installer verification requires complete candidate source before Cargo or launch
+commands. Sparse hearts source evidence remains unresolved and does not change
+Klondike effect/continuation authority.

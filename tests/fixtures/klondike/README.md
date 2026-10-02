@@ -410,3 +410,18 @@ button geometry is unchanged. The other log records a recognised OK click and
 later unrecognised frames that were not supplied; K52 does not establish those
 frames or prove that click failed. Solve animation tests use explicitly
 controlled derivatives of previously supplied artwork, not invented live frames.
+
+## v1.2.6 candidate 1 addition
+
+K53 is the later read-only Congratulations/New Game save at level 53. Log
+1790964873320 records completed scene and both button labels passing while one
+Home body colour probe failed on four earlier observations. No New Game input
+was sent. The later native frame shows the last OK pointer at (960,795), whose
+dark edge covers the old (990,827) sample. Replacement (1020,827) is identical
+in K28 and K53. Original and fixture hashes/native retained regions are recorded.
+The attached bytes differ from logged worker PNG size, so exact earlier frame
+identity is not claimed. No original was edited or resized.
+
+Pending Solve regressions use labelled controlled derivatives of original
+button artwork, matching the logged 459/483 interior and 342/342 lettering
+counts. No early Solve screenshot was provided in this cycle.

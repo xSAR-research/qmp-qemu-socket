@@ -1,5 +1,29 @@
 # Changelog
 
+## v1.2.6 candidate 2 — 3 October 2026
+
+- Rebuild complete-file installer authority against f9167a0, whose package remains
+  v1.2.5. Candidate 1 had refused installation after HEAD changed; later tests and
+  the launched binary still used the old source.
+- Include the prior measured New Game pointer-probe correction and bounded
+  pending-Solve recapture policy, with a distinct candidate 2 runtime label.
+- Preserve Charlie's committed README purpose edits. Add read-only installed
+  candidate verification before build/test/run commands.
+- Record the separate sparse hearts source failure and transient Undo evidence;
+  no gameplay effect threshold is relaxed. Beast acceptance remains pending.
+
+## 1.2.6 — 2026-10-03 (candidate 1; Beast verification pending)
+
+- Move one Home button-body colour probe outside the measured pointer shadow
+  after Level Up OK; preserve six required samples, tolerance and click points.
+- Defer lower-priority tableau/SUIT input during a strongly recognised pending
+  Solve face, using at most three editable delayed read-only captures.
+  The original full Solve availability check remains the only click authority.
+- Preserve fresh initial preview approval, action budgets, STOP and uncertain
+  input handling; add native K53 and controlled adverse/controller regressions.
+- Deliver complete files against pushed main
+  8125c9df1dd87c7d8e9ed0e928fbb7fdd7bae82b with guarded preview/backups/rollback.
+
 ## 1.2.5 — 2026-10-03 (candidate 1; Beast verification pending)
 
 - Recognise Solve from stable interior/lettering with empty-stock and scene guards,

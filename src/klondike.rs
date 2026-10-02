@@ -526,14 +526,33 @@ pub struct SolveEvidence {
 }
 
 
+impl SolveEvidence {
+
+
+    /// A nearly matching face requests read-only settling, never a Solve click.
+    /// The native run retained 459/483 face samples and every glyph sample for
+    /// three observations before the original 98% face guard passed. Preserve
+    /// that authoritative guard, requiring the same empty-stock and glyph
+    /// support plus at least 95% face support only to defer lower-priority input.
+    /// Missing probe samples withdraw even this diagnostic recovery request.
+    pub fn awaiting_settle(&self) -> bool {
+        !self.available
+            && self.stock_probe_pixels != 0 && self.interior_samples != 0 && self.glyph_samples != 0
+            && u64::from(self.stock_felt_pixels) * 100 >= u64::from(self.stock_probe_pixels) * 90
+            && u64::from(self.interior_matched) * 100 >= u64::from(self.interior_samples) * 95
+            && u64::from(self.glyph_matched) * 100 >= u64::from(self.glyph_samples) * 98
+    }
+}
+
+
 impl fmt::Display for SolveEvidence {
 
 
     /// Preserve the exact classification counts needed to diagnose live refusal.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(formatter,
-            "Solve candidate={}; empty-stock felt={}/{} (required 90%); stable interior={}/{} and glyph={}/{} (each required 98%); full artwork={}/{} (diagnostic only, animated frame excluded from authority); scene and target priority remain separate",
-            self.available, self.stock_felt_pixels, self.stock_probe_pixels,
+            "Solve candidate={}; awaiting read-only settle={}; empty-stock felt={}/{} (required 90%); stable interior={}/{} and glyph={}/{} (each required 98% for input; 95% face only requests recapture); full artwork={}/{} (diagnostic only, animated frame excluded from authority); scene and target priority remain separate",
+            self.available, self.awaiting_settle(), self.stock_felt_pixels, self.stock_probe_pixels,
             self.interior_matched, self.interior_samples, self.glyph_matched, self.glyph_samples,
             self.artwork_matched, self.artwork_samples,
         )
@@ -3942,6 +3961,121 @@ mod tests {
         for number in 1..=49 {
             let report = inspect_solve_control(&fixture(number)).unwrap();
             assert_eq!(report.available, [13, 25, 37, 42, 48].contains(&number), "K{number:02}: {report}");
+        }
+    }
+
+
+    /// Withdraw selected non-glyph face samples from the recorded settled K48.
+    /// This controlled derivative reproduces diagnostic counts only; the native
+    /// early frames were not retained and their changed pixel locations are unknown.
+    fn solve_with_face_sample_losses(losses: usize) -> CapturedFrame {
+        let mut frame = fixture(48);
+        let mut changed = 0;
+
+
+        for y in (SOLVE_BOUNDS.y..SOLVE_BOUNDS.bottom()).step_by(4) {
+
+
+            for x in (SOLVE_BOUNDS.x..SOLVE_BOUNDS.right()).step_by(4) {
+
+
+                if changed < losses
+                    && SOLVE_STABLE_INTERIOR.contains(PixelPoint::new(x as i32, y as i32))
+                    && !((590..660).contains(&x) && (160..236).contains(&y))
+                {
+                    paint(&mut frame, PixelRect::new(x, y, 1, 1), [255, 255, 255]);
+                    changed += 1;
+                }
+            }
+        }
+        assert_eq!(changed, losses, "requested losses exceed the non-glyph face");
+        frame
+    }
+
+
+    /// Logged 459/483 face and 342/342 glyph counts request observation only.
+    /// The valid lower tableau remains a prediction until the worker's bounded
+    /// priority guard settles the face; partial artwork cannot authorise Solve.
+    #[test]
+    fn solve_nearly_matching_face_requests_settling_without_click_authority() {
+        let derivative = solve_with_face_sample_losses(24);
+        let report = inspect_solve_control(&derivative).unwrap();
+        assert_eq!((report.interior_matched, report.interior_samples), (459, 483));
+        assert_eq!((report.glyph_matched, report.glyph_samples), (342, 342));
+        assert_eq!((report.stock_felt_pixels, report.stock_probe_pixels), (13_900, 13_900));
+        assert!(report.awaiting_settle(), "{report}");
+        assert!(!report.available && !has_solve_control(&derivative), "{report}");
+        assert!(matches!(action(&derivative).target, ActionTarget::Klondike(KlondikeTarget::Tableau { .. })));
+        let settled = inspect_solve_control(&fixture(48)).unwrap();
+        assert!(settled.available && !settled.awaiting_settle(), "{settled}");
+    }
+
+
+    /// The 95% face boundary is diagnostic only and stock/glyph support remains
+    /// independently mandatory; zero-length or damaged probes cannot request it.
+    #[test]
+    fn solve_pending_settle_preserves_exact_face_glyph_and_stock_bounds() {
+        let supported = inspect_solve_control(&solve_with_face_sample_losses(24)).unwrap();
+        assert!(supported.awaiting_settle());
+        let insufficient_face = inspect_solve_control(&solve_with_face_sample_losses(25)).unwrap();
+        assert_eq!(insufficient_face.interior_matched, 458);
+        assert!(!insufficient_face.available && !insufficient_face.awaiting_settle());
+
+
+        for (field, accepted, refused) in [("glyph", 336, 335), ("stock", 12_510, 12_509)] {
+            let mut boundary = supported;
+
+
+            match field {
+                "glyph" => boundary.glyph_matched = accepted,
+                "stock" => boundary.stock_felt_pixels = accepted,
+                _ => unreachable!("test field is bounded"),
+            }
+            assert!(boundary.awaiting_settle(), "{field} minimum: {boundary}");
+
+
+            match field {
+                "glyph" => boundary.glyph_matched = refused,
+                "stock" => boundary.stock_felt_pixels = refused,
+                _ => unreachable!("test field is bounded"),
+            }
+            assert!(!boundary.awaiting_settle(), "{field} below minimum: {boundary}");
+        }
+
+
+        for missing in ["stock", "interior", "glyph"] {
+            let mut boundary = supported;
+
+
+            match missing {
+                "stock" => boundary.stock_probe_pixels = 0,
+                "interior" => boundary.interior_samples = 0,
+                "glyph" => boundary.glyph_samples = 0,
+                _ => unreachable!("test field is bounded"),
+            }
+            assert!(!boundary.awaiting_settle(), "missing {missing} probe: {boundary}");
+        }
+        let mut occupied = solve_with_face_sample_losses(24);
+        copy_region(&fixture(1), &mut occupied, PixelRect::new(390, UPPER_Y, CARD_WIDTH, CARD_HEIGHT), PixelPoint::new(390, UPPER_Y as i32));
+        assert!(!inspect_solve_control(&occupied).unwrap().awaiting_settle());
+        let mut missing_glyph = solve_with_face_sample_losses(24);
+        paint(&mut missing_glyph, PixelRect::new(590, 212, 70, 24), [12, 62, 40]);
+        assert!(!inspect_solve_control(&missing_glyph).unwrap().awaiting_settle());
+        let mut malformed = occupied;
+        malformed.pixels.truncate(1);
+        assert!(inspect_solve_control(&malformed).is_err());
+    }
+
+
+    /// Native card, terminal and complete Solve scenes never request this new
+    /// partial-face wait; early live face pixels are covered only by derivatives.
+    #[test]
+    fn solve_pending_settle_is_absent_from_all_recorded_settled_scenes() {
+
+
+        for number in 1..=52 {
+            let report = inspect_solve_control(&fixture(number)).unwrap();
+            assert!(!report.awaiting_settle(), "K{number:02}: {report}");
         }
     }
 
