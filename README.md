@@ -6,10 +6,13 @@ existing QEMU QMP Unix socket, captures the guest display, and issues only
 guarded mouse/keyboard actions the policy allows. It does not launch QEMU or
 create the socket.
 
-Microsoft Solitaire & Casual Games modes used here — TriPeaks, Pyramid and
-Klondike — are **disposable guest fixtures** for exercising capture, detection
-and guarded input on shared QMP facilities. They are not the product. Each
-fixture keeps independent target and effect policies.
+Microsoft Solitaire & Casual Games modes used here — TriPeaks, Pyramid, Klondike,
+and future game types — are **disposable guest fixtures** for exercising 
+capture, detection and guarded input on shared QMP facilities. They are not
+the real purpose. Each fixture keeps independent target and effect policies.
+
+The target is to build in Dijkstra / A* shortest path problem solving rather
+than using the **Solver**, this will benefit drone route planning experience.
 
 This is **v1.2.5, candidate 1**, based on committed v1.2.4 candidate 2 at
 `eb18478b59b29b00bd5c1e11f1a30348226a5f61`. `Cargo.toml` supplies the package
