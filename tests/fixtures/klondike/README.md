@@ -573,3 +573,23 @@ Both fixtures are complete original uploaded PNGs; they are not asserted to be
 unsaved historical worker frames. Their upload sizes differ from manual-save log
 counts; no cause for the encoding difference is assumed. No independent card-rank
 recognition is added.
+
+
+### K80/K81: a complete run taller than the old empirical cap
+
+Both PNGs are complete byte-identical original uploads, without masking, resizing
+or re-encoding. K80 is the later manual FAIL frame showing the ten-card Queen-
+diamonds through three-spades source in column 7. The measured rectangle is
+`(1398,372,132,620)`, with exclusive bottom992. Its 96-pixel lower edge, closed
+top, connected exterior rails, card-paper interior and scene guards all pass.
+The former 604-pixel maximum alone rejects it. The existing scan envelope is
+rows 332..998; candidate 7 derives the height limit from those unchanged bounds.
+
+K81 is a later Undo predecessor showing a RIGHT King-spades source at fan
+offset 1 and its dark dashed empty-column 2 destination. The associated log
+1791078466492 records one acknowledged RIGHT input, repeated no-HALO captures,
+one Solver refresh and a guarded stop; the long source was never clicked.
+The manual FAIL capture occurred after the last automatic observation; the Undo
+predecessor was captured later again. Replaying K81/K80 tests fresh recommendation
+handling, without claiming these PNGs are the unsaved historical worker frames
+or proving a previous game effect.

@@ -1,7 +1,7 @@
 //! Klondike Draw 1 Solver targets and mode-owned observation policy.
 //! Historical pixel-effect proofs remain test-only diagnostic regressions.
 //!
-//! Geometry is measured from Charlie's 1920x1080 captures K01-K76. A source
+//! Geometry is measured from Charlie's 1920x1080 captures K01-K81. A source
 //! needs a continuous lower gold edge, matching exterior rails and a bright
 //! card interior. Dashed dark destinations never grant click authority. The
 //! outline primitive groups a connected run into one target. No card ranks,
@@ -101,9 +101,16 @@ const TOOLBAR_EDGE_OCCLUSION: PixelRect = PixelRect::new(1_308, 988, 28, 6);
 const TOOLBAR_SHADOW_EDGE_TAIL: PixelRect = PixelRect::new(1_336, 988, 2, 6);
 
 
-/// Largest complete source measured in K41: rows 390..994, including its edge.
-/// This changes recognition height only; input and effect stay above the toolbar.
-const MAXIMUM_SOURCE_HEIGHT: u32 = 604;
+/// Existing tableau scan starts ten pixels above the first card-face row.
+/// The exterior highlight must remain inside this native recognition envelope.
+const TABLEAU_SCAN_TOP: u32 = TABLEAU_Y - 10;
+
+
+/// Capacity of the unchanged native tableau scan, rather than an observed run.
+/// K80's complete620-pixel source exceeds K41's former604-pixel maximum.
+/// Closed edges, connected rails and paper still establish each detected block;
+/// canonical clicks and legacy diagnostic content stay above the toolbar.
+const MAXIMUM_SOURCE_HEIGHT: u32 = TABLEAU_OUTLINE_BOTTOM - TABLEAU_SCAN_TOP;
 
 
 /// K44's complete tableau source face starts fourteen pixels right of its slot.
@@ -909,7 +916,7 @@ pub fn canonical_action(target: KlondikeTarget) -> Option<GuidedAction> {
         KlondikeTarget::Tableau { column, top, bottom }
 
 
-            if (1..=7).contains(&column) && top >= 332
+            if (1..=7).contains(&column) && u32::from(top) >= TABLEAU_SCAN_TOP
                 && u32::from(bottom) <= TABLEAU_OUTLINE_BOTTOM
                 && u32::from(top) + 40 < TOOLBAR_TOP
                 && bottom.checked_sub(top).is_some_and(|height| (180..=MAXIMUM_SOURCE_HEIGHT).contains(&u32::from(height))) =>
@@ -1025,7 +1032,7 @@ fn select_target(frame: &CapturedFrame) -> Result<Option<KlondikeTarget>, HaloDe
 
     for column in 1..=7_u8 {
         let x = FIRST_COLUMN_X + COLUMN_PITCH * u32::from(column - 1);
-        let scan = PixelRect::new(x, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332);
+        let scan = PixelRect::new(x, TABLEAU_SCAN_TOP, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - TABLEAU_SCAN_TOP);
 
 
         if let Some(bounds) = find_tableau_source(frame, scan)? {
@@ -3801,8 +3808,8 @@ mod tests {
             column: 6, top: 390, bottom: TABLEAU_OUTLINE_BOTTOM as u16 + 1,
         }).is_none());
         assert!(canonical_action(KlondikeTarget::Tableau {
-            column: 6, top: 348, bottom: 953,
-        }).is_none(), "unobserved runs exceeding the measured 604-pixel bound stay unsupported");
+            column: 6, top: 331, bottom: 953,
+        }).is_none(), "source geometry above the unchanged scan stays unsupported");
     }
 
 
@@ -4934,8 +4941,8 @@ mod tests {
         assert_eq!(report.destination_changed, 0);
         assert!(!report.source_replaced && !report.verified, "{report}");
         assert!(canonical_action(KlondikeTarget::Tableau { column: 6, top: 407, bottom: TABLEAU_OUTLINE_BOTTOM as u16 + 1 }).is_none());
-        assert!(canonical_action(KlondikeTarget::Tableau { column: 6, top: 389, bottom: 994 }).is_none(),
-            "the measured 604-pixel maximum rejects uncalibrated taller runs");
+        assert!(canonical_action(KlondikeTarget::Tableau { column: 6, top: 331, bottom: 994 }).is_none(),
+            "source geometry above the unchanged scan stays unsupported");
         let mut malformed = before;
         malformed.pixels.truncate(4);
         assert_eq!(find_solid_card_source(&malformed, PixelRect::new(1_230, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)),
@@ -5183,7 +5190,7 @@ mod tests {
         assert_eq!(planned.effect_bounds(), PixelRect::new(1_230, 390, CARD_WIDTH, 557));
         assert_eq!(count_pixels(&before, TOOLBAR_ICON_SUPPORT, is_toolbar_undo_red), 68);
         assert_eq!(find_solid_card_source(&before, PixelRect::new(1_230, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)).unwrap(),
-            Some(PixelRect::new(1_230, 390, CARD_WIDTH, MAXIMUM_SOURCE_HEIGHT)));
+            Some(PixelRect::new(1_230, 390, CARD_WIDTH, 604)));
         assert!(!completion_evidence(&before).unwrap().complete_candidate);
         let mut toolbar_changed = before.clone();
         paint(&mut toolbar_changed, PixelRect::new(378, TOOLBAR_TOP, 1_162, 1_033 - TOOLBAR_TOP), [255, 255, 255]);
@@ -5191,8 +5198,8 @@ mod tests {
         assert_eq!(report.source_changed, 0);
         assert_eq!(report.destination_changed, 0);
         assert!(!report.source_replaced && !report.verified, "{report}");
-        assert!(canonical_action(KlondikeTarget::Tableau { column: 6, top: 389, bottom: 994 }).is_none());
-        assert!(canonical_action(KlondikeTarget::Tableau { column: 6, top: 390, bottom: 995 }).is_none());
+        assert!(canonical_action(KlondikeTarget::Tableau { column: 6, top: 331, bottom: 994 }).is_none());
+        assert!(canonical_action(KlondikeTarget::Tableau { column: 6, top: 390, bottom: 999 }).is_none());
     }
 
 
@@ -7232,8 +7239,8 @@ mod tests {
             assert_eq!((report.source_changed, report.source_positive, report.destination_changed), (0, 0, 0), "{report}");
             assert!(!report.source_replaced && !report.verified, "the added recognition rows never supply effect authority: {report}");
         }
-        assert!(canonical_action(KlondikeTarget::Tableau { column: 7, top: 393, bottom: 998 }).is_none(),
-            "the 604-pixel maximum height remains enforced");
+        assert!(canonical_action(KlondikeTarget::Tableau { column: 7, top: 331, bottom: 998 }).is_none(),
+            "the existing native scan-top bound remains enforced");
         assert!(canonical_action(KlondikeTarget::Tableau { column: 7, top: 425, bottom: 999 }).is_none(),
             "one row beyond the complete observed border remains unsupported");
     }
@@ -7317,6 +7324,72 @@ mod tests {
             paint(&mut below_scan, PixelRect::new(x - 10, TABLEAU_OUTLINE_BOTTOM, CARD_WIDTH + 20, 1_033 - TABLEAU_OUTLINE_BOTTOM), [230, 185, 80]);
             assert_eq!(find_solid_card_source(&below_scan, scan).unwrap(), find_solid_card_source(&frame, scan).unwrap(),
                 "pixels below the terminated observed outline remain irrelevant");
+        }
+    }
+
+
+    /// K80's complete620-pixel source passes the existing rail, edge and paper
+    /// guards. Its whole run needs one upper-card click, never toolbar input.
+    #[test]
+    fn native_taller_run_is_one_safe_upper_click() {
+        let frame = fixture(80);
+        assert!(is_gameplay_scene(&frame).unwrap());
+        let expected = PixelRect::new(1_398, 372, CARD_WIDTH, 620);
+        assert_eq!(find_tableau_source(&frame, PixelRect::new(1_398, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)).unwrap(), Some(expected));
+        let planned = action(&frame);
+        assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau { column: 7, top: 372, bottom: 992 }));
+        assert_eq!(planned.operation(), InputOperation::Click(PixelPoint::new(1_464, 412)));
+        assert_eq!(planned.effect_bounds(), PixelRect::new(1_398, 372, CARD_WIDTH, TOOLBAR_TOP - 372));
+        assert!(!completion_evidence(&frame).unwrap().complete_candidate);
+        assert_eq!(action(&fixture(81)).target, ActionTarget::Klondike(KlondikeTarget::Waste { offset: 1 }));
+    }
+
+
+    /// Taller recognition cannot excuse clipped rails, absent closure, broken
+    /// rails, dark paper or a source cut off by the existing scan boundary.
+    #[test]
+    fn native_taller_run_retains_outline_and_scan_guards() {
+        let frame = fixture(80);
+        let scan = PixelRect::new(1_398, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332);
+
+
+        for (bounds, colour) in [
+            (PixelRect::new(1_389, TABLEAU_OUTLINE_BOTTOM - 1, 1, 1), [230, 185, 80]),
+            (PixelRect::new(1_416, 980, CARD_WIDTH - 36, 18), [12, 82, 45]),
+            (PixelRect::new(1_416, 362, CARD_WIDTH - 36, 11), [12, 82, 45]),
+            (PixelRect::new(1_389, 372, 9, 620), [12, 82, 45]),
+            (PixelRect::new(1_416, TOOLBAR_TOP - 36, CARD_WIDTH - 36, 12), [32, 32, 32]),
+        ] {
+            let mut corrupted = frame.clone();
+            paint(&mut corrupted, bounds, colour);
+            assert_eq!(find_tableau_source(&corrupted, scan).unwrap(), None, "corrupted {bounds:?}");
+        }
+        assert_eq!(find_tableau_source(&frame, PixelRect::new(1_398, 332, CARD_WIDTH, 936 - 332)).unwrap(), None,
+            "an internal crossbar cannot close clipped continuing rails");
+        let mut below_scan = frame.clone();
+        paint(&mut below_scan, PixelRect::new(1_388, TABLEAU_OUTLINE_BOTTOM, CARD_WIDTH + 20, 1_033 - TABLEAU_OUTLINE_BOTTOM), [230, 185, 80]);
+        assert_eq!(find_tableau_source(&below_scan, scan).unwrap(), find_tableau_source(&frame, scan).unwrap(),
+            "pixels below the unchanged scan cannot supply outline authority");
+    }
+
+
+    /// Canonical geometry stays inside the unchanged native recognition scan;
+    /// a larger height capacity never supplies a click below the toolbar.
+    #[test]
+    fn tableau_capacity_uses_existing_native_bounds() {
+        assert!(canonical_action(KlondikeTarget::Tableau { column: 7, top: 332, bottom: 998 }).is_some());
+
+
+        for target in [
+            KlondikeTarget::Tableau { column: 7, top: 331, bottom: 998 },
+            KlondikeTarget::Tableau { column: 7, top: 372, bottom: 999 },
+            KlondikeTarget::Tableau { column: 7, top: 907, bottom: 998 },
+            KlondikeTarget::Tableau { column: 7, top: 819, bottom: 998 },
+            KlondikeTarget::Tableau { column: 0, top: 372, bottom: 992 },
+            KlondikeTarget::Tableau { column: 8, top: 372, bottom: 992 },
+            KlondikeTarget::Tableau { column: 7, top: 992, bottom: 372 },
+        ] {
+            assert!(canonical_action(target).is_none(), "unsupported {target:?}");
         }
     }
 

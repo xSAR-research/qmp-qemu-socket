@@ -1654,6 +1654,66 @@ fn native_sparse_suit_return_does_not_gate_the_next_halo_on_old_print_matching()
 }
 
 
+/// The failure snapshot and later Undo reconstruction supply native target
+/// evidence for a controlled replay, not the unsaved historical worker frames.
+/// Fresh long-source authority does not prove either acknowledged action's effect.
+#[test]
+fn native_long_column_seven_source_continues_from_acknowledged_waste_without_effect_proof() {
+    let before = native_hint_phase(81);
+    let after = native_hint_phase(80);
+    assert!(before.gameplay_scene && after.gameplay_scene);
+    assert_eq!(before.prediction, canonical(KlondikeTarget::Waste { offset: 1 }));
+    assert_eq!(after.prediction, canonical(KlondikeTarget::Tableau { column: 7, top: 372, bottom: 992 }));
+
+
+    for limit in [1, 2] {
+        let mut frames = vec![copy_observation(&before), copy_observation(&after)];
+        let mut expected_inputs = vec![before.prediction];
+
+
+        if limit == 2 {
+            frames.push(copy_observation(&after));
+            expected_inputs.push(after.prediction);
+        }
+        let mut io = fake_frames(frames);
+        let (events, receiver) = std::sync::mpsc::channel();
+        let sink = WorkerEventSink {
+            events,
+            latest_frame: super::super::LatestFrameSlot::default(),
+            capture_context: std::sync::Mutex::new(None),
+        };
+        let mut latest = None;
+        let mut attempted = false;
+        let result = drive_run(
+            &mut io, before.prediction, StepRunSettings::new(AnimationSettleDelays::default(), limit),
+            &sink, &AtomicBool::new(false), &mut latest, &mut attempted,
+        );
+        assert_eq!(result, Ok(RunOutcome::Completed { verified: 0, halo: limit }));
+        assert!(attempted);
+        assert_eq!(io.inputs, expected_inputs);
+        assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), limit + 1);
+        assert_eq!(io.trace.iter().filter(|entry| **entry == "probe").count(), limit);
+        assert_eq!(io.trace.iter().filter(|entry| **entry == "input").count(), limit);
+        assert_eq!(io.trace.iter().filter(|entry| **entry == "wait").count(), limit);
+        assert!(io.frames.is_empty());
+        assert_eq!(latest.unwrap().frame.pixels, after.frame.pixels);
+        assert_eq!(io.completion_checks, 0);
+        assert!(!io.trace.contains(&"solver") && io.terminal_inputs.is_empty());
+        let accepted: Vec<_> = receiver.try_iter().filter(|event| matches!(event, WorkerEvent::ActionCompleted { .. })).collect();
+        assert_eq!(accepted.len(), limit);
+
+
+        for (index, event) in accepted.into_iter().enumerate() {
+            assert!(matches!(event, WorkerEvent::ActionCompleted {
+                operation_index, operation_limit, before: input, after: result,
+                input_commands: 3, input_events: 4, changed_pixels: 0, continued_from_halo: true,
+            } if operation_index == index + 1 && operation_limit == limit
+                && input == expected_inputs[index] && result == after.prediction));
+        }
+    }
+}
+
+
 /// STOP and uncertain delivery remain input boundaries even when the next HALO is valid.
 #[test]
 fn native_sparse_suit_return_preserves_stop_and_uncertain_input_guards() {

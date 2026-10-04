@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.2.6 — candidate 7
+
+- Derive Klondike source-height capacity from the existing rows 332..998 scan
+  envelope instead of the earlier 604-pixel observed maximum. K80's complete
+  ten-card source is 620 pixels tall and passes every other existing guard.
+- Preserve scan coordinates, colour predicates, connected rails, closed edges,
+  paper/scene checks and one upper-card click. No card-effect matcher or
+  controller policy is added; Solve, one-board restart and other modes are unchanged.
+- Add two byte-identical native PNG fixtures, detector boundary/adverse tests
+  and finite-run controller coverage using fresh recommendations. Keep manual
+  Undo evidence separate from unsaved automatic worker frames.
+- Deliver complete affected files against committed candidate 6 at exact
+  329d806; accept only that base or a complete installed candidate 7 state.
+
 ## v1.2.6 — candidate 6
 
 - Follow fresh canonical Klondike Solver recommendations without source/recipient

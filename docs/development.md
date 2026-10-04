@@ -1,12 +1,14 @@
-# Development conventions for v1.2.6 candidate 6
+# Development conventions for v1.2.6 candidate 7
 
-Candidate 5 corrects the tableau-to-SUIT transfer whose previous source
-becomes a landing guide, retaining candidate 4's corrections against committed
-candidate 2 at `7d869c22a6ca98179cd3efc8f83552d2edd1ada7`. The installer
-recognises one complete base or delivered candidate-4 state, and restores its
-actual backed-up contents. TriPeaks and Pyramid retain their execution policies.
-Independent card-rank recognition, search and file-free capture are outside
-this candidate.
+Candidate 7 corrects a complete source HALO taller than the former604-pixel
+maximum, against committed candidate 6 at
+`329d8065f4780d7db1b4ee8a52ed3a53b6252adc`. Its height capacity derives from
+existing scan rows 332..998, without changing those rows or other outline guards.
+The installer accepts only exact base or complete candidate 7 affected contents,
+backs up the actual before-state and preserves unrelated local work. The live
+controller retains fresh-HALO continuation without card matching. TriPeaks,
+Pyramid, Solve and one-board restart retain their policies. Independent rank
+recognition, search and file-free capture remain outside this candidate.
 
 ## Naming and documentation
 
@@ -94,7 +96,7 @@ No formatter check is included, by Charlie's explicit instruction. Build/test
 results from another host do not prove Beast installation or live guest input.
 The candidate delivery notes record the checks actually executed.
 
-On the Beast, confirm the launched executable identifies v1.2.6, candidate 6. Verify
+On the Beast, confirm the launched executable identifies v1.2.6, candidate 7. Verify
 Capture Frame, exact-byte manual Capture PNG, single-step, finite and continuous
 multi-step, STOP and mode/socket invalidation. Exercise Klondike Draw 1, source
 transfers, RIGHT fan positions, recycle, Solve and late/no-HALO recovery. Preserve first-failure

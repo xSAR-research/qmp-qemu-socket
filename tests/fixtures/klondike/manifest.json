@@ -1,5 +1,5 @@
 {
-  "description": "Original-byte and derived sparse regression fixtures. Listed half-open rectangles preserve original RGBA pixels exactly at original coordinates. Sparse fixtures black all unlisted pixels, without resizing. K70-K79 are complete byte-identical original uploads. Per-file retained_rectangles_xyxy overrides the default rectangle list. Manual frames are not asserted to be the historical automatic worker frames.",
+  "description": "Original-byte and derived sparse regression fixtures. Listed half-open rectangles preserve original RGBA pixels exactly at original coordinates. Sparse fixtures black all unlisted pixels, without resizing. K70-K81 are complete byte-identical original uploads. Per-file retained_rectangles_xyxy overrides the default rectangle list. Manual frames are not asserted to be the historical automatic worker frames.",
   "frame": [
     1920,
     1080
@@ -2099,6 +2099,40 @@
         ]
       ],
       "observation": "Settled manual result: three-hearts now below four-clubs in column7, two-hearts exposed in SUIT2; fresh RIGHT two-clubs HALO. Old source-pixel proof rejected this valid Solver recommendation."
+    },
+    {
+      "fixture": "K80.png",
+      "source": "qmp-qemu-socket 261004 114822 Fail.png",
+      "source_sha256": "adf60020954430b439cf27c891c5820986a73229de722fb5f6e1b416d0592e25",
+      "fixture_sha256": "adf60020954430b439cf27c891c5820986a73229de722fb5f6e1b416d0592e25",
+      "bytes": 3335964,
+      "full_original_png": true,
+      "retained_rectangles_xyxy": [
+        [
+          0,
+          0,
+          1920,
+          1080
+        ]
+      ],
+      "observation": "Later manual FAIL capture: complete ten-card column-7 source rows372..992 is620pixels tall; all existing outline guards pass but the former604pixel cap rejects it. This capture follows the last classifier frame by several seconds."
+    },
+    {
+      "fixture": "K81.png",
+      "source": "qmp-qemu-socket 261004 114834 Move-before-fail.png",
+      "source_sha256": "df1ebc942b26942abee7c05d78a778a5b79958c433330ebe5fd4471263962d5f",
+      "fixture_sha256": "df1ebc942b26942abee7c05d78a778a5b79958c433330ebe5fd4471263962d5f",
+      "bytes": 3353526,
+      "full_original_png": true,
+      "retained_rectangles_xyxy": [
+        [
+          0,
+          0,
+          1920,
+          1080
+        ]
+      ],
+      "observation": "Later Undo predecessor: solid RIGHT King-spades at fan offset1, dashed empty-column2 destination. Taken after FAIL, not a historical before-input worker frame."
     }
   ],
   "solve_control_template": {
