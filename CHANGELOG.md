@@ -1,5 +1,33 @@
 # Changelog
 
+## v1.2.6 — candidate 10
+
+- Pyramid's freshly highlighted MOVE/Recycle target sends D. Both operations
+  share the confirmed shortcut; card and Left/Right targets retain their clicks.
+- TriPeaks uses three delayed input-free no-HALO observations before one Solver
+  recovery, then three further delayed observations before stopping. Its new
+  Params interval defaults to 1000 ms and is frozen for each run.
+- Once a one-board Klondike win is independently confirmed, expected OK,
+  New Game and Play controls use local button readiness. Rank, medal, title,
+  frame and fireworks signatures do not gate those ordered clicks.
+- Handle the measured Undo All overlay with one bounded lower-border envelope
+  and positive icon/source evidence, retaining ordinary border requirements
+  outside that envelope. No card-pixel effect checks gate Klondike play.
+- Add output-only text sizing while preserving Copy Output and existing
+  2000-entry retention and three-game visible-log rollover.
+- Retain candidate 9's Hint-shadow correction. Installation supports exact
+  base or the complete pinned candidate 9 predecessor, with guarded rollback.
+
+## v1.2.6 — candidate 9
+
+- Recognise both measured Hint-shadow lower-edge positions in column four.
+  Keep all 96 lower-edge samples positive, existing rail brackets, closed top,
+  card interior, scene context and safe upper-card click.
+- Add two complete uploaded PNG fixtures and source/controller regressions.
+- Keep fresh-HALO execution, Solve, one-board completion/restart, timings and
+  accepted TriPeaks/Pyramid behaviour. No live card-pixel effect check is added.
+- Deliver complete affected files against pushed candidate 8 at `cafdd609`.
+
 ## v1.2.6 — candidate 8
 
 - Measure the clear seven-pixel column-five/six scene gutter core for the three

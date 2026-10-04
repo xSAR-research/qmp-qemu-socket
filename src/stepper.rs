@@ -145,7 +145,7 @@ pub enum StepValidationError {
     #[error("post-action effect region did not change materially; action result is uncertain")]
     NoObservedEffect,
     /// Supplied Pyramid action differs from its immutable calibrated definition.
-    #[error("Pyramid target does not match its calibrated one-click action")]
+    #[error("Pyramid target does not match its calibrated input action")]
     InvalidPyramidAction,
     /// Supplied Klondike source bounds or input differ from the canonical action.
     #[error("Klondike target does not match its bounded source action")]
@@ -268,17 +268,16 @@ mod tests {
     }
 
 
-    /// Verify Pyramid plans reject forged timing or click definitions.
+    /// Verify the Move/Recycle HALO permits D and rejects replacement mouse input.
     #[test]
-    fn pyramid_plan_requires_the_canonical_single_mouse_click() {
+    fn pyramid_move_plan_requires_the_canonical_draw_key() {
         use crate::pyramid::{PyramidTargetKind, action_for_kind};
         let action = action_for_kind(PyramidTargetKind::Move).unwrap();
         let plan = plan_step(PredictedAction::Action(action)).unwrap();
-        assert_eq!(
-            plan.input().operation(),
-            InputOperation::Click(PixelPoint::new(960, 718))
-        );
-        assert_eq!(plan.input().qmp_command_count(), 3);
+        assert_eq!(plan.input().operation(), InputOperation::PressDrawKey);
+        assert_eq!(plan.input().qmp_command_count(), 2);
+        assert_eq!(plan.input().qmp_event_count(), 2);
+        assert_eq!(plan.input().intentional_input_wait(), KEY_HOLD);
         assert_eq!(
             plan.input()
                 .animation_settle_delay(AnimationSettleDelays::default()),
@@ -286,7 +285,7 @@ mod tests {
         );
 
         let mut forged = action;
-        forged.specification.operation = InputOperation::PressDrawKey;
+        forged.specification.operation = InputOperation::Click(PixelPoint::new(960, 718));
         assert_eq!(
             plan_step(PredictedAction::Action(forged)),
             Err(StepValidationError::InvalidPyramidAction)
@@ -297,6 +296,34 @@ mod tests {
             plan_step(PredictedAction::Action(forged)),
             Err(StepValidationError::InvalidPyramidAction)
         );
+    }
+
+
+    /// Keep lower-pile and tableau card targets restricted to their canonical click.
+    #[test]
+    fn pyramid_card_plans_reject_the_draw_key() {
+        use crate::pyramid::{PYRAMID_TARGETS, PyramidTargetKind, action_for_kind};
+
+
+        for slot in PYRAMID_TARGETS {
+
+
+            if slot.kind == PyramidTargetKind::Move {
+                continue;
+            }
+            let action = action_for_kind(slot.kind).unwrap();
+            let plan = plan_step(PredictedAction::Action(action)).unwrap();
+            assert_eq!(plan.input().operation(), InputOperation::Click(slot.click_point));
+            assert_eq!(plan.input().qmp_command_count(), 3);
+            assert_eq!(plan.input().qmp_event_count(), 4);
+
+            let mut forged = action;
+            forged.specification.operation = InputOperation::PressDrawKey;
+            assert_eq!(
+                plan_step(PredictedAction::Action(forged)),
+                Err(StepValidationError::InvalidPyramidAction)
+            );
+        }
     }
 
 

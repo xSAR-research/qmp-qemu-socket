@@ -1,13 +1,11 @@
-# Development conventions for v1.2.6 candidate 8
+# Development conventions for v1.2.6 candidate 9
 
-Candidate 8 corrects one obstructed independent scene probe and recognises the
-measured Master medal LEVEL UP layout against pushed candidate 7 at
-`449004dfbf3d0dc411fe3f5741d5f6b93f242da5`. Scene sample count/threshold,
-source guards, safe click points and the live HALO-driven controller are retained.
-The installer accepts only exact base or complete candidate 8 affected contents,
-backs up the actual before-state and preserves unrelated local work. TriPeaks,
-Pyramid, Solve and one-board restart retain their policies. Independent rank
-recognition, search and file-free capture remain outside this candidate.
+Candidate 9 corrects the measured Hint-shadow lower-edge band against pushed
+candidate 8 at `cafdd609f5afcac9738ea7d11bc43b231cb73dfc`. Every edge pixel still
+needs positive gold, with unchanged source geometry and independent scene context.
+The installer accepts only exact base or complete candidate 9 affected contents,
+backs up the actual before-state and preserves unrelated local work. The live
+controller remains driven by fresh Solver targets, without card-pixel move proof.
 
 ## Naming and documentation
 
@@ -95,7 +93,7 @@ No formatter check is included, by Charlie's explicit instruction. Build/test
 results from another host do not prove Beast installation or live guest input.
 The candidate delivery notes record the checks actually executed.
 
-On the Beast, confirm the launched executable identifies v1.2.6, candidate 8. Verify
+On the Beast, confirm the launched executable identifies v1.2.6, candidate 9. Verify
 Capture Frame, exact-byte manual Capture PNG, single-step, finite and continuous
 multi-step, STOP and mode/socket invalidation. Exercise Klondike Draw 1, source
 transfers, RIGHT fan positions, recycle, Solve and late/no-HALO recovery. Preserve first-failure
@@ -305,3 +303,24 @@ HALOs, advisory-preview changes, finite action budgets, bounded no-HALO/Solver
 recovery, unknown scenes, STOP and uncertain-input non-replay. Report acknowledged
 Solver actions separately from independently verified completion. TriPeaks and
 Pyramid retain their accepted shared policies.
+
+## Candidate 10 validation boundary
+
+Validate Pyramid's canonical Move key operation and rejection of forged card/pile
+keys, delayed TriPeaks stock-HALO recovery with zero Solver inputs, one-refresh
+exhaustion, known-win local terminal readiness on K91-K93 and Undo All source
+occlusion on K94. Decorative changes must not affect already-confirmed terminal
+progression. A generic gold button must not establish game completion.
+
+Do not run rustfmt or cargo fmt. Preserve the floating nightly toolchain and
+record actual compiler/Cargo/Clippy versions. Run check, full tests, rustdoc,
+warning-denying Clippy and release build. Retain failed commands and distinguish
+sandbox QMP Unix-listener limitations from tests passed. Beast verification is
+required for input timing and complete games; synthetic/controller tests cannot
+prove guest delivery or animation timing.
+
+Candidate 10's installer pins exact cafdd609f5afcac9738ea7d11bc43b231cb73dfc plus
+complete candidate 9 predecessor records. Refuse mixed states, staged affected
+files and unknown edits. Back up actual incoming files and restore that incoming
+state on rollback. Downloads and validation evidence use /home/charlie/tmp;
+root AGENTS.md and calibration remain local and untouched.

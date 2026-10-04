@@ -10,7 +10,7 @@
 //! Solve is requested once and followed by
 //! bounded read-only completion observations. One board is one Klondike game;
 //! completion requires two fresh positive observations. Only an authorised continuous
-//! run may advance through the separately calibrated terminal controls.
+//! run may advance through the deterministic expected terminal button sequence.
 //! The displayed preview is advisory. Fresh mode-owned scene/target evidence
 //! authorises input for both finite and continuous runs. A missing HALO receives
 //! bounded input-free recaptures and independent completion checks before one
@@ -130,14 +130,21 @@ trait KlondikeIo {
     fn solver(&mut self) -> Result<(), String>;
 
 
-    /// Classify a terminal stage from fresh pixels using Klondike's own calibration.
+    /// Enter terminal flow only after independent game-win confirmation.
     fn terminal_stage(&mut self, frame: &CapturedFrame) -> Result<Option<klondike::terminal::TerminalStage>, String> {
-        klondike::terminal::classify_terminal(frame)
+        klondike::terminal::classify_confirmed_win_entry(frame)
             .map_err(|error| format!("Klondike terminal analysis failed: {error}"))
     }
 
 
-    /// Send exactly one click on an independently recognised terminal control.
+    /// Check only the expected button within an already confirmed win sequence.
+    fn expected_terminal_control(&mut self, frame: &CapturedFrame, stage: klondike::terminal::TerminalStage) -> Result<bool, String> {
+        klondike::terminal::expected_control_ready(frame, stage)
+            .map_err(|error| format!("Klondike expected control analysis failed: {error}"))
+    }
+
+
+    /// Send exactly one click on the freshly ready expected terminal control.
     fn terminal_input(&mut self, stage: klondike::terminal::TerminalStage) -> Result<(), String>;
 
 
@@ -240,17 +247,45 @@ impl KlondikeIo for QmpKlondikeIo<'_> {
 
 
     fn terminal_stage(&mut self, frame: &CapturedFrame) -> Result<Option<klondike::terminal::TerminalStage>, String> {
-        let stage = klondike::terminal::classify_terminal(frame)
+        let stage = klondike::terminal::classify_confirmed_win_entry(frame)
             .map_err(|error| format!("Klondike terminal analysis failed: {error}"))?;
 
 
-        match klondike::terminal::inspect_terminal_evidence(frame) {
-            Ok(evidence) => send_log(self.event_tx, format!(
-                "Klondike terminal evidence: {evidence}; selected={stage:?}; guard counts do not grant input authority",
-            )),
-            Err(error) => send_log(self.event_tx, format!("Klondike terminal diagnostic unavailable: {error}")),
+        send_log(self.event_tx, format!("Klondike already-confirmed GAME WIN entry={stage:?}; button readiness does not declare the initial win"));
+
+
+        if let Some(stage) = stage
+            && let Some(evidence) = klondike::terminal::inspect_expected_control(frame, stage)
+                .map_err(|error| format!("Klondike expected entry control analysis failed: {error}"))?
+        {
+            send_log(self.event_tx, format!("Klondike confirmed-win entry control readiness: {evidence}"));
+        } else {
+
+
+            match klondike::terminal::inspect_terminal_evidence(frame) {
+                Ok(evidence) => send_log(self.event_tx, format!(
+                    "Klondike independent terminal diagnostic: {evidence}; selected={stage:?}; guard counts do not grant input authority",
+                )),
+                Err(error) => send_log(self.event_tx, format!("Klondike terminal diagnostic unavailable: {error}")),
+            }
         }
         Ok(stage)
+    }
+
+
+    fn expected_terminal_control(&mut self, frame: &CapturedFrame, stage: klondike::terminal::TerminalStage) -> Result<bool, String> {
+        let evidence = klondike::terminal::inspect_expected_control(frame, stage)
+            .map_err(|error| format!("Klondike expected control analysis failed: {error}"))?;
+
+
+        if let Some(evidence) = evidence {
+            send_log(self.event_tx, format!("Klondike confirmed-win control readiness: {evidence}"));
+            return Ok(evidence.ready());
+        }
+        let ready = klondike::terminal::expected_control_ready(frame, stage)
+            .map_err(|error| format!("Klondike expected control analysis failed: {error}"))?;
+        send_log(self.event_tx, format!("Klondike expected {stage}: positive fresh-deal/control readiness={ready}"));
+        Ok(ready)
     }
 
 
@@ -658,7 +693,8 @@ fn await_pending_solve(
 
 /// Advance an authorised continuous run through one-board terminal controls once.
 ///
-/// Each control needs fresh typed scene evidence, a new VM/tablet probe and STOP
+/// An independently confirmed win establishes the sequence context. Each next
+/// control needs fresh local button readiness, a new VM/tablet probe and STOP
 /// check. Its single acknowledged input is followed by settling and bounded
 /// read-only advancement checks. Only a freshly classified actionable Solver
 /// board completes the cycle; no terminal input is retried.
@@ -698,9 +734,10 @@ fn resume_after_win(
 /// Wait input-free for the expected next terminal stage or the new Solver board.
 ///
 /// The current fresh frame counts as the initial observation. The prior stage
-/// must advance in order; unexpected recognised controls stop immediately rather
-/// than authorising a click. Unknown transient frames and an unchanged prior
-/// stage receive at most three delayed observations.
+/// must advance in order. Only the expected local button is checked after a
+/// confirmed win; unrelated artwork is not classified. An absent or unchanged
+/// control receives the existing twenty-round terminal budget without replay.
+/// Fresh-deal and post-Solver observations retain the shorter gameplay budget.
 fn await_terminal_stage(
     io: &mut impl KlondikeIo,
     latest: &mut Option<FrameObservation>,
@@ -717,6 +754,12 @@ fn await_terminal_stage(
         TerminalStage::Play => Some(TerminalStage::SolverReady),
         TerminalStage::SolverReady => None,
     });
+
+
+    let reobservation_limit = match previous {
+        None | Some(TerminalStage::ScoreCounting | TerminalStage::LevelUp | TerminalStage::NewGame) => POST_GAME_MAX_OBSERVATION_ROUNDS,
+        Some(TerminalStage::Play | TerminalStage::SolverReady) => REOBSERVATION_LIMIT,
+    };
     let mut delayed_observations = 0usize;
 
 
@@ -732,7 +775,15 @@ fn await_terminal_stage(
             require_klondike_prediction(current.prediction, false)?;
             return Ok(None);
         }
-        let observed = io.terminal_stage(&current.frame)?;
+
+
+        let observed = if let Some(Some(stage)) = expected {
+            io.expected_terminal_control(&current.frame, stage)?.then_some(stage)
+        } else if previous.is_none() {
+            io.terminal_stage(&current.frame)?
+        } else {
+            None
+        };
 
 
         if let Some(stage) = observed {
@@ -743,19 +794,15 @@ fn await_terminal_stage(
             {
                 return Ok(Some(stage));
             }
-
-
-            if Some(stage) != previous {
-                return Err(format!("Klondike terminal flow saw unexpected {stage} after {previous:?}; no new control input authorised"));
-            }
+            return Err(format!("Klondike terminal flow saw unexpected {stage} after {previous:?}; no new control input authorised"));
         }
 
 
-        if delayed_observations >= REOBSERVATION_LIMIT {
+        if delayed_observations >= reobservation_limit {
             return Err(format!("Klondike terminal advancement exhausted {delayed_observations} delayed read-only captures after {previous:?}; the last control was not retried"));
         }
         delayed_observations += 1;
-        send_log(event_tx, format!("Klondike terminal re-observation {delayed_observations}/{REOBSERVATION_LIMIT}: prior={previous:?}, observed={observed:?}; guest input sent=0"));
+        send_log(event_tx, format!("Klondike terminal re-observation {delayed_observations}/{reobservation_limit}: prior={previous:?}, expected={expected:?}, ready={observed:?}; guest input sent=0"));
         io.wait(settings.animation_delays().klondike_reobserve)?;
         capture_latest(io, latest, event_tx)?;
     }

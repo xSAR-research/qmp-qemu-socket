@@ -419,3 +419,30 @@ present the unmeasured pixel field as a zero-pixel effect. Missing HALOs receive
 bounded input-free observations, independent completion checks, and at most one
 Solver refresh on a positively recognised gameplay scene. Solve/win/restart retain
 their independent evidence and existing input/uncertainty/cancellation gates.
+
+## Candidate 10 current runtime policy
+
+This section supersedes historical card-effect and terminal-artwork descriptions
+above for current Klondike execution. Klondike play follows fresh canonical
+Solver targets; card differences remain diagnostic-only. Independent two-frame
+win evidence establishes the terminal context. The controller then checks only
+the expected local OK, New Game or Play button, preserving existing measured
+clicks, holds, settles, VM/tablet probes, STOP and uncertain-delivery refusal.
+Printed-caption contrast supplies readiness without exact glyph or medal matching.
+The ordered stage itself cannot establish a win. The next deal still requires
+positive mode-owned board evidence before Solver or gameplay input.
+
+Pyramid Move/Recycle uses the confirmed D shortcut only when its fixed four-pixel
+HALO probe passes. The other 30 targets retain clicks. TriPeaks's ordinary no-HALO
+recovery owns three delayed observations before one Solver refresh and three
+afterward; its interval is session-editable and immutable per run. This does not
+change existing effect verification or independently authorised redeal handling.
+
+The Undo All overlay is represented by one measured bounded envelope, supported
+by red icon evidence and unoccluded connected source borders. It cannot substitute
+for source paper, closed top, exterior rail termination or ordinary evidence
+outside the envelope. No new card-effect proof or blanket toolbar exclusion exists.
+
+Detailed output retains 2000 String entries, evicting old entries on insertion,
+and rolls the visible tail over every three completed games. Session-file history
+is complete. Output text sizing changes rendering only; copied text is unchanged.

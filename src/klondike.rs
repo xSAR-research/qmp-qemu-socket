@@ -1,7 +1,7 @@
 //! Klondike Draw 1 Solver targets and mode-owned observation policy.
 //! Historical pixel-effect proofs remain test-only diagnostic regressions.
 //!
-//! Geometry is measured from Charlie's 1920x1080 captures K01-K81. A source
+//! Geometry is measured from Charlie's 1920x1080 captures K01-K94. A source
 //! needs a continuous lower gold edge, matching exterior rails and a bright
 //! card interior. Dashed dark destinations never grant click authority. The
 //! outline primitive groups a connected run into one target. No card ranks,
@@ -82,23 +82,37 @@ const COLUMN_FOUR_TOOLBAR_SHADOW_TOP: u32 = 952;
 const COLUMN_FOUR_TOOLBAR_SHADOW_BOTTOM: u32 = 963;
 
 
-/// K75's two warm lower-edge samples under the Hint stem at row995.
-/// RGB `[98,88,48]`/`[98,87,44]` pass the existing positive shadow-gold predicate.
-/// Neither is omitted: all other94 pixels and the ordinary centre must pass.
-const COLUMN_FOUR_HINT_EDGE_TAIL: PixelRect = PixelRect::new(963, 995, 2, 1);
+/// Measured Hint-stem shadow band spanning K75's two samples at row995 and
+/// K89's `[96,87,43]` sample at `(966,985)`. Every sample remains required
+/// positive under the existing shadow-gold predicate, with ordinary exterior
+/// rail brackets. The ordinary centre and every out-of-band edge stay required.
+const COLUMN_FOUR_HINT_EDGE_TAIL: PixelRect = PixelRect::new(963, 985, 4, 11);
 
 
-/// Measured Undo All icon/shadow over K38/K41's lower source-border rows.
-/// Only these 28 by 6 pixels may be unavailable to lower-edge recognition;
-/// every remaining edge pixel, closed top and exterior rail is still required.
+/// Original measured Undo All overlap in K38/K41's closing source borders.
+/// Existing valid sources retain this narrower envelope and exact geometry.
 const TOOLBAR_EDGE_OCCLUSION: PixelRect = PixelRect::new(1_308, 988, 28, 6);
 
 
-/// Two required border columns immediately right of the measured Undo All mask.
-/// K54 supplies warm `[91,78,40]`/`[99,84,43]` at row988 beneath the icon shadow.
-/// Only the existing mask rows/context can use their darker positive-gold test;
-/// these samples remain required and do not enlarge the omitted 28-pixel mask.
+/// Two required warm border columns immediately right of the original mask.
+/// Their unchanged positive-shadow predicate preserves K54's original source.
 const TOOLBAR_SHADOW_EDGE_TAIL: PixelRect = PixelRect::new(1_336, 988, 2, 6);
+
+
+/// Complete measured Undo All icon/shadow envelope spanning K38/K41/K54/K94.
+/// Only a previously unresolved single-card column-six edge above the original
+/// mask may use this fallback; old lower rows and long runs retain their
+/// established narrower authority.
+/// All uncovered edge pixels, centre, top and exterior rails remain mandatory.
+/// The source must end strictly after its paired rails terminate inside this
+/// envelope, so a shadow or internal stripe cannot extend an existing block.
+const TOOLBAR_ICON_ENVELOPE: PixelRect = PixelRect::new(1_300, 961, 41, 33);
+
+
+/// Existing one-card recognition envelope: 175 face pixels plus the twenty
+/// rows already allowed around fixed upper cards. K94 supports this single-card
+/// overlay fallback; it must not reinterpret an unresolved long-run border.
+const MAXIMUM_ICON_OVERLAY_SOURCE_HEIGHT: u32 = CARD_HEIGHT + 20;
 
 
 /// Existing tableau scan starts ten pixels above the first card-face row.
@@ -693,10 +707,12 @@ fn has_solve_control(frame: &CapturedFrame) -> bool {
 ///
 /// This primitive starts at the bottom, normally requires a continuous 96-pixel
 /// lower edge, follows both exterior rails and probes paper above the toolbar.
-/// Only K38/K41's measured column-6 icon overlap may obscure 28 lower-edge pixels;
-/// positive icon artwork and all remaining 68 gold pixels are then mandatory.
-/// K54's two adjacent shadowed columns still require positive warm gold; they
-/// cannot enlarge that mask or alter the ordinary edge/rail colour predicates.
+/// Existing sources retain their original measured lower-edge recognition.
+/// If that fails for one card in column six, the full Undo All envelope may
+/// explain missing pixels only with positive red icon artwork, all55 remaining
+/// pixels and a closing edge strictly below the terminated paired rails inside
+/// that overlay. No colour threshold is widened; the ordinary centre, closed
+/// top, connected rails and paper remain independently mandatory.
 /// A black destination interior fails even if some gold
 /// dashes align. Card-rank artwork is not required to be white at one exact pixel.
 /// The returned rectangle groups all connected highlighted cards as one action.
@@ -706,21 +722,43 @@ fn has_solve_control(frame: &CapturedFrame) -> bool {
 /// K68's separate column-7 rail band retains positive shadow chroma and two
 /// ordinary paired rail rows on each side; no shadow pixel may close an edge.
 /// K75's separately bracketed column-4 band also retains positive shadow rails;
-/// exactly two measured warm Hint-stem samples may complete its lower edge.
+/// the measured warm Hint-stem band may complete its changing lower edge.
 /// No Hint pixel is omitted and the ordinary centre remains independently gold.
 pub fn find_solid_card_source(
     frame: &CapturedFrame,
     scan: PixelRect,
 ) -> Result<Option<PixelRect>, HaloDetectionError> {
-    find_solid_outline(frame, scan, true)
+    let original = find_solid_outline(frame, scan, true)?;
+
+
+    if original.is_some() || scan.x != 1_230 || scan.width != CARD_WIDTH {
+        return Ok(original);
+    }
+
+    find_solid_outline_using_overlay(frame, scan, true, true)
 }
 
 
-/// Shared outline geometry; stock uses its own positive back/recycle interior test.
+/// Preserve established outline geometry before considering a complete icon overlay.
 fn find_solid_outline(
     frame: &CapturedFrame,
     scan: PixelRect,
     require_card_face: bool,
+) -> Result<Option<PixelRect>, HaloDetectionError> {
+    find_solid_outline_using_overlay(frame, scan, require_card_face, false)
+}
+
+
+/// Shared outline geometry; stock uses its own positive back/recycle interior test.
+/// The complete toolbar envelope is a bounded column-six fallback, not a new
+/// global colour rule or permission to alter an already recognised source.
+/// The new K94 path is limited to the existing one-card outline-height envelope;
+/// multiple-card runs retain their original recognition and refusal policy.
+fn find_solid_outline_using_overlay(
+    frame: &CapturedFrame,
+    scan: PixelRect,
+    require_card_face: bool,
+    complete_icon_overlay: bool,
 ) -> Result<Option<PixelRect>, HaloDetectionError> {
     validate_frame(frame)?;
     validate_bounds(frame, scan)?;
@@ -771,13 +809,14 @@ fn find_solid_outline(
     }
 
     let last_rail_row = (scan.y..bottom).rev().find(|&row| paired_rails(row));
+    let icon_envelope = if complete_icon_overlay { TOOLBAR_ICON_ENVELOPE } else { TOOLBAR_EDGE_OCCLUSION };
 
 
     for y in (scan.y..bottom).rev() {
         let toolbar_overlap = require_card_face && (TOOLBAR_TOP..TABLEAU_OUTLINE_BOTTOM).contains(&y);
         let known_icon_occlusion = toolbar_overlap && x == 1_230 && scan.width == CARD_WIDTH
-            && bottom >= TOOLBAR_EDGE_OCCLUSION.bottom()
-            && (TOOLBAR_EDGE_OCCLUSION.y..TOOLBAR_EDGE_OCCLUSION.bottom()).contains(&y)
+            && bottom >= icon_envelope.bottom()
+            && (icon_envelope.y..icon_envelope.bottom()).contains(&y)
             && count_pixels(frame, TOOLBAR_ICON_SUPPORT, is_toolbar_undo_red) as usize >= MINIMUM_CORNER_CHANGE;
         let lower_edge = |rgb| is_edge_gold(rgb)
             || (toolbar_overlap && is_rail_gold(rgb));
@@ -787,6 +826,8 @@ fn find_solid_outline(
             || !pixel_rgb(frame, x + scan.width / 2, y).is_some_and(lower_edge)
             || last_rail_row.is_some_and(|row| row >= y + 10)
             || (toolbar_overlap && last_rail_row.is_none_or(|row| row.abs_diff(y) > 10))
+            || (complete_icon_overlay && (y >= TOOLBAR_EDGE_OCCLUSION.y || !known_icon_occlusion
+                || last_rail_row.is_none_or(|row| row < icon_envelope.y || row >= y)))
         {
             continue;
         }
@@ -796,13 +837,13 @@ fn find_solid_outline(
         let closed_lower_edge = (x + 18..right - 18).all(|xx| {
 
 
-            if known_icon_occlusion && TOOLBAR_EDGE_OCCLUSION.contains(PixelPoint::new(xx as i32, y as i32)) {
+            if known_icon_occlusion && icon_envelope.contains(PixelPoint::new(xx as i32, y as i32)) {
                 return true;
             }
 
             visible_edge_pixels += 1;
             pixel_rgb(frame, xx, y).is_some_and(|rgb| lower_edge(rgb)
-                || (known_icon_occlusion
+                || (!complete_icon_overlay && known_icon_occlusion
                     && TOOLBAR_SHADOW_EDGE_TAIL.contains(PixelPoint::new(xx as i32, y as i32))
                     && is_toolbar_shadow_gold(rgb))
                 || (bracketed_column_four_shadow
@@ -812,7 +853,7 @@ fn find_solid_outline(
 
 
         if !closed_lower_edge || visible_edge_pixels < 48
-            || (known_icon_occlusion && visible_edge_pixels != 68)
+            || (!complete_icon_overlay && known_icon_occlusion && visible_edge_pixels != 68)
         {
             continue;
         }
@@ -843,6 +884,7 @@ fn find_solid_outline(
 
 
         if !(180..=MAXIMUM_SOURCE_HEIGHT).contains(&height) || top == scan.y
+            || (complete_icon_overlay && height > MAXIMUM_ICON_OVERLAY_SOURCE_HEIGHT)
             || matched_rows * 100 < (height - 10) * 85 {
             continue;
         }
@@ -3330,8 +3372,8 @@ mod tests {
     }
 
 
-    /// The correction is fixed to one complete native column and one lower
-    /// edge row. A shifted copy is explicitly synthetic and supplies no new
+    /// The correction is fixed to one complete native column and the measured
+    /// Hint-shadow band. A shifted copy is synthetic and supplies no new
     /// coordinates, colour bounds, input classes or toolbar proof authority.
     #[test]
     fn hint_shadow_does_not_follow_shifted_columns_rows_or_incomplete_sources() {
@@ -7447,6 +7489,191 @@ mod tests {
         for number in 1..=88 {
             assert_eq!(is_gameplay_scene(&fixture(number)).unwrap(), accepted.contains(&number), "K{number:02}");
         }
+    }
+
+
+    /// The native Hint-shadow edge moves with tableau spacing. Its new source
+    /// remains one block, with every edge sample positively classified and an
+    /// upper-card click safely outside the toolbar.
+    #[test]
+    fn hint_shadow_moving_lower_edge_accepts_native_long_run() {
+        let frame = fixture(89);
+        assert!(is_gameplay_scene(&frame).unwrap());
+        assert_eq!(pixel_rgb(&frame, 966, 985), Some([96, 87, 43]));
+        assert!(!is_rail_gold([96, 87, 43]));
+        assert!(is_toolbar_shadow_gold([96, 87, 43]));
+        assert_eq!(find_solid_card_source(&frame, PixelRect::new(894, 332, 132, 666)).unwrap(),
+            Some(PixelRect::new(894, 372, 132, 614)));
+        let planned = action(&frame);
+        assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
+            column: 4, top: 372, bottom: 986,
+        }));
+        assert_eq!(planned.operation(), InputOperation::Click(PixelPoint::new(960, 412)));
+        assert_eq!(planned.effect_bounds().bottom(), TOOLBAR_TOP);
+        assert!(!completion_evidence(&frame).unwrap().complete_candidate);
+    }
+
+
+    /// The larger measured band never omits dark, neutral, white or cool pixels,
+    /// nor extends the shadow predicate to the neighbouring lower-edge sample.
+    #[test]
+    fn hint_shadow_moving_edge_requires_positive_in_band_samples() {
+        let native = fixture(89);
+        let scan = PixelRect::new(894, 332, 132, 666);
+
+
+        for rgb in [[0, 0, 0], [128, 128, 128], [255, 255, 255],
+            [70, 140, 70], [60, 80, 170], [89, 70, 30]]
+        {
+            let mut changed = native.clone();
+            paint(&mut changed, PixelRect::new(966, 985, 1, 1), rgb);
+            assert_eq!(find_solid_card_source(&changed, scan).unwrap(), None, "{rgb:?}");
+            assert_eq!(analyse(&changed).unwrap().prediction, PredictedAction::NoHighlight);
+        }
+        let mut outside = native;
+        paint(&mut outside, PixelRect::new(967, 985, 1, 1), [96, 87, 43]);
+        assert_eq!(find_solid_card_source(&outside, scan).unwrap(), None,
+            "the adjacent sample remains ordinary gold, outside the measured band");
+    }
+
+
+    /// Each complete exterior bracket remains mandatory independently of the
+    /// valid card and Hint-shadow detail. A shadow cannot bridge an unknown rail.
+    #[test]
+    fn hint_shadow_long_run_preserves_ordinary_rail_brackets() {
+        let native = fixture(89);
+        let scan = PixelRect::new(894, 332, 132, 666);
+
+
+        for y in [949, 950, 963, 964] {
+
+
+            for (x, width) in [(885, 9), (1026, 10)] {
+                let mut changed = native.clone();
+                paint(&mut changed, PixelRect::new(x, y, width, 1), [0, 0, 0]);
+                assert_eq!(find_solid_card_source(&changed, scan).unwrap(), None, "side{x}, row{y}");
+            }
+        }
+    }
+
+
+    /// Neither Hint artwork nor a dashed landing marker supplies the closed
+    /// source top, independent paper, complete lower edge or scan termination.
+    #[test]
+    fn hint_shadow_long_run_rejects_incomplete_and_dashed_sources() {
+        let native = fixture(89);
+        let scan = PixelRect::new(894, 332, 132, 666);
+
+
+        for bounds in [PixelRect::new(912, 362, 96, 11),
+            PixelRect::new(912, 911, 96, 12), PixelRect::new(935, 978, 1, 10)]
+        {
+            let mut changed = native.clone();
+            paint(&mut changed, bounds, [0, 0, 0]);
+            assert_eq!(find_solid_card_source(&changed, scan).unwrap(), None, "{bounds:?}");
+        }
+        assert_eq!(find_solid_card_source(&native, PixelRect::new(390, 332, 132, 666)).unwrap(), None,
+            "the native column-one dark dashed destination is not a source");
+        assert_eq!(find_solid_card_source(&native, PixelRect::new(894, 332, 132, 654)).unwrap(), None,
+            "clipping the lower rail removes the complete scan context");
+        let mut continuing = native;
+        paint(&mut continuing, PixelRect::new(885, 997, 9, 1), [220, 180, 100]);
+        assert_eq!(find_solid_card_source(&continuing, scan).unwrap(), None,
+            "an unterminated exterior rail cannot become a closed block");
+    }
+
+
+    /// Native K94's single 2-clubs source reaches the Undo All icon. The
+    /// unoccluded outline authorises one upper-card click, not its dashed guide.
+    #[test]
+    fn undo_all_overlay_accepts_native_single_card_source() {
+        let frame = fixture(94);
+        assert!(is_gameplay_scene(&frame).unwrap());
+        assert_eq!(count_pixels(&frame, TOOLBAR_ICON_SUPPORT, is_toolbar_undo_red), 69);
+        assert_eq!(find_solid_card_source(&frame, PixelRect::new(1_230, 332, CARD_WIDTH, 666)).unwrap(),
+            Some(PixelRect::new(1_230, 790, CARD_WIDTH, 189)));
+        let planned = action(&frame);
+        assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
+            column: 6, top: 790, bottom: 979,
+        }));
+        assert_eq!(planned.operation(), InputOperation::Click(PixelPoint::new(1_296, 830)));
+        assert_eq!(planned.effect_bounds().bottom(), TOOLBAR_TOP);
+        assert_eq!(find_solid_card_source(&frame, PixelRect::new(1_398, 102, CARD_WIDTH, 195)).unwrap(), None,
+            "the native dashed foundation-four recipient never supplies source authority");
+        assert!(!completion_evidence(&frame).unwrap().complete_candidate);
+    }
+
+
+    /// Missing visible gold, icon, source top, connected rails or card paper
+    /// refuses K94. The internal stripe above its terminated rails cannot close
+    /// a source whose genuine visible lower border has been erased.
+    #[test]
+    fn undo_all_overlay_requires_uncovered_border_icon_top_rails_and_paper() {
+        let native = fixture(94);
+        let scan = PixelRect::new(1_230, 332, CARD_WIDTH, 666);
+
+
+        for bounds in [
+            PixelRect::new(1_248, 976, 1, 3),
+            PixelRect::new(1_299, 976, 1, 3),
+            PixelRect::new(1_341, 976, 1, 3),
+            PixelRect::new(1_343, 976, 1, 3),
+            PixelRect::new(1_296, 976, 1, 3),
+            TOOLBAR_ICON_SUPPORT,
+            PixelRect::new(1_248, 780, 96, 11),
+            PixelRect::new(1_221, 845, 9, 24),
+            PixelRect::new(1_362, 845, 10, 24),
+            PixelRect::new(1_248, 911, 96, 12),
+        ] {
+            let mut changed = native.clone();
+            paint(&mut changed, bounds, [0, 0, 0]);
+            assert_eq!(find_solid_card_source(&changed, scan).unwrap(), None, "{bounds:?}");
+            assert_eq!(analyse(&changed).unwrap().prediction, PredictedAction::NoHighlight);
+        }
+    }
+
+
+    /// The overlay cannot change the checked native scan, invent termination,
+    /// follow an icon to another slot or turn a dimmed landing marker into a card.
+    #[test]
+    fn undo_all_overlay_keeps_native_scan_and_dashed_destination_guards() {
+        let native = fixture(94);
+        let scan = PixelRect::new(1_230, 332, CARD_WIDTH, 666);
+
+
+        for bottom in 970..TOOLBAR_EDGE_OCCLUSION.bottom() {
+            assert_eq!(find_solid_card_source(&native,
+                PixelRect::new(1_230, 332, CARD_WIDTH, bottom - 332)).unwrap(), None,
+                "the complete fixed overlay envelope must remain inside the scan at row{bottom}");
+        }
+
+        let mut continuing = native.clone();
+        paint(&mut continuing, PixelRect::new(1_221, 997, 9, 1), [220, 180, 100]);
+        assert_eq!(find_solid_card_source(&continuing, scan).unwrap(), None);
+        let mut dark_card = native.clone();
+        paint(&mut dark_card, PixelRect::new(1_248, 800, 96, TOOLBAR_TOP - 800), [0, 0, 0]);
+        assert_eq!(find_solid_card_source(&dark_card, scan).unwrap(), None);
+        let mut floating = native.clone();
+        paint(&mut floating, PixelRect::new(1_218, 780, 156, TABLEAU_OUTLINE_BOTTOM - 780), [12, 82, 45]);
+        paint(&mut floating, PixelRect::new(1_248, 978, 96, 1), [220, 180, 100]);
+        copy_region(&native, &mut floating, TOOLBAR_ICON_SUPPORT,
+            PixelPoint::new(TOOLBAR_ICON_SUPPORT.x as i32, TOOLBAR_ICON_SUPPORT.y as i32));
+        assert_eq!(find_solid_card_source(&floating, scan).unwrap(), None);
+        let mut dashed = native.clone();
+        paint(&mut dashed, PixelRect::new(1_218, 780, 156, TABLEAU_OUTLINE_BOTTOM - 780), [12, 82, 45]);
+        copy_region(&native, &mut dashed, PixelRect::new(1_398, UPPER_Y, CARD_WIDTH, CARD_HEIGHT),
+            PixelPoint::new(1_230, 795));
+        assert_eq!(find_solid_card_source(&dashed, scan).unwrap(), None);
+        let mut moved_icon = native.clone();
+        copy_region(&native, &mut moved_icon, PixelRect::new(1_218, 780, 156, 218),
+            PixelPoint::new(1_050, 780));
+        assert_eq!(find_solid_card_source(&moved_icon, PixelRect::new(1_062, 332, CARD_WIDTH, 666)).unwrap(), None,
+            "the fixed Undo All mask cannot follow copied artwork into column five");
+        assert_eq!(find_solid_card_source(&native, PixelRect::new(1_900, 332, CARD_WIDTH, 666)),
+            Err(HaloDetectionError::BoundsOutsideFrame));
+        let mut malformed = native;
+        malformed.pixels.truncate(4);
+        assert_eq!(find_solid_card_source(&malformed, scan), Err(HaloDetectionError::InvalidFrameLayout));
     }
 
 }

@@ -53,7 +53,8 @@ alone does not prove a card is currently uncovered or legal to click.
 
 ## Effect and board state
 
-A normal action uses a validated frame, one QMP mouse click, the configured
+A normal action uses a validated frame, one D key press for Move/Recycle or
+one QMP mouse click for a card/pile, the configured
 settling delay (defaults: Move 1000 ms, card/pile 2000 ms), and a fresh result frame.
 The verified result is reused for the next scan.
 There is no extra screenshot immediately before each subsequent click.
@@ -190,3 +191,11 @@ with diagnostics rather than infer a click.
 Capture still uses a temporary QMP PNG, RGBA decoding and normal best-effort
 file removal. File-free automatic capture, rank/OCR reconstruction, independent
 search and Undo All replay remain separate requirements.
+
+## Confirmed MOVE/Recycle shortcut — candidate 10
+
+Charlie confirms D performs both MOVE and exhausted-pile Recycle. The same fresh
+four-pixel MOVE HALO probe authorises the typed PressDrawKey operation. No extra
+state discriminator or pointer movement is required. It sends one down/up key
+sequence; all other Pyramid targets remain single clicks. Settling, effect,
+consumed-card, repeat, board-completion and redeal policies are unchanged.

@@ -51,6 +51,73 @@ use crate::parameters::{
 const PYRAMID_OBSERVATION_LIMIT: usize = 6;
 
 
+/// Delayed input-free TriPeaks observations before and after one Solver refresh.
+const TRIPEAKS_HALO_REOBSERVATION_LIMIT: usize = 3;
+
+
+/// Next recovery operation after a fresh TriPeaks observation has no HALO.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TriPeaksHaloRecoveryStep {
+    /// Wait for a new input-free observation within the current bounded budget.
+    Observe {
+        /// One-based delayed observation number.
+        delayed_round: usize,
+        /// Whether the one Solver operation has already been reserved or sent.
+        after_solver: bool,
+    },
+    /// Reserve the context's one Solver refresh on recognised gameplay only.
+    RefreshSolver,
+    /// Stop without another input after the current observation budget is spent.
+    Stop,
+}
+
+
+/// Bounded observation and one-refresh authority for an unresolved TriPeaks action.
+#[derive(Default)]
+struct TriPeaksHaloRecovery {
+    /// Input-free captures scheduled since the action or its Solver operation.
+    delayed_observations: usize,
+    /// A reserved refresh is consumed even if input delivery becomes uncertain.
+    solver_reserved: bool,
+}
+
+
+impl TriPeaksHaloRecovery {
+
+
+    /// Start a new-board observation context after its authorised Solver input.
+    fn after_solver() -> Self {
+        Self {
+            delayed_observations: 0,
+            solver_reserved: true,
+        }
+    }
+
+
+    /// Schedule observations first, then at most one positively gated refresh.
+    fn next_missing_halo(&mut self, gameplay_scene: bool) -> TriPeaksHaloRecoveryStep {
+
+
+        if self.delayed_observations < TRIPEAKS_HALO_REOBSERVATION_LIMIT {
+            self.delayed_observations += 1;
+            return TriPeaksHaloRecoveryStep::Observe {
+                delayed_round: self.delayed_observations,
+                after_solver: self.solver_reserved,
+            };
+        }
+
+
+        if !self.solver_reserved && gameplay_scene {
+            self.solver_reserved = true;
+            self.delayed_observations = 0;
+            TriPeaksHaloRecoveryStep::RefreshSolver
+        } else {
+            TriPeaksHaloRecoveryStep::Stop
+        }
+    }
+}
+
+
 /// UI-visible lifecycle state of the background QMP worker.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum WorkerState {
@@ -966,6 +1033,19 @@ fn run_execute_steps(
         );
     }
 
+
+    if scan_state.mode() == GameMode::TriPeaks {
+        send_log(
+            event_tx,
+            format!(
+                "TriPeaks timing snapshot: Draw={} ms, tableau={} ms, missing-HALO reobserve={} ms. Missing HALOs receive {TRIPEAKS_HALO_REOBSERVATION_LIMIT} delayed input-free observations before at most one Solver refresh, then {TRIPEAKS_HALO_REOBSERVATION_LIMIT} further delayed observations; the gameplay action is never retried.",
+                settings.animation_delays().draw.as_millis(),
+                settings.animation_delays().tableau.as_millis(),
+                settings.animation_delays().tripeaks_reobserve.as_millis(),
+            ),
+        );
+    }
+
     let connect_started = Instant::now();
 
 
@@ -1868,13 +1948,14 @@ fn execute_guarded_action(
     let mut board_changed_pixels = 0usize;
     let mut missing_halo_phase = 0u8;
     let mut solver_recovery_clicks = 0usize;
+    let mut halo_recovery = TriPeaksHaloRecovery::default();
 
 
     let (after, observation, changed_pixels, board_completed, series_complete) = loop {
         send_log(
             event_tx,
             format!(
-                "Post-action observation round {observation_round}: capturing one fresh frame; read-only retries continue until a verified target or STOP."
+                "Post-action observation round {observation_round}: capturing one fresh frame; missing-HALO recovery is bounded and never retries the gameplay action."
             ),
         );
         let post_action_scan_state = *scan_state;
@@ -2204,6 +2285,8 @@ fn execute_guarded_action(
                         ));
                     }
                     profile.input_wall += input_started.elapsed();
+                    halo_recovery = TriPeaksHaloRecovery::after_solver();
+                    missing_halo_phase = 2;
                     send_log(
                         event_tx,
                         format!(
@@ -2238,194 +2321,175 @@ fn execute_guarded_action(
             profile.validation_effect += verification_started.elapsed();
 
 
-            if !recognised_gameplay && missing_halo_phase == 1 {
-                missing_halo_phase = 2;
-                send_log(
-                    event_tx,
-                    format!(
-                        "The board has left the gameplay scene after an all-row HALO miss; allowing {} ms without screendumps before one settled transition capture.",
-                        BOARD_TRANSITION_REOBSERVE_DELAY.as_millis(),
-                    ),
-                );
+            match halo_recovery.next_missing_halo(recognised_gameplay) {
+                TriPeaksHaloRecoveryStep::Observe {
+                    delayed_round,
+                    after_solver,
+                } => {
+                    missing_halo_phase = if after_solver
+                        || (!recognised_gameplay && delayed_round > 1)
+                    {
+                        2
+                    } else {
+                        1
+                    };
+                    let recovery_delay = if !recognised_gameplay && delayed_round == 2 {
+                        BOARD_TRANSITION_REOBSERVE_DELAY
+                    } else {
+                        settings.animation_delays().tripeaks_reobserve
+                    };
+                    send_log(
+                        event_tx,
+                        format!(
+                            "TriPeaks missing-HALO re-observation {delayed_round}/{TRIPEAKS_HALO_REOBSERVATION_LIMIT} {}: scene={recognised_gameplay}, exposed rows={}, current scan rows={}..{}; waiting {} ms before a fresh input-free capture. No Draw, card or further Solver input is authorised by this wait.",
+                            if after_solver { "after Solver" } else { "before Solver" },
+                            !no_rows_remain,
+                            scan_state.row_upper(),
+                            scan_state.row_lower(),
+                            recovery_delay.as_millis(),
+                        ),
+                    );
 
 
-                match cancellable_wait(BOARD_TRANSITION_REOBSERVE_DELAY, cancel_requested) {
-                    Ok(waited) => profile.intentional_wait += waited,
-                    Err(waited) => {
-                        profile.intentional_wait += waited;
+                    match cancellable_wait(recovery_delay, cancel_requested) {
+                        Ok(waited) => profile.intentional_wait += waited,
+                        Err(waited) => {
+                            profile.intentional_wait += waited;
+                            return Err(action_failure(
+                                action_started,
+                                profile,
+                                WorkerState::Uncertain,
+                                "STOP was requested during TriPeaks input-free HALO recovery; no gameplay input was retried."
+                                    .to_owned(),
+                                no_highlight_observation,
+                                FailureFramePhase::PostAction,
+                            ));
+                        }
+                    }
+                }
+                TriPeaksHaloRecoveryStep::RefreshSolver => {
+
+
+                    if cancel_requested.load(Ordering::Acquire) {
                         return Err(action_failure(
                             action_started,
                             profile,
                             WorkerState::Ready,
-                            "STOP was requested during the board-transition wait.".to_owned(),
+                            "STOP was requested before the Solver recovery click; the card action was not retried."
+                                .to_owned(),
                             no_highlight_observation,
                             FailureFramePhase::PostAction,
                         ));
                     }
-                }
-                observation_round = observation_round.saturating_add(1);
-                continue;
-            }
+
+                    let reprobe_started = Instant::now();
+                    let reprobe = qmp.probe().map_err(|error| {
+                        format!("Post-action Solver recovery QMP probe failed: {error}")
+                    });
+                    profile.validation_effect += reprobe_started.elapsed();
 
 
-            if recognised_gameplay && missing_halo_phase == 1 {
+                    let reprobe = match reprobe {
+                        Ok(probe) => probe,
+                        Err(error) => {
+                            return Err(action_failure(
+                                action_started,
+                                profile,
+                                WorkerState::Error,
+                                error,
+                                no_highlight_observation,
+                                FailureFramePhase::PostAction,
+                            ));
+                        }
+                    };
 
 
-                if cancel_requested.load(Ordering::Acquire) {
-                    return Err(action_failure(
-                        action_started,
-                        profile,
-                        WorkerState::Ready,
-                        "STOP was requested before the Solver recovery click; the card action was not retried."
-                            .to_owned(),
-                        no_highlight_observation,
-                        FailureFramePhase::PostAction,
-                    ));
-                }
-
-                let reprobe_started = Instant::now();
-                let reprobe = qmp.probe().map_err(|error| {
-                    format!("Post-action Solver recovery QMP probe failed: {error}")
-                });
-                profile.validation_effect += reprobe_started.elapsed();
-
-
-                let reprobe = match reprobe {
-                    Ok(probe) => probe,
-                    Err(error) => {
+                    if let Err(error) = validate_probe(&reprobe) {
                         return Err(action_failure(
                             action_started,
                             profile,
-                            WorkerState::Error,
-                            error,
+                            WorkerState::Ready,
+                            format!("Post-action Solver recovery click refused: {error}"),
                             no_highlight_observation,
                             FailureFramePhase::PostAction,
                         ));
                     }
-                };
+
+                    send_state(event_tx, WorkerState::Acting);
+                    send_status(event_tx, "Click Solver".to_owned());
+                    let input_started = Instant::now();
 
 
-                if let Err(error) = validate_probe(&reprobe) {
-                    return Err(action_failure(
-                        action_started,
-                        profile,
-                        WorkerState::Ready,
-                        format!("Post-action Solver recovery click refused: {error}"),
-                        no_highlight_observation,
-                        FailureFramePhase::PostAction,
-                    ));
-                }
-
-                send_state(event_tx, WorkerState::Acting);
-                send_status(event_tx, "Click Solver".to_owned());
-                let input_started = Instant::now();
-
-
-                if let Err(error) = click_shared_solver(qmp, cancel_requested) {
+                    if let Err(error) = click_shared_solver(qmp, cancel_requested) {
+                        profile.input_wall += input_started.elapsed();
+                        return Err(action_failure(
+                            action_started,
+                            profile,
+                            WorkerState::Uncertain,
+                            format!(
+                                "Post-action Solver recovery click is uncertain: {error}. The card action was not retried."
+                            ),
+                            no_highlight_observation,
+                            FailureFramePhase::PostAction,
+                        ));
+                    }
                     profile.input_wall += input_started.elapsed();
+                    solver_recovery_clicks = solver_recovery_clicks.saturating_add(1);
+                    missing_halo_phase = 2;
+                    send_log(
+                        event_tx,
+                        format!(
+                            "No HALO remained after {TRIPEAKS_HALO_REOBSERVATION_LIMIT} delayed input-free observations; the context's one Solver recovery click {solver_recovery_clicks} was sent at guest pixel ({}, {}) with a {} ms hold. Waiting {} ms before a fresh all-row HALO and card-presence capture; at most {TRIPEAKS_HALO_REOBSERVATION_LIMIT} further delayed observations may follow.",
+                            SHARED_SOLVER_CONTROL.click_point.x,
+                            SHARED_SOLVER_CONTROL.click_point.y,
+                            SOLVER_MOUSE_HOLD.as_millis(),
+                            settings.animation_delays().tripeaks_reobserve.as_millis(),
+                        ),
+                    );
+                    send_state(event_tx, WorkerState::Verifying);
+                    send_status(
+                        event_tx,
+                        format!(
+                            "Waiting {} ms for Solver HALO",
+                            settings.animation_delays().tripeaks_reobserve.as_millis(),
+                        ),
+                    );
+
+
+                    match cancellable_wait(
+                        settings.animation_delays().tripeaks_reobserve,
+                        cancel_requested,
+                    ) {
+                        Ok(waited) => profile.intentional_wait += waited,
+                        Err(waited) => {
+                            profile.intentional_wait += waited;
+                            return Err(action_failure(
+                                action_started,
+                                profile,
+                                WorkerState::Ready,
+                                "STOP was requested while waiting after the Solver recovery click; the card action was not retried."
+                                    .to_owned(),
+                                no_highlight_observation,
+                                FailureFramePhase::PostAction,
+                            ));
+                        }
+                    }
+                }
+                TriPeaksHaloRecoveryStep::Stop => {
                     return Err(action_failure(
                         action_started,
                         profile,
                         WorkerState::Uncertain,
                         format!(
-                            "Post-action Solver recovery click is uncertain: {error}. The card action was not retried."
+                            "TriPeaks missing-HALO recovery stopped after {TRIPEAKS_HALO_REOBSERVATION_LIMIT} delayed observations {}; recognised gameplay={recognised_gameplay}, exposed rows={}, current scan rows={}..{}, Solver recovery clicks={solver_recovery_clicks}. No gameplay or Solver input was retried; the latest frame is retained for inspection.",
+                            if halo_recovery.solver_reserved { "after the one Solver refresh" } else { "on an unsupported scene" },
+                            !no_rows_remain,
+                            scan_state.row_upper(),
+                            scan_state.row_lower(),
                         ),
                         no_highlight_observation,
                         FailureFramePhase::PostAction,
                     ));
-                }
-                profile.input_wall += input_started.elapsed();
-                solver_recovery_clicks = solver_recovery_clicks.saturating_add(1);
-                missing_halo_phase = 2;
-                send_log(
-                    event_tx,
-                    format!(
-                        "No HALO remained after a fresh retry; Solver recovery click {solver_recovery_clicks} was sent at guest pixel ({}, {}) with a {} ms hold. Waiting {} ms before repeating the all-row HALO and card-presence checks.",
-                        SHARED_SOLVER_CONTROL.click_point.x,
-                        SHARED_SOLVER_CONTROL.click_point.y,
-                        SOLVER_MOUSE_HOLD.as_millis(),
-                        POST_GAME_STAGE_DELAY.as_millis(),
-                    ),
-                );
-                send_state(event_tx, WorkerState::Verifying);
-                send_status(event_tx, "Waiting 1000 ms for Solver HALO".to_owned());
-
-
-                match cancellable_wait(POST_GAME_STAGE_DELAY, cancel_requested) {
-                    Ok(waited) => profile.intentional_wait += waited,
-                    Err(waited) => {
-                        profile.intentional_wait += waited;
-                        return Err(action_failure(
-                            action_started,
-                            profile,
-                            WorkerState::Ready,
-                            "STOP was requested while waiting after the Solver recovery click; the card action was not retried."
-                                .to_owned(),
-                            no_highlight_observation,
-                            FailureFramePhase::PostAction,
-                        ));
-                    }
-                }
-            } else {
-
-
-                if missing_halo_phase == 2 {
-
-
-                    send_log(
-                        event_tx,
-
-
-                        if no_rows_remain {
-                            format!(
-                                "No HALO or exposed card was found after Solver, but completion evidence is not yet settled; repeating the transition capture in {} ms.",
-                                BOARD_TRANSITION_REOBSERVE_DELAY.as_millis(),
-                            )
-                        } else {
-                            format!(
-                                "No HALO followed the Solver recovery click, but exposed cards remain within rows {}..{}; board completion is forbidden. Restarting recovery in {} ms.",
-                                scan_state.row_upper(),
-                                scan_state.row_lower(),
-                                NO_HIGHLIGHT_REOBSERVE_DELAY.as_millis(),
-                            )
-                        },
-                    );
-
-
-                    missing_halo_phase = if no_rows_remain { 2 } else { 0 };
-                } else {
-                    send_log(
-                        event_tx,
-                        format!(
-                            "WAITING: no stable calibrated target is available after post-action round {observation_round}; retrying one fresh capture in {} ms before using Solver. Press STOP to end the loop; the card action will not be retried.",
-                            NO_HIGHLIGHT_REOBSERVE_DELAY.as_millis(),
-                        ),
-                    );
-                    missing_halo_phase = 1;
-                }
-
-
-                let recovery_delay = if missing_halo_phase == 2 && no_rows_remain {
-                    BOARD_TRANSITION_REOBSERVE_DELAY
-                } else {
-                    NO_HIGHLIGHT_REOBSERVE_DELAY
-                };
-
-
-                match cancellable_wait(recovery_delay, cancel_requested) {
-                    Ok(waited) => profile.intentional_wait += waited,
-                    Err(waited) => {
-                        profile.intentional_wait += waited;
-                        return Err(action_failure(
-                            action_started,
-                            profile,
-                            WorkerState::Uncertain,
-                            "STOP was requested during post-action HALO recovery; the card action was not retried."
-                                .to_owned(),
-                            no_highlight_observation,
-                            FailureFramePhase::PostAction,
-                        ));
-                    }
                 }
             }
             observation_round = observation_round.saturating_add(1);
@@ -3210,6 +3274,9 @@ fn format_prediction_target(prediction: PredictedAction) -> String {
             (ActionTarget::Pyramid(kind), InputOperation::Click(point)) => {
                 format!("CLICK Pyramid {kind:?} at ({}, {})", point.x, point.y)
             }
+            (ActionTarget::Pyramid(pyramid::PyramidTargetKind::Move), InputOperation::PressDrawKey) => {
+                "Pyramid MOVE/Recycle via qcode D; pointer unchanged".to_owned()
+            }
             (ActionTarget::Pyramid(kind), InputOperation::PressDrawKey) => {
                 format!("INVALID Pyramid {kind:?} key action")
             }
@@ -3243,6 +3310,9 @@ fn format_step_plan(plan: StepPlan) -> Result<String, String> {
         ),
         (ActionTarget::Klondike(crate::klondike::KlondikeTarget::Draw), InputOperation::PressDrawKey) => {
             "Stable plan: Klondike Draw via qcode D; pointer unchanged; commands=2, events=2.".to_owned()
+        }
+        (ActionTarget::Pyramid(pyramid::PyramidTargetKind::Move), InputOperation::PressDrawKey) => {
+            "Stable plan: Pyramid MOVE/Recycle via qcode D; pointer unchanged; commands=2, events=2.".to_owned()
         }
         (target, InputOperation::Click(click_point)) => {
             let qmp = pixel_point_to_qmp(click_point, NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT)
@@ -3454,6 +3524,9 @@ fn format_action_status(prediction: PredictedAction) -> String {
             }
             (ActionTarget::Pyramid(kind), InputOperation::Click(_)) => {
                 format!("Click Pyramid {kind:?}")
+            }
+            (ActionTarget::Pyramid(pyramid::PyramidTargetKind::Move), InputOperation::PressDrawKey) => {
+                "MOVE/Recycle — Pyramid via D".to_owned()
             }
             (ActionTarget::Pyramid(kind), InputOperation::PressDrawKey) => {
                 format!("Invalid Pyramid {kind:?} key action")

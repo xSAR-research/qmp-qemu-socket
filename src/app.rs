@@ -32,14 +32,15 @@ use crate::parameters::{
     LEVEL_UP_APPEAR_DELAY, MAX_LOG_LINES, MAXIMUM_ANIMATION_SETTLE_DELAY_MS,
     MIN_PREVIEW_VIEWPORT_HEIGHT_POINTS, MINIMUM_ANIMATION_SETTLE_DELAY_MS,
     MINIMUM_DRAW_CHANGED_PIXELS, MINIMUM_TABLEAU_CHANGED_PIXELS, MOUSE_HOLD,
-    MULTI_STEP_INPUT_ENABLED, NO_HIGHLIGHT_REOBSERVE_DELAY, NOMINAL_FRAME_HEIGHT,
+    MULTI_STEP_INPUT_ENABLED, NOMINAL_FRAME_HEIGHT,
     NOMINAL_FRAME_WIDTH, OUTPUT_PANEL_HEIGHT, POINTER_SETTLE_DELAY, POST_GAME_MAX_CLICK_ATTEMPTS,
     POST_GAME_MAX_OBSERVATION_ROUNDS, POST_GAME_STAGE_DELAY, POST_GAME_TARGETS,
     PREVIEW_FOOTER_RESERVE_POINTS, PREVIEW_SCROLLBAR_ALLOWANCE_POINTS,
     PYRAMID_CARD_SETTLE_DELAY_MS, PYRAMID_MOVE_SETTLE_DELAY_MS, PYRAMID_REOBSERVE_DELAY_MS,
     RELEASE_LABEL, SCORE_SKIP_MAX_CLICK_ATTEMPTS, SHARED_TOOLBAR_CONTROLS,
     SNAPSHOT_LABEL_MAX_CHARS, STEP_ONCE_ACTIONS, STEP_ONCE_INPUT_ENABLED,
-    TABLEAU_ANIMATION_SETTLE_DELAY_MS, UNBOUNDED_MULTI_STEP_ACTIONS, VISIBLE_LOG_ROLLOVER_GAMES,
+    TABLEAU_ANIMATION_SETTLE_DELAY_MS, TRIPEAKS_REOBSERVE_DELAY_MS,
+    UNBOUNDED_MULTI_STEP_ACTIONS, VISIBLE_LOG_ROLLOVER_GAMES,
 };
 use crate::parameters::{AnimationSettleDelays, StepRunSettings};
 use crate::parameters::{default_qmp_socket_path, session_log_directory, snapshot_directory};
@@ -59,6 +60,14 @@ const STATE_RED: Color32 = Color32::from_rgb(172, 35, 38);
 
 /// Sub-pixel allowance that corrects f32 round-trip drift at exact pixel boundaries.
 const PREVIEW_MAPPING_FLOAT_EPSILON: f32 = 0.0005;
+
+
+/// Smallest detailed-output font size in logical points.
+const MINIMUM_OUTPUT_TEXT_SIZE_POINTS: f32 = 10.0;
+
+
+/// Largest detailed-output font size in logical points.
+const MAXIMUM_OUTPUT_TEXT_SIZE_POINTS: f32 = 24.0;
 
 
 /// UI ownership of a dispatched run until worker completion or cancellation arrives.
@@ -96,6 +105,8 @@ pub struct QmpQemuSocketApp {
     log_lines: Vec<String>,
     /// Whether the detailed-output body occupied space in the previous render.
     output_expanded: bool,
+    /// Session-only detailed-output font size, resolved from its style when first opened.
+    output_text_size_points: Option<f32>,
     /// Complete private session history, absent after creation or write failure.
     session_log: Option<SessionLog>,
     /// Successfully restarted games counted for visible-output rollover.
@@ -148,6 +159,8 @@ pub struct QmpQemuSocketApp {
     draw_animation_settle_ms: u64,
     /// TriPeaks tableau settling delay copied into the next run settings.
     tableau_animation_settle_ms: u64,
+    /// TriPeaks missing-HALO recapture delay copied into the next run settings.
+    tripeaks_reobserve_ms: u64,
     /// Redeal settling delay copied into the next run settings.
     board_redeal_settle_ms: u64,
     /// Pyramid Move/Recycle settling delay copied into the next run settings.
@@ -210,6 +223,7 @@ impl QmpQemuSocketApp {
             qmp_socket_path,
             log_lines: Vec::new(),
             output_expanded: false,
+            output_text_size_points: None,
             session_log,
             completed_games: 0,
             started_at,
@@ -236,6 +250,7 @@ impl QmpQemuSocketApp {
             diagnostic_preview: false,
             draw_animation_settle_ms: DRAW_ANIMATION_SETTLE_DELAY_MS,
             tableau_animation_settle_ms: TABLEAU_ANIMATION_SETTLE_DELAY_MS,
+            tripeaks_reobserve_ms: TRIPEAKS_REOBSERVE_DELAY_MS,
             board_redeal_settle_ms: BOARD_REDEAL_SETTLE_DELAY_MS,
             pyramid_move_settle_ms: PYRAMID_MOVE_SETTLE_DELAY_MS,
             pyramid_card_settle_ms: PYRAMID_CARD_SETTLE_DELAY_MS,
@@ -858,6 +873,7 @@ impl QmpQemuSocketApp {
             self.tableau_animation_settle_ms,
             self.board_redeal_settle_ms,
         )
+        .with_tripeaks_reobserve_millis(self.tripeaks_reobserve_ms)
         .with_pyramid_millis(
             self.pyramid_move_settle_ms,
             self.pyramid_card_settle_ms,
@@ -1298,6 +1314,12 @@ impl QmpQemuSocketApp {
         let output_response = egui::CollapsingHeader::new("Detailed output")
             .default_open(false)
             .show(ui, |ui| {
+                let mut output_text_size_points = self.output_text_size_points.unwrap_or_else(|| {
+                    egui::TextStyle::Monospace
+                        .resolve(ui.style())
+                        .size
+                        .clamp(MINIMUM_OUTPUT_TEXT_SIZE_POINTS, MAXIMUM_OUTPUT_TEXT_SIZE_POINTS)
+                });
                 ui.horizontal(|ui| {
 
 
@@ -1352,6 +1374,14 @@ impl QmpQemuSocketApp {
                             )),
                         }
                     }
+                    ui.label("Text size");
+                    ui.add(
+                        egui::DragValue::new(&mut output_text_size_points)
+                            .range(MINIMUM_OUTPUT_TEXT_SIZE_POINTS..=MAXIMUM_OUTPUT_TEXT_SIZE_POINTS)
+                            .speed(1.0)
+                            .suffix(" pt"),
+                    )
+                    .on_hover_text("Change only the detailed-output text size; preview scaling and copied text remain unchanged");
                 });
                 egui::Frame::group(ui.style()).show(ui, |ui| {
                     ui.set_min_height(OUTPUT_PANEL_HEIGHT);
@@ -1364,10 +1394,15 @@ impl QmpQemuSocketApp {
 
 
                             for line in &self.log_lines {
-                                ui.label(egui::RichText::new(line).monospace());
+                                ui.label(
+                                    egui::RichText::new(line)
+                                        .monospace()
+                                        .size(output_text_size_points),
+                                );
                             }
                         });
                 });
+                self.output_text_size_points = Some(output_text_size_points);
             });
         self.output_expanded = output_response.body_response.is_some();
     }
@@ -1486,7 +1521,7 @@ impl QmpQemuSocketApp {
                         ui.small("Draw 1; automatic reveal. Solve is clicked once, then completion needs two fresh positive observations. One board is one game; only continuous Multi-Step 0 advances through verified terminal controls.");
                     } else if self.game_mode == GameMode::Pyramid {
                         ui.horizontal(|ui| {
-                            ui.label("After Pyramid MOVE / Recycle click");
+                            ui.label("After Pyramid MOVE / Recycle (D)");
                             ui.add(
                                 egui::DragValue::new(&mut self.pyramid_move_settle_ms)
                                     .range(
@@ -1496,7 +1531,7 @@ impl QmpQemuSocketApp {
                                     .speed(10.0)
                                     .suffix(" ms"),
                             )
-                            .on_hover_text("Wait after clicking MOVE or Recycle before capturing its result");
+                            .on_hover_text("Wait after the D key performs MOVE or Recycle before capturing its result");
                         });
                         ui.horizontal(|ui| {
                             ui.label("After Pyramid card / Left / Right click");
@@ -1550,6 +1585,19 @@ impl QmpQemuSocketApp {
                                     .suffix(" ms"),
                             );
                         });
+                        ui.horizontal(|ui| {
+                            ui.label("TriPeaks missing-HALO observation settle");
+                            ui.add(
+                                egui::DragValue::new(&mut self.tripeaks_reobserve_ms)
+                                    .range(
+                                        MINIMUM_ANIMATION_SETTLE_DELAY_MS
+                                            ..=MAXIMUM_ANIMATION_SETTLE_DELAY_MS,
+                                    )
+                                    .speed(10.0)
+                                    .suffix(" ms"),
+                            )
+                            .on_hover_text("Wait between bounded fresh captures before considering Solver recovery; no guest input is sent during these waits");
+                        });
                     }
 
 
@@ -1593,6 +1641,7 @@ impl QmpQemuSocketApp {
                     if ui.button("Restore execution defaults").clicked() {
                         self.draw_animation_settle_ms = DRAW_ANIMATION_SETTLE_DELAY_MS;
                         self.tableau_animation_settle_ms = TABLEAU_ANIMATION_SETTLE_DELAY_MS;
+                        self.tripeaks_reobserve_ms = TRIPEAKS_REOBSERVE_DELAY_MS;
                         self.board_redeal_settle_ms = BOARD_REDEAL_SETTLE_DELAY_MS;
                         self.pyramid_move_settle_ms = PYRAMID_MOVE_SETTLE_DELAY_MS;
                         self.pyramid_card_settle_ms = PYRAMID_CARD_SETTLE_DELAY_MS;
@@ -1617,7 +1666,7 @@ impl QmpQemuSocketApp {
                     ));
                 } else {
                     ui.small(format!(
-                        "Execution controls are session-only; defaults: draw {DRAW_ANIMATION_SETTLE_DELAY_MS} ms, tableau {TABLEAU_ANIMATION_SETTLE_DELAY_MS} ms, board redeal {BOARD_REDEAL_SETTLE_DELAY_MS} ms, Multi-Step {DEFAULT_MULTI_STEP_ACTIONS} (continuous)."
+                        "Execution controls are session-only; defaults: draw {DRAW_ANIMATION_SETTLE_DELAY_MS} ms, tableau {TABLEAU_ANIMATION_SETTLE_DELAY_MS} ms, missing-HALO observation {TRIPEAKS_REOBSERVE_DELAY_MS} ms, board redeal {BOARD_REDEAL_SETTLE_DELAY_MS} ms, Multi-Step {DEFAULT_MULTI_STEP_ACTIONS} (continuous). Changes apply to the next run."
                     ));
                 }
 
@@ -1720,8 +1769,8 @@ impl QmpQemuSocketApp {
                     ui.monospace("no-highlight-recovery = bounded; never implies Move or completion");
                 } else {
                     ui.monospace(format!(
-                        "no-highlight-reobserve = until target or STOP, {} ms apart",
-                        NO_HIGHLIGHT_REOBSERVE_DELAY.as_millis()
+                        "no-highlight-reobserve = bounded input-free captures, {} ms apart before Solver recovery",
+                        self.tripeaks_reobserve_ms
                     ));
                 }
 
@@ -2335,8 +2384,13 @@ fn format_prediction(prediction: PredictedAction) -> String {
                 "Prediction: click {target} at ({}, {}); 2x2 HALO probe=({}, {}); input sent=0.",
                 click_point.x, click_point.y, action.anchor.x, action.anchor.y
             ),
+            (ActionTarget::Pyramid(pyramid::PyramidTargetKind::Move), InputOperation::PressDrawKey)
+                if pyramid::action_for_kind(pyramid::PyramidTargetKind::Move) == Some(action) => format!(
+                    "Prediction: Pyramid MOVE/Recycle using qcode D; 2x2 HALO probe=({}, {}); pointer unchanged; input sent=0.",
+                    action.anchor.x, action.anchor.y
+                ),
             (ActionTarget::Pyramid(target), InputOperation::PressDrawKey) => format!(
-                "Prediction refused: {target} requires mouse delivery; input sent=0."
+                "Prediction refused: {target} has an invalid key-delivery specification; input sent=0."
             ),
             (ActionTarget::Klondike(target), InputOperation::Click(point)) => format!(
                 "Prediction: click Klondike {target} at ({}, {}); source anchor=({}, {}); input sent=0.",
@@ -2386,6 +2440,9 @@ fn prediction_is_actionable(mode: GameMode, prediction: PredictedAction) -> bool
             (ActionTarget::Klondike(target), _) => {
                 crate::klondike::canonical_action(target) == Some(action)
             }
+            (ActionTarget::Pyramid(target), _) => {
+                pyramid::action_for_kind(target) == Some(action)
+            }
             (ActionTarget::Bottom { .. }, _) => true,
             (_, InputOperation::Click(_)) => true,
             (_, InputOperation::PressDrawKey) => false,
@@ -2421,6 +2478,10 @@ fn concise_prediction(prediction: PredictedAction) -> String {
             (ActionTarget::Pyramid(target), InputOperation::Click(point)) => {
                 format!("{target} at ({}, {})", point.x, point.y)
             }
+            (ActionTarget::Pyramid(pyramid::PyramidTargetKind::Move), InputOperation::PressDrawKey)
+                if pyramid::action_for_kind(pyramid::PyramidTargetKind::Move) == Some(action) => {
+                    "Pyramid MOVE/Recycle using D".to_owned()
+                }
             (ActionTarget::Pyramid(target), InputOperation::PressDrawKey) => {
                 format!("invalid {target} key action")
             }
@@ -2461,6 +2522,10 @@ fn display_action(prediction: PredictedAction) -> String {
             (ActionTarget::Pyramid(target), InputOperation::Click(_)) => {
                 format!("{target} click")
             }
+            (ActionTarget::Pyramid(pyramid::PyramidTargetKind::Move), InputOperation::PressDrawKey)
+                if pyramid::action_for_kind(pyramid::PyramidTargetKind::Move) == Some(action) => {
+                    "Pyramid MOVE/Recycle — D".to_owned()
+                }
             (ActionTarget::Pyramid(target), InputOperation::PressDrawKey) => {
                 format!("Invalid {target} key action")
             }
@@ -2854,12 +2919,47 @@ mod tests {
         let pyramid = PredictedAction::Action(pyramid_action);
         assert!(prediction_is_actionable(GameMode::Pyramid, pyramid));
         assert!(!prediction_is_actionable(GameMode::TriPeaks, pyramid));
-        let mut invalid_key_action = pyramid_action;
-        invalid_key_action.specification.operation = InputOperation::PressDrawKey;
+        let mut invalid_click_action = pyramid_action;
+        invalid_click_action.specification.operation = InputOperation::Click(PYRAMID_TARGETS[0].click_point);
         assert!(!prediction_is_actionable(
             GameMode::Pyramid,
-            PredictedAction::Action(invalid_key_action),
+            PredictedAction::Action(invalid_click_action),
         ));
+    }
+
+
+    /// Only the canonical Pyramid Move uses D; pile/card keys and altered specifications are refused.
+    #[test]
+    fn pyramid_move_key_prediction_is_canonical_and_named_as_key_delivery() {
+        let action = pyramid::action_for_kind(pyramid::PyramidTargetKind::Move).unwrap();
+        let prediction = PredictedAction::Action(action);
+        assert_eq!(action.operation(), InputOperation::PressDrawKey);
+        assert!(prediction_is_actionable(GameMode::Pyramid, prediction));
+        assert!(format_prediction(prediction).contains("using qcode D"));
+        assert!(concise_prediction(prediction).contains("using D"));
+        assert!(display_action(prediction).contains("— D"));
+
+
+        for kind in [
+            pyramid::PyramidTargetKind::Left,
+            pyramid::PyramidTargetKind::Right,
+            pyramid::PyramidTargetKind::Card { row: 7, column: 1 },
+        ] {
+            let mut forged = pyramid::action_for_kind(kind).unwrap();
+            forged.specification.operation = InputOperation::PressDrawKey;
+            let prediction = PredictedAction::Action(forged);
+            assert!(!prediction_is_actionable(GameMode::Pyramid, prediction));
+            assert!(format_prediction(prediction).contains("Prediction refused"));
+            assert!(concise_prediction(prediction).contains("invalid"));
+            assert!(display_action(prediction).contains("Invalid"));
+        }
+        let mut forged = action;
+        forged.anchor.x += 1;
+        let prediction = PredictedAction::Action(forged);
+        assert!(!prediction_is_actionable(GameMode::Pyramid, prediction));
+        assert!(format_prediction(prediction).contains("Prediction refused"));
+        assert!(concise_prediction(prediction).contains("invalid"));
+        assert!(display_action(prediction).contains("Invalid"));
     }
 
 

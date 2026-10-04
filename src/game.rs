@@ -218,7 +218,7 @@ impl fmt::Display for ActionTarget {
 pub enum InputOperation {
     /// Move to a calibrated point, press and release the left mouse button.
     Click(PixelPoint),
-    /// Press and release the confirmed Draw shortcut for TriPeaks or Klondike.
+    /// Press and release D for TriPeaks/Klondike Draw or Pyramid Move/Recycle.
     PressDrawKey,
 }
 

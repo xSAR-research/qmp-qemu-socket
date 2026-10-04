@@ -1021,3 +1021,151 @@ fn klondike_does_not_publish_three_board_progress() {
     send_board_progress(&sink, &TableauScanState::for_mode(GameMode::Klondike), 0);
     assert!(receiver.try_recv().is_err());
 }
+
+
+/// Delayed stock HALO appearance authorises D before Solver recovery is reserved.
+#[test]
+fn tripeaks_delayed_stock_halo_uses_fresh_draw_without_solver() {
+    let scan_state = TableauScanState::for_mode(GameMode::TriPeaks);
+    let mut recovery = TriPeaksHaloRecovery::default();
+    let mut draw_plan = None;
+
+
+    for observation_round in 1..=3 {
+        let mut frame = blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT);
+        let felt = crate::parameters::GAMEPLAY_FELT_PROBE_BOUNDS;
+
+
+        for y in felt.y..felt.bottom() {
+
+
+            for x in felt.x..felt.right() {
+                let offset = y as usize * frame.stride + x as usize * 4;
+                frame.pixels[offset..offset + 4].copy_from_slice(&[20, 140, 60, 255]);
+            }
+        }
+
+
+        if observation_round == 3 {
+            let bounds = crate::parameters::STOCK_HALO_SCAN_BOUNDS;
+
+
+            for x in bounds.x..bounds.x + crate::parameters::HALO_GOLD_RUN_MIN + 1 {
+                let offset = bounds.y as usize * frame.stride + x as usize * 4;
+                frame.pixels[offset..offset + 3]
+                    .copy_from_slice(&crate::parameters::GOLD_RGB_CANDIDATES[0]);
+            }
+        }
+        let (observation, _) = analyse_captured_frame(frame, &scan_state)
+            .expect("classify one fresh TriPeaks frame");
+        assert!(observation.gameplay_scene);
+
+
+        if matches!(observation.prediction, PredictedAction::NoHighlight) {
+            assert_eq!(
+                recovery.next_missing_halo(observation.gameplay_scene),
+                TriPeaksHaloRecoveryStep::Observe {
+                    delayed_round: observation_round,
+                    after_solver: false,
+                },
+            );
+        } else {
+            draw_plan = Some(plan_step(observation.prediction).expect("fresh stock plan"));
+            break;
+        }
+    }
+    let plan = draw_plan.expect("late stock HALO must create a plan");
+    assert_eq!(plan.input().operation(), InputOperation::PressDrawKey);
+    assert!(!recovery.solver_reserved);
+    assert_eq!(recovery.delayed_observations, 2);
+}
+
+
+/// A persistently missing HALO cannot cycle through repeated Solver clicks.
+#[test]
+fn tripeaks_missing_halo_has_one_solver_refresh_and_two_bounded_budgets() {
+    let mut recovery = TriPeaksHaloRecovery::default();
+    let mut delayed_before_solver = 0;
+    let mut delayed_after_solver = 0;
+    let mut solver_operations = 0;
+    let mut stop_operations = 0;
+
+
+    for _ in 0..20 {
+
+
+        match recovery.next_missing_halo(true) {
+            TriPeaksHaloRecoveryStep::Observe { after_solver, .. } => {
+
+
+                if after_solver {
+                    delayed_after_solver += 1;
+                } else {
+                    delayed_before_solver += 1;
+                }
+            }
+            TriPeaksHaloRecoveryStep::RefreshSolver => solver_operations += 1,
+            TriPeaksHaloRecoveryStep::Stop => stop_operations += 1,
+        }
+    }
+    assert_eq!(delayed_before_solver, TRIPEAKS_HALO_REOBSERVATION_LIMIT);
+    assert_eq!(delayed_after_solver, TRIPEAKS_HALO_REOBSERVATION_LIMIT);
+    assert_eq!(solver_operations, 1);
+    assert_eq!(stop_operations, 13);
+}
+
+
+/// Unsupported scenes never reserve Solver, even after the input-free budget.
+#[test]
+fn tripeaks_unsupported_scene_exhausts_observations_without_solver() {
+    let mut recovery = TriPeaksHaloRecovery::default();
+
+
+    for delayed_round in 1..=TRIPEAKS_HALO_REOBSERVATION_LIMIT {
+        assert_eq!(
+            recovery.next_missing_halo(false),
+            TriPeaksHaloRecoveryStep::Observe {
+                delayed_round,
+                after_solver: false,
+            },
+        );
+    }
+    assert_eq!(recovery.next_missing_halo(false), TriPeaksHaloRecoveryStep::Stop);
+    assert!(!recovery.solver_reserved);
+}
+
+
+/// A verified redeal's own Solver activation cannot be followed by another refresh.
+#[test]
+fn tripeaks_new_board_solver_starts_with_refresh_authority_consumed() {
+    let mut recovery = TriPeaksHaloRecovery::after_solver();
+
+
+    for delayed_round in 1..=TRIPEAKS_HALO_REOBSERVATION_LIMIT {
+        assert_eq!(
+            recovery.next_missing_halo(true),
+            TriPeaksHaloRecoveryStep::Observe {
+                delayed_round,
+                after_solver: true,
+            },
+        );
+    }
+    assert_eq!(recovery.next_missing_halo(true), TriPeaksHaloRecoveryStep::Stop);
+}
+
+
+/// Pyramid MOVE/Recycle diagnostics describe the canonical key-only operation.
+#[test]
+fn pyramid_move_key_plan_keeps_pointer_unchanged_and_uses_two_events() {
+    let action = pyramid::action_for_kind(PyramidTargetKind::Move).expect("MOVE target");
+    let prediction = PredictedAction::Action(action);
+    let plan = plan_step(prediction).expect("canonical MOVE plan");
+    let detail = format_step_plan(plan).expect("supported Pyramid D operation");
+    assert!(detail.contains("Pyramid MOVE/Recycle via qcode D"));
+    assert!(detail.contains("pointer unchanged; commands=2, events=2"));
+    assert_eq!(format_action_status(prediction), "MOVE/Recycle — Pyramid via D");
+    assert_eq!(
+        format_prediction_target(prediction),
+        "Pyramid MOVE/Recycle via qcode D; pointer unchanged",
+    );
+}

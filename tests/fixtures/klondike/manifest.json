@@ -1,5 +1,5 @@
 {
-  "description": "Original-byte and derived sparse regression fixtures. Listed half-open rectangles preserve original RGBA pixels exactly at original coordinates. Sparse fixtures black all unlisted pixels, without resizing. K69 and K70-K88 are complete byte-identical original uploads. Per-file retained_rectangles_xyxy overrides the default rectangle list. Manual frames are not asserted to be the historical automatic worker frames.",
+  "description": "Original-byte and derived sparse regression fixtures. Listed half-open rectangles preserve original RGBA pixels exactly at original coordinates. Sparse fixtures black all unlisted pixels, without resizing. K69 and K70-K94 are complete byte-identical original uploads. Per-file retained_rectangles_xyxy overrides the default rectangle list. Manual frames are not asserted to be the historical automatic worker frames.",
   "frame": [
     1920,
     1080
@@ -2203,6 +2203,144 @@
         ]
       ],
       "observation": "Later Undo predecessor of RIGHT fan-offset0 nine-diamonds to SUIT3. The Undo is outside the automatic failure input sequence; capture is not asserted to be a historical worker frame."
+    },
+    {
+      "fixture": "K89.png",
+      "source": "qmp-qemu-socket 261004 152626 FAIL.png",
+      "source_sha256": "6632eab036ac6371db635429169717b6f481b6a4a23a7744fcf9992bbf510829",
+      "fixture_sha256": "6632eab036ac6371db635429169717b6f481b6a4a23a7744fcf9992bbf510829",
+      "bytes": 3394886,
+      "source_bytes": 3394886,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "full_original_png": true,
+      "retained_rectangles_xyxy": [
+        [
+          0,
+          0,
+          1920,
+          1080
+        ]
+      ],
+      "observation": "Later manual FAIL capture: complete column4 J-diamonds through three-diamonds source. Scene passes; lower-edge row985 sample x966 RGB[96,87,43] fails ordinary rail while passing existing positive shadow gold. Source top372/exclusive bottom986 and existing canonical click(960,412) require measured Hint-shadow interpretation, with every edge pixel still positive. Not asserted to be a historical worker frame or QMP-save byte identity."
+    },
+    {
+      "fixture": "K90.png",
+      "source": "qmp-qemu-socket 261004 152638 Move-before-FAIL.png",
+      "source_sha256": "3197f471e04d8bc60f2e9bb99612c1aad0bff28a79ee782766d388e530d76256",
+      "fixture_sha256": "3197f471e04d8bc60f2e9bb99612c1aad0bff28a79ee782766d388e530d76256",
+      "bytes": 3388510,
+      "source_bytes": 3388510,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "full_original_png": true,
+      "retained_rectangles_xyxy": [
+        [
+          0,
+          0,
+          1920,
+          1080
+        ]
+      ],
+      "observation": "Later Undo predecessor: column5 highlighted ten-spades through three-diamonds with a dashed landing below Jack-diamonds in column4. Historical worker selected rows336..909 at(1128,376); this later manual phase is not asserted identical. Upload bytes preserved whole."
+    },
+    {
+      "fixture": "K91.png",
+      "source": "qmp-qemu-socket 261004 163804 01-Level-up.png",
+      "source_sha256": "7211de1c91eb552dc2a88810cb53e293c1a01ddc6649e8aef716ca5e2c000e56",
+      "fixture_sha256": "7211de1c91eb552dc2a88810cb53e293c1a01ddc6649e8aef716ca5e2c000e56",
+      "bytes": 1726147,
+      "source_bytes": 1726147,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "full_original_png": true,
+      "retained_rectangles_xyxy": [
+        [
+          0,
+          0,
+          1920,
+          1080
+        ]
+      ],
+      "observation": "Grandmaster level101 LevelUp: gold OK retains existing click geometry."
+    },
+    {
+      "fixture": "K92.png",
+      "source": "qmp-qemu-socket 261004 163819 02-New-Game.png",
+      "source_sha256": "ecb01b5486782404eca70c87a55c75002e9c2620bd46da05670aa385ac800f90",
+      "fixture_sha256": "ecb01b5486782404eca70c87a55c75002e9c2620bd46da05670aa385ac800f90",
+      "bytes": 2045929,
+      "source_bytes": 2045929,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "full_original_png": true,
+      "retained_rectangles_xyxy": [
+        [
+          0,
+          0,
+          1920,
+          1080
+        ]
+      ],
+      "observation": "Grandmaster level101 Congratulations: gold NewGame retains existing click geometry."
+    },
+    {
+      "fixture": "K93.png",
+      "source": "qmp-qemu-socket 261004 163836 03-Play.png",
+      "source_sha256": "3a700ea34cb6e50c839db7a4558be63aa1cd32c0d5e51bb8f7c13e7cf7f03a13",
+      "fixture_sha256": "3a700ea34cb6e50c839db7a4558be63aa1cd32c0d5e51bb8f7c13e7cf7f03a13",
+      "bytes": 2373015,
+      "source_bytes": 2373015,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "full_original_png": true,
+      "retained_rectangles_xyxy": [
+        [
+          0,
+          0,
+          1920,
+          1080
+        ]
+      ],
+      "observation": "Standard Draw1 selector retains Grandmaster: gold Play retains existing click geometry."
+    },
+    {
+      "fixture": "K94.png",
+      "source": "qmp-qemu-socket 261004 180427 Fail.png",
+      "source_sha256": "a40319ab1008d8f76392d05c65c6e29c54d06ee47fbe0e18dce3c8c07bef5bd5",
+      "fixture_sha256": "a40319ab1008d8f76392d05c65c6e29c54d06ee47fbe0e18dce3c8c07bef5bd5",
+      "bytes": 3408402,
+      "source_bytes": 3408402,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "full_original_png": true,
+      "retained_rectangles_xyxy": [
+        [
+          0,
+          0,
+          1920,
+          1080
+        ]
+      ],
+      "observation": "Sixth tableau column single2clubs source lower gold edge overlaps UndoAll overlay. Dashed foundation4 destination is a guide."
     }
   ],
   "solve_control_template": {

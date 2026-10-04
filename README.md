@@ -14,18 +14,16 @@ the real purpose. Each fixture keeps independent target and effect policies.
 The target is to build in Dijkstra / A* shortest path problem solving rather
 than using the **Solver**, this will benefit drone route planning experience.
 
-This is **v1.2.6, candidate 8**, based on pushed candidate 7 at
-`449004dfbf3d0dc411fe3f5741d5f6b93f242da5`. `Cargo.toml` supplies the package
+This is **v1.2.6, candidate 9**, based on pushed candidate 8 at
+`cafdd609f5afcac9738ea7d11bc43b231cb73dfc`. `Cargo.toml` supplies the package
 version shown in the window title and Parameters. Beast gameplay acceptance
 is required before promotion.
 
-Candidate 8 corrects a scene gutter covered by long column-five source HALOs
-and recognises the separately measured Master medal LEVEL UP layout. It keeps
-the same scene threshold, complete outline guards, safe upper-card clicks and
-existing terminal input point. Each fresh valid Solver recommendation receives
-one action, editable settle and a fresh capture; card matching does not gate
-execution. Solve, one-board restart and accepted other modes retain their
-policies. See [candidate notes](docs/klondike-v1.2.6-candidate-8.md).
+Candidate 9 recognises the measured Hint-shadow positions on a long column-four
+source. Every lower-edge sample still requires positive gold; none is omitted.
+The existing scene, rail, top and card-interior guards and safe upper-card click
+remain in place. Each fresh Solver recommendation receives one action, editable
+settle and a fresh capture. See [candidate notes](docs/klondike-v1.2.6-candidate-9.md).
 
 ## Build and source spacing
 
@@ -112,8 +110,13 @@ either an intact active Solver banner with every calibrated right-interior pixel
 gold and none black, or independently recognised completed-game artwork. No black
 on a green background or blue overlay is insufficient. Finite runs stop at the
 confirmed win. Only continuous Multi-Step **0** may then advance through the
-recognised score-skip, Level Up OK, New Game, Draw 1 Play and fresh-board Solver
+score-skip, Level Up OK, New Game, Draw 1 Play and fresh-board Solver
 stages, one guarded click each, before resuming from a fresh actionable board.
+After independent win confirmation, the expected OK, New Game and Play buttons
+are checked locally for a gold body and printed-caption contrast. Rank, medal,
+title, surrounding frame and fireworks colours do not gate these three clicks.
+Their ordered readiness waits allow up to 20 delayed input-free observations;
+fresh-deal Solver/HALO recovery retains its separate shorter bound.
 Unknown stages and unresolved effects stop with the latest frame and logs.
 Klondike owns these controls independently of the shared three-board controller.
 See [Klondike correction notes](docs/klondike-v1.2.3-candidate-5.md) for evidence,
@@ -139,12 +142,23 @@ this socket, independent of the repository working directory.
 QMP captures and guarded actions use the 1920×1080 primary display calibration
 with guest display and text scaling at 100%.
 
+## TriPeaks late-HALO recovery
+
+After a no-HALO result, TriPeaks takes up to three delayed input-free captures
+before considering one Solver refresh on a recognised gameplay scene. A fresh
+stock HALO proceeds directly to D. The delay is editable in Params, defaults
+to 1000 ms and is snapshotted for the active run. After Solver, at most three
+further delayed observations are allowed in that unresolved context. Persistent
+absence stops with the latest frame; ordinary recovery cannot repeatedly click
+Solver. Existing action-effect and board/redeal checks remain in place.
+
 ## Pyramid gameplay
 
 Select **Pyramid**, activate the guest's **Solver**, and capture a fresh frame.
 **Single Step** and **Multiple Steps** require a concrete prediction belonging
 to the selected mode and socket. The worker freshly validates the initial
-prediction, clicks one target, waits the configured settle time (default 1000 ms
+prediction, sends D for a highlighted MOVE/Recycle or clicks one card/pile target,
+waits the configured settle time (default 1000 ms
 after Move or 2000 ms after a card/pile click), and verifies the result. Each
 verified result becomes the next planning frame without another pre-click
 screenshot. **STOP** cancels the active run.
@@ -360,3 +374,19 @@ package without changing candidate-3 Rust code or fixtures. Base and candidate
 contents are checked as complete states. Rollback restores this committed base.
 Mixed or unknown files stop; a HEAD refusal reports expected and actual commits.
 Run `--verify-installed` before every build/run block; this requires candidate 3.
+
+## Candidate 10 verification and output readability
+
+Candidate 10 includes the candidate 9 Hint-shadow fix and the measured Undo All
+border overlay correction. K91-K93 record level-101 restart buttons; K94 records
+the later manual source frame with Undo All overlapping its lower gold edge.
+These manual PNGs are evidence, not assertions of exact historical worker timing.
+See [candidate 10 notes](docs/klondike-v1.2.6-candidate-10.md).
+
+Detailed output uses separate selectable labels in a vertical scroll area.
+**Text size** adjusts only those labels, from 10 to 24 logical points. Copy Output
+and copied/logged text remain unchanged. Mouse-drag selection does not scroll
+beyond the viewport. The visible buffer retains at most 2000 entries and clears
+after every three completed games; the complete session file remains on disk.
+Entries have no individual byte limit, and copying the complete file temporarily
+loads its text into memory. The entry bound is not a fixed byte-memory bound.

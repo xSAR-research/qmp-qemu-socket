@@ -639,3 +639,63 @@ input rule is needed. Log1791088327491 records operation92 acknowledged from
 RIGHT, then four unsupported-scene observations and a guarded stop. The manual
 FAIL frame was captured much later; neither PNG establishes historical worker
 frame identity, QMP-save byte identity or the timing of that earlier move.
+
+
+### K89/K90: Hint-stem shadow on a complete column-four source
+
+Both fixtures are complete byte-identical copies of Charlie's uploaded
+1920×1080 RGBA PNGs, without masking, resizing or re-encoding. K89 is the
+later manual FAIL capture showing the column-four J-diamonds through
+three-diamonds source and a dark dashed landing guide over column-one's
+Queen-spades. K90 is the later Undo predecessor showing the column-five
+ten-spades through three-diamonds source with its dashed landing below
+column-four's Jack-diamonds.
+
+K89 passes every scene probe. Its source has ordinary paired rail brackets
+around the existing toolbar-shadow band, a complete upper edge at row372,
+connected rails and 1152/1152 card-paper samples. At its lower edge row985,
+95/96 pixels meet ordinary gold; x966 has RGB `[96,87,43]`, positive under
+the existing shadow-gold predicate. The old K75 rule permits only x963/x964
+at row995, rejecting this native Hint-stem shadow position. The corrected
+bounded Hint-shadow interpretation still requires every edge sample to be
+positive and retains the ordinary centre, complete rails/top and paper guards.
+The resulting source is rows372..986; its existing canonical click is
+`(960,412)`, above the toolbar. No card-pixel effect gate is introduced.
+
+Log1791091551642 records operation3 at column-five rows336..909,
+`(1128,376)`, followed by settled gameplay scenes with no source, one Solver
+refresh and bounded read-only observations. The FAIL manual screenshot was
+acquired at+30.300s, about nine seconds after the last pre-refresh scene
+capture and four seconds after the final stop; K90 was acquired after Undo
+at+41.013s. These later frames do not establish historical worker-frame
+identity or animation duration. Upload byte counts differ from the log's
+saved-QMP counts; the manifest identifies the exact uploaded bytes tested.
+
+## Candidate 10 original-byte fixtures
+
+- K91: level-101 Grandmaster Level Up, existing gold OK button.
+- K92: level-101 Congratulations, existing gold New Game button.
+- K93: Standard Draw 1 selector retaining Grandmaster, existing gold Play button.
+- K94: later manual C6 single-card source with Undo All covering part of its
+  lower border; the dashed SUIT marker remains a non-actionable guide.
+
+All four are complete original uploaded 1920×1080 RGBA PNGs, copied without
+resampling or recompression. manifest.json records source names, sizes and hashes.
+Manual frames do not measure settle times or establish historical worker identity.
+
+
+K94 contains a single two-clubs source in column six, with bounds
+`(1230,790,132,189)` and the existing upper-card click `(1296,830)`. Its exterior
+rails end at row975; Undo All interrupts the lower gold border at row978.
+The existing red-icon probe supplies69 positive pixels, and the visible paper
+probe supplies1152/1152. The dark dashed foundation-four guide is not a source.
+
+Candidate10 preserves the original source finder and its existing exact results
+first. Only an unresolved single-card column-six outline, height180–195, may
+use the measured Undo All envelope `(1300,961,41,33)`. Its new fallback is limited
+to closing rows961–987 above the original lower-row mask; a closing row must be
+strictly below terminated paired rails inside that envelope. All55 unoccluded
+lower-edge pixels, ordinary centre, closed top and paper remain mandatory.
+Historical long runs and lower rows retain their original mask/shadow-tail
+requirements; erasing a required K54 lower-edge sample still refuses input.
+No colour threshold, card-rank recognition or live card-effect gate is added.

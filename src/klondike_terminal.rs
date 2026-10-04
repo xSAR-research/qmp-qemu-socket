@@ -24,11 +24,15 @@
 //! recognition instead requires four positive paper margins at every measured
 //! staggered face, retaining empty waste/foundations, stock and back-strip proof.
 //! No rank-dependent artwork fraction or missing HALO grants Solver input.
-//! Stable RGB artwork is checked directly; changing level, score, XP and card
-//! ranks are not read. A recognised terminal stage grants only its measured
-//! click. The worker still owns fresh validation, cancellation, delivery and
-//! bounded input-free transition observations. No absent black pixel or generic
-//! gold button authorises a win or restart.
+//! Independent completion retains the recorded positive terminal/board proof.
+//! Once the worker has confirmed one game win, the deterministic restart path
+//! checks only the expected OK, New Game or Play button area. Positive gold and
+//! dark printed caption contrast in that local area establish readiness; title,
+//! rank, medal, modal frame, fireworks and surrounding artwork do not gate those
+//! clicks. Local button readiness never establishes the initial game win.
+//! The worker owns ordering, fresh capture, cancellation, one-shot delivery and
+//! bounded input-free transition observations. Fresh-deal Solver readiness still
+//! requires its positive mode-owned scene and deal geometry.
 
 use std::{fmt, time::Duration};
 
@@ -44,7 +48,7 @@ use crate::{
 };
 
 
-/// Independently recognised stage of Charlie's observed Klondike restart sequence.
+/// Typed stage of Charlie's observed Klondike restart sequence.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum TerminalStage {
     /// Completed-board Congratulations panel still counting its reward.
@@ -63,8 +67,9 @@ pub(crate) enum TerminalStage {
 impl TerminalStage {
 
 
-    /// Whether this positively recognised stage is itself completed-game evidence.
-    /// The classifier requires occupied foundations and empty side-tableau context.
+    /// Whether the stage belongs to the completed-game portion of the sequence.
+    /// Only `classify_terminal` supplies independent completed-board proof; this
+    /// enum discriminator and local readiness alone cannot establish a win.
     pub(crate) const fn demonstrates_game_win(self) -> bool {
         matches!(self, Self::ScoreCounting | Self::LevelUp | Self::NewGame)
     }
@@ -999,6 +1004,149 @@ pub(crate) fn classify_terminal(
 }
 
 
+/// Positive local readiness for one expected control in an already confirmed win.
+/// These counts are not scene classification or independent completion evidence.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ExpectedControlEvidence {
+    /// The single stage requested by the deterministic restart controller.
+    stage: TerminalStage,
+    /// Positive warm gold or cream pixels inside the fixed button body region.
+    gold_pixels: u32,
+    /// Number of pixels in that local body region.
+    body_pixels: u32,
+    /// Required gold fraction, expressed per thousand for checked integer comparison.
+    gold_per_mille: u32,
+    /// Dark printed-caption pixels with nearby positive gold contrast.
+    caption_ink_pixels: u32,
+}
+
+
+impl ExpectedControlEvidence {
+
+
+    /// Require the local gold body and material printed lettering together.
+    /// No precise glyph pixels, title, level or decorative artwork are compared.
+    pub(crate) const fn ready(self) -> bool {
+        self.gold_pixels * 1_000 >= self.body_pixels * self.gold_per_mille
+            && self.caption_ink_pixels >= 48
+    }
+}
+
+
+impl fmt::Display for ExpectedControlEvidence {
+
+
+    /// Report only the expected control's local readiness, separate from win proof.
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "expected={}, local gold={}/{} (required {} per mille), caption contrast={} (required 48), ready={}; decorative artwork is not checked",
+            self.stage, self.gold_pixels, self.body_pixels, self.gold_per_mille,
+            self.caption_ink_pixels, self.ready())
+    }
+}
+
+
+/// Warm button gold and its pale upper gradient, without exact RGB signatures.
+/// Blue dialog artwork, black lettering and white/grey flat patches are excluded.
+fn is_control_gold([red, green, blue]: [u8; 3]) -> bool {
+    red >= 140 && green >= 95
+        && u16::from(red) >= u16::from(blue) + 20
+        && u16::from(green) >= u16::from(blue) + 12
+}
+
+
+/// Measure only the expected printed button at its existing native click region.
+/// The local OK window contains the prior small/medal captions and K91 caption;
+/// no search extends beyond that control. New Game and Play body regions retain
+/// sufficient independent horizontal coverage to reject each other's overlap.
+/// The largest body has 24,192 pixels, keeping all count products within u32.
+/// Missing storage or unsupported frame dimensions fail before any measurement.
+pub(crate) fn inspect_expected_control(
+    frame: &CapturedFrame,
+    stage: TerminalStage,
+) -> Result<Option<ExpectedControlEvidence>, HaloDetectionError> {
+    super::validate_frame(frame)?;
+
+
+    let (body, caption, gold_per_mille) = match stage {
+        TerminalStage::LevelUp => (PixelRect::new(848, 750, 224, 108),
+            PixelRect::new(928, 768, 62, 69), 550),
+        TerminalStage::NewGame => (PixelRect::new(642, 824, 288, 55),
+            PixelRect::new(693, 831, 191, 44), 800),
+        TerminalStage::Play => (PixelRect::new(612, 834, 191, 50),
+            PixelRect::new(673, 841, 72, 39), 850),
+        TerminalStage::ScoreCounting | TerminalStage::SolverReady => return Ok(None),
+    };
+    let gold_pixels = super::count_pixels(frame, body, is_control_gold);
+    let mut caption_ink_pixels = 0;
+
+
+    for y in caption.y..caption.y + caption.height {
+
+
+        for x in caption.x..caption.x + caption.width {
+            let printed_ink = pixel_rgb(frame, x, y)
+                .is_some_and(|rgb| rgb.into_iter().all(|channel| channel <= 70));
+
+
+            if printed_ink && [(4, 0), (-4, 0), (0, 4), (0, -4)].into_iter()
+                .any(|(dx, dy)| {
+                    x.checked_add_signed(dx).zip(y.checked_add_signed(dy))
+                        .and_then(|(column, row)| pixel_rgb(frame, column, row))
+                        .is_some_and(is_control_gold)
+                })
+            {
+                caption_ink_pixels += 1;
+            }
+        }
+    }
+    Ok(Some(ExpectedControlEvidence {
+        stage, gold_pixels, body_pixels: body.width * body.height,
+        gold_per_mille, caption_ink_pixels,
+    }))
+}
+
+
+/// Gate the one expected restart control after independent game-win confirmation.
+/// Local readiness is deliberately separate from `classify_terminal`, so a gold
+/// button cannot declare a win. Fresh-deal Solver retains its existing scene proof.
+pub(crate) fn expected_control_ready(
+    frame: &CapturedFrame,
+    stage: TerminalStage,
+) -> Result<bool, HaloDetectionError> {
+
+
+    if let Some(evidence) = inspect_expected_control(frame, stage)? {
+        return Ok(evidence.ready());
+    }
+    Ok(classify_terminal(frame)? == Some(stage))
+}
+
+
+/// Locate the entry of a restart sequence whose game win is already confirmed.
+/// A later Level Up/New Game frame may outlive the score panel; local buttons
+/// allow entry without re-proving completed-game artwork. This function is never
+/// called by completion detection, and Play cannot skip earlier restart stages.
+pub(crate) fn classify_confirmed_win_entry(
+    frame: &CapturedFrame,
+) -> Result<Option<TerminalStage>, HaloDetectionError> {
+
+
+    if let Some(stage) = classify_terminal(frame)? {
+        return Ok(Some(stage));
+    }
+
+
+    for stage in [TerminalStage::LevelUp, TerminalStage::NewGame] {
+
+
+        if expected_control_ready(frame, stage)? {
+            return Ok(Some(stage));
+        }
+    }
+    Ok(None)
+}
+
+
 /// Matched and required samples for one independently required terminal guard.
 #[derive(Clone, Copy, Debug)]
 struct SignatureEvidence {
@@ -1169,6 +1317,9 @@ mod tests {
             67 => include_bytes!("../tests/fixtures/klondike/K67.png"),
             77 => include_bytes!("../tests/fixtures/klondike/K77.png"),
             86 => include_bytes!("../tests/fixtures/klondike/K86.png"),
+            91 => include_bytes!("../tests/fixtures/klondike/K91.png"),
+            92 => include_bytes!("../tests/fixtures/klondike/K92.png"),
+            93 => include_bytes!("../tests/fixtures/klondike/K93.png"),
             _ => panic!("unknown terminal fixture"),
         };
         decode_png(png).expect("decode recorded terminal PNG")
@@ -1189,6 +1340,112 @@ mod tests {
                 frame.pixels[index..index + 3].copy_from_slice(&rgb);
             }
         }
+    }
+
+
+    /// Keep only the local expected button; all other artwork is deliberately erased.
+    /// This controlled derivative proves readiness has no decorative dependencies.
+    fn local_button_only(number: usize, stage: TerminalStage) -> CapturedFrame {
+        let original = fixture(number);
+
+
+        let bounds = match stage {
+            TerminalStage::LevelUp => PixelRect::new(848, 750, 224, 108),
+            TerminalStage::NewGame => PixelRect::new(642, 824, 288, 55),
+            TerminalStage::Play => PixelRect::new(612, 834, 191, 50),
+            _ => panic!("test helper requires a local terminal button"),
+        };
+        let mut local = original.clone();
+        local.pixels.fill(0);
+
+
+        for y in bounds.y..bounds.y + bounds.height {
+            let start = y as usize * local.stride + bounds.x as usize * 4;
+            let end = start + bounds.width as usize * 4;
+            local.pixels[start..end].copy_from_slice(&original.pixels[start..end]);
+        }
+        local
+    }
+
+
+    /// Grandmaster artwork changes cannot erase the local expected controls.
+    /// The three body windows distinguish overlapping New Game/Play surfaces.
+    #[test]
+    fn confirmed_win_buttons_follow_the_expected_stage_across_native_themes() {
+        let stages = [TerminalStage::LevelUp, TerminalStage::NewGame, TerminalStage::Play];
+
+
+        for (number, expected) in [(27, stages[0]), (49, stages[0]), (52, stages[0]),
+            (67, stages[0]), (86, stages[0]), (91, stages[0]), (28, stages[1]),
+            (53, stages[1]), (92, stages[1]), (29, stages[2]), (93, stages[2])]
+        {
+            let frame = fixture(number);
+
+
+            for stage in stages {
+                assert_eq!(expected_control_ready(&frame, stage).unwrap(), stage == expected,
+                    "K{number}, expected {expected}, checked {stage}");
+            }
+            assert!(expected_control_ready(&local_button_only(number, expected), expected).unwrap());
+        }
+    }
+
+
+    /// Gold/printed button readiness grants progression only after an existing win.
+    /// Its button alone cannot enter independent completion evidence on a blank scene.
+    #[test]
+    fn local_expected_controls_never_prove_initial_completion() {
+
+
+        for (number, stage) in [(91, TerminalStage::LevelUp),
+            (92, TerminalStage::NewGame), (93, TerminalStage::Play)]
+        {
+            let frame = local_button_only(number, stage);
+            assert!(expected_control_ready(&frame, stage).unwrap());
+            assert_eq!(classify_terminal(&frame).unwrap(), None);
+            assert!(!super::super::completion_evidence(&frame).unwrap().complete_candidate);
+        }
+        assert_eq!(classify_confirmed_win_entry(&fixture(91)).unwrap(), Some(TerminalStage::LevelUp));
+        assert_eq!(classify_confirmed_win_entry(&fixture(92)).unwrap(), Some(TerminalStage::NewGame));
+    }
+
+
+    /// An erased caption, dark/white/flat control and absent body refuse readiness.
+    /// Unknown or unchanged windows never authorise the following expected stage.
+    #[test]
+    fn expected_button_readiness_requires_gold_and_material_print_contrast() {
+
+
+        for (number, stage, body, caption) in [
+            (91, TerminalStage::LevelUp, PixelRect::new(848, 750, 224, 108), PixelRect::new(928, 768, 62, 69)),
+            (92, TerminalStage::NewGame, PixelRect::new(642, 824, 288, 55), PixelRect::new(693, 831, 191, 44)),
+            (93, TerminalStage::Play, PixelRect::new(612, 834, 191, 50), PixelRect::new(673, 841, 72, 39)),
+        ] {
+
+
+            for rgb in [[0, 0, 0], [255, 255, 255], [240, 190, 90], [12, 82, 45]] {
+                let mut erased = fixture(number);
+                paint(&mut erased, body, rgb);
+                assert!(!expected_control_ready(&erased, stage).unwrap());
+            }
+            let mut no_print = fixture(number);
+            paint(&mut no_print, caption, [240, 190, 90]);
+            assert!(!expected_control_ready(&no_print, stage).unwrap());
+        }
+        assert!(!expected_control_ready(&fixture(91), TerminalStage::NewGame).unwrap());
+        assert!(!expected_control_ready(&fixture(92), TerminalStage::Play).unwrap());
+    }
+
+
+    /// Unsupported geometry and malformed byte storage fail before local sampling.
+    #[test]
+    fn expected_button_readiness_rejects_invalid_frame_layouts() {
+        let mut wrong_size = fixture(91);
+        wrong_size.height = 1_079;
+        assert_eq!(expected_control_ready(&wrong_size, TerminalStage::LevelUp), Err(HaloDetectionError::BoundsOutsideFrame));
+        let mut malformed = fixture(91);
+        malformed.pixels.clear();
+        assert_eq!(expected_control_ready(&malformed, TerminalStage::LevelUp), Err(HaloDetectionError::InvalidFrameLayout));
     }
 
 

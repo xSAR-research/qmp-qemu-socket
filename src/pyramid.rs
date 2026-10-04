@@ -190,8 +190,8 @@ const fn card(row: u8, column: u8, label: &'static str, x: u32, y: u32) -> Pyram
 }
 
 
-/// The same visual control moves a card or recycles the pile. Geometry alone
-/// cannot distinguish the operation; only its fresh halo authorises a click.
+/// The same visual control moves a card or recycles the pile. Its fresh halo
+/// authorises the D key for either operation; the pointer remains unchanged.
 pub const MOVE_TARGET: PyramidTargetSlot = target(
     PyramidTargetKind::Move,
     "PY Move/Recycle",
@@ -555,7 +555,7 @@ fn tableau_evidence(
 }
 
 
-/// Build the canonical single click, timing class and repeat policy for a slot.
+/// Build the canonical single input, timing class and repeat policy for a slot.
 fn guided_action(slot: PyramidTargetSlot) -> GuidedAction {
     let probe = halo_probe(slot);
 
@@ -564,7 +564,11 @@ fn guided_action(slot: PyramidTargetSlot) -> GuidedAction {
         target: ActionTarget::Pyramid(slot.kind),
         anchor: PixelPoint::new(probe.x as i32, probe.y as i32),
         specification: ActionSpecification {
-            operation: InputOperation::Click(slot.click_point),
+            operation: if slot.kind == PyramidTargetKind::Move {
+                InputOperation::PressDrawKey
+            } else {
+                InputOperation::Click(slot.click_point)
+            },
             // These classes use the immutable timing snapshot chosen in Params.
             // Card/pile actions can need longer for both cards to finish moving.
             animation_class: if slot.kind == PyramidTargetKind::Move {
@@ -1461,9 +1465,9 @@ mod tests {
     }
 
 
-    /// Verify halo recognition requires all four pixels at the calibrated probe.
+    /// Verify Move authorises D only when all four calibrated HALO pixels match.
     #[test]
-    fn fixed_probe_requires_all_four_gold_pixels_without_searching_nearby() {
+    fn move_draw_key_requires_all_four_gold_pixels_without_searching_nearby() {
         let mut frame = empty_board();
         let probe = halo_probe(MOVE_TARGET);
         paint(&mut frame, PixelRect::new(probe.x + 2, probe.y, 2, 2), GOLD);
@@ -1471,6 +1475,14 @@ mod tests {
         paint(&mut frame, probe, GOLD);
         paint(&mut frame, PixelRect::new(probe.x, probe.y, 1, 1), FELT);
         assert_eq!(predicted_target(&frame, &PyramidBoardState::new()), None);
+        paint(&mut frame, probe, GOLD);
+        let PredictedAction::Action(action) =
+            analyse(&frame, &PyramidBoardState::new()).unwrap().prediction
+        else {
+            panic!("The complete Move HALO must select its canonical action");
+        };
+        assert_eq!(action.target, ActionTarget::Pyramid(PyramidTargetKind::Move));
+        assert_eq!(action.operation(), InputOperation::PressDrawKey);
     }
 
 
@@ -1897,16 +1909,25 @@ mod tests {
     }
 
 
-    /// Verify every calibrated target emits one click with its intended timing and reuse.
+    /// Verify only Move uses the D key; all targets retain their timing and reuse.
     #[test]
-    fn every_action_is_one_mouse_click_with_move_specific_settle_and_repeat_policy() {
+    fn move_uses_draw_key_and_other_targets_retain_single_clicks_and_policy() {
         let custom_delays =
             AnimationSettleDelays::from_millis(1, 2, 3).with_pyramid_millis(725, 1_350, 950);
 
 
         for slot in PYRAMID_TARGETS {
             let action = action_for_kind(slot.kind).unwrap();
-            assert_eq!(action.operation(), InputOperation::Click(slot.click_point));
+            assert_eq!(
+                action.operation(),
+
+
+                if slot.kind == PyramidTargetKind::Move {
+                    InputOperation::PressDrawKey
+                } else {
+                    InputOperation::Click(slot.click_point)
+                }
+            );
             assert_eq!(
                 action.animation_settle_delay(custom_delays),
 

@@ -13,7 +13,7 @@ pub const APP_NAME: &str = env!("CARGO_PKG_NAME");
 
 
 /// Package version and candidate number shown by the UI and session log.
-pub const RELEASE_LABEL: &str = concat!("v", env!("CARGO_PKG_VERSION"), ", candidate 8");
+pub const RELEASE_LABEL: &str = concat!("v", env!("CARGO_PKG_VERSION"), ", candidate 10");
 
 
 /// Initial application window width in egui logical points.
@@ -889,6 +889,10 @@ pub const PYRAMID_CARD_SETTLE_DELAY_MS: u64 = 2_000;
 pub const PYRAMID_REOBSERVE_DELAY_MS: u64 = 1_000;
 
 
+/// Default TriPeaks input-free interval while waiting for a late Solver halo.
+pub const TRIPEAKS_REOBSERVE_DELAY_MS: u64 = 1_000;
+
+
 /// Klondike action settling interval selected from Charlie's Beast gameplay.
 pub const KLONDIKE_SETTLE_DELAY_MS: u64 = 750;
 
@@ -916,10 +920,9 @@ pub const TABLEAU_ANIMATION_SETTLE_DELAY: Duration =
 pub const BOARD_REDEAL_SETTLE_DELAY: Duration = Duration::from_millis(BOARD_REDEAL_SETTLE_DELAY_MS);
 
 
-// A missing next highlight can be a late animation or an in-board transition.
-// Re-observe without a fixed round limit until a target appears or STOP is
-// pressed; never repeat the guest input that preceded it.
-/// TriPeaks delay between fresh captures while waiting for the next halo.
+// Retain the short wait for initial planning and existing effect-proof retries.
+// Ordinary missing-HALO recovery uses its separate bounded, editable interval.
+/// Short TriPeaks planning/effect recapture delay; not Solver-recovery timing.
 pub const NO_HIGHLIGHT_REOBSERVE_DELAY: Duration = Duration::from_millis(150);
 
 
@@ -993,6 +996,8 @@ pub struct AnimationSettleDelays {
     pub draw: Duration,
     /// TriPeaks tableau-click-to-capture settling duration.
     pub tableau: Duration,
+    /// Delay between bounded TriPeaks observations before Solver recovery.
+    pub tripeaks_reobserve: Duration,
     /// Shared duration allowed for the next board to finish dealing.
     pub board_redeal: Duration,
     /// Pyramid Move/Recycle-to-capture settling duration.
@@ -1018,6 +1023,7 @@ impl AnimationSettleDelays {
         Self {
             draw: Duration::from_millis(draw_ms),
             tableau: Duration::from_millis(tableau_ms),
+            tripeaks_reobserve: Duration::from_millis(TRIPEAKS_REOBSERVE_DELAY_MS),
             board_redeal: Duration::from_millis(board_redeal_ms),
             pyramid_move: Duration::from_millis(PYRAMID_MOVE_SETTLE_DELAY_MS),
             pyramid_card: Duration::from_millis(PYRAMID_CARD_SETTLE_DELAY_MS),
@@ -1026,6 +1032,16 @@ impl AnimationSettleDelays {
             klondike_solve: Duration::from_millis(KLONDIKE_SOLVE_SETTLE_DELAY_MS),
             klondike_reobserve: Duration::from_millis(KLONDIKE_REOBSERVE_DELAY_MS),
         }
+    }
+
+
+    /// Apply the bounded TriPeaks recapture interval to the next run snapshot.
+    pub fn with_tripeaks_reobserve_millis(mut self, reobserve_ms: u64) -> Self {
+        self.tripeaks_reobserve = Duration::from_millis(reobserve_ms.clamp(
+            MINIMUM_ANIMATION_SETTLE_DELAY_MS,
+            MAXIMUM_ANIMATION_SETTLE_DELAY_MS,
+        ));
+        self
     }
 
 
@@ -1078,6 +1094,7 @@ impl Default for AnimationSettleDelays {
         Self {
             draw: DRAW_ANIMATION_SETTLE_DELAY,
             tableau: TABLEAU_ANIMATION_SETTLE_DELAY,
+            tripeaks_reobserve: Duration::from_millis(TRIPEAKS_REOBSERVE_DELAY_MS),
             board_redeal: BOARD_REDEAL_SETTLE_DELAY,
             pyramid_move: Duration::from_millis(PYRAMID_MOVE_SETTLE_DELAY_MS),
             pyramid_card: Duration::from_millis(PYRAMID_CARD_SETTLE_DELAY_MS),
@@ -1287,6 +1304,24 @@ mod tests {
             ),
             (0, 1, 0)
         );
+    }
+
+
+    /// Recapture edits are bounded, mode-local and frozen for the active run.
+    #[test]
+    fn tripeaks_reobserve_is_bounded_and_snapshotted() {
+        let defaults = AnimationSettleDelays::default();
+        assert_eq!(defaults.tripeaks_reobserve, Duration::from_millis(1_000));
+        let edited = defaults.with_tripeaks_reobserve_millis(1_250);
+        let active = StepRunSettings::new(edited, 0);
+        let next = edited.with_tripeaks_reobserve_millis(u64::MAX);
+        assert_eq!(active.animation_delays().tripeaks_reobserve, Duration::from_millis(1_250));
+        assert_eq!(next.tripeaks_reobserve, Duration::from_millis(5_000));
+        assert_eq!(edited.with_tripeaks_reobserve_millis(0).tripeaks_reobserve, Duration::ZERO);
+        assert_eq!(next.draw, defaults.draw);
+        assert_eq!(next.tableau, defaults.tableau);
+        assert_eq!(next.pyramid_reobserve, defaults.pyramid_reobserve);
+        assert_eq!(next.klondike_reobserve, defaults.klondike_reobserve);
     }
 
 
