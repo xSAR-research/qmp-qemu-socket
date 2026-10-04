@@ -1,12 +1,11 @@
-# Development conventions for v1.2.6 candidate 7
+# Development conventions for v1.2.6 candidate 8
 
-Candidate 7 corrects a complete source HALO taller than the former604-pixel
-maximum, against committed candidate 6 at
-`329d8065f4780d7db1b4ee8a52ed3a53b6252adc`. Its height capacity derives from
-existing scan rows 332..998, without changing those rows or other outline guards.
-The installer accepts only exact base or complete candidate 7 affected contents,
-backs up the actual before-state and preserves unrelated local work. The live
-controller retains fresh-HALO continuation without card matching. TriPeaks,
+Candidate 8 corrects one obstructed independent scene probe and recognises the
+measured Master medal LEVEL UP layout against pushed candidate 7 at
+`449004dfbf3d0dc411fe3f5741d5f6b93f242da5`. Scene sample count/threshold,
+source guards, safe click points and the live HALO-driven controller are retained.
+The installer accepts only exact base or complete candidate 8 affected contents,
+backs up the actual before-state and preserves unrelated local work. TriPeaks,
 Pyramid, Solve and one-board restart retain their policies. Independent rank
 recognition, search and file-free capture remain outside this candidate.
 
@@ -96,7 +95,7 @@ No formatter check is included, by Charlie's explicit instruction. Build/test
 results from another host do not prove Beast installation or live guest input.
 The candidate delivery notes record the checks actually executed.
 
-On the Beast, confirm the launched executable identifies v1.2.6, candidate 7. Verify
+On the Beast, confirm the launched executable identifies v1.2.6, candidate 8. Verify
 Capture Frame, exact-byte manual Capture PNG, single-step, finite and continuous
 multi-step, STOP and mode/socket invalidation. Exercise Klondike Draw 1, source
 transfers, RIGHT fan positions, recycle, Solve and late/no-HALO recovery. Preserve first-failure

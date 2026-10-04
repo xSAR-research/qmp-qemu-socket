@@ -1484,6 +1484,34 @@ fn native_pro_level_up_restart_cycle_recognises_each_control_once() {
 }
 
 
+/// K86 supplies the native Master Level Up screen after the score-skip click.
+/// Separate captured stages compose a controlled restart replay, not the
+/// unretained historical frames. Each terminal control is acknowledged once.
+#[test]
+fn native_master_level_up_restart_cycle_recognises_ok_then_new_game() {
+    use klondike::terminal::TerminalStage;
+    let initial = native_hint_phase(25);
+    let approved = initial.prediction;
+    let mut io = fake_frames(vec![
+        initial, native_hint_phase(26), native_hint_phase(26), native_hint_phase(86),
+        native_hint_phase(28), native_hint_phase(29), native_hint_phase(30), native_hint_phase(2),
+    ]);
+    let stop = AtomicBool::new(false);
+    io.native_terminal_analysis = true;
+    io.stop_on_probe = Some(&stop);
+    io.probes_before_stop = 6;
+    let (result, attempted, latest) = exercise(&mut io, approved, 0, &stop);
+    assert!(result.unwrap_err().contains("STOP"));
+    assert!(attempted);
+    assert_eq!(io.inputs, [approved]);
+    assert_eq!(io.terminal_inputs, [TerminalStage::ScoreCounting, TerminalStage::LevelUp,
+        TerminalStage::NewGame, TerminalStage::Play, TerminalStage::SolverReady]);
+    assert_eq!(io.completion_checks, 2);
+    assert!(io.frames.is_empty() && !io.trace.contains(&"solver"));
+    assert_eq!(latest.unwrap().prediction, native_hint_phase(2).prediction);
+}
+
+
 /// Positive K77 deal geometry advances once through SolverReady, then an
 /// unchanged Solver-off observation receives only a delayed fresh capture.
 /// A separately supplied native HALO exercises resumption while STOP prevents
@@ -1709,6 +1737,54 @@ fn native_long_column_seven_source_continues_from_acknowledged_waste_without_eff
                 input_commands: 3, input_events: 4, changed_pixels: 0, continued_from_halo: true,
             } if operation_index == index + 1 && operation_limit == limit
                 && input == expected_inputs[index] && result == after.prediction));
+        }
+    }
+}
+
+
+/// The later Undo/manual pairs reproduce native recommendation transitions
+/// without asserting identity with the unsaved worker captures. A long source
+/// crossing the old scene gutter remains one fresh action, with no effect gate.
+#[test]
+fn native_column_five_sources_continue_with_exact_finite_action_budgets() {
+    let cases = [
+        (83, 82, KlondikeTarget::Waste { offset: 2 }, KlondikeTarget::Tableau { column: 5, top: 407, bottom: 991 }),
+        (85, 84, KlondikeTarget::Tableau { column: 2, top: 336, bottom: 527 },
+            KlondikeTarget::Tableau { column: 5, top: 389, bottom: 994 }),
+        (88, 87, KlondikeTarget::Waste { offset: 0 },
+            KlondikeTarget::Tableau { column: 5, top: 610, bottom: 909 }),
+    ];
+
+
+    for (before_number, after_number, before_target, after_target) in cases {
+        let before = native_hint_phase(before_number);
+        let after = native_hint_phase(after_number);
+        assert!(before.gameplay_scene && after.gameplay_scene);
+        assert_eq!(before.prediction, canonical(before_target));
+        assert_eq!(after.prediction, canonical(after_target));
+
+
+        for limit in [1, 2] {
+            let mut frames = vec![copy_observation(&before), copy_observation(&after)];
+            let mut expected_inputs = vec![before.prediction];
+
+
+            if limit == 2 {
+                frames.push(copy_observation(&after));
+                expected_inputs.push(after.prediction);
+            }
+            let mut io = fake_frames(frames);
+            let (result, attempted, latest) = exercise(&mut io, before.prediction, limit, &AtomicBool::new(false));
+            assert_eq!(result, Ok(RunOutcome::Completed { verified: 0, halo: limit }));
+            assert!(attempted);
+            assert_eq!(io.inputs, expected_inputs);
+            assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), limit + 1);
+            assert_eq!(io.trace.iter().filter(|entry| **entry == "probe").count(), limit);
+            assert_eq!(io.waits.len(), limit);
+            assert!(io.frames.is_empty());
+            assert_eq!(latest.unwrap().frame.pixels, after.frame.pixels);
+            assert_eq!(io.completion_checks, 0);
+            assert!(!io.trace.contains(&"solver") && io.terminal_inputs.is_empty());
         }
     }
 }

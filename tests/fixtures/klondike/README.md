@@ -513,11 +513,12 @@ This image does not establish the preceding action or its effect.
 
 `qmp-qemu-socket 261003 093602 Another-fail-moving-stack.png` supplies the
 column-3 6-spades through 2-spades source. Charlie observed a Solver click
-after no HALO was found. This fixture retains the complete source, complete
-upper priority areas, all seven-column/four-foundation edge strips, Solver
-banner and exact scene gutter probes; unrelated lower cards are blacked out.
-It is detection evidence, with no claim about the preceding action's effect
-or the capture sequence without the matching log.
+after no HALO was found. Candidate 8 restores the complete original upload,
+verified against its recorded source SHA-256. Its former sparse mask retained
+only the old scene gutter and blacked out the lower half of the corrected
+probe; that mask was not physical scene evidence. No pixels are changed,
+resized or re-encoded. This is detection evidence, with no claim about the
+preceding action's effect or the capture sequence without the matching log.
 
 
 ### K70-K73: the previous source becomes the next landing guide
@@ -593,3 +594,48 @@ The manual FAIL capture occurred after the last automatic observation; the Undo
 predecessor was captured later again. Replaying K81/K80 tests fresh recommendation
 handling, without claiming these PNGs are the unsaved historical worker frames
 or proving a previous game effect.
+
+
+### K82-K85: the column-five source covers a scene probe
+
+These are complete byte-identical copies of Charlie's supplied 1920×1080
+uploads. K82/K84 are later manual FAIL captures. K83/K85 are later Undo
+reconstructions of the preceding RIGHT King-hearts and tableau two-diamonds
+recommendations, respectively. They are not asserted to be unsaved automatic
+worker frames. Upload byte counts differ from the log-declared manual-save
+counts; the upload hashes identify exactly the evidence tested here.
+
+Both FAIL images retain only 140/196 felt samples at the former lower gutter
+`(1202,840,14,14)`. Their column-five gold outline covers x1202..1205. All other
+scene guards pass, and the ordinary source finder already accepts rows407..991
+and389..994, respectively. The shared clear corridor with prior opposing
+column-six HALOs is x1206..1217. Candidate 8 uses its seven-pixel core at
+`(1208,840,7,28)`, retaining196 samples and the95% felt threshold. No outline,
+click or effect policy changes follow from this scene correction.
+
+
+### K86: independently measured Master medal LEVEL UP layout
+
+This complete original upload shows a Master medal at level78. The matching
+log1791088050166 acknowledges score-count acceleration, then refuses the
+unrecognised terminal scene; it sends no OK input. The existing `(960,795)`
+point remains inside the gold OK button. Relative to the earlier Pro medal
+layout, title rows shift up2, the KLONDIKE label down7, and OK/frame down2.
+The native mixed label background is measured separately. All required
+signature groups and completed-board context remain mandatory; numeric
+level/rank/reward text is outside the signature. This image is a later manual
+capture, not asserted to be a historical worker frame or exact QMP-save bytes.
+
+
+### K87/K88: three-card source without toolbar overlap
+
+These whole original uploads arrived before candidate8 delivery. K87 shows
+8-hearts/7-clubs/6-hearts highlighted in column5, rows610..909, with the dark
+landing guide below column2's9-clubs. K88 is its later Undo predecessor showing
+RIGHT fan-offset0 nine-diamonds to SUIT3. The unchanged source finder accepts
+one block with the existing upper-card click`(1128,650)`. The former gutter has
+162/196felt; the corrected core has196/196. No new source threshold, height or
+input rule is needed. Log1791088327491 records operation92 acknowledged from
+RIGHT, then four unsupported-scene observations and a guarded stop. The manual
+FAIL frame was captured much later; neither PNG establishes historical worker
+frame identity, QMP-save byte identity or the timing of that earlier move.

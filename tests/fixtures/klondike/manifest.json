@@ -1,5 +1,5 @@
 {
-  "description": "Original-byte and derived sparse regression fixtures. Listed half-open rectangles preserve original RGBA pixels exactly at original coordinates. Sparse fixtures black all unlisted pixels, without resizing. K70-K81 are complete byte-identical original uploads. Per-file retained_rectangles_xyxy overrides the default rectangle list. Manual frames are not asserted to be the historical automatic worker frames.",
+  "description": "Original-byte and derived sparse regression fixtures. Listed half-open rectangles preserve original RGBA pixels exactly at original coordinates. Sparse fixtures black all unlisted pixels, without resizing. K69 and K70-K88 are complete byte-identical original uploads. Per-file retained_rectangles_xyxy overrides the default rectangle list. Manual frames are not asserted to be the historical automatic worker frames.",
   "frame": [
     1920,
     1080
@@ -1846,8 +1846,8 @@
       "fixture": "K69.png",
       "source": "qmp-qemu-socket 261003 093602 Another-fail-moving-stack.png",
       "source_sha256": "da41421d79e7e3b05d3eac81fd7cd0da0551d10a596377343747e9528843fc6f",
-      "fixture_sha256": "1830892a2277da45669ddb0dfdca75d86d14cf5790a292516d62055ba5f47b54",
-      "bytes": 547215,
+      "fixture_sha256": "da41421d79e7e3b05d3eac81fd7cd0da0551d10a596377343747e9528843fc6f",
+      "bytes": 3461927,
       "source_bytes": 3461927,
       "source_mode": "RGBA",
       "source_dimensions": [
@@ -1856,55 +1856,13 @@
       ],
       "retained_rectangles_xyxy": [
         [
-          378,
-          100,
-          1541,
-          304
-        ],
-        [
-          378,
-          332,
-          1541,
-          355
-        ],
-        [
-          706,
-          332,
-          886,
-          1000
-        ],
-        [
-          160,
-          310,
-          176,
-          326
-        ],
-        [
-          1730,
-          310,
-          1746,
-          326
-        ],
-        [
-          874,
-          710,
-          881,
-          738
-        ],
-        [
-          1202,
-          840,
-          1216,
-          854
-        ],
-        [
-          824,
-          34,
-          1096,
-          92
+          0,
+          0,
+          1920,
+          1080
         ]
       ],
-      "observation": "Supplied stopped frame after observed Solver click: column3 six-spades through two-spades outlined source enters toolbar; dotted landing is in column6. Fixture preserves complete upper priority areas, column3 outline/artwork, every native scene strip/gutter and Solver banner. Unrelated lower cards are omitted, so this is detection evidence only, not effect evidence or a substitute original frame."
+      "observation": "Candidate8 restores the complete original upload. The former sparse mask retained only the old lower gutter, artificially blacking the new clear 7-by-28 probe. No source pixels are changed or re-encoded."
     },
     {
       "fixture": "K70.png",
@@ -2133,6 +2091,118 @@
         ]
       ],
       "observation": "Later Undo predecessor: solid RIGHT King-spades at fan offset1, dashed empty-column2 destination. Taken after FAIL, not a historical before-input worker frame."
+    },
+    {
+      "fixture": "K82.png",
+      "source": "qmp-qemu-socket 261004 141320 FAIL-on-long-card-move.png",
+      "source_sha256": "a3d0b225c68b2f077250ae12df4dad9e790d8e1f1e7381e505565e0786c2b50c",
+      "fixture_sha256": "a3d0b225c68b2f077250ae12df4dad9e790d8e1f1e7381e505565e0786c2b50c",
+      "bytes": 3444999,
+      "retained_rectangles_xyxy": [
+        [
+          0,
+          0,
+          1920,
+          1080
+        ]
+      ],
+      "observation": "Later manual first FAIL capture: column-5 source rows407..991. Old scene gutter intersects gold outline; not asserted to be the historical worker frame."
+    },
+    {
+      "fixture": "K83.png",
+      "source": "qmp-qemu-socket 261004 141332 Move-before-fail.png",
+      "source_sha256": "12fefd95ecb0d18dda93928d361c7d2f27282893f96cf7cc764fef70d0ca261a",
+      "fixture_sha256": "12fefd95ecb0d18dda93928d361c7d2f27282893f96cf7cc764fef70d0ca261a",
+      "bytes": 3475799,
+      "retained_rectangles_xyxy": [
+        [
+          0,
+          0,
+          1920,
+          1080
+        ]
+      ],
+      "observation": "Later Undo reconstruction before first FAIL, showing RIGHT fan-offset2 King-hearts. The Undo is outside the automatic failure sequence."
+    },
+    {
+      "fixture": "K84.png",
+      "source": "qmp-qemu-socket 261004 142242 2nd-Fail-on-long-card-move.png",
+      "source_sha256": "99c9d0e3b9c20ced051d71abd86a5b59dd7c7b12e3b527664c93de7588251a6d",
+      "fixture_sha256": "99c9d0e3b9c20ced051d71abd86a5b59dd7c7b12e3b527664c93de7588251a6d",
+      "bytes": 3449479,
+      "retained_rectangles_xyxy": [
+        [
+          0,
+          0,
+          1920,
+          1080
+        ]
+      ],
+      "observation": "Later manual second FAIL capture: column-5 source rows389..994. Old scene gutter intersects gold outline; not asserted to be the historical worker frame."
+    },
+    {
+      "fixture": "K85.png",
+      "source": "qmp-qemu-socket 261004 142301 Move-before-2nd-fail.png",
+      "source_sha256": "63b6ea167251f1951e26af00aba614a0febf8242eb1bdbfd1781f457539447ad",
+      "fixture_sha256": "63b6ea167251f1951e26af00aba614a0febf8242eb1bdbfd1781f457539447ad",
+      "bytes": 3429284,
+      "retained_rectangles_xyxy": [
+        [
+          0,
+          0,
+          1920,
+          1080
+        ]
+      ],
+      "observation": "Later Undo reconstruction before second FAIL, showing column-2 two-diamonds. The Undo is outside the automatic failure sequence."
+    },
+    {
+      "fixture": "K86.png",
+      "source": "qmp-qemu-socket 261004 142949 FAIL-on-LEVEL-UP.png",
+      "source_sha256": "e83fb9ecb53bb1901446608cd4c237a2b6462c64b7a4366ae56728583be885fa",
+      "fixture_sha256": "e83fb9ecb53bb1901446608cd4c237a2b6462c64b7a4366ae56728583be885fa",
+      "bytes": 1865177,
+      "retained_rectangles_xyxy": [
+        [
+          0,
+          0,
+          1920,
+          1080
+        ]
+      ],
+      "observation": "Later manual Master medal Level78 LEVEL UP capture. The matching log sends no OK input because recognition fails. Upload bytes are retained without asserting QMP-save byte identity."
+    },
+    {
+      "fixture": "K87.png",
+      "source": "qmp-qemu-socket 261004 150026 Fail-on-card-stack-move.png",
+      "source_sha256": "7ad0f3720734a726d56ab14e59d9c6167847206efd7ee0c677c3f8201ca1f151",
+      "fixture_sha256": "7ad0f3720734a726d56ab14e59d9c6167847206efd7ee0c677c3f8201ca1f151",
+      "bytes": 3554866,
+      "retained_rectangles_xyxy": [
+        [
+          0,
+          0,
+          1920,
+          1080
+        ]
+      ],
+      "observation": "Later manual three-card FAIL frame, column5 rows610..909. Old gutter162/196 felt; corrected clear core196/196. Capture is much later than the automatic stop and upload bytes differ from the log-declared QMP-save count."
+    },
+    {
+      "fixture": "K88.png",
+      "source": "qmp-qemu-socket 261004 150039 Move-before-fail.png",
+      "source_sha256": "4119e91dd065f1e8e2966be30b46da53c37f386f766baebc5fb896e608d2a41d",
+      "fixture_sha256": "4119e91dd065f1e8e2966be30b46da53c37f386f766baebc5fb896e608d2a41d",
+      "bytes": 3527996,
+      "retained_rectangles_xyxy": [
+        [
+          0,
+          0,
+          1920,
+          1080
+        ]
+      ],
+      "observation": "Later Undo predecessor of RIGHT fan-offset0 nine-diamonds to SUIT3. The Undo is outside the automatic failure input sequence; capture is not asserted to be a historical worker frame."
     }
   ],
   "solve_control_template": {

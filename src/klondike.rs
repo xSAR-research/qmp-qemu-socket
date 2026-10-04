@@ -428,10 +428,10 @@ fn fraction_at_least(
 
 
 /// Require the measured seven-column/four-foundation layout and open felt gutters.
-/// The lower inter-column probe uses the clear seven-pixel core measured in K62,
-/// retaining 196 pixels and 95% felt support. Wider sampling catches K62's
-/// column-3 shadow or K47's opposing column-4 shadow. No source outline grants
-/// an exception to this independent scene guard.
+/// Both lower inter-column probes use measured clear seven-pixel felt cores,
+/// retaining 196 pixels each and 95% support. Wider sampling catches K62/K47
+/// or K82/K84 source shadows. The column-five/six core also excludes the
+/// opposing column-six HALOs. No source grants an independent scene exception.
 /// Solver may be off: this supports the worker's explicitly authorised activation.
 /// Sparse/unknown endgames and overlays fail closed; no completion is inferred.
 pub fn is_gameplay_scene(frame: &CapturedFrame) -> Result<bool, HaloDetectionError> {
@@ -440,7 +440,7 @@ pub fn is_gameplay_scene(frame: &CapturedFrame) -> Result<bool, HaloDetectionErr
         PixelRect::new(160, 310, 16, 16),
         PixelRect::new(1_730, 310, 16, 16),
         PixelRect::new(874, 710, 7, 28),
-        PixelRect::new(1_202, 840, 14, 14),
+        PixelRect::new(1_208, 840, 7, 28),
     ];
 
 
@@ -6971,7 +6971,7 @@ mod tests {
             PixelRect::new(160, 310, 16, 16),
             PixelRect::new(1_730, 310, 16, 16),
             PixelRect::new(874, 710, 7, 28),
-            PixelRect::new(1_202, 840, 14, 14),
+            PixelRect::new(1_208, 840, 7, 28),
         ] {
             let mut occluded = original.clone();
             paint(&mut occluded, bounds, [0, 0, 0]);
@@ -7390,6 +7390,62 @@ mod tests {
             KlondikeTarget::Tableau { column: 7, top: 992, bottom: 372 },
         ] {
             assert!(canonical_action(target).is_none(), "unsupported {target:?}");
+        }
+    }
+
+
+    /// Native column-five sources remain valid when their exterior edge reaches
+    /// the former column-five/six scene probe. The source itself is unchanged.
+    #[test]
+    fn column_five_sources_keep_independent_scene_context() {
+
+
+        for (number, top, bottom) in [(82, 407, 991), (84, 389, 994), (87, 610, 909)] {
+            let frame = fixture(number);
+            assert!(is_gameplay_scene(&frame).unwrap(), "K{number} native scene");
+            let planned = action(&frame);
+            assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 5, top, bottom,
+            }));
+            assert_eq!(planned.operation(), InputOperation::Click(PixelPoint::new(1_128, i32::from(top) + 40)));
+            assert!(!completion_evidence(&frame).unwrap().complete_candidate);
+        }
+    }
+
+
+    /// The second core preserves the same inclusive 95% felt requirement;
+    /// unrelated dark pixels cannot be excused by an intact nearby source.
+    #[test]
+    fn column_five_gap_keeps_exact_felt_fraction_boundary() {
+        let mut frame = fixture(82);
+        let probe = PixelRect::new(1_208, 840, 7, 28);
+        assert_eq!(count_pixels(&frame, probe, is_felt), 196);
+        paint(&mut frame, PixelRect::new(1_208, 840, 7, 1), [0, 0, 0]);
+        paint(&mut frame, PixelRect::new(1_208, 841, 2, 1), [0, 0, 0]);
+        assert_eq!(count_pixels(&frame, probe, is_felt), 187);
+        assert!(is_gameplay_scene(&frame).unwrap());
+        paint(&mut frame, PixelRect::new(1_210, 841, 1, 1), [0, 0, 0]);
+        assert_eq!(count_pixels(&frame, probe, is_felt), 186);
+        assert!(!is_gameplay_scene(&frame).unwrap());
+        assert_eq!(analyse(&frame).unwrap().prediction, PredictedAction::NoHighlight);
+    }
+
+
+    /// The corrected clear core retains all prior native scene decisions and
+    /// rejects terminal artwork while admitting the three new intact sources.
+    #[test]
+    fn column_five_gap_preserves_prior_scenes_and_terminal_refusals() {
+        let accepted = [
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
+            19, 20, 21, 22, 23, 24, 25, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
+            41, 42, 44, 45, 46, 47, 48, 50, 51, 54, 55, 56, 57, 58, 59, 60, 61, 62,
+            63, 64, 65, 66, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81,
+            82, 83, 84, 85, 87, 88,
+        ];
+
+
+        for number in 1..=88 {
+            assert_eq!(is_gameplay_scene(&fixture(number)).unwrap(), accepted.contains(&number), "K{number:02}");
         }
     }
 

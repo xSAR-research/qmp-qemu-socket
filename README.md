@@ -14,18 +14,18 @@ the real purpose. Each fixture keeps independent target and effect policies.
 The target is to build in Dijkstra / A* shortest path problem solving rather
 than using the **Solver**, this will benefit drone route planning experience.
 
-This is **v1.2.6, candidate 7**, based on committed candidate 6 at
-`329d8065f4780d7db1b4ee8a52ed3a53b6252adc`. `Cargo.toml` supplies the package
+This is **v1.2.6, candidate 8**, based on pushed candidate 7 at
+`449004dfbf3d0dc411fe3f5741d5f6b93f242da5`. `Cargo.toml` supplies the package
 version shown in the window title and Parameters. Beast gameplay acceptance
 is required before promotion.
 
-Candidate 7 recognises the complete 620-pixel Klondike source in K80 by deriving
-its maximum height from the existing tableau scan bounds. It keeps every closed
-outline, rail, card-paper and scene guard, and clicks within the upper card.
-Each fresh valid Solver recommendation still receives one action, editable
-settle and a fresh capture; card matching does not gate execution. Missing HALOs,
-Solve and one-board restart retain candidate 6's policies. See
-[candidate notes](docs/klondike-v1.2.6-candidate-7.md).
+Candidate 8 corrects a scene gutter covered by long column-five source HALOs
+and recognises the separately measured Master medal LEVEL UP layout. It keeps
+the same scene threshold, complete outline guards, safe upper-card clicks and
+existing terminal input point. Each fresh valid Solver recommendation receives
+one action, editable settle and a fresh capture; card matching does not gate
+execution. Solve, one-board restart and accepted other modes retain their
+policies. See [candidate notes](docs/klondike-v1.2.6-candidate-8.md).
 
 ## Build and source spacing
 

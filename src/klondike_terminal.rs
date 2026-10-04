@@ -15,6 +15,11 @@
 //! an OK caption four rows lower. Its complete title, mixed Klondike label,
 //! frame and control signature reuses the existing completed-board context and
 //! measured OK click. Changing rank, level and reward text remain excluded.
+//! K86 independently measures a Master medal layout: its title is two rows
+//! higher, printed game label seven rows lower and OK/frame two rows lower than
+//! K67. These complete component signatures retain the same colour tolerances,
+//! completed-board context and existing OK click; no runtime alignment search
+//! or guessed terminal input is authorised.
 //! K77's initial King has less than 30% white in its central artwork. Fresh-deal
 //! recognition instead requires four positive paper margins at every measured
 //! staggered face, retaining empty waste/foundations, stock and back-strip proof.
@@ -138,6 +143,29 @@ impl RgbSample {
     const fn new(x: u32, y: u32, rgb: [u8; 3]) -> Self {
         Self { x, y, rgb }
     }
+}
+
+
+/// Translate a complete constant sample group by one measured vertical offset.
+/// Constant evaluation rejects row underflow or overflow. Independent samples
+/// are never searched or aligned at runtime; colours and horizontal positions
+/// remain those of the original complete group.
+const fn shift_sample_rows<const LENGTH: usize>(
+    samples: [RgbSample; LENGTH],
+    upward_rows: u32,
+    downward_rows: u32,
+) -> [RgbSample; LENGTH] {
+    let mut shifted = samples;
+    let mut index = 0;
+
+
+    while index < LENGTH {
+        shifted[index].y = shifted[index].y - upward_rows + downward_rows;
+        index += 1;
+    }
+
+
+    shifted
 }
 
 
@@ -480,6 +508,60 @@ const PLAY_DRAW_ONE_NUMERAL: [RgbSample; 30] = [
 ];
 
 
+/// K86's complete title letters match K67 two rows higher, within the original
+/// colour tolerance. Level and rank artwork do not contribute to this group.
+const LEVEL_UP_MASTER_TITLE: [RgbSample; 10] =
+    shift_sample_rows(LEVEL_UP_MEDAL_TITLE, 2, 0);
+
+
+/// The same coherent title translation retains every measured blue/white
+/// contrast point; a flat white title patch cannot supply this evidence.
+const LEVEL_UP_MASTER_TITLE_BACKGROUND: [RgbSample; 7] =
+    shift_sample_rows(LEVEL_UP_MEDAL_TITLE_BACKGROUND, 2, 0);
+
+
+/// K86's complete printed Klondike name lies seven rows below K67. Numeric
+/// level, changing rank and reward text remain outside these letter samples.
+const LEVEL_UP_MASTER_KLONDIKE: [RgbSample; 10] =
+    shift_sample_rows(LEVEL_UP_KLONDIKE, 0, 7);
+
+
+/// Original native K86 background values between its translated game letters.
+/// The medal's blue rays differ from K67 at one point beyond the unchanged
+/// tolerance, so this complete mixed group is measured independently.
+const LEVEL_UP_MASTER_KLONDIKE_BACKGROUND: [RgbSample; 8] = [
+    RgbSample::new(771, 640, [22, 54, 90]),
+    RgbSample::new(800, 626, [20, 56, 92]),
+    RgbSample::new(827, 638, [33, 69, 104]),
+    RgbSample::new(855, 624, [29, 65, 98]),
+    RgbSample::new(888, 639, [42, 78, 110]),
+    RgbSample::new(906, 626, [46, 84, 114]),
+    RgbSample::new(931, 639, [26, 62, 94]),
+    RgbSample::new(961, 626, [22, 62, 95]),
+];
+
+
+/// K86's complete black OK caption lies two rows below the K67 caption.
+const LEVEL_UP_MASTER_OK: [RgbSample; 10] =
+    shift_sample_rows(LEVEL_UP_MEDAL_OK, 0, 2);
+
+
+/// All four inner gold contrast points share K86's measured OK translation.
+const LEVEL_UP_MASTER_OK_BACKGROUND: [RgbSample; 4] =
+    shift_sample_rows(LEVEL_UP_MEDAL_OK_BACKGROUND, 0, 2);
+
+
+/// Both upper and lower button edges retain their full translated body proof.
+const LEVEL_UP_MASTER_BUTTON_BODY: [RgbSample; 4] =
+    shift_sample_rows(LEVEL_UP_MEDAL_BUTTON_BODY, 0, 2);
+
+
+/// K86's enlarged modal frame matches the complete K67 frame two rows lower,
+/// independently of the title, game label, OK control and completed board.
+const LEVEL_UP_MASTER_FRAME: [RgbSample; 8] =
+    shift_sample_rows(LEVEL_UP_MEDAL_FRAME, 0, 2);
+
+
 /// Original non-letter samples distinguish the title from a flat white patch.
 const CONGRATULATIONS_TITLE_BACKGROUND: [RgbSample; 8] = [
     RgbSample::new(736, 238, [29, 164, 212]),
@@ -718,6 +800,24 @@ fn has_completed_medal_level_up(frame: &CapturedFrame) -> bool {
 }
 
 
+/// Recognise K86's independently measured Master medal components as a complete
+/// layout. Original small/Pro layouts keep their own branches. Every title,
+/// printed game label, OK and frame group must pass its fixed recorded position
+/// alongside the unchanged completed-board context before the existing OK stage
+/// is returned; a known sequence or generic gold button never supplies authority.
+fn has_completed_master_medal_level_up(frame: &CapturedFrame) -> bool {
+    matches_artwork(frame, &LEVEL_UP_MASTER_TITLE)
+        && matches_artwork(frame, &LEVEL_UP_MASTER_TITLE_BACKGROUND)
+        && matches_artwork(frame, &LEVEL_UP_MASTER_KLONDIKE)
+        && matches_artwork(frame, &LEVEL_UP_MASTER_KLONDIKE_BACKGROUND)
+        && matches_artwork(frame, &LEVEL_UP_MASTER_OK)
+        && matches_artwork(frame, &LEVEL_UP_MASTER_OK_BACKGROUND)
+        && matches_artwork(frame, &LEVEL_UP_MASTER_BUTTON_BODY)
+        && matches_artwork(frame, &LEVEL_UP_MASTER_FRAME)
+        && has_completed_level_up_context(frame)
+}
+
+
 /// One independently dimmed empty-tableau point with the measured finite warm
 /// particle allowance; neither arbitrary black nor bright paper supplies proof.
 fn matches_level_up_empty_sample(frame: &CapturedFrame, sample: &RgbSample) -> bool {
@@ -871,6 +971,11 @@ pub(crate) fn classify_terminal(
     }
 
 
+    if has_completed_master_medal_level_up(frame) {
+        return Ok(Some(TerminalStage::LevelUp));
+    }
+
+
     if matches_artwork(frame, &PLAY_KLONDIKE_TITLE)
         && matches_artwork(frame, &PLAY_KLONDIKE_TITLE_BACKGROUND)
         && matches_artwork(frame, &PLAY_DRAW_ONE)
@@ -951,6 +1056,8 @@ pub(crate) struct TerminalEvidence {
     level_up_tableau: SignatureEvidence,
     /// K67 medal-layout title, label, OK and frame groups, all independently required.
     level_up_medal: [SignatureEvidence; 8],
+    /// K86 Master-layout title, label, OK and frame groups, all independently required.
+    level_up_master: [SignatureEvidence; 8],
     /// Static Solver word and key artwork, separate from fresh-board proof.
     solver_control: [SignatureEvidence; 2],
     /// Independent initial-deal topology; no-HALO alone cannot make this true.
@@ -964,7 +1071,7 @@ impl fmt::Display for TerminalEvidence {
     /// Surface the refused scene guard without inferring missing worker pixels.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(formatter,
-            "Congratulations title={}/{}, frame={}, completed context={}, skip={}/{}, New Game={}/{}/{}; Level Up title={}/{}, label +0={}/{}, label +2={}/{}, OK={}/{}/{}, foundations={}, empty tableau={}; medal layout title={}/{}, label={}/{}, OK={}/{}/{}, frame={}; Solver word={}, key={}, fresh-deal={}",
+            "Congratulations title={}/{}, frame={}, completed context={}, skip={}/{}, New Game={}/{}/{}; Level Up title={}/{}, label +0={}/{}, label +2={}/{}, OK={}/{}/{}, foundations={}, empty tableau={}; medal layout title={}/{}, label={}/{}, OK={}/{}/{}, frame={}; Master layout title={}/{}, label={}/{}, OK={}/{}/{}, frame={}; Solver word={}, key={}, fresh-deal={}",
             self.congratulations_ribbon[0], self.congratulations_ribbon[1],
             self.congratulations_frame, self.congratulations_context,
             self.score_control[0], self.score_control[1],
@@ -977,7 +1084,10 @@ impl fmt::Display for TerminalEvidence {
             self.level_up_medal[0], self.level_up_medal[1],
             self.level_up_medal[2], self.level_up_medal[3],
             self.level_up_medal[4], self.level_up_medal[5], self.level_up_medal[6],
-            self.level_up_medal[7], self.solver_control[0], self.solver_control[1],
+            self.level_up_medal[7], self.level_up_master[0], self.level_up_master[1],
+            self.level_up_master[2], self.level_up_master[3], self.level_up_master[4],
+            self.level_up_master[5], self.level_up_master[6], self.level_up_master[7],
+            self.solver_control[0], self.solver_control[1],
             self.fresh_deal)
     }
 }
@@ -1024,6 +1134,11 @@ pub(crate) fn inspect_terminal_evidence(
             artwork(&LEVEL_UP_MEDAL_KLONDIKE_BACKGROUND), artwork(&LEVEL_UP_MEDAL_OK),
             artwork(&LEVEL_UP_MEDAL_OK_BACKGROUND), artwork(&LEVEL_UP_MEDAL_BUTTON_BODY),
             artwork(&LEVEL_UP_MEDAL_FRAME)],
+        level_up_master: [artwork(&LEVEL_UP_MASTER_TITLE),
+            artwork(&LEVEL_UP_MASTER_TITLE_BACKGROUND), artwork(&LEVEL_UP_MASTER_KLONDIKE),
+            artwork(&LEVEL_UP_MASTER_KLONDIKE_BACKGROUND), artwork(&LEVEL_UP_MASTER_OK),
+            artwork(&LEVEL_UP_MASTER_OK_BACKGROUND), artwork(&LEVEL_UP_MASTER_BUTTON_BODY),
+            artwork(&LEVEL_UP_MASTER_FRAME)],
         solver_control: [artwork(&SOLVER_LABEL), artwork(&SOLVER_KEY)],
         fresh_deal: has_fresh_deal(frame)?,
     })
@@ -1053,6 +1168,7 @@ mod tests {
             53 => include_bytes!("../tests/fixtures/klondike/K53.png"),
             67 => include_bytes!("../tests/fixtures/klondike/K67.png"),
             77 => include_bytes!("../tests/fixtures/klondike/K77.png"),
+            86 => include_bytes!("../tests/fixtures/klondike/K86.png"),
             _ => panic!("unknown terminal fixture"),
         };
         decode_png(png).expect("decode recorded terminal PNG")
@@ -1247,6 +1363,148 @@ mod tests {
         let evidence = inspect_terminal_evidence(&frame).unwrap();
         assert!(evidence.level_up_medal.iter().all(|guard| guard.matched == guard.required));
         assert!(evidence.to_string().contains("medal layout title=10/10/7/7, label=10/10/8/8, OK=10/10/4/4/4/4, frame=8/8"));
+    }
+
+
+    /// K86's Master medal changes independently aligned title, label and button
+    /// artwork. It still requires the completed board and measured existing OK
+    /// point, rather than a generic gold control or an assumed terminal sequence.
+    #[test]
+    fn master_medal_level_up_recognises_the_existing_ok_control() {
+        let frame = fixture(86);
+        assert!(!has_completed_medal_level_up(&frame));
+        assert!(has_completed_master_medal_level_up(&frame));
+        assert!(has_completed_level_up_context(&frame));
+        assert_eq!(pixel_rgb(&frame, 960, 795), Some([253, 248, 223]));
+        assert_eq!(classify_terminal(&frame).unwrap(), Some(TerminalStage::LevelUp));
+        assert_eq!(TerminalStage::LevelUp.click_point(), PixelPoint::new(960, 795));
+        assert_eq!(TerminalStage::LevelUp.mouse_hold(), POST_GAME_MOUSE_HOLD);
+        assert_eq!(TerminalStage::LevelUp.settle_delay(Duration::ZERO), POST_GAME_STAGE_DELAY);
+        let evidence = inspect_terminal_evidence(&frame).unwrap();
+        assert!(evidence.level_up_master.iter().all(|guard| guard.matched == guard.required));
+        assert_eq!(evidence.level_up_medal[0].matched, 7);
+        assert_eq!(evidence.level_up_medal[4].matched, 6);
+        assert!(evidence.to_string().contains("Master layout title=10/10/7/7, label=10/10/8/8, OK=10/10/4/4/4/4, frame=8/8"));
+    }
+
+
+    /// Each complete Master group is independently required. Erasing a title,
+    /// printed game label, OK control or frame cannot turn a known sequence into
+    /// click authority, even with all remaining native scene pixels intact.
+    #[test]
+    fn master_medal_level_up_requires_complete_scene_and_control_artwork() {
+        let bounds = [PixelRect::new(804, 177, 315, 55),
+            PixelRect::new(758, 616, 220, 35), PixelRect::new(839, 780, 241, 80),
+            PixelRect::new(456, 710, 110, 52)];
+
+
+        for bounds in bounds {
+
+
+            for rgb in [[0, 0, 0], [255, 255, 255], [240, 190, 90]] {
+                let mut frame = fixture(86);
+                paint(&mut frame, bounds, rgb);
+                assert_eq!(classify_terminal(&frame).unwrap(), None,
+                    "missing K86 artwork {bounds:?} {rgb:?}");
+            }
+        }
+
+
+        for samples in [&LEVEL_UP_MASTER_TITLE[..], &LEVEL_UP_MASTER_TITLE_BACKGROUND[..],
+            &LEVEL_UP_MASTER_KLONDIKE[..], &LEVEL_UP_MASTER_KLONDIKE_BACKGROUND[..],
+            &LEVEL_UP_MASTER_OK[..], &LEVEL_UP_MASTER_OK_BACKGROUND[..],
+            &LEVEL_UP_MASTER_BUTTON_BODY[..], &LEVEL_UP_MASTER_FRAME[..]]
+        {
+            let sample = samples[0];
+            let contrast = if sample.rgb.iter().all(|channel| *channel > 200) {
+                [0, 0, 0]
+            } else {
+                [255, 255, 255]
+            };
+            let mut frame = fixture(86);
+            paint(&mut frame, PixelRect::new(sample.x, sample.y, 1, 1), contrast);
+            assert_eq!(classify_terminal(&frame).unwrap(), None,
+                "missing K86 sample ({}, {})", sample.x, sample.y);
+        }
+    }
+
+
+    /// A visible Master dialog does not establish game win when any occupied
+    /// foundation or independent empty-tableau context sample is missing.
+    #[test]
+    fn master_medal_level_up_requires_each_completed_board_context_point() {
+
+
+        for sample in LEVEL_UP_FOUNDATION_CONTEXT.into_iter()
+            .chain(LEVEL_UP_EMPTY_TABLEAU_CONTEXT)
+        {
+
+
+            for rgb in [[0, 0, 0], [255, 255, 255]] {
+                let mut frame = fixture(86);
+                paint(&mut frame, PixelRect::new(sample.x, sample.y, 1, 1), rgb);
+                assert_eq!(classify_terminal(&frame).unwrap(), None);
+            }
+        }
+    }
+
+
+    /// The Master branch requires its one recorded control position. A complete
+    /// real OK glyph shifted horizontally cannot authorise the old click point.
+    #[test]
+    fn master_medal_level_up_rejects_a_displaced_ok_control() {
+        let original = fixture(86);
+        let mut moved = original.clone();
+        paint(&mut moved, PixelRect::new(839, 780, 257, 80), [0, 0, 0]);
+
+
+        for y in 780..860usize {
+            let source = y * original.stride + 839 * 4;
+            let destination = y * moved.stride + 855 * 4;
+            moved.pixels[destination..destination + 241 * 4]
+                .copy_from_slice(&original.pixels[source..source + 241 * 4]);
+        }
+        assert!(matches_artwork(&moved, &LEVEL_UP_MASTER_TITLE));
+        assert!(has_completed_level_up_context(&moved));
+        assert_eq!(classify_terminal(&moved).unwrap(), None);
+    }
+
+
+    /// Changing medal art, level digits, rank or next-reward text cannot erase
+    /// or create the separate title, Klondike label, complete OK and frame proof.
+    /// Synthetic erasure does not calibrate another unseen medal layout.
+    #[test]
+    fn master_medal_level_up_excludes_changing_rank_and_reward_artwork() {
+        let mut frame = fixture(86);
+
+
+        for bounds in [PixelRect::new(740, 330, 440, 273),
+            PixelRect::new(1_110, 610, 60, 45), PixelRect::new(900, 652, 140, 41),
+            PixelRect::new(790, 702, 370, 39)]
+        {
+            paint(&mut frame, bounds, [0, 0, 0]);
+        }
+        assert_eq!(classify_terminal(&frame).unwrap(), Some(TerminalStage::LevelUp));
+    }
+
+
+    /// Unknown flat colours and malformed frames cannot acquire terminal input
+    /// from the new Master signature. Native frame validation runs first.
+    #[test]
+    fn master_medal_level_up_rejects_unknown_and_malformed_native_frames() {
+
+
+        for rgb in [[0, 0, 0], [255, 255, 255], [240, 190, 90], [20, 120, 70]] {
+            let mut frame = fixture(86);
+            paint(&mut frame, PixelRect::new(0, 0, 1_920, 1_080), rgb);
+            assert_eq!(classify_terminal(&frame).unwrap(), None);
+        }
+        let mut wrong_size = fixture(86);
+        wrong_size.height = 1_079;
+        assert!(matches!(classify_terminal(&wrong_size), Err(HaloDetectionError::BoundsOutsideFrame)));
+        let mut malformed = fixture(86);
+        malformed.pixels.clear();
+        assert!(matches!(classify_terminal(&malformed), Err(HaloDetectionError::InvalidFrameLayout)));
     }
 
 

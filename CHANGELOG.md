@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.2.6 — candidate 8
+
+- Measure the clear seven-pixel column-five/six scene gutter core for the three
+  captured column-five source HALOs, preserving196 samples and the95% felt threshold.
+  Source-outline, click, capture and HALO-driven execution policy are unchanged.
+- Recognise the independently measured Master medal LEVEL UP layout using
+  complete semantic/control/frame/completed-board evidence and the existing
+  OK point. Preserve both earlier layouts and input timing; add diagnostics.
+- Add seven original-byte native fixtures and adverse/controller regressions;
+  restore originalK69 because its old sparse mask omitted part of the new probe.
+- Deliver complete affected files against pushed candidate7 at exact449004d.
+  No live card matching, formatter, warning suppression or other-mode change.
+
 ## v1.2.6 — candidate 7
 
 - Derive Klondike source-height capacity from the existing rows 332..998 scan
