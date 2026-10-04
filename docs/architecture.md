@@ -446,3 +446,21 @@ outside the envelope. No new card-effect proof or blanket toolbar exclusion exis
 Detailed output retains 2000 String entries, evicting old entries on insertion,
 and rolls the visible tail over every three completed games. Session-file history
 is complete. Output text sizing changes rendering only; copied text is unchanged.
+
+## Candidate 11 tableau boundary
+
+This section supersedes the historical tableau toolbar/icon exceptions above.
+The live tableau detector excludes all rows at or below the measured game
+toolbar boundary, 947. Ordinary closed source outlines above that boundary keep
+their existing interpretation. A source clipped at the boundary requires its
+visible closed top, connected opposing gold rails and card paper above the
+boundary. It reports the observed exclusive bottom, 947, and retains the upper
+source click at top plus 40; no hidden geometry is inferred.
+
+The frame remains full size. Upper piles, Solver and terminal controls keep
+separate recognition areas. Current source selection and worker regressions use
+the live detector. Retired card-effect tests use a named test-only historical
+classifier for their original full-source measurements, without contributing
+input authority to the application. Candidate 10's known-win terminal sequence,
+Pyramid D shortcut and TriPeaks delayed recovery remain unchanged. See
+[candidate 11](klondike-v1.2.6-candidate-11.md).

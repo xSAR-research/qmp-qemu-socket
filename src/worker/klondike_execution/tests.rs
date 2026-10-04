@@ -8,7 +8,7 @@
 use std::{collections::VecDeque, sync::atomic::AtomicBool};
 
 use super::*;
-use crate::{capture::PixelFormat, klondike::KlondikeTarget, parameters::AnimationSettleDelays};
+use crate::{capture::PixelFormat, game::InputOperation, geometry::PixelPoint, klondike::KlondikeTarget, parameters::AnimationSettleDelays};
 
 
 /// Deterministic adapter recording order while independently injecting I/O failures.
@@ -439,7 +439,7 @@ fn fresh_repeated_halos_count_actions_without_card_or_move_matching() {
     for target in [
         KlondikeTarget::Draw, KlondikeTarget::Recycle, KlondikeTarget::Waste { offset: 1 },
         KlondikeTarget::Foundation { column: 2 },
-        KlondikeTarget::Tableau { column: 4, top: 808, bottom: 996 },
+        KlondikeTarget::Tableau { column: 4, top: 808, bottom: 947 },
     ] {
         let predicted = canonical(target);
         let mut io = fake(&[(predicted, true); 3]);
@@ -1797,7 +1797,7 @@ fn native_long_column_seven_source_continues_from_acknowledged_waste_without_eff
     let after = native_hint_phase(80);
     assert!(before.gameplay_scene && after.gameplay_scene);
     assert_eq!(before.prediction, canonical(KlondikeTarget::Waste { offset: 1 }));
-    assert_eq!(after.prediction, canonical(KlondikeTarget::Tableau { column: 7, top: 372, bottom: 992 }));
+    assert_eq!(after.prediction, canonical(KlondikeTarget::Tableau { column: 7, top: 372, bottom: 947 }));
 
 
     for limit in [1, 2] {
@@ -1854,9 +1854,9 @@ fn native_long_column_seven_source_continues_from_acknowledged_waste_without_eff
 #[test]
 fn native_column_five_sources_continue_with_exact_finite_action_budgets() {
     let cases = [
-        (83, 82, KlondikeTarget::Waste { offset: 2 }, KlondikeTarget::Tableau { column: 5, top: 407, bottom: 991 }),
+        (83, 82, KlondikeTarget::Waste { offset: 2 }, KlondikeTarget::Tableau { column: 5, top: 407, bottom: 947 }),
         (85, 84, KlondikeTarget::Tableau { column: 2, top: 336, bottom: 527 },
-            KlondikeTarget::Tableau { column: 5, top: 389, bottom: 994 }),
+            KlondikeTarget::Tableau { column: 5, top: 389, bottom: 947 }),
         (88, 87, KlondikeTarget::Waste { offset: 0 },
             KlondikeTarget::Tableau { column: 5, top: 610, bottom: 909 }),
     ];
@@ -2035,7 +2035,7 @@ fn native_hint_shadow_long_run_uses_fresh_targets_and_finite_budgets() {
         column: 5, top: 337, bottom: 909,
     }));
     assert_eq!(after.prediction, canonical(KlondikeTarget::Tableau {
-        column: 4, top: 372, bottom: 986,
+        column: 4, top: 372, bottom: 947,
     }));
 
 
@@ -2061,4 +2061,33 @@ fn native_hint_shadow_long_run_uses_fresh_targets_and_finite_budgets() {
         assert_eq!(io.completion_checks, 0);
         assert!(!io.trace.contains(&"solver") && io.terminal_inputs.is_empty());
     }
+}
+
+
+/// The original K95 frame exposes a five-card source only above the toolbar.
+/// Step Once groups that source, sends its one safe header click and retains the
+/// fresh result without inspecting the covered lower border or proving an effect.
+#[test]
+fn native_toolbar_clipped_five_card_source_sends_one_step_once_click() {
+    let before = native_hint_phase(95);
+    let expected = canonical(KlondikeTarget::Tableau {
+        column: 6, top: 571, bottom: 947,
+    });
+    assert!(before.gameplay_scene);
+    assert_eq!(before.prediction, expected);
+    let PredictedAction::Action(action) = expected else { panic!("native source must be actionable"); };
+    assert_eq!(action.operation(), InputOperation::Click(PixelPoint::new(1296, 611)));
+    let mut io = fake_frames(vec![copy_observation(&before), copy_observation(&before)]);
+    let delays = AnimationSettleDelays::default().with_klondike_millis(750, 250);
+    let (result, attempted, latest) = exercise_with_settings(
+        &mut io, PredictedAction::NoHighlight, StepRunSettings::new(delays, 1), &AtomicBool::new(false),
+    );
+    assert_eq!(result, Ok(RunOutcome::Completed { verified: 0, halo: 1 }));
+    assert!(attempted);
+    assert_eq!(io.inputs, [expected]);
+    assert_eq!(io.trace, ["capture", "probe", "input", "wait", "capture"]);
+    assert_eq!(io.waits, [delays.klondike_settle]);
+    assert_eq!(io.completion_checks, 0);
+    assert!(io.frames.is_empty() && io.terminal_inputs.is_empty());
+    assert_eq!(latest.unwrap().frame.pixels, before.frame.pixels);
 }

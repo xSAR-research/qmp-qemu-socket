@@ -1,8 +1,9 @@
 //! Klondike Draw 1 Solver targets and mode-owned observation policy.
 //! Historical pixel-effect proofs remain test-only diagnostic regressions.
 //!
-//! Geometry is measured from Charlie's 1920x1080 captures K01-K94. A source
-//! needs a continuous lower gold edge, matching exterior rails and a bright
+//! Geometry is measured from Charlie's 1920x1080 captures K01-K95. Live tableau
+//! recognition stops above the guest toolbar. A visible source needs a closed
+//! lower edge or rails reaching that boundary, a closed top and a bright
 //! card interior. Dashed dark destinations never grant click authority. The
 //! outline primitive groups a connected run into one target. No card ranks,
 //! legal moves or restart behaviour are inferred here. Completion uses a separate
@@ -273,7 +274,7 @@ const PREVIEW_TARGETS: [PreviewTarget; 3] = [
     },
     PreviewTarget {
         label: "KL tableau: dynamic source blocks",
-        bounds: PixelRect::new(390, TABLEAU_Y, 1_140, TABLEAU_OUTLINE_BOTTOM - TABLEAU_Y),
+        bounds: PixelRect::new(390, TABLEAU_Y, 1_140, TOOLBAR_TOP - TABLEAU_Y),
         colour: [80, 190, 255],
     },
 ];
@@ -703,7 +704,9 @@ fn has_solve_control(frame: &CapturedFrame) -> bool {
 }
 
 
-/// Find a bright source card/run inside a dynamic vertical scan envelope.
+/// Find an upper-pile card source; retain old full-tableau geometry for diagnostics.
+/// Live tableau selection uses find_tableau_source(), whose scan excludes every
+/// toolbar row. The overlay rules below cannot authorise live tableau input.
 ///
 /// This primitive starts at the bottom, normally requires a continuous 96-pixel
 /// lower edge, follows both exterior rails and probes paper above the toolbar.
@@ -915,10 +918,128 @@ fn find_solid_outline_using_overlay(
 }
 
 
-/// Recognise the nominal tableau outline or K44's measured horizontal offset.
-/// Upper piles never use this fallback. Both scans keep the complete top/lower
-/// edges, paired rails, paper and toolbar bounds required by the same primitive.
+/// Recognise a full or toolbar-clipped source using only visible tableau pixels.
+/// The guest toolbar starts at row 947 in the calibrated 1080-row frame. Both
+/// nominal and K44's offset scans stop before that row; toolbar artwork never
+/// supplies, damages or extends a live tableau source.
 fn find_tableau_source(
+    frame: &CapturedFrame,
+    scan: PixelRect,
+) -> Result<Option<PixelRect>, HaloDetectionError> {
+    validate_frame(frame)?;
+    validate_bounds(frame, scan)?;
+
+
+    if scan.y >= TOOLBAR_TOP {
+        return Ok(None);
+    }
+
+    let visible_bottom = scan.bottom().min(TOOLBAR_TOP);
+    let visible = PixelRect::new(scan.x, scan.y, scan.width, visible_bottom - scan.y);
+
+
+    for x in [visible.x, visible.x + TABLEAU_SOURCE_RIGHT_OFFSET] {
+        let candidate = PixelRect::new(x, visible.y, visible.width, visible.height);
+
+
+        if let Some(bounds) = find_solid_outline(frame, candidate, true)? {
+            return Ok(Some(bounds));
+        }
+
+
+        if visible_bottom == TOOLBAR_TOP
+            && let Some(bounds) = find_toolbar_clipped_source(frame, candidate)?
+        {
+            return Ok(Some(bounds));
+        }
+    }
+
+    Ok(None)
+}
+
+
+/// A source crossing the toolbar retains a closed top and connected opposing
+/// exterior rails through the last two visible rows. Its lower border is
+/// unavailable, so the returned bottom is the observed cutoff, never a guessed
+/// hidden edge. Existing rail colours, ten-row gap/density guards and white
+/// paper above the cutoff distinguish the source from a dashed dark recipient.
+/// At least 48 rows keep the top+40 click and the 36-row paper-probe margin visible.
+fn find_toolbar_clipped_source(
+    frame: &CapturedFrame,
+    scan: PixelRect,
+) -> Result<Option<PixelRect>, HaloDetectionError> {
+    validate_frame(frame)?;
+    validate_bounds(frame, scan)?;
+
+
+    if scan.width < 96 || scan.x < 10 || scan.x + scan.width + 10 > frame.width {
+        return Err(HaloDetectionError::BoundsOutsideFrame);
+    }
+
+
+    if scan.bottom() != TOOLBAR_TOP || scan.height < 48 {
+        return Ok(None);
+    }
+
+    let x = scan.x;
+    let right = x + scan.width;
+    let paired_rails = |row| {
+        (x - 9..x).any(|xx| pixel_rgb(frame, xx, row).is_some_and(is_rail_gold))
+            && (right..right + 10).any(|xx| pixel_rgb(frame, xx, row).is_some_and(is_rail_gold))
+    };
+
+
+    if !(TOOLBAR_TOP - 2..TOOLBAR_TOP).all(paired_rails) {
+        return Ok(None);
+    }
+
+    let mut top = TOOLBAR_TOP - 1;
+    let mut gap = 0;
+    let mut matched_rows = 0;
+
+
+    for row in (scan.y..TOOLBAR_TOP).rev() {
+
+
+        if paired_rails(row) {
+            top = row;
+            gap = 0;
+            matched_rows += 1;
+        } else {
+            gap += 1;
+
+
+            if gap > 10 {
+                break;
+            }
+        }
+    }
+
+    let height = TOOLBAR_TOP - top;
+
+
+    if height < 48 || top == scan.y || matched_rows * 100 < height * 85 {
+        return Ok(None);
+    }
+
+    let closed_top = (top.saturating_sub(10).max(scan.y)..=top).any(|row| {
+        (x + 18..right - 18).all(|xx| pixel_rgb(frame, xx, row).is_some_and(is_edge_gold))
+    });
+    let face_probe = PixelRect::new(x + 18, TOOLBAR_TOP - 36, scan.width - 36, 12);
+
+
+    if !closed_top || !fraction_at_least(frame, face_probe, is_white, 350) {
+        return Ok(None);
+    }
+
+    Ok(Some(PixelRect::new(x, top, scan.width, height)))
+}
+
+
+/// Retain the superseded full-outline geometry solely for historical pixel-effect
+/// diagnostics. Live tableau classification never calls this toolbar-aware path.
+#[cfg(test)]
+fn find_historical_tableau_source(
     frame: &CapturedFrame,
     scan: PixelRect,
 ) -> Result<Option<PixelRect>, HaloDetectionError> {
@@ -961,7 +1082,9 @@ pub fn canonical_action(target: KlondikeTarget) -> Option<GuidedAction> {
             if (1..=7).contains(&column) && u32::from(top) >= TABLEAU_SCAN_TOP
                 && u32::from(bottom) <= TABLEAU_OUTLINE_BOTTOM
                 && u32::from(top) + 40 < TOOLBAR_TOP
-                && bottom.checked_sub(top).is_some_and(|height| (180..=MAXIMUM_SOURCE_HEIGHT).contains(&u32::from(height))) =>
+                && bottom.checked_sub(top).is_some_and(|height|
+                    (180..=MAXIMUM_SOURCE_HEIGHT).contains(&u32::from(height))
+                        || (u32::from(bottom) == TOOLBAR_TOP && height >= 48)) =>
         {
             let x = FIRST_COLUMN_X + COLUMN_PITCH * u32::from(column - 1);
             (
@@ -1024,6 +1147,17 @@ pub fn analyse(frame: &CapturedFrame) -> Result<FrameAnalysis, HaloDetectionErro
 
 /// Apply the approved priority without granting authority on an unclassified stock.
 fn select_target(frame: &CapturedFrame) -> Result<Option<KlondikeTarget>, HaloDetectionError> {
+    select_target_using_tableau(frame, find_tableau_source, TOOLBAR_TOP)
+}
+
+
+/// Keep upper-pile priority shared while historical test-only diagnostics supply
+/// their former tableau geometry. Production always supplies the capped finder.
+fn select_target_using_tableau(
+    frame: &CapturedFrame,
+    tableau_source: fn(&CapturedFrame, PixelRect) -> Result<Option<PixelRect>, HaloDetectionError>,
+    tableau_bottom: u32,
+) -> Result<Option<KlondikeTarget>, HaloDetectionError> {
     let upper_scan = |x| PixelRect::new(x, 100, CARD_WIDTH, 204);
     let solver_active = has_solver_banner(frame);
 
@@ -1074,10 +1208,10 @@ fn select_target(frame: &CapturedFrame) -> Result<Option<KlondikeTarget>, HaloDe
 
     for column in 1..=7_u8 {
         let x = FIRST_COLUMN_X + COLUMN_PITCH * u32::from(column - 1);
-        let scan = PixelRect::new(x, TABLEAU_SCAN_TOP, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - TABLEAU_SCAN_TOP);
+        let scan = PixelRect::new(x, TABLEAU_SCAN_TOP, CARD_WIDTH, tableau_bottom - TABLEAU_SCAN_TOP);
 
 
-        if let Some(bounds) = find_tableau_source(frame, scan)? {
+        if let Some(bounds) = tableau_source(frame, scan)? {
             let target = KlondikeTarget::Tableau {
                 column,
                 top: bounds.y as u16,
@@ -1107,6 +1241,25 @@ fn select_target(frame: &CapturedFrame) -> Result<Option<KlondikeTarget>, HaloDe
     }
 
     Ok(None)
+}
+
+
+/// Historical effect-regression classifier, isolated from the live worker policy.
+/// Pixel-effect helpers retain their original plans and limits without causing
+/// the live HALO loop to inspect a hidden lower edge or compare card identities.
+#[cfg(test)]
+fn analyse_historical(frame: &CapturedFrame) -> Result<FrameAnalysis, HaloDetectionError> {
+
+
+    if !is_gameplay_scene(frame)? {
+        return Ok(FrameAnalysis { prediction: PredictedAction::NoHighlight, observed_rows: None, top_row_face_up_count: 0 });
+    }
+
+    let prediction = select_target_using_tableau(frame, find_historical_tableau_source, TABLEAU_OUTLINE_BOTTOM)?
+        .and_then(canonical_action)
+        .map(PredictedAction::Action)
+        .unwrap_or(PredictedAction::NoHighlight);
+    Ok(FrameAnalysis { prediction, observed_rows: None, top_row_face_up_count: 0 })
 }
 
 
@@ -1529,7 +1682,7 @@ fn visible_contracted_source_replaced(
     }
 
 
-    let PredictedAction::Action(next) = analyse(after)?.prediction else { return Ok(false); };
+    let PredictedAction::Action(next) = analyse_historical(after)?.prediction else { return Ok(false); };
 
 
     let ActionTarget::Klondike(KlondikeTarget::Tableau {
@@ -1886,7 +2039,7 @@ fn aligned_source_print_changes(
 
 
     if canonical_action(target) != Some(action)
-        || analyse(before)?.prediction != PredictedAction::Action(action)
+        || analyse_historical(before)?.prediction != PredictedAction::Action(action)
         || u32::from(bottom) <= TOOLBAR_TOP
         || !bottom.checked_sub(top).is_some_and(|height| (180..=190).contains(&height))
     {
@@ -1894,7 +2047,7 @@ fn aligned_source_print_changes(
     }
 
 
-    let PredictedAction::Action(next) = analyse(after)?.prediction else { return Ok(evidence); };
+    let PredictedAction::Action(next) = analyse_historical(after)?.prediction else { return Ok(evidence); };
 
 
     let ActionTarget::Klondike(next_target @ KlondikeTarget::Tableau {
@@ -2134,13 +2287,13 @@ fn ordinary_source_print_changes(
 
 
     if canonical_action(target) != Some(action)
-        || analyse(before)?.prediction != PredictedAction::Action(action)
+        || analyse_historical(before)?.prediction != PredictedAction::Action(action)
         || u32::from(bottom) <= TOOLBAR_TOP
         || !bottom.checked_sub(top).is_some_and(|height| (180..=190).contains(&height))
     {
         return Ok(unsupported);
     }
-    let PredictedAction::Action(next) = analyse(after)?.prediction else { return Ok(unsupported); };
+    let PredictedAction::Action(next) = analyse_historical(after)?.prediction else { return Ok(unsupported); };
     let ActionTarget::Klondike(next_target) = next.target else { return Ok(unsupported); };
 
 
@@ -2211,13 +2364,13 @@ fn deep_felt_source_changes(
 
 
     if canonical_action(target) != Some(action)
-        || analyse(before)?.prediction != PredictedAction::Action(action)
+        || analyse_historical(before)?.prediction != PredictedAction::Action(action)
         || !bottom.checked_sub(top).is_some_and(|height| (180..=190).contains(&height))
         || u32::from(bottom) > TOOLBAR_TOP
     {
         return Ok(evidence);
     }
-    let PredictedAction::Action(next) = analyse(after)?.prediction else { return Ok(evidence); };
+    let PredictedAction::Action(next) = analyse_historical(after)?.prediction else { return Ok(evidence); };
     let ActionTarget::Klondike(next_target @ KlondikeTarget::Tableau { column: next_column, .. }) = next.target else {
         return Ok(evidence);
     };
@@ -2433,7 +2586,7 @@ fn foundation_transfer_source_changes(
     if canonical_action(target) != Some(action) { return Ok(evidence); }
 
 
-    let PredictedAction::Action(next) = analyse(after)?.prediction else { return Ok(evidence); };
+    let PredictedAction::Action(next) = analyse_historical(after)?.prediction else { return Ok(evidence); };
 
 
     let ActionTarget::Klondike(next_target) = next.target else { return Ok(evidence); };
@@ -2749,7 +2902,7 @@ fn tableau_foundation_transfer_source_changes(
 
 
     if canonical_action(target) != Some(action)
-        || analyse(before)?.prediction != PredictedAction::Action(action)
+        || analyse_historical(before)?.prediction != PredictedAction::Action(action)
         || !bottom.checked_sub(top).is_some_and(|height| (180..=191).contains(&height))
         || source_changed < MINIMUM_CONTENT_CHANGE || !is_gameplay_scene(after)?
     {
@@ -2770,7 +2923,7 @@ fn tableau_foundation_transfer_source_changes(
     evidence.context_supported = true;
     evidence.old_face_top = old_face_top;
     evidence.visible_height = visible_height as u16;
-    evidence.fresh_target_supported = matches!(analyse(after)?.prediction,
+    evidence.fresh_target_supported = matches!(analyse_historical(after)?.prediction,
         PredictedAction::Action(next) if next != action
             && matches!(next.target, ActionTarget::Klondike(next_target)
                 if canonical_action(next_target) == Some(next)));
@@ -3078,7 +3231,7 @@ pub fn inspect_effect(
 
 
     if canonical_action(target) != Some(action)
-        || analyse(before)?.prediction != PredictedAction::Action(action)
+        || analyse_historical(before)?.prediction != PredictedAction::Action(action)
     {
         evidence.reason = "before frame does not reproduce the canonical action";
         return Ok(evidence);
@@ -3199,7 +3352,7 @@ pub fn inspect_effect(
     )?;
     let stable_visible_source_replaced = evidence.source_visible_print.verified
         && evidence.destination_changed >= MINIMUM_CONTENT_CHANGE
-        && matches!(analyse(after)?.prediction, PredictedAction::Action(_));
+        && matches!(analyse_historical(after)?.prediction, PredictedAction::Action(_));
     evidence.source_aligned_print = aligned_source_print_changes(before, after, action)?;
 
 
@@ -3251,10 +3404,37 @@ pub fn inspect_effect(
 
 #[cfg(test)]
 mod tests {
+    //! Live recognition tests use analyse()/action() and the toolbar-capped finder.
+    //! Retired pixel-effect regressions explicitly use analyse_historical() and
+    //! historical_action() to preserve their former evidence geometry. Those
+    //! helpers and full-outline expectations never gate the live worker loop.
+
     //! Original-pixel regressions and explicitly synthetic adverse-scene probes.
 
     use super::*;
     use crate::capture::decode_png;
+
+
+    /// Reconstruct only the historical effect-regression plan. Production HALO
+    /// tests use action(), whose observed geometry excludes the toolbar.
+    fn historical_action(frame: &CapturedFrame) -> GuidedAction {
+        let PredictedAction::Action(action) = analyse_historical(frame).expect("analyse historical effect fixture").prediction else {
+            panic!("historical effect fixture has no action");
+        };
+        action
+    }
+
+
+    /// Source damage above the toolbar still refuses input; any damage wholly
+    /// in the excluded toolbar region must leave the live prediction unchanged.
+    fn assert_live_source_after_damage(native: &CapturedFrame, changed: &CapturedFrame, bounds: PixelRect) {
+        let expected = if bounds.y >= TOOLBAR_TOP {
+            analyse(native).unwrap().prediction
+        } else {
+            PredictedAction::NoHighlight
+        };
+        assert_eq!(analyse(changed).unwrap().prediction, expected, "live source damage {bounds:?}");
+    }
 
 
     /// Retain concise boolean assertions while production logs structured evidence.
@@ -3287,7 +3467,7 @@ mod tests {
             let frame = fixture(number);
             let bounds = find_solid_card_source(&frame, PixelRect::new(894, 332, 132, 666)).unwrap();
             assert_eq!(bounds, Some(PixelRect::new(894, top, 132, 996 - top)), "K{number}");
-            let planned = action(&frame);
+            let planned = historical_action(&frame);
             assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
                 column: 4, top: top as u16, bottom: 996,
             }));
@@ -3303,7 +3483,7 @@ mod tests {
         assert_eq!(count_pixels(&thin, PixelRect::new(912, 995, 96, 1), is_toolbar_shadow_gold), 96);
         assert!(pixel_rgb(&thin, 960, 995).is_some_and(is_rail_gold));
         let duplicate = fixture(76);
-        assert_eq!(analyse(&duplicate).unwrap().prediction, PredictedAction::NoHighlight,
+        assert_eq!(analyse_historical(&duplicate).unwrap().prediction, PredictedAction::NoHighlight,
             "a displaced duplicate over SUIT4 does not authorise an uncalibrated input");
     }
 
@@ -3323,7 +3503,7 @@ mod tests {
                 let mut changed = native.clone();
                 paint(&mut changed, PixelRect::new(x, 995, 1, 1), rgb);
                 assert_eq!(find_solid_card_source(&changed, scan).unwrap(), None, "x{x}: {rgb:?}");
-                assert_eq!(analyse(&changed).unwrap().prediction, PredictedAction::NoHighlight, "x{x}: {rgb:?}");
+                assert_eq!(analyse(&changed).unwrap().prediction, analyse(&native).unwrap().prediction, "x{x}: {rgb:?}");
             }
         }
 
@@ -3415,11 +3595,11 @@ mod tests {
     fn tableau_suit_transfer_preserves_first_manual_pairs_ordinary_effect() {
         let before = fixture(70);
         let after = fixture(71);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
             column: 7, top: 407, bottom: 597,
         }));
-        assert_eq!(analyse(&after).unwrap().prediction, PredictedAction::NoHighlight);
+        assert_eq!(analyse_historical(&after).unwrap().prediction, PredictedAction::NoHighlight);
         let report = inspect_effect(&before, &after, planned).unwrap();
         let transfer = report.source_tableau_foundation_transfer;
         assert!(report.verified && report.source_replaced, "ordinary result is preserved: {report}");
@@ -3437,11 +3617,11 @@ mod tests {
     fn tableau_suit_transfer_matches_visible_old_print_after_exposed_header() {
         let before = fixture(72);
         let after = fixture(73);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
             column: 7, top: 800, bottom: 989,
         }));
-        assert_eq!(action(&after).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
+        assert_eq!(historical_action(&after).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
             column: 4, top: 336, bottom: 527,
         }));
         let report = inspect_effect(&before, &after, planned).unwrap();
@@ -3471,7 +3651,7 @@ mod tests {
         let mut before = fixture(72);
         let source = before.clone();
         copy_region(&source, &mut before, PixelRect::new(1398, 988, 132, 1), PixelPoint::new(1398, 990));
-        let planned = action(&before);
+        let planned = historical_action(&before);
         assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
             column: 7, top: 800, bottom: 991,
         }));
@@ -3487,10 +3667,10 @@ mod tests {
     fn tableau_suit_transfer_requires_exposed_source_and_independent_new_receipt() {
         let before = fixture(72);
         let after = fixture(73);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         let mut source_only = after.clone();
         copy_region(&before, &mut source_only, PixelRect::new(894, 112, 636, 175), PixelPoint::new(894, 112));
-        assert_eq!(action(&source_only), action(&after));
+        assert_eq!(historical_action(&source_only), historical_action(&after));
         let report = inspect_effect(&before, &source_only, planned).unwrap();
         assert_eq!(report.source_tableau_foundation_transfer.receiver_count, 0, "{report}");
         assert!(!report.source_tableau_foundation_transfer.verified && !report.source_replaced && !report.verified, "{report}");
@@ -3500,7 +3680,7 @@ mod tests {
         assert!(!report.source_tableau_foundation_transfer.verified && !report.source_replaced && !report.verified, "{report}");
         let mut existing_receipt = before.clone();
         copy_region(&after, &mut existing_receipt, PixelRect::new(1062, 112, 132, 175), PixelPoint::new(1062, 112));
-        assert_eq!(action(&existing_receipt), planned);
+        assert_eq!(historical_action(&existing_receipt), planned);
         let report = inspect_effect(&existing_receipt, &after, planned).unwrap();
         assert_eq!(report.source_tableau_foundation_transfer.receiver_count, 0, "{report}");
         assert!(!report.source_tableau_foundation_transfer.verified && !report.source_replaced && !report.verified, "old matching receipt is not a new transfer: {report}");
@@ -3513,7 +3693,7 @@ mod tests {
     fn tableau_suit_transfer_rejects_retained_old_print_and_neutral_paper_whitening() {
         let before = fixture(72);
         let after = fixture(73);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         let mut retained = after.clone();
         let InputOperation::Click(point) = planned.operation() else { panic!("expected one click"); };
 
@@ -3538,8 +3718,8 @@ mod tests {
                 retained.pixels[offset..offset + 3].copy_from_slice(&old);
             }
         }
-        assert_eq!(action(&before), planned);
-        assert_eq!(action(&retained), action(&after));
+        assert_eq!(historical_action(&before), planned);
+        assert_eq!(historical_action(&retained), historical_action(&after));
         let report = inspect_effect(&before, &retained, planned).unwrap();
         assert!(report.source_changed >= MINIMUM_CONTENT_CHANGE, "the retained ink cannot borrow remaining guide/material change: {report}");
         assert!(report.source_tableau_foundation_transfer.header_positive.into_iter()
@@ -3564,7 +3744,7 @@ mod tests {
                 }
             }
         }
-        assert_eq!(action(&neutral), planned);
+        assert_eq!(historical_action(&neutral), planned);
         let report = inspect_effect(&neutral, &after, planned).unwrap();
         assert_eq!(report.source_tableau_foundation_transfer.header_positive, [0, 0], "neutral shaded paper is not true ink: {report}");
         assert!(!report.source_tableau_foundation_transfer.verified, "{report}");
@@ -3577,7 +3757,7 @@ mod tests {
     fn tableau_suit_transfer_requires_one_complete_ordinary_exposed_header() {
         let before = fixture(72);
         let after = fixture(73);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         let mut absent = after.clone();
         paint(&mut absent, PixelRect::new(1416, 777, 96, 1), [255, 255, 255]);
         let mut gutter = after.clone();
@@ -3587,7 +3767,7 @@ mod tests {
 
 
         for (name, changed) in [("missing seam", absent), ("missing felt gutter", gutter), ("dark complete header corner", corner)] {
-            assert_eq!(action(&changed), action(&after), "{name}");
+            assert_eq!(historical_action(&changed), historical_action(&after), "{name}");
             let report = inspect_effect(&before, &changed, planned).unwrap();
             assert_eq!(report.source_tableau_foundation_transfer.header_count, 0, "{name}: {report}");
             assert!(!report.source_tableau_foundation_transfer.verified, "{name}: {report}");
@@ -3607,7 +3787,7 @@ mod tests {
     fn tableau_suit_transfer_preserves_action_scene_and_visible_population_bounds() {
         let before = fixture(72);
         let after = fixture(73);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         assert!(!inspect_effect(&before, &before, planned).unwrap().source_replaced);
         let mut cursor = before.clone();
         paint(&mut cursor, PixelRect::new(1416, 792, 96, 96), [255, 255, 255]);
@@ -3621,13 +3801,13 @@ mod tests {
         let mut duplicate_after = after.clone();
         copy_region(&before, &mut duplicate_before, PixelRect::new(1078, 128, 100, 143), PixelPoint::new(910, 128));
         copy_region(&after, &mut duplicate_after, PixelRect::new(1078, 128, 100, 143), PixelPoint::new(910, 128));
-        assert_eq!(action(&duplicate_before), planned, "fixed outer foundation geometry remains genuine");
-        assert_eq!(action(&duplicate_after), action(&after));
+        assert_eq!(historical_action(&duplicate_before), planned, "fixed outer foundation geometry remains genuine");
+        assert_eq!(historical_action(&duplicate_after), historical_action(&after));
         let report = inspect_effect(&duplicate_before, &duplicate_after, planned).unwrap();
         assert_eq!(report.source_tableau_foundation_transfer.receiver_count, 2, "geometry must be unique before comparing ink: {report}");
         assert!(!report.source_tableau_foundation_transfer.verified, "{report}");
         let run_before = fixture(10);
-        let run_action = action(&run_before);
+        let run_action = historical_action(&run_before);
         assert!(!tableau_foundation_transfer_source_changes(&run_before, &fixture(11), run_action, MINIMUM_CONTENT_CHANGE).unwrap().context_supported);
         let mut forged = planned;
         forged.anchor = PixelPoint::new(1465, 840);
@@ -3739,7 +3919,7 @@ mod tests {
 
         for (number, foundation_x) in [(14, 894), (15, 1_398)] {
             let (before, after) = synthetic_right_replacement(number, foundation_x);
-            let planned = action(&before);
+            let planned = historical_action(&before);
             assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Waste { offset: 2 }));
             let evidence = inspect_effect(&before, &after, planned).unwrap();
             assert!(evidence.source_positive < MINIMUM_CONTENT_CHANGE, "old source gate should reject: {evidence}");
@@ -3765,7 +3945,7 @@ mod tests {
     #[test]
     fn right_corner_proof_rejects_cursor_single_corner_and_dark_guides() {
         let (before, completed) = synthetic_right_replacement(14, 894);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         let mut destination_only = before.clone();
         copy_region(&completed, &mut destination_only, PixelRect::new(894, UPPER_Y, CARD_WIDTH, CARD_HEIGHT), PixelPoint::new(894, UPPER_Y as i32));
         assert!(!verify_effect(&before, &destination_only, planned).unwrap());
@@ -3798,14 +3978,14 @@ mod tests {
     #[test]
     fn solve_control_requires_its_measured_artwork_empty_stock_and_scene() {
         let frame = fixture(13);
-        let planned = action(&frame);
+        let planned = historical_action(&frame);
         assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Solve));
         assert_eq!(planned.operation(), InputOperation::Click(PixelPoint::new(624, 199)));
         assert_eq!(planned.specification.animation_class, AnimationClass::KlondikeSolve);
         assert!(!inspect_effect(&frame, &frame, planned).unwrap().verified);
         let mut solver_off = frame.clone();
         paint(&mut solver_off, PixelRect::new(824, 34, 272, 58), [0, 0, 0]);
-        assert_eq!(action(&solver_off), planned);
+        assert_eq!(historical_action(&solver_off), planned);
 
 
         for (corruption, rgb) in [
@@ -3815,19 +3995,19 @@ mod tests {
         ] {
             let mut damaged = frame.clone();
             paint(&mut damaged, corruption, rgb);
-            assert_ne!(analyse(&damaged).unwrap().prediction, PredictedAction::Action(planned), "{corruption:?}");
+            assert_ne!(analyse_historical(&damaged).unwrap().prediction, PredictedAction::Action(planned), "{corruption:?}");
         }
 
         let mut occupied = frame.clone();
         copy_region(&fixture(1), &mut occupied, PixelRect::new(390, UPPER_Y, CARD_WIDTH, CARD_HEIGHT), PixelPoint::new(390, UPPER_Y as i32));
-        assert_ne!(analyse(&occupied).unwrap().prediction, PredictedAction::Action(planned));
+        assert_ne!(analyse_historical(&occupied).unwrap().prediction, PredictedAction::Action(planned));
         let mut overlay = frame.clone();
         paint(&mut overlay, PixelRect::new(820, 600, 400, 200), [20, 20, 20]);
-        assert_eq!(analyse(&overlay).unwrap().prediction, PredictedAction::NoHighlight);
+        assert_eq!(analyse_historical(&overlay).unwrap().prediction, PredictedAction::NoHighlight);
 
         let mut draw = frame;
         copy_region(&fixture(3), &mut draw, PixelRect::new(378, 100, 164, 204), PixelPoint::new(378, 100));
-        assert_eq!(action(&draw).target, ActionTarget::Klondike(KlondikeTarget::Draw));
+        assert_eq!(historical_action(&draw).target, ActionTarget::Klondike(KlondikeTarget::Draw));
     }
 
 
@@ -3838,7 +4018,7 @@ mod tests {
         let frame = fixture(19);
         let planned = action(&frame);
         assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-            column: 6, top: 390, bottom: 953,
+            column: 6, top: 390, bottom: 947,
         }));
         assert_eq!(planned.operation(), InputOperation::Click(PixelPoint::new(1_296, 430)));
         assert_eq!(planned.effect_bounds(), PixelRect::new(1_230, 390, CARD_WIDTH, 557));
@@ -3850,7 +4030,7 @@ mod tests {
             column: 6, top: 390, bottom: TABLEAU_OUTLINE_BOTTOM as u16 + 1,
         }).is_none());
         assert!(canonical_action(KlondikeTarget::Tableau {
-            column: 6, top: 331, bottom: 953,
+            column: 6, top: 331, bottom: 947,
         }).is_none(), "source geometry above the unchanged scan stays unsupported");
     }
 
@@ -3894,7 +4074,7 @@ mod tests {
         ] {
             let mut damaged = frame.clone();
             paint(&mut damaged, corruption, [12, 82, 45]);
-            assert_eq!(analyse(&damaged).unwrap().prediction, PredictedAction::NoHighlight, "{corruption:?}");
+            assert_live_source_after_damage(&frame, &damaged, corruption);
         }
 
         let mut toolbar_only = frame;
@@ -3908,7 +4088,7 @@ mod tests {
     #[test]
     fn toolbar_changes_do_not_prove_long_source_or_destination_effects() {
         let before = fixture(19);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         let mut after = before.clone();
         paint(&mut after, PixelRect::new(378, TOOLBAR_TOP, 1_162, 1_033 - TOOLBAR_TOP), [255, 255, 255]);
         let evidence = inspect_effect(&before, &after, planned).unwrap();
@@ -3926,7 +4106,7 @@ mod tests {
         let stopped = fixture(16);
         let replayed = fixture(18);
         assert_eq!(stopped.pixels, replayed.pixels);
-        let planned = action(&replayed);
+        let planned = historical_action(&replayed);
         assert_eq!(planned.operation(), InputOperation::Click(PixelPoint::new(652, 199)));
         assert!(!inspect_effect(&stopped, &replayed, planned).unwrap().verified);
     }
@@ -3955,7 +4135,7 @@ mod tests {
             Some(KlondikeTarget::Waste { offset: 1 }),
             Some(KlondikeTarget::Draw),
             Some(KlondikeTarget::Waste { offset: 1 }),
-            Some(KlondikeTarget::Tableau { column: 6, top: 390, bottom: 953 }),
+            Some(KlondikeTarget::Tableau { column: 6, top: 390, bottom: 947 }),
             Some(KlondikeTarget::Waste { offset: 1 }),
             Some(KlondikeTarget::Tableau { column: 5, top: 571, bottom: 761 }),
             Some(KlondikeTarget::Tableau { column: 6, top: 407, bottom: 597 }),
@@ -3986,8 +4166,8 @@ mod tests {
         for (before_number, after_number) in [(2, 3), (4, 5), (6, 7), (8, 9), (10, 11), (17, 18), (20, 21), (21, 22), (31, 32)] {
             let before = fixture(before_number);
             let after = fixture(after_number);
-            assert!(verify_effect(&before, &after, action(&before)).unwrap(), "K{before_number:02}->K{after_number:02}");
-            assert!(!verify_effect(&before, &before, action(&before)).unwrap(), "unchanged K{before_number:02}");
+            assert!(verify_effect(&before, &after, historical_action(&before)).unwrap(), "K{before_number:02}->K{after_number:02}");
+            assert!(!verify_effect(&before, &before, historical_action(&before)).unwrap(), "unchanged K{before_number:02}");
         }
     }
 
@@ -3998,7 +4178,7 @@ mod tests {
     fn recorded_tableau_removal_under_the_next_destination_guide_is_verified() {
         let before = fixture(21);
         let after = fixture(22);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau { column: 5, top: 571, bottom: 761 }));
         let evidence = inspect_effect(&before, &after, planned).unwrap();
         assert_eq!(evidence.source_positive, 0, "ordinary bright-pixel proof must reproduce the stop: {evidence}");
@@ -4016,7 +4196,7 @@ mod tests {
     fn dimmed_felt_source_only_has_no_destination_authority() {
         let before = fixture(21);
         let completed = fixture(22);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         let mut source_only = before.clone();
         let source = planned.effect_bounds();
         copy_region(&completed, &mut source_only, source, PixelPoint::new(source.x as i32, source.y as i32));
@@ -4033,7 +4213,7 @@ mod tests {
     fn dimmed_felt_proof_rejects_guide_only_and_masked_changes() {
         let before = fixture(21);
         let completed = fixture(22);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         let mut destination_only = before.clone();
         copy_region(&completed, &mut destination_only, PixelRect::new(1_062, UPPER_Y, CARD_WIDTH, CARD_HEIGHT), PixelPoint::new(1_062, UPPER_Y as i32));
         let source = planned.effect_bounds();
@@ -4067,7 +4247,7 @@ mod tests {
         let mut before = after.clone();
         copy_region(&fixture(20), &mut before, PixelRect::new(884, 332, 154, 420), PixelPoint::new(884, 332));
         copy_region(&fixture(21), &mut before, PixelRect::new(1_052, 561, 154, 212), PixelPoint::new(1_220, 327));
-        let planned = action(&before);
+        let planned = historical_action(&before);
         assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau { column: 6, top: 337, bottom: 527 }));
         let evidence = inspect_effect(&before, &after, planned).unwrap();
         assert_eq!(evidence.source_positive, 0, "{evidence}");
@@ -4081,10 +4261,10 @@ mod tests {
     #[test]
     fn unchanged_draw_halo_never_proves_an_effect() {
         let before = fixture(8);
-        assert_eq!(action(&before).target, ActionTarget::Klondike(KlondikeTarget::Draw));
-        assert_eq!(action(&fixture(9)).target, action(&before).target);
-        assert!(verify_effect(&before, &fixture(9), action(&before)).unwrap());
-        assert!(!verify_effect(&before, &before, action(&before)).unwrap());
+        assert_eq!(historical_action(&before).target, ActionTarget::Klondike(KlondikeTarget::Draw));
+        assert_eq!(historical_action(&fixture(9)).target, historical_action(&before).target);
+        assert!(verify_effect(&before, &fixture(9), historical_action(&before)).unwrap());
+        assert!(!verify_effect(&before, &before, historical_action(&before)).unwrap());
     }
 
 
@@ -4109,7 +4289,7 @@ mod tests {
         paint(&mut after, PixelRect::new(1_398, 448, 132, 175), [0, 0, 0]);
         copy_region(&fixture(3), &mut after, PixelRect::new(894, 112, 132, 175), PixelPoint::new(894, 112));
         assert!(is_gameplay_scene(&after).unwrap());
-        assert!(!verify_effect(&before, &after, action(&before)).unwrap());
+        assert!(!verify_effect(&before, &after, historical_action(&before)).unwrap());
     }
 
 
@@ -4117,7 +4297,7 @@ mod tests {
     #[test]
     fn cursor_changes_and_missing_destination_effect_are_rejected() {
         let before = fixture(2);
-        let planned = action(&before);
+        let planned = historical_action(&before);
 
 
         let InputOperation::Click(point) = planned.operation() else { panic!("expected click"); };
@@ -4171,7 +4351,7 @@ mod tests {
     #[test]
     fn recycle_requires_both_stock_return_and_empty_waste() {
         let before = fixture(12);
-        let selected = action(&before);
+        let selected = historical_action(&before);
         assert_eq!(selected.operation(), InputOperation::Click(PixelPoint::new(456, 199)));
         let mut after = before.clone();
         copy_region(&fixture(3), &mut after, PixelRect::new(378, 100, 164, 204), PixelPoint::new(378, 100));
@@ -4318,7 +4498,7 @@ mod tests {
     #[test]
     fn undo_replay_capture_selects_the_tableau_source_and_not_an_old_right_target() {
         let replayed = fixture(24);
-        let selected = action(&replayed);
+        let selected = historical_action(&replayed);
         assert_eq!(selected.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
             column: 5, top: 571, bottom: 761,
         }));
@@ -4417,11 +4597,11 @@ mod tests {
     fn recorded_single_card_tableau_replacement_has_bidirectional_corner_proof() {
         let before = fixture(31);
         let after = fixture(32);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
             column: 7, top: 425, bottom: 615,
         }));
-        assert_eq!(action(&after).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
+        assert_eq!(historical_action(&after).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
             column: 7, top: 407, bottom: 597,
         }));
         let evidence = inspect_effect(&before, &after, planned).unwrap();
@@ -4444,7 +4624,7 @@ mod tests {
     fn tableau_corner_replacement_keeps_source_destination_and_mask_guards() {
         let before = fixture(31);
         let completed = fixture(32);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         let source = planned.effect_bounds();
         let mut source_only = before.clone();
         copy_region(&completed, &mut source_only, source, PixelPoint::new(source.x as i32, source.y as i32));
@@ -4489,7 +4669,7 @@ mod tests {
         assert!(!evidence.verified, "{evidence}");
 
         let run = fixture(19);
-        let run_action = action(&run);
+        let run_action = historical_action(&run);
         assert_eq!(card_identity_changes(&run, &run, run_action.effect_bounds(), run_action), [[0, 0], [0, 0]],
             "printed-corner replacement is limited to evidenced complete single-card geometry");
     }
@@ -4500,7 +4680,7 @@ mod tests {
     #[test]
     fn tableau_corner_replacement_rejects_one_way_paper_or_ink_changes() {
         let before = fixture(31);
-        let planned = action(&before);
+        let planned = historical_action(&before);
 
 
         for paper_to_ink in [true, false] {
@@ -4548,9 +4728,9 @@ mod tests {
     fn recorded_right_transfer_under_an_unchanged_foundation_guide_is_verified() {
         let before = fixture(33);
         let after = fixture(34);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Waste { offset: 2 }));
-        assert_eq!(action(&after), planned, "success can retain the same source geometry");
+        assert_eq!(historical_action(&after), planned, "success can retain the same source geometry");
         let evidence = inspect_effect(&before, &after, planned).unwrap();
         assert!(evidence.source_positive >= MINIMUM_CONTENT_CHANGE, "source already passed: {evidence}");
         assert_eq!(evidence.destination_changed, 360, "recipient reproduces the runtime count: {evidence}");
@@ -4571,7 +4751,7 @@ mod tests {
     fn occupied_foundation_print_requires_independent_source_replacement() {
         let before = fixture(33);
         let completed = fixture(34);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         let source = planned.effect_bounds();
         let foundation = PixelRect::new(894, UPPER_Y, CARD_WIDTH, CARD_HEIGHT);
         let mut source_only = before.clone();
@@ -4595,7 +4775,7 @@ mod tests {
     fn occupied_foundation_print_rejects_guide_and_paper_changes() {
         let before = fixture(33);
         let completed = fixture(34);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         let foundation = PixelRect::new(894, UPPER_Y, CARD_WIDTH, CARD_HEIGHT);
 
 
@@ -4651,7 +4831,7 @@ mod tests {
     fn occupied_foundation_print_rejects_cursor_gold_tiny_and_toolbar_changes() {
         let before = fixture(33);
         let completed = fixture(34);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         let source = planned.effect_bounds();
         let mut source_only = before.clone();
         copy_region(&completed, &mut source_only, source, PixelPoint::new(source.x as i32, source.y as i32));
@@ -4674,7 +4854,7 @@ mod tests {
 
         let mut pointer_before = before.clone();
         paint(&mut pointer_before, PixelRect::new(952, 189, 16, 16), [0, 0, 0]);
-        let pointer_plan = action(&pointer_before);
+        let pointer_plan = historical_action(&pointer_before);
         let report = inspect_effect(&pointer_before, &source_only, pointer_plan).unwrap();
         assert!(!report.destination_print.verified && !report.verified, "cursor departure is not new red print: {report}");
     }
@@ -4701,7 +4881,7 @@ mod tests {
     #[test]
     fn synthetic_foundation_replacement_uses_strict_upper_card_proofs() {
         let (before, after) = synthetic_foundation_replacement();
-        let planned = action(&before);
+        let planned = historical_action(&before);
         assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Foundation { column: 3 }));
         let report = inspect_effect(&before, &after, planned).unwrap();
         assert_eq!(report.source_changed, 772, "{report}");
@@ -4720,7 +4900,7 @@ mod tests {
     #[test]
     fn synthetic_foundation_print_replacement_requires_source_and_destination() {
         let (before, mut completed) = synthetic_foundation_replacement();
-        let planned = action(&before);
+        let planned = historical_action(&before);
         let source = planned.effect_bounds();
         copy_region(&before, &mut completed, PixelRect::new(source.x + 5, UPPER_Y + 5, 8, 44), PixelPoint::new(source.x as i32 + 5, UPPER_Y as i32 + 5));
         let report = inspect_effect(&before, &completed, planned).unwrap();
@@ -4749,7 +4929,7 @@ mod tests {
     #[test]
     fn synthetic_foundation_source_print_rejects_masks_and_guide_fading() {
         let (before, mut completed) = synthetic_foundation_replacement();
-        let planned = action(&before);
+        let planned = historical_action(&before);
         let source = planned.effect_bounds();
         copy_region(&before, &mut completed, PixelRect::new(source.x + 5, UPPER_Y + 5, 8, 44), PixelPoint::new(source.x as i32 + 5, UPPER_Y as i32 + 5));
         let mut faded = completed.clone();
@@ -4803,7 +4983,7 @@ mod tests {
     #[test]
     fn occupied_foundation_and_source_proofs_reject_malformed_frames() {
         let before = fixture(33);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         let mut broken = fixture(34);
         broken.pixels.truncate(4);
         assert_eq!(inspect_effect(&before, &broken, planned), Err(HaloDetectionError::InvalidFrameLayout));
@@ -4820,9 +5000,9 @@ mod tests {
     fn recorded_right_progression_exposes_source_replacement_without_recipient_proof() {
         let before = fixture(35);
         let after = fixture(36);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Waste { offset: 1 }));
-        assert_eq!(action(&after).target, ActionTarget::Klondike(KlondikeTarget::Waste { offset: 0 }));
+        assert_eq!(historical_action(&after).target, ActionTarget::Klondike(KlondikeTarget::Waste { offset: 0 }));
         let report = inspect_effect(&before, &after, planned).unwrap();
         assert!(report.source_replaced, "independent source evidence survives sparse recipient artwork: {report}");
         assert!(report.source_positive >= MINIMUM_CONTENT_CHANGE, "{report}");
@@ -4838,7 +5018,7 @@ mod tests {
     fn source_replacement_verdict_keeps_target_and_separation_guards() {
         let before = fixture(35);
         let completed = fixture(36);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         let source = planned.effect_bounds();
         let mut source_only = before.clone();
         copy_region(&completed, &mut source_only, source, PixelPoint::new(source.x as i32, source.y as i32));
@@ -4852,7 +5032,7 @@ mod tests {
 
         for (first, second) in [(6, 7), (12, 1), (13, 13)] {
             let frame = fixture(first);
-            let report = inspect_effect(&frame, &fixture(second), action(&frame)).unwrap();
+            let report = inspect_effect(&frame, &fixture(second), historical_action(&frame)).unwrap();
             assert!(!report.source_replaced, "stock/Recycle/Solve are not card-source continuation: K{first:02}: {report}");
         }
     }
@@ -4865,13 +5045,13 @@ mod tests {
     fn recorded_solve_control_has_priority_over_a_remaining_tableau_halo() {
         let frame = fixture(37);
         assert!(has_solve_control(&frame));
-        let solve = action(&frame);
+        let solve = historical_action(&frame);
         assert_eq!(solve.target, ActionTarget::Klondike(KlondikeTarget::Solve));
         assert_eq!(solve.operation(), InputOperation::Click(PixelPoint::new(624, 199)));
         assert!(find_solid_card_source(&frame, PixelRect::new(390, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)).unwrap().is_some());
         let mut preceding = frame.clone();
         paint(&mut preceding, SOLVE_BOUNDS, [12, 82, 45]);
-        let card = action(&preceding);
+        let card = historical_action(&preceding);
         assert!(matches!(card.target, ActionTarget::Klondike(KlondikeTarget::Tableau { column: 1, .. })));
         let report = inspect_effect(&preceding, &frame, card).unwrap();
         assert_eq!(report.source_changed, 0);
@@ -4887,7 +5067,7 @@ mod tests {
         let frame = fixture(38);
         let planned = action(&frame);
         assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-            column: 6, top: 407, bottom: 990,
+            column: 6, top: 407, bottom: 947,
         }));
         assert_eq!(planned.operation(), InputOperation::Click(PixelPoint::new(1_296, 447)));
         assert_eq!(planned.effect_bounds(), PixelRect::new(1_230, 407, CARD_WIDTH, 540));
@@ -4935,7 +5115,7 @@ mod tests {
         ] {
             let mut damaged = frame.clone();
             paint(&mut damaged, corruption, [12, 82, 45]);
-            assert_eq!(analyse(&damaged).unwrap().prediction, PredictedAction::NoHighlight, "{corruption:?}");
+            assert_live_source_after_damage(&frame, &damaged, corruption);
         }
     }
 
@@ -4962,11 +5142,11 @@ mod tests {
             assert_eq!(analyse(&cursor).unwrap().prediction, PredictedAction::NoHighlight);
         }
 
-        let mut internal_edge = frame;
+        let mut internal_edge = frame.clone();
         paint(&mut internal_edge, PixelRect::new(1_218, 975, 156, TABLEAU_OUTLINE_BOTTOM - 975), [12, 82, 45]);
         paint(&mut internal_edge, PixelRect::new(1_248, 944, 96, 1), [170, 120, 75]);
-        assert_eq!(analyse(&internal_edge).unwrap().prediction, PredictedAction::NoHighlight,
-            "continuing exterior rails invalidate a fabricated internal crossbar");
+        assert_eq!(analyse(&internal_edge).unwrap().prediction, analyse(&frame).unwrap().prediction,
+            "a below-toolbar erasure or interior stripe cannot split the visible connected run");
     }
 
 
@@ -4975,7 +5155,7 @@ mod tests {
     #[test]
     fn nine_card_toolbar_source_proof_and_canonical_bounds_stay_above_toolbar() {
         let before = fixture(38);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         let mut toolbar_changed = before.clone();
         paint(&mut toolbar_changed, PixelRect::new(378, TOOLBAR_TOP, 1_162, 1_033 - TOOLBAR_TOP), [255, 255, 255]);
         let report = inspect_effect(&before, &toolbar_changed, planned).unwrap();
@@ -4999,13 +5179,13 @@ mod tests {
     fn recorded_bottom_single_card_replacement_uses_two_full_visible_patches() {
         let before = fixture(39);
         let after = fixture(40);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
             column: 3, top: 799, bottom: 989,
         }));
         assert_eq!(planned.operation(), InputOperation::Click(PixelPoint::new(792, 839)));
         assert_eq!(planned.effect_bounds().bottom(), TOOLBAR_TOP);
-        assert_eq!(action(&after).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
+        assert_eq!(historical_action(&after).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
             column: 6, top: 372, bottom: 562,
         }));
         let report = inspect_effect(&before, &after, planned).unwrap();
@@ -5027,7 +5207,7 @@ mod tests {
     fn visible_bottom_card_patches_separate_source_replacement_from_recipient() {
         let before = fixture(39);
         let completed = fixture(40);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         let source = planned.effect_bounds();
         let recipient = PixelRect::new(1_398, UPPER_Y, CARD_WIDTH, CARD_HEIGHT);
         let mut source_only = before.clone();
@@ -5070,7 +5250,7 @@ mod tests {
     fn visible_bottom_card_patches_require_both_complete_opposed_patches() {
         let before = fixture(39);
         let completed = fixture(40);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         let source = planned.effect_bounds();
         let mut source_and_foundation = before.clone();
         copy_region(&completed, &mut source_and_foundation, source, PixelPoint::new(source.x as i32, source.y as i32));
@@ -5100,7 +5280,7 @@ mod tests {
     fn visible_bottom_card_patches_reject_one_way_print_changes() {
         let original = fixture(39);
         let completed = fixture(40);
-        let planned = action(&original);
+        let planned = historical_action(&original);
 
 
         for paper_to_ink in [true, false] {
@@ -5136,7 +5316,7 @@ mod tests {
             }
 
             paint(&mut after, PixelRect::new(760, 891, 64, 10), [190, 190, 190]);
-            assert_eq!(action(&before), planned, "synthetic print preserves the independently recognised source");
+            assert_eq!(historical_action(&before), planned, "synthetic print preserves the independently recognised source");
             let report = inspect_effect(&before, &after, planned).unwrap();
             assert!(report.source_changed >= MINIMUM_CONTENT_CHANGE, "{report}");
             assert_eq!(report.destination_changed, 318, "{report}");
@@ -5153,7 +5333,7 @@ mod tests {
     fn visible_bottom_card_patches_reject_masks_guides_and_toolbar_pixels() {
         let before = fixture(39);
         let completed = fixture(40);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         let mut recipient_only = before.clone();
         copy_region(&completed, &mut recipient_only, PixelRect::new(1_398, UPPER_Y, CARD_WIDTH, CARD_HEIGHT), PixelPoint::new(1_398, UPPER_Y as i32));
 
@@ -5181,7 +5361,7 @@ mod tests {
     fn visible_bottom_card_patches_keep_geometry_and_storage_guards() {
         let before = fixture(39);
         let after = fixture(40);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         let mut toolbar_before = before.clone();
         let mut toolbar_after = after.clone();
         paint(&mut toolbar_before, PixelRect::new(726, TOOLBAR_TOP, CARD_WIDTH, 86), [0, 0, 0]);
@@ -5224,7 +5404,7 @@ mod tests {
     #[test]
     fn recorded_ten_card_source_keeps_one_upper_click_and_excludes_toolbar_effects() {
         let before = fixture(41);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
             column: 6, top: 390, bottom: 994,
         }));
@@ -5282,7 +5462,7 @@ mod tests {
         ] {
             let mut damaged = frame.clone();
             paint(&mut damaged, corruption, [12, 82, 45]);
-            assert_eq!(analyse(&damaged).unwrap().prediction, PredictedAction::NoHighlight, "{corruption:?}");
+            assert_live_source_after_damage(&frame, &damaged, corruption);
         }
 
         let mut malformed = frame;
@@ -5314,10 +5494,11 @@ mod tests {
             assert_eq!(analyse(&cursor).unwrap().prediction, PredictedAction::NoHighlight);
         }
 
-        let mut internal_edge = frame;
+        let mut internal_edge = frame.clone();
         paint(&mut internal_edge, PixelRect::new(1_218, 975, 156, TABLEAU_OUTLINE_BOTTOM - 975), [12, 82, 45]);
         paint(&mut internal_edge, PixelRect::new(1_248, 944, 96, 1), [170, 120, 75]);
-        assert_eq!(analyse(&internal_edge).unwrap().prediction, PredictedAction::NoHighlight);
+        assert_eq!(analyse(&internal_edge).unwrap().prediction, analyse(&frame).unwrap().prediction,
+            "a below-toolbar erasure or interior stripe cannot split the visible connected run");
     }
 
 
@@ -5329,7 +5510,7 @@ mod tests {
         let frame = fixture(54);
         let planned = action(&frame);
         assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-            column: 6, top: 390, bottom: 989,
+            column: 6, top: 390, bottom: 947,
         }));
         assert_eq!(planned.operation(), InputOperation::Click(PixelPoint::new(1_296, 430)));
         assert_eq!(planned.effect_bounds(), PixelRect::new(1_230, 390, CARD_WIDTH, 557));
@@ -5362,8 +5543,8 @@ mod tests {
             for rgb in [[12, 82, 45], [0, 0, 0], [255, 255, 255], [150, 20, 20], [89, 78, 40]] {
                 let mut damaged = frame.clone();
                 paint(&mut damaged, PixelRect::new(x, 988, 1, 1), rgb);
-                assert_eq!(analyse(&damaged).unwrap().prediction, PredictedAction::NoHighlight,
-                    "required lower-edge point ({x},988) with {rgb:?}");
+                assert_eq!(analyse(&damaged).unwrap().prediction, analyse(&frame).unwrap().prediction,
+                    "historical lower-edge pixel ({x},988) is outside the live tableau ROI");
             }
         }
     }
@@ -5402,8 +5583,7 @@ mod tests {
         {
             let mut damaged = frame.clone();
             paint(&mut damaged, corruption, [12, 82, 45]);
-            assert_eq!(analyse(&damaged).unwrap().prediction, PredictedAction::NoHighlight,
-                "missing source evidence: {corruption:?}");
+            assert_live_source_after_damage(&frame, &damaged, corruption);
         }
         let mut dimmed_face = frame;
         paint(&mut dimmed_face, PixelRect::new(1_248, 911, 96, 12), [128, 128, 128]);
@@ -5425,7 +5605,9 @@ mod tests {
         let mut translated = empty.clone();
         copy_region(&frame, &mut translated, envelope, PixelPoint::new(1_386, 380));
         assert_eq!(count_pixels(&translated, TOOLBAR_ICON_SUPPORT, is_toolbar_undo_red), 69);
-        assert_eq!(analyse(&translated).unwrap().prediction, PredictedAction::NoHighlight);
+        assert_eq!(action(&translated).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
+            column: 7, top: 390, bottom: TOOLBAR_TOP as u16,
+        }), "a complete visible source in another column no longer needs toolbar-shadow calibration");
         let mut dashed = empty.clone();
         copy_region(&frame, &mut dashed, PixelRect::new(558, 390, CARD_WIDTH, 200),
             PixelPoint::new(1_230, 390));
@@ -5448,7 +5630,7 @@ mod tests {
     #[test]
     fn shadow_tail_recognition_never_supplies_unchanged_or_toolbar_effect_proof() {
         let before = fixture(54);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         let unchanged = inspect_effect(&before, &before, planned).unwrap();
         assert_eq!((unchanged.source_changed, unchanged.destination_changed), (0, 0));
         assert!(!unchanged.source_replaced && !unchanged.verified);
@@ -5562,9 +5744,9 @@ mod tests {
         assert!(is_gameplay_scene(&frame).unwrap());
         let scan = PixelRect::new(390, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332);
         assert_eq!(find_solid_card_source(&frame, scan).unwrap(), None);
-        assert_eq!(find_tableau_source(&frame, scan).unwrap(),
+        assert_eq!(find_historical_tableau_source(&frame, scan).unwrap(),
             Some(PixelRect::new(404, 442, CARD_WIDTH, 464)));
-        let planned = action(&frame);
+        let planned = historical_action(&frame);
         assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
             column: 1, top: 442, bottom: 906,
         }));
@@ -5582,12 +5764,12 @@ mod tests {
     fn recorded_queen_transfer_leads_to_the_right_shifted_six_card_source() {
         let before = fixture(45);
         let after = fixture(44);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Waste { offset: 2 }));
         let report = inspect_effect(&before, &after, planned).unwrap();
         assert!(report.source_replaced && report.verified, "{report}");
         assert!(report.destination_changed >= MINIMUM_CONTENT_CHANGE, "{report}");
-        assert_eq!(action(&after).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
+        assert_eq!(historical_action(&after).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
             column: 1, top: 442, bottom: 906,
         }));
     }
@@ -5651,7 +5833,7 @@ mod tests {
     fn logged_bottom_print_counts_need_material_opposed_print_and_exact_contraction() {
         let frame = fixture(46);
         let planned = canonical_action(KlondikeTarget::Tableau { column: 1, top: 799, bottom: 989 }).unwrap();
-        assert_eq!(action(&frame).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
+        assert_eq!(historical_action(&frame).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
             column: 1, top: 773, bottom: 963,
         }));
         assert!(visible_contracted_source_replaced(&frame, planned, 687, [[36, 207], [142, 58]]).unwrap());
@@ -5693,7 +5875,7 @@ mod tests {
         paint(&mut before, PixelRect::new(378, 760, 156, 234), [12, 82, 45]);
         copy_region(&fixture(39), &mut before, PixelRect::new(716, 799, 154, 190), PixelPoint::new(380, 799));
         copy_region(&fixture(44), &mut before, PixelRect::new(614, UPPER_Y, CARD_WIDTH, CARD_HEIGHT), PixelPoint::new(390, 805));
-        let planned = action(&before);
+        let planned = historical_action(&before);
         assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
             column: 1, top: 799, bottom: 989,
         }));
@@ -5720,7 +5902,7 @@ mod tests {
     #[test]
     fn shifted_source_effect_roi_keeps_removal_recipient_and_mask_separation() {
         let before = fixture(44);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         let mut source_only = before.clone();
         paint(&mut source_only, PixelRect::new(395, 432, 154, 480), [12, 82, 45]);
         let report = inspect_effect(&before, &source_only, planned).unwrap();
@@ -5957,11 +6139,11 @@ mod tests {
     fn recorded_bottom_club_removal_continues_to_a_different_tableau_column() {
         let before = fixture(50);
         let after = fixture(51);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
             column: 1, top: 799, bottom: 989,
         }));
-        assert_eq!(action(&after).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
+        assert_eq!(historical_action(&after).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
             column: 3, top: 610, bottom: 800,
         }));
         let report = inspect_effect(&before, &after, planned).unwrap();
@@ -5990,7 +6172,7 @@ mod tests {
     fn stable_bottom_print_fallback_requires_independent_source_and_fresh_context() {
         let before = fixture(50);
         let completed = fixture(51);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         let source = planned.effect_bounds();
         let mut source_only = before.clone();
         copy_region(&completed, &mut source_only, source, PixelPoint::new(source.x as i32, source.y as i32));
@@ -6020,7 +6202,7 @@ mod tests {
     fn stable_bottom_print_fallback_rejects_missing_patches_and_paper_fading() {
         let before = fixture(50);
         let completed = fixture(51);
-        let planned = action(&before);
+        let planned = historical_action(&before);
 
 
         for patch in [PixelRect::new(395, 804, 28, 44), PixelRect::new(489, 903, 28, 44)] {
@@ -6047,7 +6229,7 @@ mod tests {
     fn stable_bottom_print_fallback_refuses_cursor_guides_and_toolbar_changes() {
         let before = fixture(50);
         let completed = fixture(51);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         let mut outside_source = before.clone();
         copy_region(&completed, &mut outside_source, PixelRect::new(716, 600, 154, 212), PixelPoint::new(716, 600));
         copy_region(&completed, &mut outside_source,
@@ -6080,11 +6262,11 @@ mod tests {
     fn recorded_clipped_source_spread_uses_aligned_print_for_continuation_only() {
         let before = fixture(55);
         let after = fixture(56);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
             column: 2, top: 804, bottom: 993,
         }));
-        assert_eq!(action(&after).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
+        assert_eq!(historical_action(&after).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
             column: 2, top: 799, bottom: 988,
         }));
         let report = inspect_effect(&before, &after, planned).unwrap();
@@ -6107,8 +6289,8 @@ mod tests {
         let before = fixture(55);
         let mut after = fixture(56);
         copy_region(&before, &mut after, PixelRect::new(563, 814, 122, 128), PixelPoint::new(563, 809));
-        let planned = action(&before);
-        assert_eq!(action(&after).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
+        let planned = historical_action(&before);
+        assert_eq!(historical_action(&after).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
             column: 2, top: 799, bottom: 988,
         }));
         (before, after, planned)
@@ -6148,7 +6330,7 @@ mod tests {
     fn aligned_clipped_source_rejects_each_one_way_print_transition() {
         let before = fixture(55);
         let completed = fixture(56);
-        let planned = action(&before);
+        let planned = historical_action(&before);
 
 
         for remove_new in [true, false] {
@@ -6190,7 +6372,7 @@ mod tests {
     fn aligned_clipped_source_rejects_core_fade_and_unsupported_paper() {
         let before = fixture(55);
         let completed = fixture(56);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         let mut faded = completed.clone();
 
 
@@ -6228,7 +6410,7 @@ mod tests {
     fn aligned_clipped_source_keeps_non_source_and_fresh_target_requirements() {
         let before = fixture(55);
         let completed = fixture(56);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         let mut recipient_only = before.clone();
         copy_region(&completed, &mut recipient_only, PixelRect::new(1398, UPPER_Y, CARD_WIDTH, CARD_HEIGHT), PixelPoint::new(1398, UPPER_Y as i32));
         let report = inspect_effect(&before, &recipient_only, planned).unwrap();
@@ -6242,7 +6424,7 @@ mod tests {
         assert!(!report.source_replaced && !report.verified, "no non-source change: {report}");
         let mut missing_source = completed;
         paint(&mut missing_source, PixelRect::new(690, 799, 10, 189), [12, 82, 45]);
-        assert_eq!(analyse(&missing_source).unwrap().prediction, PredictedAction::NoHighlight);
+        assert_eq!(analyse_historical(&missing_source).unwrap().prediction, PredictedAction::NoHighlight);
         assert!(!aligned_source_print_changes(&before, &missing_source, planned).unwrap().geometry_supported);
     }
 
@@ -6253,7 +6435,7 @@ mod tests {
     fn aligned_clipped_source_rejects_other_columns_heights_and_excessive_shift() {
         let before = fixture(55);
         let completed = fixture(56);
-        let planned = action(&before);
+        let planned = historical_action(&before);
 
 
         for (column, point) in [(3, PixelPoint::new(716, 799)), (2, PixelPoint::new(548, 777))] {
@@ -6261,7 +6443,7 @@ mod tests {
             paint(&mut different, PixelRect::new(548, 799, 152, 195), [12, 82, 45]);
             copy_region(&completed, &mut different, PixelRect::new(548, 799, 152, 189), point);
             let expected_top = point.y as u16;
-            assert_eq!(action(&different).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
+            assert_eq!(historical_action(&different).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
                 column, top: expected_top, bottom: expected_top + 189,
             }));
             let print = aligned_source_print_changes(&before, &different, planned).unwrap();
@@ -6269,7 +6451,7 @@ mod tests {
         }
         let mut different_height = before.clone();
         copy_region(&before, &mut different_height, PixelRect::new(548, 804, 152, 143), PixelPoint::new(548, 803));
-        let different_plan = action(&different_height);
+        let different_plan = historical_action(&different_height);
         assert_eq!(different_plan.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
             column: 2, top: 803, bottom: 993,
         }));
@@ -6302,11 +6484,11 @@ mod tests {
     fn recorded_ordinary_clipped_source_continues_to_a_different_column() {
         let before = fixture(57);
         let after = fixture(58);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
             column: 3, top: 803, bottom: 992,
         }));
-        assert_eq!(action(&after).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
+        assert_eq!(historical_action(&after).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
             column: 7, top: 425, bottom: 615,
         }));
         assert_eq!(ordinary_source_face_top(&after, planned.effect_bounds(), 808), Some(803));
@@ -6363,7 +6545,7 @@ mod tests {
     fn ordinary_clipped_source_rejects_ambiguous_seams_missing_paper_and_missing_felt() {
         let before = fixture(57);
         let completed = fixture(58);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         let source = planned.effect_bounds();
 
 
@@ -6381,7 +6563,7 @@ mod tests {
         ] {
             let mut different = completed.clone();
             paint(&mut different, bounds, rgb);
-            assert_eq!(action(&different).target, action(&completed).target, "{name}: fresh source is retained");
+            assert_eq!(historical_action(&different).target, historical_action(&completed).target, "{name}: fresh source is retained");
             assert_eq!(ordinary_source_face_top(&different, source, 808), None, "{name}");
             let print = ordinary_source_print_changes(&before, &different, planned).unwrap();
             assert!(!print.geometry_supported && !print.verified, "{name}: {print:?}");
@@ -6413,8 +6595,8 @@ mod tests {
         // Seven original antialiased side pixels are chromatic, but differ by
         // less than the material bound; retain the actual ordinary paper side.
         copy_region(&completed, &mut after, PixelRect::new(731, 804, 1, 143), PixelPoint::new(731, 804));
-        let planned = action(&before);
-        assert_eq!(action(&after).target, action(&completed).target);
+        let planned = historical_action(&before);
+        assert_eq!(historical_action(&after).target, historical_action(&completed).target);
         assert_eq!(ordinary_source_face_top(&after, planned.effect_bounds(), 808), Some(803));
         (before, after, planned)
     }
@@ -6457,7 +6639,7 @@ mod tests {
     fn ordinary_clipped_source_rejects_each_one_way_print_transition() {
         let before = fixture(57);
         let completed = fixture(58);
-        let planned = action(&before);
+        let planned = historical_action(&before);
 
 
         for remove_new in [true, false] {
@@ -6501,7 +6683,7 @@ mod tests {
     fn ordinary_clipped_source_rejects_stable_paper_field_fading() {
         let before = fixture(57);
         let completed = fixture(58);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         let mut faded = completed.clone();
 
 
@@ -6532,7 +6714,7 @@ mod tests {
     fn ordinary_clipped_source_requires_fresh_target_non_source_change_and_receiving_print() {
         let before = fixture(57);
         let completed = fixture(58);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         let source = planned.effect_bounds();
         let recipient = PixelRect::new(894, UPPER_Y, CARD_WIDTH, CARD_HEIGHT);
         let mut source_only = before.clone();
@@ -6540,7 +6722,7 @@ mod tests {
         assert_eq!(ordinary_source_face_top(&source_only, source, 808), Some(803));
         let print = measure_aligned_source_print_changes(&before, &source_only, source, source.height, 5, planned).unwrap();
         assert!(print.verified, "source print is independently real: {print:?}");
-        assert_eq!(analyse(&source_only).unwrap().prediction, PredictedAction::NoHighlight);
+        assert_eq!(analyse_historical(&source_only).unwrap().prediction, PredictedAction::NoHighlight);
         let report = inspect_effect(&before, &source_only, planned).unwrap();
         assert_eq!(report.destination_changed, 0, "source column does not establish a recipient: {report}");
         assert!(!report.source_aligned_print.geometry_supported && !report.source_replaced && !report.verified,
@@ -6569,11 +6751,11 @@ mod tests {
     fn recorded_deep_guide_felt_removal_supports_continuation_only() {
         let before = fixture(59);
         let after = fixture(60);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
             column: 7, top: 391, bottom: 581,
         }));
-        assert_eq!(action(&after).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
+        assert_eq!(historical_action(&after).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
             column: 3, top: 372, bottom: 562,
         }));
         let report = inspect_effect(&before, &after, planned).unwrap();
@@ -6594,7 +6776,7 @@ mod tests {
     fn deep_guide_felt_rejects_unchanged_card_and_achromatic_guide_fading() {
         let before = fixture(59);
         let completed = fixture(60);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         assert!(!inspect_effect(&before, &before, planned).unwrap().source_replaced);
 
 
@@ -6627,7 +6809,7 @@ mod tests {
     fn deep_guide_felt_keeps_source_and_non_source_changes_independent() {
         let before = fixture(59);
         let completed = fixture(60);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         let mut recipient_only = completed.clone();
         copy_region(&before, &mut recipient_only, PixelRect::new(1414, 407, 100, 158), PixelPoint::new(1414, 407));
         let report = inspect_effect(&before, &recipient_only, planned).unwrap();
@@ -6636,10 +6818,10 @@ mod tests {
 
         let mut controlled_before = before.clone();
         copy_region(&completed, &mut controlled_before, PixelRect::new(714, 360, 156, 214), PixelPoint::new(714, 360));
-        assert_eq!(action(&controlled_before), planned);
+        assert_eq!(historical_action(&controlled_before), planned);
         let mut source_only = controlled_before.clone();
         copy_region(&completed, &mut source_only, PixelRect::new(1390, 332, 148, 249), PixelPoint::new(1390, 332));
-        assert_eq!(action(&source_only).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
+        assert_eq!(historical_action(&source_only).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
             column: 3, top: 372, bottom: 562,
         }));
         let report = inspect_effect(&controlled_before, &source_only, planned).unwrap();
@@ -6655,7 +6837,7 @@ mod tests {
     fn deep_guide_felt_rejects_excluded_and_nonchromatic_source_changes() {
         let before = fixture(59);
         let completed = fixture(60);
-        let planned = action(&before);
+        let planned = historical_action(&before);
 
 
         for rgb in [[32, 32, 32], [190, 190, 190], [230, 185, 70], [14, 14, 14], [5, 9, 6]] {
@@ -6681,7 +6863,7 @@ mod tests {
     fn deep_guide_felt_keeps_material_and_opposed_half_guards() {
         let before = fixture(59);
         let completed = fixture(60);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         let evidence = deep_felt_source_changes(&before, &completed, planned, 511).unwrap();
         assert_eq!(evidence.paper_to_deep_felt, 990);
         assert!(!evidence.verified, "material threshold is independent: {evidence:?}");
@@ -6700,7 +6882,7 @@ mod tests {
     fn deep_guide_felt_rejects_noncanonical_geometry_and_malformed_frames() {
         let before = fixture(59);
         let completed = fixture(60);
-        let planned = action(&before);
+        let planned = historical_action(&before);
 
 
         for target in [
@@ -6734,15 +6916,15 @@ mod tests {
 
         for number in [10, 55] {
             let before = fixture(number);
-            let planned = action(&before);
+            let planned = historical_action(&before);
             let evidence = deep_felt_source_changes(&before, &completed, planned, 6960).unwrap();
             assert!(!evidence.context_supported && !evidence.verified, "K{number}: {evidence:?}");
         }
         let before = fixture(59);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         let mut no_target = completed;
         copy_region(&before, &mut no_target, PixelRect::new(714, 360, 156, 214), PixelPoint::new(714, 360));
-        assert_eq!(analyse(&no_target).unwrap().prediction, PredictedAction::NoHighlight);
+        assert_eq!(analyse_historical(&no_target).unwrap().prediction, PredictedAction::NoHighlight);
         let report = inspect_effect(&before, &no_target, planned).unwrap();
         assert!(report.source_changed >= MINIMUM_CONTENT_CHANGE && report.destination_changed >= MINIMUM_CONTENT_CHANGE, "material changes survive: {report}");
         assert!(!report.source_deep_felt.context_supported && !report.source_replaced && !report.verified, "no fresh target: {report}");
@@ -6756,11 +6938,11 @@ mod tests {
     fn recorded_single_king_removal_combines_disjoint_positive_felt_ranges() {
         let before = fixture(63);
         let after = fixture(64);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
             column: 3, top: 354, bottom: 544,
         }));
-        assert_eq!(action(&after).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
+        assert_eq!(historical_action(&after).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
             column: 4, top: 372, bottom: 835,
         }));
         let report = inspect_effect(&before, &after, planned).unwrap();
@@ -6782,7 +6964,7 @@ mod tests {
     fn disjoint_felt_union_rejects_native_retained_king_guide_fading() {
         let before = fixture(63);
         let completed = fixture(64);
-        let planned = action(&before);
+        let planned = historical_action(&before);
 
 
         for percent in [2_u16, 5, 10, 11, 15, 20, 25, 30, 100] {
@@ -6815,7 +6997,7 @@ mod tests {
     fn disjoint_felt_union_keeps_each_component_and_material_bounds() {
         let before = fixture(63);
         let completed = fixture(64);
-        let planned = action(&before);
+        let planned = historical_action(&before);
 
 
         for remove_deep in [true, false] {
@@ -6860,7 +7042,7 @@ mod tests {
     fn disjoint_felt_union_keeps_source_and_non_source_independent() {
         let before = fixture(63);
         let completed = fixture(64);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         let mut recipient_only = completed.clone();
         copy_region(&before, &mut recipient_only, PixelRect::new(742, 370, 100, 158), PixelPoint::new(742, 370));
         let report = inspect_effect(&before, &recipient_only, planned).unwrap();
@@ -6870,10 +7052,10 @@ mod tests {
         let native_shorter_source = fixture(59);
         let mut controlled_before = before.clone();
         copy_region(&native_shorter_source, &mut controlled_before, PixelRect::new(1386, 385, 156, 204), PixelPoint::new(1050, 345));
-        assert_eq!(action(&controlled_before), planned);
+        assert_eq!(historical_action(&controlled_before), planned);
         let mut source_only = controlled_before.clone();
         copy_region(&completed, &mut source_only, PixelRect::new(714, 342, 156, 235), PixelPoint::new(714, 342));
-        assert_eq!(action(&source_only).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
+        assert_eq!(historical_action(&source_only).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
             column: 5, top: 351, bottom: 541,
         }));
         let report = inspect_effect(&controlled_before, &source_only, planned).unwrap();
@@ -6889,7 +7071,7 @@ mod tests {
     fn disjoint_felt_union_keeps_opposed_halves_exclusions_and_fresh_target() {
         let before = fixture(63);
         let completed = fixture(64);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         let mut one_half = completed.clone();
         copy_region(&before, &mut one_half, PixelRect::new(742, 449, 50, 79), PixelPoint::new(742, 449));
         paint(&mut one_half, PixelRect::new(792, 449, 50, 79), [2, 12, 7]);
@@ -6911,7 +7093,7 @@ mod tests {
 
         let mut no_target = completed;
         copy_region(&before, &mut no_target, PixelRect::new(882, 360, 156, 483), PixelPoint::new(882, 360));
-        assert_eq!(analyse(&no_target).unwrap().prediction, PredictedAction::NoHighlight);
+        assert_eq!(analyse_historical(&no_target).unwrap().prediction, PredictedAction::NoHighlight);
         let report = inspect_effect(&before, &no_target, planned).unwrap();
         assert!(!report.source_deep_felt.context_supported && !report.source_replaced && !report.verified, "no fresh target: {report}");
     }
@@ -6923,7 +7105,7 @@ mod tests {
     fn ordinary_clipped_source_rejects_noncanonical_actions_and_malformed_frames() {
         let before = fixture(57);
         let completed = fixture(58);
-        let planned = action(&before);
+        let planned = historical_action(&before);
 
 
         for target in [
@@ -6955,15 +7137,15 @@ mod tests {
         let before = fixture(61);
         let after = fixture(62);
         assert!(is_gameplay_scene(&before).unwrap());
-        assert_eq!(action(&before).target, ActionTarget::Klondike(KlondikeTarget::Draw));
+        assert_eq!(historical_action(&before).target, ActionTarget::Klondike(KlondikeTarget::Draw));
         assert_eq!(count_pixels(&after, PixelRect::new(868, 710, 14, 14), is_felt), 168);
         assert_eq!(count_pixels(&after, PixelRect::new(874, 710, 7, 28), is_felt), 196);
         assert!(is_gameplay_scene(&after).unwrap());
-        assert_eq!(find_tableau_source(&after, PixelRect::new(726, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)).unwrap(), Some(PixelRect::new(726, 372, CARD_WIDTH, 518)));
-        assert_eq!(action(&after).target, ActionTarget::Klondike(KlondikeTarget::Tableau { column: 3, top: 372, bottom: 890 }));
-        let report = inspect_effect(&before, &after, action(&before)).unwrap();
+        assert_eq!(find_historical_tableau_source(&after, PixelRect::new(726, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)).unwrap(), Some(PixelRect::new(726, 372, CARD_WIDTH, 518)));
+        assert_eq!(historical_action(&after).target, ActionTarget::Klondike(KlondikeTarget::Tableau { column: 3, top: 372, bottom: 890 }));
+        let report = inspect_effect(&before, &after, historical_action(&before)).unwrap();
         assert!(report.verified && report.destination_changed >= MINIMUM_CONTENT_CHANGE, "Draw effect remains independent: {report}");
-        assert!(!inspect_effect(&before, &before, action(&before)).unwrap().verified);
+        assert!(!inspect_effect(&before, &before, historical_action(&before)).unwrap().verified);
     }
 
 
@@ -7058,9 +7240,9 @@ mod tests {
     fn recorded_suit_return_matches_old_print_at_independent_receiver_seam() {
         let before = fixture(65);
         let after = fixture(66);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Foundation { column: 2 }));
-        assert_eq!(action(&after).target, ActionTarget::Klondike(KlondikeTarget::Tableau { column: 5, top: 390, bottom: 582 }));
+        assert_eq!(historical_action(&after).target, ActionTarget::Klondike(KlondikeTarget::Tableau { column: 5, top: 390, bottom: 582 }));
         let report = inspect_effect(&before, &after, planned).unwrap();
         let transfer = report.source_foundation_transfer;
         assert!(report.source_changed < MINIMUM_CONTENT_CHANGE && report.source_positive < MINIMUM_CONTENT_CHANGE, "{report}");
@@ -7081,7 +7263,7 @@ mod tests {
     fn suit_transfer_requires_both_replaced_source_and_new_receiving_print() {
         let before = fixture(65);
         let after = fixture(66);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         let mut source_only = after.clone();
         copy_region(&before, &mut source_only, PixelRect::new(894, 332, CARD_WIDTH, TABLEAU_EFFECT_BOTTOM - 332), PixelPoint::new(894, 332));
         let mut recipient_only = after.clone();
@@ -7095,9 +7277,9 @@ mod tests {
             let report = inspect_effect(&before, result, planned).unwrap();
             assert!(!report.source_foundation_transfer.verified && !report.source_replaced && !report.verified, "{report}");
         }
-        assert_eq!(action(&source_only), action(&after));
-        assert_eq!(action(&recipient_only), action(&after));
-        assert_eq!(action(&halo_only), action(&after));
+        assert_eq!(historical_action(&source_only), historical_action(&after));
+        assert_eq!(historical_action(&recipient_only), historical_action(&after));
+        assert_eq!(historical_action(&halo_only), historical_action(&after));
     }
 
 
@@ -7107,7 +7289,7 @@ mod tests {
     fn suit_transfer_rejects_one_corner_and_one_way_source_changes() {
         let before = fixture(65);
         let after = fixture(66);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         let patches = [PixelRect::new(1_067, 117, 28, 44), PixelRect::new(1_161, 238, 28, 44)];
 
 
@@ -7135,7 +7317,7 @@ mod tests {
     fn suit_transfer_rejects_changed_neutral_source_fields() {
         let before = fixture(65);
         let mut after = fixture(66);
-        let planned = action(&before);
+        let planned = historical_action(&before);
 
 
         for patch in [PixelRect::new(1_067, 117, 28, 44), PixelRect::new(1_161, 238, 28, 44)] {
@@ -7167,7 +7349,7 @@ mod tests {
     fn suit_transfer_rejects_translated_old_glyph_with_real_recipient() {
         let before = fixture(65);
         let mut after = fixture(66);
-        let planned = action(&before);
+        let planned = historical_action(&before);
 
 
         for patch in [PixelRect::new(1_067, 117, 28, 44), PixelRect::new(1_161, 238, 28, 44)] {
@@ -7187,7 +7369,7 @@ mod tests {
     fn suit_transfer_rejects_missing_geometry_and_already_present_print() {
         let before = fixture(65);
         let after = fixture(66);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         let mut missing_seam = after.clone();
         paint(&mut missing_seam, PixelRect::new(912, 615, 96, 1), [255, 255, 255]);
         let report = inspect_effect(&before, &missing_seam, planned).unwrap();
@@ -7221,7 +7403,7 @@ mod tests {
     fn suit_transfer_rejects_duplicate_independent_receiver_geometry() {
         let mut before = fixture(65);
         let mut after = fixture(66);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         paint(&mut before, PixelRect::new(726, 614, CARD_WIDTH, 50), [15, 100, 60]);
         copy_region(&fixture(66), &mut after, PixelRect::new(894, 614, CARD_WIDTH, 50), PixelPoint::new(726, 614));
         let report = inspect_effect(&before, &after, planned).unwrap();
@@ -7236,7 +7418,7 @@ mod tests {
     fn suit_transfer_preserves_scene_frame_and_canonical_action_guards() {
         let before = fixture(65);
         let after = fixture(66);
-        let planned = action(&before);
+        let planned = historical_action(&before);
         let mut unsupported = after.clone();
         paint(&mut unsupported, PixelRect::new(874, 710, 7, 28), [0, 0, 0]);
         let report = inspect_effect(&before, &unsupported, planned).unwrap();
@@ -7267,11 +7449,11 @@ mod tests {
             let frame = fixture(number);
             let x = FIRST_COLUMN_X + COLUMN_PITCH * u32::from(column - 1);
             assert!(is_gameplay_scene(&frame).unwrap());
-            assert_eq!(find_tableau_source(&frame, PixelRect::new(x, 332, CARD_WIDTH, 994 - 332)).unwrap(), None,
+            assert_eq!(find_historical_tableau_source(&frame, PixelRect::new(x, 332, CARD_WIDTH, 994 - 332)).unwrap(), None,
                 "the former exclusive row994 boundary still clips genuine positive rails");
-            assert_eq!(find_tableau_source(&frame, PixelRect::new(x, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)).unwrap(),
+            assert_eq!(find_historical_tableau_source(&frame, PixelRect::new(x, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)).unwrap(),
                 Some(PixelRect::new(x, u32::from(top), CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - u32::from(top))));
-            let planned = action(&frame);
+            let planned = historical_action(&frame);
             assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau { column, top, bottom: 998 }));
             assert_eq!(planned.operation(), InputOperation::Click(PixelPoint::new((x + CARD_WIDTH / 2) as i32, i32::from(top) + 40)));
             assert_eq!(planned.effect_bounds(), PixelRect::new(x, u32::from(top), CARD_WIDTH, TOOLBAR_TOP - u32::from(top)));
@@ -7376,10 +7558,10 @@ mod tests {
     fn native_taller_run_is_one_safe_upper_click() {
         let frame = fixture(80);
         assert!(is_gameplay_scene(&frame).unwrap());
-        let expected = PixelRect::new(1_398, 372, CARD_WIDTH, 620);
+        let expected = PixelRect::new(1_398, 372, CARD_WIDTH, TOOLBAR_TOP - 372);
         assert_eq!(find_tableau_source(&frame, PixelRect::new(1_398, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)).unwrap(), Some(expected));
         let planned = action(&frame);
-        assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau { column: 7, top: 372, bottom: 992 }));
+        assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau { column: 7, top: 372, bottom: 947 }));
         assert_eq!(planned.operation(), InputOperation::Click(PixelPoint::new(1_464, 412)));
         assert_eq!(planned.effect_bounds(), PixelRect::new(1_398, 372, CARD_WIDTH, TOOLBAR_TOP - 372));
         assert!(!completion_evidence(&frame).unwrap().complete_candidate);
@@ -7404,7 +7586,7 @@ mod tests {
         ] {
             let mut corrupted = frame.clone();
             paint(&mut corrupted, bounds, colour);
-            assert_eq!(find_tableau_source(&corrupted, scan).unwrap(), None, "corrupted {bounds:?}");
+            assert_live_source_after_damage(&frame, &corrupted, bounds);
         }
         assert_eq!(find_tableau_source(&frame, PixelRect::new(1_398, 332, CARD_WIDTH, 936 - 332)).unwrap(), None,
             "an internal crossbar cannot close clipped continuing rails");
@@ -7447,7 +7629,7 @@ mod tests {
             assert!(is_gameplay_scene(&frame).unwrap(), "K{number} native scene");
             let planned = action(&frame);
             assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-                column: 5, top, bottom,
+                column: 5, top, bottom: bottom.min(TOOLBAR_TOP as u16),
             }));
             assert_eq!(planned.operation(), InputOperation::Click(PixelPoint::new(1_128, i32::from(top) + 40)));
             assert!(!completion_evidence(&frame).unwrap().complete_candidate);
@@ -7506,7 +7688,7 @@ mod tests {
             Some(PixelRect::new(894, 372, 132, 614)));
         let planned = action(&frame);
         assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-            column: 4, top: 372, bottom: 986,
+            column: 4, top: 372, bottom: 947,
         }));
         assert_eq!(planned.operation(), InputOperation::Click(PixelPoint::new(960, 412)));
         assert_eq!(planned.effect_bounds().bottom(), TOOLBAR_TOP);
@@ -7528,7 +7710,7 @@ mod tests {
             let mut changed = native.clone();
             paint(&mut changed, PixelRect::new(966, 985, 1, 1), rgb);
             assert_eq!(find_solid_card_source(&changed, scan).unwrap(), None, "{rgb:?}");
-            assert_eq!(analyse(&changed).unwrap().prediction, PredictedAction::NoHighlight);
+            assert_eq!(analyse(&changed).unwrap().prediction, analyse(&native).unwrap().prediction);
         }
         let mut outside = native;
         paint(&mut outside, PixelRect::new(967, 985, 1, 1), [96, 87, 43]);
@@ -7594,7 +7776,7 @@ mod tests {
             Some(PixelRect::new(1_230, 790, CARD_WIDTH, 189)));
         let planned = action(&frame);
         assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-            column: 6, top: 790, bottom: 979,
+            column: 6, top: 790, bottom: 947,
         }));
         assert_eq!(planned.operation(), InputOperation::Click(PixelPoint::new(1_296, 830)));
         assert_eq!(planned.effect_bounds().bottom(), TOOLBAR_TOP);
@@ -7628,7 +7810,7 @@ mod tests {
             let mut changed = native.clone();
             paint(&mut changed, bounds, [0, 0, 0]);
             assert_eq!(find_solid_card_source(&changed, scan).unwrap(), None, "{bounds:?}");
-            assert_eq!(analyse(&changed).unwrap().prediction, PredictedAction::NoHighlight);
+            assert_live_source_after_damage(&native, &changed, bounds);
         }
     }
 
@@ -7674,6 +7856,108 @@ mod tests {
         let mut malformed = native;
         malformed.pixels.truncate(4);
         assert_eq!(find_solid_card_source(&malformed, scan), Err(HaloDetectionError::InvalidFrameLayout));
+    }
+
+
+    /// K95 is the original five-card source whose lower border shares K94's
+    /// Undo All overlap. The connected outline remains one upper-card click.
+    #[test]
+    fn undo_all_overlay_accepts_native_five_card_source() {
+        let frame = fixture(95);
+        assert!(is_gameplay_scene(&frame).unwrap());
+        assert_eq!(find_tableau_source(&frame, PixelRect::new(1_230, 332, CARD_WIDTH, 666)).unwrap(),
+            Some(PixelRect::new(1_230, 571, CARD_WIDTH, TOOLBAR_TOP - 571)));
+        let planned = action(&frame);
+        assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
+            column: 6, top: 571, bottom: TOOLBAR_TOP as u16,
+        }));
+        assert_eq!(planned.operation(), InputOperation::Click(PixelPoint::new(1_296, 611)));
+        assert_eq!(planned.effect_bounds().bottom(), TOOLBAR_TOP);
+        assert_eq!(find_solid_card_source(&frame, PixelRect::new(894, 332, CARD_WIDTH, 666)).unwrap(), None,
+            "the native dark dashed column-four destination never supplies source authority");
+        assert!(!completion_evidence(&frame).unwrap().complete_candidate);
+    }
+
+
+    /// Every retained pre-candidate fixture keeps its source/operation. Only a
+    /// tableau source reaching the toolbar gains the observed bottom947; no
+    /// hidden ending or icon colour is part of its live prediction.
+    #[test]
+    fn all_recorded_live_targets_preserve_operations_with_visible_tableau_bounds() {
+
+
+        for number in 1..=94 {
+            let frame = fixture(number);
+            let old = analyse_historical(&frame).unwrap().prediction;
+            let expected = match old {
+                PredictedAction::Action(old_action) => match old_action.target {
+                    ActionTarget::Klondike(KlondikeTarget::Tableau { column, top, bottom })
+                        if u32::from(bottom) > TOOLBAR_TOP =>
+                    {
+                        PredictedAction::Action(canonical_action(KlondikeTarget::Tableau {
+                            column, top, bottom: TOOLBAR_TOP as u16,
+                        }).unwrap())
+                    }
+                    _ => old,
+                },
+                _ => old,
+            };
+            let actual = analyse(&frame).unwrap().prediction;
+            assert_eq!(actual, expected, "K{number:02} live source and operation");
+        }
+    }
+
+
+    /// Replacing every row at or below the toolbar cannot change any live
+    /// prediction. This covers Undo All/Hint artwork, arbitrary RGB fills,
+    /// lower borders and fake gold rails wholly in the excluded screen region.
+    #[test]
+    fn all_recorded_live_targets_ignore_every_pixel_at_and_below_toolbar() {
+
+
+        for number in 1..=95 {
+            let native = fixture(number);
+            let expected = analyse(&native).unwrap().prediction;
+
+
+            for rgb in [[0, 0, 0], [255, 255, 255], [220, 180, 100], [12, 82, 45], [150, 20, 20]] {
+                let mut changed = native.clone();
+                paint(&mut changed, PixelRect::new(0, TOOLBAR_TOP, native.width, native.height - TOOLBAR_TOP), rgb);
+                assert_eq!(analyse(&changed).unwrap().prediction, expected, "K{number:02} toolbar {rgb:?}");
+            }
+        }
+    }
+
+
+    /// The clipped native source still requires its visible top, opposing
+    /// rails through the cutoff and bright card paper. Cropping earlier than
+    /// the known toolbar, a dashed recipient and malformed frames grant no click.
+    #[test]
+    fn toolbar_clipped_source_requires_visible_source_and_exact_cutoff() {
+        let native = fixture(95);
+        let scan = PixelRect::new(1_230, TABLEAU_SCAN_TOP, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - TABLEAU_SCAN_TOP);
+
+
+        for bounds in [PixelRect::new(1_248, 561, 96, 11),
+            PixelRect::new(1_221, 700, 9, 24), PixelRect::new(1_362, 700, 10, 24),
+            PixelRect::new(1_221, TOOLBAR_TOP - 2, 9, 2), PixelRect::new(1_362, TOOLBAR_TOP - 2, 10, 2),
+            PixelRect::new(1_248, TOOLBAR_TOP - 36, 96, 12)]
+        {
+            let mut damaged = native.clone();
+            paint(&mut damaged, bounds, [0, 0, 0]);
+            assert_eq!(find_tableau_source(&damaged, scan).unwrap(), None, "visible source evidence {bounds:?}");
+            assert_eq!(analyse(&damaged).unwrap().prediction, PredictedAction::NoHighlight);
+        }
+        assert_eq!(find_tableau_source(&native, PixelRect::new(1_230, TABLEAU_SCAN_TOP, CARD_WIDTH,
+            TOOLBAR_TOP - 1 - TABLEAU_SCAN_TOP)).unwrap(), None, "an arbitrary earlier crop cannot supply the toolbar policy");
+        assert_eq!(find_tableau_source(&native, PixelRect::new(894, TABLEAU_SCAN_TOP, CARD_WIDTH,
+            TABLEAU_OUTLINE_BOTTOM - TABLEAU_SCAN_TOP)).unwrap(), None, "the dark dashed destination is not a source");
+        assert_eq!(find_tableau_source(&native, PixelRect::new(1_230, TOOLBAR_TOP, CARD_WIDTH, 20)).unwrap(), None);
+        assert_eq!(find_tableau_source(&native, PixelRect::new(1_900, TABLEAU_SCAN_TOP, CARD_WIDTH, 200)),
+            Err(HaloDetectionError::BoundsOutsideFrame));
+        let mut malformed = native;
+        malformed.pixels.pop();
+        assert_eq!(find_tableau_source(&malformed, scan), Err(HaloDetectionError::InvalidFrameLayout));
     }
 
 }

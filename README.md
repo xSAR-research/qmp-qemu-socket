@@ -14,16 +14,15 @@ the real purpose. Each fixture keeps independent target and effect policies.
 The target is to build in Dijkstra / A* shortest path problem solving rather
 than using the **Solver**, this will benefit drone route planning experience.
 
-This is **v1.2.6, candidate 9**, based on pushed candidate 8 at
-`cafdd609f5afcac9738ea7d11bc43b231cb73dfc`. `Cargo.toml` supplies the package
+This is **v1.2.6, candidate 11**, based on pushed candidate 10 at
+`66c779920a1a57d183f07725943e881f689ed3c6`. `Cargo.toml` supplies the package
 version shown in the window title and Parameters. Beast gameplay acceptance
 is required before promotion.
 
-Candidate 9 recognises the measured Hint-shadow positions on a long column-four
-source. Every lower-edge sample still requires positive gold; none is omitted.
-The existing scene, rail, top and card-interior guards and safe upper-card click
-remain in place. Each fresh Solver recommendation receives one action, editable
-settle and a fresh capture. See [candidate notes](docs/klondike-v1.2.6-candidate-9.md).
+Candidate 11 excludes the guest toolbar from live tableau HALO detection.
+Source runs continuing beneath it use only their visible closed top, connected
+side rails and card paper. Each fresh Solver recommendation receives one action,
+editable settle and a fresh capture. See [candidate notes](docs/klondike-v1.2.6-candidate-11.md).
 
 ## Build and source spacing
 
@@ -59,13 +58,13 @@ card fan. A solid highlighted source block receives one click, including a whole
 run or a source from a SUIT pile. The dark dashed destination is never clicked.
 Newly exposed tableau cards reveal automatically.
 
-Tall source runs can overlap the upper part of the guest toolbar. Klondike
-recognises the measured dimmed closing edge and rejects internal card edges
-while the side rails continue below them. The source click stays above the
-toolbar; toolbar pixels cannot supply move-verification evidence. The newly
-measured nine-card run reaches row 990. Its closing edge is partly covered by
-Undo All: only the measured 28-by-3 overlap is excluded, with every remaining
-edge pixel, connected side rails, closed top and above-toolbar face still required.
+Tall source runs can overlap the guest toolbar, which begins at **Y=947** in
+the calibrated frame. Live tableau HALO detection reads only rows above that
+boundary. A run continuing beneath it needs a visible closed top, connected
+opposing rails reaching the boundary and bright card paper. Its reported bottom
+is the visible cutoff, not an estimate of the hidden card edge. The existing
+upper-card click stays above the toolbar. Solver and terminal controls retain
+their separate areas; full-frame PNG capture and saving remain unchanged.
 
 **Params** provides independent Klondike card/draw/recycle, Solve-animation and
 recapture intervals, initially **750/750/1000 ms**, editable from 0 to 5000 ms. They are

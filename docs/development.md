@@ -1,11 +1,12 @@
-# Development conventions for v1.2.6 candidate 9
+# Development conventions for v1.2.6 candidate 11
 
-Candidate 9 corrects the measured Hint-shadow lower-edge band against pushed
-candidate 8 at `cafdd609f5afcac9738ea7d11bc43b231cb73dfc`. Every edge pixel still
-needs positive gold, with unchanged source geometry and independent scene context.
-The installer accepts only exact base or complete candidate 9 affected contents,
-backs up the actual before-state and preserves unrelated local work. The live
-controller remains driven by fresh Solver targets, without card-pixel move proof.
+Candidate 11 excludes rows Y>=947 from live Klondike tableau HALO detection,
+against pushed candidate 10 at `66c779920a1a57d183f07725943e881f689ed3c6`.
+Clipped sources use positive visible top, rails and paper without depending on
+toolbar artwork. The installer accepts exact base or complete candidate 11
+affected contents, backs up the actual before-state and preserves unrelated
+local work. The live controller remains driven by fresh Solver targets,
+without card-pixel move proof.
 
 ## Naming and documentation
 
@@ -324,3 +325,27 @@ complete candidate 9 predecessor records. Refuse mixed states, staged affected
 files and unknown edits. Back up actual incoming files and restore that incoming
 state on rollback. Downloads and validation evidence use /home/charlie/tmp;
 root AGENTS.md and calibration remain local and untouched.
+
+## Candidate 11 validation boundary
+
+Validate live tableau detection with the native K95 five-card source and all
+recorded frames after changing every pixel at or below row 947. Below-boundary
+mutations must leave live source selection unchanged. Remove visible top, rail
+and paper evidence separately to retain source/destination discrimination.
+The native Step Once regression must send one upper source click, settle and
+capture freshly; it must not invoke card-pixel proof or extra Solver input.
+
+Keep the retired card-effect measurements in explicitly named historical
+test-only helpers. Do not redirect live fixture or worker regressions through
+those helpers. Record focused checks, the unfiltered full suite, check, rustdoc,
+warning-denying Clippy and release build using actual private nightly versions.
+Retain environmental test failures as failures and do not hide them with filters
+or warning suppression. No formatter is run.
+
+The candidate 11 installer pins the pushed candidate 10 commit
+66c779920a1a57d183f07725943e881f689ed3c6. Its rebuilt base and complete-candidate
+records replace the prior predecessor allowance. Exercise preview, apply,
+verification, idempotence and rollback, including affected edits/index conflicts,
+new-file collisions, wrong HEAD and later local edits. Preserve unrelated staged
+calibration and untracked root AGENTS.md. The delivered review distinguishes
+these checks from Charlie's guest gameplay verification.

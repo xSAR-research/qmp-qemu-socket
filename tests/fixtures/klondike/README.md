@@ -699,3 +699,44 @@ lower-edge pixels, ordinary centre, closed top and paper remain mandatory.
 Historical long runs and lower rows retain their original mask/shadow-tail
 requirements; erasing a required K54 lower-edge sample still refuses input.
 No colour threshold, card-rank recognition or live card-effect gate is added.
+
+
+## Candidate 11 toolbar exclusion and original-byte fixture
+
+K95 is the complete original uploaded `qmp-qemu-socket 261004 212453
+Fail-on-overlap-with-Undo-All.png`, copied without resampling or recompression.
+It is a 1920×1080 RGBA PNG of 3,434,536 bytes. The manifest records its identical
+source/fixture SHA-256. The frame shows the column-six five-card source
+6-hearts/5-spades/4-hearts/3-spades/2-hearts, and a dark dashed column-four guide
+beneath 7-spades. The later saved-PNG byte count in the log is different; the
+fixture is not claimed to be the stopped worker frame or that saved encoding.
+
+Charlie's instruction supersedes the toolbar-mask policies above. Live tableau
+HALO detection ends before the measured guest toolbar at y947. Pixels at y947
+and below cannot support or damage a tableau source. This excludes the game's
+translucent icon bar, not merely the Windows taskbar farther down the frame.
+Intentional Solver and terminal controls retain their independent coordinates.
+
+A source whose complete lower outline is visible keeps its existing geometry.
+A source reaching the cutoff is grouped by its visible closed top, opposing
+connected gold rails through y945/y946 and card paper above the bar. It returns
+an observed bottom947 rather than inferring a hidden lower edge. The source needs
+at least48 visible rows so the existing top+40 click and paper probe fit. K95 is
+observed as `(1230,571,132,376)`, clicked once at `(1296,611)`. K94's visible single
+card becomes `(1230,790,132,157)`, retaining `(1296,830)`. Neither needs Undo All
+artwork, a lower-border mask or a card-pixel move comparison.
+
+The live regression checks all94 preceding fixture predictions and operations
+against the former source classes, changing only a clipped tableau bottom to947.
+A separate test replaces the entire region y947..1080 with five adverse colours
+in all95 frames and requires unchanged live predictions. Visible top, rails,
+cutoff, paper and dark dashed-guide refusals remain covered; the worker test
+sends exactly one action for the new grouped source.
+
+Retired pixel-effect diagnostic tests retain an explicitly named test-only
+historical classifier and action helper. Their former full-outline dimensions
+and effect assertions remain unchanged, without imposing their hidden-edge or
+card-identity checks on the live HALO loop. Historical lower-border/icon damage
+tests now separately require the live prediction to remain unchanged; visible
+source damage still refuses input. Native fixtures establish recognition and
+bounded geometry, not animation timing or Beast gameplay acceptance.

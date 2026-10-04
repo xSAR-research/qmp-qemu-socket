@@ -919,8 +919,8 @@ fn has_fresh_deal(frame: &CapturedFrame) -> Result<bool, HaloDetectionError> {
         }
 
 
-        if super::find_solid_card_source(
-            frame, PixelRect::new(x, 332, 132, super::TABLEAU_OUTLINE_BOTTOM - 332),
+        if super::find_tableau_source(
+            frame, PixelRect::new(x, 332, 132, super::TOOLBAR_TOP - 332),
         )?.is_some() {
             return Ok(false);
         }
@@ -2252,6 +2252,27 @@ mod tests {
         let mut occupied_foundation = fixture(30);
         paint(&mut occupied_foundation, PixelRect::new(910, 130, 100, 139), [255, 255, 255]);
         assert_eq!(classify_terminal(&occupied_foundation).unwrap(), None);
+    }
+
+
+    /// Fresh-deal tableau HALO checks exclude the toolbar independently of the
+    /// separate Solver control readiness check in the terminal classifier.
+    #[test]
+    fn fresh_deal_tableau_checks_ignore_pixels_at_and_below_toolbar() {
+
+
+        for number in [30, 77] {
+            let native = fixture(number);
+            assert!(has_fresh_deal(&native).unwrap());
+
+
+            for rgb in [[0, 0, 0], [255, 255, 255], [220, 180, 100], [12, 82, 45]] {
+                let mut changed = native.clone();
+                paint(&mut changed, PixelRect::new(0, crate::klondike::TOOLBAR_TOP,
+                    native.width, native.height - crate::klondike::TOOLBAR_TOP), rgb);
+                assert!(has_fresh_deal(&changed).unwrap(), "K{number} toolbar {rgb:?}");
+            }
+        }
     }
 
 

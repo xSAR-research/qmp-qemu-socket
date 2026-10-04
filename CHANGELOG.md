@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.2.6 — candidate 11
+
+- End live Klondike tableau HALO detection before the measured guest toolbar
+  boundary at Y=947. Undo All, Hint and other artwork below that row no longer
+  participate in source recognition.
+- Recognise a boundary-clipped source from its visible closed top, connected
+  opposing rails and card paper. Keep one upper-card click for the whole block;
+  record only its visible bounds rather than guessing its hidden lower edge.
+- Add the supplied five-card source fixture K95 and live detector/controller
+  checks. Retain historical pixel-effect diagnostics separately in tests; they
+  do not gate gameplay or restore toolbar-dependent live detection.
+- Preserve candidate 10's Pyramid/TriPeaks corrections, one-board restart
+  sequence, timings, STOP and original-byte capture/save contract.
+- Rebuild the guarded candidate package against pushed candidate 10 at
+  `66c779920a1a57d183f07725943e881f689ed3c6`.
+
 ## v1.2.6 — candidate 10
 
 - Pyramid's freshly highlighted MOVE/Recycle target sends D. Both operations

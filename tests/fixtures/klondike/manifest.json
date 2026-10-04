@@ -2341,6 +2341,29 @@
         ]
       ],
       "observation": "Sixth tableau column single2clubs source lower gold edge overlaps UndoAll overlay. Dashed foundation4 destination is a guide."
+    },
+    {
+      "fixture": "K95.png",
+      "source": "qmp-qemu-socket 261004 212453 Fail-on-overlap-with-Undo-All.png",
+      "source_sha256": "7d5218133a6d5919ea0bd6869d2e28c000d4652bdbf008ce743b485986359853",
+      "fixture_sha256": "7d5218133a6d5919ea0bd6869d2e28c000d4652bdbf008ce743b485986359853",
+      "bytes": 3434536,
+      "source_bytes": 3434536,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "full_original_png": true,
+      "retained_rectangles_xyxy": [
+        [
+          0,
+          0,
+          1920,
+          1080
+        ]
+      ],
+      "observation": "Sixth tableau column five-card 6hearts/5spades/4hearts/3spades/2hearts source lower gold edge overlaps UndoAll overlay. Dashed column4 destination beneath7spades is a guide. Manual PNG supports settled geometry, not historical worker-frame byte identity or measured timing."
     }
   ],
   "solve_control_template": {
