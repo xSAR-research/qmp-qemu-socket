@@ -1,5 +1,5 @@
 {
-  "description": "Derived sparse regression fixtures. Listed half-open rectangles preserve original RGBA pixels exactly at original coordinates. All unlisted pixels are opaque black, no resizing. These are test fixtures, not substitute original screenshot evidence. Per-file retained_rectangles_xyxy overrides the default rectangle list.",
+  "description": "Original-byte and derived sparse regression fixtures. Listed half-open rectangles preserve original RGBA pixels exactly at original coordinates. Sparse fixtures black all unlisted pixels, without resizing. K70-K79 are complete byte-identical original uploads. Per-file retained_rectangles_xyxy overrides the default rectangle list. Manual frames are not asserted to be the historical automatic worker frames.",
   "frame": [
     1920,
     1080
@@ -1475,6 +1475,630 @@
         ]
       ],
       "observation": "Settled Congratulations level 53 with New Game and Home. Log confirms no New Game input: scene and letters passed while button body stayed at 5/6; last pointer follows the Level Up OK click. Later read-only save, not exact prior worker PNG."
+    },
+    {
+      "fixture": "K54.png",
+      "source": "qmp-qemu-socket 261003 055723 FAIL-Long-card-pile.png",
+      "source_sha256": "02ff0578164d4dbed5a75a0956335bf54dd25493f60cb7fb8a3ba658e7f23d32",
+      "fixture_sha256": "e6b445ee11a95929b065198212390f610ba27dd0b1623f930e27b9991f066eb5",
+      "bytes": 1674869,
+      "source_bytes": 3448644,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          378,
+          100,
+          1540,
+          1033
+        ],
+        [
+          160,
+          310,
+          176,
+          326
+        ],
+        [
+          1730,
+          310,
+          1746,
+          326
+        ],
+        [
+          824,
+          34,
+          1096,
+          92
+        ]
+      ],
+      "observation": "Later native read-only failure scene: nine-card column6 Q-diamonds/J-spades/10-diamonds/9-spades/8-diamonds/7-clubs/6-diamonds/5-spades/4-hearts source ends at989. Previous RIGHT effect is logged verified; next source was not selected. Row988 warm border at1336/1337 is darkened by Undo All shadow below ordinary rail-red100. The original attachment differs in byte length from logged saved PNG; exact earlier worker/manual-save byte identity is not claimed."
+    },
+    {
+      "fixture": "K55.png",
+      "source": "qmp-qemu-socket 261003 060107 Move-before-FAIL-move-bottom-card.png",
+      "source_sha256": "59210805fbb39c9f4e203ae286ed86092e760a26b29a07e1bf649138d86b9202",
+      "fixture_sha256": "c7abf0f9e4148d966f7f09a2f7a4de1062107a9673e21326bb38b58444e83e83",
+      "bytes": 2267630,
+      "source_bytes": 3353939,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          150,
+          32,
+          1770,
+          994
+        ]
+      ],
+      "observation": "Undo reconstruction captured after the stopped run: highlighted 3-clubs at bottom of column 2, source outline rows804..993. Not the original worker before frame."
+    },
+    {
+      "fixture": "K56.png",
+      "source": "qmp-qemu-socket 261003 060038 FAIL-moving-bottom-card-to-SUIT.png",
+      "source_sha256": "c258a48113f1ba9bd7f00ee0d51013d1b17cf75d704b4555849904853918c58f",
+      "fixture_sha256": "07c5b9d24df8ff3a07cd6f01148430e47c667e5ab8ccecf32994cddabf44a33f",
+      "bytes": 2271787,
+      "source_bytes": 3358259,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          150,
+          32,
+          1770,
+          994
+        ]
+      ],
+      "observation": "Later read-only stopped result: 3-clubs now in foundation 4; replacement 4-hearts source in column 2, outline rows799..988. Worker before/result bytes are not supplied."
+    },
+    {
+      "fixture": "K57.png",
+      "source": "qmp-qemu-socket 261003 061641 Image-before-fail.png",
+      "source_sha256": "9605713eea5962d25b8e4ef028b4da50cf62e3ed44dad3f3ef4ffbb33cab7418",
+      "fixture_sha256": "4739515fd566680287caae2843897095fdaf2792de0a45a566d94947cd0b66b0",
+      "bytes": 2368105,
+      "source_bytes": 3458722,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          150,
+          32,
+          1770,
+          994
+        ]
+      ],
+      "observation": "Later Undo reconstruction: highlighted 3-hearts at bottom of column3, canonical paired-rail source rows803..992, nominal face top808; the historical worker log records bottom993. Ordinary four-heart card in column7 has gray seam430. This is not the original worker planning PNG."
+    },
+    {
+      "fixture": "K58.png",
+      "source": "qmp-qemu-socket 261003 061506 FAIL.png",
+      "source_sha256": "508e2836f4b37675e4b70c2663b99d51553df2bef1676bddeddc8c352a63a873",
+      "fixture_sha256": "71e8ee34ab25fa9c2824191cc4ff54885b5ef6ef91363c07c840261bd88a5a35",
+      "bytes": 2365341,
+      "source_bytes": 3454960,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          150,
+          32,
+          1770,
+          994
+        ]
+      ],
+      "observation": "Later native read-only failure snapshot: ordinary unhighlighted 4-clubs replacement in column3 has unique gray seam803; next four-heart HALO is column7 rows425..615, with unchanged artwork from K57. Receiving foundation1 retains its dashed dark guide and new three-heart print. The manual capture follows historical worker observations; byte identity with worker result PNGs is not claimed."
+    },
+    {
+      "fixture": "K59.png",
+      "source": "qmp-qemu-socket 261003 062945 Move-before-FAIL.png",
+      "source_sha256": "af8bc59fff9c2311eca5d0a189f60101954d055f547e0283c4a9f0d31250665f",
+      "fixture_sha256": "d2a122e30a2175fa3fce0eed2bc68713afedea2b551fbda3cb0d52e95a1e237d",
+      "bytes": 2631401,
+      "source_bytes": 3780212,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          150,
+          32,
+          1770,
+          994
+        ]
+      ],
+      "observation": "Native manual capture before the reported failure: outlined Q-spades source column7 rows391..581, K-diamonds above it, and dark dashed receiving guide over foundation2 J-spades. No worker planning PNG byte identity is asserted."
+    },
+    {
+      "fixture": "K60.png",
+      "source": "qmp-qemu-socket 261003 063029 FAIL.png",
+      "source_sha256": "17e623b4dcf0c1d7b57dcf88ea576501d4237a6f54812245a5509deadde2c52c",
+      "fixture_sha256": "fbc224de5958419a27ee750d74f59a7309668cf7fd13c78bfe2a7628939dc91e",
+      "bytes": 2631170,
+      "source_bytes": 3778685,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          150,
+          32,
+          1770,
+          994
+        ]
+      ],
+      "observation": "Native later read-only failure snapshot: Q-spades is now foundation2; remaining K-diamonds occupies column7 above deep guide-shaded felt. The fresh Q-clubs source is column3 rows372..562, while the dark dashed destination is in column7. Manual capture is later than the worker result observations."
+    },
+    {
+      "fixture": "K61.png",
+      "source": "qmp-qemu-socket 261003 064516 Before-fail-move-of-stack.png",
+      "source_sha256": "76809430deea3f0613d563eefa9bd2fbe27f0c583bfe365ce847686769540cbd",
+      "fixture_sha256": "5e37751dd5b2f0b4f04ac8465b05fb95b0efc72a292b5f3c97b55fe5ac0f5e5c",
+      "bytes": 2321183,
+      "source_bytes": 3412677,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          150,
+          32,
+          1770,
+          994
+        ]
+      ],
+      "observation": "Undo reconstruction after the stopped run, stock highlighted before the Draw 1 action. Not the original worker planning PNG."
+    },
+    {
+      "fixture": "K62.png",
+      "source": "qmp-qemu-socket 261003 064452 FAIL-stack-move.png",
+      "source_sha256": "1cb4b208eec53e0f34d5274b6fed4a642b00f775392b971b54295ee773ef0b86",
+      "fixture_sha256": "1ce30c04d6d3e88d0b12b632096f41cee8dd0cf6da899ad01eac31554b9b23c2",
+      "bytes": 2293092,
+      "source_bytes": 3390328,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          150,
+          32,
+          1770,
+          994
+        ]
+      ],
+      "observation": "Later read-only result after one Draw key action: waste 10-spades, seven-card highlighted run in column 3 rows372..890. Old lower gutter contains 28 shadow pixels; no stack input was attempted."
+    },
+    {
+      "fixture": "K63.png",
+      "source": "qmp-qemu-socket 261003 064934 Move-before-fail.png",
+      "source_sha256": "fb909e469c8f09642cca2ff538b62a5964e361d7025071953c0a26921cfac969",
+      "fixture_sha256": "72e86c43208a2551d3696645d6e18fa8401f0e7f2f004ea2771d7898edb5df8f",
+      "bytes": 2287060,
+      "source_bytes": 3377250,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          150,
+          32,
+          1770,
+          994
+        ]
+      ],
+      "observation": "Later supplied manual before-state capture: outlined single K-diamonds in column3 rows354..544 moves to the empty column1 landing guide. This supplied before filename is later than the failure filename; no identity with worker planning PNG bytes is asserted."
+    },
+    {
+      "fixture": "K64.png",
+      "source": "qmp-qemu-socket 261003 064918 Fail-moving-stack.png",
+      "source_sha256": "b311f5642eec8f9704255aea3adce88fc43da7f928ec67537d8875ea9b16f6c4",
+      "fixture_sha256": "05f6b22629505d9bef9973ffc30c741ea73f30520d5a5a5a1dcd5b9d8b4a045d",
+      "bytes": 2288606,
+      "source_bytes": 3383893,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          150,
+          32,
+          1770,
+          994
+        ]
+      ],
+      "observation": "Later native read-only failure capture: K-diamonds is in column1; J-diamonds is exposed in column3 beneath the next dark landing guide, with green felt below. The fresh long run source is column4 rows372..835. The failed authorised action was the preceding single King move, rather than this recommended long run."
+    },
+    {
+      "fixture": "K65.png",
+      "source": "qmp-qemu-socket 261003 090518 Before-Fail.png",
+      "source_sha256": "8c2cde61d798d43f87994aa956387755a2f724c68c58c4e40e332ca62cfc35c1",
+      "fixture_sha256": "03dcd6d7f9fb7a93f8aa9e70c50d2a347c4a5746bccf4608eaf6caca9c28863f",
+      "bytes": 2427955,
+      "source_bytes": 3524743,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          150,
+          32,
+          1770,
+          994
+        ]
+      ],
+      "observation": "Later Undo reconstruction: outlined8-diamonds in SUIT2 returns to column4 below9-spades. The supplied predecessor is not asserted to be the historical worker planning PNG."
+    },
+    {
+      "fixture": "K66.png",
+      "source": "qmp-qemu-socket 261003 090501 Fail.png",
+      "source_sha256": "782027dc46efd2c8b081785d5d33cd1a7ea1fcb9411bb24a05d3d1d3f5af6b40",
+      "fixture_sha256": "833c6109fac817b70b571131b1059b9cc4ff1181e9619c1d8b39f2f1b4986435",
+      "bytes": 2424845,
+      "source_bytes": 3521418,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          150,
+          32,
+          1770,
+          994
+        ]
+      ],
+      "observation": "Later stopped read-only capture: SUIT2 now shows7-diamonds;8-diamonds is in column4. The next gold source is7-spades in column5. The previous SUIT2 effect was rejected, not the new source detection."
+    },
+    {
+      "fixture": "K67.png",
+      "source": "qmp-qemu-socket 261003 091651 LEVEL-UP.png",
+      "source_sha256": "5089cf84d3999465b962da587bd178fcadea56da16d89f1a6f2b38bf63014c16",
+      "fixture_sha256": "0367e26b1dada043797885c3438a42a399f327173af27f86563ecb1ef6d0efe9",
+      "bytes": 1136603,
+      "source_bytes": 1847454,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          150,
+          32,
+          1770,
+          994
+        ]
+      ],
+      "observation": "Later stopped original read-only Pro LEVEL-UP layout after confirmed Klondike Solve and GAME WIN. Log sends score skip then four input-free observations; no Level Up OK click was attempted. Numeric level and reward rank are variable content, not input authority."
+    },
+    {
+      "fixture": "K68.png",
+      "source": "qmp-qemu-socket 261003 093219 Fail-on-long-card-move.png",
+      "source_sha256": "812dcd2e0b1d8b2d16585daa81756531a852b2b3174ac9a06bd68c43749fc1b2",
+      "fixture_sha256": "23c81bac982903a0a590013f76a3cfd0f79c67f615433c597fae80dd4a2b8f12",
+      "bytes": 1569454,
+      "source_bytes": 3399812,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          378,
+          100,
+          1541,
+          1000
+        ],
+        [
+          160,
+          310,
+          176,
+          326
+        ],
+        [
+          1730,
+          310,
+          1746,
+          326
+        ],
+        [
+          824,
+          34,
+          1096,
+          92
+        ]
+      ],
+      "observation": "New supplied native stopped frame: column 7 outlined red Queen through 3-clubs source outline reaches row997 under the toolbar; current scan994 clips it and toolbar rail shading adds a15-row gap. Scene passes; the separate unknown preceding action is not established without its matching log. Original screenshot processing of candidate3/r2 and the pre-correction candidate4 selects no highlight."
+    },
+    {
+      "fixture": "K69.png",
+      "source": "qmp-qemu-socket 261003 093602 Another-fail-moving-stack.png",
+      "source_sha256": "da41421d79e7e3b05d3eac81fd7cd0da0551d10a596377343747e9528843fc6f",
+      "fixture_sha256": "1830892a2277da45669ddb0dfdca75d86d14cf5790a292516d62055ba5f47b54",
+      "bytes": 547215,
+      "source_bytes": 3461927,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          378,
+          100,
+          1541,
+          304
+        ],
+        [
+          378,
+          332,
+          1541,
+          355
+        ],
+        [
+          706,
+          332,
+          886,
+          1000
+        ],
+        [
+          160,
+          310,
+          176,
+          326
+        ],
+        [
+          1730,
+          310,
+          1746,
+          326
+        ],
+        [
+          874,
+          710,
+          881,
+          738
+        ],
+        [
+          1202,
+          840,
+          1216,
+          854
+        ],
+        [
+          824,
+          34,
+          1096,
+          92
+        ]
+      ],
+      "observation": "Supplied stopped frame after observed Solver click: column3 six-spades through two-spades outlined source enters toolbar; dotted landing is in column6. Fixture preserves complete upper priority areas, column3 outline/artwork, every native scene strip/gutter and Solver banner. Unrelated lower cards are omitted, so this is detection evidence only, not effect evidence or a substitute original frame."
+    },
+    {
+      "fixture": "K70.png",
+      "source": "qmp-qemu-socket 261003 114942 Move-before-Fail.png",
+      "source_sha256": "f7e4eefdb030ebae55f223d568271504cb47f97aa0d76e6c077feb2d3fa13c0f",
+      "fixture_sha256": "f7e4eefdb030ebae55f223d568271504cb47f97aa0d76e6c077feb2d3fa13c0f",
+      "bytes": 3378912,
+      "source_bytes": 3378912,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          0,
+          0,
+          1920,
+          1080
+        ]
+      ],
+      "original_byte_copy": true,
+      "observation": "Later manual Undo frame: highlighted two-clubs in column7, dark Ace-clubs SUIT2 landing. Native source rows407..597 differ from the logged rows406..597. Does not reproduce the historical initial frame."
+    },
+    {
+      "fixture": "K71.png",
+      "source": "qmp-qemu-socket 261003 114652 FAIL-moving-long-card-stack-on-game-board.png",
+      "source_sha256": "208d98ddf4ea2763667e5bfed7935626c583c5b02f7e3d345d4c2c8ae743a514",
+      "fixture_sha256": "208d98ddf4ea2763667e5bfed7935626c583c5b02f7e3d345d4c2c8ae743a514",
+      "bytes": 3321847,
+      "source_bytes": 3321847,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          0,
+          0,
+          1920,
+          1080
+        ]
+      ],
+      "original_byte_copy": true,
+      "observation": "Later manual stopped frame: two-clubs now in SUIT2, black Queen exposed in column7; duplicate Jack-diamonds through four-clubs shown as landing preview while that run remains in column4. Native prediction is NoHighlight; old full effect is verified. Does not reproduce logged settled observations or their counts."
+    },
+    {
+      "fixture": "K72.png",
+      "source": "qmp-qemu-socket 261003 115310 Move-before-Fail-two.png",
+      "source_sha256": "31a4f1e6b86cb129359302ef6149a938bef74031c2d3e7432f38680cef89a499",
+      "fixture_sha256": "31a4f1e6b86cb129359302ef6149a938bef74031c2d3e7432f38680cef89a499",
+      "bytes": 3411612,
+      "source_bytes": 3411612,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          0,
+          0,
+          1920,
+          1080
+        ]
+      ],
+      "original_byte_copy": true,
+      "observation": "Later manual Undo frame: highlighted four-clubs at the bottom of column7 reaches toolbar. Three-clubs is under the dark SUIT2 guide. Native source rows800..989; old lower corner remains clipped and unavailable."
+    },
+    {
+      "fixture": "K73.png",
+      "source": "qmp-qemu-socket 261003 115250 Fail-Two.png",
+      "source_sha256": "c1586bf4190da5ac6652dbfb76c649d0c53d7b04da493dc1642543588a5a478d",
+      "fixture_sha256": "c1586bf4190da5ac6652dbfb76c649d0c53d7b04da493dc1642543588a5a478d",
+      "bytes": 3408274,
+      "source_bytes": 3408274,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "retained_rectangles_xyxy": [
+        [
+          0,
+          0,
+          1920,
+          1080
+        ]
+      ],
+      "original_byte_copy": true,
+      "observation": "Later manual stopped frame: four-clubs in SUIT2; five-hearts spreads in column7 and becomes the next dark landing guide for the four-spades source in column4. Native source rows336..527. No separately supplied log establishes this pair's historical worker frames."
+    },
+    {
+      "fixture": "K74.png",
+      "source": "qmp-qemu-socket 261003 174015 Move-before-FAIL.png",
+      "source_sha256": "0de2fdd4127fdc0316b1611978a5844b8374de28ab76a11cefff29526a742e34",
+      "fixture_sha256": "0de2fdd4127fdc0316b1611978a5844b8374de28ab76a11cefff29526a742e34",
+      "bytes": 3342314,
+      "full_original_png": true,
+      "retained_rectangles_xyxy": [
+        [
+          0,
+          0,
+          1920,
+          1080
+        ]
+      ],
+      "observation": "Later Undo reconstruction: same unmoved column4 two-spades source in a thicker HALO phase; not a historical replay worker frame."
+    },
+    {
+      "fixture": "K75.png",
+      "source": "qmp-qemu-socket 261003 174252 This-is-a-fail-in-the-move-before.png",
+      "source_sha256": "7bafde5c6a78cacd0f1bc2785c06d630fd76461cde3e8a3aac2a2d1ae9950fd5",
+      "fixture_sha256": "7bafde5c6a78cacd0f1bc2785c06d630fd76461cde3e8a3aac2a2d1ae9950fd5",
+      "bytes": 3340512,
+      "full_original_png": true,
+      "retained_rectangles_xyxy": [
+        [
+          0,
+          0,
+          1920,
+          1080
+        ]
+      ],
+      "observation": "Later manual capture of the initial no-HALO detection stop: thin source HALO has positive gold under the measured Hint shadow. Not the settled result of the earlier two-spades input."
+    },
+    {
+      "fixture": "K76.png",
+      "source": "qmp-qemu-socket 261003 173109 FAIL.png",
+      "source_sha256": "ca9e8548710ec265a506755f6896698aec9f2252baf62790338bf9127590cc9a",
+      "fixture_sha256": "ca9e8548710ec265a506755f6896698aec9f2252baf62790338bf9127590cc9a",
+      "bytes": 3317194,
+      "full_original_png": true,
+      "retained_rectangles_xyxy": [
+        [
+          0,
+          0,
+          1920,
+          1080
+        ]
+      ],
+      "observation": "First no-HALO report: displaced outlined two-spades preview over dashed SUIT4 Ace-spades guide; identical original two-spades remains in column4. No input semantics inferred for the displaced copy."
+    },
+    {
+      "fixture": "K77.png",
+      "source": "qmp-qemu-socket 261003 174542 Fail-on-new-game-start.png",
+      "source_sha256": "ee388d3cbcadfc26c56a88391982e7e048539a379136a988cbaccd39d84f1364",
+      "fixture_sha256": "ee388d3cbcadfc26c56a88391982e7e048539a379136a988cbaccd39d84f1364",
+      "bytes": 3847586,
+      "full_original_png": true,
+      "retained_rectangles_xyxy": [
+        [
+          0,
+          0,
+          1920,
+          1080
+        ]
+      ],
+      "observation": "Fresh game after acknowledged Play, Solver off; King-diamonds artwork fails the old fresh-deal white-area threshold. Native complete later manual capture, not a historical worker frame."
+    },
+    {
+      "fixture": "K78.png",
+      "source": "qmp-qemu-socket 261003 175506 move-before-fail.png",
+      "source_sha256": "cb942e35243a6cf102fcbdea5744b4ecb21a2be4bf24e93681d12997617e560b",
+      "fixture_sha256": "cb942e35243a6cf102fcbdea5744b4ecb21a2be4bf24e93681d12997617e560b",
+      "bytes": 3420615,
+      "full_original_png": true,
+      "retained_rectangles_xyxy": [
+        [
+          0,
+          0,
+          1920,
+          1080
+        ]
+      ],
+      "observation": "Later one-Undo predecessor: highlighted three-hearts in SUIT2, landing guide below four-clubs in column7. Not a historical worker frame."
+    },
+    {
+      "fixture": "K79.png",
+      "source": "qmp-qemu-socket 261003 175449 Fail.png",
+      "source_sha256": "3cec462c305b5de8b33c080d05efbd45ffd889cd8365343bf8a96d8565a17f1c",
+      "fixture_sha256": "3cec462c305b5de8b33c080d05efbd45ffd889cd8365343bf8a96d8565a17f1c",
+      "bytes": 3415633,
+      "full_original_png": true,
+      "retained_rectangles_xyxy": [
+        [
+          0,
+          0,
+          1920,
+          1080
+        ]
+      ],
+      "observation": "Settled manual result: three-hearts now below four-clubs in column7, two-hearts exposed in SUIT2; fresh RIGHT two-clubs HALO. Old source-pixel proof rejected this valid Solver recommendation."
     }
   ],
   "solve_control_template": {

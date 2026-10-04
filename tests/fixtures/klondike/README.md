@@ -425,3 +425,151 @@ identity is not claimed. No original was edited or resized.
 Pending Solve regressions use labelled controlled derivatives of original
 button artwork, matching the logged 459/483 interior and 342/342 lettering
 counts. No early Solve screenshot was provided in this cycle.
+
+## v1.2.6 candidate 3 additions
+
+K54 is the later native column-6 Q-diamonds through 4-hearts source under Undo
+All. Its closed lower edge retains two shadowed warm-gold samples beside the
+existing mask. The preceding RIGHT effect was verified in the log; this scene
+exposes a next-source recognition refusal, not a failed move effect.
+
+K55 is the later Undo predecessor of 3-clubs to SUIT 4; K56 is its stopped result.
+The next 4-hearts source in column 2 moves upward five pixels with equal outline
+height. Card-relative evidence has 564 material, 62 new ink and 235 cleared ink
+pixels, while the strict complete previous effect remains unverified.
+
+The manifest records original and sparse fixture hashes, byte sizes and retained
+native RGBA rectangles. The original attachments differ in byte size from logged
+manual saves; exact earlier worker PNG identity is not claimed. No original is
+edited or resized. Pure translation, gold/cursor changes and paper shading are
+controlled negative derivatives, not claimed live captures.
+
+K57 is the later Undo reconstruction of 3-hearts in clipped column 3; K58 is the
+later stopped result, with 4-clubs exposed there and the next 4-hearts HALO in
+column 7. Unchanged column-7 printed artwork independently calibrates nominal
+face top as paired-rail top plus five. Unique ordinary seam 803 then determines
+alignment before print counting. Source 553/82/189 and independently verified
+recipient print support continuation only. K58 was manually captured minutes
+after the failed observations. Neither attachment is an earlier worker export.
+
+K59/K60 record the Q-spades column-7 transfer to SUIT 2. The next Q-clubs source
+is in column 3; the dashed destination darkens King-diamonds and exposed felt
+at the old source. Existing source 6960 and dimmed-felt 320 reproduce the log.
+The separate positive neutral-paper to deeper chromatic felt rule keeps the
+old inset, masks and thresholds, supplying 990 lower-half pixels split 467/523.
+It supports continuation only with fresh different-column source and independent
+non-source material. Controlled achromatic guide darkening of retained artwork
+is negative evidence, not a live trace. These separately captured native PNGs
+are not asserted to be byte-identical historical worker frames.
+
+K61/K62 capture the Draw-only scene refusal: the new column-3 seven-card source
+casts a shadow over two columns of the previous lower probe (168/196 felt).
+The measured replacement is (874,710,7,28), preserving 196 pixels and 95% felt;
+all prior 60 scene outcomes remain unchanged. Its source rows372..890 are
+already supported by the unchanged outline detector. The before image was a
+later Undo reconstruction; no stack click occurred in this stopped run.
+
+K63/K64 capture King-diamonds from column3 to empty column1, exposing Jack-diamonds
+beneath the next guide. Deep felt275 and ordinary neutral dimmed felt407 each
+fail512 alone; their disjoint union682 (opposed386/296) supports continuation
+under the unchanged material, geometry, cursor, gold and independent-change
+bounds. Neither the next long run nor another King was played by the app.
+These later manual captures are separate evidence, not historical worker PNGs.
+
+
+K65/K66 show the later Undo predecessor and stopped SUIT-return result: 8-diamonds
+returns from SUIT2 to column4 below 9-spades, exposing 7-diamonds. The next outlined
+source is 7-spades in column5. The current cursor exclusion hides much of the
+central artwork change, so ordinary source evidence refuses. Opposing corners
+supply 64 mirrored signed print changes; a new neutral seam at row615 identifies
+the receiving face before matching old source print. Source/fixture hashes and
+retained native rectangles are recorded in manifest.json. These manual PNGs are
+not asserted to be the historical automatic worker frames. Their byte sizes differ
+from the log's manual-save counts; no cause for that encoding difference is assumed.
+
+
+K67 records the Pro LEVEL-UP panel with its larger badge and different label/OK
+artwork. The associated log confirms score skip followed by four read-only
+recognition refusals; no LEVEL-UP OK input was attempted. It is a separate
+positively calibrated layout, not permission to retry an uncertain click or
+relax existing terminal guards. The displayed level/rank are variable text.
+
+
+### K68: column-7 source through the toolbar
+
+The original `qmp-qemu-socket 261003 093219 Fail-on-long-card-move.png`
+shows the complete outlined red Queen through 3-clubs source in column 7. Its lower
+border reaches row 997; the earlier exclusive scan bound 994 clips it. A
+15-row ordinary-gold rail gap at 951–965 is caused by toolbar shading. All
+scene guards pass. The existing shadow-gold predicate supports the measured
+rail band, while complete top/bottom edges and ordinary rail bracketing are
+required. The new exclusive outline bound is 998; input/effect/height bounds
+remain unchanged. Retained rectangles preserve source, all seven-column and
+four-foundation context, banner and side gutters at original coordinates.
+This image does not establish the preceding action or its effect.
+
+
+### K69: second source reaching the toolbar
+
+`qmp-qemu-socket 261003 093602 Another-fail-moving-stack.png` supplies the
+column-3 6-spades through 2-spades source. Charlie observed a Solver click
+after no HALO was found. This fixture retains the complete source, complete
+upper priority areas, all seven-column/four-foundation edge strips, Solver
+banner and exact scene gutter probes; unrelated lower cards are blacked out.
+It is detection evidence, with no claim about the preceding action's effect
+or the capture sequence without the matching log.
+
+
+### K70-K73: the previous source becomes the next landing guide
+
+These four fixtures are complete byte-identical copies of the supplied original
+1920×1080 PNGs; no pixels are masked, resized or re-encoded. Their hashes and
+native measurements are in manifest.json and the candidate-5 delivery review.
+K70/K71 shows two-clubs reaching SUIT2, a black Queen exposed in column7, and
+the column4 run also represented as an expanded landing preview. The later
+manual annotation differs from log1790991850384: source407..597 instead of
+406..597, result NoHighlight instead of selected column4. The old effect policy
+already verifies the manual pair. It is not a historical frame reproduction.
+K72/K73 shows four-clubs reaching SUIT2 while the remaining five-hearts spreads
+and receives a dark landing guide for the new four-spades source in column4.
+This native pair reproduces the blocked source proof; no separate matching log
+establishes its historical worker sequence. Fixture comparisons are read-only,
+not evidence that a live candidate-5 input or game succeeded.
+
+
+### K74-K77: Hint shadow and fresh-game Solver activation
+
+All four files are complete byte-identical copies of the uploaded PNGs, with
+no masking or re-encoding. K74 is a later Undo reconstruction before the
+two-spades move. K75 is a later manual capture after an initial no-HALO stop:
+the two-spades remains in column4 and its thin source border is shaded beneath
+Hint. At row995, 94/96 lower-edge samples meet ordinary gold; the remaining
+two warm samples at x963/x964 meet the existing shadow-gold predicate. The
+measured positive shadow rail band has ordinary paired bracketing. K74/K75
+is an intensity-phase pair, not a completed card transfer.
+
+K76 retains the same original two-spades artwork while an outlined copy appears
+over the SUIT4 dashed Ace-spades guide. The detector must not reinterpret that
+displaced copy as a calibrated foundation-return input. Neither K74 nor K76
+is the logged replay result selecting column4 rows804..993.
+
+K77 shows the fresh initial deal after acknowledged Play, Solver inactive and
+King-diamonds in column1. The old 30% interior white-area guard fails its artwork;
+the candidate-6 card-paper perimeter signature supplies positive geometry while
+retaining the initial-deal and inactive Solver checks. Original-upload byte sizes
+for K75/K77 differ from the associated log's later manual-save counts; no cause
+for that encoding difference or historical worker-frame identity is assumed.
+
+
+### K78/K79: native SUIT return followed by a fresh RIGHT recommendation
+
+K78 is Charlie's later one-Undo predecessor showing the three-hearts SUIT2 source
+and its destination below four-clubs in column7. K79 shows three-hearts received
+there, two-hearts exposed in SUIT2 and the next solid RIGHT two-clubs source.
+The matching log reports four accepted scene/target observations but refuses
+source68/512 and corner43/44 versus48. The current candidate-6 controller follows
+the fresh RIGHT recommendation without consulting those card-effect thresholds.
+Both fixtures are complete original uploaded PNGs; they are not asserted to be
+unsaved historical worker frames. Their upload sizes differ from manual-save log
+counts; no cause for the encoding difference is assumed. No independent card-rank
+recognition is added.

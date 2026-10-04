@@ -329,3 +329,93 @@ reapplied as the candidate patch; f9167a0 is the base authority. A read-only
 installer verification requires complete candidate source before Cargo or launch
 commands. Sparse hearts source evidence remains unresolved and does not change
 Klondike effect/continuation authority.
+
+## Klondike clipped-card reflow correction
+
+Candidate 3 keeps the narrow Undo All edge context and independently compares
+qualified clipped single-card faces relative to their fresh source outlines.
+An ordinary replacement additionally needs a unique calibrated face seam and
+independent recipient print. The geometry descriptor authorises no input.
+Aligned print/paper/material evidence feeds `source_replaced` only; ordinary
+complete effect, completion and shared controller authority remain unchanged.
+See [candidate 3](klondike-v1.2.6-candidate-3.md).
+
+The recorded deeper destination guide has a separate positive-felt continuation
+rule for complete single cards. It requires formerly neutral paper, opposed
+source halves and independent non-source changes; full effect remains unverified.
+Disjoint deep and existing neutral dimmed-felt ranges are counted once per pixel.
+The lower scene probe retains 196 samples and its 95% felt threshold in the
+measured clear gap, preserving the independent lower-board context.
+
+
+## Klondike SUIT-return continuation
+
+A fixed SUIT card can be replaced by similar artwork after a valid return to the
+tableau. A separate mode-owned witness combines opposing signed corner changes,
+stable paper and newly received print matching the old source. A uniquely found
+new neutral card seam selects receiving geometry before artwork is compared.
+This witness supplies `source_replaced` only; the previous full effect remains
+unverified. The shared controller then uses the fresh canonical target under its
+existing action budget, STOP and non-replay rules. See
+[candidate 4](klondike-v1.2.6-candidate-4.md).
+
+
+The Pro Level Up artwork is a separate complete terminal-layout signature. It
+returns the existing typed LevelUp stage only with positive completed-board and
+button evidence; the existing OK point remains inside the measured button. No
+shared three-board policy, additional input retry or timing inference is introduced.
+
+
+K68/K69 extend outline recognition through exclusive row 998. Only K68's
+column-7 rails may use the existing shadow-gold predicate inside the measured
+toolbar band, supported by two ordinary paired rail rows on each side. Complete
+top/lower edges, terminated rails, above-toolbar paper and the 604-pixel height
+limit remain. K69 needs the scan extension alone. Input/effect bounds are not
+extended into the toolbar.
+
+
+## Tableau source covered by its next landing guide
+
+Candidate 5 adds a local Klondike continuation witness for a tableau-to-SUIT
+transfer followed by a guide over the old source. The unique source header and
+unique changed fixed receiver are selected from geometry/paper independently
+of source-artwork matching. Positive source-side transitions and newly received
+old source ink are both mandatory. Visible source ink stops above row 947;
+no clipped corner is complete. A canonical different fresh target supplies
+context only. The existing controller reports one continued action, keeps full
+effect/completion separate, and preserves all probe, STOP and uncertainty gates.
+
+
+## Shaded source borders and fresh-deal recognition
+
+K75 supplies a separate measured column-4 toolbar shade. Existing positive
+shadow-gold may bridge only its bounded exterior-rail band, with ordinary paired
+bracketing, and its two measured lower-edge samples. No missing, black or neutral
+sample is omitted. Complete lower/top edges, terminated rails and above-toolbar
+card paper remain mandatory; effect pixels remain above row 947.
+
+After an acknowledged Play, the terminal classifier requires a positively
+recognised initial Klondike deal with Solver inactive before returning the
+existing SolverReady stage. Card-paper perimeter geometry replaces the old
+interior-area test, which rejected the illustrated King-diamonds in K77. The
+existing terminal controller sends one Solver click and captures fresh evidence;
+an arbitrary no-HALO board does not become SolverReady.
+
+
+## Current candidate 6 Solver-led policy
+
+Charlie explicitly selected the fresh-HALO cycle over the earlier source/effect
+witnesses described above. The initial preview is advisory. The worker freshly
+classifies the selected Klondike scene and canonical recommendation, probes the
+VM/tablet and STOP, sends one logical action, waits the editable settle and captures
+again. Every acknowledged gameplay action consumes one budget slot; a finite run
+stops after its last fresh result. Repeated fresh HALOs remain eligible as new
+logical actions without proving a previous transfer.
+
+No live card-pixel comparison or recipient/rank matching gates this cycle. The
+previous effect analyser and its regressions are test-only diagnostic code. Worker
+reports record Solver-directed actions and keep effects unproven; the UI does not
+present the unmeasured pixel field as a zero-pixel effect. Missing HALOs receive
+bounded input-free observations, independent completion checks, and at most one
+Solver refresh on a positively recognised gameplay scene. Solve/win/restart retain
+their independent evidence and existing input/uncertainty/cancellation gates.

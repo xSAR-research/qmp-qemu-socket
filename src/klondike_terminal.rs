@@ -11,6 +11,14 @@
 //! K53 retains New Game/Home artwork while the pointer from Level Up OK covers
 //! the Home button's former upper-body sample. Its replacement uses identical
 //! measured pixels in K28/K53 outside the recorded pointer, with no relaxed guard.
+//! K67 supplies a separate Level Up medal layout with larger panel artwork and
+//! an OK caption four rows lower. Its complete title, mixed Klondike label,
+//! frame and control signature reuses the existing completed-board context and
+//! measured OK click. Changing rank, level and reward text remain excluded.
+//! K77's initial King has less than 30% white in its central artwork. Fresh-deal
+//! recognition instead requires four positive paper margins at every measured
+//! staggered face, retaining empty waste/foundations, stock and back-strip proof.
+//! No rank-dependent artwork fraction or missing HALO grants Solver input.
 //! Stable RGB artwork is checked directly; changing level, score, XP and card
 //! ranks are not read. A recognised terminal stage grants only its measured
 //! click. The worker still owns fresh validation, cancellation, delivery and
@@ -512,6 +520,96 @@ const LEVEL_UP_KLONDIKE_BACKGROUND: [RgbSample; 8] = [
 ];
 
 
+/// Complete title letters from K67's larger medal dialog, measured independently
+/// of K27. Its two changed glyph edges do not relax the original title signature.
+const LEVEL_UP_MEDAL_TITLE: [RgbSample; 10] = [
+    RgbSample::new(816, 217, [255, 255, 255]),
+    RgbSample::new(849, 199, [255, 255, 255]),
+    RgbSample::new(884, 217, [255, 255, 255]),
+    RgbSample::new(920, 199, [255, 255, 255]),
+    RgbSample::new(944, 224, [255, 255, 255]),
+    RgbSample::new(962, 199, [255, 255, 255]),
+    RgbSample::new(1015, 217, [252, 254, 255]),
+    RgbSample::new(1041, 199, [253, 254, 255]),
+    RgbSample::new(1069, 217, [255, 255, 255]),
+    RgbSample::new(1103, 199, [255, 255, 255]),
+];
+
+
+/// K67's positive blue gaps distinguish title text from an erased white banner.
+const LEVEL_UP_MEDAL_TITLE_BACKGROUND: [RgbSample; 7] = [
+    RgbSample::new(824, 217, [24, 172, 221]),
+    RgbSample::new(863, 196, [31, 179, 228]),
+    RgbSample::new(875, 219, [32, 180, 229]),
+    RgbSample::new(875, 203, [32, 180, 229]),
+    RgbSample::new(1058, 219, [32, 180, 229]),
+    RgbSample::new(1058, 196, [32, 180, 229]),
+    RgbSample::new(1099, 196, [25, 173, 222]),
+];
+
+
+/// K67 retains the original Klondike letter coordinates at offset zero, with
+/// these independently measured background gaps. No level or rank text is read.
+const LEVEL_UP_MEDAL_KLONDIKE_BACKGROUND: [RgbSample; 8] = [
+    RgbSample::new(771, 633, [38, 71, 103]),
+    RgbSample::new(800, 619, [34, 70, 104]),
+    RgbSample::new(827, 631, [21, 59, 92]),
+    RgbSample::new(855, 617, [26, 62, 95]),
+    RgbSample::new(888, 632, [31, 68, 100]),
+    RgbSample::new(906, 619, [33, 71, 102]),
+    RgbSample::new(931, 632, [48, 86, 117]),
+    RgbSample::new(961, 619, [37, 77, 110]),
+];
+
+
+/// K67's lower OK glyph is complete black print, not a generic dark button area.
+const LEVEL_UP_MEDAL_OK: [RgbSample; 10] = [
+    RgbSample::new(936, 820, [0, 0, 0]),
+    RgbSample::new(938, 808, [0, 0, 0]),
+    RgbSample::new(946, 826, [5, 4, 1]),
+    RgbSample::new(954, 809, [0, 0, 0]),
+    RgbSample::new(956, 820, [0, 0, 0]),
+    RgbSample::new(965, 810, [1, 1, 1]),
+    RgbSample::new(966, 820, [0, 0, 0]),
+    RgbSample::new(972, 811, [7, 6, 4]),
+    RgbSample::new(976, 821, [1, 1, 0]),
+    RgbSample::new(975, 808, [1, 1, 1]),
+];
+
+
+/// K67's gold inside the OK glyph rejects a flattened black caption region.
+const LEVEL_UP_MEDAL_OK_BACKGROUND: [RgbSample; 4] = [
+    RgbSample::new(943, 814, [237, 222, 132]),
+    RgbSample::new(943, 820, [230, 195, 88]),
+    RgbSample::new(961, 808, [246, 235, 166]),
+    RgbSample::new(961, 824, [216, 170, 67]),
+];
+
+
+/// K67's four measured light/dark button corners preserve the complete control.
+/// The prior native click (960, 795) remains inside its visible upper gold body.
+const LEVEL_UP_MEDAL_BUTTON_BODY: [RgbSample; 4] = [
+    RgbSample::new(858, 788, [253, 247, 222]),
+    RgbSample::new(1060, 788, [252, 249, 223]),
+    RgbSample::new(856, 842, [183, 132, 37]),
+    RgbSample::new(1060, 841, [176, 129, 40]),
+];
+
+
+/// K67's complete enlarged panel: white opposed edges and lower point, with
+/// independent blue/dark inner corners. Medal, rank and reward text are excluded.
+const LEVEL_UP_MEDAL_FRAME: [RgbSample; 8] = [
+    RgbSample::new(462, 320, [248, 255, 255]),
+    RgbSample::new(1457, 320, [248, 255, 255]),
+    RgbSample::new(462, 750, [249, 255, 255]),
+    RgbSample::new(1457, 750, [249, 255, 255]),
+    RgbSample::new(960, 908, [235, 242, 245]),
+    RgbSample::new(560, 720, [32, 67, 123]),
+    RgbSample::new(1360, 720, [33, 68, 125]),
+    RgbSample::new(750, 760, [8, 18, 31]),
+];
+
+
 /// Original non-letter samples distinguish the title from a flat white patch.
 const PLAY_KLONDIKE_TITLE_BACKGROUND: [RgbSample; 8] = [
     RgbSample::new(683, 195, [32, 126, 163]),
@@ -603,6 +701,23 @@ fn has_completed_level_up_context(frame: &CapturedFrame) -> bool {
 }
 
 
+/// Independently recognise K67's larger Level Up layout. Every artwork group
+/// must pass at its one supplied position, along with the unchanged occupied
+/// foundations and empty-tableau context. This grants the existing typed OK
+/// stage only; it neither infers a new delay nor retries a previous control.
+fn has_completed_medal_level_up(frame: &CapturedFrame) -> bool {
+    matches_artwork(frame, &LEVEL_UP_MEDAL_TITLE)
+        && matches_artwork(frame, &LEVEL_UP_MEDAL_TITLE_BACKGROUND)
+        && matches_artwork(frame, &LEVEL_UP_KLONDIKE)
+        && matches_artwork(frame, &LEVEL_UP_MEDAL_KLONDIKE_BACKGROUND)
+        && matches_artwork(frame, &LEVEL_UP_MEDAL_OK)
+        && matches_artwork(frame, &LEVEL_UP_MEDAL_OK_BACKGROUND)
+        && matches_artwork(frame, &LEVEL_UP_MEDAL_BUTTON_BODY)
+        && matches_artwork(frame, &LEVEL_UP_MEDAL_FRAME)
+        && has_completed_level_up_context(frame)
+}
+
+
 /// One independently dimmed empty-tableau point with the measured finite warm
 /// particle allowance; neither arbitrary black nor bright paper supplies proof.
 fn matches_level_up_empty_sample(frame: &CapturedFrame, sample: &RgbSample) -> bool {
@@ -622,6 +737,29 @@ fn has_completed_congratulations(frame: &CapturedFrame) -> bool {
         && matches_artwork(frame, &CONGRATULATIONS_TITLE_BACKGROUND)
         && matches_artwork(frame, &CONGRATULATIONS_FRAME)
         && has_completed_board_context(frame, &COMPLETED_BOARD_CONTEXT)
+}
+
+
+/// Four narrow paper margins independently establish one complete initial face.
+/// K30/K77 retain at least 98% white in their side margins and complete horizontal
+/// margins. The 95% floor permits their measured edge antialiasing while excluding
+/// central court artwork from authority. Neither a back nor felt supplies paper.
+fn has_initial_face_paper(frame: &CapturedFrame, column: u32) -> bool {
+
+
+    if column >= 7 {
+        return false;
+    }
+    let x = 390 + 168 * column;
+    let face_top = 342 + 35 * column / 2;
+    [
+        PixelRect::new(x + 3, face_top + 18, 4, 138),
+        PixelRect::new(x + 125, face_top + 18, 4, 138),
+        PixelRect::new(x + 18, face_top + 3, 96, 4),
+        PixelRect::new(x + 18, face_top + 169, 96, 3),
+    ].into_iter().all(|bounds| {
+        super::fraction_at_least(frame, bounds, super::is_white, 950)
+    })
 }
 
 
@@ -660,12 +798,9 @@ fn has_fresh_deal(frame: &CapturedFrame) -> Result<bool, HaloDetectionError> {
 
     for column in 0..7 {
         let x = 390 + 168 * column;
-        let face_top = 342 + 35 * column / 2;
 
 
-        if !super::fraction_at_least(
-            frame, PixelRect::new(x + 18, face_top + 18, 96, 110), super::is_white, 300,
-        ) || !super::fraction_at_least(
+        if !has_initial_face_paper(frame, column) || !super::fraction_at_least(
             frame, PixelRect::new(x + 18, 660, 96, 40), super::is_felt, 950,
         ) {
             return Ok(false);
@@ -691,8 +826,8 @@ fn has_fresh_deal(frame: &CapturedFrame) -> Result<bool, HaloDetectionError> {
 }
 
 
-/// Recognise only the five evidenced native stage layouts; unknown/shifted scenes return
-/// `None`. Malformed frame storage or dimensions return the parent layout error.
+/// Recognise the supplied native layouts for the five terminal stages; unknown or
+/// shifted scenes return `None`. Malformed storage or dimensions return the parent layout error.
 /// Classification is read-only and each returned stage needs fresh worker validation.
 pub(crate) fn classify_terminal(
     frame: &CapturedFrame,
@@ -727,6 +862,11 @@ pub(crate) fn classify_terminal(
         && matches_artwork(frame, &LEVEL_UP_BUTTON_BODY)
         && has_completed_level_up_context(frame)
     {
+        return Ok(Some(TerminalStage::LevelUp));
+    }
+
+
+    if has_completed_medal_level_up(frame) {
         return Ok(Some(TerminalStage::LevelUp));
     }
 
@@ -809,6 +949,12 @@ pub(crate) struct TerminalEvidence {
     level_up_foundations: SignatureEvidence,
     /// Empty side-tableau points under their finite warm-particle guard.
     level_up_tableau: SignatureEvidence,
+    /// K67 medal-layout title, label, OK and frame groups, all independently required.
+    level_up_medal: [SignatureEvidence; 8],
+    /// Static Solver word and key artwork, separate from fresh-board proof.
+    solver_control: [SignatureEvidence; 2],
+    /// Independent initial-deal topology; no-HALO alone cannot make this true.
+    fresh_deal: bool,
 }
 
 
@@ -818,7 +964,7 @@ impl fmt::Display for TerminalEvidence {
     /// Surface the refused scene guard without inferring missing worker pixels.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(formatter,
-            "Congratulations title={}/{}, frame={}, completed context={}, skip={}/{}, New Game={}/{}/{}; Level Up title={}/{}, label +0={}/{}, label +2={}/{}, OK={}/{}/{}, foundations={}, empty tableau={}",
+            "Congratulations title={}/{}, frame={}, completed context={}, skip={}/{}, New Game={}/{}/{}; Level Up title={}/{}, label +0={}/{}, label +2={}/{}, OK={}/{}/{}, foundations={}, empty tableau={}; medal layout title={}/{}, label={}/{}, OK={}/{}/{}, frame={}; Solver word={}, key={}, fresh-deal={}",
             self.congratulations_ribbon[0], self.congratulations_ribbon[1],
             self.congratulations_frame, self.congratulations_context,
             self.score_control[0], self.score_control[1],
@@ -827,7 +973,12 @@ impl fmt::Display for TerminalEvidence {
             self.level_up_label[0][0], self.level_up_label[0][1],
             self.level_up_label[1][0], self.level_up_label[1][1],
             self.level_up_control[0], self.level_up_control[1], self.level_up_control[2],
-            self.level_up_foundations, self.level_up_tableau)
+            self.level_up_foundations, self.level_up_tableau,
+            self.level_up_medal[0], self.level_up_medal[1],
+            self.level_up_medal[2], self.level_up_medal[3],
+            self.level_up_medal[4], self.level_up_medal[5], self.level_up_medal[6],
+            self.level_up_medal[7], self.solver_control[0], self.solver_control[1],
+            self.fresh_deal)
     }
 }
 
@@ -868,6 +1019,13 @@ pub(crate) fn inspect_terminal_evidence(
                 .filter(|sample| matches_level_up_empty_sample(frame, sample)).count(),
             required: LEVEL_UP_EMPTY_TABLEAU_CONTEXT.len(),
         },
+        level_up_medal: [artwork(&LEVEL_UP_MEDAL_TITLE),
+            artwork(&LEVEL_UP_MEDAL_TITLE_BACKGROUND), artwork(&LEVEL_UP_KLONDIKE),
+            artwork(&LEVEL_UP_MEDAL_KLONDIKE_BACKGROUND), artwork(&LEVEL_UP_MEDAL_OK),
+            artwork(&LEVEL_UP_MEDAL_OK_BACKGROUND), artwork(&LEVEL_UP_MEDAL_BUTTON_BODY),
+            artwork(&LEVEL_UP_MEDAL_FRAME)],
+        solver_control: [artwork(&SOLVER_LABEL), artwork(&SOLVER_KEY)],
+        fresh_deal: has_fresh_deal(frame)?,
     })
 }
 
@@ -893,6 +1051,8 @@ mod tests {
             49 => include_bytes!("../tests/fixtures/klondike/K49.png"),
             52 => include_bytes!("../tests/fixtures/klondike/K52.png"),
             53 => include_bytes!("../tests/fixtures/klondike/K53.png"),
+            67 => include_bytes!("../tests/fixtures/klondike/K67.png"),
+            77 => include_bytes!("../tests/fixtures/klondike/K77.png"),
             _ => panic!("unknown terminal fixture"),
         };
         decode_png(png).expect("decode recorded terminal PNG")
@@ -1066,6 +1226,141 @@ mod tests {
         let mut changed_level = frame.clone();
         paint(&mut changed_level, PixelRect::new(1_110, 610, 60, 38), [0, 0, 0]);
         assert_eq!(classify_terminal(&changed_level).unwrap(), Some(TerminalStage::LevelUp));
+    }
+
+
+    /// K67's measured larger panel has a complete alternate signature. The
+    /// original signature refuses it; the existing OK point remains positive
+    /// gold inside its button, retaining the original hold and transition wait.
+    #[test]
+    fn medal_level_up_recognises_the_existing_ok_control() {
+        let frame = fixture(67);
+        assert!(!matches_artwork(&frame, &LEVEL_UP_TITLE));
+        assert!(!matches_artwork(&frame, &LEVEL_UP_OK));
+        assert!(has_completed_level_up_context(&frame));
+        assert!(has_completed_medal_level_up(&frame));
+        assert_eq!(classify_terminal(&frame).unwrap(), Some(TerminalStage::LevelUp));
+        assert_eq!(pixel_rgb(&frame, 960, 795), Some([253, 248, 223]));
+        assert_eq!(TerminalStage::LevelUp.click_point(), PixelPoint::new(960, 795));
+        assert_eq!(TerminalStage::LevelUp.mouse_hold(), POST_GAME_MOUSE_HOLD);
+        assert_eq!(TerminalStage::LevelUp.settle_delay(Duration::ZERO), POST_GAME_STAGE_DELAY);
+        let evidence = inspect_terminal_evidence(&frame).unwrap();
+        assert!(evidence.level_up_medal.iter().all(|guard| guard.matched == guard.required));
+        assert!(evidence.to_string().contains("medal layout title=10/10/7/7, label=10/10/8/8, OK=10/10/4/4/4/4, frame=8/8"));
+    }
+
+
+    /// K67's numeric level, rank and next reward caption cannot alter the
+    /// independent title, game label, complete OK artwork or board context.
+    /// Controlled erasure does not claim an unseen rank layout was calibrated.
+    #[test]
+    fn medal_level_up_excludes_numeric_rank_and_reward_text() {
+        let mut frame = fixture(67);
+
+
+        for bounds in [PixelRect::new(1_110, 610, 60, 38),
+            PixelRect::new(920, 652, 85, 41), PixelRect::new(790, 702, 370, 39)]
+        {
+            paint(&mut frame, bounds, [0, 0, 0]);
+        }
+        assert_eq!(classify_terminal(&frame).unwrap(), Some(TerminalStage::LevelUp));
+    }
+
+
+    /// K67 requires its title, mixed printed game name, positive gold/black OK
+    /// and enlarged panel frame independently. Flat white, gold and black patches
+    /// cannot substitute for any one of these positively observed scene groups.
+    #[test]
+    fn medal_level_up_requires_complete_scene_and_control_artwork() {
+        let bounds = [PixelRect::new(804, 185, 315, 46),
+            PixelRect::new(760, 610, 220, 35), PixelRect::new(839, 780, 241, 76),
+            PixelRect::new(456, 710, 110, 50)];
+
+
+        for bounds in bounds {
+
+
+            for rgb in [[0, 0, 0], [255, 255, 255], [240, 190, 90]] {
+                let mut frame = fixture(67);
+                paint(&mut frame, bounds, rgb);
+                assert_eq!(classify_terminal(&frame).unwrap(), None, "missing K67 artwork {bounds:?} {rgb:?}");
+            }
+        }
+
+
+        for sample in LEVEL_UP_MEDAL_FRAME {
+            let mut frame = fixture(67);
+            let contrast = if sample.rgb.iter().all(|channel| *channel > 200) {
+                [0, 0, 0]
+            } else {
+                [255, 255, 255]
+            };
+            paint(&mut frame, PixelRect::new(sample.x, sample.y, 1, 1), contrast);
+            assert!(!matches_artwork(&frame, &LEVEL_UP_TITLE));
+            assert_eq!(inspect_terminal_evidence(&frame).unwrap().level_up_medal[7].matched, 7);
+            assert_eq!(classify_terminal(&frame).unwrap(), None);
+        }
+    }
+
+
+    /// A full medal/OK dialog cannot claim a win when any foundation margin or
+    /// independently empty side-tableau point lacks the existing completed board.
+    #[test]
+    fn medal_level_up_requires_each_completed_board_context_point() {
+
+
+        for sample in LEVEL_UP_FOUNDATION_CONTEXT.into_iter()
+            .chain(LEVEL_UP_EMPTY_TABLEAU_CONTEXT)
+        {
+
+
+            for rgb in [[0, 0, 0], [255, 255, 255]] {
+                let mut frame = fixture(67);
+                paint(&mut frame, PixelRect::new(sample.x, sample.y, 1, 1), rgb);
+                assert_eq!(classify_terminal(&frame).unwrap(), None);
+            }
+        }
+    }
+
+
+    /// The new artwork never grants the old click when its visible OK has moved
+    /// elsewhere. Its displaced real glyph remains intact but fixed guards refuse.
+    #[test]
+    fn medal_level_up_rejects_a_displaced_ok_control() {
+        let original = fixture(67);
+        let mut moved = original.clone();
+        paint(&mut moved, PixelRect::new(839, 780, 257, 76), [0, 0, 0]);
+
+
+        for y in 780..856usize {
+            let source = y * original.stride + 839 * 4;
+            let destination = y * moved.stride + 855 * 4;
+            moved.pixels[destination..destination + 241 * 4]
+                .copy_from_slice(&original.pixels[source..source + 241 * 4]);
+        }
+        assert!(matches_artwork(&moved, &LEVEL_UP_MEDAL_TITLE));
+        assert!(has_completed_level_up_context(&moved));
+        assert_eq!(classify_terminal(&moved).unwrap(), None);
+    }
+
+
+    /// Unknown flat scenes and malformed native layouts cannot use the new medal
+    /// signature. Native bounds/storage validation runs before reading any sample.
+    #[test]
+    fn medal_level_up_rejects_unknown_and_malformed_native_frames() {
+
+
+        for rgb in [[0, 0, 0], [255, 255, 255], [240, 190, 90], [20, 120, 70]] {
+            let mut frame = fixture(67);
+            paint(&mut frame, PixelRect::new(0, 0, 1_920, 1_080), rgb);
+            assert_eq!(classify_terminal(&frame).unwrap(), None);
+        }
+        let mut wrong_size = fixture(67);
+        wrong_size.height = 1_079;
+        assert!(matches!(classify_terminal(&wrong_size), Err(HaloDetectionError::BoundsOutsideFrame)));
+        let mut malformed = fixture(67);
+        malformed.pixels.clear();
+        assert!(matches!(classify_terminal(&malformed), Err(HaloDetectionError::InvalidFrameLayout)));
     }
 
 
@@ -1343,6 +1638,86 @@ mod tests {
     }
 
 
+    /// Native K77's dense King artwork cannot reject the complete initial deal.
+    #[test]
+    fn solver_ready_accepts_native_initial_court_card_geometry() {
+        let frame = fixture(77);
+        assert!(!super::super::fraction_at_least(
+            &frame, PixelRect::new(408, 360, 96, 110), super::super::is_white, 300,
+        ));
+        assert_eq!(classify_terminal(&frame).unwrap(), Some(TerminalStage::SolverReady));
+        assert_eq!(classify_terminal(&fixture(30)).unwrap(), Some(TerminalStage::SolverReady));
+        let evidence = inspect_terminal_evidence(&frame).unwrap();
+        assert!(evidence.fresh_deal);
+        assert!(evidence.solver_control.iter().all(|guard| guard.matched == guard.required));
+        assert!(!has_initial_face_paper(&frame, 7));
+        assert!(!has_initial_face_paper(&frame, u32::MAX));
+    }
+
+
+    /// Each side, top and bottom margin independently protects the initial face.
+    #[test]
+    fn solver_ready_requires_all_seven_complete_paper_perimeters() {
+
+
+        for number in [30, 77] {
+
+
+            for column in 0..7 {
+                let x = 390 + 168 * column;
+                let top = 342 + 35 * column / 2;
+
+
+                for bounds in [
+                    PixelRect::new(x + 3, top + 18, 4, 138),
+                    PixelRect::new(x + 125, top + 18, 4, 138),
+                    PixelRect::new(x + 18, top + 3, 96, 4),
+                    PixelRect::new(x + 18, top + 169, 96, 3),
+                ] {
+                    let mut erased = fixture(number);
+                    paint(&mut erased, bounds, [20, 120, 70]);
+                    assert_eq!(classify_terminal(&erased).unwrap(), None,
+                        "K{number} column {} erased {bounds:?}", column + 1);
+                    assert!(!inspect_terminal_evidence(&erased).unwrap().fresh_deal);
+                }
+            }
+        }
+    }
+
+
+    /// A genuinely dealt board still needs empty upper piles and its Solver control.
+    #[test]
+    fn native_court_card_deal_retains_solver_and_topology_guards() {
+
+
+        for bounds in [
+            PixelRect::new(406, 130, 100, 139),
+            PixelRect::new(576, 130, 152, 139),
+            PixelRect::new(910, 130, 100, 139),
+            PixelRect::new(1_078, 130, 100, 139),
+            PixelRect::new(1_246, 130, 100, 139),
+            PixelRect::new(1_414, 130, 100, 139),
+            PixelRect::new(576, 347, 96, 6),
+            PixelRect::new(744, 347, 96, 6),
+            PixelRect::new(912, 347, 96, 6),
+            PixelRect::new(1_080, 347, 96, 6),
+            PixelRect::new(1_248, 347, 96, 6),
+            PixelRect::new(1_416, 347, 96, 6),
+            PixelRect::new(560, 1_000, 80, 30),
+            PixelRect::new(584, 954, 38, 42),
+        ] {
+            let mut erased = fixture(77);
+            paint(&mut erased, bounds, [0, 0, 0]);
+            assert_eq!(classify_terminal(&erased).unwrap(), None,
+                "K77 erased required fresh-deal/control guard {bounds:?}");
+        }
+        let mut active = fixture(77);
+        paint(&mut active, PixelRect::new(828, 36, 263, 1), [240, 190, 90]);
+        paint(&mut active, PixelRect::new(828, 85, 263, 1), [240, 190, 90]);
+        assert_eq!(classify_terminal(&active).unwrap(), None);
+    }
+
+
     /// Solver activation is never offered on a board with an active recommendation.
     #[test]
     fn solver_ready_rejects_an_active_banner() {
@@ -1389,7 +1764,7 @@ mod tests {
     fn shifted_native_scenes_do_not_authorise_old_coordinates() {
 
 
-        for number in 26..=30 {
+        for number in [26, 27, 28, 29, 30, 67] {
             let original = fixture(number);
             let mut shifted = original.clone();
             paint(&mut shifted, PixelRect::new(0, 0, 1_920, 1_080), [0, 0, 0]);

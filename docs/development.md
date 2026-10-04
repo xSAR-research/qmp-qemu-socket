@@ -1,8 +1,10 @@
-# Development conventions for v1.2.6 candidate 2
+# Development conventions for v1.2.6 candidate 6
 
-This candidate corrects commit `f9167a025e69026dc589a241b265c5ce9dc1cc8b`,
-whose package/runtime source remains v1.2.5 despite its commit label.
-TriPeaks and Pyramid retain their established execution policies.
+Candidate 5 corrects the tableau-to-SUIT transfer whose previous source
+becomes a landing guide, retaining candidate 4's corrections against committed
+candidate 2 at `7d869c22a6ca98179cd3efc8f83552d2edd1ada7`. The installer
+recognises one complete base or delivered candidate-4 state, and restores its
+actual backed-up contents. TriPeaks and Pyramid retain their execution policies.
 Independent card-rank recognition, search and file-free capture are outside
 this candidate.
 
@@ -92,7 +94,7 @@ No formatter check is included, by Charlie's explicit instruction. Build/test
 results from another host do not prove Beast installation or live guest input.
 The candidate delivery notes record the checks actually executed.
 
-On the Beast, confirm the launched executable identifies v1.2.6, candidate 2. Verify
+On the Beast, confirm the launched executable identifies v1.2.6, candidate 6. Verify
 Capture Frame, exact-byte manual Capture PNG, single-step, finite and continuous
 multi-step, STOP and mode/socket invalidation. Exercise Klondike Draw 1, source
 transfers, RIGHT fan positions, recycle, Solve and late/no-HALO recovery. Preserve first-failure
@@ -208,3 +210,97 @@ separate gold-outlined 5-hearts over the table, so it is not an accepted fresh
 Waste planning frame. No source threshold is changed from this evidence. Obtain
 a settled original pre-click PNG and one-action result/log before authorising a
 new source-effect policy. See `klondike-v1.2.6-candidate-2.md`.
+
+## v1.2.6 candidate 3 verification
+
+Packaging revision r2 uses exact base 7d869c22a6ca98179cd3efc8f83552d2edd1ada7.
+Candidate 2 is now the committed base; no predecessor-package authority is needed.
+Manifest schema 4 retains whole-state checks and rollback to that base.
+Installed verification requires candidate 3 before
+Cargo or launch. Native K54-K64 regressions distinguish outline detection from
+card-relative source continuation; complete effect stays unverified for that
+continuation route. Keep the full unfiltered checks and Beast end-cycle test.
+
+The ordinary replacement regression independently binds the five-pixel nominal
+face offset with unchanged artwork. Test missing/duplicate seams, paper rails,
+felt gutters, pure translated print and independent recipient requirements.
+
+Test K59/K60 queen transfer and retained-card guide darkening, with cursor/gold,
+source-only and recipient-only refusals. Keep the older dimmed-felt predicate and
+strict complete effect verdict unchanged.
+
+Test K61/K62 Draw-to-long-source classification, the previous 60 scene outcomes,
+exact 187/186 felt acceptance, independent gutters and invalid outlines. K63/K64
+require the disjoint positive-felt union: neither shade component alone reaches
+512. Retained-card neutral guide darkening, material/cursor/gold and opposed-half
+negatives must still refuse continuation. No stack input was sent in K61/K62.
+
+
+## v1.2.6 candidate 4 verification
+
+K65/K66 are the later Undo predecessor and stopped result for the SUIT 2 return.
+Complete paired source corners and a uniquely located new recipient face support
+continuation only. New receiving print must match old source artwork and differ
+from the prior recipient; the geometry is selected before the print comparison.
+Keep old source material thresholds and the 96-by-96 cursor exclusion intact.
+Run native, adverse and production-controller regressions, including source-only,
+recipient-only, shading, translated print and ambiguous receiving seams. Require
+complete source verification before each Beast build or launch. Current check
+results, actual compiler versions and remaining limits are recorded in the
+candidate delivery review. Do not run a formatter or suppress warnings.
+
+K67 supplies a separate Pro Level Up panel signature, retaining the completed
+foundation/empty-tableau context and the existing OK coordinate/hold/settle. The
+full native restart integration uses real completion and terminal classifiers;
+no mocked stage approval hides a detector failure. Require only one click per
+recognised terminal stage and retain read-only bounds for unknown transitions.
+
+
+K68/K69 cover the new column-7/column-3 source borders at row 997. Preserve
+closed edges, terminated rails, strong rail bracketing around the measured
+column-7 shading band, paper above the toolbar and the existing height limit.
+K69 is a detection-only sparse fixture, not material-effect evidence. The
+original Strange-fail frame already selects its column-5 source; a matching log
+and immediately preceding frame are required to diagnose the earlier action.
+
+
+## Candidate 5 continuation regressions
+
+K70-K73 are complete original-byte manual uploads. Test newly received SUIT ink
+and the independently exposed source header together, then remove each separately.
+Test neutral paper whitening, retained old source print, masks, ambiguous or
+missing geometry and source rows at the toolbar boundary. Native controller
+checks distinguish continuation from verified effect/completion, preserve finite
+budgets and continuous STOP, and stop before reading evidence after uncertain
+input. K70/K71 does not reproduce the logged automatic highlight or effect counts;
+K72/K73 reproduces the unavailable source proof in native image analysis.
+
+
+## Candidate 6 detection and restart regressions
+
+K74/K75 show the same unmoved two-spades source in two HALO intensities. K75
+must reproduce the full outline through the measured Hint shadow using only
+positive gold samples; remove each rail bracket, edge sample and card/scene
+guard separately. The phase pair must not establish a card effect. A repeated fresh target may
+authorise another logical action under the current policy; uncertain input may
+never be replayed. K76's displaced copy is detection evidence only; no action
+semantics are assumed for it.
+
+K77 shows an initial deal after Play with Solver inactive. Check the entire
+terminal sequence through one Solver click and fresh observations, and stop
+before further input on STOP or uncertain acknowledgement.
+Remove card perimeter, stock/waste/foundation and inactive-banner evidence to
+prove a generic no-HALO scene cannot authorise SolverReady. The earlier logged source comparison with 454 aligned material and 21 cleared
+pixels remains a historical diagnostic; it no longer gates live Klondike input.
+
+
+## Candidate 6 policy update from Charlie
+
+The current Klondike controller follows fresh valid HALOs after acknowledged
+input and settle. Remove old worker assertions that demand card-effect proof;
+retain those analyser fixtures as test-only diagnostics. New worker tests must
+cover the native K78/K79 SUIT-return then RIGHT recommendation, repeated fresh
+HALOs, advisory-preview changes, finite action budgets, bounded no-HALO/Solver
+recovery, unknown scenes, STOP and uncertain-input non-replay. Report acknowledged
+Solver actions separately from independently verified completion. TriPeaks and
+Pyramid retain their accepted shared policies.

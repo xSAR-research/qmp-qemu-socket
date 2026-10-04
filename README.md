@@ -14,10 +14,18 @@ the real purpose. Each fixture keeps independent target and effect policies.
 The target is to build in Dijkstra / A* shortest path problem solving rather
 than using the **Solver**, this will benefit drone route planning experience.
 
-This is **v1.2.6, candidate 2**, based on commit
-`f9167a025e69026dc589a241b265c5ce9dc1cc8b` (package v1.2.5). `Cargo.toml` supplies the package
+This is **v1.2.6, candidate 6**, based on commit
+`7d869c22a6ca98179cd3efc8f83552d2edd1ada7` (committed candidate 2). `Cargo.toml` supplies the package
 version shown in the window title and Parameters. Beast gameplay acceptance
 is required before promotion.
+
+Candidate 6 follows each fresh valid Klondike Solver recommendation: one action,
+editable settle, then a fresh capture. The preview is advisory and card-pixel
+matching does not gate the next action. Missing HALOs use bounded observation,
+independent completion checks and at most one scene-validated Solver refresh.
+Solve and one-board restart remain independently recognised. It also fixes the
+measured Hint shadow and initial King-card recognition after Play. See
+[candidate notes](docs/klondike-v1.2.6-candidate-6.md).
 
 ## Build and source spacing
 
@@ -69,19 +77,18 @@ positive range of **1–10000**, plus **0 = continuous until STOP or a guarded
 stop condition**. Recovery remains bounded for each action in continuous mode.
 Timing edits apply to the next run.
 
-The worker validates the initial preview against a fresh frame, sends one
-operation, settles and observes its result. An accepted result is
-reused for the next plan. A recognised Klondike scene with no eligible HALO may
-receive one Solver activation, followed immediately by capture with **no added
-post-click delay**. Normal pointer-settle/button-hold and QMP acknowledgements
-still apply. Further unresolved captures are bounded and use the editable
-recapture delay. A changed initial target sends no input and publishes a fresh
-actionable preview for review; another explicit Step request validates it again.
-An approved no-HALO preview permits one guarded Solver activation. In continuous
-Multi-Step 0, a freshly observed valid target then continues the active run.
-Single Step and finite runs display the recovered preview for another explicit
-Step request before gameplay.
-Recovery does not repeat an uncertain gameplay operation.
+The Klondike preview is advisory. The worker captures fresh supported scene and
+canonical target evidence, sends one operation, settles and observes anew. Each
+acknowledged gameplay action consumes one finite budget slot. Single Step stops
+after that action and result; remaining finite slots and continuous mode follow
+each fresh valid HALO, including repeated targets and changing stack geometry.
+
+Missing HALOs receive at most three delayed input-free observations, then an
+independent completion check. A recognised gameplay scene may receive one Solver
+refresh per unresolved context, followed immediately by capture and at most three
+further delayed observations. Normal pointer settle, hold and acknowledgements
+still apply. Unknown scenes or uncertain delivery stop; no uncertain input is
+replayed. Recovery alone does not consume a gameplay slot.
 
 The separate **Solve** button can replace RIGHT when the guest offers automatic
 finishing. Its stable button interior and complete lettering, with empty stock and a
@@ -94,41 +101,11 @@ ordinary card recovery retains its three-observation bound.
 An unresolved result stops for review without retrying Solve or Solver.
 The lower-toolbar **Solver** control remains the hint/recommendation control.
 
-Transfer verification requires source and destination changes. For RIGHT and
-SUIT returns, a
-bounded comparison of both opposite card corners also recognises replacement
-faces with little changed central artwork. It compares pixels without decoding
-ranks or suits. Logs record the separate proof measurements on unresolved effects.
-
-Tableau removal can leave green felt dimmed beneath the next dashed destination
-guide. A separate measured white-paper-to-dimmed-felt check recognises this
-effect while retaining independent destination evidence. Neutral card darkening,
-opaque black guides and a fresh HALO alone do not establish removal. A separate
-source-face comparison covers a transfer that automatically reveals a replacement
-card in the same column; it retains independent destination evidence and does not
-read ranks. Existing SUIT-return sources can also use guarded bright-paper
-replacement proof with independent material source and destination bounds.
-A separate foundation-recipient proof covers a small red printed-content
-change beneath an unchanged dark landing guide, retaining the source gate and
-stable surrounding paper. The generic 512-pixel destination gate is preserved for a verified effect.
-For a complete single-card source whose normal lower proof corner overlaps the toolbar,
-a separate visible-patch route uses two full 28-by-44 patches above the toolbar.
-Both patches retain white paper and require both printing/clearing directions.
-This route additionally requires 512 material source pixels. It supplies source
-replacement for the separately counted fresh-HALO continuation only; it cannot
-verify the complete move or supply receiver/completion evidence.
-The ordinary corner check still refuses clipped patches.
-
-Klondike also permits a separately counted continuation after an acknowledged
-card-source click and its configured settle: a supported fresh HALO may authorise
-the next action when the existing source-removal/replacement proof passes, even
-if the recipient change is too small to prove the previous effect. A repeated
-source is eligible under that same source proof; an unchanged card or HALO alone
-is insufficient. A freshly recognised Solve control may also become the next
-plan without proving the preceding card moved. Neither route retries the previous
-input, advances completion counters or applies after a Solver refresh. Draw and
-recycle keep their effect checks. Every acknowledged action consumes one finite
-budget slot; verified and continued operations are reported separately.
+Live Klondike play does not compare source or recipient card pixels. Logs count
+acknowledged Solver-directed actions and keep their effects explicitly unproven.
+The previous effect analyser and native regressions remain test-only diagnostics.
+An acknowledged no-op retaining a valid HALO can produce another fresh action in
+continuous mode; completion still requires independent positive evidence.
 
 **One Klondike board is one game.** A win requires two fresh positive observations:
 either an intact active Solver banner with every calibrated right-interior pixel
@@ -367,3 +344,19 @@ and bounded read-only settling of a nearly recognised Solve control. Full Solve
 input authority, STOP, mode/socket invalidation and uncertain-input refusal
 remain. See `docs/klondike-v1.2.6-candidate-1.md` for the original evidence and
 `docs/klondike-v1.2.6-candidate-2.md` for recovery and current verification limits.
+
+## Klondike v1.2.6 candidate 3 correction
+
+Candidate 3 retains the candidate 2 New Game/Solve fixes and adds narrowly
+measured long-outline, clear-gutter and source-evidence handling. Stack reflow is compared
+in card-relative coordinates; printed source support can authorise fresh-HALO
+continuation while the complete previous effect remains unverified. Disjoint
+chromatic felt ranges support the queen and King transfers under the same bounds. See
+[the candidate 3 notes](docs/klondike-v1.2.6-candidate-3.md) for evidence and limits.
+
+Packaging revision r2 is pinned to committed candidate 2 at
+`7d869c22a6ca98179cd3efc8f83552d2edd1ada7`. It replaces the refused f916-based
+package without changing candidate-3 Rust code or fixtures. Base and candidate
+contents are checked as complete states. Rollback restores this committed base.
+Mixed or unknown files stop; a HEAD refusal reports expected and actual commits.
+Run `--verify-installed` before every build/run block; this requires candidate 3.

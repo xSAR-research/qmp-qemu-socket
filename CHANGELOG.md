@@ -1,5 +1,85 @@
 # Changelog
 
+## v1.2.6 — candidate 6
+
+- Follow fresh canonical Klondike Solver recommendations without source/recipient
+  card matching. The preview is advisory; each acknowledged action consumes one
+  budget slot, settles and captures anew. Keep previous effects explicitly unproven.
+- Continue repeated fresh HALOs as new logical actions; finite Step Once stops
+  after one action and fresh result. Missing HALOs use bounded read-only captures,
+  independent completion and one scene-validated Solver refresh per context.
+- Move the previous card-effect matcher to test-only diagnostics; retain its
+  historical native/adverse tests without a live execution gate or warning allow.
+- Recognise K75's thin column-4 HALO through the measured Hint toolbar shade.
+  Require positive shadow-gold on the bounded rail band and two lower-edge
+  samples, ordinary paired bracketing and the complete remaining outline.
+- Recognise the fresh post-Play deal using positive card-paper perimeter
+  geometry, preserving fresh-deal topology, inactive Solver and scene guards.
+  The King-diamonds artwork no longer prevents the existing one Solver click.
+- Add six original-byte PNG fixtures and native/adverse controller regressions.
+  Keep the first no-HALO report separate from the earlier post-click source
+  verification stall; its source thresholds no longer gate live Klondike play.
+- Deliver against the same committed candidate-2 base at exact 7d869c2.
+  Accept complete base, delivered candidate 5 or candidate 6 content states,
+  preserving unrelated work and rollback to the actual backed-up before-state.
+
+
+## v1.2.6 — candidate 5
+
+- Add separate tableau-to-SUIT continuation when the old source becomes the
+  next landing guide. Require independently located exposed header, opposed
+  positive source strips and uniquely received old artwork in a bright SUIT face.
+- Reject neutral guide whitening, retained old print, ambiguous receivers and
+  incomplete geometry. Keep ordinary effect thresholds and clipped-corner refusal.
+- Add four original-byte PNG fixtures and native/adverse controller regressions.
+  Preserve the distinction between the first manual pair and its logged frames.
+- Retain candidate 4's source, SUIT-return and Pro Level Up corrections; input,
+  timing, Solve, one-board restart and accepted other-game policies are unchanged.
+- Deliver against the same exact 7d869c2 base, accepting complete base or
+  delivered candidate 4 contents and restoring the actual backed-up before-state.
+
+
+## v1.2.6 — candidate 4
+
+- Add separately logged SUIT-return continuation when nearly identical foundation
+  faces hide most source changes inside the existing cursor exclusion. Require
+  paired opposite-corner print, stable paper and independently located newly
+  received tableau artwork. Complete action effect remains unverified.
+- Recognise the separately evidenced Pro Level Up artwork with complete dialog
+  and completed-board guards. Reuse the existing measured OK point and timing;
+  the reported failure had sent no OK input.
+- Recognise the newly evidenced column-3 and column-7 source borders through
+  row 997; bound shadow-gold rail support to its measured column-7 band.
+  Keep input/effect limits, complete outline guards and existing height limit.
+- Add K65-K69 native regressions and adverse/controller cases; preserve ordinary
+  material thresholds, input non-replay and the confirmed one-board restart flow.
+- Deliver against committed candidate 2 at exact 7d869c2, accepting a complete
+  base or installed candidate 3 r2. Back up and restore the actual before-state.
+
+
+## v1.2.6 — candidate 3
+
+- Packaging revision r2 targets committed candidate 2 at 7d869c2 after the
+  previous f916-based package refused installation. Rebuild all base/content
+  records and report expected/actual HEAD; Rust code and fixtures are unchanged.
+
+- Recognise the measured long column-6 source with two positively shadowed gold
+  edge samples beside Undo All, retaining the complete visible-edge requirement.
+- Add bounded card-relative proof for clipped single-card stack reflow; retain
+  material/printed/paper/cursor guards and log continuation separately from
+  complete effect verification.
+- Support the measured ordinary replacement face after a clipped-card transfer,
+  using unique geometry and independent recipient print for continuation only.
+- Add separate positive neutral-paper to chromatic-felt continuation for the
+  queen and King transfers; combine disjoint measured shade ranges under the
+  unchanged source/destination bounds, leaving full effect unverified.
+- Reposition one lower scene probe inside the measured clear gutter; retain its
+  196-pixel area, 95% felt requirement and all previous scene classifications.
+- Add K54-K64 native regressions. Packaging r2 applies to committed candidate 2
+  at exact base 7d869c2 and supports rollback to that base. Preserve confirmed
+  GAME WIN flow.
+
+
 ## v1.2.6 candidate 2 — 3 October 2026
 
 - Rebuild complete-file installer authority against f9167a0, whose package remains

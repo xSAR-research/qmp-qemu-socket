@@ -2,17 +2,20 @@
 //!
 //! Zero requests continuous gameplay until STOP, uncertainty or a confirmed game win.
 //! Every unresolved context has finite Solver-refresh and observation budgets.
-//! An uncertain input is never replayed. An acknowledged card action may continue
-//! from a freshly classified HALO only after mode-owned source replacement proof.
-//! An independently recognised new Solve control can instead be handed off without
-//! claiming the previous effect. Both paths consume the requested action budget.
+//! An uncertain input is never replayed. Every acknowledged gameplay action
+//! consumes one budget slot, then settles and produces a fresh observation.
+//! A canonical fresh Solver HALO authorises the next action, even at the same
+//! position; no card matching or pixel-difference threshold gates play. HALOs
+//! never prove the preceding effect, a card transfer or game completion.
 //! Solve is requested once and followed by
 //! bounded read-only completion observations. One board is one Klondike game;
 //! completion requires two fresh positive observations. Only an authorised continuous
 //! run may advance through the separately calibrated terminal controls.
-//! A continuous request may also start from an approved no-HALO board: reproduce
-//! that board freshly, refresh Solver once and observe a valid target before play.
-//! Finite requests retain the separate recovered-preview review endpoint.
+//! The displayed preview is advisory. Fresh mode-owned scene/target evidence
+//! authorises input for both finite and continuous runs. A missing HALO receives
+//! bounded input-free recaptures and independent completion checks before one
+//! Solver refresh on a positively recognised gameplay scene. The same unresolved
+//! context cannot refresh Solver again; uncertainty and unknown scenes stop.
 //! Strong, incomplete Solve artwork defers lower tableau/foundation input through
 //! at most three input-free observations. It never weakens Solve click authority.
 
@@ -21,7 +24,7 @@ use std::{path::Path, sync::atomic::{AtomicBool, Ordering}, time::{Duration, Ins
 use super::{
     FrameObservation, WorkerEvent, WorkerEventSink, WorkerState, analyse_captured_frame, capture_screen,
     connect_and_probe, execute_planned_input, format_action_status, format_prediction_target,
-    format_step_plan, materially_changed_pixels, milliseconds, send_log, send_state,
+    format_step_plan, milliseconds, send_log, send_state,
     send_status, validate_probe, wait_or_stop,
 };
 use crate::{
@@ -29,7 +32,7 @@ use crate::{
     game::{ActionTarget, GuidedAction},
     klondike,
     parameters::{
-        ACTION_CHANGE_CHANNEL_THRESHOLD, KEY_HOLD, KLONDIKE_MAX_MULTI_STEP_ACTIONS, MOUSE_HOLD,
+        KEY_HOLD, KLONDIKE_MAX_MULTI_STEP_ACTIONS, MOUSE_HOLD,
         NOMINAL_FRAME_HEIGHT, NOMINAL_FRAME_WIDTH, POINTER_SETTLE_DELAY, POST_GAME_MAX_OBSERVATION_ROUNDS,
         SOLVER_MOUSE_HOLD, StepRunSettings,
     },
@@ -58,6 +61,16 @@ enum CompletionWait {
 }
 
 
+/// Cumulative diagnostics and the one-refresh budget of an unresolved context.
+#[derive(Default)]
+struct SolverRecovery {
+    /// Checked cumulative count; continuous play cannot wrap this counter.
+    refreshes: usize,
+    /// True after one refresh until an action is acknowledged or a fresh restart completes.
+    refreshed: bool,
+}
+
+
 /// Accept continuous zero or a finite gameplay-action budget before connecting or clearing STOP.
 pub(super) fn validate_operation_limit(limit: usize) -> Result<(), String> {
 
@@ -82,16 +95,6 @@ enum CaptureResult {
         /// The cause returned after retaining the diagnostic frame.
         reason: String,
     },
-}
-
-
-/// Keep complete effect proof separate from the mode-owned source replacement proof.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-struct EffectVerdict {
-    /// Independent source and destination proof established the previous effect.
-    verified: bool,
-    /// Card content changed under Klondike's source replacement policy alone.
-    source_replaced: bool,
 }
 
 
@@ -140,19 +143,6 @@ trait KlondikeIo {
 
     /// Wait in cancellable slices when ordinary gameplay or re-observation needs settling.
     fn wait(&mut self, duration: Duration) -> Result<(), String>;
-
-
-    /// Measure full effect and source replacement independently of the next target.
-    fn effect(
-        &mut self,
-        before: &CapturedFrame,
-        after: &CapturedFrame,
-        action: GuidedAction,
-    ) -> Result<EffectVerdict, String> {
-        klondike::inspect_effect(before, after, action)
-            .map(|evidence| EffectVerdict { verified: evidence.verified, source_replaced: evidence.source_replaced })
-            .map_err(|error| format!("Klondike effect analysis failed: {error}"))
-    }
 }
 
 
@@ -166,7 +156,7 @@ struct QmpKlondikeIo<'a> {
     scan_state: &'a TableauScanState,
     /// Cooperative cancellation flag, checked before input and observations.
     cancel_requested: &'a AtomicBool,
-    /// Bounded UI output and complete session log for effect-evidence diagnostics.
+    /// Bounded UI output and complete session log for scene and input diagnostics.
     event_tx: &'a WorkerEventSink,
 }
 
@@ -279,46 +269,29 @@ impl KlondikeIo for QmpKlondikeIo<'_> {
             "STOP was requested during Klondike settling; no input was retried",
         ).map(|_| ())
     }
-
-
-    fn effect(
-        &mut self,
-        before: &CapturedFrame,
-        after: &CapturedFrame,
-        action: GuidedAction,
-    ) -> Result<EffectVerdict, String> {
-        let evidence = klondike::inspect_effect(before, after, action)
-            .map_err(|error| format!("Klondike effect analysis failed: {error}"))?;
-        send_log(self.event_tx, format!("Klondike effect evidence for {}: {evidence}", action.target));
-        Ok(EffectVerdict { verified: evidence.verified, source_replaced: evidence.source_replaced })
-    }
 }
 
 
-/// Explicit endpoint separating reviewed predictions, proven gameplay and completion.
+/// Explicit endpoint separating acknowledged actions from independent completion.
 #[derive(Debug, PartialEq, Eq)]
 enum RunOutcome {
     /// The finite action budget was consumed without implying game completion.
     Completed {
-        /// Gameplay effects independently established by source and destination proof.
+        /// Zero under Solver-led play; HALOs never establish a previous effect.
         verified: usize,
-        /// Acknowledged actions accepted only through fresh HALO or new Solve authority.
+        /// Acknowledged actions selected from a freshly classified Solver target.
         halo: usize,
     },
-    /// Initial read-only validation found a different canonical target requiring explicit review.
-    PreviewChanged,
-    /// A finite request's Solver refresh produced a preview requiring another user run.
-    RecoveryOnly,
     /// One board is one game, confirmed by two fresh mode-owned completion observations.
     GameWon {
-        /// Ordinary gameplay effects proven before the independent completion endpoint.
+        /// Zero under Solver-led play; completion does not prove earlier card effects.
         previous_verified: usize,
         /// Previous actions accepted from fresh HALO or new Solve control evidence.
         previous_halo: usize,
     },
     /// Solve was requested once; bounded observations did not establish completion.
     SolveRequested {
-        /// Gameplay effects proven before the separate, unverified Solve request.
+        /// Zero under Solver-led play; a Solve request does not prove earlier effects.
         previous_verified: usize,
         /// Previous actions accepted from fresh HALO or new Solve control evidence.
         previous_halo: usize,
@@ -372,27 +345,7 @@ pub(super) fn run_klondike_steps(
             }
             send_state(event_tx, WorkerState::Ready);
             send_status(event_tx, "Ready".to_owned());
-            send_log(event_tx, format!("Klondike bounded run complete: {verified} verified gameplay action(s), {halo} accepted from fresh HALO or new Solve control evidence; no completion or restart inferred."));
-        }
-        Ok(RunOutcome::PreviewChanged) => {
-
-
-            if let Some(observation) = latest {
-                event_tx.publish_frame(observation.frame, observation.prediction, true);
-            }
-            send_state(event_tx, WorkerState::Ready);
-            send_status(event_tx, "Preview changed — review next move".to_owned());
-            send_log(event_tx, "Klondike initial validation found a different current target. Guest inputs sent: 0. The refreshed prediction is displayed for review; press Step Once or Multi-Step again to authorise it.".to_owned());
-        }
-        Ok(RunOutcome::RecoveryOnly) => {
-
-
-            if let Some(observation) = latest {
-                event_tx.publish_frame(observation.frame, observation.prediction, true);
-            }
-            send_state(event_tx, WorkerState::Ready);
-            send_status(event_tx, "Solver refreshed — review next move".to_owned());
-            send_log(event_tx, "Klondike Solver recovery produced a new preview. Gameplay inputs sent: 0. Review the preview and press Step Once or Multi-Step again to authorise that action.".to_owned());
+            send_log(event_tx, format!("Klondike bounded run complete: {halo} acknowledged gameplay action(s) from fresh Solver targets; independently verified effects={verified}. The final fresh frame is retained; no completion or restart inferred."));
         }
         Ok(RunOutcome::GameWon { previous_verified, previous_halo }) => {
 
@@ -428,10 +381,14 @@ pub(super) fn run_klondike_steps(
 }
 
 
-/// Execute the production controller against a QMP or deterministic test adapter.
+/// Execute Solver-led play against a QMP or deterministic test adapter.
 ///
-/// The same result frame is reused for the next plan. `latest` is updated only
-/// after a successful capture so an observation failure preserves prior pixels.
+/// The preview supplies the selected-mode boundary, not a frozen card coordinate.
+/// Every input uses the latest canonical mode-owned target, then settles and
+/// captures anew. Acknowledgements consume the finite budget; HALOs do not prove
+/// previous effects. Missing targets have bounded read-only recovery and at most
+/// one Solver refresh per unresolved context. The latest decoded frame survives
+/// STOP, uncertainty and all analysis failures.
 fn drive_run(
     io: &mut impl KlondikeIo,
     approved_prediction: PredictedAction,
@@ -448,7 +405,7 @@ fn drive_run(
     let requested_actions = settings.bounded_operation_limit()
         .map_or_else(|| "continuous until STOP, uncertainty or game win".to_owned(), |limit| format!("{limit} gameplay action(s)"));
     send_log(event_tx, format!(
-        "Klondike requested {requested_actions}, settle={} ms, Solve animation settle={} ms, reobserve={} ms. Draw uses qcode D; recycle and card sources use one click. Solver refresh: one per unresolved context, followed by at most {REOBSERVATION_LIMIT} delayed observations; the first capture is immediate. Solve is clicked once, separately settled and checked with up to {SOLVE_COMPLETION_REOBSERVATION_LIMIT} delayed input-free completion captures; two consecutive positives are required and card recovery keeps its own shorter budget. One board is one game. Only continuous Multi-Step 0 advances through independently recognised terminal controls.",
+        "Klondike requested {requested_actions}, settle={} ms, Solve animation settle={} ms, reobserve={} ms. The preview is advisory: each input requires a fresh supported scene and canonical Solver target. Draw uses qcode D; recycle and card sources use one click. Each acknowledged gameplay action consumes one budget slot; card matching and changed-pixel thresholds are not used. Missing HALOs receive at most {REOBSERVATION_LIMIT} delayed input-free captures, then independent completion review, then at most one Solver refresh on a positively recognised gameplay scene. Solver captures immediately and waits at most {REOBSERVATION_LIMIT} further delayed observations. Solve remains one click plus up to {SOLVE_COMPLETION_REOBSERVATION_LIMIT} delayed completion captures; two consecutive positives establish one-board game win. Only continuous Multi-Step 0 advances recognised terminal controls.",
         delays.klondike_settle.as_millis(), delays.klondike_solve.as_millis(), delays.klondike_reobserve.as_millis(),
     ));
     send_log(event_tx, format!(
@@ -457,76 +414,10 @@ fn drive_run(
         delays.klondike_settle.as_millis(),
     ));
     send_state(event_tx, WorkerState::Validating);
-    send_status(event_tx, "Validating Klondike preview".to_owned());
+    send_status(event_tx, "Observing fresh Klondike Solver target".to_owned());
     capture_latest(io, latest, event_tx)?;
-    let fresh_prediction = latest.as_ref().expect("fresh planning capture").prediction;
-    let mut solver_refreshes = 0usize;
-    let mut initial_restarted = false;
-    let preserve_initial_target = matches!(fresh_prediction, PredictedAction::Action(_));
-
-
-    require_klondike_prediction(fresh_prediction, true)?;
-    require_running(cancel_requested)?;
-
-
-    if matches!(fresh_prediction, PredictedAction::NoHighlight)
-        && io.completion(&latest.as_ref().expect("fresh planning capture").frame)?
-    {
-
-
-        if !await_completion(io, latest, settings, event_tx, cancel_requested, CompletionWait::ConfirmCandidate)? {
-            return Err("initial completion candidate was not confirmed within bounded read-only observations; no input sent".to_owned());
-        }
-
-
-        if settings.is_unbounded() && fresh_prediction == approved_prediction {
-            resume_after_win(io, latest, settings, event_tx, cancel_requested, input_attempted)?;
-            initial_restarted = true;
-        } else {
-
-
-            if fresh_prediction != approved_prediction {
-                send_log(event_tx, "Klondike completion was confirmed read-only after the approved preview changed. No terminal input is authorised by the stale preview; capture the current completed scene and explicitly approve a new continuous run before advancing terminal controls.".to_owned());
-            }
-            return Ok(RunOutcome::GameWon { previous_verified: 0, previous_halo: 0 });
-        }
-    }
-
-
-    if !initial_restarted {
-        require_scene(latest.as_ref().expect("fresh planning capture"))?;
-
-
-        if fresh_prediction != approved_prediction {
-            send_log(event_tx, format!(
-                "Klondike preview changed: fresh target {} differs from approved preview {}; guest input sent=0; review the refreshed prediction before another run",
-                format_prediction_target(fresh_prediction), format_prediction_target(approved_prediction),
-            ));
-            return Ok(RunOutcome::PreviewChanged);
-        }
-
-
-        if matches!(fresh_prediction, PredictedAction::NoHighlight) {
-            // Recovery is authorised only when the explicit no-HALO preview is reproduced.
-            refresh_solver(io, latest, &mut solver_refreshes, settings, event_tx, cancel_requested, input_attempted)?;
-            await_target(io, latest, settings, event_tx, cancel_requested)?;
-
-
-            if !settings.is_unbounded() {
-                return Ok(RunOutcome::RecoveryOnly);
-            }
-            send_log(event_tx, format!(
-                "Klondike initial Solver recovery established fresh target {}. The active continuous Multi-Step 0 request authorises play from this captured frame; gameplay inputs sent so far=0. Each action still requires its own VM/tablet probe and STOP check.",
-                format_prediction_target(latest.as_ref().expect("fresh recovered planning capture").prediction),
-            ));
-        }
-    }
-
-
-    // The budget counts acknowledged logical actions, including unverified ones.
-    // Effect and continuation counts remain separate diagnostic outcomes.
+    let mut recovery = SolverRecovery::default();
     let mut completed_operations = 0usize;
-    let mut verified_operations = 0usize;
     let mut halo_operations = 0usize;
 
 
@@ -535,28 +426,37 @@ fn drive_run(
 
 
         if settings.bounded_operation_limit().is_some_and(|limit| completed_operations >= limit) {
-            return Ok(RunOutcome::Completed { verified: verified_operations, halo: halo_operations });
+            return Ok(RunOutcome::Completed { verified: 0, halo: halo_operations });
+        }
+
+
+        if await_playable_context(
+            io, latest, &mut recovery, settings,
+            event_tx, cancel_requested, input_attempted,
+        )? {
+
+
+            if settings.is_unbounded() {
+                resume_after_win(io, latest, settings, event_tx, cancel_requested, input_attempted)?;
+                recovery.refreshed = false;
+                continue;
+            }
+            return Ok(RunOutcome::GameWon { previous_verified: 0, previous_halo: halo_operations });
         }
         await_pending_solve(io, latest, settings, event_tx, cancel_requested)?;
-
-
-        if completed_operations == 0 && !initial_restarted && preserve_initial_target
-            && latest.as_ref().expect("fresh settled planning capture").prediction != approved_prediction
-        {
-            send_log(event_tx, format!(
-                "Klondike preview changed during input-free Solve settling: fresh target {} differs from approved preview {}; guest input sent=0; review the refreshed prediction before another run",
-                format_prediction_target(latest.as_ref().expect("fresh settled planning capture").prediction),
-                format_prediction_target(approved_prediction),
-            ));
-            return Ok(RunOutcome::PreviewChanged);
-        }
-        let operation_index = next_counter(completed_operations, "gameplay action")?;
         let observation = latest.as_ref().ok_or_else(|| "Klondike planning frame is missing".to_owned())?;
         require_scene(observation)?;
-        require_klondike_prediction(observation.prediction, false)?;
+        require_klondike_prediction(observation.prediction, true)?;
+
+
+        if matches!(observation.prediction, PredictedAction::NoHighlight) {
+            // Pending Solve recaptures may replace an actionable planning frame.
+            // The existing context flag prevents a second Solver refresh.
+            continue;
+        }
+        let operation_index = next_counter(completed_operations, "gameplay action")?;
         let plan = plan_step(observation.prediction).map_err(|error| format!("Klondike plan rejected: {error}"))?;
         send_log(event_tx, format_step_plan(plan)?);
-        let before = observation.frame.clone();
         let solve_requested = matches!(plan.input().action().target, ActionTarget::Klondike(klondike::KlondikeTarget::Solve));
         io.probe()?;
         require_running(cancel_requested)?;
@@ -565,15 +465,14 @@ fn drive_run(
         *input_attempted = true;
         io.input(plan).map_err(|error| format!("gameplay input outcome is uncertain: {error}"))?;
         completed_operations = operation_index;
+        recovery.refreshed = false;
         io.wait(if solve_requested { delays.klondike_solve } else { delays.klondike_settle })?;
         send_state(event_tx, WorkerState::Verifying);
-
-
-        send_status(event_tx, if solve_requested { "Capturing Solve result" } else { "Verifying Klondike move" }.to_owned());
+        send_status(event_tx, if solve_requested { "Capturing Solve result" } else { "Observing next Klondike Solver target" }.to_owned());
 
 
         if solve_requested {
-            // Completion checks cannot authorise another Solve or recovery input.
+            // Only independent completion evidence can advance this one-shot input.
             let complete = await_completion(
                 io, latest, settings, event_tx, cancel_requested, CompletionWait::AfterSolve,
             )?;
@@ -584,117 +483,128 @@ fn drive_run(
                 continue;
             }
             return Ok(if complete {
-                RunOutcome::GameWon { previous_verified: verified_operations, previous_halo: halo_operations }
+                RunOutcome::GameWon { previous_verified: 0, previous_halo: halo_operations }
             } else {
-                RunOutcome::SolveRequested { previous_verified: verified_operations, previous_halo: halo_operations }
+                RunOutcome::SolveRequested { previous_verified: 0, previous_halo: halo_operations }
             });
         }
         capture_latest(io, latest, event_tx)?;
         require_running(cancel_requested)?;
-        let mut context_refreshed = false;
-        let mut delayed_observations = 0usize;
-
-
-        loop {
-            require_running(cancel_requested)?;
-            let current = latest.as_ref().expect("fresh result capture");
-            require_klondike_prediction(current.prediction, true)?;
-            let completion_candidate = matches!(current.prediction, PredictedAction::NoHighlight)
-                && io.completion(&current.frame)?;
-
-
-            if !completion_candidate && !current.gameplay_scene {
-
-
-                if delayed_observations >= REOBSERVATION_LIMIT {
-                    return Err(format!(
-                        "unsupported Klondike scene persisted through {delayed_observations} delayed input-free result captures; the previous gameplay input was not replayed",
-                    ));
-                }
-                delayed_observations += 1;
-                send_log(event_tx, format!(
-                    "Klondike unsupported result re-observation {delayed_observations}/{REOBSERVATION_LIMIT}: scene not established; gameplay, Solver and terminal input sent=0; previous effect remains pending",
-                ));
-                io.wait(delays.klondike_reobserve)?;
-                capture_latest(io, latest, event_tx)?;
-                continue;
-            }
-            let effect = io.effect(&before, &current.frame, plan.input().action())?;
-            let effect_verified = effect.verified;
-
-
-            if completion_candidate {
-                // Own the final action frame before completion captures replace `latest`.
-                let terminal_result = FrameObservation {
-                    frame: current.frame.clone(),
-                    prediction: current.prediction,
-                    observed_rows: current.observed_rows,
-                    gameplay_scene: current.gameplay_scene,
-                    game_progress: current.game_progress,
-                };
-
-
-                if await_completion(io, latest, settings, event_tx, cancel_requested, CompletionWait::ConfirmCandidate)? {
-
-
-                    if effect_verified {
-                        verified_operations = next_counter(verified_operations, "verified action")?;
-                        report_verified_action(event_tx, &before, &terminal_result, plan, operation_index, settings, solver_refreshes)?;
-                    } else {
-                        send_log(event_tx, "Klondike last gameplay effect remains unverified; GAME WIN evidence was independently confirmed by fresh terminal observations. The previous gameplay input was not replayed or counted as verified.".to_owned());
-                    }
-
-
-                    if settings.is_unbounded() {
-                        resume_after_win(io, latest, settings, event_tx, cancel_requested, input_attempted)?;
-                        break;
-                    }
-                    return Ok(RunOutcome::GameWon { previous_verified: verified_operations, previous_halo: halo_operations });
-                }
-                return Err("completion candidate was not confirmed within bounded read-only observations; no gameplay or Solver input retried".to_owned());
-            }
-
-
-            if matches!(current.prediction, PredictedAction::NoHighlight) && !context_refreshed {
-                refresh_solver(io, latest, &mut solver_refreshes, settings, event_tx, cancel_requested, input_attempted)?;
-                context_refreshed = true;
-                continue;
-            }
-
-
-            if effect_verified && matches!(current.prediction, PredictedAction::Action(_)) {
-                verified_operations = next_counter(verified_operations, "verified action")?;
-                report_verified_action(event_tx, &before, current, plan, operation_index, settings, solver_refreshes)?;
-                break;
-            }
-
-
-            if !context_refreshed && fresh_evidence_continuation(plan.input().action(), current.prediction, effect) {
-                halo_operations = next_counter(halo_operations, "fresh-evidence continuation")?;
-                report_continued_action(event_tx, &before, current, plan, operation_index, settings, solver_refreshes)?;
-                break;
-            }
-
-
-            if delayed_observations >= REOBSERVATION_LIMIT {
-                return Err(format!(
-                    "bounded result observations exhausted after {delayed_observations} delayed captures; previous effect verified={effect_verified}, next target={}; gameplay input was sent once",
-                    format_prediction_target(current.prediction),
-                ));
-            }
-            delayed_observations += 1;
-            io.wait(delays.klondike_reobserve)?;
-            capture_latest(io, latest, event_tx)?;
-        }
+        halo_operations = next_counter(halo_operations, "acknowledged Solver action")?;
+        report_acknowledged_action(
+            event_tx, latest.as_ref().expect("fresh acknowledged-action result"), plan,
+            operation_index, settings, recovery.refreshes,
+        );
     }
 }
 
 
+/// Resolve a missing target without treating missing pixels as input authority.
+///
+/// The current frame and at most three delayed observations are read-only. Only
+/// independent completion can establish a win. Otherwise one Solver refresh is
+/// authorised by a positively recognised gameplay scene; its immediate capture
+/// and bounded delayed observations cannot authorise another refresh. The caller
+/// resets the context only after an acknowledged gameplay action or a positively
+/// recognised fresh board at the end of a confirmed game restart.
+fn await_playable_context(
+    io: &mut impl KlondikeIo,
+    latest: &mut Option<FrameObservation>,
+    recovery: &mut SolverRecovery,
+    settings: StepRunSettings,
+    event_tx: &WorkerEventSink,
+    cancel_requested: &AtomicBool,
+    input_attempted: &mut bool,
+) -> Result<bool, String> {
+
+
+    if await_fresh_target(io, latest, settings, event_tx, cancel_requested)? {
+        return Ok(false);
+    }
+
+
+    if io.completion(&latest.as_ref().expect("bounded planning observation").frame)? {
+
+
+        if await_completion(io, latest, settings, event_tx, cancel_requested, CompletionWait::ConfirmCandidate)? {
+            return Ok(true);
+        }
+        return Err("completion candidate was not confirmed within bounded read-only observations; no gameplay or Solver input retried".to_owned());
+    }
+    require_scene(latest.as_ref().expect("bounded planning observation"))?;
+
+
+    if recovery.refreshed {
+        return Err("Klondike unresolved context already refreshed Solver once; no further input authorised".to_owned());
+    }
+    recovery.refreshed = true;
+    refresh_solver(io, latest, &mut recovery.refreshes, settings, event_tx, cancel_requested, input_attempted)?;
+
+
+    if await_fresh_target(io, latest, settings, event_tx, cancel_requested)? {
+        return Ok(false);
+    }
+
+
+    if io.completion(&latest.as_ref().expect("bounded Solver observation").frame)? {
+
+
+        if await_completion(io, latest, settings, event_tx, cancel_requested, CompletionWait::ConfirmCandidate)? {
+            return Ok(true);
+        }
+        return Err("completion after Solver refresh was not confirmed within bounded read-only observations; no further input authorised".to_owned());
+    }
+    require_scene(latest.as_ref().expect("bounded Solver observation"))?;
+    Err("Solver refresh produced no fresh canonical target within its bounded input-free observations; no further Solver or gameplay input authorised".to_owned())
+}
+
+
+/// Observe a canonical fresh Solver target, allowing at most three delayed captures.
+/// A supported repeated HALO is a new action recommendation, not prior effect proof.
+/// Unknown scenes receive only read-only observations and cannot grant input.
+fn await_fresh_target(
+    io: &mut impl KlondikeIo,
+    latest: &mut Option<FrameObservation>,
+    settings: StepRunSettings,
+    event_tx: &WorkerEventSink,
+    cancel_requested: &AtomicBool,
+) -> Result<bool, String> {
+
+
+    for delayed in 0..=REOBSERVATION_LIMIT {
+        require_running(cancel_requested)?;
+        let current = latest.as_ref().ok_or_else(|| "Klondike planning context has no fresh frame".to_owned())?;
+        require_klondike_prediction(current.prediction, true)?;
+
+
+        if current.gameplay_scene && matches!(current.prediction, PredictedAction::Action(_)) {
+            return Ok(true);
+        }
+
+
+        if delayed == REOBSERVATION_LIMIT {
+            return Ok(false);
+        }
+        send_state(event_tx, WorkerState::Verifying);
+        send_status(event_tx, "Waiting for fresh Klondike Solver target".to_owned());
+        send_log(event_tx, format!(
+            "Klondike target re-observation {}/{REOBSERVATION_LIMIT}: scene={}, target={}; waiting {} ms before a fresh input-free capture; no gameplay, Solver or terminal input authorised",
+            delayed + 1, current.gameplay_scene, format_prediction_target(current.prediction),
+            settings.animation_delays().klondike_reobserve.as_millis(),
+        ));
+        io.wait(settings.animation_delays().klondike_reobserve)?;
+        capture_latest(io, latest, event_tx)?;
+    }
+    Ok(false)
+}
+
+
 /// Defer lower card input while strong Solve lettering awaits its existing face guard.
-/// The preceding action has already been evaluated and counted before this planning
-/// context starts. DRAW, RIGHT and a fully recognised Solve retain priority. Each
-/// recapture replaces the planning frame; disappearing candidates grant no Solver
-/// refresh or stale-target replay. Unknown scenes and malformed storage stop.
+/// Any preceding action has already been acknowledged and counted before this
+/// planning context starts. DRAW, RIGHT and a fully recognised Solve retain priority. Each
+/// recapture replaces the planning frame. Disappearing candidates grant no immediate
+/// input: missing-HALO frames return to bounded recovery without resetting its
+/// one-refresh flag. Unknown scenes and malformed storage stop.
 fn await_pending_solve(
     io: &mut impl KlondikeIo,
     latest: &mut Option<FrameObservation>,
@@ -852,20 +762,19 @@ fn await_terminal_stage(
 }
 
 
-/// Record a proven ordinary gameplay effect separately from independent completion.
-fn report_verified_action(
+/// Publish one acknowledged action and its fresh result without measuring effects.
+///
+/// The shared event's zero changed-pixel value is an unmeasured placeholder, not
+/// evidence that no card changed. Fresh Solver source authority is recorded
+/// separately from effect verification; a finite endpoint may have no next HALO.
+fn report_acknowledged_action(
     event_tx: &WorkerEventSink,
-    before: &CapturedFrame,
     current: &FrameObservation,
     plan: StepPlan,
     operation_index: usize,
     settings: StepRunSettings,
     solver_refreshes: usize,
-) -> Result<(), String> {
-    let changed_pixels = materially_changed_pixels(
-        before, &current.frame, plan.input().effect_bounds(),
-        plan.input().effect_exclusion_bounds(), ACTION_CHANGE_CHANNEL_THRESHOLD,
-    )?;
+) {
     let _ = event_tx.send(WorkerEvent::ActionCompleted {
         operation_index,
         operation_limit: settings.operation_limit(),
@@ -873,88 +782,15 @@ fn report_verified_action(
         after: current.prediction,
         input_commands: plan.input().qmp_command_count(),
         input_events: plan.input().qmp_event_count(),
-        changed_pixels,
-        continued_from_halo: false,
-    });
-    let run_bound = settings.bounded_operation_limit()
-        .map_or_else(|| "continuous".to_owned(), |limit| limit.to_string());
-    send_log(event_tx, format!(
-        "Klondike action {operation_index}/{run_bound} effect verified; {} -> {}; changed effect pixels={changed_pixels}; Solver refreshes={solver_refreshes}. Fresh HALO alone never verifies the previous action.",
-        format_prediction_target(plan.before()), format_prediction_target(current.prediction),
-    ));
-    Ok(())
-}
-
-
-/// Decide fresh target authority without upgrading the previous action to proven.
-/// The caller has already received an input acknowledgement, waited the configured
-/// settle and validated a new supported scene with canonical Klondike actions.
-/// No Solver refresh may intervene. Ordinary HALOs require changed source content;
-/// a positively recognised new Solve control is a different action, never a retry
-/// of the old card click. Draw, recycle and Solve sources retain their own policy.
-fn fresh_evidence_continuation(
-    previous: GuidedAction,
-    fresh: PredictedAction,
-    effect: EffectVerdict,
-) -> bool {
-
-
-    if !matches!(previous.target, ActionTarget::Klondike(
-        klondike::KlondikeTarget::Waste { .. } | klondike::KlondikeTarget::Tableau { .. }
-            | klondike::KlondikeTarget::Foundation { .. }
-    )) {
-        return false;
-    }
-
-
-    let PredictedAction::Action(next) = fresh else { return false; };
-    matches!(next.target, ActionTarget::Klondike(klondike::KlondikeTarget::Solve))
-        || effect.source_replaced
-}
-
-
-/// Record an acknowledged action accepted from fresh evidence, not effect proof.
-/// Its budget slot is consumed even for Step Once; the result remains the next
-/// planning frame. This changes no card history or game-completion authority.
-fn report_continued_action(
-    event_tx: &WorkerEventSink,
-    before: &CapturedFrame,
-    current: &FrameObservation,
-    plan: StepPlan,
-    operation_index: usize,
-    settings: StepRunSettings,
-    solver_refreshes: usize,
-) -> Result<(), String> {
-    let changed_pixels = materially_changed_pixels(
-        before, &current.frame, plan.input().effect_bounds(),
-        plan.input().effect_exclusion_bounds(), ACTION_CHANGE_CHANNEL_THRESHOLD,
-    )?;
-    let _ = event_tx.send(WorkerEvent::ActionCompleted {
-        operation_index,
-        operation_limit: settings.operation_limit(),
-        before: plan.before(),
-        after: current.prediction,
-        input_commands: plan.input().qmp_command_count(),
-        input_events: plan.input().qmp_event_count(),
-        changed_pixels,
+        changed_pixels: 0,
         continued_from_halo: true,
     });
-
-
-    let authority = if matches!(current.prediction, PredictedAction::Action(GuidedAction {
-        target: ActionTarget::Klondike(klondike::KlondikeTarget::Solve), ..
-    })) {
-        "independently recognised new Solve control"
-    } else {
-        "fresh HALO with mode-owned source replacement proof"
-    };
     let run_bound = settings.bounded_operation_limit()
         .map_or_else(|| "continuous".to_owned(), |limit| limit.to_string());
     send_log(event_tx, format!(
-        "Klondike action {operation_index}/{run_bound} accepted from {authority}; {} -> {}; previous effect remains unverified; changed effect pixels={changed_pixels}; Solver refreshes={solver_refreshes}. One action budget slot consumed; no previous input replay, completion or restart inferred.",
+        "Klondike action {operation_index}/{run_bound} acknowledged from a fresh canonical Solver target; {} -> {}; pixel difference not measured, previous effect remains unproven; Solver refreshes={solver_refreshes}. One action budget slot consumed. Only a fresh supported target authorises the next action; no card transfer, completion or restart inferred.",
         format_prediction_target(plan.before()), format_prediction_target(current.prediction),
     ));
-    Ok(())
 }
 
 
@@ -1062,43 +898,6 @@ fn refresh_solver(
     send_state(event_tx, WorkerState::Verifying);
     capture_latest(io, latest, event_tx)?;
     Ok(())
-}
-
-
-/// Observe a recovered initial target without sending gameplay or another Solver click.
-fn await_target(
-    io: &mut impl KlondikeIo,
-    latest: &mut Option<FrameObservation>,
-    settings: StepRunSettings,
-    event_tx: &WorkerEventSink,
-    cancel_requested: &AtomicBool,
-) -> Result<(), String> {
-
-
-    for attempt in 0..=REOBSERVATION_LIMIT {
-        require_running(cancel_requested)?;
-        let current = latest.as_ref().ok_or_else(|| "Solver recovery has no captured frame".to_owned())?;
-        require_scene(current)?;
-        require_klondike_prediction(current.prediction, true)?;
-
-
-        if matches!(current.prediction, PredictedAction::Action(_)) {
-            return Ok(());
-        }
-
-
-        if attempt == REOBSERVATION_LIMIT {
-            break;
-        }
-        send_status(event_tx, "Waiting for Klondike Solver target".to_owned());
-        send_log(event_tx, format!(
-            "Klondike initial Solver recovery re-observation {}/{REOBSERVATION_LIMIT}: no HALO; waiting {} ms before a fresh input-free capture; no gameplay or further Solver input authorised",
-            attempt + 1, settings.animation_delays().klondike_reobserve.as_millis(),
-        ));
-        io.wait(settings.animation_delays().klondike_reobserve)?;
-        capture_latest(io, latest, event_tx)?;
-    }
-    Err("Solver refresh produced no target within its bounded input-free observations".to_owned())
 }
 
 

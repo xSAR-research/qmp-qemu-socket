@@ -257,3 +257,68 @@ candidate source before Cargo/launch commands and refuses old or mixed files.
 The application still reports its Cargo package and candidate label at startup.
 Capture/QMP policy is unchanged. The hearts Undo attachment contains a transient
 duplicated source card; it cannot substitute for a settled fresh pre-click PNG.
+
+## Klondike candidate 3 source evidence
+
+Fresh captured source geometry may change when a compressed stack expands. The
+bounded clipped-card comparison maps both images to relative card positions and
+excludes the commanded cursor neighbourhood in both sampled coordinate spaces.
+It supplies qualified continuation only; it does not replay input or establish
+complete effect. QMP/capture, editable waits and original-byte saving are unchanged.
+
+The later Draw result failed scene classification before any stack click. Its
+measured replacement lower probe is a 7-by-28 rectangle with the same 196 pixels
+and 95% felt support, rather than a wider scan. The King transfer retains separate
+shade diagnostics and accepts their disjoint positive-felt union only under the
+existing source, non-source, cursor, gold and geometry guards. Full effect proof
+and the shared execution controller remain unchanged.
+
+
+## Klondike candidate 4 SUIT-return evidence
+
+The matched SUIT return keeps the original cursor exclusion and ordinary effect
+thresholds. Positive source-corner replacement and newly changed recipient print
+are measured from the same two decoded observations; no extra capture, input,
+rank reader or destination click is introduced. Receiving geometry and transferred
+artwork have no click authority. A passing witness authorises fresh-target
+continuation only and is logged separately from complete action verification.
+Unsupported or ambiguous evidence follows the existing bounded read-only stop.
+
+
+K67's Pro Level Up layout is recognised from the same fresh decoded terminal
+frame. The preceding score click had been acknowledged; no OK click was attempted
+before the reported recognition stop. Separate measured title/label/frame/button
+evidence permits the existing LevelUp action without replaying prior input.
+
+
+K68/K69 calibrate source-outline recognition from newly supplied originals.
+The four-pixel scan extension and bounded column-7 shadow-gold rail support
+change detection only. No capture timing, input retry, click location or effect
+bound is introduced. The separate Strange-fail screenshot is recognised by
+the previous detector; its matching log is still required to explain the stop.
+
+
+Candidate 5 adds no QMP command, input coordinate or delay. Its tableau-to-SUIT
+continuation witness uses the retained before/result RGBA frames after one
+acknowledged source click. A new landing guide can cover the old source; an
+independent exposed header and newly received old artwork are required before
+continuing from the fresh target. QMP acknowledgement alone never supplies this
+proof, and uncertain delivery stops before recovery or another gameplay input.
+
+
+## Candidate 6 source and restart observations
+
+The column4 Hint-shadow correction concerns read-only outline recognition only;
+its positive gold samples do not extend card-effect proof into the toolbar.
+Fresh initial-deal paper margins replace a rank-sensitive area test after Play.
+The existing acknowledged Solver activation still runs once, then captures fresh
+frames under bounded observation and cancellation gates. No capture path, PNG
+identity contract, mouse/key operation or retry policy changes.
+
+
+The current candidate-6 Klondike policy omits live card-effect comparison. QMP
+acknowledgement still establishes delivery only; the next fresh valid Solver
+recommendation authorises the next action. Independent completion is unchanged.
+A finite run captures once after its last action and returns; continuous mode
+uses bounded input-free no-HALO observations before one scene-validated Solver
+refresh. STOP, native input bounds and uncertain-input non-replay remain.
