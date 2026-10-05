@@ -27,7 +27,7 @@ use crate::parameters::{
     ACTION_CHANGE_CHANNEL_THRESHOLD, ACTION_CURSOR_EXCLUSION_HALF_SIZE,
     BOARD_REDEAL_SETTLE_DELAY_MS, CHALLENGE_COMPLETE_CONTINUE_CONTROL, DEFAULT_MULTI_STEP_ACTIONS,
     DRAW_ANIMATION_SETTLE_DELAY_MS, FREECELL_DEFAULT_MULTI_STEP_ACTIONS,
-    FREECELL_DEFAULT_OBSERVATION_LIMIT, FREECELL_MAX_OBSERVATION_LIMIT,
+    FREECELL_DEFAULT_OBSERVATION_LIMIT, FREECELL_GAME_START_DELAY_MS, FREECELL_MAX_OBSERVATION_LIMIT,
     FREECELL_MAX_MULTI_STEP_ACTIONS, FREECELL_REOBSERVE_DELAY_MS, FREECELL_SETTLE_DELAY_MS,
     GOLD_CHANNEL_TOLERANCE, GOLD_RGB_CANDIDATES, KEY_HOLD,
     KLONDIKE_DEFAULT_MULTI_STEP_ACTIONS, KLONDIKE_MAX_MULTI_STEP_ACTIONS,
@@ -184,6 +184,8 @@ pub struct QmpQemuSocketApp {
     freecell_settle_ms: u64,
     /// Free Cell bounded recapture delay copied into the next run settings.
     freecell_reobserve_ms: u64,
+    /// Free Cell game-start delay copied independently into the next run settings.
+    freecell_game_start_ms: u64,
     /// Separate Free Cell operation budget, with zero meaning continuous.
     freecell_multi_step_actions: usize,
     /// Delayed input-free Free Cell observations allowed for each unresolved context.
@@ -272,6 +274,7 @@ impl QmpQemuSocketApp {
             klondike_multi_step_actions: KLONDIKE_DEFAULT_MULTI_STEP_ACTIONS,
             freecell_settle_ms: FREECELL_SETTLE_DELAY_MS,
             freecell_reobserve_ms: FREECELL_REOBSERVE_DELAY_MS,
+            freecell_game_start_ms: FREECELL_GAME_START_DELAY_MS,
             freecell_multi_step_actions: FREECELL_DEFAULT_MULTI_STEP_ACTIONS,
             freecell_observation_limit: FREECELL_DEFAULT_OBSERVATION_LIMIT,
             multi_step_actions: DEFAULT_MULTI_STEP_ACTIONS,
@@ -907,7 +910,8 @@ impl QmpQemuSocketApp {
         )
         .with_klondike_millis(self.klondike_settle_ms, self.klondike_reobserve_ms)
         .with_klondike_solve_millis(self.klondike_solve_settle_input)
-        .with_freecell_millis(self.freecell_settle_ms, self.freecell_reobserve_ms);
+        .with_freecell_millis(self.freecell_settle_ms, self.freecell_reobserve_ms)
+        .with_freecell_game_start_millis(self.freecell_game_start_ms);
 
 
         let operation_limit = normalise_operation_limit(self.game_mode, operation_limit);
@@ -1543,11 +1547,21 @@ impl QmpQemuSocketApp {
                             .on_hover_text("Wait between bounded fresh captures while the next HALO or completion appears; no guest input is sent");
                         });
                         ui.horizontal(|ui| {
+                            ui.label("After Free Cell game start");
+                            ui.add(
+                                egui::DragValue::new(&mut self.freecell_game_start_ms)
+                                    .range(MINIMUM_ANIMATION_SETTLE_DELAY_MS..=MAXIMUM_ANIMATION_SETTLE_DELAY_MS)
+                                    .speed(10.0)
+                                    .suffix(" ms"),
+                            )
+                            .on_hover_text("Wait after starting the game before capturing the dealt board; independent of card and repeat-observation timings");
+                        });
+                        ui.horizontal(|ui| {
                             ui.label("Delayed observations per unresolved stage");
                             ui.add(egui::DragValue::new(&mut self.freecell_observation_limit)
                                 .range(1..=FREECELL_MAX_OBSERVATION_LIMIT).speed(1.0));
                         });
-                        ui.small("Automatic SUIT transfers may temporarily hide the HALO. Wait and recapture without card matching; Solver is activated only on a recognised Solver-off board.");
+                        ui.small("Automatic SUIT transfers may temporarily hide the HALO. Inactive Solver waits for game start and a fresh capture; active no-HALO gameplay gets a delayed capture before one refresh. Activation and refresh share one reserve per unresolved stage.");
                     } else if self.game_mode == GameMode::Klondike {
                         ui.horizontal(|ui| {
                             ui.label("After Klondike card / Draw / Recycle action");
@@ -1722,6 +1736,7 @@ impl QmpQemuSocketApp {
                         self.klondike_multi_step_actions = KLONDIKE_DEFAULT_MULTI_STEP_ACTIONS;
                         self.freecell_settle_ms = FREECELL_SETTLE_DELAY_MS;
                         self.freecell_reobserve_ms = FREECELL_REOBSERVE_DELAY_MS;
+                        self.freecell_game_start_ms = FREECELL_GAME_START_DELAY_MS;
                         self.freecell_multi_step_actions = FREECELL_DEFAULT_MULTI_STEP_ACTIONS;
                         self.freecell_observation_limit = FREECELL_DEFAULT_OBSERVATION_LIMIT;
                         self.multi_step_actions = DEFAULT_MULTI_STEP_ACTIONS;
@@ -1731,9 +1746,9 @@ impl QmpQemuSocketApp {
 
                 if self.game_mode == GameMode::FreeCell {
                     ui.small(format!(
-                        "Free Cell initial defaults: action {FREECELL_SETTLE_DELAY_MS} ms, repeat observation {FREECELL_REOBSERVE_DELAY_MS} ms, Multi-Step {FREECELL_DEFAULT_MULTI_STEP_ACTIONS} (0 = continuous). Beast gameplay may refine these independent timings; edits apply to the next run."
+                        "Free Cell initial defaults: action {FREECELL_SETTLE_DELAY_MS} ms, repeat observation {FREECELL_REOBSERVE_DELAY_MS} ms, game start {FREECELL_GAME_START_DELAY_MS} ms, Multi-Step {FREECELL_DEFAULT_MULTI_STEP_ACTIONS} (0 = continuous). Beast gameplay may refine these independent timings; edits apply to the next run."
                     ));
-                    ui.small("Each source HALO permits one click, settle and fresh observation. GAME WIN uses the reward panel, followed by expected OK, New Game and Play controls; decorations and card pixels are not matched.");
+                    ui.small("Each source HALO permits one click, settle and fresh observation. GAME WIN uses the reward panel, followed by optional Level Up OK, New Game and Play controls; decorations and card pixels are not matched.");
                 } else if self.game_mode == GameMode::Klondike {
                     ui.small(format!(
                         "Klondike defaults: action {KLONDIKE_SETTLE_DELAY_MS} ms from Beast gameplay, Solve animation {KLONDIKE_SOLVE_SETTLE_DELAY_MS} ms, repeat observation {KLONDIKE_REOBSERVE_DELAY_MS} ms, Multi-Step {KLONDIKE_DEFAULT_MULTI_STEP_ACTIONS} (0 = continuous). Editable timings apply to the next run."
@@ -1780,7 +1795,7 @@ impl QmpQemuSocketApp {
                     ui.monospace(format!("guest-input-authorised = {}; fresh canonical source required", self.game_mode.input_authorised()));
                     ui.monospace("priority = CELL 1–4, PLAY 1–8 bottom-up; SUIT is never scanned");
                     ui.monospace("source = solid outline; one click on the bottom card of a run");
-                    ui.monospace("toolbar = excluded; crossing-run evidence FC14 remains unavailable");
+                    ui.monospace("toolbar = excluded; clipped sources use the visible card above Y947");
                     ui.monospace("automatic SUIT transfers = guest-owned; no card matching or separate input");
                 } else if self.game_mode == GameMode::Klondike {
                     ui.monospace("guest-input-authorised = true; one guarded operation per action");
@@ -1850,8 +1865,8 @@ impl QmpQemuSocketApp {
 
 
                 if self.game_mode == GameMode::FreeCell {
-                    ui.monospace("no-highlight recovery = bounded fresh captures; activate only a recognised Solver-off board");
-                    ui.monospace("completion = one reward panel is one game; OK → New Game → Play → Solver");
+                    ui.monospace("no-highlight recovery = fresh capture after start/reobserve delay; one shared activation/refresh reserve");
+                    ui.monospace("completion = one reward panel is one game; optional Level Up OK → New Game → Play → fresh board");
                 } else if self.game_mode == GameMode::Klondike {
                     ui.monospace("no-highlight-recovery = positive completion check first; otherwise approved bounded Solver refresh; no speculative draw");
                     ui.monospace("completion = two fresh full gold/zero BLACK observations or positively recognised completed terminal scenes; one board per game");

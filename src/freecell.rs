@@ -1,6 +1,6 @@
 //! Free Cell's independent, single-frame Solver source detector.
 //!
-//! Native FC01-FC13 evidence supplies four CELL and eight PLAY columns. Only a
+//! Native FC01-FC14 and FC16-FC17 evidence supplies CELL and PLAY columns. Only a
 //! solid source outline is actionable; dark dashed destination guides are not.
 //! Every frame is classified independently, so stack compression, expansion and
 //! repeated source positions do not require card recognition or effect proofs.
@@ -48,6 +48,19 @@ pub const SOLVER_CLICK: PixelPoint = PixelPoint::new(602, 977);
 const MINIMUM_SOURCE_HEIGHT: u32 = 180;
 
 
+/// Existing complete-card click inset, also used from a clipped visible cutoff.
+const SOURCE_CLICK_BOTTOM_INSET: u32 = 40;
+
+
+/// Radius of a small paper-presence probe around a toolbar-clipped source click.
+const CLICK_PAPER_RADIUS: u32 = 8;
+
+
+/// Keep a clipped click's paper probe at least 18px below its closed top.
+/// The resulting 66 visible pixels are a coordinate bound, not a card-size guess.
+const MINIMUM_CLIPPED_SOURCE_HEIGHT: u32 = SOURCE_CLICK_BOTTOM_INSET + CLICK_PAPER_RADIUS + 18;
+
+
 /// Maximum tolerated rail gap around rounded corners or a shared card boundary.
 const MAXIMUM_RAIL_GAP: u32 = 10;
 
@@ -86,7 +99,7 @@ pub enum FreeCellTarget {
         column: u8,
         /// Inclusive upper outline row measured in the current frame.
         top: u32,
-        /// Exclusive lower outline row, strictly above the game toolbar.
+        /// Exclusive visible outline end, capped at the first game toolbar row.
         bottom: u32,
     },
 }
@@ -149,6 +162,13 @@ fn is_slot_edge(rgb: [u8; 3]) -> bool {
             && i16::from(green) - i16::from(red) >= 25
             && i16::from(green) - i16::from(blue) >= 20)
         || is_gold(rgb)
+}
+
+
+/// Bright neutral paper establishes a visible card around the clipped click.
+/// This is a single-frame presence check, not a card identity or effect proof.
+fn is_paper([red, green, blue]: [u8; 3]) -> bool {
+    red >= 180 && green >= 180 && blue >= 180
 }
 
 
@@ -226,9 +246,11 @@ fn crossbar(frame: &CapturedFrame, x: u32, y: u32) -> bool {
 }
 
 
-/// Find the lowest complete solid source, grouping connected card rails as one.
-/// Dashed destinations lack continuous rails and closed crossbars. A clipped
-/// source remains unresolved until original toolbar-crossing FC14 is supplied.
+/// Find the lowest solid source, grouping connected card rails as one.
+/// A complete source retains its closed top/bottom policy. FC14/FC16/FC17
+/// establish a second path with a closed top and opposing rails reaching the
+/// toolbar cutoff, plus paper around the visible click. No hidden bottom or
+/// toolbar pixel is read, and dashed destinations grant neither path authority.
 fn find_source(frame: &CapturedFrame, x: u32, scan_top: u32, scan_bottom: u32) -> Option<PixelRect> {
     let mut row = scan_bottom;
 
@@ -266,6 +288,26 @@ fn find_source(frame: &CapturedFrame, x: u32, scan_top: u32, scan_bottom: u32) -
         }
 
         let rail_height = lower_rail + 1 - upper_rail;
+        let top = (upper_rail.saturating_sub(10).max(scan_top)..=(upper_rail + 5).min(scan_bottom - 1))
+            .find(|y| crossbar(frame, x, *y));
+
+
+        if let Some(top) = top
+            && scan_bottom == TOOLBAR_TOP
+            && lower_rail == TOOLBAR_TOP - 1
+            && TOOLBAR_TOP - top >= MINIMUM_CLIPPED_SOURCE_HEIGHT
+            && matched_rows * 100 >= rail_height * 85
+            && (TOOLBAR_TOP - 4..TOOLBAR_TOP).all(|y| paired_rails(frame, x, y)) {
+            let click_x = x + CARD_WIDTH / 2;
+            let click_y = TOOLBAR_TOP - SOURCE_CLICK_BOTTOM_INSET;
+            let paper = PixelRect::new(click_x - CLICK_PAPER_RADIUS, click_y - CLICK_PAPER_RADIUS,
+                CLICK_PAPER_RADIUS * 2 + 1, CLICK_PAPER_RADIUS * 2 + 1);
+
+
+            if fraction_at_least(frame, paper, is_paper, 500) {
+                return Some(PixelRect::new(x, top, CARD_WIDTH, TOOLBAR_TOP - top));
+            }
+        }
 
 
         if rail_height < MINIMUM_SOURCE_HEIGHT - 10
@@ -274,8 +316,6 @@ fn find_source(frame: &CapturedFrame, x: u32, scan_top: u32, scan_bottom: u32) -
             continue;
         }
 
-        let top = (upper_rail.saturating_sub(10).max(scan_top)..=upper_rail + 5)
-            .find(|y| crossbar(frame, x, *y));
         let bottom = (lower_rail.saturating_sub(5)..(lower_rail + 11).min(scan_bottom))
             .rev().find(|y| crossbar(frame, x, *y));
 
@@ -294,7 +334,9 @@ fn find_source(frame: &CapturedFrame, x: u32, scan_top: u32, scan_bottom: u32) -
 }
 
 
-/// Validate source coordinates and construct exactly one bottom-card click.
+/// Validate source coordinates and construct exactly one source click.
+/// Complete sources retain their bottom-card click; clipped sources use only
+/// the visible cutoff and the paper-presence authority established by analysis.
 /// No changed-pixel effect threshold is attached to Free Cell actions.
 pub fn canonical_action(target: FreeCellTarget) -> Option<GuidedAction> {
     let (x, click_y, bounds) = match target {
@@ -305,10 +347,12 @@ pub fn canonical_action(target: FreeCellTarget) -> Option<GuidedAction> {
         FreeCellTarget::Play { column, top, bottom }
 
 
-            if (1..=8).contains(&column) && top >= PLAY_SCAN_TOP && bottom < TOOLBAR_TOP
-                && bottom.checked_sub(top).is_some_and(|height| height >= MINIMUM_SOURCE_HEIGHT) => {
+            if (1..=8).contains(&column) && top >= PLAY_SCAN_TOP && bottom <= TOOLBAR_TOP
+                && bottom.checked_sub(top).is_some_and(|height|
+                    height >= if bottom == TOOLBAR_TOP { MINIMUM_CLIPPED_SOURCE_HEIGHT }
+                        else { MINIMUM_SOURCE_HEIGHT }) => {
             let x = PLAY_X[usize::from(column - 1)];
-            (x, bottom - 40, PixelRect::new(x, top, CARD_WIDTH, bottom - top))
+            (x, bottom - SOURCE_CLICK_BOTTOM_INSET, PixelRect::new(x, top, CARD_WIDTH, bottom - top))
         }
         _ => return None,
     };
@@ -404,6 +448,9 @@ mod tests {
             11 => include_bytes!("../tests/fixtures/freecell-FC11.png"),
             12 => include_bytes!("../tests/fixtures/freecell-FC12.png"),
             13 => include_bytes!("../tests/fixtures/freecell-FC13.png"),
+            14 => include_bytes!("../tests/fixtures/freecell-FC14.png"),
+            16 => include_bytes!("../tests/fixtures/freecell-FC16.png"),
+            17 => include_bytes!("../tests/fixtures/freecell-FC17.png"),
             _ => panic!("unknown native Free Cell fixture"),
         };
 
@@ -535,7 +582,7 @@ mod tests {
 
     /// Destinations, SUIT outlines and toolbar pixels never become source input.
     #[test]
-    fn destination_guides_and_clipped_toolbar_sources_are_not_actions() {
+    fn destination_guides_and_unknown_clipped_sources_are_not_actions() {
 
 
         for (code, x, top) in [(2, PLAY_X[6], 580), (3, PLAY_X[4], 524)] {
@@ -552,10 +599,75 @@ mod tests {
             "SUIT has no Free Cell source scan");
         paint_source(&mut frame, PLAY_X[1], 800, 1_001);
         assert_eq!(analyse(&frame).unwrap().prediction, PredictedAction::NoHighlight,
-            "FC14 is absent; a truncated source cannot invent a bottom-card click");
+            "rails without visible card paper cannot invent a clipped click");
         paint(&mut frame, PixelRect::new(0, TOOLBAR_TOP, 1_920, 1_080 - TOOLBAR_TOP), [255, 255, 255]);
         assert_eq!(analyse(&frame).unwrap().prediction, PredictedAction::NoHighlight,
             "toolbar pixels are outside source authority");
+    }
+
+
+    /// Native clipped single cards and runs use the visible cutoff, never a hidden bottom.
+    #[test]
+    fn native_toolbar_clipped_sources_ignore_all_toolbar_pixels() {
+
+
+        for (code, column, top, click_x) in [(14, 3, 786, 671), (16, 3, 627, 671), (17, 1, 627, 286)] {
+            let mut frame = fixture(code);
+            let expected = PredictedAction::Action(canonical_action(FreeCellTarget::Play {
+                column, top, bottom: TOOLBAR_TOP,
+            }).unwrap());
+            assert_eq!(analyse(&frame).unwrap().prediction, expected, "FC{code:02}");
+            let PredictedAction::Action(action) = expected else { panic!("native clipped source"); };
+            assert_eq!(action.operation(), InputOperation::Click(PixelPoint::new(click_x, 907)));
+            assert_eq!(action.minimum_changed_pixels(), 0);
+
+
+            for colour in [[0, 0, 0], [255, 255, 255], [235, 195, 90], [20, 120, 75]] {
+                paint(&mut frame, PixelRect::new(0, TOOLBAR_TOP, 1_920, 1_080 - TOOLBAR_TOP), colour);
+                assert_eq!(analyse(&frame).unwrap().prediction, expected,
+                    "FC{code:02}: toolbar pixels cannot affect the visible source");
+            }
+        }
+    }
+
+
+    /// Clipping does not excuse a missing top, disconnected/dashed rails or no card.
+    #[test]
+    fn clipped_source_requires_closed_top_connected_rails_and_visible_paper() {
+        let felt = [20, 120, 75];
+        let x = PLAY_X[2];
+
+
+        for (label, bounds, colour) in [
+            ("closed top", PixelRect::new(x - 10, 780, CARD_WIDTH + 21, 19), felt),
+            ("left rail", PixelRect::new(x - 10, 799, 10, TOOLBAR_TOP - 799), felt),
+            ("rails reaching cutoff", PixelRect::new(x + CARD_WIDTH, TOOLBAR_TOP - 4, 11, 4), felt),
+            ("visible card paper", PixelRect::new(663, 899, 17, 17), [0, 0, 0]),
+        ] {
+            let mut frame = fixture(14);
+            paint(&mut frame, bounds, colour);
+            assert_eq!(analyse(&frame).unwrap().prediction, PredictedAction::NoHighlight, "missing {label}");
+        }
+
+        let mut frame = fixture(14);
+
+
+        for y in 786..TOOLBAR_TOP {
+
+
+            if (y - 786) % 26 >= 12 {
+                paint(&mut frame, PixelRect::new(x - 10, y, 10, 1), felt);
+                paint(&mut frame, PixelRect::new(x + CARD_WIDTH, y, 11, 1), felt);
+            }
+        }
+
+        assert_eq!(analyse(&frame).unwrap().prediction, PredictedAction::NoHighlight,
+            "dashed opposing rails do not establish a clipped source");
+        let mut frame = fixture(14);
+        paint(&mut frame, PixelRect::new(x - 10, 780, CARD_WIDTH + 21, 103), felt);
+        paint(&mut frame, PixelRect::new(x + 18, 882, CARD_WIDTH - 36, 1), [235, 195, 90]);
+        assert_eq!(analyse(&frame).unwrap().prediction, PredictedAction::NoHighlight,
+            "65 visible rows do not enclose the click inset and its paper probe");
     }
 
 
@@ -581,7 +693,8 @@ mod tests {
             FreeCellTarget::Play { column: 0, top: 400, bottom: 600 },
             FreeCellTarget::Play { column: 9, top: 400, bottom: 600 },
             FreeCellTarget::Play { column: 1, top: 300, bottom: 600 },
-            FreeCellTarget::Play { column: 1, top: 400, bottom: 947 },
+            FreeCellTarget::Play { column: 1, top: 400, bottom: 948 },
+            FreeCellTarget::Play { column: 1, top: 882, bottom: 947 },
             FreeCellTarget::Play { column: 1, top: 600, bottom: 400 },
             FreeCellTarget::Play { column: 1, top: u32::MAX, bottom: u32::MAX },
         ] {

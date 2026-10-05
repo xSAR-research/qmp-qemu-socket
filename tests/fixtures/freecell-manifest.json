@@ -6,7 +6,6 @@
   ],
   "mode": "RGBA",
   "toolbar_top_exclusive_source_scan": 947,
-  "missing_evidence": "FC14 toolbar-crossing run was not supplied; clipped-source fallback is not enabled.",
   "files": [
     {
       "fixture": "freecell-FC01.png",
@@ -113,12 +112,37 @@
       "observation": "Fresh deal after Play, Solver off."
     },
     {
+      "fixture": "freecell-FC14.png",
+      "source": "qmp-qemu-socket 261006 023708 Move-from-toolbar.png",
+      "source_sha256": "fbd122cf72301b6941c4fb97c679d5a18f8720ad41f37f0a347b72e64096b77e",
+      "fixture_sha256": "fbd122cf72301b6941c4fb97c679d5a18f8720ad41f37f0a347b72e64096b77e",
+      "bytes": 3293798,
+      "observation": "PLAY 3 single five of spades source has its lower outline hidden by toolbar; dashed SUIT 4 destination."
+    },
+    {
       "fixture": "freecell-FC15.png",
       "source": "qmp-qemu-socket 261005 235829 STOPPED.png",
       "source_sha256": "af7bef64ffea86f51a3977aeeeca642a8181e81628730a59022fed98b9a13891",
       "fixture_sha256": "af7bef64ffea86f51a3977aeeeca642a8181e81628730a59022fed98b9a13891",
       "bytes": 1919954,
       "observation": "Completed one-board game, 2000 XP; New Game visible without a Level Up OK screen."
+    },
+    {
+      "fixture": "freecell-FC16.png",
+      "source": "qmp-qemu-socket 261006 024656 Second-failure-with-same-problem.png",
+      "source_sha256": "87b9f6048d722f889363ab0be2e06e32cf0d920c6f46605631e91f8b95e7e0be",
+      "fixture_sha256": "87b9f6048d722f889363ab0be2e06e32cf0d920c6f46605631e91f8b95e7e0be",
+      "bytes": 3310733,
+      "observation": "PLAY 3 connected nine of clubs/eight of hearts/seven of spades/six of diamonds source reaches toolbar; dashed PLAY 6 destination."
+    },
+    {
+      "fixture": "freecell-FC17.png",
+      "source": "qmp-qemu-socket 261006 024721 third-failure-same-problem.png",
+      "source_sha256": "f0dd585f9ff503bca13509ddc827d367819499e984950cbe5471b1cd8072d29c",
+      "fixture_sha256": "f0dd585f9ff503bca13509ddc827d367819499e984950cbe5471b1cd8072d29c",
+      "bytes": 3282723,
+      "observation": "PLAY 1 connected king of diamonds/queen of spades/jack of diamonds/ten of spades source reaches toolbar; dashed empty PLAY 5 destination."
     }
-  ]
+  ],
+  "toolbar_source_policy": "Source reads and clicks remain above Y947; FC14/FC16/FC17 evidence supports visible clipped PLAY sources."
 }

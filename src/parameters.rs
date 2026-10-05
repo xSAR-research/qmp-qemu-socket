@@ -13,7 +13,7 @@ pub const APP_NAME: &str = env!("CARGO_PKG_NAME");
 
 
 /// Package version and candidate number shown by the UI and session log.
-pub const RELEASE_LABEL: &str = concat!("v", env!("CARGO_PKG_VERSION"), ", candidate 3");
+pub const RELEASE_LABEL: &str = concat!("v", env!("CARGO_PKG_VERSION"), ", candidate 4");
 
 
 /// Initial application window width in egui logical points.
@@ -930,6 +930,10 @@ pub const FREECELL_SETTLE_DELAY_MS: u64 = 750;
 pub const FREECELL_REOBSERVE_DELAY_MS: u64 = 1_000;
 
 
+/// Charlie-confirmed editable delay after starting a Free Cell game.
+pub const FREECELL_GAME_START_DELAY_MS: u64 = 1_000;
+
+
 /// Default TriPeaks draw settling interval as a typed duration.
 pub const DRAW_ANIMATION_SETTLE_DELAY: Duration =
     Duration::from_millis(DRAW_ANIMATION_SETTLE_DELAY_MS);
@@ -1040,6 +1044,8 @@ pub struct AnimationSettleDelays {
     pub freecell_settle: Duration,
     /// Delay between bounded input-free Free Cell result observations.
     pub freecell_reobserve: Duration,
+    /// Delay after starting a Free Cell game before observing the dealt board.
+    pub freecell_game_start: Duration,
 }
 
 
@@ -1061,6 +1067,7 @@ impl AnimationSettleDelays {
             klondike_reobserve: Duration::from_millis(KLONDIKE_REOBSERVE_DELAY_MS),
             freecell_settle: Duration::from_millis(FREECELL_SETTLE_DELAY_MS),
             freecell_reobserve: Duration::from_millis(FREECELL_REOBSERVE_DELAY_MS),
+            freecell_game_start: Duration::from_millis(FREECELL_GAME_START_DELAY_MS),
         }
     }
 
@@ -1119,6 +1126,16 @@ impl AnimationSettleDelays {
     }
 
 
+    /// Set the independent bounded Free Cell game-start delay for the next run.
+    pub fn with_freecell_game_start_millis(mut self, game_start_ms: u64) -> Self {
+        self.freecell_game_start = Duration::from_millis(game_start_ms.clamp(
+            MINIMUM_ANIMATION_SETTLE_DELAY_MS,
+            MAXIMUM_ANIMATION_SETTLE_DELAY_MS,
+        ));
+        self
+    }
+
+
     /// Set the separately editable Solve delay without changing card/draw timing.
     pub fn with_klondike_solve_millis(mut self, solve_ms: u64) -> Self {
         self.klondike_solve = Duration::from_millis(solve_ms.clamp(
@@ -1148,6 +1165,7 @@ impl Default for AnimationSettleDelays {
             klondike_reobserve: Duration::from_millis(KLONDIKE_REOBSERVE_DELAY_MS),
             freecell_settle: Duration::from_millis(FREECELL_SETTLE_DELAY_MS),
             freecell_reobserve: Duration::from_millis(FREECELL_REOBSERVE_DELAY_MS),
+            freecell_game_start: Duration::from_millis(FREECELL_GAME_START_DELAY_MS),
         }
     }
 }
@@ -1472,11 +1490,25 @@ mod tests {
         let defaults = AnimationSettleDelays::default();
         assert_eq!(defaults.freecell_settle, Duration::from_millis(750));
         assert_eq!(defaults.freecell_reobserve, Duration::from_millis(1_000));
-        let edited = defaults.with_freecell_millis(1_250, 850);
+        assert_eq!(defaults.freecell_game_start, Duration::from_millis(1_000));
+        assert_eq!(
+            AnimationSettleDelays::from_millis(123, 987, 2_345).freecell_game_start,
+            defaults.freecell_game_start,
+        );
+        let edited = defaults.with_freecell_millis(1_250, 850)
+            .with_freecell_game_start_millis(1_750);
         let active = StepRunSettings::new(edited, FREECELL_DEFAULT_MULTI_STEP_ACTIONS);
         let next = edited.with_freecell_millis(0, u64::MAX);
         assert_eq!(active.animation_delays().freecell_settle, Duration::from_millis(1_250));
         assert_eq!(active.animation_delays().freecell_reobserve, Duration::from_millis(850));
+        assert_eq!(active.animation_delays().freecell_game_start, Duration::from_millis(1_750));
+        assert_eq!(next.freecell_game_start, edited.freecell_game_start);
+        let next_game_start = next.with_freecell_game_start_millis(u64::MAX);
+        assert_eq!(next_game_start.freecell_game_start, Duration::from_millis(5_000));
+        let next_game_start = next_game_start.with_freecell_game_start_millis(0);
+        assert_eq!(next_game_start.freecell_game_start, Duration::ZERO);
+        assert_eq!(next_game_start.with_freecell_game_start_millis(1_750), next);
+        assert_eq!(active.animation_delays().freecell_game_start, Duration::from_millis(1_750));
         assert_eq!(next.freecell_settle, Duration::ZERO);
         assert_eq!(next.freecell_reobserve, Duration::from_millis(5_000));
         assert_eq!(next.with_freecell_millis(u64::MAX, 0).freecell_settle, Duration::from_millis(5_000));

@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.3.0 — candidate 4
+
+- Enable evidenced toolbar-clipped Free Cell PLAY sources using only visible
+  source geometry and card paper above Y=947; never infer the hidden lower edge
+  or read toolbar pixels for source authority. Connected runs remain one click.
+- Add an independent editable game-start wait, default 1000 ms as confirmed by
+  Charlie, followed by fresh capture before inactive Solver activation.
+- Restore one bounded Solver refresh for a supported no-HALO board after an
+  input-free re-observation and independent GAME WIN check. Report observed
+  Solver state; uncertain input is not replayed.
+- Add original FC14/FC16/FC17 evidence and focused regression coverage. Preserve
+  candidate 3 optional LEVEL UP, shared capture and accepted earlier modes.
+- Pin the guarded installer to pushed candidate 3 at `676afb477495a166a67132a5735b2347b343585d`.
+
 ## v1.3.0 — candidate 3
 
 - Make Free Cell LEVEL UP optional after score counting. Each fresh frame checks

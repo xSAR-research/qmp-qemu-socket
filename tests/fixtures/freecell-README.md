@@ -1,7 +1,7 @@
 # Free Cell native Solver evidence
 
-These fourteen PNG files are complete, byte-identical originals from Charlie's
-5 October 2026 captures, taken through the application's manual QMP PNG capture
+These seventeen PNG files are complete, byte-identical originals from Charlie's
+5–6 October 2026 captures, taken through the application's manual QMP PNG capture
 and exact-byte save. They are not crops, sparse fixtures, OCR products or resized
 images. Each frame is 1920×1080 RGBA, including the title bar, guest game toolbar
 and Windows taskbar. `freecell-manifest.json` records original filenames and
@@ -24,7 +24,10 @@ SHA-256 digests.
 | FC11 | Congratulations, New Game visible | Expected terminal New Game stage |
 | FC12 | New Game chooser, Play visible | Expected terminal Play stage |
 | FC13 | Fresh deal, Solver off | Gameplay; activate Solver before source play |
+| FC14 | PLAY 3 single five of spades source crosses toolbar; SUIT 4 guide | Visible clipped PLAY 3 source |
 | FC15 | Completed game, 2000 XP; New Game visible without LEVEL UP | New Game ready; OK absent |
+| FC16 | Four-card PLAY 3 source crosses toolbar; PLAY 6 guide | One visible clipped PLAY 3 run |
+| FC17 | Four-card PLAY 1 source crosses toolbar; empty PLAY 5 guide | One visible clipped PLAY 1 run |
 
 FC05's source is CELL 2, not a SUIT card. FC06 and FC07 show the same highlighted
 run; they do not form a before/after proof of transfer. The frames' source
@@ -36,14 +39,14 @@ CELL positions are numbered 1–4 and PLAY columns 1–8, left to right. CELL so
 have priority. PLAY scanning starts from the lowest solid source, with
 left-to-right tie-breaking. A run's exterior rails are grouped into one source;
 its inner card outlines are not separate candidate moves. The click is inside
-the bottom highlighted card, above the game toolbar.
+the visible bottom highlighted card, above the game toolbar.
 
 The game toolbar begins at native row 947. Gameplay source scanning excludes
-that row and everything below it. FC14, the requested original showing a run
-crossing the toolbar, was not supplied. The current detector requires a complete visible
-source outline above that boundary and does not infer a clipped bottom card.
-An unresolved clipped source receives input-free recaptures and then a guarded
-stop with its latest frame and log.
+that row and everything below it. FC14/FC16/FC17 now supply native single-card
+and run overlap cases. A clipped PLAY source needs a closed visible top,
+connected opposing rails reaching the cutoff and card paper around its click.
+Its exclusive bottom is Y=947, documenting the visible cutoff rather than an
+inferred hidden card edge. Source scans do not read the overlaid toolbar.
 
 SUIT cards are not sources in this guest Free Cell contract. There is no Draw,
 Recycle or Solve action. Eligible cards can automatically move to SUIT; absent
@@ -62,5 +65,7 @@ or settle-time measurements. Automatic transfers, complete game-win progression,
 new-game Solver activation and STOP/socket invalidation require live Beast checks.
 Charlie reported successful candidate-2 gameplay and win entry; FC15 and its log
 expose the previously unsupported skipped-LEVEL-UP branch. Candidate 3 requires
-verification both with and without a level change. Native FC14 remains a separate
-outstanding evidence case.
+verification both with and without a level change. Candidate 4 also requires live
+checks of all three clipped sources, game-start delay and bounded Solver refresh.
+The attached 49-line log covers the first toolbar stall; the later restart excerpt
+was pasted separately. Still images do not measure deal or transfer durations.

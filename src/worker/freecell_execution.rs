@@ -7,6 +7,9 @@
 //! evidence does. Only continuous runs advance the expected terminal controls.
 //! After score skip, Level Up is optional: inspect local OK and New Game
 //! readiness on each fresh frame and accept exactly one ready control.
+//! An inactive Solver board receives an editable start delay and fresh capture
+//! before activation. Active no-HALO gameplay receives one delayed observation
+//! before one Solver refresh. Both share one input reserve per unresolved context.
 
 use std::{path::Path, sync::atomic::{AtomicBool, Ordering}, time::{Duration, Instant}};
 
@@ -59,7 +62,7 @@ trait FreeCellIo {
     fn input(&mut self, plan: StepPlan) -> Result<(), String>;
 
 
-    /// Activate the positively recognised inactive Solver once per context.
+    /// Activate or refresh Solver once from fresh positively recognised gameplay.
     fn solver(&mut self) -> Result<(), String>;
 
 
@@ -233,8 +236,8 @@ fn drive_run(
     validate_operation_limit(settings.operation_limit())?;
     let delays = settings.animation_delays();
     send_log(event_tx, format!(
-        "Free Cell fresh-HALO execution: action/automatic-transfer settle={} ms, no-HALO observation={} ms, delayed allowance={}. One source click consumes one action; Solver and terminal clicks do not. No card identity, pixel difference, SUIT input, Draw, Recycle or Solve is used. Continuous 0 may restart one-board games through Score, optional Level Up OK, New Game and Play. After score skip, exactly one ready local OK or New Game control selects the next stage; neither receives bounded recaptures and both stop without input.",
-        delays.freecell_settle.as_millis(), delays.freecell_reobserve.as_millis(), settings.freecell_observation_limit(),
+        "Free Cell fresh-HALO execution: game-start delay={} ms, action/automatic-transfer settle={} ms, no-HALO observation={} ms, delayed allowance={}. Inactive Solver receives one start delay and fresh capture before activation. Active no-HALO gameplay receives one delayed input-free observation before one refresh; activation and refresh share one reserve per unresolved context. One source click consumes one action; Solver and terminal clicks do not. No card identity, pixel difference, SUIT input, Draw, Recycle or Solve is used. Continuous 0 may restart one-board games through Score, optional Level Up OK, New Game and Play. After score skip, exactly one ready local OK or New Game control selects the next stage; neither receives bounded recaptures and both stop without input.",
+        delays.freecell_game_start.as_millis(), delays.freecell_settle.as_millis(), delays.freecell_reobserve.as_millis(), settings.freecell_observation_limit(),
     ));
     capture_latest(io, latest, event_tx, cancel_requested)?;
     let mut actions = 0usize;
@@ -295,6 +298,8 @@ fn await_context(
 ) -> Result<Option<TerminalStage>, String> {
     let mut solver_reserved = false;
     let mut delayed = 0usize;
+    let mut start_observed = false;
+    let mut active_reobserved = false;
 
 
     loop {
@@ -308,6 +313,7 @@ fn await_context(
             send_log(event_tx, format!("Free Cell independent one-board GAME WIN entry={stage:?}; missing HALO alone did not establish completion."));
             return Ok(stage);
         }
+        let mut observed_solver = "unavailable: unsupported scene";
 
 
         if observation.gameplay_scene {
@@ -324,27 +330,56 @@ fn await_context(
             }
             let solver_active = freecell::solver_active(&observation.frame)
                 .map_err(|error| format!("Free Cell Solver-state analysis failed: {error}"))?;
+            observed_solver = if solver_active { "active" } else { "inactive" };
 
 
-            if !solver_active && !solver_reserved {
+            if !solver_reserved {
+
+
+                if !solver_active && !start_observed {
+                    start_observed = true;
+                    send_status(event_tx, "Settling Free Cell board before Solver activation".to_owned());
+                    send_log(event_tx, format!("Free Cell Solver observed inactive with no HALO: waiting game-start delay={} ms once, then fresh input-free capture before deciding activation; guest input sent=0.", settings.animation_delays().freecell_game_start.as_millis()));
+                    io.wait(settings.animation_delays().freecell_game_start)?;
+                    capture_latest(io, latest, event_tx, cancel_requested)?;
+                    continue;
+                }
+
+
+                if solver_active && !active_reobserved {
+
+
+                    if delayed >= settings.freecell_observation_limit() {
+                        return Err(format!("Free Cell active no-HALO observation allowance exhausted after {delayed} delayed captures before Solver refresh; no further input authorised"));
+                    }
+                    active_reobserved = true;
+                    delayed += 1;
+                    send_log(event_tx, format!("Free Cell Solver observed active with no HALO: input-free re-observation {delayed}/{} after {} ms allows automatic transfers before considering one refresh.", settings.freecell_observation_limit(), settings.animation_delays().freecell_reobserve.as_millis()));
+                    io.wait(settings.animation_delays().freecell_reobserve)?;
+                    capture_latest(io, latest, event_tx, cancel_requested)?;
+                    continue;
+                }
                 guard_input(io, cancel_requested)?;
                 solver_reserved = true;
                 *input_attempted = true;
                 send_state(event_tx, WorkerState::Acting);
-                send_status(event_tx, "Activating Free Cell Solver once".to_owned());
+                let operation = if solver_active { "refresh" } else { "activation" };
+                send_status(event_tx, format!("Free Cell Solver {operation} once"));
+                send_log(event_tx, format!("Free Cell Solver {operation}: fresh supported no-HALO board, observed Solver={observed_solver}; one click consumes this unresolved context's shared activation/refresh reserve."));
                 io.solver()?;
                 io.wait(settings.animation_delays().freecell_settle)?;
                 capture_latest(io, latest, event_tx, cancel_requested)?;
+                delayed = 0;
                 continue;
             }
         }
 
 
         if delayed >= settings.freecell_observation_limit() {
-            return Err(format!("Free Cell source/win observation allowance exhausted after {delayed} delayed captures; scene={}, Solver activation reserved={solver_reserved}; no speculative input authorised", observation.gameplay_scene));
+            return Err(format!("Free Cell source/win observation allowance exhausted after {delayed} delayed captures; scene={}, observed Solver={observed_solver}, activation/refresh reserved={solver_reserved}; no further input authorised", observation.gameplay_scene));
         }
         delayed += 1;
-        send_log(event_tx, format!("Free Cell no-HALO observation {delayed}/{}: scene={}; waiting {} ms, then input-free recapture; active Solver is not clicked again.", settings.freecell_observation_limit(), observation.gameplay_scene, settings.animation_delays().freecell_reobserve.as_millis()));
+        send_log(event_tx, format!("Free Cell no-HALO observation {delayed}/{}: scene={}, observed Solver={observed_solver}, activation/refresh reserved={solver_reserved}; waiting {} ms, then input-free recapture.", settings.freecell_observation_limit(), observation.gameplay_scene, settings.animation_delays().freecell_reobserve.as_millis()));
         io.wait(settings.animation_delays().freecell_reobserve)?;
         capture_latest(io, latest, event_tx, cancel_requested)?;
     }
@@ -593,6 +628,8 @@ mod tests {
         StopAtProbe,
         /// Set STOP after acquiring the first decoded frame.
         StopAfterCapture,
+        /// Set STOP during the first requested settle or observation wait.
+        StopOnWait,
     }
 
 
@@ -606,6 +643,12 @@ mod tests {
         controls: Vec<TerminalStage>,
         /// Attempted activations, independent from the source-action budget.
         solver_clicks: usize,
+        /// Actual native banner state observed at each attempted Solver input.
+        solver_states: Vec<Option<bool>>,
+        /// Acquisition count at Solver delivery proves a new capture preceded it.
+        solver_capture_counts: Vec<usize>,
+        /// Banner classification from the latest acquired pixels, not a mocked state.
+        last_solver_state: Option<bool>,
         /// Total acquisitions, distinguishing immediate from delayed observations.
         captures: usize,
         /// Requested settle and input-free observation intervals.
@@ -623,6 +666,7 @@ mod tests {
         fn capture(&mut self) -> Result<CapturedFrame, String> {
             self.captures += 1;
             let frame = self.frames.pop_front().ok_or_else(|| "fixture sequence exhausted".to_owned())?;
+            self.last_solver_state = freecell::solver_active(&frame).ok();
 
 
             if self.fault == Fault::StopAfterCapture {
@@ -652,6 +696,8 @@ mod tests {
 
         fn solver(&mut self) -> Result<(), String> {
             self.solver_clicks += 1;
+            self.solver_states.push(self.last_solver_state);
+            self.solver_capture_counts.push(self.captures);
 
 
             if self.fault == Fault::Solver { Err("injected uncertain Solver".to_owned()) } else { Ok(()) }
@@ -668,6 +714,11 @@ mod tests {
 
         fn wait(&mut self, duration: Duration) -> Result<(), String> {
             self.waits.push(duration);
+
+
+            if self.fault == Fault::StopOnWait {
+                self.cancel.store(true, Ordering::Release);
+            }
             require_running(self.cancel)
         }
     }
@@ -708,19 +759,29 @@ mod tests {
 
     /// Construct a deterministic adapter with no fabricated classifier outputs.
     fn fake(frames: Vec<CapturedFrame>, cancel: &AtomicBool) -> FakeIo<'_> {
-        FakeIo { frames: frames.into(), sources: Vec::new(), controls: Vec::new(), solver_clicks: 0, captures: 0, waits: Vec::new(), fault: Fault::None, cancel }
+        FakeIo {
+            frames: frames.into(), sources: Vec::new(), controls: Vec::new(),
+            solver_clicks: 0, solver_states: Vec::new(), solver_capture_counts: Vec::new(),
+            last_solver_state: None, captures: 0, waits: Vec::new(), fault: Fault::None, cancel,
+        }
     }
 
 
     /// Run the exact production driver with isolated bounded event channels.
     fn run(io: &mut FakeIo<'_>, limit: usize, observations: usize, latest: &mut Option<FrameObservation>) -> Result<RunOutcome, String> {
+        let settings = StepRunSettings::new(AnimationSettleDelays::default(), limit).with_freecell_observation_limit(observations);
+        run_with_settings(io, settings, latest)
+    }
+
+
+    /// Preserve custom snapshotted timing while exercising the production controller.
+    fn run_with_settings(io: &mut FakeIo<'_>, settings: StepRunSettings, latest: &mut Option<FrameObservation>) -> Result<RunOutcome, String> {
         let (events, _receiver) = std::sync::mpsc::channel();
         let events = WorkerEventSink {
             events,
             latest_frame: super::super::LatestFrameSlot::default(),
             capture_context: std::sync::Mutex::new(None),
         };
-        let settings = StepRunSettings::new(AnimationSettleDelays::default(), limit).with_freecell_observation_limit(observations);
         let mut attempted = false;
         let cancel = io.cancel;
         drive_run(io, settings, &events, cancel, latest, &mut attempted)
@@ -731,14 +792,44 @@ mod tests {
     #[test]
     fn initial_solver_activation_then_one_action_and_fresh_result() {
         let cancel = AtomicBool::new(false);
-        let mut io = fake(vec![fixture(1), fixture(2), fixture(3)], &cancel);
+        let mut io = fake(vec![fixture(1), fixture(1), fixture(2), fixture(3)], &cancel);
         let mut latest = None;
         assert_eq!(run(&mut io, 1, 3, &mut latest), Ok(RunOutcome::Completed(1)));
         assert_eq!(io.solver_clicks, 1);
         assert_eq!(io.sources.len(), 1);
-        assert_eq!(io.captures, 3);
+        assert_eq!(io.captures, 4);
+        assert_eq!(io.solver_states, [Some(false)]);
+        assert_eq!(io.solver_capture_counts, [2]);
+        assert_eq!(io.waits[0], AnimationSettleDelays::default().freecell_game_start);
         assert!(io.controls.is_empty());
         assert_eq!(latest.unwrap().frame.pixels, fixture(3).pixels);
+    }
+
+
+    /// The editable start delay precedes a new capture, then the inactive-state click.
+    #[test]
+    fn editable_start_delay_is_snapshotted_before_fresh_solver_activation() {
+        let cancel = AtomicBool::new(false);
+        let mut io = fake(vec![fixture(1), fixture(1), fixture(2), fixture(3)], &cancel);
+        let delays = AnimationSettleDelays::default().with_freecell_game_start_millis(1_750);
+        let settings = StepRunSettings::new(delays, 1).with_freecell_observation_limit(3);
+        assert_eq!(run_with_settings(&mut io, settings, &mut None), Ok(RunOutcome::Completed(1)));
+        assert_eq!(io.waits, [Duration::from_millis(1_750), delays.freecell_settle, delays.freecell_settle]);
+        assert_eq!(io.solver_states, [Some(false)]);
+        assert_eq!(io.solver_capture_counts, [2]);
+    }
+
+
+    /// A source appearing during the start wait prevents an obsolete Solver click.
+    #[test]
+    fn start_delay_fresh_capture_uses_appearing_halo_without_solver_activation() {
+        let cancel = AtomicBool::new(false);
+        let mut io = fake(vec![fixture(1), fixture(2), fixture(3)], &cancel);
+        assert_eq!(run(&mut io, 1, 3, &mut None), Ok(RunOutcome::Completed(1)));
+        assert_eq!(io.solver_clicks, 0);
+        assert_eq!(io.sources.len(), 1);
+        assert_eq!(io.captures, 3);
+        assert_eq!(io.waits[0], AnimationSettleDelays::default().freecell_game_start);
     }
 
 
@@ -747,7 +838,7 @@ mod tests {
     fn native_source_classes_and_runs_use_one_click_without_pixel_proof() {
 
 
-        for number in [2, 3, 4, 5, 6, 7, 8] {
+        for number in [2, 3, 4, 5, 6, 7, 8, 14, 16, 17] {
             let cancel = AtomicBool::new(false);
             let mut io = fake(vec![fixture(number), fixture(number)], &cancel);
             assert_eq!(run(&mut io, 1, 3, &mut None), Ok(RunOutcome::Completed(1)), "FC{number:02}");
@@ -772,11 +863,11 @@ mod tests {
     #[test]
     fn missing_halo_then_native_source_resumes_without_input_during_gap() {
         let cancel = AtomicBool::new(false);
-        let mut io = fake(vec![active_without_halo(), active_without_halo(), fixture(7), fixture(8)], &cancel);
+        let mut io = fake(vec![active_without_halo(), fixture(7), fixture(8)], &cancel);
         assert_eq!(run(&mut io, 1, 3, &mut None), Ok(RunOutcome::Completed(1)));
         assert_eq!(io.sources.len(), 1);
         assert_eq!(io.solver_clicks, 0);
-        assert_eq!(io.captures, 4);
+        assert_eq!(io.captures, 3);
     }
 
 
@@ -794,15 +885,83 @@ mod tests {
     }
 
 
-    /// An active no-HALO board never spends its allowance on redundant Solver clicks.
+    /// Active no-HALO gameplay refreshes once, then exhausts bounded read-only recovery.
     #[test]
-    fn active_solver_without_halo_stops_after_read_only_allowance() {
+    fn active_solver_without_halo_refreshes_once_then_stops_after_allowance() {
         let cancel = AtomicBool::new(false);
-        let mut io = fake(vec![active_without_halo(), active_without_halo(), active_without_halo()], &cancel);
+        let mut io = fake(vec![active_without_halo(), active_without_halo(), active_without_halo(), active_without_halo(), active_without_halo()], &cancel);
         assert!(run(&mut io, 0, 2, &mut None).unwrap_err().contains("allowance exhausted"));
-        assert_eq!(io.captures, 3);
-        assert_eq!(io.solver_clicks, 0);
+        assert_eq!(io.captures, 5);
+        assert_eq!(io.solver_clicks, 1);
+        assert_eq!(io.solver_states, [Some(true)]);
+        assert_eq!(io.solver_capture_counts, [2]);
         assert!(io.sources.is_empty() && io.controls.is_empty());
+    }
+
+
+    /// One fresh no-HALO recapture permits one active-state refresh and fresh action.
+    #[test]
+    fn active_no_halo_refresh_follows_recapture_then_fresh_supported_source() {
+        let cancel = AtomicBool::new(false);
+        let mut io = fake(vec![active_without_halo(), active_without_halo(), fixture(7), fixture(8)], &cancel);
+        assert_eq!(run(&mut io, 1, 3, &mut None), Ok(RunOutcome::Completed(1)));
+        assert_eq!(io.solver_clicks, 1);
+        assert_eq!(io.solver_states, [Some(true)]);
+        assert_eq!(io.solver_capture_counts, [2]);
+        assert_eq!(io.sources.len(), 1);
+        assert_eq!(io.captures, 4);
+        assert_eq!(io.waits, [AnimationSettleDelays::default().freecell_reobserve,
+            AnimationSettleDelays::default().freecell_settle, AnimationSettleDelays::default().freecell_settle]);
+    }
+
+
+    /// A refresh that leaves Solver off cannot spend a second activation reserve.
+    #[test]
+    fn solver_refresh_to_inactive_state_never_activates_again_in_same_context() {
+        let cancel = AtomicBool::new(false);
+        let mut io = fake(vec![active_without_halo(), active_without_halo(), fixture(1), fixture(1), fixture(1)], &cancel);
+        assert!(run(&mut io, 0, 2, &mut None).unwrap_err().contains("allowance exhausted"));
+        assert_eq!(io.solver_clicks, 1);
+        assert_eq!(io.solver_states, [Some(true)]);
+        assert_eq!(io.solver_capture_counts, [2]);
+        assert_eq!(io.captures, 5);
+        assert!(io.sources.is_empty() && io.controls.is_empty());
+    }
+
+
+    /// Win entry after either pre-Solver wait takes priority over activation or refresh.
+    #[test]
+    fn win_during_start_or_active_observation_wait_prevents_solver_input() {
+
+
+        for initial in [fixture(1), active_without_halo()] {
+            let cancel = AtomicBool::new(false);
+            let mut io = fake(vec![initial, fixture(9)], &cancel);
+            assert_eq!(run(&mut io, 1, 3, &mut None), Ok(RunOutcome::GameWon(0)));
+            assert_eq!(io.solver_clicks, 0);
+            assert_eq!(io.captures, 2);
+            assert!(io.sources.is_empty() && io.controls.is_empty());
+        }
+    }
+
+
+    /// STOP during either pre-Solver wait prevents input and retains its last frame.
+    #[test]
+    fn stop_during_start_or_active_observation_wait_sends_no_solver_input() {
+
+
+        for initial in [fixture(1), active_without_halo()] {
+            let cancel = AtomicBool::new(false);
+            let expected_pixels = initial.pixels.clone();
+            let mut io = fake(vec![initial], &cancel);
+            io.fault = Fault::StopOnWait;
+            let mut latest = None;
+            assert!(run(&mut io, 0, 3, &mut latest).unwrap_err().contains("STOP"));
+            assert_eq!(io.solver_clicks, 0);
+            assert_eq!(io.captures, 1);
+            assert!(io.sources.is_empty() && io.controls.is_empty());
+            assert_eq!(latest.unwrap().frame.pixels, expected_pixels);
+        }
     }
 
 
@@ -817,12 +976,14 @@ mod tests {
 
 
             if prefix { frames.push(fixture(8)); }
-            frames.extend([fixture(9), fixture(10), fixture(11), fixture(12), fixture(13), fixture(2), fixture(3)]);
+            frames.extend([fixture(9), fixture(10), fixture(11), fixture(12), fixture(13), fixture(13), fixture(2), fixture(3)]);
             let mut io = fake(frames, &cancel);
             let mut latest = None;
             assert_eq!(run(&mut io, 0, 3, &mut latest).unwrap_err(), "fixture sequence exhausted");
             assert_eq!(io.controls, [TerminalStage::Score, TerminalStage::LevelUp, TerminalStage::NewGame, TerminalStage::Play]);
             assert_eq!(io.solver_clicks, 1);
+            assert_eq!(io.solver_states, [Some(false)]);
+            assert_eq!(io.solver_capture_counts, [if prefix { 7 } else { 6 }]);
             assert_eq!(io.sources.len(), if prefix { 3 } else { 2 });
             assert_eq!(io.waits.iter().filter(|delay| **delay == LEVEL_UP_APPEAR_DELAY).count(), 1);
         }
@@ -840,7 +1001,7 @@ mod tests {
 
 
             if delayed { frames.extend([fixture(9), unknown()]); }
-            frames.extend([fixture(15), fixture(12), fixture(13), fixture(2)]);
+            frames.extend([fixture(15), fixture(12), fixture(13), fixture(13), fixture(2)]);
             let mut io = fake(frames, &cancel);
             assert_eq!(run(&mut io, 0, 3, &mut None).unwrap_err(), "fixture sequence exhausted");
             assert_eq!(io.controls, [TerminalStage::Score, TerminalStage::NewGame, TerminalStage::Play]);
@@ -854,7 +1015,7 @@ mod tests {
     #[test]
     fn native_new_game_entry_resumes_without_score_or_level_up_input() {
         let cancel = AtomicBool::new(false);
-        let mut io = fake(vec![fixture(15), fixture(12), fixture(13), fixture(2)], &cancel);
+        let mut io = fake(vec![fixture(15), fixture(12), fixture(13), fixture(13), fixture(2)], &cancel);
         assert_eq!(run(&mut io, 0, 3, &mut None).unwrap_err(), "fixture sequence exhausted");
         assert_eq!(io.controls, [TerminalStage::NewGame, TerminalStage::Play]);
         assert_eq!(io.solver_clicks, 1);
@@ -909,7 +1070,7 @@ mod tests {
     #[test]
     fn terminal_animation_recaptures_without_replaying_score_input() {
         let cancel = AtomicBool::new(false);
-        let mut io = fake(vec![fixture(9), fixture(9), fixture(10), fixture(11), fixture(12), fixture(13), fixture(2)], &cancel);
+        let mut io = fake(vec![fixture(9), fixture(9), fixture(10), fixture(11), fixture(12), fixture(13), fixture(13), fixture(2)], &cancel);
         assert_eq!(run(&mut io, 0, 3, &mut None).unwrap_err(), "fixture sequence exhausted");
         assert_eq!(io.controls, [TerminalStage::Score, TerminalStage::LevelUp, TerminalStage::NewGame, TerminalStage::Play]);
     }
@@ -965,12 +1126,32 @@ mod tests {
 
         for (fault, number) in [(Fault::Source, 2), (Fault::Solver, 1), (Fault::Terminal, 9)] {
             let cancel = AtomicBool::new(false);
-            let mut io = fake(vec![fixture(number)], &cancel);
+            let mut frames = vec![fixture(number)];
+
+
+            if fault == Fault::Solver { frames.push(fixture(number)); }
+            let mut io = fake(frames, &cancel);
             io.fault = fault;
             assert!(run(&mut io, 0, 2, &mut None).unwrap_err().contains("uncertain"));
             assert_eq!(io.sources.len() + io.controls.len() + io.solver_clicks, 1);
-            assert_eq!(io.captures, 1);
+            assert_eq!(io.captures, if fault == Fault::Solver { 2 } else { 1 });
         }
+    }
+
+
+    /// An uncertain active-state refresh consumes its reserve without later captures.
+    #[test]
+    fn uncertain_active_solver_refresh_is_attempted_once_without_reobservation() {
+        let cancel = AtomicBool::new(false);
+        let mut io = fake(vec![active_without_halo(), active_without_halo(), fixture(7)], &cancel);
+        io.fault = Fault::Solver;
+        assert!(run(&mut io, 0, 3, &mut None).unwrap_err().contains("uncertain"));
+        assert_eq!(io.solver_clicks, 1);
+        assert_eq!(io.solver_states, [Some(true)]);
+        assert_eq!(io.solver_capture_counts, [2]);
+        assert_eq!(io.captures, 2);
+        assert_eq!(io.frames.len(), 1);
+        assert!(io.sources.is_empty() && io.controls.is_empty());
     }
 
 
