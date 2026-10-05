@@ -26,6 +26,8 @@ pub enum GameMode {
     Pyramid,
     /// Changing seven-column tableau, Draw 1 stock and fanned waste.
     Klondike,
+    /// Eight face-up columns, four temporary cells and four suit piles.
+    FreeCell,
 }
 
 
@@ -33,7 +35,7 @@ impl GameMode {
 
 
     /// Modes exposed by the game selector, with the default first.
-    pub const AVAILABLE: [Self; 3] = [Self::TriPeaks, Self::Pyramid, Self::Klondike];
+    pub const AVAILABLE: [Self; 4] = [Self::TriPeaks, Self::Pyramid, Self::Klondike, Self::FreeCell];
 
 
     /// Return the stable game name used in controls and logs.
@@ -44,6 +46,7 @@ impl GameMode {
             Self::TriPeaks => "TriPeaks",
             Self::Pyramid => "Pyramid",
             Self::Klondike => "Klondike",
+            Self::FreeCell => "Free Cell",
         }
     }
 
@@ -56,6 +59,7 @@ impl GameMode {
             Self::TriPeaks => &crate::tripeaks::PROFILE,
             Self::Pyramid => &crate::pyramid::PROFILE,
             Self::Klondike => &crate::klondike::PROFILE,
+            Self::FreeCell => &crate::freecell::PROFILE,
         }
     }
 
@@ -534,18 +538,20 @@ mod tests {
 
 
     #[test]
-    fn tripeaks_remains_the_default_with_three_executable_modes() {
+    fn tripeaks_remains_the_default_with_freecell_calibration_separate() {
         let mode = GameMode::default();
         let profile = mode.profile();
 
         assert_eq!(mode, GameMode::TriPeaks);
-        assert_eq!(GameMode::AVAILABLE, [GameMode::TriPeaks, GameMode::Pyramid, GameMode::Klondike]);
+        assert_eq!(GameMode::AVAILABLE, [GameMode::TriPeaks, GameMode::Pyramid, GameMode::Klondike, GameMode::FreeCell]);
         assert!(GameMode::TriPeaks.input_authorised());
         assert!(!GameMode::TriPeaks.calibration_only());
         assert!(GameMode::Pyramid.input_authorised());
         assert!(!GameMode::Pyramid.calibration_only());
         assert!(GameMode::Klondike.input_authorised());
         assert!(!GameMode::Klondike.calibration_only());
+        assert!(!GameMode::FreeCell.input_authorised());
+        assert!(GameMode::FreeCell.calibration_only());
         assert_eq!(profile.label, "TriPeaks");
         assert_eq!(profile.valid_row_bits(), 0b1111);
         assert_eq!(profile.initial_active_rows, 0b1000);

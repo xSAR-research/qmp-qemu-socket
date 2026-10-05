@@ -14,15 +14,18 @@ the real purpose. Each fixture keeps independent target and effect policies.
 The target is to build in Dijkstra / A* shortest path problem solving rather
 than using the **Solver**, this will benefit drone route planning experience.
 
-This is **v1.2.6, candidate 11**, based on pushed candidate 10 at
-`66c779920a1a57d183f07725943e881f689ed3c6`. `Cargo.toml` supplies the package
-version shown in the window title and Parameters. Beast gameplay acceptance
-is required before promotion.
+This is **v1.3.0, candidate 1**, based on accepted and pushed v1.2.6 candidate 11
+at `146fe173f6e123a92e2eadf518523715d042cd66`. `Cargo.toml` supplies the package
+version shown in the window title and Parameters. Charlie reported that the
+previous Undo All overlap case and complete Klondike GAME WIN sequence passed
+on the Beast before promoting that base. This is a user-reported acceptance run,
+not an exhaustive layout or timing claim.
 
-Candidate 11 excludes the guest toolbar from live tableau HALO detection.
-Source runs continuing beneath it use only their visible closed top, connected
-side rails and card paper. Each fresh Solver recommendation receives one action,
-editable settle and a fresh capture. See [candidate notes](docs/klondike-v1.2.6-candidate-11.md).
+Candidate 1 adds **Free Cell** as a read-only calibration mode. Its independent
+profile and editable future timings are present; HALO detection, gameplay,
+Solver activation and win/restart automation remain disabled pending fresh
+native evidence. Existing TriPeaks, Pyramid and Klondike execution stays intact.
+See [Free Cell candidate notes](docs/freecell-v1.3.0-candidate-1.md).
 
 ## Build and source spacing
 
@@ -44,8 +47,37 @@ cargo build --locked --release
 Do not run `rustfmt` or `cargo fmt` for this candidate. Charlie requested two
 blank lines before Rust definitions (above their documentation/attributes)
 and statement blocks, including existing source. The committed nightly and
-rustfmt configuration are preserved. The candidate's spacing pass inserts
-blank lines and checks that Rust tokens and comments are unchanged.
+rustfmt configuration and existing source spacing are preserved; no formatter
+is part of this candidate.
+
+
+## Free Cell calibration
+
+Select **Free Cell** for read-only **Capture Frame** and **Capture PNG**.
+The preview reports calibration-only status. **Single Step** and **Multiple
+Steps** do not send guest input. The worker rejects a Free Cell execution
+request before guest input. Capture does not click the guest's Solver.
+
+Board names are **CELL 1–4** at the upper left, **PLAY 1–8** across the tableau,
+and **SUIT 1–4** at the upper right, numbered left to right. Future source actions
+will follow the guest's Solver: one click on a highlighted CELL card or PLAY
+card/run, settle, then fresh capture. Dashed destination guides do not become
+source targets. Automatic moves to SUIT can follow a source click; no card-rank,
+recipient-card or changed-pixel proof is being added.
+
+**Params** keeps independent future Free Cell **action / automatic-transfer
+settle** and **re-observation** intervals, initially **750/1000 ms**, editable
+from 0 to 5000 ms, and **Actions per Multi-Step**, initially **0**. Zero means
+continuous when gameplay is enabled; a finite value is limited to 1–10000.
+These settings do not enable execution or establish measured animation times.
+
+The new native **FC01–FC13** evidence sequence and capture instructions are in
+[Free Cell Gate 1](docs/freecell-gate-1.md). The three supplied 4 October images
+were inspected for intake; the new FC01–FC13 sequence has not yet been received.
+Those intake observations do not establish a runtime detector. Free Cell must
+own its geometry and completion policy before any guest input is enabled.
+No Draw, Recycle or Solve
+operation is inherited from another mode.
 
 ## Klondike Draw 1
 
@@ -116,14 +148,11 @@ are checked locally for a gold body and printed-caption contrast. Rank, medal,
 title, surrounding frame and fireworks colours do not gate these three clicks.
 Their ordered readiness waits allow up to 20 delayed input-free observations;
 fresh-deal Solver/HALO recovery retains its separate shorter bound.
-Unknown stages and unresolved effects stop with the latest frame and logs.
+Unknown stages, unsupported target evidence or uncertain delivery stop with
+the latest frame and logs.
 Klondike owns these controls independently of the shared three-board controller.
-See [Klondike correction notes](docs/klondike-v1.2.3-candidate-5.md) for evidence,
-verification boundaries and live checks.
-
-FreeCell's supplied screenshots have completed evidence intake only. Its distinct
-geometry, automatic foundation transfers and terminal Play button are recorded
-in [FreeCell Gate 1](docs/freecell-gate-1.md); no FreeCell mode is enabled here.
+See [accepted Klondike boundary notes](docs/klondike-v1.2.6-candidate-11.md)
+and [current architecture](docs/architecture.md) for policy and evidence limits.
 
 ## QMP connection
 
@@ -296,6 +325,13 @@ input contracts, and `docs/pyramid-execution.md` for Pyramid geometry,
 verification rules and evidence limits. The candidate review records tests
 actually run; live King, pair, pile, recycle and transition checks remain part
 of Beast acceptance.
+
+## Historical candidate evidence
+
+The following entries retain the decisions and validation limits of their
+deliveries. Earlier card-effect witnesses and toolbar/icon exceptions are
+historical diagnostics; the current Klondike policy above supersedes them.
+
 
 ## v1.2.4 candidate 1 evidence
 

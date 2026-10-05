@@ -1,5 +1,16 @@
 # Architecture and control flow
 
+## Current boundary
+
+Version 1.3.0 candidate 1 starts from accepted and pushed v1.2.6 candidate 11
+at `146fe173f6e123a92e2eadf518523715d042cd66`. Charlie reported a successful
+replay of the Undo All overlap case and a complete Klondike GAME WIN sequence
+before promotion. Free Cell is now selectable for read-only calibration;
+it cannot send gameplay, Solver or terminal input until its independent native
+detector and scene policy are evidenced. The later candidate-history sections
+retain their original decisions, including superseded card-effect policies.
+
+
 ## Component boundaries
 
 | **Module** | **Responsibility** |
@@ -8,8 +19,9 @@
 | `session_log.rs` | private session-file creation, append and complete-history reads |
 | `game.rs` | small game/profile boundary and typed actions |
 | `tripeaks.rs` | validated TriPeaks profile assembly |
-| `klondike.rs` | Klondike dynamic source blocks, stock/recycle, RIGHT fan, Solve control and effect evidence |
+| `klondike.rs` | live Klondike dynamic sources, stock/recycle, RIGHT fan, Solve and independent win evidence; retired effect diagnostics are test-only |
 | `klondike_terminal.rs` | Klondike completed-game scenes, terminal controls and fresh Draw 1 deal recognition |
+| `freecell.rs` | independent read-only Free Cell profile, native frame validation and calibration-only status |
 | `pyramid.rs` | Pyramid targets, fixed halo probes, priority and action-effect evidence |
 | `parameters.rs` | fixed geometry, colour values, delays, limits and release label |
 | `capture.rs` | decoded immutable frame representation |
@@ -28,8 +40,9 @@
 
 ---
 
-`GameMode` selects a static `GameProfile`. TriPeaks and Pyramid share the QMP
-controller, Solver toolbar control, cancellation and guarded post-game stages.
+`GameMode` selects a static `GameProfile`. QMP, full-frame capture, cancellation,
+logging and exact-byte PNG saving are shared facilities. TriPeaks and Pyramid
+share their guarded gameplay and post-game controller.
 Their target detection and effect rules remain separate: TriPeaks requires one
 unique highlight; Pyramid chooses the first eligible target in its ordered
 31-slot profile. Typed action identities must belong to the selected mode.
@@ -40,24 +53,25 @@ names. Displaying an overlay alone never grants input authority.
 
 ```mermaid
 flowchart TD
-    A["Fresh initial capture"] --> B["Validate typed action"]
-    B --> C["Probe QMP and send once"]
-    C --> D["Settle and capture result"]
-    D --> E{"Effect or fresh pair valid?"}
-    E -->|"Yes"| F["Reuse result as next plan"]
-    E -->|"No"| G["Stop; never retry input"]
-    F --> C
+    A["Fresh capture"] --> B{"Mode permits input?"}
+    B -->|"Free Cell calibration"| C["Publish read-only preview"]
+    B -->|"Active mode"| D["Apply mode target policy"]
+    D --> E["Probe QMP and send once"]
+    E --> F["Settle and capture result"]
+    F --> G["Apply mode result policy"]
+    G -->|"Fresh action eligible"| D
+    G -->|"Unsupported or uncertain"| H["Stop with latest frame"]
 ```
 
-The initial UI prediction is advisory. The first input requires a fresh frame
-that reproduces it. Thereafter, the result frame has already been captured
-after settling and accepted through the selected game's result policy. An
-effect-verified state, Pyramid's strictly qualified repeated Left/Right HALO
-pair, or Klondike's source-supported fresh recommendation becomes the next
-action's planning frame. Fresh-HALO continuation is
-recorded separately and does not claim the previous effect was proven. The
-worker still checks STOP and
-freshly probes VM/pointer state before each input.
+TriPeaks and Pyramid freshly reproduce the approved initial prediction and keep
+their accepted result-verification policies. An effect-verified result or
+Pyramid's qualified repeated Left/Right HALO pair becomes the next planning
+frame. Klondike's preview is advisory: each fresh supported scene and canonical
+Solver recommendation authorises one operation, then editable settle and fresh
+capture. Card-rank, source/recipient matching and changed-pixel proof do not gate
+Klondike play. Acknowledged delivery is logged with its effect explicitly
+unproven; independent positive evidence is still required for game completion.
+Every active input checks STOP and freshly probes VM/current absolute tablet.
 
 For N ordinary actions this yields one initial capture plus N result captures.
 Bounded recovery and board/game transitions may require additional sparse
@@ -71,12 +85,13 @@ Ordinary gameplay operations require a validated `StepPlan`; bounded board and
 post-game transitions have separate worker paths with stage checks and retry
 limits. Read-only capture, detector, UI and profile code cannot send input.
 
-Each action has:
+Each enabled action has:
 
 - stable semantic identity;
 - exactly one `InputOperation`;
 - an animation class and settle delay;
-- an effect region and minimum changed-pixel count;
+- a mode-owned result policy; effect regions and thresholds apply only where
+  that mode uses effect verification;
 - a repeat-target policy.
 
 A QMP error after delivery begins makes the result uncertain. The operation is
@@ -106,15 +121,15 @@ implemented or benchmarked.
 
 ## Mode availability
 
-| **Capability** | **TriPeaks** | **Pyramid** |
-| --- | --- | --- |
-| Capture Frame / Capture PNG | Read-only | Read-only |
-| Track coordinates / Draw Targets | Preview only | Preview only |
-| HALO selection | Unique across frame | First eligible of 31 fixed 2×2 probes |
-| Single Step / Multiple Steps | Guarded | Guarded |
-| Ordinary input | Draw key or tableau click | One mouse click |
-| Settling | Configurable draw/tableau delays | Configurable Move/card/reobserve; defaults 1000/2000/1000 ms |
-| Board/game transitions | Shared guarded controller | Shared guarded controller |
+| **Capability** | **TriPeaks** | **Pyramid** | **Klondike** | **Free Cell** |
+| --- | --- | --- | --- | --- |
+| Capture Frame / Capture PNG | Read-only | Read-only | Read-only | Read-only calibration |
+| HALO selection | Unique target | First eligible of 31 fixed probes | Mode-owned ordered source classes | Not calibrated |
+| Single Step / Multiple Steps | Guarded | Guarded | Fresh Solver-led actions | Input disabled |
+| Ordinary input | D or tableau click | D for highlighted MOVE/Recycle; card/pile click | D for Draw 1; recycle/source click | None |
+| Result policy | Existing effect checks | Effect checks or qualified fresh pair | Fresh valid recommendation; effect unproven | Calibration-only status |
+| Editable settle/reobserve | Draw/tableau and late-HALO intervals | 1000/2000/1000 ms defaults | 750/750/1000 ms defaults | Future 750/1000 ms settings |
+| Board/game transitions | Shared three-board policy | Shared three-board policy | Independent one-board policy | No automation enabled |
 
 Pyramid's semantic order is `Move`, `Left`, `Right`, then 28 card identities
 from row 7 left-to-right upward to the row-1 apex. It does not use TriPeaks row
@@ -162,6 +177,10 @@ reserves that fixed space only while the log is expanded, so additional window
 height increases the image area instead of stretching the log.
 
 ## Klondike boundary
+
+This section records the earlier Klondike boundary and effect design. It is
+historical; the current target cycle above and candidate-10/11 summaries below
+supersede its effect, initial-preview and toolbar-exception requirements.
 
 Klondike uses an independent controller and no three-board progress probe.
 Its dynamic target identity includes the highlighted source geometry. It follows
@@ -254,6 +273,8 @@ promoted to complete-effect proof by this new route.
   disk.
 - TriPeaks/Pyramid Multi-Step defaults to continuous (`0`) and is STOP-cancellable.
 - Klondike Multi-Step defaults to 0; 1–10000 bounds actions and 0 runs continuously.
+- Free Cell future Multi-Step defaults to 0, with a finite range of 1–10000;
+  calibration mode still rejects all guest input.
 - Klondike Solve sends one request, then bounded read-only completion observations;
   terminal progression requires continuous authority and independent win proof.
 - Transition retries and click attempts are bounded.
@@ -402,7 +423,7 @@ existing terminal controller sends one Solver click and captures fresh evidence;
 an arbitrary no-HALO board does not become SolverReady.
 
 
-## Current candidate 6 Solver-led policy
+## Historical candidate 6 Solver-led policy
 
 Charlie explicitly selected the fresh-HALO cycle over the earlier source/effect
 witnesses described above. The initial preview is advisory. The worker freshly
@@ -420,7 +441,7 @@ bounded input-free observations, independent completion checks, and at most one
 Solver refresh on a positively recognised gameplay scene. Solve/win/restart retain
 their independent evidence and existing input/uncertainty/cancellation gates.
 
-## Candidate 10 current runtime policy
+## Candidate 10 runtime policy retained by candidate 11
 
 This section supersedes historical card-effect and terminal-artwork descriptions
 above for current Klondike execution. Klondike play follows fresh canonical
@@ -464,3 +485,27 @@ classifier for their original full-source measurements, without contributing
 input authority to the application. Candidate 10's known-win terminal sequence,
 Pyramid D shortcut and TriPeaks delayed recovery remain unchanged. See
 [candidate 11](klondike-v1.2.6-candidate-11.md).
+
+
+## Free Cell read-only foundation
+
+The agreed board names are CELL 1–4 for the upper-left temporary slots, PLAY
+1–8 for the tableau columns and SUIT 1–4 for the upper-right foundations.
+Numbering is left to right. These names document the next calibration slice;
+there are no executable Free Cell source actions or click constructors yet.
+
+Free Cell owns no live scene discriminator or HALO selector. Valid native
+1920-by-1080 frames publish calibration-only status; malformed storage or other
+dimensions are rejected. The independent profile has no actionable targets.
+The worker refuses Free Cell execution before guest input; UI capture remains
+read-only. Shared capture retains the full frame and original manual PNG bytes.
+
+The intended next slice is one fresh supported CELL or PLAY HALO, one source
+click, editable settle including automatic SUIT transfers, then fresh capture.
+It does not require rank recognition or card-pixel move proof. The future PLAY
+detector must keep toolbar pixels outside its source region; upper slots and
+terminal controls need their own evidence. There is no Draw, Recycle or Solve
+operation to inherit. Independent scene/target and one-board completion evidence
+must precede input or deterministic terminal progression. The current candidate
+adds only read-only foundations and future Params values. See
+[Free Cell candidate notes](freecell-v1.3.0-candidate-1.md).

@@ -1,12 +1,18 @@
-# Development conventions for v1.2.6 candidate 11
+# Development conventions for v1.3.0 candidate 1
 
-Candidate 11 excludes rows Y>=947 from live Klondike tableau HALO detection,
-against pushed candidate 10 at `66c779920a1a57d183f07725943e881f689ed3c6`.
-Clipped sources use positive visible top, rails and paper without depending on
-toolbar artwork. The installer accepts exact base or complete candidate 11
-affected contents, backs up the actual before-state and preserves unrelated
-local work. The live controller remains driven by fresh Solver targets,
-without card-pixel move proof.
+The base is accepted and pushed v1.2.6 candidate 11 at
+`146fe173f6e123a92e2eadf518523715d042cd66`. Charlie reported successful overlap
+recovery and a complete Klondike GAME WIN sequence before promotion. Preserve
+that mode's live Y<947 source boundary, advisory preview and fresh Solver-led
+cycle without card-pixel move proof. Pyramid's highlighted MOVE/Recycle uses D;
+TriPeaks retains its delayed input-free no-HALO recovery.
+
+Free Cell is read-only calibration in this candidate. Its independent profile,
+native-frame validation and future Params values do not authorise gameplay,
+Solver or terminal input. No new source detector, click geometry or completion
+automation is inferred from Klondike or the three current intake screenshots.
+The guarded installer pins this exact base, preserves unrelated work and the
+Beast's untracked root AGENTS.md, and verifies complete affected contents.
 
 ## Naming and documentation
 
@@ -43,7 +49,10 @@ bounded per-action recovery and independently verified single-board completion.
 button is clicked once before bounded completion observations; only continuous
 runs may restart through fresh recognised stages. The shared terminal controller
 retains the existing TriPeaks/Pyramid policy and coordinates.
-The UI delegates persistent log I/O to `session_log.rs`.
+`freecell.rs` returns calibration-only predictions from valid native frames.
+The worker refuses execution requests for that mode before guest input; UI
+action controls remain disabled. The UI delegates persistent log I/O to
+`session_log.rs`.
 
 When adding a mode, supply its profile/detection policy and preserve the shared
 input and capture contracts. Do not scatter new mode checks through QMP or
@@ -86,7 +95,7 @@ the first error.
 cargo check --locked
 cargo test --locked
 cargo doc --locked --no-deps --document-private-items
-cargo clippy --locked --all-targets
+cargo clippy --locked --all-targets -- -D warnings
 cargo build --locked --release
 ```
 
@@ -94,12 +103,28 @@ No formatter check is included, by Charlie's explicit instruction. Build/test
 results from another host do not prove Beast installation or live guest input.
 The candidate delivery notes record the checks actually executed.
 
-On the Beast, confirm the launched executable identifies v1.2.6, candidate 9. Verify
-Capture Frame, exact-byte manual Capture PNG, single-step, finite and continuous
-multi-step, STOP and mode/socket invalidation. Exercise Klondike Draw 1, source
-transfers, RIGHT fan positions, recycle, Solve and late/no-HALO recovery. Preserve first-failure
-frames and session logs. Recheck the accepted TriPeaks/Pyramid behaviour before
-Charlie commits and pushes the candidate.
+On the Beast, confirm that the installed package, launched executable and startup
+log identify **v1.3.0, candidate 1**. Select Free Cell and verify read-only Capture
+Frame, original-byte Capture PNG/Save PNG, calibration-only status and disabled
+gameplay controls. Adjust the future 750/1000 ms settings and zero action budget;
+they must not enable input or alter other modes' settings. Switch to each existing
+mode and verify its accepted action/recovery behaviour, STOP and socket/mode
+invalidation. Preserve first-failure frames and complete session logs.
+
+Use compact tests for actual invariants: Free Cell read-only request refusal,
+native frame-layout rejection, independent bounded timings and existing-mode
+preservation. Test counts are measured results, not coverage quotas. Historical
+Klondike card-effect diagnostics remain explicitly test-only and must not become
+Free Cell runtime requirements. The delivery review records actual tool versions,
+commands and failures; no old validation run establishes this candidate's results.
+
+
+## Historical candidate verification notes
+
+The following notes retain their original candidate scope and measurements.
+Earlier card-effect witnesses, exact preview matching and icon exceptions do not
+override the current Solver-led Klondike policy. The candidate-10 terminal
+button policy and candidate-11 tableau boundary are retained by this release.
 
 For the inherited tall-run behaviour, verify the complete source bounds and
 its single click above the toolbar. The reconstructed Draw pair is not a

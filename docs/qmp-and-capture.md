@@ -1,5 +1,12 @@
 # QMP and capture design
 
+This describes the current shared transport and mode-owned input policies in
+v1.3.0 candidate 1. Free Cell is read-only calibration; capture, preview and
+future Params values cannot activate Solver, gameplay or terminal input.
+Later dated correction notes retain historical evidence rather than current
+card-effect requirements.
+
+
 ## Connection boundary
 
 QMP is QEMU's newline-delimited JSON control protocol. The worker connects to
@@ -98,9 +105,10 @@ A click is delivered as three QMP commands:
 2. left-button down;
 3. left-button up after the configured hold.
 
-TriPeaks and confirmed Klondike Draw 1 use qcode `d` down and up with the pointer unchanged.
+TriPeaks Draw, Pyramid's highlighted MOVE/Recycle and confirmed Klondike Draw 1
+use qcode `d` down and up with the pointer unchanged.
 Klondike recycle uses its recognised stock-area click; `d` is not assumed to recycle.
-Pyramid Move, pile and card targets are mouse clicks, never the draw key. The
+Pyramid pile and card targets retain their one-click operation. The
 removed blank-felt primer click must not be reintroduced without evidence;
 the proven Solver click at each board also establishes guest focus.
 
@@ -108,11 +116,11 @@ Down and up are deliberately separate. Once a down command has been flushed,
 the release timing must not wait indefinitely for a delayed acknowledgement.
 If delivery becomes uncertain, the action is never sent again automatically.
 
-## Visual verification
+## Mode-owned visual policy
 
 QMP acknowledgement proves only that QEMU accepted a command. It does not
-prove that Solitaire acted on it. After the configured settle, the normal
-effect-verification path requires a fresh screenshot showing:
+prove that Solitaire acted on it. After the configured settle, the retained
+TriPeaks/Pyramid effect-verification path requires a fresh screenshot showing:
 
 - the selected profile's effect evidence inside its calibrated region; and
 - a valid resulting gameplay or transition state.
@@ -140,11 +148,18 @@ authorise one Solver activation after repeated settled observations. The
 latest unverified post-action frame is displayed for diagnosis and cannot
 approve the next click. Capture Frame obtains new authority for a later run.
 
-The verified result frame is immutable and becomes the next action's planning
-frame. A fresh QMP health/pointer probe remains mandatory immediately before
-the next input.
+TriPeaks ordinary no-HALO recovery uses up to three delayed input-free captures
+at its editable interval before one scene-validated Solver refresh, then up to
+three further delayed captures. A late stock HALO authorises D without an extra
+Solver click. This recovery does not alter its action-effect or redeal policies.
 
-After a completion signal, a fresh pre-score capture can recover an already
+The accepted result frame is immutable and becomes the next action's planning
+frame. Klondike instead follows a fresh valid Solver target without card-pixel
+effect proof, as described below. A fresh QMP health/pointer probe remains
+mandatory immediately before each active input. Free Cell has no input path.
+
+For the shared TriPeaks/Pyramid terminal controller, a fresh pre-score capture
+after a completion signal can recover an already
 actionable board before any score-skip click. Two consecutive non-gameplay
 captures are required before the first score-skip click. A gameplay transition
 without a halo is observed again without input. After every score-panel click, including
@@ -184,7 +199,7 @@ The saved manual PNG always contains the original capture bytes. Undo All
 confirmation remains uncalibrated and is not clicked automatically. See
 `pyramid-execution.md` for the profile measurements and evidence limits.
 
-## Klondike exception to missing-HALO handling
+## Current Klondike Solver-led policy
 
 Charlie authorised Klondike-specific Solver recovery on 30 September 2026:
 recognised gameplay with no eligible HALO can receive one Solver activation,
@@ -194,12 +209,27 @@ Recovery is bounded, STOP-aware and never repeats an uncertain operation.
 Later unresolved observations use the editable Klondike recapture interval.
 This policy does not alter Pyramid or TriPeaks recovery rules.
 
-Klondike source detection consumes one immutable RGBA frame in priority order.
-It does not take a separate screenshot for each target class. Each accepted
-result is reused as the next planning frame. Initial validation must reproduce
-the approved target before any gameplay or no-HALO Solver recovery input. A
-changed target publishes the fresh prediction for another explicit review and
-Step request, with zero guest input.
+Klondike source detection consumes one immutable RGBA frame in priority order:
+DRAW/RECYCLE, RIGHT HALO, RIGHT Solve, tableau bottom upwards and SUIT.
+It does not take a separate screenshot for each target class. The preview is
+advisory; each fresh supported scene and canonical target authorises one logical
+operation, followed by editable settle and fresh capture. Card ranks, source or
+recipient matching and changed-pixel effect proof do not gate play. Delivery
+is acknowledged while its previous effect remains explicitly unproven.
+
+Live tableau recognition checks only Y<947. Source blocks continuing behind the
+toolbar use their visible closed top, connected opposing rails and card paper;
+their reported exclusive bottom is 947. No hidden lower edge is inferred and
+the single upper source click stays above the toolbar. The captured frame itself
+remains full size. Upper piles, Solver and terminal controls have separate areas.
+
+Ordinary missing HALOs receive at most three delayed input-free observations,
+then independent completion review. At most one Solver refresh is allowed per
+unresolved context on a positively recognised gameplay scene, followed by an
+immediate capture and at most three further delayed observations. Unknown scenes
+or uncertain delivery stop without input replay. Single Step sends at most one
+gameplay operation; finite budgets count acknowledged operations. Continuous
+Multi-Step 0 follows only each new valid target and remains STOP-cancellable.
 
 A separately recognised upper Solve button permits one auto-finish request,
 its own editable animation delay and up to 20 delayed read-only completion
@@ -213,18 +243,41 @@ proof. Background and overlays cannot satisfy completion through black absence.
 
 Only continuous authority permits the independently recognised Klondike
 score-skip → Level Up OK → New Game → Draw 1 Play → fresh-board Solver sequence.
+Once that win context is established, readiness checks only the expected local
+gold OK, New Game or Play button and its printed-caption contrast. Rank, medal,
+title, surrounding frame and fireworks colours do not gate these ordered clicks.
 Each control receives a QMP health/tablet probe and STOP check, one input,
-existing calibrated hold/settle timings, then fresh observation. The Klondike
-Play button is higher than the shared three-board calibration and remains
-mode-specific. Missing or unchanged stages receive at most three delayed
-input-free observations; no uncertain or unchanged control is clicked again.
-Gameplay resumes only from the freshly recognised actionable next Solver board.
+existing calibrated hold/settle timings, then fresh observation. Missing readiness
+receives up to 20 delayed input-free observations; uncertain or unchanged input
+is not repeated. The fresh deal still requires positive mode-owned evidence
+before Solver activation and bounded HALO recovery. The Klondike Play point
+remains independent from the shared three-board calibration.
 
-Candidate2 adds input-free result recapture for a temporarily unsupported
-Klondike scene. Capture/decode failures still stop immediately; this does not
-retry QMP delivery. Exact stock/artwork/glyph Solve measurements are logged from
-run observations. Later manual PNGs remain separate evidence and cannot be
-assumed byte-identical to an earlier automatic result frame.
+Capture/decode failures stop. Later manual PNGs remain separate evidence and
+cannot be assumed byte-identical to an earlier automatic result frame.
+
+
+## Free Cell calibration boundary
+
+Free Cell can use the same read-only capture and original-byte snapshot flow,
+but its independent profile has no actionable HALO targets or positively
+recognised scene. A valid native frame publishes calibration-only status;
+malformed storage or dimensions outside 1920-by-1080 are refused. The worker
+rejects a Free Cell execution request before guest input, independently of UI
+button state. No stock key, Solve, Solver activation or terminal click is enabled.
+
+Future CELL/PLAY source actions, toolbar exclusion and automatic SUIT transfers
+need native evidence. The stored 750 ms action/automatic-transfer settle,
+1000 ms re-observation and zero continuous-action defaults are future settings;
+they are not measured timings or authority to execute. Capture stays full-frame
+and saving stays byte-identical. See [Free Cell Gate 1](freecell-gate-1.md).
+
+
+## Historical Klondike correction notes
+
+The following notes preserve earlier candidate measurements and verification
+limits. Their card-effect witnesses, initial-preview equality and artwork-wide
+terminal checks do not override the current policy above.
 
 ## v1.2.5 Klondike diagnostics and initial recovery
 

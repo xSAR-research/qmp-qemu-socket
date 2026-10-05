@@ -26,7 +26,9 @@ use crate::{
 use crate::parameters::{
     ACTION_CHANGE_CHANNEL_THRESHOLD, ACTION_CURSOR_EXCLUSION_HALF_SIZE,
     BOARD_REDEAL_SETTLE_DELAY_MS, CHALLENGE_COMPLETE_CONTINUE_CONTROL, DEFAULT_MULTI_STEP_ACTIONS,
-    DRAW_ANIMATION_SETTLE_DELAY_MS, GOLD_CHANNEL_TOLERANCE, GOLD_RGB_CANDIDATES, KEY_HOLD,
+    DRAW_ANIMATION_SETTLE_DELAY_MS, FREECELL_DEFAULT_MULTI_STEP_ACTIONS,
+    FREECELL_MAX_MULTI_STEP_ACTIONS, FREECELL_REOBSERVE_DELAY_MS, FREECELL_SETTLE_DELAY_MS,
+    GOLD_CHANNEL_TOLERANCE, GOLD_RGB_CANDIDATES, KEY_HOLD,
     KLONDIKE_DEFAULT_MULTI_STEP_ACTIONS, KLONDIKE_MAX_MULTI_STEP_ACTIONS,
     KLONDIKE_REOBSERVE_DELAY_MS, KLONDIKE_SETTLE_DELAY_MS, KLONDIKE_SOLVE_SETTLE_DELAY_MS,
     LEVEL_UP_APPEAR_DELAY, MAX_LOG_LINES, MAXIMUM_ANIMATION_SETTLE_DELAY_MS,
@@ -177,6 +179,12 @@ pub struct QmpQemuSocketApp {
     klondike_reobserve_ms: u64,
     /// Separate Klondike operation budget, with zero meaning continuous.
     klondike_multi_step_actions: usize,
+    /// Free Cell action settling delay copied into the next run settings.
+    freecell_settle_ms: u64,
+    /// Free Cell bounded recapture delay copied into the next run settings.
+    freecell_reobserve_ms: u64,
+    /// Separate Free Cell operation budget, with zero meaning continuous.
+    freecell_multi_step_actions: usize,
     /// Requested operation limit; the configured zero sentinel means continuous.
     multi_step_actions: usize,
     /// Run ownership retained until the worker reports completion.
@@ -259,6 +267,9 @@ impl QmpQemuSocketApp {
             klondike_solve_settle_input: KLONDIKE_SOLVE_SETTLE_DELAY_MS,
             klondike_reobserve_ms: KLONDIKE_REOBSERVE_DELAY_MS,
             klondike_multi_step_actions: KLONDIKE_DEFAULT_MULTI_STEP_ACTIONS,
+            freecell_settle_ms: FREECELL_SETTLE_DELAY_MS,
+            freecell_reobserve_ms: FREECELL_REOBSERVE_DELAY_MS,
+            freecell_multi_step_actions: FREECELL_DEFAULT_MULTI_STEP_ACTIONS,
             multi_step_actions: DEFAULT_MULTI_STEP_ACTIONS,
             active_run: None,
             stop_requested: false,
@@ -289,10 +300,10 @@ impl QmpQemuSocketApp {
         app.push_log(format!("QMP socket candidate: {}", app.qmp_socket_path));
         app.push_log("Initial Capture Frame is automatic, one-shot and read-only.");
         app.push_log("The preview retains only the latest worker frame; stale full-resolution previews are coalesced while the UI is asleep or occluded.");
-        app.push_log("Step Once and Multi-Step capture fresh evidence before input and reuse settled result frames. Klondike follows fresh Solver recommendations without card-pixel effect proof; its preview is advisory. TriPeaks/Pyramid retain their existing validation and effect policies.");
+        app.push_log("Step Once and Multi-Step capture fresh evidence before input and reuse settled result frames. Klondike follows fresh Solver recommendations without card-pixel effect proof; its preview is advisory. Free Cell is read-only calibration pending new source and terminal evidence. TriPeaks/Pyramid retain their existing validation and effect policies.");
         app.push_log(format!(
-            "Execution defaults: one initial planning frame plus fresh result captures after each action, Multi-Step limits: TriPeaks/Pyramid {}, Klondike {} (0 means continuous). STOP is visible only while a guarded run is active.",
-            DEFAULT_MULTI_STEP_ACTIONS, KLONDIKE_DEFAULT_MULTI_STEP_ACTIONS,
+            "Execution defaults: one initial planning frame plus fresh result captures after each action, Multi-Step limits: TriPeaks/Pyramid {}, Klondike {}, Free Cell {} (0 means continuous). STOP is visible only while a guarded run is active.",
+            DEFAULT_MULTI_STEP_ACTIONS, KLONDIKE_DEFAULT_MULTI_STEP_ACTIONS, FREECELL_DEFAULT_MULTI_STEP_ACTIONS,
         ));
         app.request_capture("Startup");
         app
@@ -516,7 +527,8 @@ impl QmpQemuSocketApp {
                     let progress = format_operation_progress(operation_index, operation_limit);
 
 
-                    let solver_directed = self.game_mode == GameMode::Klondike && continued_from_halo;
+                    let solver_directed = matches!(self.game_mode, GameMode::Klondike | GameMode::FreeCell)
+                        && continued_from_halo;
                     let acceptance = if solver_directed {
                         "followed fresh Solver recommendation (effect unproven)"
                     } else if continued_from_halo {
@@ -564,7 +576,7 @@ impl QmpQemuSocketApp {
                     let requested = format_operation_limit(requested_operations);
 
 
-                    if self.game_mode == GameMode::Klondike {
+                    if matches!(self.game_mode, GameMode::Klondike | GameMode::FreeCell) {
                         self.push_log(format!(
                             "Execution run completed: followed {halo_operations} fresh Solver recommendation(s), from a {requested} request; action effects remain unproven; final prediction={}; guest-input retries=0.",
                             concise_prediction(prediction),
@@ -880,15 +892,18 @@ impl QmpQemuSocketApp {
             self.pyramid_reobserve_ms,
         )
         .with_klondike_millis(self.klondike_settle_ms, self.klondike_reobserve_ms)
-        .with_klondike_solve_millis(self.klondike_solve_settle_input);
+        .with_klondike_solve_millis(self.klondike_solve_settle_input)
+        .with_freecell_millis(self.freecell_settle_ms, self.freecell_reobserve_ms);
 
 
         let operation_limit = normalise_operation_limit(self.game_mode, operation_limit);
         let settings = StepRunSettings::new(animation_delays, operation_limit);
 
 
-        let request_scope = if settings.is_unbounded() && self.game_mode == GameMode::Klondike {
-            "continuously across one-board Klondike games until STOP or a guarded stop condition".to_owned()
+        let request_scope = if settings.is_unbounded()
+            && matches!(self.game_mode, GameMode::Klondike | GameMode::FreeCell)
+        {
+            format!("continuously across one-board {} games until STOP or a guarded stop condition", self.game_mode)
         } else if settings.is_unbounded() {
             "continuously until STOP or a fail-closed anomaly".to_owned()
         } else {
@@ -900,10 +915,10 @@ impl QmpQemuSocketApp {
         self.current_status = "Validating next move".to_owned();
 
 
-        if self.game_mode == GameMode::Klondike {
+        if matches!(self.game_mode, GameMode::Klondike | GameMode::FreeCell) {
             self.push_log(format!(
-                "{request_name} requested {request_scope}; advisory preview={}. A fresh valid Solver recommendation authorises each action, followed by editable settle and fresh capture. Card-pixel comparisons do not gate Klondike play.",
-                concise_prediction(approved_prediction),
+                "{request_name} requested {request_scope}; advisory preview={}. A fresh valid Solver recommendation authorises each action, followed by editable settle and fresh capture. Card-pixel comparisons do not gate {} play.",
+                concise_prediction(approved_prediction), self.game_mode,
             ));
         } else {
             self.push_log(format!(
@@ -913,10 +928,10 @@ impl QmpQemuSocketApp {
         }
 
 
-        if self.game_mode == GameMode::Klondike
+        if matches!(self.game_mode, GameMode::Klondike | GameMode::FreeCell)
             && approved_prediction == PredictedAction::NoHighlight
         {
-            self.push_log("Klondike missing-HALO recovery first uses bounded input-free captures and independent completion checks. A recognised gameplay scene may refresh Solver once, then obtain fresh evidence. Step Once sends at most one gameplay action; only continuous Multi-Step 0 advances confirmed wins through the terminal sequence.");
+            self.push_log(format!("{} missing-HALO recovery first uses bounded input-free captures and independent completion checks. A recognised gameplay scene may refresh Solver once, then obtain fresh evidence. Step Once sends at most one gameplay action; only continuous Multi-Step 0 advances confirmed wins through supported terminal controls.", self.game_mode));
         }
 
 
@@ -936,10 +951,10 @@ impl QmpQemuSocketApp {
     fn selected_multi_step_actions(&self) -> usize {
 
 
-        if self.game_mode == GameMode::Klondike {
-            normalise_operation_limit(self.game_mode, self.klondike_multi_step_actions)
-        } else {
-            self.multi_step_actions
+        match self.game_mode {
+            GameMode::Klondike => normalise_operation_limit(self.game_mode, self.klondike_multi_step_actions),
+            GameMode::FreeCell => normalise_operation_limit(self.game_mode, self.freecell_multi_step_actions),
+            _ => self.multi_step_actions,
         }
     }
 
@@ -1113,11 +1128,13 @@ impl QmpQemuSocketApp {
 
 
                 if bevel_button(ui, "Single Step", ACTION_GREEN, false, STEP_ONCE_INPUT_ENABLED && action_available)
-                    .on_hover_text(if self.game_mode == GameMode::Klondike && self.prediction == Some(PredictedAction::NoHighlight) {
+                    .on_hover_text(if self.game_mode == GameMode::FreeCell {
+                        "Free Cell input is disabled pending source and terminal captures; use Capture Frame or Capture PNG for calibration"
+                    } else if self.game_mode == GameMode::Klondike && self.prediction == Some(PredictedAction::NoHighlight) {
                         "Observe for a fresh HALO or completion; a recognised board may refresh Solver once, then send at most one gameplay action and capture its result"
                     } else if prediction_is_klondike_solve(self.prediction) {
                         "Click the freshly recognised Solve control once, wait its editable animation delay and confirm completion from two fresh frames; Single Step stops before terminal inputs"
-                    } else if self.game_mode == GameMode::Klondike {
+                    } else if matches!(self.game_mode, GameMode::Klondike | GameMode::FreeCell) {
                         "Capture a fresh valid Solver recommendation, send one action, wait the editable settle and capture its result"
                     } else {
                         "Execute one freshly validated guarded action; require a changed effect and valid resulting state"
@@ -1129,17 +1146,19 @@ impl QmpQemuSocketApp {
 
 
                 if bevel_button(ui, "Multiple Steps", ACTION_GREEN, false, MULTI_STEP_INPUT_ENABLED && action_available)
-                    .on_hover_text(if self.game_mode == GameMode::Klondike
+                    .on_hover_text(if self.game_mode == GameMode::FreeCell {
+                        "Free Cell input is disabled pending source and terminal captures; its saved timing and operation budget do not enable input"
+                    } else if self.game_mode == GameMode::Klondike
                         && self.prediction == Some(PredictedAction::NoHighlight)
                         && self.selected_multi_step_actions() == UNBOUNDED_MULTI_STEP_ACTIONS
                     {
                         "Observe for a fresh HALO or completion; a recognised board may refresh Solver once, then continue only from fresh recommendations"
-                    } else if self.game_mode == GameMode::Klondike && self.prediction == Some(PredictedAction::NoHighlight) {
+                    } else if matches!(self.game_mode, GameMode::Klondike | GameMode::FreeCell) && self.prediction == Some(PredictedAction::NoHighlight) {
                         "Observe for a fresh HALO or completion; a recognised board may refresh Solver once, then follow the configured number of fresh recommendations"
                     } else if prediction_is_klondike_solve(self.prediction) {
                         "Click Solve once, settle and check completion; only continuous Multi-Step 0 advances through verified terminal controls"
-                    } else if self.game_mode == GameMode::Klondike && self.selected_multi_step_actions() == UNBOUNDED_MULTI_STEP_ACTIONS {
-                        "Run continuously across one-board Klondike games and verified terminal controls until STOP or a guarded stop condition"
+                    } else if matches!(self.game_mode, GameMode::Klondike | GameMode::FreeCell) && self.selected_multi_step_actions() == UNBOUNDED_MULTI_STEP_ACTIONS {
+                        "Run continuously across one-board games and supported terminal controls until STOP or a guarded stop condition"
                     } else if self.selected_multi_step_actions() == UNBOUNDED_MULTI_STEP_ACTIONS {
                         "Run continuously until STOP or the first guarded stop condition"
                     } else {
@@ -1487,7 +1506,29 @@ impl QmpQemuSocketApp {
                 ui.add_enabled_ui(execution_enabled, |ui| {
 
 
-                    if self.game_mode == GameMode::Klondike {
+                    if self.game_mode == GameMode::FreeCell {
+                        ui.horizontal(|ui| {
+                            ui.label("After Free Cell card / run action");
+                            ui.add(
+                                egui::DragValue::new(&mut self.freecell_settle_ms)
+                                    .range(MINIMUM_ANIMATION_SETTLE_DELAY_MS..=MAXIMUM_ANIMATION_SETTLE_DELAY_MS)
+                                    .speed(10.0)
+                                    .suffix(" ms"),
+                            )
+                            .on_hover_text("Wait after a source click before capturing; include time for automatic moves to SUIT");
+                        });
+                        ui.horizontal(|ui| {
+                            ui.label("Free Cell repeat observation settle");
+                            ui.add(
+                                egui::DragValue::new(&mut self.freecell_reobserve_ms)
+                                    .range(MINIMUM_ANIMATION_SETTLE_DELAY_MS..=MAXIMUM_ANIMATION_SETTLE_DELAY_MS)
+                                    .speed(10.0)
+                                    .suffix(" ms"),
+                            )
+                            .on_hover_text("Wait between bounded fresh captures while the next HALO or completion appears; no guest input is sent");
+                        });
+                        ui.small("Free Cell is read-only calibration in this candidate. Capture Frame and Capture PNG are available; Step Once and Multi-Step remain disabled pending source and terminal evidence.");
+                    } else if self.game_mode == GameMode::Klondike {
                         ui.horizontal(|ui| {
                             ui.label("After Klondike card / Draw / Recycle action");
                             ui.add(
@@ -1601,7 +1642,7 @@ impl QmpQemuSocketApp {
                     }
 
 
-                    if self.game_mode != GameMode::Klondike {
+                    if !matches!(self.game_mode, GameMode::Klondike | GameMode::FreeCell) {
                         ui.horizontal(|ui| {
                             ui.label("Board redeal settle");
                             ui.add(
@@ -1617,7 +1658,14 @@ impl QmpQemuSocketApp {
                         ui.label("Actions per Multi-Step");
 
 
-                        if self.game_mode == GameMode::Klondike {
+                        if self.game_mode == GameMode::FreeCell {
+                            ui.add(
+                                egui::DragValue::new(&mut self.freecell_multi_step_actions)
+                                    .range(UNBOUNDED_MULTI_STEP_ACTIONS..=FREECELL_MAX_MULTI_STEP_ACTIONS)
+                                    .speed(1.0),
+                            )
+                            .on_hover_text("Reserved Free Cell budget: 0 means continuous once input is enabled; positive values limit gameplay actions. This setting does not enable calibration-mode input.");
+                        } else if self.game_mode == GameMode::Klondike {
                             ui.add(
                                 egui::DragValue::new(&mut self.klondike_multi_step_actions)
                                     .range(UNBOUNDED_MULTI_STEP_ACTIONS..=KLONDIKE_MAX_MULTI_STEP_ACTIONS)
@@ -1631,7 +1679,9 @@ impl QmpQemuSocketApp {
                     });
 
 
-                    if self.game_mode == GameMode::Klondike && self.selected_multi_step_actions() == UNBOUNDED_MULTI_STEP_ACTIONS {
+                    if self.game_mode == GameMode::FreeCell {
+                        ui.small("Free Cell input is disabled; Multi-Step 0 is retained as the future continuous default.");
+                    } else if self.game_mode == GameMode::Klondike && self.selected_multi_step_actions() == UNBOUNDED_MULTI_STEP_ACTIONS {
                         ui.small("Multi-Step 0: continuous across one-board Klondike games through verified terminal controls. Finite runs and Single Step stop before restart.");
                     } else if self.selected_multi_step_actions() == UNBOUNDED_MULTI_STEP_ACTIONS {
                         ui.small("Multi-Step is unbounded: run until STOP or a guarded stop condition.");
@@ -1650,12 +1700,20 @@ impl QmpQemuSocketApp {
                         self.klondike_solve_settle_input = KLONDIKE_SOLVE_SETTLE_DELAY_MS;
                         self.klondike_reobserve_ms = KLONDIKE_REOBSERVE_DELAY_MS;
                         self.klondike_multi_step_actions = KLONDIKE_DEFAULT_MULTI_STEP_ACTIONS;
+                        self.freecell_settle_ms = FREECELL_SETTLE_DELAY_MS;
+                        self.freecell_reobserve_ms = FREECELL_REOBSERVE_DELAY_MS;
+                        self.freecell_multi_step_actions = FREECELL_DEFAULT_MULTI_STEP_ACTIONS;
                         self.multi_step_actions = DEFAULT_MULTI_STEP_ACTIONS;
                     }
                 });
 
 
-                if self.game_mode == GameMode::Klondike {
+                if self.game_mode == GameMode::FreeCell {
+                    ui.small(format!(
+                        "Free Cell initial defaults: action {FREECELL_SETTLE_DELAY_MS} ms, repeat observation {FREECELL_REOBSERVE_DELAY_MS} ms, Multi-Step {FREECELL_DEFAULT_MULTI_STEP_ACTIONS} (0 = continuous). Beast gameplay may refine these independent timings; edits apply to the next run."
+                    ));
+                    ui.small("These settings are reserved for the approved source-click controller. No Free Cell input is enabled yet; timing changes cannot bypass that capability gate.");
+                } else if self.game_mode == GameMode::Klondike {
                     ui.small(format!(
                         "Klondike defaults: action {KLONDIKE_SETTLE_DELAY_MS} ms from Beast gameplay, Solve animation {KLONDIKE_SOLVE_SETTLE_DELAY_MS} ms, repeat observation {KLONDIKE_REOBSERVE_DELAY_MS} ms, Multi-Step {KLONDIKE_DEFAULT_MULTI_STEP_ACTIONS} (0 = continuous). Editable timings apply to the next run."
                     ));
@@ -1697,7 +1755,13 @@ impl QmpQemuSocketApp {
                 }
 
 
-                if self.game_mode == GameMode::Klondike {
+                if self.game_mode == GameMode::FreeCell {
+                    ui.monospace(format!("guest-input-authorised = {}; read-only calibration pending source and terminal evidence", self.game_mode.input_authorised()));
+                    ui.monospace("planned priority = CELL 1–4, PLAY 1–8 bottom-up, then evidenced SUIT sources");
+                    ui.monospace("source detector and click geometry = not enabled; awaiting native captures");
+                    ui.monospace("SUIT returns = reserved until source evidence is supplied");
+                    ui.monospace("automatic SUIT transfers = guest-owned; no card matching or separate input");
+                } else if self.game_mode == GameMode::Klondike {
                     ui.monospace("guest-input-authorised = true; one guarded operation per action");
                     ui.monospace("target-priority = Draw/Recycle, Right waste, Solve control, tableau bottom-up, foundations, completion");
                     ui.monospace("source = continuous gold border with card interior; dashed destinations are excluded");
@@ -1750,7 +1814,9 @@ impl QmpQemuSocketApp {
                 ui.small("Undo All confirmation requires separate calibration; no confirmation click is automated.");
 
 
-                if self.game_mode == GameMode::Klondike {
+                if self.game_mode == GameMode::FreeCell {
+                    ui.monospace("planned HALO policy = source outline only; dashed destinations are guides");
+                } else if self.game_mode == GameMode::Klondike {
                     ui.monospace("HALO = source-border continuity plus independently validated card/stock geometry");
                 } else if self.game_mode == GameMode::Pyramid {
                     ui.monospace("HALO requires all four pixels to match the Pyramid gold predicate");
@@ -1762,7 +1828,10 @@ impl QmpQemuSocketApp {
                 }
 
 
-                if self.game_mode == GameMode::Klondike {
+                if self.game_mode == GameMode::FreeCell {
+                    ui.monospace("no-highlight recovery = not enabled; planned bounded observations before scene-authorised Solver");
+                    ui.monospace("completion = one board per game; win/restart input remains disabled pending terminal captures");
+                } else if self.game_mode == GameMode::Klondike {
                     ui.monospace("no-highlight-recovery = positive completion check first; otherwise approved bounded Solver refresh; no speculative draw");
                     ui.monospace("completion = two fresh full gold/zero BLACK observations or positively recognised completed terminal scenes; one board per game");
                 } else if self.game_mode == GameMode::Pyramid {
@@ -1775,7 +1844,7 @@ impl QmpQemuSocketApp {
                 }
 
 
-                if self.game_mode != GameMode::Klondike {
+                if !matches!(self.game_mode, GameMode::Klondike | GameMode::FreeCell) {
                     ui.monospace(format!(
                         "board-series = {} boards, redeal wait {} ms",
                         profile.boards_per_game,
@@ -1839,8 +1908,8 @@ impl QmpQemuSocketApp {
                 ));
 
 
-                if self.game_mode == GameMode::Klondike {
-                    ui.monospace("action-verification = material change in target-specific card regions; no input replay");
+                if matches!(self.game_mode, GameMode::Klondike | GameMode::FreeCell) {
+                    ui.monospace("action-policy = fresh supported Solver source, one input, settle, fresh capture; no card-pixel effect gate or uncertain-input replay");
                 } else if self.game_mode == GameMode::Pyramid {
                     ui.monospace("action-verification = card removal or material lower-pile change; repeated Left–Right pair may continue from fresh settled halos");
                 } else {
@@ -2180,14 +2249,14 @@ fn controls_are_mutable(
 }
 
 
-/// Bound finite Klondike requests while preserving zero as continuous operation.
+/// Bound finite single-board mode requests while preserving zero as continuous.
 fn normalise_operation_limit(mode: GameMode, requested: usize) -> usize {
 
 
-    if mode == GameMode::Klondike {
-        requested.min(KLONDIKE_MAX_MULTI_STEP_ACTIONS)
-    } else {
-        requested
+    match mode {
+        GameMode::Klondike => requested.min(KLONDIKE_MAX_MULTI_STEP_ACTIONS),
+        GameMode::FreeCell => requested.min(FREECELL_MAX_MULTI_STEP_ACTIONS),
+        _ => requested,
     }
 }
 
@@ -2247,8 +2316,8 @@ fn board_position_label(
 ) -> String {
 
 
-    if mode == GameMode::Klondike {
-        "Klondike — 1 board per game".to_owned()
+    if matches!(mode, GameMode::Klondike | GameMode::FreeCell) {
+        format!("{mode} — 1 board per game")
     } else if established {
         format!("{mode} — Board {current_board}/{boards_per_game} (session advisory)")
     } else {
@@ -2420,12 +2489,14 @@ fn prediction_is_klondike_solve(prediction: Option<PredictedAction>) -> bool {
 }
 
 
-/// Checks mode ownership, permitting Klondike no-HALO recovery without gameplay authority.
+/// Check mode ownership, separating single-board no-HALO recovery from gameplay authority.
 fn prediction_is_actionable(mode: GameMode, prediction: PredictedAction) -> bool {
 
 
-    if mode == GameMode::Klondike && prediction == PredictedAction::NoHighlight {
-        return true;
+    if matches!(mode, GameMode::Klondike | GameMode::FreeCell)
+        && prediction == PredictedAction::NoHighlight
+    {
+        return mode.input_authorised();
     }
 
 
@@ -3007,6 +3078,24 @@ mod tests {
         assert_eq!(normalise_operation_limit(GameMode::Klondike, usize::MAX), 10_000);
         assert_eq!(normalise_operation_limit(GameMode::TriPeaks, usize::MAX), usize::MAX);
         assert_eq!(normalise_operation_limit(GameMode::Pyramid, 0), 0);
+    }
+
+
+    /// Free Cell captures and supplied existing-mode actions cannot enable input.
+    #[test]
+    fn freecell_calibration_authority_and_finite_budget_remain_mode_local() {
+        assert!(!GameMode::FreeCell.input_authorised());
+        assert!(!prediction_is_actionable(GameMode::FreeCell, PredictedAction::NoHighlight));
+        assert!(!prediction_is_actionable(GameMode::FreeCell, PredictedAction::CalibrationOnly {
+            mode: GameMode::FreeCell,
+        }));
+        let foreign_action = crate::klondike::canonical_action(crate::klondike::KlondikeTarget::Draw)
+            .expect("existing Klondike Draw has a canonical action");
+        assert!(!prediction_is_actionable(GameMode::FreeCell, PredictedAction::Action(foreign_action)));
+        assert_eq!(normalise_operation_limit(GameMode::FreeCell, FREECELL_DEFAULT_MULTI_STEP_ACTIONS), 0);
+        assert_eq!(normalise_operation_limit(GameMode::FreeCell, 25), 25);
+        assert_eq!(normalise_operation_limit(GameMode::FreeCell, usize::MAX), 10_000);
+        assert_eq!(board_position_label(GameMode::FreeCell, 3, 3, true), "Free Cell — 1 board per game");
     }
 
 

@@ -75,6 +75,59 @@ fn both_game_modes_allow_the_shared_guarded_input_path() {
 }
 
 
+/// Free Cell captures cannot inherit progress or action authority from another mode.
+#[test]
+fn freecell_native_capture_is_read_only_and_rejects_malformed_storage() {
+    let state = TableauScanState::for_mode(GameMode::FreeCell);
+    let (observation, _) = analyse_captured_frame(
+        blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT),
+        &state,
+    ).expect("native calibration frame");
+    assert_eq!(observation.prediction, PredictedAction::CalibrationOnly { mode: GameMode::FreeCell });
+    assert!(!observation.gameplay_scene);
+    assert_eq!(observation.observed_rows, None);
+    assert_eq!(observation.game_progress, None);
+    assert!(analyse_captured_frame(blank_frame(1_280, 720), &state).is_err());
+    let mut malformed = blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT);
+    malformed.pixels.truncate(16);
+    assert!(analyse_captured_frame(malformed, &state).is_err());
+}
+
+
+/// A direct Free Cell run request stops before QMP even with a foreign actionable preview.
+#[test]
+fn freecell_execution_request_cannot_bypass_calibration_capability() {
+
+
+    for operation_limit in [0, 1] {
+        let (events, receiver) = mpsc::channel();
+        let sink = WorkerEventSink {
+            events,
+            latest_frame: LatestFrameSlot::default(),
+            capture_context: Mutex::new(None),
+        };
+        let mut state = TableauScanState::for_mode(GameMode::FreeCell);
+        let mut completed_boards = 0;
+        run_execute_steps(
+            PathBuf::from("/nonexistent-freecell-calibration/qmp.sock"),
+            draw_prediction(crate::geometry::PixelPoint::new(842, 870)),
+            StepRunSettings::new(crate::parameters::AnimationSettleDelays::default(), operation_limit),
+            &mut state,
+            &mut completed_boards,
+            &sink,
+            &AtomicBool::new(false),
+        );
+        let notifications: Vec<_> = receiver.try_iter().collect();
+        assert!(notifications.iter().any(|event| matches!(event,
+            WorkerEvent::Log(message) if message.contains("read-only calibration only") && message.contains("input sent: 0"))));
+        assert!(!notifications.iter().any(|event| matches!(event,
+            WorkerEvent::State(WorkerState::Connecting) | WorkerEvent::ActionCompleted { .. } | WorkerEvent::GameCompleted)));
+        assert_eq!(completed_boards, 0);
+        assert!(sink.latest_frame.take().is_none());
+    }
+}
+
+
 /// Check that an unrecognised Pyramid image cannot create an executable plan.
 #[test]
 fn unknown_pyramid_capture_grants_no_action_authority() {

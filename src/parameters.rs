@@ -13,7 +13,7 @@ pub const APP_NAME: &str = env!("CARGO_PKG_NAME");
 
 
 /// Package version and candidate number shown by the UI and session log.
-pub const RELEASE_LABEL: &str = concat!("v", env!("CARGO_PKG_VERSION"), ", candidate 11");
+pub const RELEASE_LABEL: &str = concat!("v", env!("CARGO_PKG_VERSION"), ", candidate 1");
 
 
 /// Initial application window width in egui logical points.
@@ -854,6 +854,14 @@ pub const KLONDIKE_DEFAULT_MULTI_STEP_ACTIONS: usize = UNBOUNDED_MULTI_STEP_ACTI
 pub const KLONDIKE_MAX_MULTI_STEP_ACTIONS: usize = 10_000;
 
 
+/// Initial Free Cell operation budget; zero selects continuous play until STOP.
+pub const FREECELL_DEFAULT_MULTI_STEP_ACTIONS: usize = UNBOUNDED_MULTI_STEP_ACTIONS;
+
+
+/// Largest finite Free Cell operation budget; zero remains continuous.
+pub const FREECELL_MAX_MULTI_STEP_ACTIONS: usize = 10_000;
+
+
 // Allow Microsoft Solitaire's action-specific animation to finish before the
 // first post-action screen dump. These constants remain the session defaults;
 // the Params window can tune a bounded copy for the next guarded run.
@@ -904,6 +912,14 @@ pub const KLONDIKE_SOLVE_SETTLE_DELAY_MS: u64 = KLONDIKE_SETTLE_DELAY_MS;
 
 /// Initial Klondike input-free result recapture interval in milliseconds.
 pub const KLONDIKE_REOBSERVE_DELAY_MS: u64 = 1_000;
+
+
+/// Initial editable Free Cell action settle; Beast gameplay may refine it.
+pub const FREECELL_SETTLE_DELAY_MS: u64 = 750;
+
+
+/// Initial editable Free Cell input-free observation interval.
+pub const FREECELL_REOBSERVE_DELAY_MS: u64 = 1_000;
 
 
 /// Default TriPeaks draw settling interval as a typed duration.
@@ -1012,6 +1028,10 @@ pub struct AnimationSettleDelays {
     pub klondike_solve: Duration,
     /// Delay between bounded input-free Klondike result observations.
     pub klondike_reobserve: Duration,
+    /// Free Cell click-to-capture settling duration, including automatic suit moves.
+    pub freecell_settle: Duration,
+    /// Delay between bounded input-free Free Cell result observations.
+    pub freecell_reobserve: Duration,
 }
 
 
@@ -1031,6 +1051,8 @@ impl AnimationSettleDelays {
             klondike_settle: Duration::from_millis(KLONDIKE_SETTLE_DELAY_MS),
             klondike_solve: Duration::from_millis(KLONDIKE_SOLVE_SETTLE_DELAY_MS),
             klondike_reobserve: Duration::from_millis(KLONDIKE_REOBSERVE_DELAY_MS),
+            freecell_settle: Duration::from_millis(FREECELL_SETTLE_DELAY_MS),
+            freecell_reobserve: Duration::from_millis(FREECELL_REOBSERVE_DELAY_MS),
         }
     }
 
@@ -1075,6 +1097,20 @@ impl AnimationSettleDelays {
     }
 
 
+    /// Apply bounded Free Cell timing without changing another mode's settings.
+    pub fn with_freecell_millis(mut self, settle_ms: u64, reobserve_ms: u64) -> Self {
+        let bounded = |milliseconds: u64| {
+            Duration::from_millis(milliseconds.clamp(
+                MINIMUM_ANIMATION_SETTLE_DELAY_MS,
+                MAXIMUM_ANIMATION_SETTLE_DELAY_MS,
+            ))
+        };
+        self.freecell_settle = bounded(settle_ms);
+        self.freecell_reobserve = bounded(reobserve_ms);
+        self
+    }
+
+
     /// Set the separately editable Solve delay without changing card/draw timing.
     pub fn with_klondike_solve_millis(mut self, solve_ms: u64) -> Self {
         self.klondike_solve = Duration::from_millis(solve_ms.clamp(
@@ -1102,6 +1138,8 @@ impl Default for AnimationSettleDelays {
             klondike_settle: Duration::from_millis(KLONDIKE_SETTLE_DELAY_MS),
             klondike_solve: Duration::from_millis(KLONDIKE_SOLVE_SETTLE_DELAY_MS),
             klondike_reobserve: Duration::from_millis(KLONDIKE_REOBSERVE_DELAY_MS),
+            freecell_settle: Duration::from_millis(FREECELL_SETTLE_DELAY_MS),
+            freecell_reobserve: Duration::from_millis(FREECELL_REOBSERVE_DELAY_MS),
         }
     }
 }
@@ -1401,6 +1439,36 @@ mod tests {
             continuous_run.animation_delays().klondike_settle,
             Duration::from_millis(750)
         );
+    }
+
+
+    /// Free Cell timings are independent, bounded and immutable for an active run.
+    #[test]
+    fn freecell_timing_and_budget_are_bounded_and_snapshotted() {
+        let defaults = AnimationSettleDelays::default();
+        assert_eq!(defaults.freecell_settle, Duration::from_millis(750));
+        assert_eq!(defaults.freecell_reobserve, Duration::from_millis(1_000));
+        let edited = defaults.with_freecell_millis(1_250, 850);
+        let active = StepRunSettings::new(edited, FREECELL_DEFAULT_MULTI_STEP_ACTIONS);
+        let next = edited.with_freecell_millis(0, u64::MAX);
+        assert_eq!(active.animation_delays().freecell_settle, Duration::from_millis(1_250));
+        assert_eq!(active.animation_delays().freecell_reobserve, Duration::from_millis(850));
+        assert_eq!(next.freecell_settle, Duration::ZERO);
+        assert_eq!(next.freecell_reobserve, Duration::from_millis(5_000));
+        assert_eq!(next.with_freecell_millis(u64::MAX, 0).freecell_settle, Duration::from_millis(5_000));
+        assert_eq!(next.with_freecell_millis(u64::MAX, 0).freecell_reobserve, Duration::ZERO);
+        assert_eq!(next.draw, defaults.draw);
+        assert_eq!(next.tableau, defaults.tableau);
+        assert_eq!(next.tripeaks_reobserve, defaults.tripeaks_reobserve);
+        assert_eq!(next.pyramid_move, defaults.pyramid_move);
+        assert_eq!(next.pyramid_card, defaults.pyramid_card);
+        assert_eq!(next.pyramid_reobserve, defaults.pyramid_reobserve);
+        assert_eq!(next.klondike_settle, defaults.klondike_settle);
+        assert_eq!(next.klondike_solve, defaults.klondike_solve);
+        assert_eq!(next.klondike_reobserve, defaults.klondike_reobserve);
+        assert_eq!(next.board_redeal, defaults.board_redeal);
+        assert!(active.is_unbounded());
+        assert_eq!(active.bounded_operation_limit(), None);
     }
 
 

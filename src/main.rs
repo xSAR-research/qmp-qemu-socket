@@ -6,6 +6,7 @@ mod app;
 mod capture;
 mod cards;
 mod detector;
+mod freecell;
 mod game;
 mod geometry;
 mod klondike;

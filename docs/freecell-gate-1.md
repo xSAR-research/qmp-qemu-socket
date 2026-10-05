@@ -1,5 +1,85 @@
 # FreeCell Gate 1: native evidence intake
 
+## Current preparation — 4 October 2026
+
+Version 1.3.0 candidate 1 is based on accepted and pushed v1.2.6 candidate 11
+at `146fe173f6e123a92e2eadf518523715d042cd66`. It adds Free Cell as a read-only
+calibration mode with shared capture and independent future Params values.
+No HALO detector, source click, Solver activation or win/restart automation is
+enabled. The three attached PNGs from this date were available locally and
+visually inspected for intake: the initial Solver-off board, Solver-on PLAY-to-SUIT
+recommendation and PLAY-to-CELL recommendation. They are observations, not a
+calibrated runtime detector. The fresh FC01–FC13 sequence below has not yet been
+received. This preparation does not replace missing frames with inferred pixels.
+
+The agreed board names are **CELL 1–4**, upper left; **PLAY 1–8**, tableau;
+and **SUIT 1–4**, upper right. Number each area from left to right. The intended
+action is a single click on the guest Solver's highlighted CELL or PLAY source,
+including a whole run. Automatic transfers into SUIT can follow and can pause
+for another HALO. A dashed landing guide is not a source. There is no Draw,
+Recycle or Solve operation to copy from another game type.
+
+Future independent settle/re-observation settings start at **750/1000 ms**,
+editable from 0 to 5000 ms. Actions per Multi-Step starts at **0** for continuous
+operation when execution is later enabled; finite settings are bounded at
+1–10000. These are initial settings rather than measured animation durations.
+They cannot activate input in this calibration-only candidate.
+
+
+## Fresh FC01–FC13 capture sequence
+
+Start a clean new Free Cell game in the existing full guest layout, retaining
+1920-by-1080 resolution and 100% display/text scaling. Operate the guest manually;
+the preparation candidate captures but does not play. For each requested state,
+use the application's **Capture PNG**, inspect its preview, then **Save PNG**.
+Attach those original full-frame PNGs. Save does not make a second screendump.
+Avoid cropping, preview exports or a host screenshot for native calibration.
+
+Use the labels below in the saved filenames. Each fresh file's timestamp
+distinguishes it from the historical FC01–FC12 sequence. Preserve a before/action/
+after order for the paired cases; do not insert another gameplay move between
+each pair. Note automatic SUIT transfers rather than assuming each image
+differs by exactly one card. No delay is inferred from filename timestamps.
+
+| Fresh ID | Capture state |
+| --- | --- |
+| FC01 | Initial new board, guest Solver off. |
+| FC02 | Solver on; highlighted PLAY source recommended to SUIT, before its source click. |
+| FC03 | Highlighted PLAY source recommended to CELL, before its source click. |
+| FC04 | Settled result of FC03; source card has arrived in CELL, including any automatic SUIT transfer. |
+| FC05 | Highlighted CELL source before clicking it; prefer a recommendation back to PLAY. |
+| FC06 | Settled result of FC05, without an intervening manual gameplay move. |
+| FC07 | Highlighted multi-card PLAY run before clicking any card in that source block. |
+| FC08 | Settled result of FC07, including automatic transfers if present. |
+| FC09 | GAME WIN / XP counting screen before manually speeding up the count. |
+| FC10 | LEVEL UP screen with OK ready. |
+| FC11 | Congratulations screen with New Game ready. |
+| FC12 | New Game selection screen with Play ready. |
+| FC13 | Fresh board after Play, Solver still off. |
+| FC14, optional | A PLAY source HALO reaching or continuing behind the bottom game toolbar. |
+
+If automatic play bypasses FC02's source or a terminal stage does not appear,
+record that observation; do not force a move or fabricate a missing frame.
+Use the next available recommended PLAY-to-SUIT source for FC02. Record the
+selected difficulty and any automatic transfers with the images. An optional
+unsupported-source example can be obtained later if the Solver offers a class
+not in this sequence; unsupported actions stay disabled until evidenced.
+
+These captures will establish native source geometry, solid-source versus
+dashed-destination discrimination, automatic-transfer observations and the
+one-board win/restart controls. The future PLAY detector will exclude toolbar
+pixels, with the boundary measured from the fresh Free Cell frames. No card-rank
+recognition, changed-pixel move proof or large fixture quota is required.
+Charlie will approve the evidenced action slice before runtime input is enabled.
+
+
+## Historical intake — 1 October 2026
+
+The following original intake records an earlier screenshot series. Its pixel
+measurements and former next-gate limits are historical, not proof that a current
+detector or runtime action is implemented. Those earlier raw files were not
+available for reinspection in this cycle. Fresh FC labels above are a new series.
+
 Prepared 1 October 2026, Australia/Brisbane. This is read-only intake alongside
 Klondike v1.2.3 candidate 3. No FreeCell mode or runtime input is enabled.
 Implementation follows acceptance of the Klondike correction and Charlie's

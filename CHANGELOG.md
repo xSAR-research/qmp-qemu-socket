@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.3.0 — candidate 1
+
+- Add a selectable read-only Free Cell calibration mode and independent profile.
+  Agree CELL, PLAY and SUIT names for future calibration. No Free Cell HALO detector,
+  gameplay input, Solver activation or completion/restart automation is enabled.
+- Add independent future Free Cell settle/re-observation settings, defaulting
+  to 750/1000 ms, and a zero continuous-action budget, with existing bounds.
+  Editing these values does not authorise guest input.
+- Preserve the accepted Klondike live Y<947 tableau boundary and Solver-led
+  action cycle, Pyramid's highlighted MOVE/Recycle D shortcut, TriPeaks delayed
+  no-HALO recovery, STOP and original-byte PNG saving.
+- Consolidate current architecture and input contracts while retaining dated
+  candidate evidence. Add the FC01–FC13 native screenshot intake checklist.
+- Base the candidate on `146fe173f6e123a92e2eadf518523715d042cd66`. Charlie
+  reported successful candidate-11 overlap recovery and a complete Klondike
+  GAME WIN sequence before pushing that base on 4 October 2026.
+
 ## v1.2.6 — candidate 11
 
 - End live Klondike tableau HALO detection before the measured guest toolbar
