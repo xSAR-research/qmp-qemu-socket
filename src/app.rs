@@ -27,6 +27,7 @@ use crate::parameters::{
     ACTION_CHANGE_CHANNEL_THRESHOLD, ACTION_CURSOR_EXCLUSION_HALF_SIZE,
     BOARD_REDEAL_SETTLE_DELAY_MS, CHALLENGE_COMPLETE_CONTINUE_CONTROL, DEFAULT_MULTI_STEP_ACTIONS,
     DRAW_ANIMATION_SETTLE_DELAY_MS, FREECELL_DEFAULT_MULTI_STEP_ACTIONS,
+    FREECELL_DEFAULT_OBSERVATION_LIMIT, FREECELL_MAX_OBSERVATION_LIMIT,
     FREECELL_MAX_MULTI_STEP_ACTIONS, FREECELL_REOBSERVE_DELAY_MS, FREECELL_SETTLE_DELAY_MS,
     GOLD_CHANNEL_TOLERANCE, GOLD_RGB_CANDIDATES, KEY_HOLD,
     KLONDIKE_DEFAULT_MULTI_STEP_ACTIONS, KLONDIKE_MAX_MULTI_STEP_ACTIONS,
@@ -185,6 +186,8 @@ pub struct QmpQemuSocketApp {
     freecell_reobserve_ms: u64,
     /// Separate Free Cell operation budget, with zero meaning continuous.
     freecell_multi_step_actions: usize,
+    /// Delayed input-free Free Cell observations allowed for each unresolved context.
+    freecell_observation_limit: usize,
     /// Requested operation limit; the configured zero sentinel means continuous.
     multi_step_actions: usize,
     /// Run ownership retained until the worker reports completion.
@@ -270,6 +273,7 @@ impl QmpQemuSocketApp {
             freecell_settle_ms: FREECELL_SETTLE_DELAY_MS,
             freecell_reobserve_ms: FREECELL_REOBSERVE_DELAY_MS,
             freecell_multi_step_actions: FREECELL_DEFAULT_MULTI_STEP_ACTIONS,
+            freecell_observation_limit: FREECELL_DEFAULT_OBSERVATION_LIMIT,
             multi_step_actions: DEFAULT_MULTI_STEP_ACTIONS,
             active_run: None,
             stop_requested: false,
@@ -300,7 +304,7 @@ impl QmpQemuSocketApp {
         app.push_log(format!("QMP socket candidate: {}", app.qmp_socket_path));
         app.push_log("Initial Capture Frame is automatic, one-shot and read-only.");
         app.push_log("The preview retains only the latest worker frame; stale full-resolution previews are coalesced while the UI is asleep or occluded.");
-        app.push_log("Step Once and Multi-Step capture fresh evidence before input and reuse settled result frames. Klondike follows fresh Solver recommendations without card-pixel effect proof; its preview is advisory. Free Cell is read-only calibration pending new source and terminal evidence. TriPeaks/Pyramid retain their existing validation and effect policies.");
+        app.push_log("Step Once and Multi-Step capture fresh evidence before input and reuse settled result frames. Klondike and Free Cell follow fresh Solver recommendations without card-pixel effect proof; their previews are advisory. Free Cell has no Draw, Recycle, Solve or SUIT-return input. TriPeaks/Pyramid retain their existing validation and effect policies.");
         app.push_log(format!(
             "Execution defaults: one initial planning frame plus fresh result captures after each action, Multi-Step limits: TriPeaks/Pyramid {}, Klondike {}, Free Cell {} (0 means continuous). STOP is visible only while a guarded run is active.",
             DEFAULT_MULTI_STEP_ACTIONS, KLONDIKE_DEFAULT_MULTI_STEP_ACTIONS, FREECELL_DEFAULT_MULTI_STEP_ACTIONS,
@@ -555,6 +559,16 @@ impl QmpQemuSocketApp {
                         self.roll_visible_output_after_completed_game();
                     } else {
                         self.push_log("Discarded a Klondike completion notification after a mode change.");
+                    }
+                }
+                WorkerEvent::FreeCellGameCompleted => {
+
+
+                    if self.game_mode == GameMode::FreeCell {
+                        self.push_log("One-board Free Cell GAME WIN recognised. The worker log records whether the run stopped or completed the ordered restart.");
+                        self.roll_visible_output_after_completed_game();
+                    } else {
+                        self.push_log("Discarded a Free Cell completion notification after a mode change.");
                     }
                 }
                 WorkerEvent::GameCompleted => {
@@ -897,7 +911,8 @@ impl QmpQemuSocketApp {
 
 
         let operation_limit = normalise_operation_limit(self.game_mode, operation_limit);
-        let settings = StepRunSettings::new(animation_delays, operation_limit);
+        let settings = StepRunSettings::new(animation_delays, operation_limit)
+            .with_freecell_observation_limit(self.freecell_observation_limit);
 
 
         let request_scope = if settings.is_unbounded()
@@ -1129,7 +1144,7 @@ impl QmpQemuSocketApp {
 
                 if bevel_button(ui, "Single Step", ACTION_GREEN, false, STEP_ONCE_INPUT_ENABLED && action_available)
                     .on_hover_text(if self.game_mode == GameMode::FreeCell {
-                        "Free Cell input is disabled pending source and terminal captures; use Capture Frame or Capture PNG for calibration"
+                        "Follow one fresh CELL or PLAY source HALO, settle and recapture; activate Solver once only if it is off; no card-pixel move proof"
                     } else if self.game_mode == GameMode::Klondike && self.prediction == Some(PredictedAction::NoHighlight) {
                         "Observe for a fresh HALO or completion; a recognised board may refresh Solver once, then send at most one gameplay action and capture its result"
                     } else if prediction_is_klondike_solve(self.prediction) {
@@ -1147,7 +1162,7 @@ impl QmpQemuSocketApp {
 
                 if bevel_button(ui, "Multiple Steps", ACTION_GREEN, false, MULTI_STEP_INPUT_ENABLED && action_available)
                     .on_hover_text(if self.game_mode == GameMode::FreeCell {
-                        "Free Cell input is disabled pending source and terminal captures; its saved timing and operation budget do not enable input"
+                        "Follow fresh CELL/PLAY HALOs; 0 continues through one-board GAME WIN, OK, New Game, Play and Solver activation; no SUIT, Draw or Solve inputs"
                     } else if self.game_mode == GameMode::Klondike
                         && self.prediction == Some(PredictedAction::NoHighlight)
                         && self.selected_multi_step_actions() == UNBOUNDED_MULTI_STEP_ACTIONS
@@ -1527,7 +1542,12 @@ impl QmpQemuSocketApp {
                             )
                             .on_hover_text("Wait between bounded fresh captures while the next HALO or completion appears; no guest input is sent");
                         });
-                        ui.small("Free Cell is read-only calibration in this candidate. Capture Frame and Capture PNG are available; Step Once and Multi-Step remain disabled pending source and terminal evidence.");
+                        ui.horizontal(|ui| {
+                            ui.label("Delayed observations per unresolved stage");
+                            ui.add(egui::DragValue::new(&mut self.freecell_observation_limit)
+                                .range(1..=FREECELL_MAX_OBSERVATION_LIMIT).speed(1.0));
+                        });
+                        ui.small("Automatic SUIT transfers may temporarily hide the HALO. Wait and recapture without card matching; Solver is activated only on a recognised Solver-off board.");
                     } else if self.game_mode == GameMode::Klondike {
                         ui.horizontal(|ui| {
                             ui.label("After Klondike card / Draw / Recycle action");
@@ -1664,7 +1684,7 @@ impl QmpQemuSocketApp {
                                     .range(UNBOUNDED_MULTI_STEP_ACTIONS..=FREECELL_MAX_MULTI_STEP_ACTIONS)
                                     .speed(1.0),
                             )
-                            .on_hover_text("Reserved Free Cell budget: 0 means continuous once input is enabled; positive values limit gameplay actions. This setting does not enable calibration-mode input.");
+                            .on_hover_text("0 continues across one-board Free Cell games until STOP or a guarded stop; positive values limit source clicks and stop before restart");
                         } else if self.game_mode == GameMode::Klondike {
                             ui.add(
                                 egui::DragValue::new(&mut self.klondike_multi_step_actions)
@@ -1680,7 +1700,7 @@ impl QmpQemuSocketApp {
 
 
                     if self.game_mode == GameMode::FreeCell {
-                        ui.small("Free Cell input is disabled; Multi-Step 0 is retained as the future continuous default.");
+                        ui.small("Free Cell Multi-Step 0 continues through one-board wins and restart. Finite runs and Single Step stop before terminal input.");
                     } else if self.game_mode == GameMode::Klondike && self.selected_multi_step_actions() == UNBOUNDED_MULTI_STEP_ACTIONS {
                         ui.small("Multi-Step 0: continuous across one-board Klondike games through verified terminal controls. Finite runs and Single Step stop before restart.");
                     } else if self.selected_multi_step_actions() == UNBOUNDED_MULTI_STEP_ACTIONS {
@@ -1703,6 +1723,7 @@ impl QmpQemuSocketApp {
                         self.freecell_settle_ms = FREECELL_SETTLE_DELAY_MS;
                         self.freecell_reobserve_ms = FREECELL_REOBSERVE_DELAY_MS;
                         self.freecell_multi_step_actions = FREECELL_DEFAULT_MULTI_STEP_ACTIONS;
+                        self.freecell_observation_limit = FREECELL_DEFAULT_OBSERVATION_LIMIT;
                         self.multi_step_actions = DEFAULT_MULTI_STEP_ACTIONS;
                     }
                 });
@@ -1712,7 +1733,7 @@ impl QmpQemuSocketApp {
                     ui.small(format!(
                         "Free Cell initial defaults: action {FREECELL_SETTLE_DELAY_MS} ms, repeat observation {FREECELL_REOBSERVE_DELAY_MS} ms, Multi-Step {FREECELL_DEFAULT_MULTI_STEP_ACTIONS} (0 = continuous). Beast gameplay may refine these independent timings; edits apply to the next run."
                     ));
-                    ui.small("These settings are reserved for the approved source-click controller. No Free Cell input is enabled yet; timing changes cannot bypass that capability gate.");
+                    ui.small("Each source HALO permits one click, settle and fresh observation. GAME WIN uses the reward panel, followed by expected OK, New Game and Play controls; decorations and card pixels are not matched.");
                 } else if self.game_mode == GameMode::Klondike {
                     ui.small(format!(
                         "Klondike defaults: action {KLONDIKE_SETTLE_DELAY_MS} ms from Beast gameplay, Solve animation {KLONDIKE_SOLVE_SETTLE_DELAY_MS} ms, repeat observation {KLONDIKE_REOBSERVE_DELAY_MS} ms, Multi-Step {KLONDIKE_DEFAULT_MULTI_STEP_ACTIONS} (0 = continuous). Editable timings apply to the next run."
@@ -1756,10 +1777,10 @@ impl QmpQemuSocketApp {
 
 
                 if self.game_mode == GameMode::FreeCell {
-                    ui.monospace(format!("guest-input-authorised = {}; read-only calibration pending source and terminal evidence", self.game_mode.input_authorised()));
-                    ui.monospace("planned priority = CELL 1–4, PLAY 1–8 bottom-up, then evidenced SUIT sources");
-                    ui.monospace("source detector and click geometry = not enabled; awaiting native captures");
-                    ui.monospace("SUIT returns = reserved until source evidence is supplied");
+                    ui.monospace(format!("guest-input-authorised = {}; fresh canonical source required", self.game_mode.input_authorised()));
+                    ui.monospace("priority = CELL 1–4, PLAY 1–8 bottom-up; SUIT is never scanned");
+                    ui.monospace("source = solid outline; one click on the bottom card of a run");
+                    ui.monospace("toolbar = excluded; crossing-run evidence FC14 remains unavailable");
                     ui.monospace("automatic SUIT transfers = guest-owned; no card matching or separate input");
                 } else if self.game_mode == GameMode::Klondike {
                     ui.monospace("guest-input-authorised = true; one guarded operation per action");
@@ -1815,7 +1836,7 @@ impl QmpQemuSocketApp {
 
 
                 if self.game_mode == GameMode::FreeCell {
-                    ui.monospace("planned HALO policy = source outline only; dashed destinations are guides");
+                    ui.monospace("HALO policy = source outline only; dashed destinations are guides");
                 } else if self.game_mode == GameMode::Klondike {
                     ui.monospace("HALO = source-border continuity plus independently validated card/stock geometry");
                 } else if self.game_mode == GameMode::Pyramid {
@@ -1829,8 +1850,8 @@ impl QmpQemuSocketApp {
 
 
                 if self.game_mode == GameMode::FreeCell {
-                    ui.monospace("no-highlight recovery = not enabled; planned bounded observations before scene-authorised Solver");
-                    ui.monospace("completion = one board per game; win/restart input remains disabled pending terminal captures");
+                    ui.monospace("no-highlight recovery = bounded fresh captures; activate only a recognised Solver-off board");
+                    ui.monospace("completion = one reward panel is one game; OK → New Game → Play → Solver");
                 } else if self.game_mode == GameMode::Klondike {
                     ui.monospace("no-highlight-recovery = positive completion check first; otherwise approved bounded Solver refresh; no speculative draw");
                     ui.monospace("completion = two fresh full gold/zero BLACK observations or positively recognised completed terminal scenes; one board per game");
@@ -2469,6 +2490,13 @@ fn format_prediction(prediction: PredictedAction) -> String {
                 "Prediction: Klondike {target} using qcode D; source anchor=({}, {}); input sent=0.",
                 action.anchor.x, action.anchor.y
             ),
+            (ActionTarget::FreeCell(target), InputOperation::Click(point)) => format!(
+                "Prediction: click Free Cell {target} at ({}, {}); fresh source HALO only; input sent=0.",
+                point.x, point.y
+            ),
+            (ActionTarget::FreeCell(target), InputOperation::PressDrawKey) => format!(
+                "Prediction refused: Free Cell {target} has an invalid key specification; input sent=0."
+            ),
         },
         PredictedAction::Ambiguous { highlight_count } => format!(
             "Prediction refused: {highlight_count} calibrated highlights were found; input sent=0."
@@ -2510,6 +2538,9 @@ fn prediction_is_actionable(mode: GameMode, prediction: PredictedAction) -> bool
         && match (action.target, action.operation()) {
             (ActionTarget::Klondike(target), _) => {
                 crate::klondike::canonical_action(target) == Some(action)
+            }
+            (ActionTarget::FreeCell(target), _) => {
+                crate::freecell::canonical_action(target) == Some(action)
             }
             (ActionTarget::Pyramid(target), _) => {
                 pyramid::action_for_kind(target) == Some(action)
@@ -2559,6 +2590,12 @@ fn concise_prediction(prediction: PredictedAction) -> String {
             (ActionTarget::Klondike(target), InputOperation::Click(point)) => {
                 format!("Klondike {target} at ({}, {})", point.x, point.y)
             }
+            (ActionTarget::FreeCell(target), InputOperation::Click(point)) => {
+                format!("Free Cell {target} at ({}, {})", point.x, point.y)
+            }
+            (ActionTarget::FreeCell(target), InputOperation::PressDrawKey) => {
+                format!("invalid Free Cell {target} key action")
+            }
             (ActionTarget::Klondike(target), InputOperation::PressDrawKey) => {
                 format!("Klondike {target} using D")
             }
@@ -2602,6 +2639,12 @@ fn display_action(prediction: PredictedAction) -> String {
             }
             (ActionTarget::Klondike(target), InputOperation::Click(_)) => {
                 format!("Klondike {target} click")
+            }
+            (ActionTarget::FreeCell(target), InputOperation::Click(_)) => {
+                format!("Free Cell {target} click")
+            }
+            (ActionTarget::FreeCell(target), InputOperation::PressDrawKey) => {
+                format!("Invalid Free Cell {target} key action")
             }
             (ActionTarget::Klondike(target), InputOperation::PressDrawKey) => {
                 format!("Klondike {target} — D")
@@ -2744,6 +2787,7 @@ fn paint_prediction(painter: &egui::Painter, canvas: Rect, prediction: Predicted
                     }
                     ActionTarget::Pyramid(target) => format!("proposed {target}"),
                     ActionTarget::Klondike(target) => format!("proposed {target}"),
+                    ActionTarget::FreeCell(target) => format!("proposed {target}"),
                 };
                 paint_labeled_crosshair(painter, canvas, click_point, proposal, &label);
             }
@@ -3081,17 +3125,23 @@ mod tests {
     }
 
 
-    /// Free Cell captures and supplied existing-mode actions cannot enable input.
+    /// Free Cell permits its own source actions and no-HALO recovery, never foreign actions.
     #[test]
-    fn freecell_calibration_authority_and_finite_budget_remain_mode_local() {
-        assert!(!GameMode::FreeCell.input_authorised());
-        assert!(!prediction_is_actionable(GameMode::FreeCell, PredictedAction::NoHighlight));
+    fn freecell_source_authority_and_finite_budget_remain_mode_local() {
+        assert!(GameMode::FreeCell.input_authorised());
+        assert!(prediction_is_actionable(GameMode::FreeCell, PredictedAction::NoHighlight));
         assert!(!prediction_is_actionable(GameMode::FreeCell, PredictedAction::CalibrationOnly {
             mode: GameMode::FreeCell,
         }));
         let foreign_action = crate::klondike::canonical_action(crate::klondike::KlondikeTarget::Draw)
             .expect("existing Klondike Draw has a canonical action");
         assert!(!prediction_is_actionable(GameMode::FreeCell, PredictedAction::Action(foreign_action)));
+        let own_action = crate::freecell::canonical_action(crate::freecell::FreeCellTarget::Cell { column: 1 })
+            .expect("bounded Free Cell CELL source");
+        assert!(prediction_is_actionable(GameMode::FreeCell, PredictedAction::Action(own_action)));
+        let mut forged = own_action;
+        forged.specification.operation = InputOperation::PressDrawKey;
+        assert!(!prediction_is_actionable(GameMode::FreeCell, PredictedAction::Action(forged)));
         assert_eq!(normalise_operation_limit(GameMode::FreeCell, FREECELL_DEFAULT_MULTI_STEP_ACTIONS), 0);
         assert_eq!(normalise_operation_limit(GameMode::FreeCell, 25), 25);
         assert_eq!(normalise_operation_limit(GameMode::FreeCell, usize::MAX), 10_000);

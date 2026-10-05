@@ -14,18 +14,12 @@ the real purpose. Each fixture keeps independent target and effect policies.
 The target is to build in Dijkstra / A* shortest path problem solving rather
 than using the **Solver**, this will benefit drone route planning experience.
 
-This is **v1.3.0, candidate 1**, based on accepted and pushed v1.2.6 candidate 11
-at `146fe173f6e123a92e2eadf518523715d042cd66`. `Cargo.toml` supplies the package
-version shown in the window title and Parameters. Charlie reported that the
-previous Undo All overlap case and complete Klondike GAME WIN sequence passed
-on the Beast before promoting that base. This is a user-reported acceptance run,
-not an exhaustive layout or timing claim.
-
-Candidate 1 adds **Free Cell** as a read-only calibration mode. Its independent
-profile and editable future timings are present; HALO detection, gameplay,
-Solver activation and win/restart automation remain disabled pending fresh
-native evidence. Existing TriPeaks, Pyramid and Klondike execution stays intact.
-See [Free Cell candidate notes](docs/freecell-v1.3.0-candidate-1.md).
+This is **v1.3.0, candidate 2**, based on pushed candidate 1 at
+`44727193d4e620a749925e9cc46c9d9d4df1700f`. `Cargo.toml` supplies the package
+version shown in the window title and Parameters. Original FC01–FC13 evidence
+and Charlie's approved input contract now enable **Free Cell**. Existing
+TriPeaks, Pyramid and Klondike execution stays intact.
+See [Free Cell candidate notes](docs/freecell-v1.3.0-candidate-2.md).
 
 ## Build and source spacing
 
@@ -51,33 +45,49 @@ rustfmt configuration and existing source spacing are preserved; no formatter
 is part of this candidate.
 
 
-## Free Cell calibration
-
-Select **Free Cell** for read-only **Capture Frame** and **Capture PNG**.
-The preview reports calibration-only status. **Single Step** and **Multiple
-Steps** do not send guest input. The worker rejects a Free Cell execution
-request before guest input. Capture does not click the guest's Solver.
+## Free Cell
 
 Board names are **CELL 1–4** at the upper left, **PLAY 1–8** across the tableau,
-and **SUIT 1–4** at the upper right, numbered left to right. Future source actions
-will follow the guest's Solver: one click on a highlighted CELL card or PLAY
-card/run, settle, then fresh capture. Dashed destination guides do not become
-source targets. Automatic moves to SUIT can follow a source click; no card-rank,
-recipient-card or changed-pixel proof is being added.
+and **SUIT 1–4** at the upper right, numbered left to right. Select Free Cell,
+then Single Step or Multiple Steps. Read-only Capture Frame and Capture PNG
+never activate Solver or send gameplay input.
 
-**Params** keeps independent future Free Cell **action / automatic-transfer
-settle** and **re-observation** intervals, initially **750/1000 ms**, editable
-from 0 to 5000 ms, and **Actions per Multi-Step**, initially **0**. Zero means
-continuous when gameplay is enabled; a finite value is limited to 1–10000.
-These settings do not enable execution or establish measured animation times.
+Each run starts with a fresh frame; its preview is advisory. Scan CELL first,
+then PLAY bottom-up and left-to-right. One solid highlighted source block
+receives one bottom-card click, including an entire run, followed by editable
+settle and a fresh frame. Dashed destination guides are not sources. There is
+no card-rank, recipient-card, position-change or changed-pixel move proof.
+Repeated source positions are valid. SUIT piles are never scanned for input;
+Free Cell has no Draw, Recycle or Solve operation.
 
-The new native **FC01–FC13** evidence sequence and capture instructions are in
-[Free Cell Gate 1](docs/freecell-gate-1.md). The three supplied 4 October images
-were inspected for intake; the new FC01–FC13 sequence has not yet been received.
-Those intake observations do not establish a runtime detector. Free Cell must
-own its geometry and completion policy before any guest input is enabled.
-No Draw, Recycle or Solve
-operation is inherited from another mode.
+Automatic SUIT transfers can temporarily leave no HALO. A positive win-entry
+check is independent of source detection. Otherwise observe again, without
+clicking an active Solver. A positively recognised Solver-off board may activate
+Solver once, settle and capture anew. Unknown scenes or unresolved sources stop
+after the bounded allowance, retaining the latest frame and complete log.
+
+**Params** offers **action / automatic-transfer settle** and **re-observation**
+intervals, initially **750/1000 ms**, editable from 0 to 5000 ms, plus **Delayed
+observations per unresolved stage**, initially **20**, bounded **1–100**. These
+starting values are not measured animation times. **Actions per Multi-Step**
+defaults to **0 = continuous**; finite budgets are **1–10000**. Step Once sends
+at most one source action. Settings are snapshotted for each run.
+
+**One Free Cell board is one game.** GAME WIN entry requires the score/skip
+panel or the completed-game New Game panel; missing HALO, isolated OK and Play
+do not establish a win. Only continuous mode follows score skip → expected OK
+→ New Game → Play → fresh board → Solver activation → fresh HALO. Expected
+controls use their local lettering and button body, not level, rank, medal,
+fireworks or surrounding artwork. Each acknowledged click is sent once; an
+unready next stage receives input-free observations, not click retries.
+
+The original **FC01–FC13** PNGs are included with hashes. **FC14 is absent**:
+source probes exclude the toolbar beginning at **Y=947**, and a block without a
+complete visible lower outline remains unsupported. See
+[Free Cell Gate 1](docs/freecell-gate-1.md) and the candidate review for evidence,
+validation limits and Beast checks. Native Rust validation was not available
+in the delivery workspace; build/test and live GAME WIN validation remain
+mandatory before acceptance.
 
 ## Klondike Draw 1
 

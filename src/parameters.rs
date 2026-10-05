@@ -13,7 +13,7 @@ pub const APP_NAME: &str = env!("CARGO_PKG_NAME");
 
 
 /// Package version and candidate number shown by the UI and session log.
-pub const RELEASE_LABEL: &str = concat!("v", env!("CARGO_PKG_VERSION"), ", candidate 1");
+pub const RELEASE_LABEL: &str = concat!("v", env!("CARGO_PKG_VERSION"), ", candidate 2");
 
 
 /// Initial application window width in egui logical points.
@@ -862,6 +862,14 @@ pub const FREECELL_DEFAULT_MULTI_STEP_ACTIONS: usize = UNBOUNDED_MULTI_STEP_ACTI
 pub const FREECELL_MAX_MULTI_STEP_ACTIONS: usize = 10_000;
 
 
+/// Default delayed Free Cell observations per unresolved animation or terminal stage.
+pub const FREECELL_DEFAULT_OBSERVATION_LIMIT: usize = 20;
+
+
+/// Largest editable Free Cell observation allowance; each context remains bounded.
+pub const FREECELL_MAX_OBSERVATION_LIMIT: usize = 100;
+
+
 // Allow Microsoft Solitaire's action-specific animation to finish before the
 // first post-action screen dump. These constants remain the session defaults;
 // the Params window can tune a bounded copy for the next guarded run.
@@ -1159,6 +1167,8 @@ pub struct StepRunSettings {
     animation_delays: AnimationSettleDelays,
     /// Gameplay operation limit; zero means unbounded until STOP or uncertainty.
     operation_limit: usize,
+    /// Delayed input-free Free Cell captures permitted for one unresolved context.
+    freecell_observation_limit: usize,
 }
 
 
@@ -1170,6 +1180,7 @@ impl StepRunSettings {
         Self {
             animation_delays,
             operation_limit,
+            freecell_observation_limit: FREECELL_DEFAULT_OBSERVATION_LIMIT,
         }
     }
 
@@ -1183,6 +1194,19 @@ impl StepRunSettings {
     /// Return the raw operation limit; zero represents an unbounded run.
     pub const fn operation_limit(self) -> usize {
         self.operation_limit
+    }
+
+
+    /// Freeze a bounded Free Cell observation allowance without changing other modes.
+    pub fn with_freecell_observation_limit(mut self, limit: usize) -> Self {
+        self.freecell_observation_limit = limit.clamp(1, FREECELL_MAX_OBSERVATION_LIMIT);
+        self
+    }
+
+
+    /// Return the snapshotted delayed observation allowance for each Free Cell context.
+    pub const fn freecell_observation_limit(self) -> usize {
+        self.freecell_observation_limit
     }
 
 
@@ -1469,6 +1493,10 @@ mod tests {
         assert_eq!(next.board_redeal, defaults.board_redeal);
         assert!(active.is_unbounded());
         assert_eq!(active.bounded_operation_limit(), None);
+        assert_eq!(active.freecell_observation_limit(), 20);
+        assert_eq!(active.with_freecell_observation_limit(0).freecell_observation_limit(), 1);
+        assert_eq!(active.with_freecell_observation_limit(usize::MAX).freecell_observation_limit(), 100);
+        assert_eq!(active.with_freecell_observation_limit(7).freecell_observation_limit(), 7);
     }
 
 

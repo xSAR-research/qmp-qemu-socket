@@ -66,7 +66,7 @@ impl GameMode {
 
     /// Whether this mode has enough approved evidence to send guest input.
     pub const fn input_authorised(self) -> bool {
-        matches!(self, Self::TriPeaks | Self::Pyramid | Self::Klondike)
+        matches!(self, Self::TriPeaks | Self::Pyramid | Self::Klondike | Self::FreeCell)
     }
 
 
@@ -177,6 +177,8 @@ pub enum ActionTarget {
     Pyramid(crate::pyramid::PyramidTargetKind),
     /// A source block or stock operation managed by Klondike's detector.
     Klondike(crate::klondike::KlondikeTarget),
+    /// A CELL card or PLAY source run managed by Free Cell's detector.
+    FreeCell(crate::freecell::FreeCellTarget),
 }
 
 
@@ -191,6 +193,7 @@ impl ActionTarget {
             Self::Bottom { .. } | Self::Tableau(_) => GameMode::TriPeaks,
             Self::Pyramid(_) => GameMode::Pyramid,
             Self::Klondike(_) => GameMode::Klondike,
+            Self::FreeCell(_) => GameMode::FreeCell,
         }
     }
 }
@@ -207,6 +210,7 @@ impl fmt::Display for ActionTarget {
             Self::Bottom { label, .. } => formatter.write_str(label),
             Self::Pyramid(kind) => write!(formatter, "Pyramid {kind}"),
             Self::Klondike(kind) => write!(formatter, "Klondike {kind}"),
+            Self::FreeCell(kind) => write!(formatter, "Free Cell {kind}"),
             Self::Tableau(target) => write!(
                 formatter,
                 "tableau row {}, column {}",
@@ -242,6 +246,8 @@ pub enum AnimationClass {
     Klondike,
     /// Klondike auto-finish animation, with its own editable settling interval.
     KlondikeSolve,
+    /// Free Cell source click followed by any automatic SUIT transfers.
+    FreeCell,
 }
 
 
@@ -329,6 +335,7 @@ impl GuidedAction {
             AnimationClass::PyramidCard => delays.pyramid_card,
             AnimationClass::Klondike => delays.klondike_settle,
             AnimationClass::KlondikeSolve => delays.klondike_solve,
+            AnimationClass::FreeCell => delays.freecell_settle,
         }
     }
 
@@ -538,7 +545,7 @@ mod tests {
 
 
     #[test]
-    fn tripeaks_remains_the_default_with_freecell_calibration_separate() {
+    fn tripeaks_remains_the_default_with_four_independent_modes() {
         let mode = GameMode::default();
         let profile = mode.profile();
 
@@ -550,8 +557,8 @@ mod tests {
         assert!(!GameMode::Pyramid.calibration_only());
         assert!(GameMode::Klondike.input_authorised());
         assert!(!GameMode::Klondike.calibration_only());
-        assert!(!GameMode::FreeCell.input_authorised());
-        assert!(GameMode::FreeCell.calibration_only());
+        assert!(GameMode::FreeCell.input_authorised());
+        assert!(!GameMode::FreeCell.calibration_only());
         assert_eq!(profile.label, "TriPeaks");
         assert_eq!(profile.valid_row_bits(), 0b1111);
         assert_eq!(profile.initial_active_rows, 0b1000);

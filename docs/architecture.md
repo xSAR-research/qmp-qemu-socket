@@ -2,12 +2,11 @@
 
 ## Current boundary
 
-Version 1.3.0 candidate 1 starts from accepted and pushed v1.2.6 candidate 11
-at `146fe173f6e123a92e2eadf518523715d042cd66`. Charlie reported a successful
-replay of the Undo All overlap case and a complete Klondike GAME WIN sequence
-before promotion. Free Cell is now selectable for read-only calibration;
-it cannot send gameplay, Solver or terminal input until its independent native
-detector and scene policy are evidenced. The later candidate-history sections
+Version 1.3.0 candidate 2 starts from pushed candidate 1 at
+`44727193d4e620a749925e9cc46c9d9d4df1700f`. Free Cell's approved FC01–FC13
+slice now owns CELL/PLAY source actions, automatic-transfer observations and
+independent one-board completion/restart policy. It does not inherit card-pixel
+proof, Draw, Recycle, Solve or SUIT-source input. The later candidate-history sections
 retain their original decisions, including superseded card-effect policies.
 
 
@@ -21,7 +20,8 @@ retain their original decisions, including superseded card-effect policies.
 | `tripeaks.rs` | validated TriPeaks profile assembly |
 | `klondike.rs` | live Klondike dynamic sources, stock/recycle, RIGHT fan, Solve and independent win evidence; retired effect diagnostics are test-only |
 | `klondike_terminal.rs` | Klondike completed-game scenes, terminal controls and fresh Draw 1 deal recognition |
-| `freecell.rs` | independent read-only Free Cell profile, native frame validation and calibration-only status |
+| `freecell.rs` | native Free Cell scene/Solver state, dynamic CELL/PLAY sources and canonical one-click actions |
+| `freecell_terminal.rs` | independent score/New Game win entry and local expected OK/New Game/Play readiness |
 | `pyramid.rs` | Pyramid targets, fixed halo probes, priority and action-effect evidence |
 | `parameters.rs` | fixed geometry, colour values, delays, limits and release label |
 | `capture.rs` | decoded immutable frame representation |
@@ -36,6 +36,7 @@ retain their original decisions, including superseded card-effect policies.
 | `worker/post_game.rs` | shared score, Level Up, New Game, Play and Solver progression |
 | `worker/pyramid_execution.rs` | Pyramid effect, fresh-pair continuation and redeal checks |
 | `worker/klondike_execution.rs` | Klondike execution, bounded recovery, independent completion and continuous terminal progression |
+| `worker/freecell_execution.rs` | Free Cell fresh-source actions, automatic-transfer observations and deterministic one-board restart |
 | `worker/tests.rs` | worker regression cases, including transition and cancellation guards |
 
 ---
@@ -54,7 +55,7 @@ names. Displaying an overlay alone never grants input authority.
 ```mermaid
 flowchart TD
     A["Fresh capture"] --> B{"Mode permits input?"}
-    B -->|"Free Cell calibration"| C["Publish read-only preview"]
+    B -->|"Read-only request"| C["Publish read-only preview"]
     B -->|"Active mode"| D["Apply mode target policy"]
     D --> E["Probe QMP and send once"]
     E --> F["Settle and capture result"]
@@ -66,10 +67,10 @@ flowchart TD
 TriPeaks and Pyramid freshly reproduce the approved initial prediction and keep
 their accepted result-verification policies. An effect-verified result or
 Pyramid's qualified repeated Left/Right HALO pair becomes the next planning
-frame. Klondike's preview is advisory: each fresh supported scene and canonical
+frame. Klondike and Free Cell previews are advisory: each fresh supported scene and canonical
 Solver recommendation authorises one operation, then editable settle and fresh
 capture. Card-rank, source/recipient matching and changed-pixel proof do not gate
-Klondike play. Acknowledged delivery is logged with its effect explicitly
+their play. Acknowledged delivery is logged with its effect explicitly
 unproven; independent positive evidence is still required for game completion.
 Every active input checks STOP and freshly probes VM/current absolute tablet.
 
@@ -123,13 +124,13 @@ implemented or benchmarked.
 
 | **Capability** | **TriPeaks** | **Pyramid** | **Klondike** | **Free Cell** |
 | --- | --- | --- | --- | --- |
-| Capture Frame / Capture PNG | Read-only | Read-only | Read-only | Read-only calibration |
-| HALO selection | Unique target | First eligible of 31 fixed probes | Mode-owned ordered source classes | Not calibrated |
-| Single Step / Multiple Steps | Guarded | Guarded | Fresh Solver-led actions | Input disabled |
-| Ordinary input | D or tableau click | D for highlighted MOVE/Recycle; card/pile click | D for Draw 1; recycle/source click | None |
-| Result policy | Existing effect checks | Effect checks or qualified fresh pair | Fresh valid recommendation; effect unproven | Calibration-only status |
-| Editable settle/reobserve | Draw/tableau and late-HALO intervals | 1000/2000/1000 ms defaults | 750/750/1000 ms defaults | Future 750/1000 ms settings |
-| Board/game transitions | Shared three-board policy | Shared three-board policy | Independent one-board policy | No automation enabled |
+| Capture Frame / Capture PNG | Read-only | Read-only | Read-only | Read-only |
+| HALO selection | Unique target | First eligible of 31 fixed probes | Mode-owned ordered source classes | CELL, then PLAY bottom-up / left-to-right |
+| Single Step / Multiple Steps | Guarded | Guarded | Fresh Solver-led actions | Fresh Solver-led actions |
+| Ordinary input | D or tableau click | D for highlighted MOVE/Recycle; card/pile click | D for Draw 1; recycle/source click | One CELL/PLAY bottom-card click |
+| Result policy | Existing effect checks | Effect checks or qualified fresh pair | Fresh valid recommendation; effect unproven | Fresh valid recommendation; effect unproven |
+| Editable settle/reobserve | Draw/tableau and late-HALO intervals | 1000/2000/1000 ms defaults | 750/750/1000 ms defaults | 750/1000 ms and 20-observation defaults |
+| Board/game transitions | Shared three-board policy | Shared three-board policy | Independent one-board policy | Independent one-board policy |
 
 Pyramid's semantic order is `Move`, `Left`, `Right`, then 28 card identities
 from row 7 left-to-right upward to the row-1 apex. It does not use TriPeaks row
@@ -273,8 +274,8 @@ promoted to complete-effect proof by this new route.
   disk.
 - TriPeaks/Pyramid Multi-Step defaults to continuous (`0`) and is STOP-cancellable.
 - Klondike Multi-Step defaults to 0; 1–10000 bounds actions and 0 runs continuously.
-- Free Cell future Multi-Step defaults to 0, with a finite range of 1–10000;
-  calibration mode still rejects all guest input.
+- Free Cell Multi-Step defaults to 0, with a finite range of 1–10000. Source and
+  terminal observation allowances are bounded 1–100 per unresolved stage.
 - Klondike Solve sends one request, then bounded read-only completion observations;
   terminal progression requires continuous authority and independent win proof.
 - Transition retries and click attempts are bounded.
@@ -487,25 +488,35 @@ Pyramid D shortcut and TriPeaks delayed recovery remain unchanged. See
 [candidate 11](klondike-v1.2.6-candidate-11.md).
 
 
-## Free Cell read-only foundation
+## Free Cell approved Solver-led slice
 
 The agreed board names are CELL 1–4 for the upper-left temporary slots, PLAY
 1–8 for the tableau columns and SUIT 1–4 for the upper-right foundations.
-Numbering is left to right. These names document the next calibration slice;
-there are no executable Free Cell source actions or click constructors yet.
+Numbering is left to right. CELL precedes PLAY; PLAY scans bottom-up and then
+left-to-right. Opposing exterior source rails and closed ends distinguish solid
+source blocks from dashed guides and card-face artwork. Connected source cards
+form one run. Canonical geometry places one click inside its bottom card.
+Every frame is classified independently; stack expansion/compression and
+same-position recommendations do not require move proofs.
 
-Free Cell owns no live scene discriminator or HALO selector. Valid native
-1920-by-1080 frames publish calibration-only status; malformed storage or other
-dimensions are rejected. The independent profile has no actionable targets.
-The worker refuses Free Cell execution before guest input; UI capture remains
-read-only. Shared capture retains the full frame and original manual PNG bytes.
+All source probes and clicks are above Y=947. FC14 was not supplied, so no
+truncated-source fallback is enabled. Native dimensions/storage are validated
+before reads. Coarse open-board layout and the Solver banner have separate
+scene/activation roles. SUIT piles are never scanned as sources. No Draw,
+Recycle or Solve target exists. Read-only capture never activates Solver.
 
-The intended next slice is one fresh supported CELL or PLAY HALO, one source
-click, editable settle including automatic SUIT transfers, then fresh capture.
-It does not require rank recognition or card-pixel move proof. The future PLAY
-detector must keep toolbar pixels outside its source region; upper slots and
-terminal controls need their own evidence. There is no Draw, Recycle or Solve
-operation to inherit. Independent scene/target and one-board completion evidence
-must precede input or deterministic terminal progression. The current candidate
-adds only read-only foundations and future Params values. See
-[Free Cell candidate notes](freecell-v1.3.0-candidate-1.md).
+Source actions settle for an editable initial 750 ms, then capture anew.
+No-HALO contexts check independent win entry and otherwise wait/capture,
+initially 1000 ms and up to 20 delayed observations (editable 1–100).
+Only a recognised Solver-off gameplay board can activate Solver, once per
+unresolved context. Active Solver is not refreshed while cards move to SUIT.
+
+Independent win entry recognises the score/skip panel or completed-game
+New Game panel. An isolated OK, Play or missing source is insufficient. Only
+continuous Multi-Step 0 advances expected score skip → OK → New Game → Play.
+Readiness checks each local caption and button body without surrounding level,
+medal, fireworks or panel artwork. Each click occurs once; the next expected
+stage receives bounded read-only observations. Restart must reach a fresh
+recognised board and actionable Solver frame before continuing. Finite runs
+do not send terminal input. See
+[Free Cell candidate notes](freecell-v1.3.0-candidate-2.md).

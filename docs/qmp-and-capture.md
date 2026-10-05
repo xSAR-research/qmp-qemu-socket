@@ -1,8 +1,8 @@
 # QMP and capture design
 
 This describes the current shared transport and mode-owned input policies in
-v1.3.0 candidate 1. Free Cell is read-only calibration; capture, preview and
-future Params values cannot activate Solver, gameplay or terminal input.
+v1.3.0 candidate 2. Free Cell uses approved native CELL/PLAY sources and its own
+one-board terminal sequence; capture-only requests never send input.
 Later dated correction notes retain historical evidence rather than current
 card-effect requirements.
 
@@ -156,7 +156,8 @@ Solver click. This recovery does not alter its action-effect or redeal policies.
 The accepted result frame is immutable and becomes the next action's planning
 frame. Klondike instead follows a fresh valid Solver target without card-pixel
 effect proof, as described below. A fresh QMP health/pointer probe remains
-mandatory immediately before each active input. Free Cell has no input path.
+mandatory immediately before each active input, including Free Cell source,
+Solver activation and expected terminal clicks.
 
 For the shared TriPeaks/Pyramid terminal controller, a fresh pre-score capture
 after a completion signal can recover an already
@@ -257,20 +258,29 @@ Capture/decode failures stop. Later manual PNGs remain separate evidence and
 cannot be assumed byte-identical to an earlier automatic result frame.
 
 
-## Free Cell calibration boundary
+## Free Cell input boundary
 
-Free Cell can use the same read-only capture and original-byte snapshot flow,
-but its independent profile has no actionable HALO targets or positively
-recognised scene. A valid native frame publishes calibration-only status;
-malformed storage or dimensions outside 1920-by-1080 are refused. The worker
-rejects a Free Cell execution request before guest input, independently of UI
-button state. No stock key, Solve, Solver activation or terminal click is enabled.
+Free Cell reuses full-frame capture and original-byte snapshot saving. Only a
+fresh supported board and canonical solid CELL/PLAY source authorise one
+bottom-card click. There is no card-rank or changed-pixel effect proof, SUIT
+source, stock key, Recycle or Solve input. Source reads/clicks remain above Y=947;
+optional FC14 is absent, so incomplete lower outlines are not actionable.
 
-Future CELL/PLAY source actions, toolbar exclusion and automatic SUIT transfers
-need native evidence. The stored 750 ms action/automatic-transfer settle,
-1000 ms re-observation and zero continuous-action defaults are future settings;
-they are not measured timings or authority to execute. Capture stays full-frame
-and saving stays byte-identical. See [Free Cell Gate 1](freecell-gate-1.md).
+One acknowledged action settles for the editable initial 750 ms and captures
+anew. Automatic SUIT transfers can leave no HALO: check independent win entry,
+otherwise wait the editable initial 1000 ms and recapture without input. Each
+unresolved stage has an editable allowance, initially 20, bounded 1–100. Only
+a recognised Solver-off board permits one activation per context. Every input
+has a fresh VM/tablet probe and STOP check; uncertain input is not replayed.
+
+One board is one game. A positively recognised score/skip or completed-game
+New Game panel permits continuous mode to follow expected score skip, OK,
+New Game and Play controls, each once. Finite runs do not restart. The next
+control must be freshly ready; unrelated artwork is not checked. Existing
+score/terminal hold and settle timings are reused, followed by bounded input-free
+observations. A fresh board, Solver activation if needed, and a new source frame
+are required before play resumes. Capture stays full-frame and saving stays
+byte-identical. See [Free Cell Gate 1](freecell-gate-1.md).
 
 
 ## Historical Klondike correction notes

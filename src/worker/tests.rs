@@ -75,15 +75,15 @@ fn both_game_modes_allow_the_shared_guarded_input_path() {
 }
 
 
-/// Free Cell captures cannot inherit progress or action authority from another mode.
+/// Free Cell blank frames cannot inherit a progress bar or another mode's scene authority.
 #[test]
-fn freecell_native_capture_is_read_only_and_rejects_malformed_storage() {
+fn freecell_native_capture_rejects_unknown_scene_and_malformed_storage() {
     let state = TableauScanState::for_mode(GameMode::FreeCell);
     let (observation, _) = analyse_captured_frame(
         blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT),
         &state,
-    ).expect("native calibration frame");
-    assert_eq!(observation.prediction, PredictedAction::CalibrationOnly { mode: GameMode::FreeCell });
+    ).expect("native diagnostic frame");
+    assert_eq!(observation.prediction, PredictedAction::NoHighlight);
     assert!(!observation.gameplay_scene);
     assert_eq!(observation.observed_rows, None);
     assert_eq!(observation.game_progress, None);
@@ -94,9 +94,9 @@ fn freecell_native_capture_is_read_only_and_rejects_malformed_storage() {
 }
 
 
-/// A direct Free Cell run request stops before QMP even with a foreign actionable preview.
+/// A stale foreign preview cannot bypass Free Cell's fresh QMP acquisition boundary.
 #[test]
-fn freecell_execution_request_cannot_bypass_calibration_capability() {
+fn freecell_execution_request_cannot_execute_a_foreign_preview_without_capture() {
 
 
     for operation_limit in [0, 1] {
@@ -118,10 +118,8 @@ fn freecell_execution_request_cannot_bypass_calibration_capability() {
             &AtomicBool::new(false),
         );
         let notifications: Vec<_> = receiver.try_iter().collect();
-        assert!(notifications.iter().any(|event| matches!(event,
-            WorkerEvent::Log(message) if message.contains("read-only calibration only") && message.contains("input sent: 0"))));
         assert!(!notifications.iter().any(|event| matches!(event,
-            WorkerEvent::State(WorkerState::Connecting) | WorkerEvent::ActionCompleted { .. } | WorkerEvent::GameCompleted)));
+            WorkerEvent::ActionCompleted { .. } | WorkerEvent::GameCompleted | WorkerEvent::FreeCellGameCompleted)));
         assert_eq!(completed_boards, 0);
         assert!(sink.latest_frame.take().is_none());
     }

@@ -150,6 +150,9 @@ pub enum StepValidationError {
     /// Supplied Klondike source bounds or input differ from the canonical action.
     #[error("Klondike target does not match its bounded source action")]
     InvalidKlondikeAction,
+    /// Supplied Free Cell source bounds or click differ from its canonical action.
+    #[error("Free Cell target does not match its bounded source action")]
+    InvalidFreeCellAction,
 }
 
 
@@ -165,6 +168,13 @@ pub fn plan_step(before: PredictedAction) -> Result<StepPlan, StepValidationErro
             return Err(StepValidationError::NoPreActionHighlight);
         }
         PredictedAction::Action(action) => {
+
+
+            if let ActionTarget::FreeCell(kind) = action.target
+                && crate::freecell::canonical_action(kind) != Some(action)
+            {
+                return Err(StepValidationError::InvalidFreeCellAction);
+            }
 
 
             if let ActionTarget::Klondike(kind) = action.target

@@ -1,0 +1,113 @@
+{
+  "description": "Complete byte-identical original Free Cell QMP PNG captures. No resizing, cropping, sparse reduction or pixel modification.",
+  "frame": [1920, 1080],
+  "mode": "RGBA",
+  "toolbar_top_exclusive_source_scan": 947,
+  "missing_evidence": "FC14 toolbar-crossing run was not supplied; clipped-source fallback is not enabled.",
+  "files": [
+    {
+      "fixture": "freecell-FC01.png",
+      "source": "qmp-qemu-socket 261005 213639 FC01(1).png",
+      "source_sha256": "3fd7508150cf5522b33b320ddde09ee9880d094b284e4439309cc94b07af4447",
+      "fixture_sha256": "3fd7508150cf5522b33b320ddde09ee9880d094b284e4439309cc94b07af4447",
+      "bytes": 3536080,
+      "observation": "Initial deal, Solver off."
+    },
+    {
+      "fixture": "freecell-FC02.png",
+      "source": "qmp-qemu-socket 261005 213701 FC02(1).png",
+      "source_sha256": "b783644a2aa4c120052780ae9b409252198d653433286863330db84c66cde2be",
+      "fixture_sha256": "b783644a2aa4c120052780ae9b409252198d653433286863330db84c66cde2be",
+      "bytes": 3326642,
+      "observation": "PLAY 7 solid source, dashed SUIT destination."
+    },
+    {
+      "fixture": "freecell-FC03.png",
+      "source": "qmp-qemu-socket 261005 213724 FC03(1).png",
+      "source_sha256": "b4c52f685a2b26a170f79023c2899e23636fda0f8d500d3653be5ec99357c07e",
+      "fixture_sha256": "b4c52f685a2b26a170f79023c2899e23636fda0f8d500d3653be5ec99357c07e",
+      "bytes": 3307266,
+      "observation": "PLAY 5 queen source, dashed CELL 1 destination."
+    },
+    {
+      "fixture": "freecell-FC04.png",
+      "source": "qmp-qemu-socket 261005 213744 FC04(1).png",
+      "source_sha256": "a30a5428b1011dbfe8ebe90dd15465a6145f590e10b1e511bec97d4efde1a255",
+      "fixture_sha256": "a30a5428b1011dbfe8ebe90dd15465a6145f590e10b1e511bec97d4efde1a255",
+      "bytes": 3300134,
+      "observation": "PLAY 5 ten source, dashed CELL 2 destination."
+    },
+    {
+      "fixture": "freecell-FC05.png",
+      "source": "qmp-qemu-socket 261005 213858 FC05(1).png",
+      "source_sha256": "f7dacc56123f614b6c82a22dc0a388a852e110d8bc5b3524ff9561458c3156fa",
+      "fixture_sha256": "f7dacc56123f614b6c82a22dc0a388a852e110d8bc5b3524ff9561458c3156fa",
+      "bytes": 3376496,
+      "observation": "CELL 2 ten source, dashed PLAY 2 destination."
+    },
+    {
+      "fixture": "freecell-FC06.png",
+      "source": "qmp-qemu-socket 261005 213915 FC06(1).png",
+      "source_sha256": "edc75b4842710f5309780a1ae4f1ad908084dd2547e4e6b1638390234d7019fd",
+      "fixture_sha256": "edc75b4842710f5309780a1ae4f1ad908084dd2547e4e6b1638390234d7019fd",
+      "bytes": 3380935,
+      "observation": "PLAY 2 two-card source; group is one action."
+    },
+    {
+      "fixture": "freecell-FC07.png",
+      "source": "qmp-qemu-socket 261005 213937 FC07(1).png",
+      "source_sha256": "d63fbedb7eeacf65ed77baf4506907c4aadbddb5b78386ea224ce26c4e24ae2a",
+      "fixture_sha256": "d63fbedb7eeacf65ed77baf4506907c4aadbddb5b78386ea224ce26c4e24ae2a",
+      "bytes": 3381053,
+      "observation": "Same PLAY 2 run recommendation as FC06, not a proven after frame."
+    },
+    {
+      "fixture": "freecell-FC08.png",
+      "source": "qmp-qemu-socket 261005 213949 FC08(1).png",
+      "source_sha256": "766a6f7ef032b6a1388228ab3011e0f3a275f6e0cb75cd3c0b19aaf0f18aed46",
+      "fixture_sha256": "766a6f7ef032b6a1388228ab3011e0f3a275f6e0cb75cd3c0b19aaf0f18aed46",
+      "bytes": 3368419,
+      "observation": "PLAY 2 six source, dashed PLAY 5 destination."
+    },
+    {
+      "fixture": "freecell-FC09.png",
+      "source": "qmp-qemu-socket 261005 214032 FC09(1).png",
+      "source_sha256": "800810dc41a17841271a22f306174c9e3ce03dfef5b3bb4a7a8bf7074f10e39f",
+      "fixture_sha256": "800810dc41a17841271a22f306174c9e3ce03dfef5b3bb4a7a8bf7074f10e39f",
+      "bytes": 1905495,
+      "observation": "Congratulations and XP score counting."
+    },
+    {
+      "fixture": "freecell-FC10.png",
+      "source": "qmp-qemu-socket 261005 214050 FC10(1).png",
+      "source_sha256": "7aa05091a8c03f482543834747bd010c4e26cfe8987a8b8fede856b4200994ff",
+      "fixture_sha256": "7aa05091a8c03f482543834747bd010c4e26cfe8987a8b8fede856b4200994ff",
+      "bytes": 1782797,
+      "observation": "Level Up, OK visible."
+    },
+    {
+      "fixture": "freecell-FC11.png",
+      "source": "qmp-qemu-socket 261005 214103 FC11(1).png",
+      "source_sha256": "3d27bccffc5c54f6eb09e1dba7865b9b6170e74415fe1c2c56e77feea33964c2",
+      "fixture_sha256": "3d27bccffc5c54f6eb09e1dba7865b9b6170e74415fe1c2c56e77feea33964c2",
+      "bytes": 1906372,
+      "observation": "Congratulations, New Game visible."
+    },
+    {
+      "fixture": "freecell-FC12.png",
+      "source": "qmp-qemu-socket 261005 214121 FC12(1).png",
+      "source_sha256": "37d89e9c0a125e3d3336b558eee658a1c2ef9a6ca3630c65191e097c7bcd40e5",
+      "fixture_sha256": "37d89e9c0a125e3d3336b558eee658a1c2ef9a6ca3630c65191e097c7bcd40e5",
+      "bytes": 2456034,
+      "observation": "New Game chooser, Play visible."
+    },
+    {
+      "fixture": "freecell-FC13.png",
+      "source": "qmp-qemu-socket 261005 214135 FC13(1).png",
+      "source_sha256": "6272d39471df739229858c36a7cb255cb37ca61d314eac38c240bd33fa3dba4f",
+      "fixture_sha256": "6272d39471df739229858c36a7cb255cb37ca61d314eac38c240bd33fa3dba4f",
+      "bytes": 3471624,
+      "observation": "Fresh deal after Play, Solver off."
+    }
+  ]
+}

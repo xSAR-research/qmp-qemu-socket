@@ -7,6 +7,7 @@ mod capture;
 mod cards;
 mod detector;
 mod freecell;
+mod freecell_terminal;
 mod game;
 mod geometry;
 mod klondike;

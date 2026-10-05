@@ -1,5 +1,28 @@
 # Changelog
 
+## v1.3.0 — candidate 2
+
+- Enable the approved Free Cell Solver-led slice from original FC01–FC13 PNGs:
+  CELL sources first, then PLAY sources bottom-up, with one bottom-card click
+  per solid highlighted block. Dashed landing guides are not actionable.
+- Observe automatic SUIT transfers without card identity, changed-pixel proof
+  or source-position comparison. Activate visibly inactive Solver once; an
+  active Solver with no HALO receives bounded input-free captures.
+- Add an editable delayed-observation allowance, initially 20, bounded 1–100.
+  Preserve independent 750/1000 ms Free Cell timings and continuous budget 0.
+- Recognise independent one-board GAME WIN entry from the score/skip panel or
+  completed-game New Game panel. Continuous play follows expected local
+  OK → New Game → Play controls, fresh board and Solver activation. Finite runs
+  do not restart. Level, medal, fireworks and surrounding panel colours do not
+  gate these expected controls.
+- Keep source probes and clicks above Y=947. Optional FC14 is absent, so a run
+  with no complete visible lower outline remains unsupported. No SUIT-source,
+  Draw, Recycle or Solve input is enabled.
+- Preserve existing modes, STOP, uncertain-input non-replay and exact-byte PNG
+  saving. Pin the installer to `44727193d4e620a749925e9cc46c9d9d4df1700f`.
+- Native Rust validation is unavailable in the delivery workspace; the review
+  distinguishes pixel rehearsals and installer checks from unrun Rust tests.
+
 ## v1.3.0 — candidate 1
 
 - Add a selectable read-only Free Cell calibration mode and independent profile.

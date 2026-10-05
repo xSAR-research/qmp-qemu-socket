@@ -1,16 +1,18 @@
-# Development conventions for v1.3.0 candidate 1
+# Development conventions for v1.3.0 candidate 2
 
-The base is accepted and pushed v1.2.6 candidate 11 at
-`146fe173f6e123a92e2eadf518523715d042cd66`. Charlie reported successful overlap
-recovery and a complete Klondike GAME WIN sequence before promotion. Preserve
+The exact base is pushed v1.3.0 candidate 1 at
+`44727193d4e620a749925e9cc46c9d9d4df1700f`. Preserve
 that mode's live Y<947 source boundary, advisory preview and fresh Solver-led
 cycle without card-pixel move proof. Pyramid's highlighted MOVE/Recycle uses D;
 TriPeaks retains its delayed input-free no-HALO recovery.
 
-Free Cell is read-only calibration in this candidate. Its independent profile,
-native-frame validation and future Params values do not authorise gameplay,
-Solver or terminal input. No new source detector, click geometry or completion
-automation is inferred from Klondike or the three current intake screenshots.
+Free Cell's approved runtime slice uses original FC01–FC13 native frames and
+its own source geometry and one-board terminal controls. It follows fresh
+CELL/PLAY source HALOs without card or effect-pixel matching. Missing HALOs
+receive bounded input-free observations for automatic SUIT transfers. Only a
+recognised Solver-off board permits activation; there is no SUIT source scan,
+Draw, Recycle or Solve operation. FC14 was not supplied, so toolbar-crossing
+blocks without a complete visible lower outline remain unsupported.
 The guarded installer pins this exact base, preserves unrelated work and the
 Beast's untracked root AGENTS.md, and verifies complete affected contents.
 
@@ -49,10 +51,13 @@ bounded per-action recovery and independently verified single-board completion.
 button is clicked once before bounded completion observations; only continuous
 runs may restart through fresh recognised stages. The shared terminal controller
 retains the existing TriPeaks/Pyramid policy and coordinates.
-`freecell.rs` returns calibration-only predictions from valid native frames.
-The worker refuses execution requests for that mode before guest input; UI
-action controls remain disabled. The UI delegates persistent log I/O to
-`session_log.rs`.
+`freecell.rs` owns native layout, coarse scene/Solver state and canonical
+CELL/PLAY source actions. `freecell_terminal.rs` owns independent score/New Game
+win entry and local expected-control readiness. `worker/freecell_execution.rs`
+owns finite/continuous execution, automatic-transfer observations and ordered
+one-shot terminal progression. Only continuous runs restart; the fresh board
+must be recognised before activating Solver and resuming from a new frame.
+The UI delegates persistent log I/O to `session_log.rs`.
 
 When adding a mode, supply its profile/detection policy and preserve the shared
 input and capture contracts. Do not scatter new mode checks through QMP or
@@ -104,16 +109,19 @@ results from another host do not prove Beast installation or live guest input.
 The candidate delivery notes record the checks actually executed.
 
 On the Beast, confirm that the installed package, launched executable and startup
-log identify **v1.3.0, candidate 1**. Select Free Cell and verify read-only Capture
-Frame, original-byte Capture PNG/Save PNG, calibration-only status and disabled
-gameplay controls. Adjust the future 750/1000 ms settings and zero action budget;
-they must not enable input or alter other modes' settings. Switch to each existing
+log identify **v1.3.0, candidate 2**. Select Free Cell and verify read-only Capture
+Frame, original-byte Capture PNG/Save PNG, initial Solver activation, CELL/PLAY
+single clicks and automatic SUIT-transfer recapture. Adjust the independent
+750/1000 ms settings, 20-observation allowance and zero action budget; they must
+not alter other modes' settings. Verify an entire GAME WIN → OK → New Game →
+Play → fresh board → Solver → fresh source sequence. Switch to each existing
 mode and verify its accepted action/recovery behaviour, STOP and socket/mode
 invalidation. Preserve first-failure frames and complete session logs.
 
-Use compact tests for actual invariants: Free Cell read-only request refusal,
-native frame-layout rejection, independent bounded timings and existing-mode
-preservation. Test counts are measured results, not coverage quotas. Historical
+Use compact tests for actual invariants: native source/scene discrimination,
+frame-layout rejection, finite budgets, automatic-transfer recapture, one-shot
+GAME WIN controls, STOP, uncertain-input non-replay and independent bounded
+timings. Test counts are measured results, not coverage quotas. Historical
 Klondike card-effect diagnostics remain explicitly test-only and must not become
 Free Cell runtime requirements. The delivery review records actual tool versions,
 commands and failures; no old validation run establishes this candidate's results.

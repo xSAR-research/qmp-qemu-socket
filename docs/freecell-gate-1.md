@@ -1,6 +1,33 @@
 # FreeCell Gate 1: native evidence intake
 
-## Current preparation — 4 October 2026
+## Approved implementation intake — 5 October 2026
+
+Fresh main was copied once at `44727193d4e620a749925e9cc46c9d9d4df1700f`,
+v1.3.0 candidate 1. The initial tree was clean. The refreshed companion
+AGENTS.md was read separately and is not included in the candidate or committed.
+Candidate 2 uses the approved Solver-led process; existing modes remain intact.
+
+All thirteen original FC01–FC13 PNGs are present, decoded as native
+1920×1080 RGBA and inspected. The exact bytes and hashes accompany the candidate
+under `tests/fixtures/freecell-FC01.png` through `freecell-FC13.png`; the fixture
+README and manifest describe actual pixels, not assumed one-move transitions.
+The selected difficulty is Expert. FC06 and FC07 show the same two-card source;
+FC08 shows its result. Filename timestamps do not establish settle times.
+
+Charlie confirms that SUIT cards never return to PLAY, eligible cards can move
+to SUIT automatically, and Free Cell has no Solve button. One click on the
+bottom card transfers a complete highlighted run. Source identity and previous
+effects are not pixel-compared. No independent rank/search solver is introduced.
+
+The measured toolbar boundary is Y=947. FC14 is explicitly missing; a run
+without a complete visible lower outline above that row remains unsupported.
+Terminal evidence FC09–FC13 supplies score skip, OK, New Game, Play and a fresh
+Solver-off board. After independent win entry, only expected local control
+readiness gates the deterministic sequence; level/firework/panel art is excluded.
+Beast build and live GAME WIN/restart validation remain outstanding. See
+[candidate 2](freecell-v1.3.0-candidate-2.md) for the current implementation.
+
+## Historical preparation — 4 October 2026
 
 Version 1.3.0 candidate 1 is based on accepted and pushed v1.2.6 candidate 11
 at `146fe173f6e123a92e2eadf518523715d042cd66`. It adds Free Cell as a read-only
