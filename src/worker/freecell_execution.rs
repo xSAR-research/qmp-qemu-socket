@@ -5,6 +5,8 @@
 //! conditions. Automatic transfers receive bounded input-free observations.
 //! A missing HALO does not establish a win: positive terminal caption/control
 //! evidence does. Only continuous runs advance the expected terminal controls.
+//! After score skip, Level Up is optional: inspect local OK and New Game
+//! readiness on each fresh frame and accept exactly one ready control.
 
 use std::{path::Path, sync::atomic::{AtomicBool, Ordering}, time::{Duration, Instant}};
 
@@ -231,7 +233,7 @@ fn drive_run(
     validate_operation_limit(settings.operation_limit())?;
     let delays = settings.animation_delays();
     send_log(event_tx, format!(
-        "Free Cell fresh-HALO execution: action/automatic-transfer settle={} ms, no-HALO observation={} ms, delayed allowance={}. One source click consumes one action; Solver and terminal clicks do not. No card identity, pixel difference, SUIT input, Draw, Recycle or Solve is used. Continuous 0 may restart one-board games through Score, OK, New Game and Play.",
+        "Free Cell fresh-HALO execution: action/automatic-transfer settle={} ms, no-HALO observation={} ms, delayed allowance={}. One source click consumes one action; Solver and terminal clicks do not. No card identity, pixel difference, SUIT input, Draw, Recycle or Solve is used. Continuous 0 may restart one-board games through Score, optional Level Up OK, New Game and Play. After score skip, exactly one ready local OK or New Game control selects the next stage; neither receives bounded recaptures and both stop without input.",
         delays.freecell_settle.as_millis(), delays.freecell_reobserve.as_millis(), settings.freecell_observation_limit(),
     ));
     capture_latest(io, latest, event_tx, cancel_requested)?;
@@ -349,7 +351,8 @@ fn await_context(
 }
 
 
-/// Advance only the expected local control, once, after independent win entry.
+/// Advance each ready local control once after independent win entry.
+/// Score skip can lead to optional Level Up OK or directly to New Game.
 fn restart_game(
     io: &mut impl FreeCellIo,
     latest: &mut Option<FrameObservation>,
@@ -375,7 +378,9 @@ fn restart_game(
 
 
         match stage {
-            TerminalStage::Score => stage = TerminalStage::LevelUp,
+            TerminalStage::Score => stage = await_post_score_control(
+                io, latest, settings, event_tx, cancel_requested,
+            )?,
             TerminalStage::LevelUp => stage = TerminalStage::NewGame,
             TerminalStage::NewGame => stage = TerminalStage::Play,
             TerminalStage::Play => break,
@@ -406,6 +411,52 @@ fn restart_game(
         capture_latest(io, latest, event_tx, cancel_requested)?;
     }
     Err("Free Cell Play acknowledgement was not followed by a recognised fresh board within bounded input-free observations; Play was not retried".to_owned())
+}
+
+
+/// Resolve optional Level Up from this fresh frame's two local controls only.
+/// No ready control receives bounded input-free captures. Two ready controls
+/// are uncertain and stop; neither artwork nor a prior stage supplies a guess.
+fn await_post_score_control(
+    io: &mut impl FreeCellIo,
+    latest: &mut Option<FrameObservation>,
+    settings: StepRunSettings,
+    event_tx: &WorkerEventSink,
+    cancel_requested: &AtomicBool,
+) -> Result<TerminalStage, String> {
+
+
+    for delayed in 0..=settings.freecell_observation_limit() {
+        require_running(cancel_requested)?;
+        let frame = &current(latest)?.frame;
+        let ok_ready = freecell_terminal::expected_control_ready(frame, TerminalStage::LevelUp)
+            .map_err(|error| format!("Free Cell post-score OK readiness failed: {error}"))?;
+        let new_game_ready = freecell_terminal::expected_control_ready(frame, TerminalStage::NewGame)
+            .map_err(|error| format!("Free Cell post-score New Game readiness failed: {error}"))?;
+
+
+        match (ok_ready, new_game_ready) {
+            (true, false) => {
+                send_log(event_tx, "Free Cell post-score branch: local OK ready; optional Level Up selected.".to_owned());
+                return Ok(TerminalStage::LevelUp);
+            }
+            (false, true) => {
+                send_log(event_tx, "Free Cell post-score branch: local New Game ready; no Level Up step required.".to_owned());
+                return Ok(TerminalStage::NewGame);
+            }
+            (true, true) => return Err("Free Cell post-score controls are uncertain: both OK and New Game are ready; no branch input authorised".to_owned()),
+            (false, false) => {}
+        }
+
+
+        if delayed == settings.freecell_observation_limit() {
+            break;
+        }
+        send_log(event_tx, format!("Free Cell post-score input-free observation {}/{}: neither local OK nor New Game is ready; score skip is not repeated.", delayed + 1, settings.freecell_observation_limit()));
+        io.wait(settings.animation_delays().freecell_reobserve)?;
+        capture_latest(io, latest, event_tx, cancel_requested)?;
+    }
+    Err("Free Cell expected post-score OK or New Game did not become ready within the bounded observation allowance; score skip was not retried".to_owned())
 }
 
 
@@ -775,6 +826,69 @@ mod tests {
             assert_eq!(io.sources.len(), if prefix { 3 } else { 2 });
             assert_eq!(io.waits.iter().filter(|delay| **delay == LEVEL_UP_APPEAR_DELAY).count(), 1);
         }
+    }
+
+
+    /// A score skip can reach New Game directly, immediately or after animation.
+    #[test]
+    fn native_no_level_up_restart_accepts_immediate_and_delayed_new_game() {
+
+
+        for delayed in [false, true] {
+            let cancel = AtomicBool::new(false);
+            let mut frames = vec![fixture(9)];
+
+
+            if delayed { frames.extend([fixture(9), unknown()]); }
+            frames.extend([fixture(15), fixture(12), fixture(13), fixture(2)]);
+            let mut io = fake(frames, &cancel);
+            assert_eq!(run(&mut io, 0, 3, &mut None).unwrap_err(), "fixture sequence exhausted");
+            assert_eq!(io.controls, [TerminalStage::Score, TerminalStage::NewGame, TerminalStage::Play]);
+            assert_eq!(io.solver_clicks, 1);
+            assert_eq!(io.sources.len(), 1);
+        }
+    }
+
+
+    /// The exact stopped native New Game frame can resume a continuous restart.
+    #[test]
+    fn native_new_game_entry_resumes_without_score_or_level_up_input() {
+        let cancel = AtomicBool::new(false);
+        let mut io = fake(vec![fixture(15), fixture(12), fixture(13), fixture(2)], &cancel);
+        assert_eq!(run(&mut io, 0, 3, &mut None).unwrap_err(), "fixture sequence exhausted");
+        assert_eq!(io.controls, [TerminalStage::NewGame, TerminalStage::Play]);
+        assert_eq!(io.solver_clicks, 1);
+        assert_eq!(io.sources.len(), 1);
+        let mut io = fake(vec![fixture(15)], &cancel);
+        assert_eq!(run(&mut io, 1, 3, &mut None), Ok(RunOutcome::GameWon(0)));
+        assert!(io.controls.is_empty() && io.sources.is_empty());
+        assert_eq!(io.solver_clicks, 0);
+    }
+
+
+    /// Contradictory local controls stop after score skip, without choosing either.
+    #[test]
+    fn simultaneous_post_score_ok_and_new_game_are_uncertain() {
+        let cancel = AtomicBool::new(false);
+        let mut both = fixture(15);
+        let ok = fixture(10);
+
+
+        for y in 788..838 {
+            let start = y * both.stride + 848 * 4;
+            let end = start + 223 * 4;
+            both.pixels[start..end].copy_from_slice(&ok.pixels[start..end]);
+        }
+        assert!(freecell_terminal::expected_control_ready(&both, TerminalStage::LevelUp).unwrap());
+        assert!(freecell_terminal::expected_control_ready(&both, TerminalStage::NewGame).unwrap());
+        let mut io = fake(vec![fixture(9), both], &cancel);
+        let mut latest = None;
+        assert!(run(&mut io, 0, 3, &mut latest).unwrap_err().contains("both OK and New Game"));
+        assert_eq!(io.controls, [TerminalStage::Score]);
+        assert_eq!(io.captures, 2);
+        assert!(io.sources.is_empty());
+        assert_eq!(io.solver_clicks, 0);
+        assert!(latest.is_some());
     }
 
 

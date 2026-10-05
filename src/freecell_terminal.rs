@@ -334,6 +334,7 @@ mod tests {
             11 => include_bytes!("../tests/fixtures/freecell-FC11.png"),
             12 => include_bytes!("../tests/fixtures/freecell-FC12.png"),
             13 => include_bytes!("../tests/fixtures/freecell-FC13.png"),
+            15 => include_bytes!("../tests/fixtures/freecell-FC15.png"),
             _ => panic!("unsupported Free Cell terminal fixture {number}"),
         };
         decode_png(bytes).expect("decode native Free Cell terminal fixture")
@@ -370,6 +371,18 @@ mod tests {
         for number in [10, 12, 13] {
             assert_eq!(classify_win_entry(&fixture(number)).unwrap(), None);
         }
+    }
+
+
+    /// FC15's changed rank does not hide New Game or turn its panel into Level Up.
+    #[test]
+    fn stopped_new_game_panel_recognises_its_local_control_without_level_up() {
+        let frame = fixture(15);
+        assert_eq!(classify_win_entry(&frame).unwrap(), Some(TerminalStage::NewGame));
+        assert!(expected_control_ready(&frame, TerminalStage::NewGame).unwrap());
+        assert!(!expected_control_ready(&frame, TerminalStage::LevelUp).unwrap());
+        assert!(!expected_control_ready(&frame, TerminalStage::Score).unwrap());
+        assert!(!expected_control_ready(&frame, TerminalStage::Play).unwrap());
     }
 
 
@@ -421,7 +434,7 @@ mod tests {
         for rgb in [[0, 0, 0], [255, 255, 255], [210, 180, 60]] {
 
 
-            for pixel in frame.pixels.chunks_exact_mut(4) {
+            for pixel in frame.pixels.as_chunks_mut::<4>().0 {
                 pixel.copy_from_slice(&[rgb[0], rgb[1], rgb[2], 255]);
             }
 

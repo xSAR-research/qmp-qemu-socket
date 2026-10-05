@@ -1,12 +1,12 @@
-# Development conventions for v1.3.0 candidate 2
+# Development conventions for v1.3.0 candidate 3
 
-The exact base is pushed v1.3.0 candidate 1 at
-`44727193d4e620a749925e9cc46c9d9d4df1700f`. Preserve
+The exact base is pushed v1.3.0 candidate 2 at
+`656881ee3f906347bd6f5665c733892621b1cc98`. Preserve
 that mode's live Y<947 source boundary, advisory preview and fresh Solver-led
 cycle without card-pixel move proof. Pyramid's highlighted MOVE/Recycle uses D;
 TriPeaks retains its delayed input-free no-HALO recovery.
 
-Free Cell's approved runtime slice uses original FC01–FC13 native frames and
+Free Cell's approved runtime slice uses original FC01–FC13 and FC15 native frames and
 its own source geometry and one-board terminal controls. It follows fresh
 CELL/PLAY source HALOs without card or effect-pixel matching. Missing HALOs
 receive bounded input-free observations for automatic SUIT transfers. Only a
@@ -109,12 +109,14 @@ results from another host do not prove Beast installation or live guest input.
 The candidate delivery notes record the checks actually executed.
 
 On the Beast, confirm that the installed package, launched executable and startup
-log identify **v1.3.0, candidate 2**. Select Free Cell and verify read-only Capture
+log identify **v1.3.0, candidate 3**. Select Free Cell and verify read-only Capture
 Frame, original-byte Capture PNG/Save PNG, initial Solver activation, CELL/PLAY
 single clicks and automatic SUIT-transfer recapture. Adjust the independent
 750/1000 ms settings, 20-observation allowance and zero action budget; they must
-not alter other modes' settings. Verify an entire GAME WIN → OK → New Game →
-Play → fresh board → Solver → fresh source sequence. Switch to each existing
+not alter other modes' settings. Verify GAME WIN → optional OK → New Game →
+Play → fresh board → Solver → fresh source, both with and without a level change.
+After score counting, one fresh frame checks both permitted controls; only one
+ready local control authorises input. Unready controls receive bounded recaptures. Switch to each existing
 mode and verify its accepted action/recovery behaviour, STOP and socket/mode
 invalidation. Preserve first-failure frames and complete session logs.
 

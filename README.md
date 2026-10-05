@@ -14,12 +14,12 @@ the real purpose. Each fixture keeps independent target and effect policies.
 The target is to build in Dijkstra / A* shortest path problem solving rather
 than using the **Solver**, this will benefit drone route planning experience.
 
-This is **v1.3.0, candidate 2**, based on pushed candidate 1 at
-`44727193d4e620a749925e9cc46c9d9d4df1700f`. `Cargo.toml` supplies the package
+This is **v1.3.0, candidate 3**, based on pushed candidate 2 at
+`656881ee3f906347bd6f5665c733892621b1cc98`. `Cargo.toml` supplies the package
 version shown in the window title and Parameters. Original FC01–FC13 evidence
 and Charlie's approved input contract now enable **Free Cell**. Existing
 TriPeaks, Pyramid and Klondike execution stays intact.
-See [Free Cell candidate notes](docs/freecell-v1.3.0-candidate-2.md).
+See [Free Cell candidate notes](docs/freecell-v1.3.0-candidate-3.md).
 
 ## Build and source spacing
 
@@ -75,13 +75,16 @@ at most one source action. Settings are snapshotted for each run.
 
 **One Free Cell board is one game.** GAME WIN entry requires the score/skip
 panel or the completed-game New Game panel; missing HALO, isolated OK and Play
-do not establish a win. Only continuous mode follows score skip → expected OK
-→ New Game → Play → fresh board → Solver activation → fresh HALO. Expected
+do not establish a win. Only continuous mode follows score skip → optional OK
+→ New Game → Play → fresh board → Solver activation → fresh HALO. After score
+counting, each fresh frame checks both OK and New Game. A game without a level
+change proceeds directly to New Game; if both controls appear ready, input stops. Expected
 controls use their local lettering and button body, not level, rank, medal,
 fireworks or surrounding artwork. Each acknowledged click is sent once; an
 unready next stage receives input-free observations, not click retries.
 
-The original **FC01–FC13** PNGs are included with hashes. **FC14 is absent**:
+The original **FC01–FC13 and FC15** PNGs are included with hashes. FC15 shows
+New Game after a win without LEVEL UP. **FC14 is absent**:
 source probes exclude the toolbar beginning at **Y=947**, and a block without a
 complete visible lower outline remains unsupported. See
 [Free Cell Gate 1](docs/freecell-gate-1.md) and the candidate review for evidence,

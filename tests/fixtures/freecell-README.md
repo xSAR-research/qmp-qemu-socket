@@ -1,6 +1,6 @@
 # Free Cell native Solver evidence
 
-These thirteen PNG files are complete, byte-identical originals from Charlie's
+These fourteen PNG files are complete, byte-identical originals from Charlie's
 5 October 2026 captures, taken through the application's manual QMP PNG capture
 and exact-byte save. They are not crops, sparse fixtures, OCR products or resized
 images. Each frame is 1920×1080 RGBA, including the title bar, guest game toolbar
@@ -24,6 +24,7 @@ SHA-256 digests.
 | FC11 | Congratulations, New Game visible | Expected terminal New Game stage |
 | FC12 | New Game chooser, Play visible | Expected terminal Play stage |
 | FC13 | Fresh deal, Solver off | Gameplay; activate Solver before source play |
+| FC15 | Completed game, 2000 XP; New Game visible without LEVEL UP | New Game ready; OK absent |
 
 FC05's source is CELL 2, not a SUIT card. FC06 and FC07 show the same highlighted
 run; they do not form a before/after proof of transfer. The frames' source
@@ -39,7 +40,7 @@ the bottom highlighted card, above the game toolbar.
 
 The game toolbar begins at native row 947. Gameplay source scanning excludes
 that row and everything below it. FC14, the requested original showing a run
-crossing the toolbar, was not supplied. Candidate 2 requires a complete visible
+crossing the toolbar, was not supplied. The current detector requires a complete visible
 source outline above that boundary and does not infer a clipped bottom card.
 An unresolved clipped source receives input-free recaptures and then a guarded
 stop with its latest frame and log.
@@ -58,5 +59,8 @@ instead of level-dependent decoration or whole-screen artwork matching.
 
 The original PNGs provide positive frame observations, not runtime input tests
 or settle-time measurements. Automatic transfers, complete game-win progression,
-new-game Solver activation and STOP/socket invalidation still require Charlie's
-Beast checks. Native FC14 remains a separate outstanding evidence case.
+new-game Solver activation and STOP/socket invalidation require live Beast checks.
+Charlie reported successful candidate-2 gameplay and win entry; FC15 and its log
+expose the previously unsupported skipped-LEVEL-UP branch. Candidate 3 requires
+verification both with and without a level change. Native FC14 remains a separate
+outstanding evidence case.

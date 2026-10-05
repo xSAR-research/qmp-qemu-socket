@@ -1,6 +1,9 @@
 {
   "description": "Complete byte-identical original Free Cell QMP PNG captures. No resizing, cropping, sparse reduction or pixel modification.",
-  "frame": [1920, 1080],
+  "frame": [
+    1920,
+    1080
+  ],
   "mode": "RGBA",
   "toolbar_top_exclusive_source_scan": 947,
   "missing_evidence": "FC14 toolbar-crossing run was not supplied; clipped-source fallback is not enabled.",
@@ -108,6 +111,14 @@
       "fixture_sha256": "6272d39471df739229858c36a7cb255cb37ca61d314eac38c240bd33fa3dba4f",
       "bytes": 3471624,
       "observation": "Fresh deal after Play, Solver off."
+    },
+    {
+      "fixture": "freecell-FC15.png",
+      "source": "qmp-qemu-socket 261005 235829 STOPPED.png",
+      "source_sha256": "af7bef64ffea86f51a3977aeeeca642a8181e81628730a59022fed98b9a13891",
+      "fixture_sha256": "af7bef64ffea86f51a3977aeeeca642a8181e81628730a59022fed98b9a13891",
+      "bytes": 1919954,
+      "observation": "Completed one-board game, 2000 XP; New Game visible without a Level Up OK screen."
     }
   ]
 }

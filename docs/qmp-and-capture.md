@@ -1,7 +1,7 @@
 # QMP and capture design
 
 This describes the current shared transport and mode-owned input policies in
-v1.3.0 candidate 2. Free Cell uses approved native CELL/PLAY sources and its own
+v1.3.0 candidate 3. Free Cell uses approved native CELL/PLAY sources and its own
 one-board terminal sequence; capture-only requests never send input.
 Later dated correction notes retain historical evidence rather than current
 card-effect requirements.
@@ -274,8 +274,11 @@ a recognised Solver-off board permits one activation per context. Every input
 has a fresh VM/tablet probe and STOP check; uncertain input is not replayed.
 
 One board is one game. A positively recognised score/skip or completed-game
-New Game panel permits continuous mode to follow expected score skip, OK,
-New Game and Play controls, each once. Finite runs do not restart. The next
+New Game panel permits continuous mode to follow score skip, optional OK,
+New Game and Play controls, each once. After score counting, each fresh frame
+checks both local OK and New Game readiness. A skipped LEVEL UP proceeds
+directly to New Game; ambiguous simultaneous controls stop. Finite runs do not
+restart. The next
 control must be freshly ready; unrelated artwork is not checked. Existing
 score/terminal hold and settle timings are reused, followed by bounded input-free
 observations. A fresh board, Solver activation if needed, and a new source frame

@@ -2,8 +2,8 @@
 
 ## Current boundary
 
-Version 1.3.0 candidate 2 starts from pushed candidate 1 at
-`44727193d4e620a749925e9cc46c9d9d4df1700f`. Free Cell's approved FC01–FC13
+Version 1.3.0 candidate 3 starts from pushed candidate 2 at
+`656881ee3f906347bd6f5665c733892621b1cc98`. Free Cell's approved FC01–FC13 and FC15
 slice now owns CELL/PLAY source actions, automatic-transfer observations and
 independent one-board completion/restart policy. It does not inherit card-pixel
 proof, Draw, Recycle, Solve or SUIT-source input. The later candidate-history sections
@@ -513,10 +513,13 @@ unresolved context. Active Solver is not refreshed while cards move to SUIT.
 
 Independent win entry recognises the score/skip panel or completed-game
 New Game panel. An isolated OK, Play or missing source is insufficient. Only
-continuous Multi-Step 0 advances expected score skip → OK → New Game → Play.
+continuous Multi-Step 0 advances score skip → optional OK → New Game → Play.
+After score skip each fresh frame checks local OK and New Game readiness; exactly
+one ready control authorises input. No level change proceeds directly to New Game.
+Neither control receives speculative input; two ready controls stop as ambiguous.
 Readiness checks each local caption and button body without surrounding level,
 medal, fireworks or panel artwork. Each click occurs once; the next expected
 stage receives bounded read-only observations. Restart must reach a fresh
 recognised board and actionable Solver frame before continuing. Finite runs
 do not send terminal input. See
-[Free Cell candidate notes](freecell-v1.3.0-candidate-2.md).
+[Free Cell candidate notes](freecell-v1.3.0-candidate-3.md).

@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.3.0 — candidate 3
+
+- Make Free Cell LEVEL UP optional after score counting. Each fresh frame checks
+  the local OK and New Game controls; New Game can proceed directly when no
+  level was earned. Ambiguous or absent controls do not authorise input.
+- Preserve one-shot terminal clicks, bounded input-free observations, STOP and
+  uncertain-input non-replay; New Game → Play → fresh board remains ordered.
+- Correct the test-only constant RGBA chunk loop to `as_chunks_mut::<4>()`,
+  addressing the reported Clippy lint without suppressing warnings.
+- Add byte-identical FC15 evidence and focused optional-LEVEL-UP regressions.
+- Pin the guarded installer to pushed candidate 2 at `656881ee3f906347bd6f5665c733892621b1cc98`.
+  Runtime gameplay detectors, other modes, timings and capture are unchanged.
+
 ## v1.3.0 — candidate 2
 
 - Enable the approved Free Cell Solver-led slice from original FC01–FC13 PNGs:
