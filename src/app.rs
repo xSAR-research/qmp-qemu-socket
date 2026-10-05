@@ -41,7 +41,10 @@ use crate::parameters::{
     PREVIEW_FOOTER_RESERVE_POINTS, PREVIEW_SCROLLBAR_ALLOWANCE_POINTS,
     PYRAMID_CARD_SETTLE_DELAY_MS, PYRAMID_MOVE_SETTLE_DELAY_MS, PYRAMID_REOBSERVE_DELAY_MS,
     RELEASE_LABEL, SCORE_SKIP_MAX_CLICK_ATTEMPTS, SHARED_TOOLBAR_CONTROLS,
-    SNAPSHOT_LABEL_MAX_CHARS, STEP_ONCE_ACTIONS, STEP_ONCE_INPUT_ENABLED,
+    SNAPSHOT_LABEL_MAX_CHARS, SPIDER_DEFAULT_MULTI_STEP_ACTIONS,
+    SPIDER_DEFAULT_OBSERVATION_LIMIT, SPIDER_DRAW_SETTLE_DELAY_MS, SPIDER_GAME_START_DELAY_MS,
+    SPIDER_MAX_MULTI_STEP_ACTIONS, SPIDER_MAX_OBSERVATION_LIMIT, SPIDER_REOBSERVE_DELAY_MS,
+    SPIDER_SETTLE_DELAY_MS, STEP_ONCE_ACTIONS, STEP_ONCE_INPUT_ENABLED,
     TABLEAU_ANIMATION_SETTLE_DELAY_MS, TRIPEAKS_REOBSERVE_DELAY_MS,
     UNBOUNDED_MULTI_STEP_ACTIONS, VISIBLE_LOG_ROLLOVER_GAMES,
 };
@@ -190,6 +193,18 @@ pub struct QmpQemuSocketApp {
     freecell_multi_step_actions: usize,
     /// Delayed input-free Free Cell observations allowed for each unresolved context.
     freecell_observation_limit: usize,
+    /// Spider source-action delay copied independently into the next run.
+    spider_settle_ms: u64,
+    /// Spider stock-deal delay copied independently into the next run.
+    spider_draw_settle_ms: u64,
+    /// Spider input-free recapture delay copied into the next run.
+    spider_reobserve_ms: u64,
+    /// Spider opening-deal delay copied into the next run.
+    spider_game_start_ms: u64,
+    /// Separate Spider operation budget; zero means continuous.
+    spider_multi_step_actions: usize,
+    /// Delayed Spider captures permitted per unresolved context.
+    spider_observation_limit: usize,
     /// Requested operation limit; the configured zero sentinel means continuous.
     multi_step_actions: usize,
     /// Run ownership retained until the worker reports completion.
@@ -277,6 +292,12 @@ impl QmpQemuSocketApp {
             freecell_game_start_ms: FREECELL_GAME_START_DELAY_MS,
             freecell_multi_step_actions: FREECELL_DEFAULT_MULTI_STEP_ACTIONS,
             freecell_observation_limit: FREECELL_DEFAULT_OBSERVATION_LIMIT,
+            spider_settle_ms: SPIDER_SETTLE_DELAY_MS,
+            spider_draw_settle_ms: SPIDER_DRAW_SETTLE_DELAY_MS,
+            spider_reobserve_ms: SPIDER_REOBSERVE_DELAY_MS,
+            spider_game_start_ms: SPIDER_GAME_START_DELAY_MS,
+            spider_multi_step_actions: SPIDER_DEFAULT_MULTI_STEP_ACTIONS,
+            spider_observation_limit: SPIDER_DEFAULT_OBSERVATION_LIMIT,
             multi_step_actions: DEFAULT_MULTI_STEP_ACTIONS,
             active_run: None,
             stop_requested: false,
@@ -307,10 +328,10 @@ impl QmpQemuSocketApp {
         app.push_log(format!("QMP socket candidate: {}", app.qmp_socket_path));
         app.push_log("Initial Capture Frame is automatic, one-shot and read-only.");
         app.push_log("The preview retains only the latest worker frame; stale full-resolution previews are coalesced while the UI is asleep or occluded.");
-        app.push_log("Step Once and Multi-Step capture fresh evidence before input and reuse settled result frames. Klondike and Free Cell follow fresh Solver recommendations without card-pixel effect proof; their previews are advisory. Free Cell has no Draw, Recycle, Solve or SUIT-return input. TriPeaks/Pyramid retain their existing validation and effect policies.");
+        app.push_log("Step Once and Multi-Step capture fresh evidence before input and reuse settled result frames. Klondike, Free Cell and Spider follow fresh Solver recommendations without card-pixel effect proof; their previews are advisory. Free Cell has no Draw, Recycle, Solve or SUIT-return input. TriPeaks/Pyramid retain their existing validation and effect policies.");
         app.push_log(format!(
-            "Execution defaults: one initial planning frame plus fresh result captures after each action, Multi-Step limits: TriPeaks/Pyramid {}, Klondike {}, Free Cell {} (0 means continuous). STOP is visible only while a guarded run is active.",
-            DEFAULT_MULTI_STEP_ACTIONS, KLONDIKE_DEFAULT_MULTI_STEP_ACTIONS, FREECELL_DEFAULT_MULTI_STEP_ACTIONS,
+            "Execution defaults: one initial planning frame plus fresh result captures after each action, Multi-Step limits: TriPeaks/Pyramid {}, Klondike {}, Free Cell {}, Spider {} (0 means continuous). STOP is visible only while a guarded run is active.",
+            DEFAULT_MULTI_STEP_ACTIONS, KLONDIKE_DEFAULT_MULTI_STEP_ACTIONS, FREECELL_DEFAULT_MULTI_STEP_ACTIONS, SPIDER_DEFAULT_MULTI_STEP_ACTIONS,
         ));
         app.request_capture("Startup");
         app
@@ -534,7 +555,7 @@ impl QmpQemuSocketApp {
                     let progress = format_operation_progress(operation_index, operation_limit);
 
 
-                    let solver_directed = matches!(self.game_mode, GameMode::Klondike | GameMode::FreeCell)
+                    let solver_directed = matches!(self.game_mode, GameMode::Klondike | GameMode::FreeCell | GameMode::Spider)
                         && continued_from_halo;
                     let acceptance = if solver_directed {
                         "followed fresh Solver recommendation (effect unproven)"
@@ -574,6 +595,16 @@ impl QmpQemuSocketApp {
                         self.push_log("Discarded a Free Cell completion notification after a mode change.");
                     }
                 }
+                WorkerEvent::SpiderGameCompleted => {
+
+
+                    if self.game_mode == GameMode::Spider {
+                        self.push_log("One-board Spider GAME WIN recognised. The worker log records whether the run stopped or completed the ordered restart.");
+                        self.roll_visible_output_after_completed_game();
+                    } else {
+                        self.push_log("Discarded a Spider completion notification after a mode change.");
+                    }
+                }
                 WorkerEvent::GameCompleted => {
                     self.board_position_established = true;
                     self.push_log(format!(
@@ -593,7 +624,7 @@ impl QmpQemuSocketApp {
                     let requested = format_operation_limit(requested_operations);
 
 
-                    if matches!(self.game_mode, GameMode::Klondike | GameMode::FreeCell) {
+                    if matches!(self.game_mode, GameMode::Klondike | GameMode::FreeCell | GameMode::Spider) {
                         self.push_log(format!(
                             "Execution run completed: followed {halo_operations} fresh Solver recommendation(s), from a {requested} request; action effects remain unproven; final prediction={}; guest-input retries=0.",
                             concise_prediction(prediction),
@@ -911,16 +942,19 @@ impl QmpQemuSocketApp {
         .with_klondike_millis(self.klondike_settle_ms, self.klondike_reobserve_ms)
         .with_klondike_solve_millis(self.klondike_solve_settle_input)
         .with_freecell_millis(self.freecell_settle_ms, self.freecell_reobserve_ms)
-        .with_freecell_game_start_millis(self.freecell_game_start_ms);
+        .with_freecell_game_start_millis(self.freecell_game_start_ms)
+        .with_spider_millis(self.spider_settle_ms, self.spider_draw_settle_ms, self.spider_reobserve_ms)
+        .with_spider_game_start_millis(self.spider_game_start_ms);
 
 
         let operation_limit = normalise_operation_limit(self.game_mode, operation_limit);
         let settings = StepRunSettings::new(animation_delays, operation_limit)
-            .with_freecell_observation_limit(self.freecell_observation_limit);
+            .with_freecell_observation_limit(self.freecell_observation_limit)
+            .with_spider_observation_limit(self.spider_observation_limit);
 
 
         let request_scope = if settings.is_unbounded()
-            && matches!(self.game_mode, GameMode::Klondike | GameMode::FreeCell)
+            && matches!(self.game_mode, GameMode::Klondike | GameMode::FreeCell | GameMode::Spider)
         {
             format!("continuously across one-board {} games until STOP or a guarded stop condition", self.game_mode)
         } else if settings.is_unbounded() {
@@ -934,7 +968,7 @@ impl QmpQemuSocketApp {
         self.current_status = "Validating next move".to_owned();
 
 
-        if matches!(self.game_mode, GameMode::Klondike | GameMode::FreeCell) {
+        if matches!(self.game_mode, GameMode::Klondike | GameMode::FreeCell | GameMode::Spider) {
             self.push_log(format!(
                 "{request_name} requested {request_scope}; advisory preview={}. A fresh valid Solver recommendation authorises each action, followed by editable settle and fresh capture. Card-pixel comparisons do not gate {} play.",
                 concise_prediction(approved_prediction), self.game_mode,
@@ -947,7 +981,7 @@ impl QmpQemuSocketApp {
         }
 
 
-        if matches!(self.game_mode, GameMode::Klondike | GameMode::FreeCell)
+        if matches!(self.game_mode, GameMode::Klondike | GameMode::FreeCell | GameMode::Spider)
             && approved_prediction == PredictedAction::NoHighlight
         {
             self.push_log(format!("{} missing-HALO recovery first uses bounded input-free captures and independent completion checks. A recognised gameplay scene may refresh Solver once, then obtain fresh evidence. Step Once sends at most one gameplay action; only continuous Multi-Step 0 advances confirmed wins through supported terminal controls.", self.game_mode));
@@ -973,6 +1007,7 @@ impl QmpQemuSocketApp {
         match self.game_mode {
             GameMode::Klondike => normalise_operation_limit(self.game_mode, self.klondike_multi_step_actions),
             GameMode::FreeCell => normalise_operation_limit(self.game_mode, self.freecell_multi_step_actions),
+            GameMode::Spider => normalise_operation_limit(self.game_mode, self.spider_multi_step_actions),
             _ => self.multi_step_actions,
         }
     }
@@ -1147,13 +1182,15 @@ impl QmpQemuSocketApp {
 
 
                 if bevel_button(ui, "Single Step", ACTION_GREEN, false, STEP_ONCE_INPUT_ENABLED && action_available)
-                    .on_hover_text(if self.game_mode == GameMode::FreeCell {
+                    .on_hover_text(if self.game_mode == GameMode::Spider {
+                        "Follow one fresh PLAY source HALO or DRAW via D, wait the separate editable settle and recapture; no card-pixel move proof"
+                    } else if self.game_mode == GameMode::FreeCell {
                         "Follow one fresh CELL or PLAY source HALO, settle and recapture; activate Solver once only if it is off; no card-pixel move proof"
                     } else if self.game_mode == GameMode::Klondike && self.prediction == Some(PredictedAction::NoHighlight) {
                         "Observe for a fresh HALO or completion; a recognised board may refresh Solver once, then send at most one gameplay action and capture its result"
                     } else if prediction_is_klondike_solve(self.prediction) {
                         "Click the freshly recognised Solve control once, wait its editable animation delay and confirm completion from two fresh frames; Single Step stops before terminal inputs"
-                    } else if matches!(self.game_mode, GameMode::Klondike | GameMode::FreeCell) {
+                    } else if matches!(self.game_mode, GameMode::Klondike | GameMode::FreeCell | GameMode::Spider) {
                         "Capture a fresh valid Solver recommendation, send one action, wait the editable settle and capture its result"
                     } else {
                         "Execute one freshly validated guarded action; require a changed effect and valid resulting state"
@@ -1165,18 +1202,20 @@ impl QmpQemuSocketApp {
 
 
                 if bevel_button(ui, "Multiple Steps", ACTION_GREEN, false, MULTI_STEP_INPUT_ENABLED && action_available)
-                    .on_hover_text(if self.game_mode == GameMode::FreeCell {
+                    .on_hover_text(if self.game_mode == GameMode::Spider {
+                        "Follow fresh DRAW/PLAY HALOs; 0 continues through one-board GAME WIN, optional OK, New Game, Play and Solver activation; collapsed suits are display-only"
+                    } else if self.game_mode == GameMode::FreeCell {
                         "Follow fresh CELL/PLAY HALOs; 0 continues through one-board GAME WIN, OK, New Game, Play and Solver activation; no SUIT, Draw or Solve inputs"
                     } else if self.game_mode == GameMode::Klondike
                         && self.prediction == Some(PredictedAction::NoHighlight)
                         && self.selected_multi_step_actions() == UNBOUNDED_MULTI_STEP_ACTIONS
                     {
                         "Observe for a fresh HALO or completion; a recognised board may refresh Solver once, then continue only from fresh recommendations"
-                    } else if matches!(self.game_mode, GameMode::Klondike | GameMode::FreeCell) && self.prediction == Some(PredictedAction::NoHighlight) {
+                    } else if matches!(self.game_mode, GameMode::Klondike | GameMode::FreeCell | GameMode::Spider) && self.prediction == Some(PredictedAction::NoHighlight) {
                         "Observe for a fresh HALO or completion; a recognised board may refresh Solver once, then follow the configured number of fresh recommendations"
                     } else if prediction_is_klondike_solve(self.prediction) {
                         "Click Solve once, settle and check completion; only continuous Multi-Step 0 advances through verified terminal controls"
-                    } else if matches!(self.game_mode, GameMode::Klondike | GameMode::FreeCell) && self.selected_multi_step_actions() == UNBOUNDED_MULTI_STEP_ACTIONS {
+                    } else if matches!(self.game_mode, GameMode::Klondike | GameMode::FreeCell | GameMode::Spider) && self.selected_multi_step_actions() == UNBOUNDED_MULTI_STEP_ACTIONS {
                         "Run continuously across one-board games and supported terminal controls until STOP or a guarded stop condition"
                     } else if self.selected_multi_step_actions() == UNBOUNDED_MULTI_STEP_ACTIONS {
                         "Run continuously until STOP or the first guarded stop condition"
@@ -1525,7 +1564,42 @@ impl QmpQemuSocketApp {
                 ui.add_enabled_ui(execution_enabled, |ui| {
 
 
-                    if self.game_mode == GameMode::FreeCell {
+                    if self.game_mode == GameMode::Spider {
+                        ui.horizontal(|ui| {
+                            ui.label("After Spider card / run action");
+                            ui.add(egui::DragValue::new(&mut self.spider_settle_ms)
+                                .range(MINIMUM_ANIMATION_SETTLE_DELAY_MS..=MAXIMUM_ANIMATION_SETTLE_DELAY_MS)
+                                .speed(10.0).suffix(" ms"))
+                                .on_hover_text("Wait after one source click, including automatic completed-suit collection, before capturing");
+                        });
+                        ui.horizontal(|ui| {
+                            ui.label("After Spider DRAW / deal to all columns");
+                            ui.add(egui::DragValue::new(&mut self.spider_draw_settle_ms)
+                                .range(MINIMUM_ANIMATION_SETTLE_DELAY_MS..=MAXIMUM_ANIMATION_SETTLE_DELAY_MS)
+                                .speed(10.0).suffix(" ms"))
+                                .on_hover_text("Wait after D deals one card to each column; initial 2000 ms from the observed 1–2 second deal");
+                        });
+                        ui.horizontal(|ui| {
+                            ui.label("Spider repeat observation settle");
+                            ui.add(egui::DragValue::new(&mut self.spider_reobserve_ms)
+                                .range(MINIMUM_ANIMATION_SETTLE_DELAY_MS..=MAXIMUM_ANIMATION_SETTLE_DELAY_MS)
+                                .speed(10.0).suffix(" ms"))
+                                .on_hover_text("Wait between bounded input-free captures while a HALO or completion appears");
+                        });
+                        ui.horizontal(|ui| {
+                            ui.label("After Spider game start");
+                            ui.add(egui::DragValue::new(&mut self.spider_game_start_ms)
+                                .range(MINIMUM_ANIMATION_SETTLE_DELAY_MS..=MAXIMUM_ANIMATION_SETTLE_DELAY_MS)
+                                .speed(10.0).suffix(" ms"))
+                                .on_hover_text("Wait after Play before observing the dealt board; initial 3000 ms borrows Free Cell's accepted start setting");
+                        });
+                        ui.horizontal(|ui| {
+                            ui.label("Delayed observations per unresolved stage");
+                            ui.add(egui::DragValue::new(&mut self.spider_observation_limit)
+                                .range(1..=SPIDER_MAX_OBSERVATION_LIMIT).speed(1.0));
+                        });
+                        ui.small("DRAW sends D once. PLAY uses one source click. Automatic completed-suit collection may hide the next HALO temporarily; input-free captures precede bounded Solver recovery.");
+                    } else if self.game_mode == GameMode::FreeCell {
                         ui.horizontal(|ui| {
                             ui.label("After Free Cell card / run action");
                             ui.add(
@@ -1676,7 +1750,7 @@ impl QmpQemuSocketApp {
                     }
 
 
-                    if !matches!(self.game_mode, GameMode::Klondike | GameMode::FreeCell) {
+                    if !matches!(self.game_mode, GameMode::Klondike | GameMode::FreeCell | GameMode::Spider) {
                         ui.horizontal(|ui| {
                             ui.label("Board redeal settle");
                             ui.add(
@@ -1692,7 +1766,12 @@ impl QmpQemuSocketApp {
                         ui.label("Actions per Multi-Step");
 
 
-                        if self.game_mode == GameMode::FreeCell {
+                        if self.game_mode == GameMode::Spider {
+                            ui.add(egui::DragValue::new(&mut self.spider_multi_step_actions)
+                                .range(UNBOUNDED_MULTI_STEP_ACTIONS..=SPIDER_MAX_MULTI_STEP_ACTIONS)
+                                .speed(1.0))
+                                .on_hover_text("0 continues across one-board Spider games until STOP or a guarded stop; positive values limit source/DRAW actions and stop before restart");
+                        } else if self.game_mode == GameMode::FreeCell {
                             ui.add(
                                 egui::DragValue::new(&mut self.freecell_multi_step_actions)
                                     .range(UNBOUNDED_MULTI_STEP_ACTIONS..=FREECELL_MAX_MULTI_STEP_ACTIONS)
@@ -1713,7 +1792,9 @@ impl QmpQemuSocketApp {
                     });
 
 
-                    if self.game_mode == GameMode::FreeCell {
+                    if self.game_mode == GameMode::Spider {
+                        ui.small("Spider Multi-Step 0 continues through one-board wins and restart. Finite runs and Single Step stop before terminal input.");
+                    } else if self.game_mode == GameMode::FreeCell {
                         ui.small("Free Cell Multi-Step 0 continues through one-board wins and restart. Finite runs and Single Step stop before terminal input.");
                     } else if self.game_mode == GameMode::Klondike && self.selected_multi_step_actions() == UNBOUNDED_MULTI_STEP_ACTIONS {
                         ui.small("Multi-Step 0: continuous across one-board Klondike games through verified terminal controls. Finite runs and Single Step stop before restart.");
@@ -1739,12 +1820,23 @@ impl QmpQemuSocketApp {
                         self.freecell_game_start_ms = FREECELL_GAME_START_DELAY_MS;
                         self.freecell_multi_step_actions = FREECELL_DEFAULT_MULTI_STEP_ACTIONS;
                         self.freecell_observation_limit = FREECELL_DEFAULT_OBSERVATION_LIMIT;
+                        self.spider_settle_ms = SPIDER_SETTLE_DELAY_MS;
+                        self.spider_draw_settle_ms = SPIDER_DRAW_SETTLE_DELAY_MS;
+                        self.spider_reobserve_ms = SPIDER_REOBSERVE_DELAY_MS;
+                        self.spider_game_start_ms = SPIDER_GAME_START_DELAY_MS;
+                        self.spider_multi_step_actions = SPIDER_DEFAULT_MULTI_STEP_ACTIONS;
+                        self.spider_observation_limit = SPIDER_DEFAULT_OBSERVATION_LIMIT;
                         self.multi_step_actions = DEFAULT_MULTI_STEP_ACTIONS;
                     }
                 });
 
 
-                if self.game_mode == GameMode::FreeCell {
+                if self.game_mode == GameMode::Spider {
+                    ui.small(format!(
+                        "Spider initial defaults: source {SPIDER_SETTLE_DELAY_MS} ms, DRAW {SPIDER_DRAW_SETTLE_DELAY_MS} ms, repeat observation {SPIDER_REOBSERVE_DELAY_MS} ms, game start {SPIDER_GAME_START_DELAY_MS} ms, Multi-Step {SPIDER_DEFAULT_MULTI_STEP_ACTIONS} (0 = continuous). Edits apply to the next run; Beast testing may refine these independent timings."
+                    ));
+                    ui.small("Each source HALO permits one click or D, settle and fresh observation. One-board GAME WIN follows score skip, optional Level Up OK, New Game and Play; cards and unrelated artwork are not matched.");
+                } else if self.game_mode == GameMode::FreeCell {
                     ui.small(format!(
                         "Free Cell initial defaults: action {FREECELL_SETTLE_DELAY_MS} ms, repeat observation {FREECELL_REOBSERVE_DELAY_MS} ms, game start {FREECELL_GAME_START_DELAY_MS} ms, Multi-Step {FREECELL_DEFAULT_MULTI_STEP_ACTIONS} (0 = continuous). Beast gameplay may refine these independent timings; edits apply to the next run."
                     ));
@@ -1791,7 +1883,14 @@ impl QmpQemuSocketApp {
                 }
 
 
-                if self.game_mode == GameMode::FreeCell {
+                if self.game_mode == GameMode::Spider {
+                    ui.monospace(format!("guest-input-authorised = {}; fresh canonical source required", self.game_mode.input_authorised()));
+                    ui.monospace("priority = DRAW, PLAY 1–10 bottom-up; COLLAPSED SUITS are display-only");
+                    ui.monospace("PLAY source = solid outline; one click within the visible highlighted run");
+                    ui.monospace("toolbar = excluded; clipped sources use the visible card above Y947");
+                    ui.monospace("DRAW = qcode D; disappearance opens the former stock area to PLAY geometry and is not completion");
+                    ui.monospace("automatic completed-suit collection = guest-owned; no card matching or separate input");
+                } else if self.game_mode == GameMode::FreeCell {
                     ui.monospace(format!("guest-input-authorised = {}; fresh canonical source required", self.game_mode.input_authorised()));
                     ui.monospace("priority = CELL 1–4, PLAY 1–8 bottom-up; SUIT is never scanned");
                     ui.monospace("source = solid outline; one click on the bottom card of a run");
@@ -1850,7 +1949,9 @@ impl QmpQemuSocketApp {
                 ui.small("Undo All confirmation requires separate calibration; no confirmation click is automated.");
 
 
-                if self.game_mode == GameMode::FreeCell {
+                if self.game_mode == GameMode::Spider {
+                    ui.monospace("HALO policy = connected solid source outlines; dashed destinations and toolbar icons are excluded");
+                } else if self.game_mode == GameMode::FreeCell {
                     ui.monospace("HALO policy = source outline only; dashed destinations are guides");
                 } else if self.game_mode == GameMode::Klondike {
                     ui.monospace("HALO = source-border continuity plus independently validated card/stock geometry");
@@ -1864,7 +1965,10 @@ impl QmpQemuSocketApp {
                 }
 
 
-                if self.game_mode == GameMode::FreeCell {
+                if self.game_mode == GameMode::Spider {
+                    ui.monospace("no-highlight recovery = bounded fresh captures for deal/suit animation, independent win review, one Solver reserve per unresolved context");
+                    ui.monospace("completion = one reward panel is one game; optional Level Up OK → New Game → Spider Play → fresh board");
+                } else if self.game_mode == GameMode::FreeCell {
                     ui.monospace("no-highlight recovery = fresh capture after start/reobserve delay; one shared activation/refresh reserve");
                     ui.monospace("completion = one reward panel is one game; optional Level Up OK → New Game → Play → fresh board");
                 } else if self.game_mode == GameMode::Klondike {
@@ -1880,7 +1984,7 @@ impl QmpQemuSocketApp {
                 }
 
 
-                if !matches!(self.game_mode, GameMode::Klondike | GameMode::FreeCell) {
+                if !matches!(self.game_mode, GameMode::Klondike | GameMode::FreeCell | GameMode::Spider) {
                     ui.monospace(format!(
                         "board-series = {} boards, redeal wait {} ms",
                         profile.boards_per_game,
@@ -1944,7 +2048,7 @@ impl QmpQemuSocketApp {
                 ));
 
 
-                if matches!(self.game_mode, GameMode::Klondike | GameMode::FreeCell) {
+                if matches!(self.game_mode, GameMode::Klondike | GameMode::FreeCell | GameMode::Spider) {
                     ui.monospace("action-policy = fresh supported Solver source, one input, settle, fresh capture; no card-pixel effect gate or uncertain-input replay");
                 } else if self.game_mode == GameMode::Pyramid {
                     ui.monospace("action-verification = card removal or material lower-pile change; repeated Left–Right pair may continue from fresh settled halos");
@@ -2292,6 +2396,7 @@ fn normalise_operation_limit(mode: GameMode, requested: usize) -> usize {
     match mode {
         GameMode::Klondike => requested.min(KLONDIKE_MAX_MULTI_STEP_ACTIONS),
         GameMode::FreeCell => requested.min(FREECELL_MAX_MULTI_STEP_ACTIONS),
+        GameMode::Spider => requested.min(SPIDER_MAX_MULTI_STEP_ACTIONS),
         _ => requested,
     }
 }
@@ -2352,7 +2457,7 @@ fn board_position_label(
 ) -> String {
 
 
-    if matches!(mode, GameMode::Klondike | GameMode::FreeCell) {
+    if matches!(mode, GameMode::Klondike | GameMode::FreeCell | GameMode::Spider) {
         format!("{mode} — 1 board per game")
     } else if established {
         format!("{mode} — Board {current_board}/{boards_per_game} (session advisory)")
@@ -2505,6 +2610,13 @@ fn format_prediction(prediction: PredictedAction) -> String {
                 "Prediction: Klondike {target} using qcode D; source anchor=({}, {}); input sent=0.",
                 action.anchor.x, action.anchor.y
             ),
+            (ActionTarget::Spider(target), InputOperation::Click(point)) => format!(
+                "Prediction: click Spider {target} at ({}, {}); fresh source HALO only; input sent=0.",
+                point.x, point.y
+            ),
+            (ActionTarget::Spider(target), InputOperation::PressDrawKey) => format!(
+                "Prediction: Spider {target} using qcode D; pointer unchanged; input sent=0."
+            ),
             (ActionTarget::FreeCell(target), InputOperation::Click(point)) => format!(
                 "Prediction: click Free Cell {target} at ({}, {}); fresh source HALO only; input sent=0.",
                 point.x, point.y
@@ -2536,7 +2648,7 @@ fn prediction_is_klondike_solve(prediction: Option<PredictedAction>) -> bool {
 fn prediction_is_actionable(mode: GameMode, prediction: PredictedAction) -> bool {
 
 
-    if matches!(mode, GameMode::Klondike | GameMode::FreeCell)
+    if matches!(mode, GameMode::Klondike | GameMode::FreeCell | GameMode::Spider)
         && prediction == PredictedAction::NoHighlight
     {
         return mode.input_authorised();
@@ -2556,6 +2668,9 @@ fn prediction_is_actionable(mode: GameMode, prediction: PredictedAction) -> bool
             }
             (ActionTarget::FreeCell(target), _) => {
                 crate::freecell::canonical_action(target) == Some(action)
+            }
+            (ActionTarget::Spider(target), _) => {
+                crate::spider::canonical_action(target) == Some(action)
             }
             (ActionTarget::Pyramid(target), _) => {
                 pyramid::action_for_kind(target) == Some(action)
@@ -2604,6 +2719,12 @@ fn concise_prediction(prediction: PredictedAction) -> String {
             }
             (ActionTarget::Klondike(target), InputOperation::Click(point)) => {
                 format!("Klondike {target} at ({}, {})", point.x, point.y)
+            }
+            (ActionTarget::Spider(target), InputOperation::Click(point)) => {
+                format!("Spider {target} at ({}, {})", point.x, point.y)
+            }
+            (ActionTarget::Spider(target), InputOperation::PressDrawKey) => {
+                format!("Spider {target} using D")
             }
             (ActionTarget::FreeCell(target), InputOperation::Click(point)) => {
                 format!("Free Cell {target} at ({}, {})", point.x, point.y)
@@ -2654,6 +2775,12 @@ fn display_action(prediction: PredictedAction) -> String {
             }
             (ActionTarget::Klondike(target), InputOperation::Click(_)) => {
                 format!("Klondike {target} click")
+            }
+            (ActionTarget::Spider(target), InputOperation::Click(_)) => {
+                format!("Spider {target} click")
+            }
+            (ActionTarget::Spider(target), InputOperation::PressDrawKey) => {
+                format!("Spider {target} — D")
             }
             (ActionTarget::FreeCell(target), InputOperation::Click(_)) => {
                 format!("Free Cell {target} click")
@@ -2803,6 +2930,7 @@ fn paint_prediction(painter: &egui::Painter, canvas: Rect, prediction: Predicted
                     ActionTarget::Pyramid(target) => format!("proposed {target}"),
                     ActionTarget::Klondike(target) => format!("proposed {target}"),
                     ActionTarget::FreeCell(target) => format!("proposed {target}"),
+                    ActionTarget::Spider(target) => format!("proposed {target}"),
                 };
                 paint_labeled_crosshair(painter, canvas, click_point, proposal, &label);
             }
@@ -3302,4 +3430,24 @@ mod tests {
             "TriPeaks — Board 2/3 (session advisory)"
         );
     }
+
+
+    /// Spider accepts only its canonical fresh DRAW/PLAY targets and an independent budget.
+    #[test]
+    fn spider_action_authority_and_budget_are_mode_local() {
+        assert!(GameMode::Spider.input_authorised());
+        assert!(prediction_is_actionable(GameMode::Spider, PredictedAction::NoHighlight));
+        let draw = crate::spider::canonical_action(crate::spider::SpiderTarget::Draw)
+            .expect("canonical Spider DRAW");
+        assert!(prediction_is_actionable(GameMode::Spider, PredictedAction::Action(draw)));
+        assert!(!prediction_is_actionable(GameMode::FreeCell, PredictedAction::Action(draw)));
+        let mut forged = draw;
+        forged.specification.operation = InputOperation::Click(PixelPoint::new(10, 10));
+        assert!(!prediction_is_actionable(GameMode::Spider, PredictedAction::Action(forged)));
+        assert_eq!(normalise_operation_limit(GameMode::Spider, SPIDER_DEFAULT_MULTI_STEP_ACTIONS), 0);
+        assert_eq!(normalise_operation_limit(GameMode::Spider, 25), 25);
+        assert_eq!(normalise_operation_limit(GameMode::Spider, usize::MAX), 10_000);
+        assert_eq!(board_position_label(GameMode::Spider, 3, 3, true), "Spider — 1 board per game");
+    }
+
 }

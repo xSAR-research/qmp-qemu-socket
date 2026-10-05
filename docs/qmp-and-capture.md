@@ -1,8 +1,8 @@
 # QMP and capture design
 
 This describes the current shared transport and mode-owned input policies in
-v1.3.0 candidate 5. Free Cell uses approved native CELL/PLAY sources and its own
-one-board terminal sequence; capture-only requests never send input.
+v1.4.0 candidate 1. Free Cell and Spider use native mode-owned sources and
+independent one-board terminal sequences; capture-only requests never send input.
 Later dated correction notes retain historical evidence rather than current
 card-effect requirements.
 
@@ -290,6 +290,30 @@ score/terminal hold and settle timings are reused, followed by bounded input-fre
 observations. A fresh board, Solver activation if needed, and a new source frame
 are required before play resumes. Capture stays full-frame and saving stays
 byte-identical. See [Free Cell Gate 1](freecell-gate-1.md).
+
+
+## Spider input boundary
+
+Spider reuses QMP capture, typed input, cancellation, session logging and exact
+original-byte PNG saving. A freshly recognised solid DRAW source sends one D
+press; a canonical PLAY source sends one click for the connected block. Source
+reads/clicks exclude rows Y>=947; clipped outlines use only visible card area.
+Dashed guides, COLLAPSED SUITS and absent stock never authorise input.
+
+Card/run settling initially uses 750 ms; DRAW dealing has its own 2000 ms wait
+based on Charlie's observed 1–2 second deal/HALO latency. Observation and
+new-game waits initially use 1000/3000 ms. Settings are independent, editable
+and frozen per run. No before/after card-pixel effect witness is used.
+Automatic dealing or packing receives bounded input-free captures. Independent
+win review precedes a bounded Solver activation/refresh on supported gameplay;
+unknown scenes or uncertain inputs stop without retry.
+
+One-board win entry and ordered score/optional OK/New Game controls reuse the
+accepted local caption/button evidence. Spider owns its Play point at the
+measured +100 px Y offset. Each stage is captured freshly and clicked once;
+finite runs stop at a win, while continuous 0 may deal a new board and activate
+Solver after its separate start wait. No new QMP command, capture encoding,
+temporary-file policy or snapshot-save behaviour is introduced.
 
 
 ## Historical Klondike correction notes

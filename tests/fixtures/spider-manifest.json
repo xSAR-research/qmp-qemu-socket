@@ -1,0 +1,210 @@
+{
+  "schema": 1,
+  "game": "Spider",
+  "candidate": "v1.4.0, candidate 1",
+  "base": "4298fe96079f9283159a0b1200876f97de047d7f",
+  "capture": "Original supplied PNG bytes; native 1920x1080 RGBA; no re-encoding",
+  "missing": "SP16 optional LEVEL UP was not observed; existing accepted OK control is reused",
+  "fixtures": [
+    {
+      "id": "SP01",
+      "original_filename": "qmp-qemu-socket 261006 054613 SP01.png",
+      "fixture": "spider-SP01.png",
+      "sha256": "d2f1289a008bbab2f3370cadb709fdd73d091650e649ae64925c624ad8eeb25a",
+      "bytes": 3502001,
+      "width": 1920,
+      "height": 1080,
+      "mode": "RGBA"
+    },
+    {
+      "id": "SP02",
+      "original_filename": "qmp-qemu-socket 261006 054627 SP02.png",
+      "fixture": "spider-SP02.png",
+      "sha256": "6e68a67b01d050343a4bb7429bd4d5f54f787a804928fa6766bebd5d99f512c0",
+      "bytes": 3306153,
+      "width": 1920,
+      "height": 1080,
+      "mode": "RGBA"
+    },
+    {
+      "id": "SP03",
+      "original_filename": "qmp-qemu-socket 261006 054816 SP03.png",
+      "fixture": "spider-SP03.png",
+      "sha256": "0f4a85073aa013c3b06a8820e07e593a73fa48ad8d1a5f690c96a2120d532250",
+      "bytes": 3209803,
+      "width": 1920,
+      "height": 1080,
+      "mode": "RGBA"
+    },
+    {
+      "id": "SP04",
+      "original_filename": "qmp-qemu-socket 261006 054912 SP04.png",
+      "fixture": "spider-SP04.png",
+      "sha256": "e3dbb3761798f99a7099658567cc24d7d79430fca21b721e100fc60d08fb7b63",
+      "bytes": 3169945,
+      "width": 1920,
+      "height": 1080,
+      "mode": "RGBA"
+    },
+    {
+      "id": "SP05",
+      "original_filename": "qmp-qemu-socket 261006 054929 SP05.png",
+      "fixture": "spider-SP05.png",
+      "sha256": "970e689c576fa1c478bc35e69355d4530421c46933d4dd140d0a0e1f9e5a054f",
+      "bytes": 3202111,
+      "width": 1920,
+      "height": 1080,
+      "mode": "RGBA"
+    },
+    {
+      "id": "SP06",
+      "original_filename": "qmp-qemu-socket 261006 055042 SP06.png",
+      "fixture": "spider-SP06.png",
+      "sha256": "ae3732344e52d7511e9410603a78cfa62ade5b9d791f6bc7287b56f9a15ec4e8",
+      "bytes": 3171354,
+      "width": 1920,
+      "height": 1080,
+      "mode": "RGBA"
+    },
+    {
+      "id": "SP07",
+      "original_filename": "qmp-qemu-socket 261006 055053 SP07.png",
+      "fixture": "spider-SP07.png",
+      "sha256": "e6ed725f10336f761b6b34eab6b46b15ff50cf4c8e41d45e9d48bcbc13ac6d31",
+      "bytes": 3156512,
+      "width": 1920,
+      "height": 1080,
+      "mode": "RGBA"
+    },
+    {
+      "id": "SP08",
+      "original_filename": "qmp-qemu-socket 261006 055126 SP08.png",
+      "fixture": "spider-SP08.png",
+      "sha256": "fc73b570485902d66db70275e40b80e96feafb6d3fdbe4bc664fb3a29bf55df0",
+      "bytes": 3134116,
+      "width": 1920,
+      "height": 1080,
+      "mode": "RGBA"
+    },
+    {
+      "id": "SP09",
+      "original_filename": "qmp-qemu-socket 261006 055143 SP09.png",
+      "fixture": "spider-SP09.png",
+      "sha256": "35c64a6b074700d82e327e88c05ac147cb5421dbcd07d1ddc58a3a1bb2b00f99",
+      "bytes": 3153641,
+      "width": 1920,
+      "height": 1080,
+      "mode": "RGBA"
+    },
+    {
+      "id": "SP10",
+      "original_filename": "qmp-qemu-socket 261006 055200 SP10.png",
+      "fixture": "spider-SP10.png",
+      "sha256": "c66f81fe0629119350c8027b0ae6ff1d830468194b44eee65dd8db65026c0f0b",
+      "bytes": 3154675,
+      "width": 1920,
+      "height": 1080,
+      "mode": "RGBA"
+    },
+    {
+      "id": "SP11",
+      "original_filename": "qmp-qemu-socket 261006 055219 SP11.png",
+      "fixture": "spider-SP11.png",
+      "sha256": "afe8e654dcde22e8e48af9715fb54c631b9b439f745921786167a48cf3edc4f3",
+      "bytes": 3211542,
+      "width": 1920,
+      "height": 1080,
+      "mode": "RGBA"
+    },
+    {
+      "id": "SP12",
+      "original_filename": "qmp-qemu-socket 261006 055433 SP12.png",
+      "fixture": "spider-SP12.png",
+      "sha256": "6a12c97c63bc99cebf27fe050f85bb7c8f6b6a88885a0fc2b5ddb8456a6b719d",
+      "bytes": 3186826,
+      "width": 1920,
+      "height": 1080,
+      "mode": "RGBA"
+    },
+    {
+      "id": "SP13",
+      "original_filename": "qmp-qemu-socket 261006 055444 SP13.png",
+      "fixture": "spider-SP13.png",
+      "sha256": "57760f469a90f8146469d920d495c954a454700dba696b4bf2ce823b1ca57d14",
+      "bytes": 3208134,
+      "width": 1920,
+      "height": 1080,
+      "mode": "RGBA"
+    },
+    {
+      "id": "SP14",
+      "original_filename": "qmp-qemu-socket 261006 061608 SP14.png",
+      "fixture": "spider-SP14.png",
+      "sha256": "38cf1f7ab7df26028589151f9231496f298501c50e5e24c8cfc2d2212940c002",
+      "bytes": 3215685,
+      "width": 1920,
+      "height": 1080,
+      "mode": "RGBA"
+    },
+    {
+      "id": "SP-Lower-Toolbar",
+      "original_filename": "qmp-qemu-socket 261006 061950 SP-Lower-Toolbar.png",
+      "fixture": "spider-lower-toolbar.png",
+      "sha256": "cd66802b5d8603e65af0220c86c2e7e0eb4b1dec64fc7c1806aebeb6144947fc",
+      "bytes": 2951642,
+      "width": 1920,
+      "height": 1080,
+      "mode": "RGBA"
+    },
+    {
+      "id": "SP-no-DRAW-PILE",
+      "original_filename": "qmp-qemu-socket 261006 062200 SP-no-DRAW-PILE.png",
+      "fixture": "spider-no-draw-pile.png",
+      "sha256": "0192e8fe8dc01b7092dd460f8bed1ff1245a9b4afd44876183659337072c0b07",
+      "bytes": 3181086,
+      "width": 1920,
+      "height": 1080,
+      "mode": "RGBA"
+    },
+    {
+      "id": "SP15",
+      "original_filename": "qmp-qemu-socket 261006 062310 SP15.png",
+      "fixture": "spider-SP15.png",
+      "sha256": "f8121d54674493be91465f9717193f7b0c775bfec5caccd72f88cc909558956f",
+      "bytes": 1911676,
+      "width": 1920,
+      "height": 1080,
+      "mode": "RGBA"
+    },
+    {
+      "id": "SP17",
+      "original_filename": "qmp-qemu-socket 261006 062351 SP17.png",
+      "fixture": "spider-SP17.png",
+      "sha256": "0e102dff3ff5b7d1e721162b2bd21716307f3abe9bcaa64ce1a6f9e242febe55",
+      "bytes": 1923545,
+      "width": 1920,
+      "height": 1080,
+      "mode": "RGBA"
+    },
+    {
+      "id": "SP18",
+      "original_filename": "qmp-qemu-socket 261006 062413 SP18.png",
+      "fixture": "spider-SP18.png",
+      "sha256": "e1aa8458a9fdb8909086a1a5f6f6be4a06bef4669ca10062e8f288648343d861",
+      "bytes": 2355019,
+      "width": 1920,
+      "height": 1080,
+      "mode": "RGBA"
+    },
+    {
+      "id": "SP19",
+      "original_filename": "qmp-qemu-socket 261006 062446 SP19.png",
+      "fixture": "spider-SP19.png",
+      "sha256": "1aeba32573d21e3f425d6f8eb6d6526dd68b5898f0b57ed26841df3350e6b468",
+      "bytes": 3571053,
+      "width": 1920,
+      "height": 1080,
+      "mode": "RGBA"
+    }
+  ]
+}

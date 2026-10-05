@@ -28,6 +28,8 @@ pub enum GameMode {
     Klondike,
     /// Eight face-up columns, four temporary cells and four suit piles.
     FreeCell,
+    /// Ten compacting columns, a stock deal and automatic completed-suit collection.
+    Spider,
 }
 
 
@@ -35,7 +37,7 @@ impl GameMode {
 
 
     /// Modes exposed by the game selector, with the default first.
-    pub const AVAILABLE: [Self; 4] = [Self::TriPeaks, Self::Pyramid, Self::Klondike, Self::FreeCell];
+    pub const AVAILABLE: [Self; 5] = [Self::TriPeaks, Self::Pyramid, Self::Klondike, Self::FreeCell, Self::Spider];
 
 
     /// Return the stable game name used in controls and logs.
@@ -47,6 +49,7 @@ impl GameMode {
             Self::Pyramid => "Pyramid",
             Self::Klondike => "Klondike",
             Self::FreeCell => "Free Cell",
+            Self::Spider => "Spider",
         }
     }
 
@@ -60,13 +63,14 @@ impl GameMode {
             Self::Pyramid => &crate::pyramid::PROFILE,
             Self::Klondike => &crate::klondike::PROFILE,
             Self::FreeCell => &crate::freecell::PROFILE,
+            Self::Spider => &crate::spider::PROFILE,
         }
     }
 
 
     /// Whether this mode has enough approved evidence to send guest input.
     pub const fn input_authorised(self) -> bool {
-        matches!(self, Self::TriPeaks | Self::Pyramid | Self::Klondike | Self::FreeCell)
+        matches!(self, Self::TriPeaks | Self::Pyramid | Self::Klondike | Self::FreeCell | Self::Spider)
     }
 
 
@@ -179,6 +183,8 @@ pub enum ActionTarget {
     Klondike(crate::klondike::KlondikeTarget),
     /// A CELL card or PLAY source run managed by Free Cell's detector.
     FreeCell(crate::freecell::FreeCellTarget),
+    /// A PLAY source run or stock deal managed by Spider's detector.
+    Spider(crate::spider::SpiderTarget),
 }
 
 
@@ -194,6 +200,7 @@ impl ActionTarget {
             Self::Pyramid(_) => GameMode::Pyramid,
             Self::Klondike(_) => GameMode::Klondike,
             Self::FreeCell(_) => GameMode::FreeCell,
+            Self::Spider(_) => GameMode::Spider,
         }
     }
 }
@@ -211,6 +218,7 @@ impl fmt::Display for ActionTarget {
             Self::Pyramid(kind) => write!(formatter, "Pyramid {kind}"),
             Self::Klondike(kind) => write!(formatter, "Klondike {kind}"),
             Self::FreeCell(kind) => write!(formatter, "Free Cell {kind}"),
+            Self::Spider(kind) => write!(formatter, "Spider {kind}"),
             Self::Tableau(target) => write!(
                 formatter,
                 "tableau row {}, column {}",
@@ -226,7 +234,7 @@ impl fmt::Display for ActionTarget {
 pub enum InputOperation {
     /// Move to a calibrated point, press and release the left mouse button.
     Click(PixelPoint),
-    /// Press and release D for TriPeaks/Klondike Draw or Pyramid Move/Recycle.
+    /// Press and release D for a stock deal or Pyramid Move/Recycle.
     PressDrawKey,
 }
 
@@ -248,6 +256,10 @@ pub enum AnimationClass {
     KlondikeSolve,
     /// Free Cell source click followed by any automatic SUIT transfers.
     FreeCell,
+    /// Spider source click followed by automatic completed-suit collection.
+    Spider,
+    /// Spider stock deal to all ten columns before the next capture.
+    SpiderDraw,
 }
 
 
@@ -336,6 +348,8 @@ impl GuidedAction {
             AnimationClass::Klondike => delays.klondike_settle,
             AnimationClass::KlondikeSolve => delays.klondike_solve,
             AnimationClass::FreeCell => delays.freecell_settle,
+            AnimationClass::Spider => delays.spider_settle,
+            AnimationClass::SpiderDraw => delays.spider_draw_settle,
         }
     }
 
@@ -545,12 +559,12 @@ mod tests {
 
 
     #[test]
-    fn tripeaks_remains_the_default_with_four_independent_modes() {
+    fn tripeaks_remains_the_default_with_five_independent_modes() {
         let mode = GameMode::default();
         let profile = mode.profile();
 
         assert_eq!(mode, GameMode::TriPeaks);
-        assert_eq!(GameMode::AVAILABLE, [GameMode::TriPeaks, GameMode::Pyramid, GameMode::Klondike, GameMode::FreeCell]);
+        assert_eq!(GameMode::AVAILABLE, [GameMode::TriPeaks, GameMode::Pyramid, GameMode::Klondike, GameMode::FreeCell, GameMode::Spider]);
         assert!(GameMode::TriPeaks.input_authorised());
         assert!(!GameMode::TriPeaks.calibration_only());
         assert!(GameMode::Pyramid.input_authorised());
@@ -559,6 +573,8 @@ mod tests {
         assert!(!GameMode::Klondike.calibration_only());
         assert!(GameMode::FreeCell.input_authorised());
         assert!(!GameMode::FreeCell.calibration_only());
+        assert!(GameMode::Spider.input_authorised());
+        assert!(!GameMode::Spider.calibration_only());
         assert_eq!(profile.label, "TriPeaks");
         assert_eq!(profile.valid_row_bits(), 0b1111);
         assert_eq!(profile.initial_active_rows, 0b1000);

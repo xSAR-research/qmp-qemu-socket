@@ -1220,3 +1220,35 @@ fn pyramid_move_key_plan_keeps_pointer_unchanged_and_uses_two_events() {
         "Pyramid MOVE/Recycle via qcode D; pointer unchanged",
     );
 }
+
+
+
+/// Spider capture has no inherited three-board progress or blank-frame input authority.
+#[test]
+fn spider_native_capture_rejects_unknown_scene_and_malformed_storage() {
+    let state = TableauScanState::for_mode(GameMode::Spider);
+    let (observation, _) = analyse_captured_frame(
+        blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT),
+        &state,
+    ).expect("native Spider diagnostic frame");
+    assert_eq!(observation.prediction, PredictedAction::NoHighlight);
+    assert!(!observation.gameplay_scene);
+    assert_eq!(observation.observed_rows, None);
+    assert_eq!(observation.game_progress, None);
+    assert!(analyse_captured_frame(blank_frame(1_280, 720), &state).is_err());
+    let mut malformed = blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT);
+    malformed.pixels.truncate(16);
+    assert!(analyse_captured_frame(malformed, &state).is_err());
+}
+
+
+/// Spider stock deals must pass the shared delivery guard as a key action.
+#[test]
+fn spider_draw_shared_delivery_plan_accepts_only_the_canonical_key() {
+    let action = crate::spider::canonical_action(crate::spider::SpiderTarget::Draw)
+        .expect("canonical Spider DRAW");
+    let plan = plan_step(PredictedAction::Action(action)).expect("Spider DRAW plan");
+    assert_eq!(format_step_plan(plan).expect("shared Spider key-delivery guard"),
+        "Stable plan: Spider DRAW via qcode D; pointer unchanged; commands=2, events=2.");
+    assert_eq!(format_action_status(PredictedAction::Action(action)), "Draw card — Spider DRAW");
+}

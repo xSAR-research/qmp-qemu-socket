@@ -153,6 +153,9 @@ pub enum StepValidationError {
     /// Supplied Free Cell source bounds or click differ from its canonical action.
     #[error("Free Cell target does not match its bounded source action")]
     InvalidFreeCellAction,
+    /// Supplied Spider source bounds or stock input differ from the canonical action.
+    #[error("Spider target does not match its bounded source or Draw action")]
+    InvalidSpiderAction,
 }
 
 
@@ -168,6 +171,13 @@ pub fn plan_step(before: PredictedAction) -> Result<StepPlan, StepValidationErro
             return Err(StepValidationError::NoPreActionHighlight);
         }
         PredictedAction::Action(action) => {
+
+
+            if let ActionTarget::Spider(kind) = action.target
+                && crate::spider::canonical_action(kind) != Some(action)
+            {
+                return Err(StepValidationError::InvalidSpiderAction);
+            }
 
 
             if let ActionTarget::FreeCell(kind) = action.target
@@ -519,4 +529,25 @@ mod tests {
             })
         );
     }
+
+
+    /// Spider's fresh DRAW plan uses its own deal delay and rejects altered delivery.
+    #[test]
+    fn spider_draw_uses_its_mode_local_delay_and_canonical_key() {
+        let action = crate::spider::canonical_action(crate::spider::SpiderTarget::Draw)
+            .expect("canonical Spider DRAW");
+        let plan = plan_step(PredictedAction::Action(action)).expect("fresh Spider DRAW plan");
+        let delays = AnimationSettleDelays::default().with_spider_millis(450, 2_250, 900);
+        assert_eq!(plan.input().operation(), InputOperation::PressDrawKey);
+        assert_eq!(plan.input().animation_settle_delay(delays), Duration::from_millis(2_250));
+        assert_eq!(plan.input().qmp_command_count(), 2);
+        assert_eq!(plan.input().qmp_event_count(), 2);
+        let mut forged = action;
+        forged.specification.operation = InputOperation::Click(action.anchor);
+        assert_eq!(plan_step(PredictedAction::Action(forged)), Err(StepValidationError::InvalidSpiderAction));
+        forged = action;
+        forged.specification.animation_class = crate::game::AnimationClass::Draw;
+        assert_eq!(plan_step(PredictedAction::Action(forged)), Err(StepValidationError::InvalidSpiderAction));
+    }
+
 }

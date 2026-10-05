@@ -2,12 +2,13 @@
 
 ## Current boundary
 
-Version 1.3.0 candidate 5 starts from pushed candidate 4 at
-`2345898e8a59e37f065d93ebda51726af0a8887f`. Free Cell's approved FC01–FC19
-slice now owns CELL/PLAY source actions, automatic-transfer observations and
-independent one-board completion/restart policy. It does not inherit card-pixel
-proof, Draw, Recycle, Solve or SUIT-source input. The later candidate-history sections
-retain their original decisions, including superseded card-effect policies.
+Version 1.4.0 candidate 1 starts from accepted Free Cell candidate 5 at
+`4298fe96079f9283159a0b1200876f97de047d7f`. Spider owns ten PLAY columns,
+stock dealing and automatic-run observations without card-pixel effect proof.
+Its ordered one-board terminal flow reuses accepted local caption checks,
+retaining optional LEVEL UP and its independently measured Play location.
+Existing game policies remain. Later candidate-history sections retain their
+original decisions, including superseded card-effect policies.
 
 
 ## Component boundaries
@@ -22,6 +23,8 @@ retain their original decisions, including superseded card-effect policies.
 | `klondike_terminal.rs` | Klondike completed-game scenes, terminal controls and fresh Draw 1 deal recognition |
 | `freecell.rs` | native Free Cell scene/Solver state, dynamic CELL/PLAY sources and canonical one-click actions |
 | `freecell_terminal.rs` | independent score/New Game win entry and local expected OK/New Game/Play readiness |
+| `spider.rs` | native Spider scene/Solver state, dynamic PLAY runs and stock-to-D actions |
+| `spider_terminal.rs` | typed one-board stages, shared local captions and Spider Play position |
 | `pyramid.rs` | Pyramid targets, fixed halo probes, priority and action-effect evidence |
 | `parameters.rs` | fixed geometry, colour values, delays, limits and release label |
 | `capture.rs` | decoded immutable frame representation |
@@ -37,6 +40,7 @@ retain their original decisions, including superseded card-effect policies.
 | `worker/pyramid_execution.rs` | Pyramid effect, fresh-pair continuation and redeal checks |
 | `worker/klondike_execution.rs` | Klondike execution, bounded recovery, independent completion and continuous terminal progression |
 | `worker/freecell_execution.rs` | Free Cell fresh-source actions, automatic-transfer observations and deterministic one-board restart |
+| `worker/spider_execution.rs` | fresh Spider card/D actions, independent deal timing and ordered one-board restart |
 | `worker/tests.rs` | worker regression cases, including transition and cancellation guards |
 
 ---
@@ -67,7 +71,7 @@ flowchart TD
 TriPeaks and Pyramid freshly reproduce the approved initial prediction and keep
 their accepted result-verification policies. An effect-verified result or
 Pyramid's qualified repeated Left/Right HALO pair becomes the next planning
-frame. Klondike and Free Cell previews are advisory: each fresh supported scene and canonical
+frame. Klondike, Free Cell and Spider previews are advisory: each fresh supported scene and canonical
 Solver recommendation authorises one operation, then editable settle and fresh
 capture. Card-rank, source/recipient matching and changed-pixel proof do not gate
 their play. Acknowledged delivery is logged with its effect explicitly
@@ -122,15 +126,15 @@ implemented or benchmarked.
 
 ## Mode availability
 
-| **Capability** | **TriPeaks** | **Pyramid** | **Klondike** | **Free Cell** |
-| --- | --- | --- | --- | --- |
-| Capture Frame / Capture PNG | Read-only | Read-only | Read-only | Read-only |
-| HALO selection | Unique target | First eligible of 31 fixed probes | Mode-owned ordered source classes | CELL, then PLAY bottom-up / left-to-right |
-| Single Step / Multiple Steps | Guarded | Guarded | Fresh Solver-led actions | Fresh Solver-led actions |
-| Ordinary input | D or tableau click | D for highlighted MOVE/Recycle; card/pile click | D for Draw 1; recycle/source click | One CELL/PLAY bottom-card click |
-| Result policy | Existing effect checks | Effect checks or qualified fresh pair | Fresh valid recommendation; effect unproven | Fresh valid recommendation; effect unproven |
-| Editable settle/reobserve | Draw/tableau and late-HALO intervals | 1000/2000/1000 ms defaults | 750/750/1000 ms defaults | 750/1000 ms and 20-observation defaults |
-| Board/game transitions | Shared three-board policy | Shared three-board policy | Independent one-board policy | Independent one-board policy |
+| **Capability** | **TriPeaks** | **Pyramid** | **Klondike** | **Free Cell** | **Spider** |
+| --- | --- | --- | --- | --- | --- |
+| Capture Frame / Capture PNG | Read-only | Read-only | Read-only | Read-only | Read-only |
+| HALO selection | Unique target | First eligible of 31 fixed probes | Mode-owned source priority | CELL, then PLAY | DRAW, then PLAY |
+| Ordinary input | D or tableau click | D for MOVE/Recycle; card/pile click | D for Draw 1; recycle/source click | One CELL/PLAY click | D for deal; one card/run click |
+| Result policy | Existing effect checks | Effect checks or qualified fresh pair | Fresh recommendation; effect unproven | Fresh recommendation; effect unproven | Fresh recommendation; effect unproven |
+| Settle defaults | Draw/tableau and late-HALO intervals | 1000/2000/1000 ms | 750/750/1000 ms | 750/1000 ms; start 3000 ms | Card 750; DRAW 2000; observe 1000; start 3000 ms |
+| Board/game transitions | Shared three-board policy | Shared three-board policy | Independent one-board | Independent one-board | Independent one-board |
+
 
 Pyramid's semantic order is `Move`, `Left`, `Right`, then 28 card identities
 from row 7 left-to-right upward to the row-1 apex. It does not use TriPeaks row
@@ -528,3 +532,30 @@ stage receives bounded read-only observations. Restart must reach a fresh
 recognised board and actionable Solver frame before continuing. Finite runs
 do not send terminal input. See
 [Free Cell candidate notes](freecell-v1.3.0-candidate-5.md).
+
+
+## Spider Solver-led policy
+
+One fresh supported scene and canonical solid source authorise one input.
+DRAW has priority and sends D; ten PLAY columns are scanned bottom-up, with
+connected source outlines grouped as a single card/run action. COLLAPSED SUITS
+are display-only and automatic packing receives input-free observations.
+Source scans/clicks end before Y947, including visible clipped-source authority.
+Disappearing stock grants no win authority and does not reserve that former
+area against tableau growth. No source/destination card identity, old-position
+comparison or effect-pixel threshold gates the next recommendation.
+
+The worker snapshots four independent editable timings and a finite/continuous
+budget. Acknowledged D and card/run actions consume one slot each. STOP and
+fresh QMP/tablet probes apply before all input. Missing targets receive bounded
+observations; independent terminal entry precedes Solver recovery. Each
+unresolved supported context has at most one Solver input, with no replay on
+uncertain delivery.
+
+A positive score/skip or completed New Game caption establishes a one-board
+win. Continuous mode uses ordered score skip, optional OK, New Game and Spider
+Play, each once from a fresh ready frame. OK and New Game are alternative
+post-score branches; both-ready ambiguity stops. Only local control evidence
+is used after win entry. Spider Play uses the measured +100 px position; fresh
+board capture and the editable deal wait precede needed Solver activation.
+See [Spider candidate notes](spider-v1.4.0-candidate-1.md).

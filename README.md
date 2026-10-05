@@ -7,19 +7,19 @@ guarded mouse/keyboard actions the policy allows. It does not launch QEMU or
 create the socket.
 
 Microsoft Solitaire & Casual Games modes used here — TriPeaks, Pyramid, Klondike,
-and future game types — are **disposable guest fixtures** for exercising 
+Free Cell and Spider — are **disposable guest fixtures** for exercising
 capture, detection and guarded input on shared QMP facilities. They are not
 the real purpose. Each fixture keeps independent target and effect policies.
 
 The target is to build in Dijkstra / A* shortest path problem solving rather
 than using the **Solver**, this will benefit drone route planning experience.
 
-This is **v1.3.0, candidate 5**, based on pushed candidate 4 at
-`2345898e8a59e37f065d93ebda51726af0a8887f`. `Cargo.toml` supplies the package
-version shown in the window title and Parameters. Original FC01–FC19 evidence
-and Charlie's approved input contract now enable **Free Cell**. Existing
-TriPeaks, Pyramid and Klondike execution stays intact.
-See [Free Cell candidate notes](docs/freecell-v1.3.0-candidate-5.md).
+This is **v1.4.0, candidate 1**, based on accepted Free Cell candidate 5 at
+`4298fe96079f9283159a0b1200876f97de047d7f`. `Cargo.toml` supplies the package
+version shown in the window title and Parameters. Twenty original Spider
+captures and Charlie's Solver input contract enable the new mode. TriPeaks,
+Pyramid, Klondike and Free Cell retain their accepted execution policies.
+See [Spider candidate notes](docs/spider-v1.4.0-candidate-1.md).
 
 ## Build and source spacing
 
@@ -43,6 +43,58 @@ blank lines before Rust definitions (above their documentation/attributes)
 and statement blocks, including existing source. The committed nightly and
 rustfmt configuration and existing source spacing are preserved; no formatter
 is part of this candidate.
+
+
+
+## Spider
+
+Board names are **GAME PLAY AREA / PLAY 1–10**, **COLLAPSED SUITS** at the
+bottom left and **DRAW PILE** at the bottom right. Select Spider, then Single
+Step or Multiple Steps. Read-only captures never activate Solver or send input.
+
+Each action uses a fresh supported board and a solid source HALO. Check DRAW
+first; otherwise scan PLAY columns bottom-up and left-to-right. DRAW sends one
+`d` key press, dealing one card to every column. A highlighted card/run receives
+one click in its visible bottom-card area. Connected overlapping card outlines
+are one source; dark dashed destination guides are never clicked. No ranks,
+recipient cards, previous positions or changed-pixel move effects are compared.
+
+Source detection and clicks stay above **Y=947**, the measured toolbar cutoff.
+A complete source ending at that boundary or a source continuing behind the
+icons remains eligible from its visible outline and card area. Compression and
+expansion are measured anew. The DRAW PILE disappears when exhausted; its
+absence does not establish completion. Completed King-to-Ace runs pack into
+COLLAPSED SUITS automatically, with no click on those packets. Spider has no
+Recycle, SUIT-return or Solve-button input.
+
+**Params** has four independent editable intervals: **after card/run action**
+750 ms, **after DRAW deal** 2000 ms, **re-observation** 1000 ms and **after game
+start** 3000 ms. Each accepts 0–5000 ms. The DRAW default covers Charlie's
+observed 1–2 second deal/HALO wait; card and new-game defaults are initial
+settings borrowed from accepted Free Cell, subject to Beast validation.
+**Actions per Multi-Step** starts at **0 = continuous**; a positive budget
+counts acknowledged card/run and DRAW actions. Single Step sends at most one
+logical gameplay action. Timing and budget settings are frozen for each run.
+
+Automatic deals and run packing can leave a frame without a HALO. Bounded
+input-free observations allow those movements to finish; independent win entry
+is checked before supported gameplay can receive one Solver activation or
+refresh per unresolved context. Unknown scenes and uncertain delivery stop
+with the latest frame and log. Missing HALO alone never authorises DRAW.
+
+**One Spider board is one game.** Continuous mode follows score skip → optional
+Level Up OK → New Game → Spider Play → new-game deal wait → Solver if needed →
+fresh capture. After score skip, each frame checks OK and New Game; a game
+without LEVEL UP proceeds directly to New Game. Expected controls use their
+local word/button evidence, independent of level, rank, fireworks and panel
+colours. Spider's Play button is 100 px lower than Free Cell's measured button.
+Finite runs recognise a win and stop without restarting.
+
+[Original Spider fixtures](tests/fixtures/spider-README.md) cover both Easy and
+Grandmaster layouts, stock dealing, long/compacted runs, empty columns, toolbar
+clipping, automatic packing and the observed terminal controls. SP16 was not
+observed; the optional OK control uses the accepted local check. Native Rust
+and live QMP validation remain Beast checks before acceptance.
 
 
 ## Free Cell

@@ -13,7 +13,7 @@ pub const APP_NAME: &str = env!("CARGO_PKG_NAME");
 
 
 /// Package version and candidate number shown by the UI and session log.
-pub const RELEASE_LABEL: &str = concat!("v", env!("CARGO_PKG_VERSION"), ", candidate 5");
+pub const RELEASE_LABEL: &str = concat!("v", env!("CARGO_PKG_VERSION"), ", candidate 1");
 
 
 /// Initial application window width in egui logical points.
@@ -870,6 +870,22 @@ pub const FREECELL_DEFAULT_OBSERVATION_LIMIT: usize = 20;
 pub const FREECELL_MAX_OBSERVATION_LIMIT: usize = 100;
 
 
+/// Initial Spider operation budget; zero selects continuous play until STOP.
+pub const SPIDER_DEFAULT_MULTI_STEP_ACTIONS: usize = UNBOUNDED_MULTI_STEP_ACTIONS;
+
+
+/// Largest finite Spider operation budget; zero remains continuous.
+pub const SPIDER_MAX_MULTI_STEP_ACTIONS: usize = 10_000;
+
+
+/// Default delayed Spider captures per unresolved animation or terminal stage.
+pub const SPIDER_DEFAULT_OBSERVATION_LIMIT: usize = 20;
+
+
+/// Largest editable Spider allowance; each unresolved context remains bounded.
+pub const SPIDER_MAX_OBSERVATION_LIMIT: usize = 40;
+
+
 // Allow Microsoft Solitaire's action-specific animation to finish before the
 // first post-action screen dump. These constants remain the session defaults;
 // the Params window can tune a bounded copy for the next guarded run.
@@ -932,6 +948,22 @@ pub const FREECELL_REOBSERVE_DELAY_MS: u64 = 1_000;
 
 /// Editable delay measured by Charlie for starting and dealing a Free Cell game.
 pub const FREECELL_GAME_START_DELAY_MS: u64 = 3_000;
+
+
+/// Initial editable Spider source-action settle, pending Beast gameplay tuning.
+pub const SPIDER_SETTLE_DELAY_MS: u64 = 750;
+
+
+/// Spider stock-deal delay from Charlie's observed one-to-two-second deal.
+pub const SPIDER_DRAW_SETTLE_DELAY_MS: u64 = 2_000;
+
+
+/// Initial editable Spider input-free observation interval.
+pub const SPIDER_REOBSERVE_DELAY_MS: u64 = 1_000;
+
+
+/// Initial Spider deal delay, borrowing the accepted Free Cell start default.
+pub const SPIDER_GAME_START_DELAY_MS: u64 = 3_000;
 
 
 /// Default TriPeaks draw settling interval as a typed duration.
@@ -1046,6 +1078,14 @@ pub struct AnimationSettleDelays {
     pub freecell_reobserve: Duration,
     /// Delay after starting a Free Cell game before observing the dealt board.
     pub freecell_game_start: Duration,
+    /// Spider source-click settle, including automatic completed-suit collection.
+    pub spider_settle: Duration,
+    /// Spider stock deal to all ten columns before observing the next HALO.
+    pub spider_draw_settle: Duration,
+    /// Delay between bounded input-free Spider observations.
+    pub spider_reobserve: Duration,
+    /// Delay after Spider Play before observing the dealt board.
+    pub spider_game_start: Duration,
 }
 
 
@@ -1068,6 +1108,10 @@ impl AnimationSettleDelays {
             freecell_settle: Duration::from_millis(FREECELL_SETTLE_DELAY_MS),
             freecell_reobserve: Duration::from_millis(FREECELL_REOBSERVE_DELAY_MS),
             freecell_game_start: Duration::from_millis(FREECELL_GAME_START_DELAY_MS),
+            spider_settle: Duration::from_millis(SPIDER_SETTLE_DELAY_MS),
+            spider_draw_settle: Duration::from_millis(SPIDER_DRAW_SETTLE_DELAY_MS),
+            spider_reobserve: Duration::from_millis(SPIDER_REOBSERVE_DELAY_MS),
+            spider_game_start: Duration::from_millis(SPIDER_GAME_START_DELAY_MS),
         }
     }
 
@@ -1136,6 +1180,31 @@ impl AnimationSettleDelays {
     }
 
 
+    /// Apply independent bounded Spider timings without changing existing modes.
+    pub fn with_spider_millis(mut self, settle_ms: u64, draw_ms: u64, reobserve_ms: u64) -> Self {
+        let bounded = |milliseconds: u64| {
+            Duration::from_millis(milliseconds.clamp(
+                MINIMUM_ANIMATION_SETTLE_DELAY_MS,
+                MAXIMUM_ANIMATION_SETTLE_DELAY_MS,
+            ))
+        };
+        self.spider_settle = bounded(settle_ms);
+        self.spider_draw_settle = bounded(draw_ms);
+        self.spider_reobserve = bounded(reobserve_ms);
+        self
+    }
+
+
+    /// Set Spider's independent bounded game-start delay for the next run.
+    pub fn with_spider_game_start_millis(mut self, game_start_ms: u64) -> Self {
+        self.spider_game_start = Duration::from_millis(game_start_ms.clamp(
+            MINIMUM_ANIMATION_SETTLE_DELAY_MS,
+            MAXIMUM_ANIMATION_SETTLE_DELAY_MS,
+        ));
+        self
+    }
+
+
     /// Set the separately editable Solve delay without changing card/draw timing.
     pub fn with_klondike_solve_millis(mut self, solve_ms: u64) -> Self {
         self.klondike_solve = Duration::from_millis(solve_ms.clamp(
@@ -1166,6 +1235,10 @@ impl Default for AnimationSettleDelays {
             freecell_settle: Duration::from_millis(FREECELL_SETTLE_DELAY_MS),
             freecell_reobserve: Duration::from_millis(FREECELL_REOBSERVE_DELAY_MS),
             freecell_game_start: Duration::from_millis(FREECELL_GAME_START_DELAY_MS),
+            spider_settle: Duration::from_millis(SPIDER_SETTLE_DELAY_MS),
+            spider_draw_settle: Duration::from_millis(SPIDER_DRAW_SETTLE_DELAY_MS),
+            spider_reobserve: Duration::from_millis(SPIDER_REOBSERVE_DELAY_MS),
+            spider_game_start: Duration::from_millis(SPIDER_GAME_START_DELAY_MS),
         }
     }
 }
@@ -1187,6 +1260,8 @@ pub struct StepRunSettings {
     operation_limit: usize,
     /// Delayed input-free Free Cell captures permitted for one unresolved context.
     freecell_observation_limit: usize,
+    /// Delayed input-free Spider captures permitted for one unresolved context.
+    spider_observation_limit: usize,
 }
 
 
@@ -1199,6 +1274,7 @@ impl StepRunSettings {
             animation_delays,
             operation_limit,
             freecell_observation_limit: FREECELL_DEFAULT_OBSERVATION_LIMIT,
+            spider_observation_limit: SPIDER_DEFAULT_OBSERVATION_LIMIT,
         }
     }
 
@@ -1225,6 +1301,19 @@ impl StepRunSettings {
     /// Return the snapshotted delayed observation allowance for each Free Cell context.
     pub const fn freecell_observation_limit(self) -> usize {
         self.freecell_observation_limit
+    }
+
+
+    /// Freeze Spider's bounded allowance without changing another mode's settings.
+    pub fn with_spider_observation_limit(mut self, limit: usize) -> Self {
+        self.spider_observation_limit = limit.clamp(1, SPIDER_MAX_OBSERVATION_LIMIT);
+        self
+    }
+
+
+    /// Return the frozen delayed observation allowance for each Spider context.
+    pub const fn spider_observation_limit(self) -> usize {
+        self.spider_observation_limit
     }
 
 
@@ -1927,4 +2016,40 @@ mod tests {
         assert!((1_655..1_792).contains(&centre.x));
         assert!((443..624).contains(&centre.y));
     }
+
+
+    /// Keep Spider timing and capture budgets bounded and independent in each run.
+    #[test]
+    fn spider_timing_and_observation_budget_are_independent() {
+        let defaults = AnimationSettleDelays::default();
+        assert_eq!(defaults.spider_settle, Duration::from_millis(750));
+        assert_eq!(defaults.spider_draw_settle, Duration::from_millis(2_000));
+        assert_eq!(defaults.spider_reobserve, Duration::from_millis(1_000));
+        assert_eq!(defaults.spider_game_start, Duration::from_millis(3_000));
+        let edited = defaults.with_spider_millis(950, 2_250, 850)
+            .with_spider_game_start_millis(3_500);
+        let frozen = StepRunSettings::new(edited, SPIDER_DEFAULT_MULTI_STEP_ACTIONS);
+        let next = edited.with_spider_millis(0, u64::MAX, u64::MAX)
+            .with_spider_game_start_millis(u64::MAX);
+        assert!(frozen.is_unbounded());
+        assert_eq!(frozen.animation_delays().spider_settle, Duration::from_millis(950));
+        assert_eq!(frozen.animation_delays().spider_draw_settle, Duration::from_millis(2_250));
+        assert_eq!(frozen.animation_delays().spider_reobserve, Duration::from_millis(850));
+        assert_eq!(frozen.animation_delays().spider_game_start, Duration::from_millis(3_500));
+        assert_eq!(next.spider_settle, Duration::ZERO);
+        assert_eq!(next.spider_draw_settle, Duration::from_millis(5_000));
+        assert_eq!(next.spider_reobserve, Duration::from_millis(5_000));
+        assert_eq!(next.spider_game_start, Duration::from_millis(5_000));
+        assert_eq!(edited.freecell_settle, defaults.freecell_settle);
+        assert_eq!(edited.freecell_game_start, defaults.freecell_game_start);
+        assert_eq!(edited.klondike_settle, defaults.klondike_settle);
+        assert_eq!(edited.pyramid_move, defaults.pyramid_move);
+        assert_eq!(edited.draw, defaults.draw);
+        assert_eq!(frozen.spider_observation_limit(), 20);
+        assert_eq!(frozen.with_spider_observation_limit(0).spider_observation_limit(), 1);
+        assert_eq!(frozen.with_spider_observation_limit(usize::MAX).spider_observation_limit(), 40);
+        assert_eq!(frozen.with_spider_observation_limit(7).spider_observation_limit(), 7);
+        assert_eq!(frozen.freecell_observation_limit(), FREECELL_DEFAULT_OBSERVATION_LIMIT);
+    }
+
 }

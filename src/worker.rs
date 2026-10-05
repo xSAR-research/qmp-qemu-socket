@@ -9,6 +9,7 @@ mod freecell_execution;
 mod klondike_execution;
 mod post_game;
 mod pyramid_execution;
+mod spider_execution;
 
 use std::{
     fs::{self, OpenOptions},
@@ -276,6 +277,8 @@ pub enum WorkerEvent {
     KlondikeGameCompleted,
     /// Free Cell recognised a one-board win; the worker log distinguishes finite stop from restart.
     FreeCellGameCompleted,
+    /// Spider recognised a one-board win; logs distinguish finite stop from restart.
+    SpiderGameCompleted,
     /// A bounded run reached its requested action count.
     RunCompleted {
         /// Advisory prediction from the accompanying capture.
@@ -563,6 +566,11 @@ impl WorkerHandle {
 
         if mode == GameMode::FreeCell {
             freecell_execution::validate_operation_limit(settings.operation_limit())?;
+        }
+
+
+        if mode == GameMode::Spider {
+            spider_execution::validate_operation_limit(settings.operation_limit())?;
         }
 
 
@@ -987,6 +995,14 @@ fn run_execute_steps(
     event_tx: &WorkerEventSink,
     cancel_requested: &AtomicBool,
 ) {
+
+
+    if scan_state.mode() == GameMode::Spider {
+        spider_execution::run_spider_steps(
+            &socket_path, approved_prediction, settings, scan_state, event_tx, cancel_requested,
+        );
+        return;
+    }
 
 
     if scan_state.mode() == GameMode::FreeCell {
@@ -3111,7 +3127,7 @@ fn analyse_captured_frame(
         .map_err(|error| format!("gameplay-scene analysis failed: {error}"))?;
 
 
-    let game_progress = if matches!(scan_state.mode(), GameMode::Klondike | GameMode::FreeCell) {
+    let game_progress = if matches!(scan_state.mode(), GameMode::Klondike | GameMode::FreeCell | GameMode::Spider) {
         None
     } else {
         Some(
@@ -3284,6 +3300,12 @@ fn format_prediction_target(prediction: PredictedAction) -> String {
             (ActionTarget::Klondike(kind), InputOperation::Click(point)) => {
                 format!("CLICK Klondike {kind:?} at ({}, {})", point.x, point.y)
             }
+            (ActionTarget::Spider(kind), InputOperation::Click(point)) => {
+                format!("CLICK Spider {kind} at ({}, {})", point.x, point.y)
+            }
+            (ActionTarget::Spider(kind), InputOperation::PressDrawKey) => {
+                format!("Spider {kind} via qcode D; pointer unchanged")
+            }
             (ActionTarget::FreeCell(kind), InputOperation::Click(point)) => {
                 format!("CLICK Free Cell {kind} at ({}, {})", point.x, point.y)
             }
@@ -3335,6 +3357,9 @@ fn format_step_plan(plan: StepPlan) -> Result<String, String> {
         }
         (ActionTarget::Pyramid(pyramid::PyramidTargetKind::Move), InputOperation::PressDrawKey) => {
             "Stable plan: Pyramid MOVE/Recycle via qcode D; pointer unchanged; commands=2, events=2.".to_owned()
+        }
+        (ActionTarget::Spider(crate::spider::SpiderTarget::Draw), InputOperation::PressDrawKey) => {
+            "Stable plan: Spider DRAW via qcode D; pointer unchanged; commands=2, events=2.".to_owned()
         }
         (target, InputOperation::Click(click_point)) => {
             let qmp = pixel_point_to_qmp(click_point, NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT)
@@ -3506,7 +3531,7 @@ fn send_board_progress(
 ) {
 
 
-    if matches!(scan_state.mode(), GameMode::Klondike | GameMode::FreeCell) {
+    if matches!(scan_state.mode(), GameMode::Klondike | GameMode::FreeCell | GameMode::Spider) {
         return;
     }
     let boards_per_game = scan_state.mode().profile().boards_per_game;
@@ -3540,6 +3565,12 @@ fn format_action_status(prediction: PredictedAction) -> String {
             }
             (ActionTarget::Klondike(kind), InputOperation::Click(_)) => {
                 format!("Click Klondike {kind:?}")
+            }
+            (ActionTarget::Spider(kind), InputOperation::Click(_)) => {
+                format!("Click Spider {kind}")
+            }
+            (ActionTarget::Spider(kind), InputOperation::PressDrawKey) => {
+                format!("Draw card — Spider {kind}")
             }
             (ActionTarget::FreeCell(kind), InputOperation::Click(_)) => {
                 format!("Click Free Cell {kind}")

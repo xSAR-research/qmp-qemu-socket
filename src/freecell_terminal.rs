@@ -273,9 +273,36 @@ pub fn expected_control_ready(
         TerminalStage::Score => return caption_ready(frame, &SCORE_SKIP),
         TerminalStage::LevelUp => (&LEVEL_UP_OK, PixelRect::new(848, 788, 223, 50)),
         TerminalStage::NewGame => (&NEW_GAME, PixelRect::new(640, 824, 291, 56)),
-        TerminalStage::Play => (&PLAY, PixelRect::new(610, 735, 198, 52)),
+        TerminalStage::Play => return play_control_ready_at(frame, 0),
     };
     Ok(button_body_ready(frame, body)? && caption_ready(frame, caption)?)
+}
+
+
+/// Reuse the local Play caption at an evidenced vertical layout offset.
+/// Free Cell uses zero; Spider's native SP18 places the same control 100 pixels
+/// lower. The offset changes only this expected control, never win authority.
+pub(crate) fn play_control_ready_at(
+    frame: &CapturedFrame,
+    y_offset: u32,
+) -> Result<bool, HaloDetectionError> {
+    validate_frame(frame)?;
+    let caption_bottom = PLAY.bounds.bottom().checked_add(y_offset)
+        .and_then(|bottom| bottom.checked_add(8))
+        .ok_or(HaloDetectionError::BoundsOutsideFrame)?;
+
+
+    if caption_bottom > frame.height {
+        return Err(HaloDetectionError::BoundsOutsideFrame);
+    }
+    let caption = Caption {
+        bounds: PixelRect::new(PLAY.bounds.x, PLAY.bounds.y + y_offset,
+            PLAY.bounds.width, PLAY.bounds.height),
+        ink: PLAY.ink,
+        rows: PLAY.rows,
+    };
+    let body = PixelRect::new(610, 735 + y_offset, 198, 52);
+    Ok(button_body_ready(frame, body)? && caption_ready(frame, &caption)?)
 }
 
 

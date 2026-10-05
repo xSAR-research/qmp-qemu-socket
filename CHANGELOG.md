@@ -1,5 +1,23 @@
 # Changelog
 
+## v1.4.0 — candidate 1
+
+- Add Solver-led Spider with ten dynamic PLAY columns, DRAW via D and one click
+  per highlighted card/run. Completed runs pack automatically; collapsed suits
+  are never input targets. No card identity or changed-pixel effect proof.
+- Handle complete and clipped source outlines above the measured Y947 toolbar
+  boundary, including connected overlapping outlines and changing compression.
+  Disappearing stock does not imply a win or retain a permanent input region.
+- Add independent editable card, DRAW, observation and game-start waits, initially
+  750/2000/1000/3000 ms. DRAW reflects Charlie's observed 1–2 second deal wait.
+  Multi-Step starts at continuous 0; observations and recovery remain bounded.
+- Reuse accepted local terminal controls for score, optional OK and New Game;
+  Spider owns its Play button 100 px lower and its one-board restart policy.
+- Include twenty unchanged supplied PNGs, hash manifest and focused regressions.
+  Preserve earlier modes, STOP, uncertain-input non-replay and exact PNG saving.
+- Pin complete-file installation to `4298fe96079f9283159a0b1200876f97de047d7f`.
+  Native Rust and live QMP checks remain mandatory Beast validation.
+
 ## v1.3.0 — candidate 5
 
 - Accept fully closed Free Cell PLAY outlines ending at the Y947 exclusive

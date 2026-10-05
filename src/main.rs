@@ -16,6 +16,8 @@ mod pyramid;
 mod qmp;
 mod session_log;
 mod snapshot;
+mod spider;
+mod spider_terminal;
 mod stepper;
 mod tracker;
 mod tripeaks;

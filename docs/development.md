@@ -1,10 +1,17 @@
-# Development conventions for v1.3.0 candidate 5
+# Development conventions for v1.4.0 candidate 1
 
-The exact base is pushed v1.3.0 candidate 4 at
-`2345898e8a59e37f065d93ebda51726af0a8887f`. Preserve
-that mode's live Y<947 source boundary, advisory preview and fresh Solver-led
-cycle without card-pixel move proof. Pyramid's highlighted MOVE/Recycle uses D;
-TriPeaks retains its delayed input-free no-HALO recovery.
+The exact base is accepted Free Cell v1.3.0 candidate 5 at
+`4298fe96079f9283159a0b1200876f97de047d7f`. Preserve the accepted earlier modes'
+fresh-evidence cycles and independent policies. Pyramid's highlighted
+MOVE/Recycle uses D; TriPeaks retains delayed input-free no-HALO recovery.
+
+Spider's twenty native originals cover ten PLAY columns, stock dealing,
+automatic run packing, heavy compaction and the toolbar boundary. A single
+fresh source authorises one card/run click or D. No card/effect proof is added.
+The independent 2000 ms DRAW wait reflects Charlie's 1–2 second observation;
+other initial settings remain editable. Spider owns its source geometry and
+ordered one-board policy; score, optional OK and New Game use the accepted
+local control checks, with a separate Spider Play location 100 px lower.
 
 Free Cell's approved runtime slice uses original FC01–FC19 native frames and
 its own source geometry and one-board terminal controls. It follows fresh
@@ -60,6 +67,12 @@ win entry and local expected-control readiness. `worker/freecell_execution.rs`
 owns finite/continuous execution, automatic-transfer observations and ordered
 one-shot terminal progression. Only continuous runs restart; the fresh board
 must be recognised before activating Solver and resuming from a new frame.
+`spider.rs` owns the stock/source classifier and ten-column dynamic geometry.
+`spider_terminal.rs` owns typed expected stages and the measured Spider Play
+location, reusing local caption/control checks through a bounded offset helper.
+`worker/spider_execution.rs` owns one-action execution, independent DRAW delay,
+bounded no-HALO recovery and optional-LEVEL-UP restart. Only continuous 0
+restarts; a fresh dealt board precedes Solver activation.
 The UI delegates persistent log I/O to `session_log.rs`.
 
 When adding a mode, supply its profile/detection policy and preserve the shared
@@ -112,7 +125,7 @@ results from another host do not prove Beast installation or live guest input.
 The candidate delivery notes record the checks actually executed.
 
 On the Beast, confirm that the installed package, launched executable and startup
-log identify **v1.3.0, candidate 5**. Select Free Cell and verify read-only Capture
+log identify **v1.4.0, candidate 1**. Select Free Cell and verify read-only Capture
 Frame, original-byte Capture PNG/Save PNG, initial Solver activation, CELL/PLAY
 single clicks and automatic SUIT-transfer recapture. Adjust the independent
 750/1000 ms settings, separate 3000 ms game-start wait, 20-observation allowance

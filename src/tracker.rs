@@ -411,6 +411,16 @@ pub fn is_gameplay_scene_for_mode(
     validate_frame(frame, profile)?;
 
 
+    if mode == GameMode::Spider {
+        return crate::spider::is_gameplay_scene(frame).map_err(|source| {
+            TrackerError::HaloDetection {
+                target: "Spider scene",
+                source,
+            }
+        });
+    }
+
+
     if mode == GameMode::FreeCell {
         return crate::freecell::is_gameplay_scene(frame).map_err(|source| {
             TrackerError::HaloDetection {
@@ -460,6 +470,17 @@ pub fn analyse_frame_with_state(
     state: &TableauScanState,
 ) -> Result<FrameAnalysis, TrackerError> {
     let profile = state.mode().profile();
+
+
+    if state.mode() == GameMode::Spider {
+        validate_frame(frame, profile)?;
+        return crate::spider::analyse(frame).map_err(|source| {
+            TrackerError::HaloDetection {
+                target: "Spider targets",
+                source,
+            }
+        });
+    }
 
 
     if state.mode() == GameMode::FreeCell {
