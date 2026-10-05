@@ -2,8 +2,8 @@
 
 ## Current boundary
 
-Version 1.3.0 candidate 4 starts from pushed candidate 3 at
-`676afb477495a166a67132a5735b2347b343585d`. Free Cell's approved FC01–FC17
+Version 1.3.0 candidate 5 starts from pushed candidate 4 at
+`2345898e8a59e37f065d93ebda51726af0a8887f`. Free Cell's approved FC01–FC19
 slice now owns CELL/PLAY source actions, automatic-transfer observations and
 independent one-board completion/restart policy. It does not inherit card-pixel
 proof, Draw, Recycle, Solve or SUIT-source input. The later candidate-history sections
@@ -502,7 +502,9 @@ same-position recommendations do not require move proofs.
 All source probes and clicks are above Y=947. FC14/FC16/FC17 now evidence
 toolbar-clipped sources: a closed top, connected opposing rails to the visible
 boundary and card paper around the click establish visible authority without
-inventing a hidden bottom edge. Native dimensions/storage are validated before reads. Coarse open-board layout and the Solver banner have separate
+inventing a hidden bottom edge. FC18/FC19 add fully closed source edges whose
+exclusive end equals Y947; rounded lower rails can terminate before that final
+closed crossbar. Native dimensions/storage are validated before reads. Coarse open-board layout and the Solver banner have separate
 scene/activation roles. SUIT piles are never scanned as sources. No Draw,
 Recycle or Solve target exists. Read-only capture never activates Solver.
 
@@ -510,7 +512,7 @@ Source actions settle for an editable initial 750 ms, then capture anew.
 No-HALO contexts check independent win entry first. An active supported board
 gets one input-free re-observation, initially 1000 ms, before one Solver refresh
 if still unresolved. An inactive supported board waits the separate game-start
-interval, default 1000 ms, then captures freshly before activation. Each context
+interval, default 3000 ms, then captures freshly before activation. Each context
 permits at most one Solver input. Subsequent input-free captures remain bounded
 by the editable 1–100 allowance, initially 20; uncertain input is never replayed.
 
@@ -525,4 +527,4 @@ medal, fireworks or panel artwork. Each click occurs once; the next expected
 stage receives bounded read-only observations. Restart must reach a fresh
 recognised board and actionable Solver frame before continuing. Finite runs
 do not send terminal input. See
-[Free Cell candidate notes](freecell-v1.3.0-candidate-4.md).
+[Free Cell candidate notes](freecell-v1.3.0-candidate-5.md).

@@ -13,7 +13,7 @@ pub const APP_NAME: &str = env!("CARGO_PKG_NAME");
 
 
 /// Package version and candidate number shown by the UI and session log.
-pub const RELEASE_LABEL: &str = concat!("v", env!("CARGO_PKG_VERSION"), ", candidate 4");
+pub const RELEASE_LABEL: &str = concat!("v", env!("CARGO_PKG_VERSION"), ", candidate 5");
 
 
 /// Initial application window width in egui logical points.
@@ -930,8 +930,8 @@ pub const FREECELL_SETTLE_DELAY_MS: u64 = 750;
 pub const FREECELL_REOBSERVE_DELAY_MS: u64 = 1_000;
 
 
-/// Charlie-confirmed editable delay after starting a Free Cell game.
-pub const FREECELL_GAME_START_DELAY_MS: u64 = 1_000;
+/// Editable delay measured by Charlie for starting and dealing a Free Cell game.
+pub const FREECELL_GAME_START_DELAY_MS: u64 = 3_000;
 
 
 /// Default TriPeaks draw settling interval as a typed duration.
@@ -1490,7 +1490,7 @@ mod tests {
         let defaults = AnimationSettleDelays::default();
         assert_eq!(defaults.freecell_settle, Duration::from_millis(750));
         assert_eq!(defaults.freecell_reobserve, Duration::from_millis(1_000));
-        assert_eq!(defaults.freecell_game_start, Duration::from_millis(1_000));
+        assert_eq!(defaults.freecell_game_start, Duration::from_millis(3_000));
         assert_eq!(
             AnimationSettleDelays::from_millis(123, 987, 2_345).freecell_game_start,
             defaults.freecell_game_start,

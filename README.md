@@ -14,12 +14,12 @@ the real purpose. Each fixture keeps independent target and effect policies.
 The target is to build in Dijkstra / A* shortest path problem solving rather
 than using the **Solver**, this will benefit drone route planning experience.
 
-This is **v1.3.0, candidate 4**, based on pushed candidate 3 at
-`676afb477495a166a67132a5735b2347b343585d`. `Cargo.toml` supplies the package
-version shown in the window title and Parameters. Original FC01–FC17 evidence
+This is **v1.3.0, candidate 5**, based on pushed candidate 4 at
+`2345898e8a59e37f065d93ebda51726af0a8887f`. `Cargo.toml` supplies the package
+version shown in the window title and Parameters. Original FC01–FC19 evidence
 and Charlie's approved input contract now enable **Free Cell**. Existing
 TriPeaks, Pyramid and Klondike execution stays intact.
-See [Free Cell candidate notes](docs/freecell-v1.3.0-candidate-4.md).
+See [Free Cell candidate notes](docs/freecell-v1.3.0-candidate-5.md).
 
 ## Build and source spacing
 
@@ -70,7 +70,7 @@ never authorise recovery input. Further observations remain bounded.
 
 **Params** offers **action / automatic-transfer settle** and **re-observation**
 intervals, initially **750/1000 ms**, plus **After Free Cell game start**, initially
-**1000 ms** as confirmed by Charlie. All three are editable from 0 to 5000 ms.
+**3000 ms** as confirmed by Charlie. All three are editable from 0 to 5000 ms.
 **Delayed observations per unresolved stage** remains **20**, bounded **1–100**. **Actions per Multi-Step**
 defaults to **0 = continuous**; finite budgets are **1–10000**. Step Once sends
 at most one source action. Settings are snapshotted for each run.
@@ -85,11 +85,13 @@ controls use their local lettering and button body, not level, rank, medal,
 fireworks or surrounding artwork. Each acknowledged click is sent once; an
 unready next stage receives input-free observations, not click retries.
 
-The original **FC01–FC17** PNGs are included with hashes. FC15 shows New Game
+The original **FC01–FC19** PNGs are included with hashes. FC15 shows New Game
 after a win without LEVEL UP. FC14/FC16/FC17 show sources overlapping the toolbar.
 Source reads and clicks stay above **Y=947**; a clipped source needs a closed
 visible top, connected exterior rails to that boundary and visible card paper
-around its click. The reported lower boundary is a cutoff, not a hidden edge. See
+around its click. The reported lower boundary is a cutoff, not a hidden edge. FC18/FC19 show
+closed source bottoms ending exactly at the exclusive cutoff; these retain
+complete-outline authority without treating the rounded corner as clipped. See
 [Free Cell Gate 1](docs/freecell-gate-1.md) and the candidate review for evidence,
 validation limits and Beast checks. Native Rust validation was not available
 in the delivery workspace; build/test and live GAME WIN validation remain

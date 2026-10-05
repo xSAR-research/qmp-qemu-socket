@@ -1,7 +1,7 @@
 # QMP and capture design
 
 This describes the current shared transport and mode-owned input policies in
-v1.3.0 candidate 4. Free Cell uses approved native CELL/PLAY sources and its own
+v1.3.0 candidate 5. Free Cell uses approved native CELL/PLAY sources and its own
 one-board terminal sequence; capture-only requests never send input.
 Later dated correction notes retain historical evidence rather than current
 card-effect requirements.
@@ -266,13 +266,15 @@ bottom-card click. There is no card-rank or changed-pixel effect proof, SUIT
 source, stock key, Recycle or Solve input. Source reads/clicks remain above Y=947.
 Native FC14/FC16/FC17 support clipped sources with a closed visible top, connected
 rails reaching the boundary and visible paper around the click. The boundary is
-an exclusive visible cutoff, not an estimated hidden card edge.
+an exclusive visible cutoff, not an estimated hidden card edge. FC18/FC19
+provide fully closed bottoms at this cutoff; their rounded rails terminate
+before the last closing crossbar, which remains above the toolbar.
 
 One acknowledged action settles for the editable initial 750 ms and captures
 anew. Automatic SUIT transfers can leave no HALO: check independent win entry,
 otherwise wait the editable initial 1000 ms and recapture without input before
 one Solver refresh on a supported active board. An inactive supported board
-waits the separate game-start interval (initially 1000 ms), then captures freshly
+waits the separate game-start interval (initially 3000 ms), then captures freshly
 before activation. Each context permits at most one Solver click and an editable
 input-free allowance, initially 20, bounded 1–100. Every input has a fresh
 VM/tablet probe and STOP check; uncertain input is not replayed.

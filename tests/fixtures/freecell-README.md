@@ -1,9 +1,8 @@
 # Free Cell native Solver evidence
 
-These seventeen PNG files are complete, byte-identical originals from Charlie's
-5–6 October 2026 captures, taken through the application's manual QMP PNG capture
-and exact-byte save. They are not crops, sparse fixtures, OCR products or resized
-images. Each frame is 1920×1080 RGBA, including the title bar, guest game toolbar
+These nineteen complete PNG files were copied byte-for-byte from Charlie's
+supplied 5–6 October 2026 attachments. He captured them through the application.
+They are not crops, sparse fixtures, OCR products or resized images. Each frame is 1920×1080 RGBA, including the title bar, guest game toolbar
 and Windows taskbar. `freecell-manifest.json` records original filenames and
 SHA-256 digests.
 
@@ -28,6 +27,8 @@ SHA-256 digests.
 | FC15 | Completed game, 2000 XP; New Game visible without LEVEL UP | New Game ready; OK absent |
 | FC16 | Four-card PLAY 3 source crosses toolbar; PLAY 6 guide | One visible clipped PLAY 3 run |
 | FC17 | Four-card PLAY 1 source crosses toolbar; empty PLAY 5 guide | One visible clipped PLAY 1 run |
+| FC18 | Three-card PLAY 1 source closes at toolbar boundary; PLAY 8 guide | One complete PLAY 1 run ending at Y947 |
+| FC19 | Three-card PLAY 3 source closes at toolbar boundary; PLAY 1 guide | One complete PLAY 3 run ending at Y947 |
 
 FC05's source is CELL 2, not a SUIT card. FC06 and FC07 show the same highlighted
 run; they do not form a before/after proof of transfer. The frames' source
@@ -46,7 +47,10 @@ that row and everything below it. FC14/FC16/FC17 now supply native single-card
 and run overlap cases. A clipped PLAY source needs a closed visible top,
 connected opposing rails reaching the cutoff and card paper around its click.
 Its exclusive bottom is Y=947, documenting the visible cutoff rather than an
-inferred hidden card edge. Source scans do not read the overlaid toolbar.
+inferred hidden card edge. Source scans do not read the overlaid toolbar. FC18/FC19 supply fully closed
+source bottoms whose last crossbar is row946, giving exclusive end947. Rounded
+rails terminate before that crossbar; the complete outline supplies authority
+without depending on the clipped paper probe.
 
 SUIT cards are not sources in this guest Free Cell contract. There is no Draw,
 Recycle or Solve action. Eligible cards can automatically move to SUIT; absent
@@ -69,3 +73,12 @@ verification both with and without a level change. Candidate 4 also requires liv
 checks of all three clipped sources, game-start delay and bounded Solver refresh.
 The attached 49-line log covers the first toolbar stall; the later restart excerpt
 was pasted separately. Still images do not measure deal or transfer durations.
+
+Candidate 5 adds the two boundary captures and a 3000ms game-start default from
+Charlie's live timing observation. Its attached log shows supported gameplay
+and active Solver throughout the no-HALO wait; Charlie's STOP ended the run.
+FC18's supplied PNG is 3,203,290 bytes while its log records a 2,544,532-byte
+saved PNG. The fixture hash proves equality to the supplied attachment, not
+to that earlier PNG encoding. Pixels are inspected directly at native resolution;
+the reason for the encoding difference is unverified. Original-byte capture
+and saving code are unchanged.

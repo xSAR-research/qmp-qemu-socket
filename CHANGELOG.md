@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.3.0 — candidate 5
+
+- Accept fully closed Free Cell PLAY outlines ending at the Y947 exclusive
+  cutoff. Their rounded rails terminate before the closing bottom crossbar;
+  remove the gap between complete-source and toolbar-clipped-source policies
+  without changing gold thresholds or reading toolbar pixels.
+- Set the independent editable Free Cell game-start default to 3000 ms,
+  reflecting Charlie's live deal timing. Other timings and recovery flow stay
+  unchanged.
+- Add unchanged supplied FC18/FC19 PNGs and focused boundary regressions.
+  Preserve candidate 4 clipped sources, optional LEVEL UP and Solver recovery.
+- Pin the guarded installer to pushed candidate 4 at `2345898e8a59e37f065d93ebda51726af0a8887f`.
+
 ## v1.3.0 — candidate 4
 
 - Enable evidenced toolbar-clipped Free Cell PLAY sources using only visible

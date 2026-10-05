@@ -1,20 +1,21 @@
-# Development conventions for v1.3.0 candidate 4
+# Development conventions for v1.3.0 candidate 5
 
-The exact base is pushed v1.3.0 candidate 3 at
-`676afb477495a166a67132a5735b2347b343585d`. Preserve
+The exact base is pushed v1.3.0 candidate 4 at
+`2345898e8a59e37f065d93ebda51726af0a8887f`. Preserve
 that mode's live Y<947 source boundary, advisory preview and fresh Solver-led
 cycle without card-pixel move proof. Pyramid's highlighted MOVE/Recycle uses D;
 TriPeaks retains its delayed input-free no-HALO recovery.
 
-Free Cell's approved runtime slice uses original FC01–FC17 native frames and
+Free Cell's approved runtime slice uses original FC01–FC19 native frames and
 its own source geometry and one-board terminal controls. It follows fresh
 CELL/PLAY source HALOs without card or effect-pixel matching. Missing HALOs
 receive input-free re-observation for automatic SUIT transfers before one
 Solver refresh on a supported board. Inactive Solver receives the independent
-1000 ms game-start wait and fresh capture before activation. There is no SUIT
+3000 ms game-start wait and fresh capture before activation. There is no SUIT
 source scan, Draw, Recycle or Solve operation. FC14/FC16/FC17 support clipped
 PLAY sources using visible closed tops, rails and paper above the toolbar;
-no hidden bottom edge or card effect is inferred.
+no hidden bottom edge or card effect is inferred. FC18/FC19 also cover complete
+closed bottoms ending at Y947; the toolbar remains excluded.
 The guarded installer pins this exact base, preserves unrelated work and the
 Beast's untracked root AGENTS.md, and verifies complete affected contents.
 
@@ -111,10 +112,10 @@ results from another host do not prove Beast installation or live guest input.
 The candidate delivery notes record the checks actually executed.
 
 On the Beast, confirm that the installed package, launched executable and startup
-log identify **v1.3.0, candidate 4**. Select Free Cell and verify read-only Capture
+log identify **v1.3.0, candidate 5**. Select Free Cell and verify read-only Capture
 Frame, original-byte Capture PNG/Save PNG, initial Solver activation, CELL/PLAY
 single clicks and automatic SUIT-transfer recapture. Adjust the independent
-750/1000 ms settings, separate 1000 ms game-start wait, 20-observation allowance
+750/1000 ms settings, separate 3000 ms game-start wait, 20-observation allowance
 and zero action budget; they must
 not alter other modes' settings. Verify GAME WIN → optional OK → New Game →
 Play → fresh board → Solver → fresh source, both with and without a level change.

@@ -985,7 +985,18 @@ mod tests {
             assert_eq!(io.solver_states, [Some(false)]);
             assert_eq!(io.solver_capture_counts, [if prefix { 7 } else { 6 }]);
             assert_eq!(io.sources.len(), if prefix { 3 } else { 2 });
-            assert_eq!(io.waits.iter().filter(|delay| **delay == LEVEL_UP_APPEAR_DELAY).count(), 1);
+            let delays = AnimationSettleDelays::default();
+            let mut expected_waits = Vec::new();
+
+
+            if prefix { expected_waits.push(delays.freecell_settle); }
+            expected_waits.extend([
+                LEVEL_UP_APPEAR_DELAY,
+                POST_GAME_STAGE_DELAY, POST_GAME_STAGE_DELAY, POST_GAME_STAGE_DELAY,
+                delays.freecell_game_start,
+                delays.freecell_settle, delays.freecell_settle, delays.freecell_settle,
+            ]);
+            assert_eq!(io.waits, expected_waits);
         }
     }
 

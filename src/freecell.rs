@@ -1,6 +1,6 @@
 //! Free Cell's independent, single-frame Solver source detector.
 //!
-//! Native FC01-FC14 and FC16-FC17 evidence supplies CELL and PLAY columns. Only a
+//! Native FC01-FC14 and FC16-FC19 evidence supplies CELL and PLAY columns. Only a
 //! solid source outline is actionable; dark dashed destination guides are not.
 //! Every frame is classified independently, so stack compression, expansion and
 //! repeated source positions do not require card recognition or effect proofs.
@@ -251,6 +251,8 @@ fn crossbar(frame: &CapturedFrame, x: u32, y: u32) -> bool {
 /// establish a second path with a closed top and opposing rails reaching the
 /// toolbar cutoff, plus paper around the visible click. No hidden bottom or
 /// toolbar pixel is read, and dashed destinations grant neither path authority.
+/// FC18/FC19 close their complete bottom at the cutoff: a crossbar below the
+/// terminated rails proves that visible end without the clipped-paper fallback.
 fn find_source(frame: &CapturedFrame, x: u32, scan_top: u32, scan_bottom: u32) -> Option<PixelRect> {
     let mut row = scan_bottom;
 
@@ -311,8 +313,7 @@ fn find_source(frame: &CapturedFrame, x: u32, scan_top: u32, scan_bottom: u32) -
 
 
         if rail_height < MINIMUM_SOURCE_HEIGHT - 10
-            || matched_rows * 100 < rail_height * 85
-            || lower_rail >= scan_bottom - 8 {
+            || matched_rows * 100 < rail_height * 85 {
             continue;
         }
 
@@ -322,9 +323,13 @@ fn find_source(frame: &CapturedFrame, x: u32, scan_top: u32, scan_bottom: u32) -
 
         if let (Some(top), Some(last)) = (top, bottom) {
             let bottom = last + 1;
+            let closes_before_toolbar = scan_bottom == TOOLBAR_TOP
+                && lower_rail < TOOLBAR_TOP - 1 && last > lower_rail;
 
 
-            if bottom - top >= MINIMUM_SOURCE_HEIGHT && bottom < scan_bottom {
+            if bottom - top >= MINIMUM_SOURCE_HEIGHT
+                && (lower_rail < scan_bottom - 8 || closes_before_toolbar)
+                && (bottom < scan_bottom || (bottom == TOOLBAR_TOP && closes_before_toolbar)) {
                 return Some(PixelRect::new(x, top, CARD_WIDTH, bottom - top));
             }
         }
@@ -451,6 +456,8 @@ mod tests {
             14 => include_bytes!("../tests/fixtures/freecell-FC14.png"),
             16 => include_bytes!("../tests/fixtures/freecell-FC16.png"),
             17 => include_bytes!("../tests/fixtures/freecell-FC17.png"),
+            18 => include_bytes!("../tests/fixtures/freecell-FC18.png"),
+            19 => include_bytes!("../tests/fixtures/freecell-FC19.png"),
             _ => panic!("unknown native Free Cell fixture"),
         };
 
@@ -628,6 +635,57 @@ mod tests {
                     "FC{code:02}: toolbar pixels cannot affect the visible source");
             }
         }
+    }
+
+
+    /// A complete bottom at the cutoff is visible authority even over card ink.
+    #[test]
+    fn native_closed_bottoms_at_the_toolbar_remain_complete_sources() {
+
+
+        for (code, column, click_x) in [(18, 1, 286), (19, 3, 671)] {
+            let mut frame = fixture(code);
+            let expected = PredictedAction::Action(canonical_action(FreeCellTarget::Play {
+                column, top: 641, bottom: TOOLBAR_TOP,
+            }).unwrap());
+            assert_eq!(analyse(&frame).unwrap().prediction, expected, "FC{code:02}");
+            let PredictedAction::Action(action) = expected else { panic!("native closed source"); };
+            assert_eq!(action.operation(), InputOperation::Click(PixelPoint::new(click_x, 907)));
+
+
+            for colour in [[0, 0, 0], [255, 255, 255], [235, 195, 90], [20, 120, 75]] {
+                paint(&mut frame, PixelRect::new(0, TOOLBAR_TOP, 1_920, 1_080 - TOOLBAR_TOP), colour);
+                assert_eq!(analyse(&frame).unwrap().prediction, expected,
+                    "FC{code:02}: a closed bottom uses no toolbar pixels");
+            }
+        }
+    }
+
+
+    /// Internal crossbars cannot turn a failed clipped source into a closed end.
+    #[test]
+    fn near_toolbar_closure_requires_crossbar_below_terminated_rails() {
+        let mut frame = blank_frame();
+        let x = PLAY_X[0];
+        let gold = [235, 195, 90];
+        paint_source(&mut frame, x, 641, TOOLBAR_TOP);
+        assert_eq!(find_source(&frame, x, PLAY_SCAN_TOP, TOOLBAR_TOP),
+            Some(PixelRect::new(x, 641, CARD_WIDTH, TOOLBAR_TOP - 641)));
+        paint(&mut frame, PixelRect::new(x + 18, TOOLBAR_TOP - 1, CARD_WIDTH - 36, 1), [0, 0, 0]);
+        paint(&mut frame, PixelRect::new(x + 18, TOOLBAR_TOP - 5, CARD_WIDTH - 36, 1), gold);
+        assert!(find_source(&frame, x, PLAY_SCAN_TOP, TOOLBAR_TOP).is_none(),
+            "a crossbar above the last paired rail is not a complete bottom");
+        paint_source(&mut frame, x, 641, 1_001);
+        paint(&mut frame, PixelRect::new(x + 18, TOOLBAR_TOP - 2, CARD_WIDTH - 36, 1), gold);
+        assert!(find_source(&frame, x, PLAY_SCAN_TOP, TOOLBAR_TOP).is_none(),
+            "rails through the cutoff still require clipped-source paper");
+        paint(&mut frame, PixelRect::new(x + 18, 641, CARD_WIDTH - 36, 1), [0, 0, 0]);
+        assert!(find_source(&frame, x, PLAY_SCAN_TOP, TOOLBAR_TOP).is_none(),
+            "neither near-cutoff path excuses an absent closed top");
+        let mut frame = blank_frame();
+        paint_source(&mut frame, CELL_X[0], 102, 310);
+        assert!(find_source(&frame, CELL_X[0], 100, 310).is_none(),
+            "the PLAY toolbar boundary does not change CELL policy");
     }
 
 

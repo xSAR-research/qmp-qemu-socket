@@ -1,5 +1,5 @@
 {
-  "description": "Complete byte-identical original Free Cell QMP PNG captures. No resizing, cropping, sparse reduction or pixel modification.",
+  "description": "Complete supplied Free Cell PNGs, copied byte-for-byte from attachments. No resizing, cropping, sparse reduction or pixel modification.",
   "frame": [
     1920,
     1080
@@ -142,7 +142,24 @@
       "fixture_sha256": "f0dd585f9ff503bca13509ddc827d367819499e984950cbe5471b1cd8072d29c",
       "bytes": 3282723,
       "observation": "PLAY 1 connected king of diamonds/queen of spades/jack of diamonds/ten of spades source reaches toolbar; dashed empty PLAY 5 destination."
+    },
+    {
+      "fixture": "freecell-FC18.png",
+      "source": "qmp-qemu-socket 261006 042015 FAIL.png",
+      "source_sha256": "8995c456164a181d215dcc01687eaf467b54613bc8e04f201361b55617f9c0c4",
+      "fixture_sha256": "8995c456164a181d215dcc01687eaf467b54613bc8e04f201361b55617f9c0c4",
+      "bytes": 3203290,
+      "observation": "PLAY 1 connected six of spades/five of diamonds/four of clubs source; closed bottom ends at the exclusive Y947 boundary; dashed PLAY 8 destination."
+    },
+    {
+      "fixture": "freecell-FC19.png",
+      "source": "qmp-qemu-socket 261006 042921 ON-THE-LINE.png",
+      "source_sha256": "fd59a2d258f8e5d9cb8c3daf834e7b899339fc5ecbd6847a7c7b1762f708ff3b",
+      "fixture_sha256": "fd59a2d258f8e5d9cb8c3daf834e7b899339fc5ecbd6847a7c7b1762f708ff3b",
+      "bytes": 3204218,
+      "observation": "PLAY 3 connected five of clubs/four of diamonds/three of clubs source; closed bottom ends at the exclusive Y947 boundary; dashed PLAY 1 destination."
     }
   ],
-  "toolbar_source_policy": "Source reads and clicks remain above Y947; FC14/FC16/FC17 evidence supports visible clipped PLAY sources."
+  "toolbar_source_policy": "Source reads and clicks remain above Y947; FC14/FC16/FC17 support clipped PLAY sources and FC18/FC19 support fully closed bottoms ending at the exclusive cutoff.",
+  "FC18_encoding_limit": "The supplied attachment has 3203290 bytes; its session log records 2544532 bytes for the saved QMP PNG. Fixture equality is verified against the supplied attachment; equality to the guest-saved PNG encoding is not established."
 }
