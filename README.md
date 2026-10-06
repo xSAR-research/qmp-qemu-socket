@@ -14,12 +14,12 @@ the real purpose. Each fixture keeps independent target and effect policies.
 The target is to build in Dijkstra / A* shortest path problem solving rather
 than using the **Solver**, this will benefit drone route planning experience.
 
-This is **v1.4.0, candidate 1**, based on accepted Free Cell candidate 5 at
-`4298fe96079f9283159a0b1200876f97de047d7f`. `Cargo.toml` supplies the package
+This is **v1.4.0, candidate 2**, based on pushed Spider candidate 1 at
+`5a0f730a4248d030ae98fb466a00b092b8083133`. `Cargo.toml` supplies the package
 version shown in the window title and Parameters. Twenty original Spider
 captures and Charlie's Solver input contract enable the new mode. TriPeaks,
 Pyramid, Klondike and Free Cell retain their accepted execution policies.
-See [Spider candidate notes](docs/spider-v1.4.0-candidate-1.md).
+See [Spider candidate notes](docs/spider-v1.4.0-candidate-2.md).
 
 ## Build and source spacing
 
@@ -68,10 +68,11 @@ COLLAPSED SUITS automatically, with no click on those packets. Spider has no
 Recycle, SUIT-return or Solve-button input.
 
 **Params** has four independent editable intervals: **after card/run action**
-750 ms, **after DRAW deal** 2000 ms, **re-observation** 1000 ms and **after game
+1250 ms, **after DRAW deal** 2000 ms, **re-observation** 1000 ms and **after game
 start** 3000 ms. Each accepts 0–5000 ms. The DRAW default covers Charlie's
-observed 1–2 second deal/HALO wait; card and new-game defaults are initial
-settings borrowed from accepted Free Cell, subject to Beast validation.
+observed 1–2 second deal/HALO wait. Charlie requested the 1250 ms card/run
+default after observing stack animation before HALO appeared during Beast play.
+The new-game default retains the accepted 3000 ms starting value.
 **Actions per Multi-Step** starts at **0 = continuous**; a positive budget
 counts acknowledged card/run and DRAW actions. Single Step sends at most one
 logical gameplay action. Timing and budget settings are frozen for each run.
@@ -93,8 +94,10 @@ Finite runs recognise a win and stop without restarting.
 [Original Spider fixtures](tests/fixtures/spider-README.md) cover both Easy and
 Grandmaster layouts, stock dealing, long/compacted runs, empty columns, toolbar
 clipping, automatic packing and the observed terminal controls. SP16 was not
-observed; the optional OK control uses the accepted local check. Native Rust
-and live QMP validation remain Beast checks before acceptance.
+observed; the optional OK control uses the accepted local check. Charlie reports
+successful candidate 1 gameplay. Candidate 2 corrects a test that conflated
+equal-duration score and game-start waits; the runtime sequence is unchanged.
+Native Rust validation remains a Beast check for this delivery.
 
 
 ## Free Cell

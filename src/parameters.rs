@@ -13,7 +13,7 @@ pub const APP_NAME: &str = env!("CARGO_PKG_NAME");
 
 
 /// Package version and candidate number shown by the UI and session log.
-pub const RELEASE_LABEL: &str = concat!("v", env!("CARGO_PKG_VERSION"), ", candidate 1");
+pub const RELEASE_LABEL: &str = concat!("v", env!("CARGO_PKG_VERSION"), ", candidate 2");
 
 
 /// Initial application window width in egui logical points.
@@ -950,8 +950,8 @@ pub const FREECELL_REOBSERVE_DELAY_MS: u64 = 1_000;
 pub const FREECELL_GAME_START_DELAY_MS: u64 = 3_000;
 
 
-/// Initial editable Spider source-action settle, pending Beast gameplay tuning.
-pub const SPIDER_SETTLE_DELAY_MS: u64 = 750;
+/// Editable Spider source-action settle tuned by Charlie after Beast gameplay.
+pub const SPIDER_SETTLE_DELAY_MS: u64 = 1_250;
 
 
 /// Spider stock-deal delay from Charlie's observed one-to-two-second deal.
@@ -2022,7 +2022,7 @@ mod tests {
     #[test]
     fn spider_timing_and_observation_budget_are_independent() {
         let defaults = AnimationSettleDelays::default();
-        assert_eq!(defaults.spider_settle, Duration::from_millis(750));
+        assert_eq!(defaults.spider_settle, Duration::from_millis(1_250));
         assert_eq!(defaults.spider_draw_settle, Duration::from_millis(2_000));
         assert_eq!(defaults.spider_reobserve, Duration::from_millis(1_000));
         assert_eq!(defaults.spider_game_start, Duration::from_millis(3_000));

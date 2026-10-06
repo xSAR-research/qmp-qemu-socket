@@ -2,12 +2,14 @@
 
 ## Current boundary
 
-Version 1.4.0 candidate 1 starts from accepted Free Cell candidate 5 at
-`4298fe96079f9283159a0b1200876f97de047d7f`. Spider owns ten PLAY columns,
+Version 1.4.0 candidate 2 starts from pushed Spider candidate 1 at
+`5a0f730a4248d030ae98fb466a00b092b8083133`. Spider owns ten PLAY columns,
 stock dealing and automatic-run observations without card-pixel effect proof.
 Its ordered one-board terminal flow reuses accepted local caption checks,
 retaining optional LEVEL UP and its independently measured Play location.
-Existing game policies remain. Later candidate-history sections retain their
+The editable card/run default is 1250 ms after Charlie's Beast tuning; its
+restart test distinguishes score and game-start waits without changing the
+runtime sequence. Existing game policies remain. Later history sections retain their
 original decisions, including superseded card-effect policies.
 
 
@@ -132,7 +134,7 @@ implemented or benchmarked.
 | HALO selection | Unique target | First eligible of 31 fixed probes | Mode-owned source priority | CELL, then PLAY | DRAW, then PLAY |
 | Ordinary input | D or tableau click | D for MOVE/Recycle; card/pile click | D for Draw 1; recycle/source click | One CELL/PLAY click | D for deal; one card/run click |
 | Result policy | Existing effect checks | Effect checks or qualified fresh pair | Fresh recommendation; effect unproven | Fresh recommendation; effect unproven | Fresh recommendation; effect unproven |
-| Settle defaults | Draw/tableau and late-HALO intervals | 1000/2000/1000 ms | 750/750/1000 ms | 750/1000 ms; start 3000 ms | Card 750; DRAW 2000; observe 1000; start 3000 ms |
+| Settle defaults | Draw/tableau and late-HALO intervals | 1000/2000/1000 ms | 750/750/1000 ms | 750/1000 ms; start 3000 ms | Card 1250; DRAW 2000; observe 1000; start 3000 ms |
 | Board/game transitions | Shared three-board policy | Shared three-board policy | Independent one-board | Independent one-board | Independent one-board |
 
 
@@ -558,4 +560,4 @@ Play, each once from a fresh ready frame. OK and New Game are alternative
 post-score branches; both-ready ambiguity stops. Only local control evidence
 is used after win entry. Spider Play uses the measured +100 px position; fresh
 board capture and the editable deal wait precede needed Solver activation.
-See [Spider candidate notes](spider-v1.4.0-candidate-1.md).
+See [Spider candidate notes](spider-v1.4.0-candidate-2.md).

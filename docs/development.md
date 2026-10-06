@@ -1,7 +1,7 @@
-# Development conventions for v1.4.0 candidate 1
+# Development conventions for v1.4.0 candidate 2
 
-The exact base is accepted Free Cell v1.3.0 candidate 5 at
-`4298fe96079f9283159a0b1200876f97de047d7f`. Preserve the accepted earlier modes'
+The exact base is pushed Spider v1.4.0 candidate 1 at
+`5a0f730a4248d030ae98fb466a00b092b8083133`. Preserve the accepted earlier modes'
 fresh-evidence cycles and independent policies. Pyramid's highlighted
 MOVE/Recycle uses D; TriPeaks retains delayed input-free no-HALO recovery.
 
@@ -9,9 +9,16 @@ Spider's twenty native originals cover ten PLAY columns, stock dealing,
 automatic run packing, heavy compaction and the toolbar boundary. A single
 fresh source authorises one card/run click or D. No card/effect proof is added.
 The independent 2000 ms DRAW wait reflects Charlie's 1–2 second observation;
-other initial settings remain editable. Spider owns its source geometry and
+the card/run default is now 1250 ms following Charlie's Beast tuning. Other
+settings remain editable. Spider owns its source geometry and
 ordered one-board policy; score, optional OK and New Game use the accepted
 local control checks, with a separate Spider Play location 100 px lower.
+
+The continuous restart regression uses a distinctive configured start delay
+and checks ordered waits, with and without LEVEL UP and with Solver inactive
+or already active. Score-skip and the default game-start wait are both 3000 ms;
+counting equal durations conflated the two purposes and produced a false failure
+in candidate 1. Candidate 2 changes the test, not the terminal state machine.
 
 Free Cell's approved runtime slice uses original FC01–FC19 native frames and
 its own source geometry and one-board terminal controls. It follows fresh
@@ -125,7 +132,7 @@ results from another host do not prove Beast installation or live guest input.
 The candidate delivery notes record the checks actually executed.
 
 On the Beast, confirm that the installed package, launched executable and startup
-log identify **v1.4.0, candidate 1**. Select Free Cell and verify read-only Capture
+log identify **v1.4.0, candidate 2**. Select Free Cell and verify read-only Capture
 Frame, original-byte Capture PNG/Save PNG, initial Solver activation, CELL/PLAY
 single clicks and automatic SUIT-transfer recapture. Adjust the independent
 750/1000 ms settings, separate 3000 ms game-start wait, 20-observation allowance

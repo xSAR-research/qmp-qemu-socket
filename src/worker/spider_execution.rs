@@ -900,31 +900,58 @@ mod tests {
 
 
     /// Both optional-OK and direct-New Game paths reach Spider's own Play
-    /// location, then wait for the fresh deal before Solver activation.
+    /// location, then wait once for the fresh deal and activate only an inactive
+    /// Solver. Ordered waits distinguish score settling from the editable deal.
     #[test]
     fn continuous_win_restart_handles_optional_level_up_and_spider_play() {
 
 
         for with_level_up in [true, false] {
-            let cancel = AtomicBool::new(false);
-            let mut frames = vec![fixture(15)];
 
 
-            if with_level_up { frames.push(level_up()); }
-            frames.extend([fixture(17), fixture(18), fixture(19), fixture(2)]);
-            let mut io = fake(frames, &cancel);
-            assert_eq!(run(&mut io, 0, &mut None).unwrap_err(), "fixture sequence exhausted");
-            let mut controls = vec![TerminalStage::Score];
+            for solver_already_active in [false, true] {
+                let branch = format!("level_up={with_level_up}, solver_already_active={solver_already_active}");
+                let cancel = AtomicBool::new(false);
+                let delays = AnimationSettleDelays::default().with_spider_game_start_millis(3_500);
+                let settings = StepRunSettings::new(delays, 0).with_spider_observation_limit(2);
+                let mut frames = vec![fixture(15)];
 
 
-            if with_level_up { controls.push(TerminalStage::LevelUp); }
-            controls.extend([TerminalStage::NewGame, TerminalStage::Play]);
-            assert_eq!(io.controls, controls);
-            assert_eq!(io.solver_clicks, 1);
-            assert_eq!(io.solver_capture_counts, [if with_level_up { 5 } else { 4 }]);
-            assert_eq!(io.sources.len(), 1);
-            assert_eq!(io.waits.iter().filter(|duration|
-                **duration == AnimationSettleDelays::default().spider_game_start).count(), 1);
+                if with_level_up { frames.push(level_up()); }
+                frames.extend([fixture(17), fixture(18)]);
+
+
+                if !solver_already_active { frames.push(fixture(19)); }
+                frames.push(fixture(2));
+                let mut io = fake(frames, &cancel);
+                assert_eq!(run_with_settings(&mut io, settings, &mut None).unwrap_err(),
+                    "fixture sequence exhausted", "{branch}");
+                let mut controls = vec![TerminalStage::Score];
+                let mut waits = vec![LEVEL_UP_APPEAR_DELAY];
+
+
+                if with_level_up {
+                    controls.push(TerminalStage::LevelUp);
+                    waits.push(POST_GAME_STAGE_DELAY);
+                }
+                controls.extend([TerminalStage::NewGame, TerminalStage::Play]);
+                waits.extend([POST_GAME_STAGE_DELAY, delays.spider_game_start]);
+
+
+                if !solver_already_active { waits.push(delays.spider_settle); }
+                waits.push(delays.spider_settle);
+                let solver_capture_counts = if solver_already_active {
+                    Vec::new()
+                } else {
+                    vec![if with_level_up { 5 } else { 4 }]
+                };
+                assert_eq!(io.controls, controls, "{branch}");
+                assert_eq!(io.solver_clicks, usize::from(!solver_already_active), "{branch}");
+                assert_eq!(io.solver_capture_counts, solver_capture_counts, "{branch}");
+                assert_eq!(io.sources.len(), 1, "{branch}");
+                assert_eq!(io.captures, 5 + usize::from(with_level_up) + usize::from(!solver_already_active), "{branch}");
+                assert_eq!(io.waits, waits, "{branch}");
+            }
         }
     }
 

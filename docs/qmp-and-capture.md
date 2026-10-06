@@ -1,7 +1,7 @@
 # QMP and capture design
 
 This describes the current shared transport and mode-owned input policies in
-v1.4.0 candidate 1. Free Cell and Spider use native mode-owned sources and
+v1.4.0 candidate 2. Free Cell and Spider use native mode-owned sources and
 independent one-board terminal sequences; capture-only requests never send input.
 Later dated correction notes retain historical evidence rather than current
 card-effect requirements.
@@ -300,7 +300,8 @@ press; a canonical PLAY source sends one click for the connected block. Source
 reads/clicks exclude rows Y>=947; clipped outlines use only visible card area.
 Dashed guides, COLLAPSED SUITS and absent stock never authorise input.
 
-Card/run settling initially uses 750 ms; DRAW dealing has its own 2000 ms wait
+Card/run settling defaults to 1250 ms after Charlie's Beast tuning; DRAW
+dealing has its own 2000 ms wait
 based on Charlie's observed 1–2 second deal/HALO latency. Observation and
 new-game waits initially use 1000/3000 ms. Settings are independent, editable
 and frozen per run. No before/after card-pixel effect witness is used.

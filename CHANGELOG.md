@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.4.0 — candidate 2
+
+- Raise the editable Spider card/run settle default from 750 to 1250 ms at
+  Charlie's request after successful Beast play, allowing stack animation to
+  finish before fresh HALO detection. Keep DRAW/start/observation defaults.
+- Correct the continuous restart test's equal-duration wait count: score-skip
+  and default game-start waits are both 3000 ms and serve different purposes.
+  Check the ordered waits using a distinct configured start delay, with or
+  without LEVEL UP and with inactive or already-active Solver.
+- Preserve the accepted runtime detector, terminal sequence, source actions,
+  cancellation and capture behaviour; no card-effect matching is introduced.
+- Pin this complete-file update to pushed candidate 1 at
+  `5a0f730a4248d030ae98fb466a00b092b8083133`. Native verification remains a
+  Beast check; delivery records distinguish it from executed source audits.
+
 ## v1.4.0 — candidate 1
 
 - Add Solver-led Spider with ten dynamic PLAY columns, DRAW via D and one click
