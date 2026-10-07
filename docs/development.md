@@ -1,9 +1,25 @@
-# Development conventions for v1.4.0 candidate 4
+# Development conventions for v2.0.0 candidate 2
 
-The exact base is pushed v1.4.0 candidate 2 at
-`aae11dee2792967cb375b368270e46c8a95e8c95`. Preserve the accepted earlier modes'
-fresh-evidence cycles and independent policies. Pyramid's highlighted
-MOVE/Recycle uses D; TriPeaks retains delayed input-free no-HALO recovery.
+The exact application base is `78df8f1fc994442a06aa9eaa411414462e169727`.
+The xsar Git dependency is pinned to Charlie's promoted commit
+`1a719b359a51d1e1e3113224193a779c76de82f8`; Cargo.lock records the same source.
+Keep the root companion AGENTS.md untracked. Do not run rustfmt/cargo fmt.
+Keep two blank lines before item documentation and statement blocks.
+
+Use ordinary Cargo check, test, doc, Clippy and release-build commands with
+`--locked`. The application no longer requires the paired candidate wrapper
+or a local xsar checkout. No machine-specific path or Cargo patch is committed.
+Crates.io publication remains a separate decision.
+
+Preparation must not call a HALO controller or accept ExecuteSteps. Tests
+cover raw capture, zero guest input, unsupported combinations and late
+socket/game/strategy/generation rejection. Shared transport tests move into
+the crate, alongside checked frame/ROI and optional-feature coverage. Existing
+five-game evidence remains application regression coverage.
+
+Preserve the accepted earlier modes' fresh-evidence cycles and policies.
+Pyramid's highlighted MOVE/Recycle uses D; TriPeaks retains delayed input-free
+no-HALO recovery. The following gameplay notes remain current.
 
 Spider's twenty native originals cover ten PLAY columns, stock dealing,
 automatic run packing, heavy compaction and the toolbar boundary. A single

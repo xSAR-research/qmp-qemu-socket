@@ -4,7 +4,7 @@
 use thiserror::Error;
 
 use crate::{
-    capture::{CapturedFrame, PixelFormat},
+    capture::CapturedFrame,
     cards::CardRegionPixels,
     game::{GameProfile, GameProgress, GameplaySceneProfile},
     geometry::{PixelPoint, PixelRect},
@@ -525,28 +525,16 @@ fn find_horizontal_run(
     minimum_length: u32,
     predicate: fn([u8; 3]) -> bool,
 ) -> Option<(u32, u32)> {
-    let mut run_start = 0;
-    let mut run_length = 0;
-
-
-    for x in left..right {
-
-
-        if pixel_rgb(frame, x, y).is_some_and(predicate) {
-
-
-            if run_length == 0 {
-                run_start = x;
-            }
-            run_length += 1;
-        } else if run_length >= minimum_length {
-            return Some((run_start, run_length));
-        } else {
-            run_length = 0;
-        }
-    }
-
-    (run_length >= minimum_length).then_some((run_start, run_length))
+    let width = right.checked_sub(left)?;
+    let view = frame.as_view().ok()?;
+    let hit = xsar::image_matching::find_horizontal_run(
+        view,
+        PixelRect::new(left, y, width, 1),
+        minimum_length,
+        None,
+        predicate,
+    ).ok()??;
+    Some((u32::try_from(hit.anchor.x).ok()?, hit.length))
 }
 
 
@@ -562,34 +550,20 @@ fn find_horizontal_run_near_anchor(
     start_tolerance: u32,
     predicate: fn([u8; 3]) -> bool,
 ) -> Option<(u32, u32)> {
-    let mut run_start = 0;
-    let mut run_length = 0;
-
-
-    for x in left..right {
-
-
-        if pixel_rgb(frame, x, y).is_some_and(predicate) {
-
-
-            if run_length == 0 {
-                run_start = x;
-            }
-            run_length += 1;
-        } else {
-
-
-            if run_length >= minimum_length
-                && run_start.abs_diff(canonical_start) <= start_tolerance
-            {
-                return Some((run_start, run_length));
-            }
-            run_length = 0;
-        }
-    }
-
-    (run_length >= minimum_length && run_start.abs_diff(canonical_start) <= start_tolerance)
-        .then_some((run_start, run_length))
+    let width = right.checked_sub(left)?;
+    let view = frame.as_view().ok()?;
+    let constraint = xsar::image_matching::RunStartConstraint {
+        x: canonical_start,
+        tolerance: start_tolerance,
+    };
+    let hit = xsar::image_matching::find_horizontal_run(
+        view,
+        PixelRect::new(left, y, width, 1),
+        minimum_length,
+        Some(constraint),
+        predicate,
+    ).ok()??;
+    Some((u32::try_from(hit.anchor.x).ok()?, hit.length))
 }
 
 
@@ -646,13 +620,7 @@ fn checked_bounds(
 
 /// Read the RGB channels of one RGBA pixel in a caller-validated frame.
 pub(crate) fn pixel_rgb(frame: &CapturedFrame, x: u32, y: u32) -> Option<[u8; 3]> {
-    let offset = y as usize * frame.stride + x as usize * 4;
-    let pixel = frame.pixels.get(offset..offset + 4)?;
-
-
-    match frame.format {
-        PixelFormat::Rgba8 => Some([pixel[0], pixel[1], pixel[2]]),
-    }
+    xsar::image_matching::pixel_rgb(frame, x, y)
 }
 
 
@@ -660,6 +628,7 @@ pub(crate) fn pixel_rgb(frame: &CapturedFrame, x: u32, y: u32) -> Option<[u8; 3]
 mod tests {
     //! Synthetic detector boundaries and recorded progress-probe regression evidence.
     use super::*;
+    use crate::capture::PixelFormat;
     use crate::parameters::{
         CLICK_OFFSET_X, FACE_UP_WHITE_SCAN_HEIGHT, SOLVER_PROGRESS_RIGHT_PROBE,
     };

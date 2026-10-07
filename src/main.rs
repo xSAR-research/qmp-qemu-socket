@@ -19,6 +19,7 @@ mod snapshot;
 mod spider;
 mod spider_terminal;
 mod stepper;
+mod strategy;
 mod tracker;
 mod tripeaks;
 mod worker;

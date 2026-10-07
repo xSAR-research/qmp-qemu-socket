@@ -508,7 +508,8 @@ fn halo_action_events_keep_verified_totals_zero() {
     let result = drive_run(&mut io, draw(), StepRunSettings::new(AnimationSettleDelays::default(), 1),
         &sink, &AtomicBool::new(false), &mut latest, &mut attempted);
     assert_eq!(result, Ok(RunOutcome::Completed { verified: 0, halo: 1 }));
-    let accepted: Vec<_> = receiver.try_iter().filter(|event| matches!(event, WorkerEvent::ActionCompleted { .. })).collect();
+    let accepted: Vec<_> = receiver.try_iter().map(|notification| notification.event)
+        .filter(|event| matches!(event, WorkerEvent::ActionCompleted { .. })).collect();
     assert_eq!(accepted.len(), 1);
     assert!(matches!(accepted[0], WorkerEvent::ActionCompleted {
         operation_index: 1, operation_limit: 1, before, after, continued_from_halo: true, ..
@@ -1833,7 +1834,8 @@ fn native_long_column_seven_source_continues_from_acknowledged_waste_without_eff
         assert_eq!(latest.unwrap().frame.pixels, after.frame.pixels);
         assert_eq!(io.completion_checks, 0);
         assert!(!io.trace.contains(&"solver") && io.terminal_inputs.is_empty());
-        let accepted: Vec<_> = receiver.try_iter().filter(|event| matches!(event, WorkerEvent::ActionCompleted { .. })).collect();
+        let accepted: Vec<_> = receiver.try_iter().map(|notification| notification.event)
+            .filter(|event| matches!(event, WorkerEvent::ActionCompleted { .. })).collect();
         assert_eq!(accepted.len(), limit);
 
 

@@ -1,18 +1,25 @@
 # QMP and capture design
 
-This describes the current shared transport and mode-owned input policies in
-v1.4.0 candidate 4. Free Cell and Spider use native mode-owned sources and
-independent one-board terminal sequences; capture-only requests never send input.
-Free Cell's clipped-source check reads paper in both visible card margins above
-Y947, avoiding a central pip; it does not compare moved-card pixels. Spider
-parks the pointer after an acknowledged source-click release, before its
-existing settle and capture. Active Spider Solver receives bounded input-free
-observations without a refresh click. Capture and timing defaults stay unchanged.
-Spider's higher LEVEL UP OK is recognised from the expected local control only;
-its existing click point and fresh one-shot progression remain.
-Later dated correction notes retain historical evidence rather than current
-card-effect requirements.
+Version 2.0.0 candidate 2 imports the reusable transport from xsar's optional
+Unix `qmp` feature. Its application adapter selects the existing timing
+constants and maps Draw to the neutral qcode API. Probe, movement, click,
+release ordering and release-only recovery retain their existing semantics.
 
+No QMP request starts before startup strategy selection. Independent Pyramid
+preparation performs only capture/decode/publish and exact-byte PNG preview/save;
+Solver, gameplay and terminal input are rejected at the worker boundary.
+Requests and observations carry strategy/game/socket/generation identity.
+
+The PNG decoder and checked RGBA/ROI/predicate scans come from xsar. QMP still
+writes a temporary PNG; acquisition, cleanup and original-byte snapshot
+ownership remain here. This is not file-free framebuffer capture. CV game
+coordinates, HALO colour conditions and completion policies remain local.
+
+Transport timeouts remain **per I/O operation**. An endless stream of events
+or a slowly delivered line can exceed the configured duration for an entire
+command, and a line has no explicit packet-size cap. The extraction does not
+claim a global command deadline. The local QMP socket is a trusted boundary;
+bounded packet/deadline hardening is separate future work.
 
 ## Connection boundary
 

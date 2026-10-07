@@ -2,31 +2,33 @@
 
 ## Current boundary
 
-Version 1.4.0 candidate 4 starts from pushed candidate 2 at
-`aae11dee2792967cb375b368270e46c8a95e8c95`. Free Cell's clipped-source paper
-presence check uses both visible card margins, avoiding central pip artwork.
-Closed source tops, connected exterior rails and the Y947 exclusive cutoff
-remain required; clicks and the fresh-HALO execution cycle do not change.
-Spider's expected LEVEL UP additionally recognises the supplied OK caption
-19 pixels above the original local region. This translates only that control's
-readiness area; level artwork and surrounding panels are not compared, and the
-existing click point remains inside both evidenced buttons.
-Spider source clicks now finish their acknowledged button release, move the
-pointer to the measured clear-felt point (20, 500), then use the same
-editable settle and fresh capture. DRAW and read-only captures do not park.
-The shared transport helper sends only checked absolute movement; Spider owns
-the decision to use it. Active Solver is disabled and receives bounded
-input-free observations rather than a refresh click. Inactive Solver retains
-one start wait, fresh capture and one activation.
-Spider owns ten PLAY columns,
-stock dealing and automatic-run observations without card-pixel effect proof.
-Its ordered one-board terminal flow reuses accepted local caption checks,
-retaining optional LEVEL UP and its independently measured Play location.
-The editable card/run default is 1250 ms after Charlie's Beast tuning; its
-restart test distinguishes score and game-start waits without changing the
-runtime sequence. Existing game policies remain. Later history sections retain their
-original decisions, including superseded card-effect policies.
+Version 2.0.0 candidate 2 starts from the complete pushed v1.4.0 candidate 4
+snapshot at `78df8f1fc994442a06aa9eaa411414462e169727`. Its xsar dependency
+uses promoted Git commit `1a719b359a51d1e1e3113224193a779c76de82f8`
+without a local override.
 
+`SolvingStrategy` selects the controller independently of `GameMode`.
+Startup waits for a choice. Computer Vision dispatches the existing five
+controllers. Shortest path opens a read-only Pyramid preparation capture path;
+its frame has no fabricated HALO prediction or route. Worker input requests
+reject this strategy before connecting or sending input.
+
+`ControllerContext` contains socket, game, strategy and generation. The worker
+retains it on event envelopes, latest frames and original-PNG snapshots. The
+UI accepts only the current context; switching away and back increments the
+generation and cannot revive stale frames, status or execution events.
+
+The application imports xsar geometry and frame types, PNG decoding and
+predicate scans. Its QMP adapter retains `press_draw_key()` as application
+vocabulary over the crate's neutral `press_key("d", hold)` API. Calibration,
+colour predicates, canonical sources and terminal-stage ownership stay local.
+All five CV input/settle policies, including Spider pointer parking, are
+preserved. The extraction is functional rather than a second unused copy.
+
+The crate has no game dependencies. Its default telemetry API has no external
+dependencies; optional features enable Unix QMP, matching and PNG. Temporary
+file acquisition, original-byte saving, cancellation and logs remain in the
+application. Search and card recognition are future independent modules.
 
 ## Component boundaries
 
@@ -34,6 +36,7 @@ original decisions, including superseded card-effect policies.
 | --- | --- |
 | `app.rs` | egui controls, latest-frame preview, concise status and bounded visible output |
 | `session_log.rs` | private session-file creation, append and complete-history reads |
+| `strategy.rs` | solving strategy and immutable request identity |
 | `game.rs` | small game/profile boundary and typed actions |
 | `tripeaks.rs` | validated TriPeaks profile assembly |
 | `klondike.rs` | live Klondike dynamic sources, stock/recycle, RIGHT fan, Solve and independent win evidence; retired effect diagnostics are test-only |
@@ -44,14 +47,14 @@ original decisions, including superseded card-effect policies.
 | `spider_terminal.rs` | typed one-board stages, shared local captions and Spider Play position |
 | `pyramid.rs` | Pyramid targets, fixed halo probes, priority and action-effect evidence |
 | `parameters.rs` | fixed geometry, colour values, delays, limits and release label |
-| `capture.rs` | decoded immutable frame representation |
+| `capture.rs` | xSAR PNG/RGBA reexports |
 | `snapshot.rs` | collision-safe PNG naming and saving the original captured bytes |
 | `cards.rs` | calibrated card regions and test-only geometry validation |
 | `detector.rs` | bounded pixel and scene discriminators |
 | `tracker.rs` | profile-driven HALO and row observation |
 | `stepper.rs` | one typed action plan and result validation |
-| `geometry.rs` | guest-pixel and QMP coordinate conversion |
-| `qmp.rs` | allow-listed QMP client, checked movement-only helper and non-idempotent input delivery |
+| `geometry.rs` | xSAR checked coordinate reexports |
+| `qmp.rs` | application vocabulary and timing adapter over xSAR transport |
 | `worker.rs` | worker commands/events, capture, guarded execution, timing and cancellation |
 | `worker/post_game.rs` | shared score, Level Up, New Game, Play and Solver progression |
 | `worker/pyramid_execution.rs` | Pyramid effect, fresh-pair continuation and redeal checks |

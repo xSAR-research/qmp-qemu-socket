@@ -19,6 +19,7 @@ use crate::{
     pyramid::{self, PYRAMID_TARGETS},
     session_log::SessionLog,
     snapshot::SnapshotArtifact,
+    strategy::{ControllerContext, SolvingStrategy},
     tracker::PredictedAction,
     worker::{WorkerEvent, WorkerHandle, WorkerState},
 };
@@ -105,6 +106,14 @@ pub struct QmpQemuSocketApp {
     worker_state: WorkerState,
     /// Selected calibration and gameplay profile.
     game_mode: GameMode,
+    /// Last Computer Vision game selection retained while preparing Pyramid.
+    computer_vision_game_mode: GameMode,
+    /// Controller identity, kept separate from the game calibration.
+    solving_strategy: SolvingStrategy,
+    /// Startup waits for an explicit strategy choice before any QMP request.
+    strategy_choice_pending: bool,
+    /// Selection generation rejects results from an earlier switch or socket.
+    context_generation: u64,
     /// Editable local socket pathname; edits revoke preview authority.
     qmp_socket_path: String,
     /// Bounded visible tail of timestamped session output.
@@ -146,7 +155,7 @@ pub struct QmpQemuSocketApp {
     /// Detector result paired with the snapshot frame.
     snapshot_prediction: Option<PredictedAction>,
     /// Socket and mode associated with the snapshot request.
-    snapshot_context: Option<(PathBuf, GameMode)>,
+    snapshot_context: Option<ControllerContext>,
     /// Display texture for the snapshot review dialog.
     snapshot_texture: Option<egui::TextureHandle>,
     /// Host clipboard access used by snapshot-label editing.
@@ -156,7 +165,7 @@ pub struct QmpQemuSocketApp {
     /// Dimensions of the installed main preview.
     captured_dimensions: Option<(u32, u32)>,
     /// Socket and mode from which the installed main preview originated.
-    preview_context: Option<(PathBuf, GameMode)>,
+    preview_context: Option<ControllerContext>,
     /// Displayed detector result, subject to fresh worker validation before input.
     prediction: Option<PredictedAction>,
     /// Marks an unverified result frame as inspection-only.
@@ -248,6 +257,10 @@ impl QmpQemuSocketApp {
             worker: WorkerHandle::spawn(),
             worker_state: WorkerState::Detached,
             game_mode: GameMode::TriPeaks,
+            computer_vision_game_mode: GameMode::TriPeaks,
+            solving_strategy: SolvingStrategy::ComputerVision,
+            strategy_choice_pending: true,
+            context_generation: 0,
             qmp_socket_path,
             log_lines: Vec::new(),
             output_expanded: false,
@@ -308,9 +321,8 @@ impl QmpQemuSocketApp {
         };
 
         app.push_log(format!(
-            "{} {RELEASE_LABEL} started; active game profile={}.",
-            crate::parameters::APP_NAME,
-            app.game_mode
+            "{} {RELEASE_LABEL} started; waiting for a solving strategy choice.",
+            crate::parameters::APP_NAME
         ));
 
 
@@ -326,14 +338,14 @@ impl QmpQemuSocketApp {
             ));
         }
         app.push_log(format!("QMP socket candidate: {}", app.qmp_socket_path));
-        app.push_log("Initial Capture Frame is automatic, one-shot and read-only.");
+        app.push_log("Choose a solving strategy before connecting or capturing. The first capture after selection is one-shot and read-only.");
         app.push_log("The preview retains only the latest worker frame; stale full-resolution previews are coalesced while the UI is asleep or occluded.");
         app.push_log("Step Once and Multi-Step capture fresh evidence before input and reuse settled result frames. Klondike, Free Cell and Spider follow fresh Solver recommendations without card-pixel effect proof; their previews are advisory. Free Cell has no Draw, Recycle, Solve or SUIT-return input. TriPeaks/Pyramid retain their existing validation and effect policies.");
         app.push_log(format!(
             "Execution defaults: one initial planning frame plus fresh result captures after each action, Multi-Step limits: TriPeaks/Pyramid {}, Klondike {}, Free Cell {}, Spider {} (0 means continuous). STOP is visible only while a guarded run is active.",
             DEFAULT_MULTI_STEP_ACTIONS, KLONDIKE_DEFAULT_MULTI_STEP_ACTIONS, FREECELL_DEFAULT_MULTI_STEP_ACTIONS, SPIDER_DEFAULT_MULTI_STEP_ACTIONS,
         ));
-        app.request_capture("Startup");
+
         app
     }
 
@@ -457,10 +469,20 @@ impl QmpQemuSocketApp {
         let events: Vec<_> = self.worker.try_events().collect();
 
 
-        for event in events {
+        for tagged in events {
 
 
-            match event {
+            if !worker_result_is_current(tagged.context.as_ref(), &self.current_preview_context(), self.strategy_choice_pending) {
+
+
+                if let WorkerEvent::Log(message) = tagged.event {
+                    self.push_log(format!("Earlier request: {message}"));
+                }
+                continue;
+            }
+
+
+            match tagged.event {
                 WorkerEvent::Log(message) => self.push_log(message),
                 WorkerEvent::Status(message) => self.current_status = message,
                 WorkerEvent::SnapshotPrepared {
@@ -487,7 +509,7 @@ impl QmpQemuSocketApp {
                                     egui::TextureOptions::LINEAR,
                                 ));
                                 self.snapshot_context = Some(capture_context);
-                                self.snapshot_prediction = Some(prediction);
+                                self.snapshot_prediction = prediction;
                                 self.snapshot_frame = Some(frame);
                                 self.snapshot_png = Some(png);
                                 self.snapshot_error = None;
@@ -687,9 +709,9 @@ impl QmpQemuSocketApp {
         &mut self,
         context: &egui::Context,
         frame: CapturedFrame,
-        prediction: PredictedAction,
+        prediction: Option<PredictedAction>,
         log_prediction: bool,
-        frame_context: Option<(PathBuf, GameMode)>,
+        frame_context: Option<ControllerContext>,
     ) {
         let dimensions = (frame.width, frame.height);
 
@@ -703,11 +725,11 @@ impl QmpQemuSocketApp {
                 ));
                 self.captured_dimensions = Some(dimensions);
                 self.preview_context = frame_context;
-                self.prediction = Some(prediction);
+                self.prediction = prediction;
                 self.diagnostic_preview = false;
 
 
-                if log_prediction {
+                if log_prediction && let Some(prediction) = prediction {
                     self.push_log(format_prediction(prediction));
                 }
             }
@@ -721,8 +743,8 @@ impl QmpQemuSocketApp {
 
 
     /// Returns the trimmed socket pathname and selected mode used to identify captures.
-    fn current_preview_context(&self) -> (PathBuf, GameMode) {
-        (PathBuf::from(self.qmp_socket_path.trim()), self.game_mode)
+    fn current_preview_context(&self) -> ControllerContext {
+        ControllerContext::new(PathBuf::from(self.qmp_socket_path.trim()), self.game_mode, self.solving_strategy, self.context_generation)
     }
 
 
@@ -755,7 +777,7 @@ impl QmpQemuSocketApp {
     fn request_capture(&mut self, source: &str) {
 
 
-        if self.worker_state.is_busy() || self.active_run.is_some() || self.stop_requested {
+        if self.strategy_choice_pending || self.worker_state.is_busy() || self.active_run.is_some() || self.stop_requested {
             return;
         }
         self.invalidate_preview();
@@ -765,10 +787,10 @@ impl QmpQemuSocketApp {
             "{source}: one read-only {} QMP frame requested; guest input events=0.",
             self.game_mode
         ));
-        let (socket_path, mode) = self.current_preview_context();
+        let capture_context = self.current_preview_context();
 
 
-        if let Err(error) = self.worker.capture_frame(socket_path, mode) {
+        if let Err(error) = self.worker.capture_frame(capture_context) {
             self.worker_state = WorkerState::Error;
             self.current_status = "Capture failed".to_owned();
             self.push_log(error);
@@ -783,7 +805,7 @@ impl QmpQemuSocketApp {
     fn prepare_snapshot(&mut self) {
 
 
-        if self.worker_state.is_busy() || self.active_run.is_some() || self.stop_requested {
+        if self.strategy_choice_pending || self.worker_state.is_busy() || self.active_run.is_some() || self.stop_requested {
             return;
         }
         self.snapshot_request_id = self.snapshot_request_id.wrapping_add(1);
@@ -801,12 +823,12 @@ impl QmpQemuSocketApp {
             "Snapshot capture requested: one fresh read-only {} QMP PNG for review before saving; guest input events=0.",
             self.game_mode
         ));
-        let (socket_path, mode) = self.current_preview_context();
+        let capture_context = self.current_preview_context();
 
 
         if let Err(error) =
             self.worker
-                .prepare_snapshot(socket_path, mode, self.snapshot_request_id)
+                .prepare_snapshot(capture_context, self.snapshot_request_id)
         {
             self.worker_state = WorkerState::Error;
             self.snapshot_capture_pending = false;
@@ -851,7 +873,7 @@ impl QmpQemuSocketApp {
                 ));
 
 
-                if let (Some(frame), Some(prediction), Some(capture_context)) = (
+                if let (Some(frame), prediction, Some(capture_context)) = (
                     self.snapshot_frame.take(),
                     self.snapshot_prediction.take(),
                     self.snapshot_context.take(),
@@ -906,6 +928,12 @@ impl QmpQemuSocketApp {
         }
 
 
+        if self.strategy_choice_pending || !self.solving_strategy.permits_input() {
+            self.push_log(format!("{request_name} refused: independent Pyramid preparation is read-only; recognition and route calculation are not implemented; guest input sent=0."));
+            return;
+        }
+
+
         if !self.game_mode.input_authorised() {
             self.worker_state = WorkerState::Ready;
             self.current_status = format!("{} calibration — input disabled", self.game_mode);
@@ -927,7 +955,7 @@ impl QmpQemuSocketApp {
             return;
         };
 
-        let socket_path = PathBuf::from(self.qmp_socket_path.trim());
+        let run_context = self.current_preview_context();
         let animation_delays = AnimationSettleDelays::from_millis(
             self.draw_animation_settle_ms,
             self.tableau_animation_settle_ms,
@@ -990,7 +1018,7 @@ impl QmpQemuSocketApp {
 
         if let Err(error) =
             self.worker
-                .execute_steps(socket_path, self.game_mode, approved_prediction, settings)
+                .execute_steps(run_context, approved_prediction, settings)
         {
             self.active_run = None;
             self.worker_state = WorkerState::Error;
@@ -1013,6 +1041,73 @@ impl QmpQemuSocketApp {
     }
 
 
+    /// Select a controller only while idle, revoke old authority and capture fresh pixels.
+    fn select_strategy(&mut self, strategy: SolvingStrategy) {
+
+
+        if !controls_are_mutable(self.active_run, self.worker_state, self.stop_requested) || self.show_snapshot_dialog {
+            return;
+        }
+
+
+        if self.solving_strategy == SolvingStrategy::ComputerVision {
+            self.computer_vision_game_mode = self.game_mode;
+        }
+        self.solving_strategy = strategy;
+        self.strategy_choice_pending = false;
+        self.context_generation = self.context_generation.wrapping_add(1);
+
+
+        self.game_mode = match strategy {
+            SolvingStrategy::ShortestPath => GameMode::Pyramid,
+            SolvingStrategy::ComputerVision => self.computer_vision_game_mode,
+        };
+        self.invalidate_preview();
+        self.snapshot_request_id = self.snapshot_request_id.wrapping_add(1);
+        self.current_board = 1;
+        self.board_position_established = false;
+        self.boards_per_game = self.game_mode.profile().boards_per_game;
+        self.current_status = "Ready — capture required".to_owned();
+        self.push_log(format!("Solving strategy selected: {}. {}", strategy.label(), strategy.description()));
+
+
+        if let Err(error) = self.worker.reset_progress(self.current_preview_context()) {
+            self.worker_state = WorkerState::Error;
+            self.push_log(error);
+            return;
+        }
+        self.request_capture("Strategy selected");
+    }
+
+
+    /// Offer both startup strategies before any socket connection or automatic capture.
+    fn startup_choices(&mut self, ui: &mut egui::Ui) {
+        ui.add_space(24.0);
+        ui.heading("Choose a solving strategy");
+        ui.label("Select how to work with the guest game.");
+        ui.add_space(16.0);
+
+
+        for strategy in SolvingStrategy::AVAILABLE {
+            ui.group(|ui| {
+                ui.set_min_width(600.0_f32.min(ui.available_width()));
+
+
+                if bevel_button(ui, strategy.label(), SETUP_BLUE, false, true).clicked() {
+                    self.select_strategy(strategy);
+                }
+                ui.label(strategy.description());
+
+
+                if strategy == SolvingStrategy::ShortestPath {
+                    ui.strong("Preparation only: capture and inspect Pyramid. Card recognition and route calculation follow in later candidates.");
+                }
+            });
+            ui.add_space(12.0);
+        }
+    }
+
+
     /// Draws mode, capture and execution controls with run-state gating.
     ///
     /// Mode or socket changes invalidate the previous preview before it can authorise input.
@@ -1031,10 +1126,37 @@ impl QmpQemuSocketApp {
             controls_are_mutable(self.active_run, self.worker_state, self.stop_requested)
                 && !self.show_snapshot_dialog;
         let mut preview_available = self.has_current_preview();
+        let mut selected_strategy = self.solving_strategy;
+        ui.horizontal(|ui| {
+            ui.label("Solving strategy");
+            ui.add_enabled_ui(controls_enabled, |ui| {
+                egui::ComboBox::from_id_salt("solving-strategy")
+                    .selected_text(self.solving_strategy.label())
+                    .show_ui(ui, |ui| {
+
+
+                        for strategy in SolvingStrategy::AVAILABLE {
+                            ui.selectable_value(&mut selected_strategy, strategy, strategy.label());
+                        }
+                    });
+            });
+        });
+
+
+        if selected_strategy != self.solving_strategy {
+            self.select_strategy(selected_strategy);
+            return;
+        }
+
+
+        if self.solving_strategy == SolvingStrategy::ShortestPath {
+            ui.strong("Pyramid · Preparation only");
+            ui.label("Card recognition and route calculation are not implemented yet.");
+        }
         ui.horizontal(|ui| {
             ui.label("Game Type");
             let previous_mode = self.game_mode;
-            ui.add_enabled_ui(controls_enabled, |ui| {
+            ui.add_enabled_ui(controls_enabled && self.solving_strategy.permits_input(), |ui| {
                 let style = ui.style_mut();
                 style.visuals.widgets.inactive.bg_fill = SETUP_BLUE;
                 style.visuals.widgets.hovered.bg_fill = SETUP_BLUE.gamma_multiply(1.2);
@@ -1052,6 +1174,8 @@ impl QmpQemuSocketApp {
 
 
             if self.game_mode != previous_mode {
+                self.computer_vision_game_mode = self.game_mode;
+                self.context_generation = self.context_generation.wrapping_add(1);
                 self.invalidate_preview();
                 preview_available = false;
                 self.current_board = 1;
@@ -1066,7 +1190,7 @@ impl QmpQemuSocketApp {
                 };
 
 
-                match self.worker.reset_progress() {
+                match self.worker.reset_progress(self.current_preview_context()) {
                     Ok(()) => {
                         self.push_log(format!(
                             "Game Type changed to {}; prior prediction and advisory progress were cleared. Capturing a fresh read-only frame; guest input events=0.",
@@ -1156,7 +1280,7 @@ impl QmpQemuSocketApp {
                         self.current_status = "Stopping…".to_owned();
 
 
-                        if let Err(error) = self.worker.disconnect() {
+                        if let Err(error) = self.worker.disconnect(self.current_preview_context()) {
                             self.active_run = None;
                             self.worker_state = WorkerState::Error;
                             self.current_status = "Stop request failed".to_owned();
@@ -1174,7 +1298,7 @@ impl QmpQemuSocketApp {
             }
 
 
-            if preview_available {
+            if preview_available && self.solving_strategy.permits_input() {
                 let action_available = controls_enabled
                     && self.game_mode.input_authorised()
                     && matches!(self.worker_state, WorkerState::Ready)
@@ -1236,7 +1360,7 @@ impl QmpQemuSocketApp {
     /// Pointer clicks here log coordinates only; overlays never modify captured
     /// pixels or the original PNG retained by the snapshot dialog.
     fn preview(&mut self, ui: &mut egui::Ui) {
-        ui.heading("QMP capture and target preview");
+        ui.heading(if self.solving_strategy == SolvingStrategy::ShortestPath { "Pyramid preparation capture" } else { "QMP capture and target preview" });
 
 
         match self.captured_dimensions {
@@ -1244,6 +1368,9 @@ impl QmpQemuSocketApp {
                 ui.colored_label(Color32::from_rgb(255, 174, 79), format!(
                     "QMP result capture: {width}x{height}. {}", diagnostic_preview_status(self.worker_state)
                 ));
+            }
+            Some((width, height)) if self.solving_strategy == SolvingStrategy::ShortestPath => {
+                ui.label(format!("Fresh raw capture: {width}x{height}. Inspect pixels or save the original PNG; no card identity or route has been calculated."));
             }
             Some((width, height)) => {
                 ui.label(format!(
@@ -1331,7 +1458,7 @@ impl QmpQemuSocketApp {
                     }
 
 
-                    for (label, control) in SHARED_TOOLBAR_CONTROLS {
+                    for (label, control) in SHARED_TOOLBAR_CONTROLS.iter().filter(|_| self.solving_strategy.permits_input()) {
                         let colour = Color32::from_rgb(120, 200, 255);
                         paint_target(&painter, canvas, control.bounds, colour, label);
                         paint_labeled_crosshair(&painter, canvas, control.click_point, colour, "");
@@ -1418,7 +1545,7 @@ impl QmpQemuSocketApp {
 
                     if ui
                         .add_enabled(
-                            !self.worker_state.is_busy(),
+                            controls_are_mutable(self.active_run, self.worker_state, self.stop_requested) && !self.show_snapshot_dialog,
                             egui::Button::new("Clear Output"),
                         )
                         .on_hover_text(
@@ -1428,7 +1555,7 @@ impl QmpQemuSocketApp {
                     {
 
 
-                        match self.worker.reset_progress() {
+                        match self.worker.reset_progress(self.current_preview_context()) {
                             Ok(()) => {
                                 self.completed_games = 0;
                                 self.current_board = 1;
@@ -1491,7 +1618,9 @@ impl QmpQemuSocketApp {
             ui.horizontal_wrapped(|ui| {
 
 
-                if self.game_mode.calibration_only() {
+                if self.solving_strategy == SolvingStrategy::ShortestPath {
+                    ui.strong("Pyramid · Preparation only");
+                } else if self.game_mode.calibration_only() {
                     ui.strong(format!("{} — calibration only", self.game_mode));
                 } else {
                     ui.strong(board_position_label(
@@ -1525,6 +1654,7 @@ impl QmpQemuSocketApp {
             .resizable(true)
             .show(context, |ui| {
                 ui.strong(RELEASE_LABEL);
+                ui.label(format!("Solving strategy: {}", self.solving_strategy.label()));
                 ui.label(format!("Game Type: {}", self.game_mode));
 
 
@@ -1537,22 +1667,29 @@ impl QmpQemuSocketApp {
                 ui.separator();
                 ui.label("QMP Unix socket");
                 let socket_edit = ui.add_enabled(
-                    !self.worker_state.is_busy()
-                        && self.active_run.is_none()
+                    controls_are_mutable(self.active_run, self.worker_state, self.stop_requested)
                         && !self.show_snapshot_dialog,
                     egui::TextEdit::singleline(&mut self.qmp_socket_path),
                 );
 
 
                 if socket_edit.changed() {
+                    self.context_generation = self.context_generation.wrapping_add(1);
                     self.invalidate_preview();
                     self.current_status = "Socket changed — capture required".to_owned();
                     self.push_log("QMP socket changed locally; prior preview authority was discarded. Capture a fresh read-only frame before input.");
                 }
                 ui.separator();
+
+
+                if self.solving_strategy == SolvingStrategy::ShortestPath {
+                    ui.strong("Pyramid preparation");
+                    ui.label("Capture Frame obtains fresh raw pixels. Capture PNG previews and saves the exact original PNG.");
+                    ui.label("Native frame: 1920×1080. Card recognition, route calculation and exploratory Undo controls are not implemented yet.");
+                    return;
+                }
                 ui.label("Execution settings for the next Step Once or Multi-Step run");
-                let execution_enabled = !self.worker_state.is_busy()
-                    && self.active_run.is_none()
+                let execution_enabled = controls_are_mutable(self.active_run, self.worker_state, self.stop_requested)
                     && !self.show_snapshot_dialog;
 
 
@@ -2305,19 +2442,25 @@ impl eframe::App for QmpQemuSocketApp {
     /// Renders the main controls and dialogs; EXIT requests worker detachment before closing.
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ui, |ui| {
-            self.top_bar(ui);
-            ui.separator();
-            self.status_panel(ui);
-            ui.separator();
-            self.preview(ui);
-            self.output(ui);
+
+
+            if self.strategy_choice_pending {
+                self.startup_choices(ui);
+            } else {
+                self.top_bar(ui);
+                ui.separator();
+                self.status_panel(ui);
+                ui.separator();
+                self.preview(ui);
+                self.output(ui);
+            }
             ui.add_space(8.0);
             ui.with_layout(Layout::top_down(Align::Center), |ui| {
 
 
                 if bevel_button(ui, "EXIT", STATE_RED, false, true).clicked() {
                     self.push_log("EXIT requested; detaching locally and leaving QEMU untouched.");
-                    let _ = self.worker.disconnect();
+                    let _ = self.worker.disconnect(self.current_preview_context());
                     ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
                 }
             });
@@ -2429,13 +2572,23 @@ fn worker_frame_is_displayable(state: WorkerState, diagnostic: bool) -> bool {
 }
 
 
+/// Accept a worker result only after selection and for this exact strategy generation.
+fn worker_result_is_current(
+    received: Option<&ControllerContext>,
+    requested: &ControllerContext,
+    startup_choice_pending: bool,
+) -> bool {
+    !startup_choice_pending && received == Some(requested)
+}
+
+
 /// Checks nominal dimensions, texture availability and matching socket/mode authority.
 ///
 /// STOP and diagnostic-only previews reject authority even if their other metadata matches.
-fn preview_is_current(
+fn preview_is_current<C: PartialEq>(
     dimensions: Option<(u32, u32)>,
-    preview_context: Option<&(PathBuf, GameMode)>,
-    requested_context: &(PathBuf, GameMode),
+    preview_context: Option<&C>,
+    requested_context: &C,
     has_texture: bool,
     stop_requested: bool,
     diagnostic_preview: bool,
@@ -3448,6 +3601,37 @@ mod tests {
         assert_eq!(normalise_operation_limit(GameMode::Spider, 25), 25);
         assert_eq!(normalise_operation_limit(GameMode::Spider, usize::MAX), 10_000);
         assert_eq!(board_position_label(GameMode::Spider, 3, 3, true), "Spider — 1 board per game");
+    }
+
+
+    /// No startup, stale strategy, socket, game or generation event may update current UI state.
+    #[test]
+    fn worker_results_require_a_choice_and_exact_controller_context() {
+        let current = ControllerContext::new(PathBuf::from("/tmp/current.sock"), GameMode::Pyramid, SolvingStrategy::ComputerVision, 3);
+        assert!(!worker_result_is_current(Some(&current), &current, true));
+        assert!(!worker_result_is_current(None, &current, false));
+        assert!(worker_result_is_current(Some(&current), &current, false));
+
+
+        for stale in [
+            ControllerContext::new(current.socket_path.clone(), GameMode::Pyramid, SolvingStrategy::ShortestPath, 3),
+            ControllerContext::new(current.socket_path.clone(), GameMode::Pyramid, SolvingStrategy::ComputerVision, 1),
+            ControllerContext::new(current.socket_path.clone(), GameMode::Spider, SolvingStrategy::ComputerVision, 3),
+            ControllerContext::new(PathBuf::from("/tmp/previous.sock"), GameMode::Pyramid, SolvingStrategy::ComputerVision, 3),
+        ] {
+            assert!(!worker_result_is_current(Some(&stale), &current, false));
+        }
+    }
+
+
+    /// Switching away and back cannot revive an earlier preview or snapshot identity.
+    #[test]
+    fn controller_generation_revokes_previews_after_switching_back() {
+        let old = ControllerContext::new(PathBuf::from("/tmp/current.sock"), GameMode::Pyramid, SolvingStrategy::ComputerVision, 1);
+        let current = ControllerContext::new(old.socket_path.clone(), old.game_mode, old.strategy, 3);
+        assert!(!preview_is_current(Some((NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT)), Some(&old), &current, true, false, false));
+        assert!(!worker_result_is_current(Some(&old), &current, false));
+        assert!(preview_is_current(Some((NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT)), Some(&current), &current, true, false, false));
     }
 
 }

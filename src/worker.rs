@@ -33,6 +33,7 @@ use crate::{
     pyramid,
     qmp::QmpClient,
     stepper::{StepPlan, plan_step, verify_post_action},
+    strategy::{ControllerContext, SolvingStrategy},
     tracker::{
         PredictedAction, RowMask, TableauScanState, analyse_frame_with_state,
         is_gameplay_scene_for_mode,
@@ -181,35 +182,29 @@ impl WorkerState {
 enum WorkerCommand {
     /// Capture and analyse a read-only advisory preview.
     CaptureFrame {
-        /// Selected QMP Unix socket.
-        socket_path: PathBuf,
-        /// Game profile used for capture and detection.
-        mode: GameMode,
+        /// Immutable socket, game and strategy selection for this request.
+        context: ControllerContext,
     },
     /// Capture original PNG bytes and decoded pixels for manual saving.
     PrepareSnapshot {
-        /// Selected QMP Unix socket.
-        socket_path: PathBuf,
-        /// Game profile used for capture and detection.
-        mode: GameMode,
+        /// Immutable socket, game and strategy selection for this request.
+        context: ControllerContext,
         /// UI request identifier used to reject stale responses.
         request_id: u64,
     },
     /// Run guarded input using an approved preview and fixed settings.
     ExecuteSteps {
-        /// Selected QMP Unix socket.
-        socket_path: PathBuf,
-        /// Game profile used for capture and detection.
-        mode: GameMode,
+        /// Immutable socket, game and strategy selection for this request.
+        context: ControllerContext,
         /// Preview prediction that the first fresh planning frame must reproduce.
         approved_prediction: PredictedAction,
         /// Immutable operation limit and animation timings for this run.
         settings: Box<StepRunSettings>,
     },
     /// Clear local board and scan history without touching the guest.
-    ResetProgress,
+    ResetProgress(ControllerContext),
     /// Stop the current run and discard its capture context.
-    Disconnect,
+    Disconnect(ControllerContext),
     /// Exit the worker command loop.
     Shutdown,
 }
@@ -226,13 +221,13 @@ pub enum WorkerEvent {
         /// Manual snapshot request identifier.
         request_id: u64,
         /// Socket/game identity under which the snapshot was captured.
-        context: (PathBuf, GameMode),
+        context: ControllerContext,
         /// Decoded pixels from this exact capture.
         frame: CapturedFrame,
         /// Original PNG bytes matching the preview frame.
         png: Vec<u8>,
         /// Advisory prediction from the accompanying capture.
-        prediction: PredictedAction,
+        prediction: Option<PredictedAction>,
     },
     /// The identified manual snapshot could not be prepared.
     SnapshotPreparationFailed {
@@ -298,7 +293,7 @@ pub struct LatestWorkerFrame {
     /// Full decoded capture for display.
     pub frame: CapturedFrame,
     /// Advisory target; diagnostic frames carry no action authority.
-    pub prediction: PredictedAction,
+    pub prediction: Option<PredictedAction>,
     /// Whether the UI should log the displayed prediction.
     pub log_prediction: bool,
     /// Whether the frame is retained solely to inspect a failed result.
@@ -306,7 +301,7 @@ pub struct LatestWorkerFrame {
     /// Older pending previews replaced since the last UI consumption.
     pub coalesced_frames: usize,
     /// Socket/game identity associated with the frame.
-    pub context: Option<(PathBuf, GameMode)>,
+    pub context: Option<ControllerContext>,
 }
 
 
@@ -315,13 +310,13 @@ struct PendingWorkerFrame {
     /// Decoded image retained for the preview.
     frame: CapturedFrame,
     /// Advisory target attached to this frame.
-    prediction: PredictedAction,
+    prediction: Option<PredictedAction>,
     /// Request prediction logging when displayed.
     log_prediction: bool,
     /// Mark unverified result pixels for inspection only.
     diagnostic: bool,
     /// Socket/game identity used for the capture.
-    context: Option<(PathBuf, GameMode)>,
+    context: Option<ControllerContext>,
 }
 
 
@@ -353,10 +348,10 @@ impl LatestFrameSlot {
     fn publish(
         &self,
         frame: CapturedFrame,
-        prediction: PredictedAction,
+        prediction: Option<PredictedAction>,
         log_prediction: bool,
         diagnostic: bool,
-        context: Option<(PathBuf, GameMode)>,
+        context: Option<ControllerContext>,
     ) {
         // Preview frames are advisory. Replacing a stale pending frame keeps
         // an occluded or sleeping UI from accumulating full-resolution images.
@@ -405,11 +400,20 @@ impl LatestFrameSlot {
 /// Worker-side delivery of small events and coalesced full-resolution preview frames.
 struct WorkerEventSink {
     /// Ordered event channel to the UI.
-    events: Sender<WorkerEvent>,
+    events: Sender<ContextualWorkerEvent>,
     /// Single-frame slot for high-volume image updates.
     latest_frame: LatestFrameSlot,
     /// Current socket/game identity attached to preview publications.
-    capture_context: Mutex<Option<(PathBuf, GameMode)>>,
+    capture_context: Mutex<Option<ControllerContext>>,
+}
+
+
+/// Worker notification carrying the immutable identity of its originating request.
+pub struct ContextualWorkerEvent {
+    /// Socket/game/strategy generation; absent only before any request.
+    pub context: Option<ControllerContext>,
+    /// Existing gameplay or capture notification.
+    pub event: WorkerEvent,
 }
 
 
@@ -417,8 +421,10 @@ impl WorkerEventSink {
 
 
     /// Queue a small worker event; retain failed delivery in a boxed channel error.
-    fn send(&self, event: WorkerEvent) -> Result<(), Box<mpsc::SendError<WorkerEvent>>> {
-        self.events.send(event).map_err(Box::new)
+    fn send(&self, event: WorkerEvent) -> Result<(), Box<mpsc::SendError<ContextualWorkerEvent>>> {
+        let context = self.capture_context.lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner).clone();
+        self.events.send(ContextualWorkerEvent { context, event }).map_err(Box::new)
     }
 
 
@@ -435,7 +441,7 @@ impl WorkerEventSink {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone();
         self.latest_frame
-            .publish(frame, prediction, log_prediction, false, context);
+            .publish(frame, Some(prediction), log_prediction, false, context);
     }
 
 
@@ -448,12 +454,12 @@ impl WorkerEventSink {
             .clone();
         // Preserve the exact last observed pixels, without approving a target.
         self.latest_frame
-            .publish(frame, PredictedAction::NoHighlight, false, true, context);
+            .publish(frame, None, false, true, context);
     }
 
 
     /// Set the socket and game identity attached to subsequent preview frames.
-    fn set_capture_context(&self, context: Option<(PathBuf, GameMode)>) {
+    fn set_capture_context(&self, context: Option<ControllerContext>) {
         *self
             .capture_context
             .lock()
@@ -467,7 +473,7 @@ pub struct WorkerHandle {
     /// Queue for serialised worker requests.
     command_tx: Sender<WorkerCommand>,
     /// Receiver for ordered small worker events.
-    event_rx: Receiver<WorkerEvent>,
+    event_rx: Receiver<ContextualWorkerEvent>,
     /// Shared slot for the newest preview.
     latest_frame: LatestFrameSlot,
     /// Thread handle consumed during shutdown.
@@ -511,31 +517,31 @@ impl WorkerHandle {
     }
 
 
-    /// Queue one read-only capture for `socket_path` and `mode`.
+    /// Queue one read-only capture for the immutable controller context.
     ///
     /// Returns an error if the worker command channel has closed.
-    pub fn capture_frame(&self, socket_path: PathBuf, mode: GameMode) -> Result<(), String> {
+    pub fn capture_frame(&self, context: ControllerContext) -> Result<(), String> {
+        context.validate()?;
         // Requests one read-only QMP screendump and frame analysis.
         self.command_tx
-            .send(WorkerCommand::CaptureFrame { socket_path, mode })
+            .send(WorkerCommand::CaptureFrame { context })
             .map_err(|error| format!("QMP worker is unavailable: {error}"))
     }
 
 
     /// Queue a fresh capture whose original PNG and decoded preview share `request_id`.
     ///
-    /// The UI uses the request ID and socket/game context to reject stale responses.
+    /// The UI uses the request ID and controller context to reject stale responses.
     /// Returns an error if the worker command channel has closed.
     pub fn prepare_snapshot(
         &self,
-        socket_path: PathBuf,
-        mode: GameMode,
+        context: ControllerContext,
         request_id: u64,
     ) -> Result<(), String> {
+        context.validate()?;
         self.command_tx
             .send(WorkerCommand::PrepareSnapshot {
-                socket_path,
-                mode,
+                context,
                 request_id,
             })
             .map_err(|error| format!("QMP worker is unavailable: {error}"))
@@ -549,13 +555,15 @@ impl WorkerHandle {
     /// does not itself send guest input.
     pub fn execute_steps(
         &self,
-        socket_path: PathBuf,
-        mode: GameMode,
+        context: ControllerContext,
         approved_prediction: PredictedAction,
         settings: StepRunSettings,
     ) -> Result<(), String> {
         // Requests one guarded run. Every operation requires fresh
         // validation and emits at most one input sequence.
+        context.validate()?;
+        ensure_strategy_input_authorised(context.strategy)?;
+        let mode = context.game_mode;
         ensure_input_authorised(mode)?;
 
 
@@ -587,8 +595,7 @@ impl WorkerHandle {
         self.cancel_requested.store(false, Ordering::Release);
         self.command_tx
             .send(WorkerCommand::ExecuteSteps {
-                socket_path,
-                mode,
+                context,
                 approved_prediction,
                 settings: Box::new(settings),
             })
@@ -599,11 +606,11 @@ impl WorkerHandle {
     /// Request cancellation immediately and queue a return to the detached state.
     ///
     /// Returns an error if the worker channel has closed; QEMU remains running.
-    pub fn disconnect(&self) -> Result<(), String> {
+    pub fn disconnect(&self, context: ControllerContext) -> Result<(), String> {
         // Requests that the worker return to its detached state.
         self.cancel_requested.store(true, Ordering::Release);
         self.command_tx
-            .send(WorkerCommand::Disconnect)
+            .send(WorkerCommand::Disconnect(context))
             .map_err(|error| format!("QMP worker is unavailable: {error}"))
     }
 
@@ -611,16 +618,16 @@ impl WorkerHandle {
     /// Queue a local reset of the board counter and scan history without guest input.
     ///
     /// Returns an error if the worker command channel has closed.
-    pub fn reset_progress(&self) -> Result<(), String> {
+    pub fn reset_progress(&self, context: ControllerContext) -> Result<(), String> {
         // Resets the board counter and bounded row scan without touching QMP.
         self.command_tx
-            .send(WorkerCommand::ResetProgress)
+            .send(WorkerCommand::ResetProgress(context))
             .map_err(|error| format!("QMP worker is unavailable: {error}"))
     }
 
 
     /// Iterate over currently queued events without blocking the UI thread.
-    pub fn try_events(&self) -> impl Iterator<Item = WorkerEvent> + '_ {
+    pub fn try_events(&self) -> impl Iterator<Item = ContextualWorkerEvent> + '_ {
         // Returns currently queued worker events without blocking the caller.
         self.event_rx.try_iter()
     }
@@ -652,7 +659,7 @@ impl Drop for WorkerHandle {
 }
 
 
-/// Dispatch queued commands while retaining scan history only for the active socket and game.
+/// Dispatch queued commands while retaining scan history only for the active controller context.
 ///
 /// QMP connections belong to individual capture or execution transactions.
 /// Shutdown or a closed command channel ends the thread.
@@ -671,81 +678,66 @@ fn run_worker(
 
 
         match command {
-            WorkerCommand::CaptureFrame { socket_path, mode } => {
-                event_tx.set_capture_context(Some((socket_path.clone(), mode)));
-                reset_scan_state_for_context(
-                    &socket_path,
-                    mode,
-                    &mut scan_context,
-                    &mut scan_state,
-                    &mut completed_boards,
-                );
-                send_board_progress(&event_tx, &scan_state, completed_boards);
-                run_capture(
-                    socket_path,
-                    &mut scan_state,
-                    &mut completed_boards,
-                    &event_tx,
-                );
+            WorkerCommand::CaptureFrame { context } => {
+                event_tx.set_capture_context(Some(context.clone()));
+                reset_scan_state_for_context(&context, &mut scan_context, &mut scan_state, &mut completed_boards);
+
+
+                if context.strategy == SolvingStrategy::ShortestPath {
+                    run_preparation_capture(&context, &event_tx);
+                } else {
+                    send_board_progress(&event_tx, &scan_state, completed_boards);
+                    run_capture(context.socket_path, &mut scan_state, &mut completed_boards, &event_tx);
+                }
             }
-            WorkerCommand::PrepareSnapshot {
-                socket_path,
-                mode,
-                request_id,
-            } => {
-                event_tx.set_capture_context(Some((socket_path.clone(), mode)));
-                reset_scan_state_for_context(
-                    &socket_path,
-                    mode,
-                    &mut scan_context,
-                    &mut scan_state,
-                    &mut completed_boards,
-                );
-                send_board_progress(&event_tx, &scan_state, completed_boards);
-                run_prepare_snapshot(socket_path, &scan_state, request_id, &event_tx);
+            WorkerCommand::PrepareSnapshot { context, request_id } => {
+                event_tx.set_capture_context(Some(context.clone()));
+                reset_scan_state_for_context(&context, &mut scan_context, &mut scan_state, &mut completed_boards);
+
+
+                if context.strategy == SolvingStrategy::ComputerVision {
+                    send_board_progress(&event_tx, &scan_state, completed_boards);
+                }
+                run_prepare_snapshot(&context, &scan_state, request_id, &event_tx);
             }
-            WorkerCommand::ExecuteSteps {
-                socket_path,
-                mode,
-                approved_prediction,
-                settings,
-            } => {
-                event_tx.set_capture_context(Some((socket_path.clone(), mode)));
-                reset_scan_state_for_context(
-                    &socket_path,
-                    mode,
-                    &mut scan_context,
-                    &mut scan_state,
-                    &mut completed_boards,
-                );
+            WorkerCommand::ExecuteSteps { context, approved_prediction, settings } => {
+                event_tx.set_capture_context(Some(context.clone()));
+
+
+                if let Err(error) = context.validate().and_then(|()| ensure_strategy_input_authorised(context.strategy)) {
+                    step_failed_before_input(&event_tx, error);
+                    continue;
+                }
+                reset_scan_state_for_context(&context, &mut scan_context, &mut scan_state, &mut completed_boards);
                 send_board_progress(&event_tx, &scan_state, completed_boards);
-                run_execute_steps(
-                    socket_path,
-                    approved_prediction,
-                    *settings,
-                    &mut scan_state,
-                    &mut completed_boards,
-                    &event_tx,
-                    &cancel_requested,
-                );
+                run_execute_steps(context.socket_path, approved_prediction, *settings, &mut scan_state,
+                    &mut completed_boards, &event_tx, &cancel_requested);
             }
-            WorkerCommand::ResetProgress => {
+            WorkerCommand::ResetProgress(context) => {
+                event_tx.set_capture_context(Some(context.clone()));
+                reset_scan_state_for_context(&context, &mut scan_context, &mut scan_state, &mut completed_boards);
                 reset_progress_tracking(&mut scan_state, &mut completed_boards);
-                send_board_progress(&event_tx, &scan_state, completed_boards);
+
+
+                if context.strategy == SolvingStrategy::ComputerVision {
+                    send_board_progress(&event_tx, &scan_state, completed_boards);
+                }
                 send_status(&event_tx, "Ready".to_owned());
             }
-            WorkerCommand::Disconnect => {
-                event_tx.set_capture_context(None);
+            WorkerCommand::Disconnect(context) => {
+                let vision = context.strategy == SolvingStrategy::ComputerVision;
+                event_tx.set_capture_context(Some(context));
                 reset_progress_tracking(&mut scan_state, &mut completed_boards);
                 scan_context = None;
-                send_board_progress(&event_tx, &scan_state, completed_boards);
+
+
+                if vision {
+                    send_board_progress(&event_tx, &scan_state, completed_boards);
+                }
                 send_state(&event_tx, WorkerState::Detached);
                 send_status(&event_tx, "Stopped".to_owned());
-                send_log(
-                    &event_tx,
-                    "Detached. No QMP connection is retained between captures; QEMU and Windows were left running."
-                        .to_owned(),
-                );
+                send_log(&event_tx, "Detached. No QMP connection is retained between captures; QEMU and Windows were left running.".to_owned());
+                event_tx.set_capture_context(None);
             }
             WorkerCommand::Shutdown => break,
         }
@@ -753,24 +745,19 @@ fn run_worker(
 }
 
 
-/// Reset board and scan history only when the socket path or game mode changes.
+/// Reset board and scan history when socket, game, strategy or generation changes.
 fn reset_scan_state_for_context(
-    socket_path: &Path,
-    mode: GameMode,
-    scan_context: &mut Option<(PathBuf, GameMode)>,
+    context: &ControllerContext,
+    scan_context: &mut Option<ControllerContext>,
     scan_state: &mut TableauScanState,
     completed_boards: &mut usize,
 ) {
 
 
-    if scan_context
-        .as_ref()
-        .map(|(path, active_mode)| (path.as_path(), *active_mode))
-        != Some((socket_path, mode))
-    {
-        *scan_state = TableauScanState::for_mode(mode);
+    if scan_context.as_ref() != Some(context) {
+        *scan_state = TableauScanState::for_mode(context.game_mode);
         *completed_boards = 0;
-        *scan_context = Some((socket_path.to_path_buf(), mode));
+        *scan_context = Some(context.clone());
     }
 }
 
@@ -780,6 +767,64 @@ fn reset_progress_tracking(scan_state: &mut TableauScanState, completed_boards: 
     // Returns progress tracking to a new game and the profile's initial row scan.
     *scan_state = TableauScanState::for_mode(scan_state.mode());
     *completed_boards = 0;
+}
+
+
+/// Validate preparation pixels without invoking a scene, HALO or card detector.
+fn preparation_prediction(frame: &CapturedFrame) -> Result<Option<PredictedAction>, String> {
+
+
+    if (frame.width, frame.height) != (NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT) || !frame.is_layout_valid() {
+        return Err("Preparation requires a valid native 1920×1080 RGBA frame".to_owned());
+    }
+    Ok(None)
+}
+
+
+/// Refuse the preparation strategy before any input or cancellation state changes.
+fn ensure_strategy_input_authorised(strategy: SolvingStrategy) -> Result<(), String> {
+
+
+    if !strategy.permits_input() {
+        return Err("Pyramid preparation is read-only; card recognition and route calculation are not implemented; input sent: 0".to_owned());
+    }
+    Ok(())
+}
+
+
+/// Capture and publish raw Pyramid preparation pixels without any gameplay analysis.
+fn run_preparation_capture(context: &ControllerContext, event_tx: &WorkerEventSink) {
+
+
+    if let Err(error) = context.validate() {
+        step_failed_before_input(event_tx, error);
+        return;
+    }
+    send_state(event_tx, WorkerState::Connecting);
+    send_status(event_tx, "Capturing Pyramid preparation".to_owned());
+    let result = (|| {
+        let (mut qmp, probe) = connect_and_probe(&context.socket_path)?;
+
+
+        if !probe.is_running() {
+            return Err("Preparation capture refused because the VM is not running".to_owned());
+        }
+        send_state(event_tx, WorkerState::Capturing);
+        let (frame, _) = capture_screen(&mut qmp, &context.socket_path)?;
+        let prediction = preparation_prediction(&frame)?;
+        Ok::<_, String>((frame, prediction))
+    })();
+
+
+    match result {
+        Ok((frame, prediction)) => {
+            event_tx.latest_frame.publish(frame, prediction, false, false, Some(context.clone()));
+            send_state(event_tx, WorkerState::Ready);
+            send_status(event_tx, "Pyramid preparation only — recognition and route calculation pending".to_owned());
+            send_log(event_tx, "Fresh raw Pyramid preparation capture; no HALO analysis or guest input. Card recognition and route calculation are not implemented.".to_owned());
+        }
+        Err(error) => step_failed_before_input(event_tx, error),
+    }
 }
 
 
@@ -896,23 +941,25 @@ fn run_capture(
 /// Enforces the profile frame contract; classification remains advisory so
 /// dialogs can be saved. Reports success or failure with the supplied request ID.
 fn run_prepare_snapshot(
-    socket_path: PathBuf,
+    context: &ControllerContext,
     scan_state: &TableauScanState,
     request_id: u64,
     event_tx: &WorkerEventSink,
 ) {
-    send_state(event_tx, WorkerState::Connecting);
-    send_status(event_tx, "Capturing snapshot".to_owned());
+    let socket_path = &context.socket_path;
 
     let result = (|| {
-        let (mut qmp, probe) = connect_and_probe(&socket_path)?;
+        context.validate()?;
+        send_state(event_tx, WorkerState::Connecting);
+        send_status(event_tx, "Capturing snapshot".to_owned());
+        let (mut qmp, probe) = connect_and_probe(socket_path)?;
 
 
         if !probe.is_running() {
             return Err("snapshot refused because the VM is not running".to_owned());
         }
         send_state(event_tx, WorkerState::Capturing);
-        let (frame, png, timing) = capture_screen_with_png(&mut qmp, &socket_path)?;
+        let (frame, png, timing) = capture_screen_with_png(&mut qmp, socket_path)?;
         let profile = scan_state.mode().profile();
 
 
@@ -928,7 +975,10 @@ fn run_prepare_snapshot(
 
         // Recognition is advisory for saving: dialogs must still be
         // capturable, and an unrecognised scene never authorises input.
-        let prediction = match analyse_captured_frame(frame.clone(), scan_state) {
+        let prediction = if context.strategy == SolvingStrategy::ShortestPath {
+            preparation_prediction(&frame)?
+        } else {
+            Some(match analyse_captured_frame(frame.clone(), scan_state) {
             Ok((observation, _)) => observation.prediction,
             Err(error) => {
                 send_log(
@@ -939,6 +989,7 @@ fn run_prepare_snapshot(
                 );
                 PredictedAction::NoHighlight
             }
+            })
         };
         Ok::<_, String>((frame, prediction, png, timing))
     })();
@@ -949,7 +1000,7 @@ fn run_prepare_snapshot(
             let png_len = png.len();
             let _ = event_tx.send(WorkerEvent::SnapshotPrepared {
                 request_id,
-                context: (socket_path, scan_state.mode()),
+                context: context.clone(),
                 frame,
                 png,
                 prediction,

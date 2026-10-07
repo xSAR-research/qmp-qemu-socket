@@ -16,6 +16,7 @@ use crate::parameters::{
     POST_GAME_TARGETS, PostGameControlVariant, PostGameStage, SCORE_SKIP_MAX_CLICK_ATTEMPTS,
 };
 use crate::pyramid::PyramidTargetKind;
+use crate::strategy::{ControllerContext, SolvingStrategy};
 
 use crate::parameters::{LEVEL_UP_CONTROL_VARIANTS, NEW_GAME_CONTROL_VARIANTS};
 
@@ -30,6 +31,12 @@ fn blank_frame(width: u32, height: u32) -> CapturedFrame {
         format: crate::capture::PixelFormat::Rgba8,
         pixels: vec![0; stride * height as usize],
     }
+}
+
+
+/// Build a Computer Vision context for existing game-policy regression fixtures.
+fn vision_context(socket_path: impl Into<PathBuf>, mode: GameMode) -> ControllerContext {
+    ControllerContext::new(socket_path.into(), mode, SolvingStrategy::ComputerVision, 1)
 }
 
 
@@ -75,6 +82,142 @@ fn both_game_modes_allow_the_shared_guarded_input_path() {
 }
 
 
+/// Preparation retains captured pixels even when Computer Vision would approve a HALO.
+#[test]
+fn preparation_frame_has_no_prediction_from_an_actionable_pyramid_halo() {
+    let mut frame = blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT);
+
+
+    for pixel in frame.pixels.as_chunks_mut::<4>().0 {
+        pixel.copy_from_slice(&[20, 110, 60, 255]);
+    }
+    // Calibrated legend separators establish a positive Pyramid scene.
+
+
+    for y in [169, 207, 245, 283, 321, 359] {
+
+
+        for line in y..y + 2 {
+
+
+            for x in 1_816..1_884 {
+                let offset = line as usize * frame.stride + x as usize * 4;
+                frame.pixels[offset..offset + 4].copy_from_slice(&[255; 4]);
+            }
+        }
+    }
+    let move_slot = pyramid::PYRAMID_TARGETS[0];
+    let halo = pyramid::halo_probe(move_slot);
+
+
+    for y in halo.y..halo.bottom() {
+
+
+        for x in halo.x..halo.right() {
+            let offset = y as usize * frame.stride + x as usize * 4;
+            frame.pixels[offset..offset + 4].copy_from_slice(&[237, 207, 109, 255]);
+        }
+    }
+    let vision = pyramid::analyse(&frame, &pyramid::PyramidBoardState::new())
+        .expect("recognised Pyramid fixture");
+    assert!(matches!(vision.prediction,
+        PredictedAction::Action(action) if action.target == ActionTarget::Pyramid(PyramidTargetKind::Move)));
+    let original_pixels = frame.pixels.clone();
+    assert_eq!(preparation_prediction(&frame), Ok(None));
+    assert_eq!(frame.pixels, original_pixels);
+}
+
+
+/// Preparation keeps the calibrated frame contract and rejects unsafe pixel storage.
+#[test]
+fn preparation_frame_rejects_non_native_or_malformed_capture() {
+    assert!(preparation_prediction(&blank_frame(1_280, 720)).is_err());
+    let mut truncated = blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT);
+    truncated.pixels.truncate(16);
+    assert!(preparation_prediction(&truncated).is_err());
+    let mut narrow_stride = blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT);
+    narrow_stride.stride = 1;
+    assert!(preparation_prediction(&narrow_stride).is_err());
+}
+
+
+/// A preparation run is refused before clearing STOP or queueing any QMP work.
+#[test]
+fn preparation_execute_request_preserves_stop_and_never_reaches_worker_queue() {
+    let (command_tx, command_rx) = mpsc::channel();
+    let (_event_tx, event_rx) = mpsc::channel();
+    let cancel_requested = Arc::new(AtomicBool::new(true));
+    let handle = WorkerHandle {
+        command_tx,
+        event_rx,
+        latest_frame: LatestFrameSlot::default(),
+        join: None,
+        cancel_requested: Arc::clone(&cancel_requested),
+    };
+    let context = ControllerContext::new(
+        PathBuf::from("/nonexistent-preparation/qmp.sock"),
+        GameMode::Pyramid,
+        SolvingStrategy::ShortestPath,
+        9,
+    );
+    let prediction = PredictedAction::Action(
+        pyramid::action_for_kind(PyramidTargetKind::Move).expect("canonical Pyramid Move"),
+    );
+    let error = handle.execute_steps(
+        context,
+        prediction,
+        StepRunSettings::new(crate::parameters::AnimationSettleDelays::default(), 1),
+    ).expect_err("preparation cannot execute input");
+    assert!(error.contains("preparation") || error.contains("route"));
+    assert!(cancel_requested.load(Ordering::Acquire));
+    assert!(matches!(command_rx.try_recv(), Err(mpsc::TryRecvError::Empty)));
+}
+
+
+/// The worker independently rejects a preparation execution command before opening QMP.
+#[test]
+fn preparation_execution_command_has_no_connection_capture_or_input_events() {
+    let (command_tx, command_rx) = mpsc::channel();
+    let (events, receiver) = mpsc::channel();
+    let latest_frame = LatestFrameSlot::default();
+    let sink = WorkerEventSink {
+        events,
+        latest_frame: latest_frame.clone(),
+        capture_context: Mutex::new(None),
+    };
+    let context = ControllerContext::new(
+        PathBuf::from("/nonexistent-preparation/qmp.sock"),
+        GameMode::Pyramid,
+        SolvingStrategy::ShortestPath,
+        11,
+    );
+    let prediction = PredictedAction::Action(
+        pyramid::action_for_kind(PyramidTargetKind::Move).expect("canonical Pyramid Move"),
+    );
+    command_tx.send(WorkerCommand::ExecuteSteps {
+        context: context.clone(),
+        approved_prediction: prediction,
+        settings: Box::new(StepRunSettings::new(
+            crate::parameters::AnimationSettleDelays::default(), 1,
+        )),
+    }).expect("queue rejected execution");
+    command_tx.send(WorkerCommand::Shutdown).expect("queue shutdown");
+    let cancel_requested = Arc::new(AtomicBool::new(true));
+    run_worker(command_rx, sink, Arc::clone(&cancel_requested));
+    let notifications: Vec<_> = receiver.try_iter().collect();
+    assert!(!notifications.is_empty());
+    assert!(notifications.iter().all(|notification| notification.context == Some(context.clone())));
+    assert!(!notifications.iter().any(|notification| matches!(notification.event,
+        WorkerEvent::State(WorkerState::Connecting | WorkerState::Capturing | WorkerState::Acting)
+        | WorkerEvent::ActionCompleted { .. }
+        | WorkerEvent::RunCompleted { .. }
+        | WorkerEvent::GameCompleted
+        | WorkerEvent::BoardProgress { .. })));
+    assert!(latest_frame.take().is_none());
+    assert!(cancel_requested.load(Ordering::Acquire));
+}
+
+
 /// Free Cell blank frames cannot inherit a progress bar or another mode's scene authority.
 #[test]
 fn freecell_native_capture_rejects_unknown_scene_and_malformed_storage() {
@@ -117,7 +260,7 @@ fn freecell_execution_request_cannot_execute_a_foreign_preview_without_capture()
             &sink,
             &AtomicBool::new(false),
         );
-        let notifications: Vec<_> = receiver.try_iter().collect();
+        let notifications: Vec<_> = receiver.try_iter().map(|notification| notification.event).collect();
         assert!(!notifications.iter().any(|event| matches!(event,
             WorkerEvent::ActionCompleted { .. } | WorkerEvent::GameCompleted | WorkerEvent::FreeCellGameCompleted)));
         assert_eq!(completed_boards, 0);
@@ -253,14 +396,14 @@ fn pyramid_solver_recovery_requires_a_verified_redeal_and_three_observations() {
 #[test]
 fn pyramid_consumed_slots_survive_same_context_and_reset_on_context_change() {
     let socket = PathBuf::from("/test/first.sock");
-    let mut context = Some((socket.clone(), GameMode::Pyramid));
+    let first_context = vision_context(socket, GameMode::Pyramid);
+    let mut context = Some(first_context.clone());
     let mut state = TableauScanState::for_mode(GameMode::Pyramid);
     let removed = PyramidTargetKind::Card { row: 7, column: 1 };
     state.pyramid.mark_removed(removed);
     let mut completed_boards = 1;
     reset_scan_state_for_context(
-        &socket,
-        GameMode::Pyramid,
+        &first_context,
         &mut context,
         &mut state,
         &mut completed_boards,
@@ -269,8 +412,7 @@ fn pyramid_consumed_slots_survive_same_context_and_reset_on_context_change() {
     assert_eq!(completed_boards, 1);
 
     reset_scan_state_for_context(
-        Path::new("/test/second.sock"),
-        GameMode::Pyramid,
+        &vision_context("/test/second.sock", GameMode::Pyramid),
         &mut context,
         &mut state,
         &mut completed_boards,
@@ -283,6 +425,30 @@ fn pyramid_consumed_slots_survive_same_context_and_reset_on_context_change() {
             .all(|clicked| !clicked)
     );
     assert_eq!(completed_boards, 0);
+}
+
+
+/// Strategy and selection generation invalidate consumed cards and advisory progress.
+#[test]
+fn strategy_or_generation_change_resets_pyramid_history_and_progress() {
+    let original = vision_context("/test/same.sock", GameMode::Pyramid);
+    let removed = PyramidTargetKind::Card { row: 7, column: 1 };
+
+
+    for changed in [
+        ControllerContext { strategy: SolvingStrategy::ShortestPath, ..original.clone() },
+        ControllerContext { generation: 2, ..original.clone() },
+        ControllerContext { game_mode: GameMode::FreeCell, ..original.clone() },
+    ] {
+        let mut context = Some(original.clone());
+        let mut state = TableauScanState::for_mode(GameMode::Pyramid);
+        state.pyramid.mark_removed(removed);
+        let mut completed_boards = 2;
+        reset_scan_state_for_context(&changed, &mut context, &mut state, &mut completed_boards);
+        assert_eq!(state, TableauScanState::for_mode(changed.game_mode));
+        assert_eq!(completed_boards, 0);
+        assert_eq!(context, Some(changed));
+    }
 }
 
 
@@ -383,30 +549,57 @@ fn latest_frame_slot_replaces_stale_full_resolution_previews() {
 
     slot.publish(
         first.frame,
-        first.prediction,
+        Some(first.prediction),
         false,
         false,
-        Some((PathBuf::from("/tmp/old-qmp.sock"), GameMode::TriPeaks)),
+        Some(vision_context("/tmp/old-qmp.sock", GameMode::TriPeaks)),
     );
     slot.publish(
         second.frame,
-        second.prediction,
+        Some(second.prediction),
         true,
         false,
-        Some((PathBuf::from("/tmp/new-qmp.sock"), GameMode::Pyramid)),
+        Some(vision_context("/tmp/new-qmp.sock", GameMode::Pyramid)),
     );
 
     let latest = slot.take().expect("latest preview");
     assert_eq!(latest.frame.pixels, vec![2; 4]);
-    assert_eq!(latest.prediction, second_prediction);
+    assert_eq!(latest.prediction, Some(second_prediction));
     assert!(latest.log_prediction);
     assert!(!latest.diagnostic);
     assert_eq!(latest.coalesced_frames, 1);
     assert_eq!(
         latest.context,
-        Some((PathBuf::from("/tmp/new-qmp.sock"), GameMode::Pyramid))
+        Some(vision_context("/tmp/new-qmp.sock", GameMode::Pyramid))
     );
     assert!(slot.take().is_none());
+}
+
+
+/// A raw preparation frame replaces prior HALO metadata while retaining its own identity.
+#[test]
+fn preparation_preview_carries_no_prior_prediction_and_preserves_generation() {
+    let slot = LatestFrameSlot::default();
+    let vision = vision_context("/tmp/same-qmp.sock", GameMode::Pyramid);
+    let preparation = ControllerContext {
+        strategy: SolvingStrategy::ShortestPath,
+        generation: 2,
+        ..vision.clone()
+    };
+    let prediction = PredictedAction::Action(
+        pyramid::action_for_kind(PyramidTargetKind::Move).expect("canonical Pyramid Move"),
+    );
+    slot.publish(blank_frame(1, 1), Some(prediction), true, false, Some(vision));
+    let mut raw = blank_frame(1, 1);
+    raw.pixels.fill(81);
+    slot.publish(raw, None, false, false, Some(preparation.clone()));
+    let latest = slot.take().expect("preparation preview");
+    assert_eq!(latest.context, Some(preparation));
+    assert_eq!(latest.prediction, None);
+    assert!(!latest.log_prediction);
+    assert!(!latest.diagnostic);
+    assert_eq!(latest.frame.pixels, vec![81; 4]);
+    assert_eq!(latest.coalesced_frames, 1);
 }
 
 
@@ -417,7 +610,7 @@ fn failed_action_publishes_latest_pixels_without_approving_a_target() {
     let sink = WorkerEventSink {
         events: tx,
         latest_frame: LatestFrameSlot::default(),
-        capture_context: Mutex::new(Some((PathBuf::from("/tmp/qmp.sock"), GameMode::Pyramid))),
+        capture_context: Mutex::new(Some(vision_context("/tmp/qmp.sock", GameMode::Pyramid))),
     };
     let mut observation = row_observation(
         PredictedAction::Action(
@@ -429,7 +622,7 @@ fn failed_action_publishes_latest_pixels_without_approving_a_target() {
     send_post_action_frame(&sink, observation);
     let diagnostic = sink.latest_frame.take().expect("last failure frame");
     assert!(diagnostic.diagnostic);
-    assert_eq!(diagnostic.prediction, PredictedAction::NoHighlight);
+    assert_eq!(diagnostic.prediction, None);
     assert!(diagnostic.frame.pixels.iter().all(|pixel| *pixel == 71));
 }
 
@@ -447,7 +640,7 @@ fn board_progress_reports_committed_completion_without_waiting_for_redeal() {
     send_board_progress(&sink, &scan_state, 1);
 
 
-    match rx.try_recv().expect("board-completion event") {
+    match rx.try_recv().expect("board-completion event").event {
         WorkerEvent::BoardProgress {
             current_board,
             completed_boards,
@@ -954,16 +1147,15 @@ fn ambiguous_single_capture_does_not_change_row_state() {
 /// Check scan hints reset on socket/game changes and persist within the same context.
 #[test]
 fn socket_or_mode_change_resets_the_row_hint_but_same_context_preserves_it() {
-    let first_socket = PathBuf::from("/tmp/solitaire-a.sock");
-    let second_socket = PathBuf::from("/tmp/solitaire-b.sock");
+    let first_context = vision_context("/tmp/solitaire-a.sock", GameMode::TriPeaks);
+    let second_context = vision_context("/tmp/solitaire-b.sock", GameMode::TriPeaks);
     let row_three = row_mask(3);
     let mut state = TableauScanState::from_active_rows(row_three).unwrap();
     let mut remembered_context = None;
     let mut completed_boards = 2;
 
     reset_scan_state_for_context(
-        &first_socket,
-        GameMode::TriPeaks,
+        &first_context,
         &mut remembered_context,
         &mut state,
         &mut completed_boards,
@@ -971,17 +1163,14 @@ fn socket_or_mode_change_resets_the_row_hint_but_same_context_preserves_it() {
     assert_eq!(state, TableauScanState::initial());
     assert_eq!(completed_boards, 0);
     assert_eq!(
-        remembered_context
-            .as_ref()
-            .map(|(path, mode)| (path.as_path(), *mode)),
-        Some((first_socket.as_path(), GameMode::TriPeaks))
+        remembered_context,
+        Some(first_context.clone())
     );
 
     state = TableauScanState::from_active_rows(row_three).unwrap();
     completed_boards = 1;
     reset_scan_state_for_context(
-        &first_socket,
-        GameMode::TriPeaks,
+        &first_context,
         &mut remembered_context,
         &mut state,
         &mut completed_boards,
@@ -990,8 +1179,7 @@ fn socket_or_mode_change_resets_the_row_hint_but_same_context_preserves_it() {
     assert_eq!(completed_boards, 1);
 
     reset_scan_state_for_context(
-        &second_socket,
-        GameMode::TriPeaks,
+        &second_context,
         &mut remembered_context,
         &mut state,
         &mut completed_boards,
@@ -999,10 +1187,8 @@ fn socket_or_mode_change_resets_the_row_hint_but_same_context_preserves_it() {
     assert_eq!(state, TableauScanState::initial());
     assert_eq!(completed_boards, 0);
     assert_eq!(
-        remembered_context
-            .as_ref()
-            .map(|(path, mode)| (path.as_path(), *mode)),
-        Some((second_socket.as_path(), GameMode::TriPeaks))
+        remembered_context,
+        Some(second_context)
     );
 }
 

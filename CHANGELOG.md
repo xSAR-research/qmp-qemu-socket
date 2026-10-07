@@ -1,5 +1,30 @@
 # Changelog
 
+## v2.0.0 — candidate 2
+
+- Pin xsar v0.2.0 to Charlie's promoted Git commit
+  `1a719b359a51d1e1e3113224193a779c76de82f8` and record the actual Git source
+  in Cargo.lock. Ordinary Cargo builds no longer need a local override.
+- Update current build instructions and release identity; retain the startup
+  strategy split, shared primitives and all accepted game-controller behaviour.
+- Deliver complete application files against the same exact base, accepting
+  the recorded installed candidate 1 as the guarded preimage and rollback state.
+
+## v2.0.0 — candidate 1
+
+- Add startup strategy selection before any QMP request. Keep the five CV game
+  types separate from a read-only independent Pyramid preparation workspace.
+- Tag requests, frame/snapshot mailboxes and status/run events with strategy,
+  game, socket and generation; reject stale results after idle switches.
+- Retain exact original PNG preview/save and shared capture/logging controls;
+  preparation does not perform detection or permit guest input.
+- Extract actual QMP, geometry, PNG/RGBA and predicate-scan implementations
+  into optional xsar features and use them through application adapters.
+- Keep accepted game controllers, calibration, timings and terminal policies.
+  Recognition, reconnaissance and route search remain later work.
+- Deliver a guarded local paired-validation override; the final application
+  dependency pin follows Charlie's promotion of the tested xsar commit.
+
 ## v1.4.0 — candidate 4
 
 - Move Spider's pointer to the measured clear-felt point at (20, 500)

@@ -869,7 +869,7 @@ mod tests {
         let mut attempted = false;
         let cancel = io.cancel;
         let result = drive_run(io, settings, &events, cancel, latest, &mut attempted);
-        (result, receiver.try_iter().collect())
+        (result, receiver.try_iter().map(|notification| notification.event).collect())
     }
 
 

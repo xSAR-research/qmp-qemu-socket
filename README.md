@@ -14,16 +14,31 @@ the real purpose. Each fixture keeps independent target and effect policies.
 The target is to build in Dijkstra / A* shortest path problem solving rather
 than using the **Solver**, this will benefit drone route planning experience.
 
-This is **v1.4.0, candidate 4**, based on pushed candidate 2 at
-`aae11dee2792967cb375b368270e46c8a95e8c95`. `Cargo.toml` supplies the package
-version shown in the window title and Parameters. After a Spider source click,
-the pointer moves to clear felt before the existing settle and fresh capture,
-preventing it from obscuring the next source outline. Active Spider Solver
-receives bounded input-free observations, without a disabled refresh click.
-This cumulative update retains Free Cell's visible-margin clipped-source check
-and Spider's higher local LEVEL UP OK from candidate 3. Timings and earlier
-mode policies stay unchanged. See [Spider candidate 4 notes](docs/spider-v1.4.0-candidate-4.md)
-and [candidate 3 evidence](docs/freecell-v1.4.0-candidate-3.md).
+This is **v2.0.0, candidate 2**, based on
+`78df8f1fc994442a06aa9eaa411414462e169727`. At startup choose a **Solving
+strategy**, separately from **Game Type**:
+
+| Choice | Current behaviour |
+| --- | --- |
+| Shortest path route calculation | Read-only Pyramid preparation: capture, inspect calibrated slots and preview/save original PNGs. Card recognition, Dijkstra/A* search and route execution are not implemented yet. |
+| Computer Vision solving | The five existing guest Solver/HALO controllers, with their accepted gameplay, timings and terminal flows. |
+
+No QMP capture starts until a choice is made. Strategy changes are available
+while idle and clear old prediction/progress authority. Requests and results
+carry strategy, game, socket and selection generation so late results cannot
+revive an earlier selection. Preparation hides CV timings and disables every
+Solver, gameplay and terminal input at both UI and worker boundaries.
+
+Reusable QMP, geometry, RGBA/PNG and predicate scans come from optional
+features in **xsar v0.2.0**, pinned to Charlie's promoted commit
+`1a719b359a51d1e1e3113224193a779c76de82f8`. Game calibration, source selection,
+completion policy, screenshot acquisition and exact-byte saving remain here.
+Ordinary Cargo commands fetch this exact Git dependency. No local xsar checkout,
+paired override or crates.io publication is required to build the application.
+
+See [candidate notes](docs/strategy-v2.0.0-candidate-2.md). The committed
+[Gate 1 plan](docs/QMP-QEMU-Strategy-xSAR-Gate1-Plan.md) records the original
+proposal and intake discrepancy; the missing files were restored in this base.
 
 ## Build and source spacing
 
@@ -37,8 +52,8 @@ rustc --version
 cargo --version
 cargo check --locked
 cargo test --locked
-cargo doc --locked --no-deps --document-private-items
-cargo clippy --locked --all-targets
+cargo doc --locked --no-deps
+cargo clippy --locked --all-targets -- -D warnings
 cargo build --locked --release
 ```
 
