@@ -1,5 +1,23 @@
 # Changelog
 
+## v1.4.0 — candidate 3
+
+- Correct Free Cell toolbar-clipped source detection when a central card pip
+  covers the paper probe. Use the visible left and right card margins instead;
+  retain closed tops, connected exterior rails and the Y947 exclusive cutoff.
+- Add byte-identical FC20/FC21 evidence for a five-card PLAY 6 run and a single
+  PLAY 7 card. Both bottom cards are eight of diamonds; their centre paper
+  probes contained 139/289 bright pixels, just below the old 50% requirement.
+- Keep source clicks, action timings, Solver recovery, deterministic terminal
+  flow and all other modes unchanged. No card identity or move-effect matching.
+- Accept Spider's supplied LEVEL UP OK caption 19 pixels above the original
+  Free Cell location. Reuse only the local button/word check; retain the existing
+  click point, optional-level branch and one-shot terminal progression.
+- Add original SP20 evidence and restart coverage for both OK positions. Level,
+  medal, title, panel colours and fireworks remain outside readiness checks.
+- Pin this complete-file update to pushed candidate 2 at
+  `aae11dee2792967cb375b368270e46c8a95e8c95`.
+
 ## v1.4.0 — candidate 2
 
 - Raise the editable Spider card/run settle default from 750 to 1250 ms at

@@ -306,6 +306,39 @@ pub(crate) fn play_control_ready_at(
 }
 
 
+/// Reuse only the local OK control at an evidenced signed vertical offset.
+/// Spider SP20 places the same caption 19 pixels higher than FC10. Free Cell's
+/// accepted readiness and win entry remain at their original locations.
+pub(crate) fn level_up_control_ready_at(
+    frame: &CapturedFrame,
+    y_offset: i32,
+) -> Result<bool, HaloDetectionError> {
+    validate_frame(frame)?;
+    let caption_y = LEVEL_UP_OK.bounds.y.checked_add_signed(y_offset)
+        .ok_or(HaloDetectionError::BoundsOutsideFrame)?;
+    let body_y = 788_u32.checked_add_signed(y_offset)
+        .ok_or(HaloDetectionError::BoundsOutsideFrame)?;
+    let caption_bottom = caption_y.checked_add(LEVEL_UP_OK.bounds.height)
+        .and_then(|bottom| bottom.checked_add(8))
+        .ok_or(HaloDetectionError::BoundsOutsideFrame)?;
+    let body_bottom = body_y.checked_add(50)
+        .ok_or(HaloDetectionError::BoundsOutsideFrame)?;
+
+
+    if caption_y < 8 || caption_bottom > frame.height || body_bottom > frame.height {
+        return Err(HaloDetectionError::BoundsOutsideFrame);
+    }
+    let caption = Caption {
+        bounds: PixelRect::new(LEVEL_UP_OK.bounds.x, caption_y,
+            LEVEL_UP_OK.bounds.width, LEVEL_UP_OK.bounds.height),
+        ink: LEVEL_UP_OK.ink,
+        rows: LEVEL_UP_OK.rows,
+    };
+    let body = PixelRect::new(848, body_y, 223, 50);
+    Ok(button_body_ready(frame, body)? && caption_ready(frame, &caption)?)
+}
+
+
 /// Establish a win from the Congratulations panel's own stable local captions.
 /// Generic gold, isolated OK/Play controls and missing HALOs are not win proof.
 /// Level Up can be handled only after the worker has already established the win.

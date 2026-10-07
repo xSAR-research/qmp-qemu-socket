@@ -1,8 +1,13 @@
 # QMP and capture design
 
 This describes the current shared transport and mode-owned input policies in
-v1.4.0 candidate 2. Free Cell and Spider use native mode-owned sources and
+v1.4.0 candidate 3. Free Cell and Spider use native mode-owned sources and
 independent one-board terminal sequences; capture-only requests never send input.
+Free Cell's clipped-source check reads paper in both visible card margins above
+Y947, avoiding a central pip; it does not compare moved-card pixels. Capture,
+input delivery and all settling/recovery timings are unchanged.
+Spider's higher LEVEL UP OK is recognised from the expected local control only;
+its existing click point and fresh one-shot progression remain.
 Later dated correction notes retain historical evidence rather than current
 card-effect requirements.
 

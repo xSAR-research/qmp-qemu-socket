@@ -899,25 +899,28 @@ mod tests {
     }
 
 
-    /// Both optional-OK and direct-New Game paths reach Spider's own Play
-    /// location, then wait once for the fresh deal and activate only an inactive
-    /// Solver. Ordered waits distinguish score settling from the editable deal.
+    /// Legacy and SP20 optional-OK paths, plus direct New Game, reach Spider's
+    /// own Play location. Ordered waits distinguish score settling from the
+    /// editable deal; only an inactive Solver receives activation.
     #[test]
     fn continuous_win_restart_handles_optional_level_up_and_spider_play() {
 
 
-        for with_level_up in [true, false] {
+        for level_up_fixture in [Some(10), Some(20), None] {
+            let with_level_up = level_up_fixture.is_some();
 
 
             for solver_already_active in [false, true] {
-                let branch = format!("level_up={with_level_up}, solver_already_active={solver_already_active}");
+                let branch = format!("level_up_fixture={level_up_fixture:?}, solver_already_active={solver_already_active}");
                 let cancel = AtomicBool::new(false);
                 let delays = AnimationSettleDelays::default().with_spider_game_start_millis(3_500);
                 let settings = StepRunSettings::new(delays, 0).with_spider_observation_limit(2);
                 let mut frames = vec![fixture(15)];
 
 
-                if with_level_up { frames.push(level_up()); }
+                if let Some(number) = level_up_fixture {
+                    frames.push(if number == 10 { level_up() } else { fixture(number) });
+                }
                 frames.extend([fixture(17), fixture(18)]);
 
 
@@ -964,10 +967,14 @@ mod tests {
         let mut io = fake(vec![fixture(15)], &cancel);
         assert_eq!(run(&mut io, 1, &mut None), Ok(RunOutcome::GameWon(0)));
         assert!(io.sources.is_empty() && io.controls.is_empty());
-        let mut io = fake(vec![level_up(), level_up(), level_up()], &cancel);
-        assert!(run(&mut io, 0, &mut None).unwrap_err().contains("allowance exhausted"));
-        assert!(io.sources.is_empty() && io.controls.is_empty());
-        assert_eq!(io.solver_clicks, 0);
+
+
+        for frame in [level_up(), fixture(20)] {
+            let mut io = fake(vec![frame.clone(), frame.clone(), frame], &cancel);
+            assert!(run(&mut io, 0, &mut None).unwrap_err().contains("allowance exhausted"));
+            assert!(io.sources.is_empty() && io.controls.is_empty());
+            assert_eq!(io.solver_clicks, 0);
+        }
     }
 
 

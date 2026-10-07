@@ -14,12 +14,15 @@ the real purpose. Each fixture keeps independent target and effect policies.
 The target is to build in Dijkstra / A* shortest path problem solving rather
 than using the **Solver**, this will benefit drone route planning experience.
 
-This is **v1.4.0, candidate 2**, based on pushed Spider candidate 1 at
-`5a0f730a4248d030ae98fb466a00b092b8083133`. `Cargo.toml` supplies the package
-version shown in the window title and Parameters. Twenty original Spider
-captures and Charlie's Solver input contract enable the new mode. TriPeaks,
-Pyramid, Klondike and Free Cell retain their accepted execution policies.
-See [Spider candidate notes](docs/spider-v1.4.0-candidate-2.md).
+This is **v1.4.0, candidate 3**, based on pushed candidate 2 at
+`aae11dee2792967cb375b368270e46c8a95e8c95`. `Cargo.toml` supplies the package
+version shown in the window title and Parameters. This update corrects Free
+Cell toolbar-clipped HALOs when a central card pip covers the paper probe;
+visible card margins supply that presence check. Source clicks and execution
+policies remain unchanged, including Spider's 1250 ms card/run settle default.
+Spider also accepts the supplied higher LEVEL UP OK position using only the
+local button and caption; its click point and restart sequence stay unchanged.
+See [Free Cell and Spider correction notes](docs/freecell-v1.4.0-candidate-3.md).
 
 ## Build and source spacing
 

@@ -4,7 +4,7 @@
   "candidate": "v1.4.0, candidate 1",
   "base": "4298fe96079f9283159a0b1200876f97de047d7f",
   "capture": "Original supplied PNG bytes; native 1920x1080 RGBA; no re-encoding",
-  "missing": "SP16 optional LEVEL UP was not observed; existing accepted OK control is reused",
+  "missing": "SP16 was not captured in the original sequence; SP20 now supplies a native optional Spider LEVEL UP frame.",
   "fixtures": [
     {
       "id": "SP01",
@@ -205,6 +205,25 @@
       "width": 1920,
       "height": 1080,
       "mode": "RGBA"
+    },
+    {
+      "id": "SP20",
+      "original_filename": "qmp-qemu-socket 261007 090223 SPIDER-Level-Up-Failure.png",
+      "fixture": "spider-SP20.png",
+      "sha256": "0e0081e66ab729d57089ded30bf6ff96932082edba9a341159a551dd29fe5ed9",
+      "bytes": 1732335,
+      "width": 1920,
+      "height": 1080,
+      "mode": "RGBA",
+      "observation": "Standard Level Up, Spider Grandmaster 2, level 105. Local OK caption exactly 19 pixels above FC10. Existing (959,812) click lies inside the gold button.",
+      "attachment_note": "Supplied attachment is 1732335 bytes; associated session log records a saved PNG of 1109762 bytes. The supplied attachment is copied byte-identically; exact-byte identity to that logged saved PNG is unverified."
+    }
+  ],
+  "updates": [
+    {
+      "candidate": "v1.4.0, candidate 3",
+      "base": "aae11dee2792967cb375b368270e46c8a95e8c95",
+      "description": "SP20 supplies original native Spider Level Up with the local OK caption 19 pixels above FC10; no panel artwork or rank matching is required."
     }
   ]
 }

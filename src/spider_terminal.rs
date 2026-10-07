@@ -1,9 +1,10 @@
 //! Spider's one-board win and deterministic ordered restart controls.
 //!
 //! SP15/SP17 evidence the shared score-skip and New Game controls. SP18 places
-//! Play 100 pixels below Free Cell's location. Level Up is optional and retains
-//! the existing local OK control. No Solve, missing DRAW or missing HALO is win
-//! authority. Shared local caption contrast excludes level and panel artwork.
+//! Play 100 pixels below Free Cell's location. Level Up is optional: SP20 adds
+//! the same local OK caption 19 pixels higher, while the accepted click remains
+//! inside both buttons. No Solve, missing DRAW or missing HALO is win authority.
+//! Shared local caption contrast excludes level and panel artwork.
 
 use std::fmt;
 
@@ -67,6 +68,16 @@ pub fn expected_control_ready(
     if stage == TerminalStage::Play {
         return freecell_terminal::play_control_ready_at(frame, 100);
     }
+
+
+    if stage == TerminalStage::LevelUp {
+
+
+        if freecell_terminal::expected_control_ready(frame, SharedStage::LevelUp)? {
+            return Ok(true);
+        }
+        return freecell_terminal::level_up_control_ready_at(frame, -19);
+    }
     freecell_terminal::expected_control_ready(frame, shared_stage(stage))
 }
 
@@ -116,7 +127,8 @@ mod tests {
 
 
         for (number, expected) in [(15, TerminalStage::Score),
-            (17, TerminalStage::NewGame), (18, TerminalStage::Play)] {
+            (17, TerminalStage::NewGame), (18, TerminalStage::Play),
+            (20, TerminalStage::LevelUp)] {
             let frame = fixture(number);
 
 
@@ -126,7 +138,8 @@ mod tests {
                     "SP{number:02} / {stage}");
             }
             assert_eq!(classify_win_entry(&frame).unwrap(),
-                (expected != TerminalStage::Play).then_some(expected));
+                matches!(expected, TerminalStage::Score | TerminalStage::NewGame)
+                    .then_some(expected));
         }
         assert_eq!(classify_win_entry(&fixture(19)).unwrap(), None);
     }
@@ -153,5 +166,79 @@ mod tests {
         let frame = decode_png(include_bytes!("../tests/fixtures/freecell-FC10.png")).unwrap();
         assert!(expected_control_ready(&frame, TerminalStage::LevelUp).unwrap());
         assert_eq!(classify_win_entry(&frame).unwrap(), None);
+    }
+
+
+    /// SP20's original OK word is 19 pixels higher; the accepted click still
+    /// lands inside its button. Free Cell's default location does not change.
+    #[test]
+    fn shifted_spider_level_up_uses_only_its_local_ok_without_win_authority() {
+        let frame = fixture(20);
+        assert!(expected_control_ready(&frame, TerminalStage::LevelUp).unwrap());
+        assert!(!freecell_terminal::expected_control_ready(&frame, SharedStage::LevelUp).unwrap());
+        assert!(freecell_terminal::level_up_control_ready_at(&frame, -19).unwrap());
+        assert_eq!(classify_win_entry(&frame).unwrap(), None);
+        let click = click_point(TerminalStage::LevelUp);
+        let [red, green, blue] = crate::detector::pixel_rgb(&frame,
+            click.x as u32, click.y as u32).unwrap();
+        assert!(red >= 140 && green >= 95
+            && u16::from(red) >= u16::from(blue) + 20
+            && u16::from(green) >= u16::from(blue) + 12);
+
+
+        for offset in [i32::MIN, i32::MAX, -787, 300] {
+            assert_eq!(freecell_terminal::level_up_control_ready_at(&frame, offset),
+                Err(HaloDetectionError::BoundsOutsideFrame));
+        }
+    }
+
+
+    /// The shifted region still requires the printed OK and warm button body;
+    /// erased local controls and flat frames do not grant terminal authority.
+    #[test]
+    fn shifted_ok_rejects_missing_caption_body_and_flat_frames() {
+
+
+        for erase_caption in [true, false] {
+            let mut frame = fixture(20);
+            let bounds = if erase_caption {
+                crate::geometry::PixelRect::new(926, 767, 64, 52)
+            } else {
+                crate::geometry::PixelRect::new(848, 769, 223, 50)
+            };
+
+
+            for y in bounds.y..bounds.bottom() {
+
+
+                for x in bounds.x..bounds.right() {
+                    let index = y as usize * frame.stride + x as usize * 4;
+                    let [red, green, blue] = crate::detector::pixel_rgb(&frame, x, y).unwrap();
+
+
+                    if erase_caption {
+                        frame.pixels[index..index + 4].copy_from_slice(&[210, 180, 60, 255]);
+                    } else if red >= 140 && green >= 95
+                        && u16::from(red) >= u16::from(blue) + 20
+                        && u16::from(green) >= u16::from(blue) + 12 {
+                        frame.pixels[index..index + 4].copy_from_slice(&[120, 120, 120, 255]);
+                    }
+                }
+            }
+            assert!(!expected_control_ready(&frame, TerminalStage::LevelUp).unwrap());
+            assert_eq!(classify_win_entry(&frame).unwrap(), None);
+        }
+
+
+        for rgb in [[0, 0, 0], [210, 180, 60]] {
+            let mut frame = fixture(20);
+
+
+            for pixel in frame.pixels.as_chunks_mut::<4>().0 {
+                pixel.copy_from_slice(&[rgb[0], rgb[1], rgb[2], 255]);
+            }
+            assert!(!expected_control_ready(&frame, TerminalStage::LevelUp).unwrap());
+            assert_eq!(classify_win_entry(&frame).unwrap(), None);
+        }
     }
 }

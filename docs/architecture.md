@@ -2,8 +2,16 @@
 
 ## Current boundary
 
-Version 1.4.0 candidate 2 starts from pushed Spider candidate 1 at
-`5a0f730a4248d030ae98fb466a00b092b8083133`. Spider owns ten PLAY columns,
+Version 1.4.0 candidate 3 starts from pushed candidate 2 at
+`aae11dee2792967cb375b368270e46c8a95e8c95`. Free Cell's clipped-source paper
+presence check uses both visible card margins, avoiding central pip artwork.
+Closed source tops, connected exterior rails and the Y947 exclusive cutoff
+remain required; clicks and the fresh-HALO execution cycle do not change.
+Spider's expected LEVEL UP additionally recognises the supplied OK caption
+19 pixels above the original local region. This translates only that control's
+readiness area; level artwork and surrounding panels are not compared, and the
+existing click point remains inside both evidenced buttons.
+Spider owns ten PLAY columns,
 stock dealing and automatic-run observations without card-pixel effect proof.
 Its ordered one-board terminal flow reuses accepted local caption checks,
 retaining optional LEVEL UP and its independently measured Play location.

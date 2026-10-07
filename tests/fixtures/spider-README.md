@@ -1,6 +1,6 @@
 # Spider native evidence
 
-These twenty supplied originals are copied byte-for-byte, with dimensions,
+These twenty-one supplied originals are copied byte-for-byte, with dimensions,
 filenames, sizes and SHA-256 hashes in `spider-manifest.json`. Each is a
 1920x1080 RGBA PNG containing the guest title bar and Windows taskbar.
 
@@ -24,12 +24,20 @@ filenames, sizes and SHA-256 hashes in `spider-manifest.json`. Each is a
 | SP17 | Congratulations with New Game control. |
 | SP18 | Spider setup / Grandmaster four suits; Play is 100 px lower than Free Cell. |
 | SP19 | Fresh dealt Grandmaster board with Solver inactive. |
+| SP20 | Standard Level Up at Spider Grandmaster level 105; OK caption is 19 px above FC10, with the existing click still inside its button. |
 | SP-Lower-Toolbar | Easy board; PLAY 5 source continues behind toolbar icons. |
 | SP-no-DRAW-PILE | Easy board; DRAW absent, source PLAY 7; lower PLAY 10 box is a dashed destination guide. |
 
 SP16 was not captured because no LEVEL UP occurred in the recorded end sequence.
-Charlie confirms its optional OK control is the accepted local control. Tests
-reuse the accepted Free Cell OK fixture; no missing Spider frame is fabricated.
+SP20 now supplies the original Spider Level Up frame. Tests cover its local OK
+and the accepted Free Cell OK fixture used for the original Spider sequence.
+The controller checks either evidenced local OK location after a known win;
+level, rank, banner colour and medal artwork do not gate the click. SP20's
+existing click point remains inside the gold button, so input coordinates and
+timings do not change. No missing Spider frame is fabricated. SP20's supplied attachment is 1,732,335
+bytes; the session log reports a saved capture of 1,109,762 bytes. The fixture
+is byte-identical to the supplied attachment; identity to that logged saved
+PNG is unverified.
 Easy and Grandmaster captures establish the observed geometry and controls,
 not a contiguous same-difficulty game. The controller does not change difficulty.
 

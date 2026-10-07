@@ -1,7 +1,7 @@
 # Free Cell native Solver evidence
 
-These nineteen complete PNG files were copied byte-for-byte from Charlie's
-supplied 5–6 October 2026 attachments. He captured them through the application.
+These twenty-one complete PNG files were copied byte-for-byte from Charlie's
+supplied 5–7 October 2026 attachments. He captured them through the application.
 They are not crops, sparse fixtures, OCR products or resized images. Each frame is 1920×1080 RGBA, including the title bar, guest game toolbar
 and Windows taskbar. `freecell-manifest.json` records original filenames and
 SHA-256 digests.
@@ -29,6 +29,8 @@ SHA-256 digests.
 | FC17 | Four-card PLAY 1 source crosses toolbar; empty PLAY 5 guide | One visible clipped PLAY 1 run |
 | FC18 | Three-card PLAY 1 source closes at toolbar boundary; PLAY 8 guide | One complete PLAY 1 run ending at Y947 |
 | FC19 | Three-card PLAY 3 source closes at toolbar boundary; PLAY 1 guide | One complete PLAY 3 run ending at Y947 |
+| FC20 | Five-card PLAY 6 source crosses toolbar; eight of diamonds at bottom; PLAY 7 guide | One visible clipped PLAY 6 run |
+| FC21 | PLAY 7 eight of diamonds source crosses toolbar; SUIT 3 guide | Visible clipped PLAY 7 source |
 
 FC05's source is CELL 2, not a SUIT card. FC06 and FC07 show the same highlighted
 run; they do not form a before/after proof of transfer. The frames' source
@@ -45,7 +47,8 @@ the visible bottom highlighted card, above the game toolbar.
 The game toolbar begins at native row 947. Gameplay source scanning excludes
 that row and everything below it. FC14/FC16/FC17 now supply native single-card
 and run overlap cases. A clipped PLAY source needs a closed visible top,
-connected opposing rails reaching the cutoff and card paper around its click.
+connected opposing rails reaching the cutoff and visible paper at both card
+side margins beside its click.
 Its exclusive bottom is Y=947, documenting the visible cutoff rather than an
 inferred hidden card edge. Source scans do not read the overlaid toolbar. FC18/FC19 supply fully closed
 source bottoms whose last crossbar is row946, giving exclusive end947. Rounded
@@ -82,3 +85,17 @@ saved PNG. The fixture hash proves equality to the supplied attachment, not
 to that earlier PNG encoding. Pixels are inspected directly at native resolution;
 the reason for the encoding difference is unverified. Original-byte capture
 and saving code are unchanged.
+
+Candidate 3 of v1.4.0 adds FC20/FC21. Both clips have complete visible source
+tops and opposing rails through row946. The previous central 17×17 paper probe
+has only 139 of 289 paper pixels because of the eight of diamonds' central
+pips; both symmetric side-margin probes have 289 of 289. The clipped presence
+check now uses these margins at the same row907, keeping the existing 50%
+threshold, source geometry, click and toolbar cutoff. This establishes visible
+card presence only; it does not recognise the card or verify a prior move.
+Spider LEVEL UP remains unchanged pending its separate log and frame.
+
+FC20/FC21's supplied attachments contain 3,331,493/3,457,697 bytes; their logs
+record saved PNGs of 2,645,645/2,743,438 bytes. Fixture hashes prove equality to
+the supplied attachments, not those earlier encodings. The reason for these
+encoding differences is unknown; exact-byte capture and saving code are unchanged.

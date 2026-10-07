@@ -1,7 +1,7 @@
-# Development conventions for v1.4.0 candidate 2
+# Development conventions for v1.4.0 candidate 3
 
-The exact base is pushed Spider v1.4.0 candidate 1 at
-`5a0f730a4248d030ae98fb466a00b092b8083133`. Preserve the accepted earlier modes'
+The exact base is pushed v1.4.0 candidate 2 at
+`aae11dee2792967cb375b368270e46c8a95e8c95`. Preserve the accepted earlier modes'
 fresh-evidence cycles and independent policies. Pyramid's highlighted
 MOVE/Recycle uses D; TriPeaks retains delayed input-free no-HALO recovery.
 
@@ -19,8 +19,13 @@ and checks ordered waits, with and without LEVEL UP and with Solver inactive
 or already active. Score-skip and the default game-start wait are both 3000 ms;
 counting equal durations conflated the two purposes and produced a false failure
 in candidate 1. Candidate 2 changes the test, not the terminal state machine.
+Candidate 3 adds native SP20, whose OK caption sits 19 pixels higher than FC10.
+Spider accepts the original or this measured local button position after a
+confirmed win. Free Cell keeps its original location; no title, level or medal
+matching is introduced. Cover both OK positions in continuous restart tests,
+retaining the optional direct-New-Game branch and uncertain-input non-replay.
 
-Free Cell's approved runtime slice uses original FC01–FC19 native frames and
+Free Cell's approved runtime slice uses original FC01–FC21 native frames and
 its own source geometry and one-board terminal controls. It follows fresh
 CELL/PLAY source HALOs without card or effect-pixel matching. Missing HALOs
 receive input-free re-observation for automatic SUIT transfers before one
@@ -30,6 +35,12 @@ source scan, Draw, Recycle or Solve operation. FC14/FC16/FC17 support clipped
 PLAY sources using visible closed tops, rails and paper above the toolbar;
 no hidden bottom edge or card effect is inferred. FC18/FC19 also cover complete
 closed bottoms ending at Y947; the toolbar remains excluded.
+FC20/FC21 add a clipped run and single card whose central eight-of-diamonds pip
+leaves only 139/289 bright pixels in the old centre probe. Check paper in both
+visible card margins instead, preserving the outline conditions and click at
+Y907. These are same-frame card-presence checks; they neither compare ranks
+nor establish a previous action's effect. Regressions erase each margin and
+alter excluded toolbar pixels independently.
 The guarded installer pins this exact base, preserves unrelated work and the
 Beast's untracked root AGENTS.md, and verifies complete affected contents.
 
@@ -132,7 +143,7 @@ results from another host do not prove Beast installation or live guest input.
 The candidate delivery notes record the checks actually executed.
 
 On the Beast, confirm that the installed package, launched executable and startup
-log identify **v1.4.0, candidate 2**. Select Free Cell and verify read-only Capture
+log identify **v1.4.0, candidate 3**. Select Free Cell and verify read-only Capture
 Frame, original-byte Capture PNG/Save PNG, initial Solver activation, CELL/PLAY
 single clicks and automatic SUIT-transfer recapture. Adjust the independent
 750/1000 ms settings, separate 3000 ms game-start wait, 20-observation allowance
