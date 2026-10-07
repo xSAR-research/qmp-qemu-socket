@@ -1,6 +1,6 @@
 # Spider native evidence
 
-These twenty-one supplied originals are copied byte-for-byte, with dimensions,
+These twenty-three supplied originals are copied byte-for-byte, with dimensions,
 filenames, sizes and SHA-256 hashes in `spider-manifest.json`. Each is a
 1920x1080 RGBA PNG containing the guest title bar and Windows taskbar.
 
@@ -25,6 +25,8 @@ filenames, sizes and SHA-256 hashes in `spider-manifest.json`. Each is a
 | SP18 | Spider setup / Grandmaster four suits; Play is 100 px lower than Free Cell. |
 | SP19 | Fresh dealt Grandmaster board with Solver inactive. |
 | SP20 | Standard Level Up at Spider Grandmaster level 105; OK caption is 19 px above FC10, with the existing click still inside its button. |
+| SP21 | Queen before exposing the Jack; solid PLAY 6 source rows 145–349, click (1045,309); actual large cursor at (21,921). |
+| SP22 | Reconstructed Jack state; solid PLAY 6 source rows 123–327, with the cursor moved to left felt. |
 | SP-Lower-Toolbar | Easy board; PLAY 5 source continues behind toolbar icons. |
 | SP-no-DRAW-PILE | Easy board; DRAW absent, source PLAY 7; lower PLAY 10 box is a dashed destination guide. |
 
@@ -54,3 +56,30 @@ observations and new-game dealing. Pixel regressions cannot establish QMP
 input delivery, animation duration, all unseen layouts or live completion.
 The delivery review distinguishes the executed Python rehearsal from native
 Rust tests and Beast gameplay.
+
+SP21 and SP22 are byte-identical supplied originals; their original names,
+byte counts and SHA-256 provenance are recorded in `spider-manifest.json`.
+The exact failed runtime PNG was not captured. Charlie used Undo to reconstruct
+the same Queen-to-Jack board four times, so these frames establish the source
+geometry and a reproducible cursor diagnostic, not identity to the failed frame.
+
+The focused regression copies only measured neutral black/white pixels from
+SP21's cursor rectangle (20,920,34,47), with hotspot (21,921), into decoded SP22
+test memory at the preceding Queen click (1045,309). This lowers gold coverage
+on Jack bottom-bar rows 322–326 from 103 pixels to 91, 90, 89, 88 and 87,
+below the unchanged 95-pixel crossbar requirement. The surviving inner bars
+at rows 316/317 lie outside the bottom search window 318–333. The source rails,
+scene and Solver checks remain present. The original clear Jack frame still
+recognises PLAY 6 rows 123–327. No diagnostic PNG is generated or edited.
+The native Rust regressions were added but could not be executed in this
+environment; the measured decoded-pixel rehearsal is separate from a live
+Beast gameplay verification.
+
+The pointer park is (20,500), outside the existing scene and source probes.
+Its full 33x46 cursor bounds are clear felt on all nineteen current gameplay
+fixtures, including SP21/SP22. A second in-memory cursor-overlay regression
+requires parking to preserve scene recognition, Solver state and the original
+source prediction on every one of those frames. The centre of the existing
+left scene probe, (82,362), is unsuitable: the actual neutral cursor pixels
+cover 64 of its 576 pixels, lowering felt coverage to 88.89% below the unchanged
+90% gameplay requirement.

@@ -14,15 +14,16 @@ the real purpose. Each fixture keeps independent target and effect policies.
 The target is to build in Dijkstra / A* shortest path problem solving rather
 than using the **Solver**, this will benefit drone route planning experience.
 
-This is **v1.4.0, candidate 3**, based on pushed candidate 2 at
+This is **v1.4.0, candidate 4**, based on pushed candidate 2 at
 `aae11dee2792967cb375b368270e46c8a95e8c95`. `Cargo.toml` supplies the package
-version shown in the window title and Parameters. This update corrects Free
-Cell toolbar-clipped HALOs when a central card pip covers the paper probe;
-visible card margins supply that presence check. Source clicks and execution
-policies remain unchanged, including Spider's 1250 ms card/run settle default.
-Spider also accepts the supplied higher LEVEL UP OK position using only the
-local button and caption; its click point and restart sequence stay unchanged.
-See [Free Cell and Spider correction notes](docs/freecell-v1.4.0-candidate-3.md).
+version shown in the window title and Parameters. After a Spider source click,
+the pointer moves to clear felt before the existing settle and fresh capture,
+preventing it from obscuring the next source outline. Active Spider Solver
+receives bounded input-free observations, without a disabled refresh click.
+This cumulative update retains Free Cell's visible-margin clipped-source check
+and Spider's higher local LEVEL UP OK from candidate 3. Timings and earlier
+mode policies stay unchanged. See [Spider candidate 4 notes](docs/spider-v1.4.0-candidate-4.md)
+and [candidate 3 evidence](docs/freecell-v1.4.0-candidate-3.md).
 
 ## Build and source spacing
 
@@ -61,6 +62,13 @@ first; otherwise scan PLAY columns bottom-up and left-to-right. DRAW sends one
 one click in its visible bottom-card area. Connected overlapping card outlines
 are one source; dark dashed destination guides are never clicked. No ranks,
 recipient cards, previous positions or changed-pixel move effects are compared.
+After the source click's button release is acknowledged, Spider sends one
+movement-only command to (20, 500), on measured clear felt outside scene/source
+probes, then uses the configured card/run settle and captures anew. The park sends no
+button/key event, adds no wait and is not used after DRAW. It is auxiliary
+movement: one QMP command with two absolute-axis events, counted separately;
+the card/run still consumes one logical action slot. Initial and read-only
+captures, including manual PNG capture/recapture/save, send no input.
 
 Source detection and clicks stay above **Y=947**, the measured toolbar cutoff.
 A complete source ending at that boundary or a source continuing behind the
@@ -82,9 +90,11 @@ logical gameplay action. Timing and budget settings are frozen for each run.
 
 Automatic deals and run packing can leave a frame without a HALO. Bounded
 input-free observations allow those movements to finish; independent win entry
-is checked before supported gameplay can receive one Solver activation or
-refresh per unresolved context. Unknown scenes and uncertain delivery stop
-with the latest frame and log. Missing HALO alone never authorises DRAW.
+is checked on fresh frames. The active Solver button is disabled, so Spider
+never refreshes it. A supported inactive-Solver board receives one game-start
+wait and fresh input-free capture before one activation. Unknown scenes and
+uncertain delivery stop with the latest frame and log. Missing HALO alone
+never authorises DRAW.
 
 **One Spider board is one game.** Continuous mode follows score skip → optional
 Level Up OK → New Game → Spider Play → new-game deal wait → Solver if needed →
@@ -100,6 +110,9 @@ clipping, automatic packing and the observed terminal controls. SP16 was not
 observed; the optional OK control uses the accepted local check. Charlie reports
 successful candidate 1 gameplay. Candidate 2 corrects a test that conflated
 equal-duration score and game-start waits; the runtime sequence is unchanged.
+Candidate 3 retains both evidenced local OK positions. Candidate 4 follows the
+confirmed cursor-overlap report; its supplied-frame simulation reproduces the
+miss, but the exact rejected runtime PNG is unavailable.
 Native Rust validation remains a Beast check for this delivery.
 
 

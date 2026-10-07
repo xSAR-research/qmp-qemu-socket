@@ -2,7 +2,7 @@
 
 ## Current boundary
 
-Version 1.4.0 candidate 3 starts from pushed candidate 2 at
+Version 1.4.0 candidate 4 starts from pushed candidate 2 at
 `aae11dee2792967cb375b368270e46c8a95e8c95`. Free Cell's clipped-source paper
 presence check uses both visible card margins, avoiding central pip artwork.
 Closed source tops, connected exterior rails and the Y947 exclusive cutoff
@@ -11,6 +11,13 @@ Spider's expected LEVEL UP additionally recognises the supplied OK caption
 19 pixels above the original local region. This translates only that control's
 readiness area; level artwork and surrounding panels are not compared, and the
 existing click point remains inside both evidenced buttons.
+Spider source clicks now finish their acknowledged button release, move the
+pointer to the measured clear-felt point (20, 500), then use the same
+editable settle and fresh capture. DRAW and read-only captures do not park.
+The shared transport helper sends only checked absolute movement; Spider owns
+the decision to use it. Active Solver is disabled and receives bounded
+input-free observations rather than a refresh click. Inactive Solver retains
+one start wait, fresh capture and one activation.
 Spider owns ten PLAY columns,
 stock dealing and automatic-run observations without card-pixel effect proof.
 Its ordered one-board terminal flow reuses accepted local caption checks,
@@ -44,13 +51,13 @@ original decisions, including superseded card-effect policies.
 | `tracker.rs` | profile-driven HALO and row observation |
 | `stepper.rs` | one typed action plan and result validation |
 | `geometry.rs` | guest-pixel and QMP coordinate conversion |
-| `qmp.rs` | allow-listed QMP client and non-idempotent input delivery |
+| `qmp.rs` | allow-listed QMP client, checked movement-only helper and non-idempotent input delivery |
 | `worker.rs` | worker commands/events, capture, guarded execution, timing and cancellation |
 | `worker/post_game.rs` | shared score, Level Up, New Game, Play and Solver progression |
 | `worker/pyramid_execution.rs` | Pyramid effect, fresh-pair continuation and redeal checks |
 | `worker/klondike_execution.rs` | Klondike execution, bounded recovery, independent completion and continuous terminal progression |
 | `worker/freecell_execution.rs` | Free Cell fresh-source actions, automatic-transfer observations and deterministic one-board restart |
-| `worker/spider_execution.rs` | fresh Spider card/D actions, independent deal timing and ordered one-board restart |
+| `worker/spider_execution.rs` | fresh Spider card/D actions, post-click pointer parking, independent deal timing and ordered one-board restart |
 | `worker/tests.rs` | worker regression cases, including transition and cancellation guards |
 
 ---
@@ -87,6 +94,9 @@ capture. Card-rank, source/recipient matching and changed-pixel proof do not gat
 their play. Acknowledged delivery is logged with its effect explicitly
 unproven; independent positive evidence is still required for game completion.
 Every active input checks STOP and freshly probes VM/current absolute tablet.
+Spider source clicks additionally park the pointer after acknowledged release
+and before the same settle; this auxiliary movement grants no new target or
+completion authority and does not consume another logical action slot.
 
 For N ordinary actions this yields one initial capture plus N result captures.
 Bounded recovery and board/game transitions may require additional sparse
@@ -108,6 +118,11 @@ Each enabled action has:
 - a mode-owned result policy; effect regions and thresholds apply only where
   that mode uses effect verification;
 - a repeat-target policy.
+
+Spider attaches one movement-only park to acknowledged source clicks. Its one
+QMP command and two absolute-axis events are counted separately from the
+source `InputOperation`. No park is attached to DRAW, Solver, terminal or
+initial/read-only capture paths.
 
 A QMP error after delivery begins makes the result uncertain. The operation is
 not automatically retried.
@@ -550,6 +565,13 @@ One fresh supported scene and canonical solid source authorise one input.
 DRAW has priority and sends D; ten PLAY columns are scanned bottom-up, with
 connected source outlines grouped as a single card/run action. COLLAPSED SUITS
 are display-only and automatic packing receives input-free observations.
+After a source click's release acknowledgement, the pointer parks at (20, 500),
+where the full supplied cursor fits on clear felt outside scene/source probes.
+The checked shared helper sends one movement-only command with two
+absolute-axis events and no button or key event. The existing editable card/run
+settle follows, then fresh capture;
+no additional delay is introduced. DRAW retains its independent settle without
+parking. Initial, read-only and manual PNG captures remain input-free.
 Source scans/clicks end before Y947, including visible clipped-source authority.
 Disappearing stock grants no win authority and does not reserve that former
 area against tableau growth. No source/destination card identity, old-position
@@ -558,9 +580,10 @@ comparison or effect-pixel threshold gates the next recommendation.
 The worker snapshots four independent editable timings and a finite/continuous
 budget. Acknowledged D and card/run actions consume one slot each. STOP and
 fresh QMP/tablet probes apply before all input. Missing targets receive bounded
-observations; independent terminal entry precedes Solver recovery. Each
-unresolved supported context has at most one Solver input, with no replay on
-uncertain delivery.
+input-free observations and independent terminal checks. Active Solver is
+disabled and never receives a refresh click. A supported inactive board gets
+one editable start wait and fresh capture before one activation per unresolved
+context. Uncertain source, park, Solver or terminal delivery is not replayed.
 
 A positive score/skip or completed New Game caption establishes a one-board
 win. Continuous mode uses ordered score skip, optional OK, New Game and Spider
@@ -568,4 +591,4 @@ Play, each once from a fresh ready frame. OK and New Game are alternative
 post-score branches; both-ready ambiguity stops. Only local control evidence
 is used after win entry. Spider Play uses the measured +100 px position; fresh
 board capture and the editable deal wait precede needed Solver activation.
-See [Spider candidate notes](spider-v1.4.0-candidate-2.md).
+See [Spider candidate 4 notes](spider-v1.4.0-candidate-4.md).

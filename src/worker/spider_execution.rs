@@ -1,15 +1,16 @@
 //! Solver-led Spider execution and its ordered one-board restart sequence.
 //!
 //! One fresh source HALO authorises one click or DRAW key press, followed by editable settling and
-//! a new frame. DRAW has a separate editable deal interval. Card identity, changed pixels and previous effects are not input
+//! a new frame. An acknowledged, released source click parks the pointer on felt before settling.
+//! DRAW has a separate editable deal interval. Card identity, changed pixels and previous effects are not input
 //! conditions. Automatic transfers receive bounded input-free observations.
 //! A missing HALO does not establish a win: positive terminal caption/control
 //! evidence does. Only continuous runs advance the expected terminal controls.
 //! After score skip, Level Up is optional: inspect local OK and New Game
 //! readiness on each fresh frame and accept exactly one ready control.
 //! An inactive Solver board receives an editable start delay and fresh capture
-//! before activation. Active no-HALO gameplay receives one delayed observation
-//! before one Solver refresh. Both share one input reserve per unresolved context.
+//! before activation once per unresolved context. Active no-HALO gameplay receives
+//! bounded input-free observations, with no Solver refresh or allowance reset.
 
 use std::{path::Path, sync::atomic::{AtomicBool, Ordering}, time::{Duration, Instant}};
 
@@ -23,7 +24,7 @@ use crate::{
     capture::CapturedFrame,
     spider,
     spider_terminal::{self, TerminalStage},
-    game::{ActionTarget, GameMode},
+    game::{ActionTarget, GameMode, InputOperation},
     parameters::{
         SPIDER_MAX_MULTI_STEP_ACTIONS, LEVEL_UP_APPEAR_DELAY, NOMINAL_FRAME_HEIGHT,
         NOMINAL_FRAME_WIDTH, POST_GAME_MOUSE_HOLD, POST_GAME_STAGE_DELAY,
@@ -58,11 +59,15 @@ trait SpiderIo {
     fn probe(&mut self) -> Result<(), String>;
 
 
-    /// Deliver exactly one source click or DRAW key press without replay on uncertainty.
+    /// Acknowledge one source click or DRAW key through release without replay on uncertainty.
     fn input(&mut self, plan: StepPlan) -> Result<(), String>;
 
 
-    /// Activate or refresh Solver once from fresh positively recognised gameplay.
+    /// Move the released source-click pointer to validated felt without clicking.
+    fn park_pointer(&mut self) -> Result<(), String>;
+
+
+    /// Activate inactive Solver once from fresh positively recognised gameplay.
     fn solver(&mut self) -> Result<(), String>;
 
 
@@ -118,6 +123,14 @@ impl SpiderIo for QmpSpiderIo<'_> {
 
     fn input(&mut self, plan: StepPlan) -> Result<(), String> {
         execute_planned_input(self.qmp, plan, self.cancel_requested)
+    }
+
+
+    fn park_pointer(&mut self) -> Result<(), String> {
+        require_running(self.cancel_requested)?;
+        self.qmp.move_pointer(
+            spider::POINTER_PARK, NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT,
+        ).map_err(|error| format!("Spider pointer parking delivery is uncertain: {error}; no retry permitted"))
     }
 
 
@@ -218,7 +231,7 @@ pub(super) fn run_spider_steps(
             }
             send_state(event_tx, WorkerState::Uncertain);
             send_status(event_tx, "Spider stopped".to_owned());
-            send_log(event_tx, format!("Spider stopped: {error}; guest input attempted={input_attempted}. No uncertain source, Solver or terminal input was replayed; latest available frame retained."));
+            send_log(event_tx, format!("Spider stopped: {error}; guest input attempted={input_attempted}. No uncertain source, pointer movement, Solver or terminal input was replayed; latest available frame retained."));
         }
     }
 }
@@ -236,11 +249,12 @@ fn drive_run(
     validate_operation_limit(settings.operation_limit())?;
     let delays = settings.animation_delays();
     send_log(event_tx, format!(
-        "Spider fresh-HALO execution: game-start delay={} ms, card/automatic-pack settle={} ms, DRAW deal settle={} ms, no-HALO observation={} ms, delayed allowance={}. Initial inactive Solver receives one start delay and fresh capture before activation. After Play, the same game-start delay runs once before observing the new board. Active no-HALO gameplay receives one delayed input-free observation before one refresh; activation and refresh share one reserve per unresolved context. One source click or DRAW key press consumes one action; Solver and terminal clicks do not. DRAW uses qcode D and has its own deal wait. No card identity, pixel difference, COLLAPSED SUITS input, Recycle or Solve is used. Continuous 0 may restart one-board games through Score, optional Level Up OK, New Game and Play. After score skip, exactly one ready local OK or New Game control selects the next stage. When neither control is ready, bounded captures follow; when both are ready, execution stops without input.",
+        "Spider fresh-HALO execution: game-start delay={} ms, card/automatic-pack settle={} ms, DRAW deal settle={} ms, no-HALO observation={} ms, delayed allowance={}. Initial inactive Solver receives one start delay and fresh capture before one activation per unresolved context. After Play, the same game-start delay runs once before observing the new board. Active no-HALO gameplay receives bounded input-free observations with no Solver refresh; activation does not reset the delayed allowance. One source click or DRAW key press consumes one action; Solver and terminal clicks do not. Each acknowledged released source click parks the pointer on validated felt before settling: one separate QMP movement command with two absolute events, no click and no extra action. DRAW uses qcode D, has its own deal wait and does not park. No card identity, pixel difference, COLLAPSED SUITS input, Recycle or Solve is used. Continuous 0 may restart one-board games through Score, optional Level Up OK, New Game and Play. After score skip, exactly one ready local OK or New Game control selects the next stage. When neither control is ready, bounded captures follow; when both are ready, execution stops without input.",
         delays.spider_game_start.as_millis(), delays.spider_settle.as_millis(), delays.spider_draw_settle.as_millis(), delays.spider_reobserve.as_millis(), settings.spider_observation_limit(),
     ));
     capture_latest(io, latest, event_tx, cancel_requested)?;
     let mut actions = 0usize;
+    let mut pointer_parks = 0usize;
 
 
     loop {
@@ -270,7 +284,17 @@ fn drive_run(
         send_status(event_tx, format_action_status(prediction));
         *input_attempted = true;
         io.input(plan).map_err(|error| format!("Spider source input outcome uncertain: {error}; no replay permitted"))?;
+        // The released source consumes its slot even if parking or later observation fails.
         actions = next_actions;
+        send_log(event_tx, format!("Spider source action {actions} acknowledged through release: input_commands={}, input_events={}; source action budget consumed; pointer movement counted separately.", plan.input().qmp_command_count(), plan.input().qmp_event_count()));
+
+
+        if matches!(plan.input().operation(), InputOperation::Click(_)) {
+            guard_input(io, cancel_requested)?;
+            io.park_pointer().map_err(|error| format!("Spider pointer parking outcome uncertain: {error}; no source or park replay permitted"))?;
+            pointer_parks += 1;
+            send_log(event_tx, format!("Spider pointer park {pointer_parks} acknowledged after released source action {actions}: {:?}; separate input_commands=1, input_events=2 (absolute x/y), no action-budget slot consumed.", spider::POINTER_PARK));
+        }
         io.wait(plan.input().animation_settle_delay(delays))?;
         capture_latest(io, latest, event_tx, cancel_requested)?;
         let after = current(latest)?.prediction;
@@ -297,10 +321,9 @@ fn await_context(
     input_attempted: &mut bool,
     game_start_settled: bool,
 ) -> Result<Option<TerminalStage>, String> {
-    let mut solver_reserved = false;
+    let mut activation_reserved = false;
     let mut delayed = 0usize;
     let mut start_observed = game_start_settled;
-    let mut active_reobserved = false;
 
 
     loop {
@@ -334,10 +357,10 @@ fn await_context(
             observed_solver = if solver_active { "active" } else { "inactive" };
 
 
-            if !solver_reserved {
+            if !solver_active && !activation_reserved {
 
 
-                if !solver_active && !start_observed {
+                if !start_observed {
                     start_observed = true;
                     send_status(event_tx, "Settling Spider board before Solver activation".to_owned());
                     send_log(event_tx, format!("Spider Solver observed inactive with no HALO: waiting game-start delay={} ms once, then fresh input-free capture before deciding activation; guest input sent=0.", settings.animation_delays().spider_game_start.as_millis()));
@@ -347,40 +370,25 @@ fn await_context(
                 }
 
 
-                if solver_active && !active_reobserved {
-
-
-                    if delayed >= settings.spider_observation_limit() {
-                        return Err(format!("Spider active no-HALO observation allowance exhausted after {delayed} delayed captures before Solver refresh; no further input authorised"));
-                    }
-                    active_reobserved = true;
-                    delayed += 1;
-                    send_log(event_tx, format!("Spider Solver observed active with no HALO: input-free re-observation {delayed}/{} after {} ms allows automatic transfers before considering one refresh.", settings.spider_observation_limit(), settings.animation_delays().spider_reobserve.as_millis()));
-                    io.wait(settings.animation_delays().spider_reobserve)?;
-                    capture_latest(io, latest, event_tx, cancel_requested)?;
-                    continue;
-                }
                 guard_input(io, cancel_requested)?;
-                solver_reserved = true;
+                activation_reserved = true;
                 *input_attempted = true;
                 send_state(event_tx, WorkerState::Acting);
-                let operation = if solver_active { "refresh" } else { "activation" };
-                send_status(event_tx, format!("Spider Solver {operation} once"));
-                send_log(event_tx, format!("Spider Solver {operation}: fresh supported no-HALO board, observed Solver={observed_solver}; one click consumes this unresolved context's shared activation/refresh reserve."));
+                send_status(event_tx, "Spider Solver activation once".to_owned());
+                send_log(event_tx, format!("Spider Solver activation: fresh supported no-HALO board, observed Solver={observed_solver}; one click consumes this unresolved context's activation reserve; delayed observations already used={delayed}, allowance is not reset."));
                 io.solver()?;
                 io.wait(settings.animation_delays().spider_settle)?;
                 capture_latest(io, latest, event_tx, cancel_requested)?;
-                delayed = 0;
                 continue;
             }
         }
 
 
         if delayed >= settings.spider_observation_limit() {
-            return Err(format!("Spider source/win observation allowance exhausted after {delayed} delayed captures; scene={}, observed Solver={observed_solver}, activation/refresh reserved={solver_reserved}; no further input authorised", observation.gameplay_scene));
+            return Err(format!("Spider source/win observation allowance exhausted after {delayed} delayed captures; scene={}, observed Solver={observed_solver}, activation reserved={activation_reserved}; no further input authorised", observation.gameplay_scene));
         }
         delayed += 1;
-        send_log(event_tx, format!("Spider no-HALO observation {delayed}/{}: scene={}, observed Solver={observed_solver}, activation/refresh reserved={solver_reserved}; waiting {} ms, then input-free recapture.", settings.spider_observation_limit(), observation.gameplay_scene, settings.animation_delays().spider_reobserve.as_millis()));
+        send_log(event_tx, format!("Spider no-HALO observation {delayed}/{}: scene={}, observed Solver={observed_solver}, activation reserved={activation_reserved}; waiting {} ms, then input-free recapture; active Solver is not refreshed.", settings.spider_observation_limit(), observation.gameplay_scene, settings.animation_delays().spider_reobserve.as_millis()));
         io.wait(settings.animation_delays().spider_reobserve)?;
         capture_latest(io, latest, event_tx, cancel_requested)?;
     }
@@ -590,7 +598,7 @@ fn current(latest: &Option<FrameObservation>) -> Result<&FrameObservation, Strin
 }
 
 
-/// Probe and recheck STOP immediately before each authorised input class.
+/// Probe and recheck STOP immediately before authorised clicks, keys or pointer movement.
 fn guard_input(io: &mut impl SpiderIo, cancel_requested: &AtomicBool) -> Result<(), String> {
     require_running(cancel_requested)?;
     io.probe()?;
@@ -616,7 +624,7 @@ mod tests {
     use std::collections::VecDeque;
 
     use super::*;
-    use crate::{capture::{PixelFormat, decode_png}, game::InputOperation,
+    use crate::{capture::{PixelFormat, decode_png},
         parameters::AnimationSettleDelays};
 
 
@@ -627,16 +635,42 @@ mod tests {
         None,
         /// Source input may already have reached the guest.
         Source,
+        /// Pointer movement may already have reached the guest.
+        Park,
         /// Solver input may already have reached the guest.
         Solver,
         /// Terminal input may already have reached the guest.
         Terminal,
         /// Cancellation at the final pre-input probe boundary.
         StopAtProbe,
+        /// Cancellation after a source click acknowledges its release.
+        StopAfterSource,
+        /// Cancellation at the second probe, immediately before parking.
+        StopAtParkProbe,
         /// Cancellation after fresh pixels have been acquired.
         StopAfterCapture,
         /// Cancellation during a requested delay.
         StopOnWait,
+    }
+
+
+    /// Call ordering proves that movement precedes settling and recapture.
+    #[derive(Debug, PartialEq, Eq)]
+    enum IoCall {
+        /// Acquire one fresh native frame.
+        Capture,
+        /// Check the current VM and absolute pointer before input.
+        Probe,
+        /// Deliver one canonical gameplay click or DRAW key.
+        Source(InputOperation),
+        /// Move the released pointer without a button or key event.
+        Park,
+        /// Activate an observed inactive Solver control once.
+        Solver,
+        /// Click one ready expected terminal control.
+        Terminal(TerminalStage),
+        /// Observe the selected settle interval without input.
+        Wait(Duration),
     }
 
 
@@ -646,6 +680,10 @@ mod tests {
         frames: VecDeque<CapturedFrame>,
         /// Attempted canonical source inputs, including uncertain delivery.
         sources: Vec<StepPlan>,
+        /// Attempted movement-only pointer parks, separate from source inputs.
+        pointer_parks: usize,
+        /// Delivery, delay and capture order at the adapter boundary.
+        calls: Vec<IoCall>,
         /// Attempted terminal controls in order.
         controls: Vec<TerminalStage>,
         /// Attempted Solver inputs, independent from the action budget.
@@ -667,6 +705,7 @@ mod tests {
 
 
         fn capture(&mut self) -> Result<CapturedFrame, String> {
+            self.calls.push(IoCall::Capture);
             self.captures += 1;
             let frame = self.frames.pop_front().ok_or_else(|| "fixture sequence exhausted".to_owned())?;
 
@@ -679,9 +718,12 @@ mod tests {
 
 
         fn probe(&mut self) -> Result<(), String> {
+            self.calls.push(IoCall::Probe);
 
 
-            if self.fault == Fault::StopAtProbe {
+            if self.fault == Fault::StopAtProbe
+                || (self.fault == Fault::StopAtParkProbe && !self.sources.is_empty())
+            {
                 self.cancel.store(true, Ordering::Release);
             }
             Ok(())
@@ -689,14 +731,28 @@ mod tests {
 
 
         fn input(&mut self, plan: StepPlan) -> Result<(), String> {
+            self.calls.push(IoCall::Source(plan.input().operation()));
             self.sources.push(plan);
 
 
+            if self.fault == Fault::StopAfterSource {
+                self.cancel.store(true, Ordering::Release);
+            }
             if self.fault == Fault::Source { Err("injected uncertain source".to_owned()) } else { Ok(()) }
         }
 
 
+        fn park_pointer(&mut self) -> Result<(), String> {
+            self.calls.push(IoCall::Park);
+            self.pointer_parks += 1;
+
+
+            if self.fault == Fault::Park { Err("injected uncertain movement".to_owned()) } else { Ok(()) }
+        }
+
+
         fn solver(&mut self) -> Result<(), String> {
+            self.calls.push(IoCall::Solver);
             self.solver_clicks += 1;
             self.solver_capture_counts.push(self.captures);
 
@@ -706,6 +762,7 @@ mod tests {
 
 
         fn terminal(&mut self, stage: TerminalStage) -> Result<(), String> {
+            self.calls.push(IoCall::Terminal(stage));
             self.controls.push(stage);
 
 
@@ -714,6 +771,7 @@ mod tests {
 
 
         fn wait(&mut self, duration: Duration) -> Result<(), String> {
+            self.calls.push(IoCall::Wait(duration));
             self.waits.push(duration);
 
 
@@ -768,7 +826,8 @@ mod tests {
 
     /// Exhaustion deliberately reveals unexpected captures or repeated inputs.
     fn fake(frames: Vec<CapturedFrame>, cancel: &AtomicBool) -> FakeIo<'_> {
-        FakeIo { frames: frames.into(), sources: Vec::new(), controls: Vec::new(),
+        FakeIo { frames: frames.into(), sources: Vec::new(), pointer_parks: 0,
+            calls: Vec::new(), controls: Vec::new(),
             solver_clicks: 0, solver_capture_counts: Vec::new(), captures: 0,
             waits: Vec::new(), fault: Fault::None, cancel }
     }
@@ -792,14 +851,25 @@ mod tests {
         settings: StepRunSettings,
         latest: &mut Option<FrameObservation>,
     ) -> Result<RunOutcome, String> {
-        let (events, _receiver) = std::sync::mpsc::channel();
+        run_with_events(io, settings, latest).0
+    }
+
+
+    /// Inspect emitted source counts and separate park logging when relevant.
+    fn run_with_events(
+        io: &mut FakeIo<'_>,
+        settings: StepRunSettings,
+        latest: &mut Option<FrameObservation>,
+    ) -> (Result<RunOutcome, String>, Vec<WorkerEvent>) {
+        let (events, receiver) = std::sync::mpsc::channel();
         let events = WorkerEventSink {
             events, latest_frame: super::super::LatestFrameSlot::default(),
             capture_context: std::sync::Mutex::new(None),
         };
         let mut attempted = false;
         let cancel = io.cancel;
-        drive_run(io, settings, &events, cancel, latest, &mut attempted)
+        let result = drive_run(io, settings, &events, cancel, latest, &mut attempted);
+        (result, receiver.try_iter().collect())
     }
 
 
@@ -815,12 +885,83 @@ mod tests {
             assert_eq!(run(&mut io, 1, &mut None), Ok(RunOutcome::Completed(1)), "SP{number:02}");
             assert_eq!(io.sources.len(), 1);
             assert!(matches!(io.sources[0].input().operation(), InputOperation::Click { .. }));
+            assert_eq!(io.pointer_parks, 1);
             assert_eq!(io.solver_clicks, 0);
         }
         let cancel = AtomicBool::new(false);
         let mut io = fake(vec![fixture(3), fixture(3), fixture(3)], &cancel);
         assert_eq!(run(&mut io, 2, &mut None), Ok(RunOutcome::Completed(2)));
         assert_eq!(io.sources[0].before(), io.sources[1].before());
+        assert_eq!(io.pointer_parks, 2);
+    }
+
+
+    /// Source command accounting excludes the separately logged movement; the
+    /// park is guarded after acknowledged release and precedes settle/capture.
+    #[test]
+    fn acknowledged_source_click_parks_before_settle_and_fresh_capture() {
+        let cancel = AtomicBool::new(false);
+        let mut io = fake(vec![fixture(3), fixture(4)], &cancel);
+        let settings = StepRunSettings::new(AnimationSettleDelays::default(), 1);
+        let (result, events) = run_with_events(&mut io, settings, &mut None);
+        assert_eq!(result, Ok(RunOutcome::Completed(1)));
+        assert_eq!(io.calls, [IoCall::Capture, IoCall::Probe,
+            IoCall::Source(io.sources[0].input().operation()), IoCall::Probe,
+            IoCall::Park, IoCall::Wait(settings.animation_delays().spider_settle), IoCall::Capture]);
+        let source_counts: Vec<_> = events.iter().filter_map(|event| match event {
+            WorkerEvent::ActionCompleted { operation_index, input_commands, input_events, .. } =>
+                Some((*operation_index, *input_commands, *input_events)),
+            _ => None,
+        }).collect();
+        assert_eq!(source_counts, [(1, 3, 4)]);
+        assert!(events.iter().any(|event| matches!(event, WorkerEvent::Log(message)
+            if message.contains("pointer park 1 acknowledged")
+                && message.contains("input_commands=1, input_events=2"))));
+    }
+
+
+    /// DRAW acknowledges only its two key commands, then the deal interval and
+    /// recapture; it never probes for or delivers a pointer park.
+    #[test]
+    fn draw_never_parks_pointer_or_consumes_an_extra_action() {
+        let cancel = AtomicBool::new(false);
+        let mut io = fake(vec![fixture(8), fixture(9)], &cancel);
+        let settings = StepRunSettings::new(AnimationSettleDelays::default(), 1);
+        let (result, events) = run_with_events(&mut io, settings, &mut None);
+        assert_eq!(result, Ok(RunOutcome::Completed(1)));
+        assert_eq!(io.pointer_parks, 0);
+        assert_eq!(io.calls, [IoCall::Capture, IoCall::Probe,
+            IoCall::Source(InputOperation::PressDrawKey),
+            IoCall::Wait(settings.animation_delays().spider_draw_settle), IoCall::Capture]);
+        assert!(events.iter().any(|event| matches!(event, WorkerEvent::ActionCompleted {
+            operation_index: 1, input_commands: 2, input_events: 2, ..
+        })));
+    }
+
+
+    /// Uncertain movement and STOP after release or at its probe stop without
+    /// repeating the acknowledged source, settling or recapturing.
+    #[test]
+    fn parking_failure_and_stop_after_source_do_not_replay_source() {
+
+
+        for fault in [Fault::Park, Fault::StopAfterSource, Fault::StopAtParkProbe] {
+            let cancel = AtomicBool::new(false);
+            let mut io = fake(vec![fixture(3)], &cancel);
+            io.fault = fault;
+            let settings = StepRunSettings::new(AnimationSettleDelays::default(), 1);
+            let (result, events) = run_with_events(&mut io, settings, &mut None);
+            let error = result.unwrap_err();
+            assert!(error.contains(if fault == Fault::Park { "uncertain" } else { "STOP" }));
+            assert_eq!(io.sources.len(), 1);
+            assert_eq!(io.pointer_parks, usize::from(fault == Fault::Park));
+            assert_eq!(io.captures, 1);
+            assert!(io.waits.is_empty() && io.controls.is_empty());
+            assert_eq!(io.solver_clicks, 0);
+            assert!(!events.iter().any(|event| matches!(event, WorkerEvent::ActionCompleted { .. })));
+            assert!(events.iter().any(|event| matches!(event, WorkerEvent::Log(message)
+                if message.contains("source action 1 acknowledged through release"))));
+        }
     }
 
 
@@ -839,6 +980,7 @@ mod tests {
         assert_eq!(io.waits, [Duration::from_millis(2_250), Duration::from_millis(650)]);
         assert_eq!(io.captures, 3);
         assert_eq!(io.solver_clicks, 0);
+        assert_eq!(io.pointer_parks, 1);
     }
 
 
@@ -867,20 +1009,58 @@ mod tests {
     }
 
 
-    /// Automatic movement is observed first; one refresh cannot become a loop
-    /// of guest input when no fresh source recommendation appears.
+    /// Active no-HALO boards receive only bounded captures. Each can recognise
+    /// a source or independent win; continued absence sends no Solver input.
     #[test]
-    fn active_no_halo_recaptures_then_refreshes_once_per_context() {
+    fn active_no_halo_recaptures_without_solver_input_and_checks_completion() {
         let cancel = AtomicBool::new(false);
-        let mut io = fake(vec![active_without_halo(), fixture(3), fixture(4)], &cancel);
+        let mut io = fake(vec![active_without_halo(), active_without_halo(), fixture(3), fixture(4)], &cancel);
         assert_eq!(run(&mut io, 1, &mut None), Ok(RunOutcome::Completed(1)));
         assert_eq!(io.solver_clicks, 0);
         assert_eq!(io.waits[0], AnimationSettleDelays::default().spider_reobserve);
-        let mut io = fake(vec![active_without_halo(); 5], &cancel);
-        assert!(run(&mut io, 0, &mut None).unwrap_err().contains("allowance exhausted"));
-        assert_eq!(io.solver_clicks, 1);
-        assert_eq!(io.solver_capture_counts, [2]);
+        let mut io = fake(vec![active_without_halo(), active_without_halo(), fixture(15)], &cancel);
+        assert_eq!(run(&mut io, 1, &mut None), Ok(RunOutcome::GameWon(0)));
         assert!(io.sources.is_empty() && io.controls.is_empty());
+        assert_eq!(io.solver_clicks, 0);
+        assert_eq!(io.pointer_parks, 0);
+        let mut io = fake(vec![active_without_halo(); 3], &cancel);
+        assert!(run(&mut io, 0, &mut None).unwrap_err().contains("allowance exhausted"));
+        assert_eq!(io.solver_clicks, 0);
+        assert_eq!(io.captures, 3);
+        assert_eq!(io.waits, [AnimationSettleDelays::default().spider_reobserve; 2]);
+        assert_eq!(io.pointer_parks, 0);
+        assert!(io.sources.is_empty() && io.controls.is_empty());
+    }
+
+
+    /// A still inactive board cannot reuse its activation; delayed captures
+    /// already consumed before activation remain charged to this context.
+    #[test]
+    fn inactive_solver_activates_once_without_resetting_observation_allowance() {
+
+
+        for delayed_before_activation in [false, true] {
+            let cancel = AtomicBool::new(false);
+            let frames = if delayed_before_activation {
+                vec![active_without_halo(), fixture(1), fixture(1), active_without_halo(), active_without_halo()]
+            } else {
+                vec![fixture(1); 5]
+            };
+            let mut io = fake(frames, &cancel);
+            assert!(run(&mut io, 0, &mut None).unwrap_err().contains("allowance exhausted"));
+            assert_eq!(io.solver_clicks, 1);
+            assert_eq!(io.solver_capture_counts, [if delayed_before_activation { 3 } else { 2 }]);
+            assert_eq!(io.captures, 5);
+            let delays = AnimationSettleDelays::default();
+            let expected_waits = if delayed_before_activation {
+                vec![delays.spider_reobserve, delays.spider_game_start, delays.spider_settle, delays.spider_reobserve]
+            } else {
+                vec![delays.spider_game_start, delays.spider_settle, delays.spider_reobserve, delays.spider_reobserve]
+            };
+            assert_eq!(io.waits, expected_waits);
+            assert!(io.sources.is_empty() && io.controls.is_empty());
+            assert_eq!(io.pointer_parks, 0);
+        }
     }
 
 
@@ -924,7 +1104,7 @@ mod tests {
                 frames.extend([fixture(17), fixture(18)]);
 
 
-                if !solver_already_active { frames.push(fixture(19)); }
+                frames.push(if solver_already_active { active_without_halo() } else { fixture(19) });
                 frames.push(fixture(2));
                 let mut io = fake(frames, &cancel);
                 assert_eq!(run_with_settings(&mut io, settings, &mut None).unwrap_err(),
@@ -941,7 +1121,7 @@ mod tests {
                 waits.extend([POST_GAME_STAGE_DELAY, delays.spider_game_start]);
 
 
-                if !solver_already_active { waits.push(delays.spider_settle); }
+                waits.push(if solver_already_active { delays.spider_reobserve } else { delays.spider_settle });
                 waits.push(delays.spider_settle);
                 let solver_capture_counts = if solver_already_active {
                     Vec::new()
@@ -952,7 +1132,8 @@ mod tests {
                 assert_eq!(io.solver_clicks, usize::from(!solver_already_active), "{branch}");
                 assert_eq!(io.solver_capture_counts, solver_capture_counts, "{branch}");
                 assert_eq!(io.sources.len(), 1, "{branch}");
-                assert_eq!(io.captures, 5 + usize::from(with_level_up) + usize::from(!solver_already_active), "{branch}");
+                assert_eq!(io.pointer_parks, 1, "{branch}");
+                assert_eq!(io.captures, 6 + usize::from(with_level_up), "{branch}");
                 assert_eq!(io.waits, waits, "{branch}");
             }
         }
@@ -1028,6 +1209,7 @@ mod tests {
             assert!(run(&mut io, 0, &mut None).unwrap_err().contains("uncertain"));
             assert_eq!(io.sources.len() + io.controls.len() + io.solver_clicks, 1);
             assert_eq!(io.captures, if fault == Fault::Solver { 2 } else { 1 });
+            assert_eq!(io.pointer_parks, 0);
         }
     }
 

@@ -39,6 +39,10 @@ pub const TOOLBAR_TOP: u32 = 947;
 pub const SOLVER_CLICK: PixelPoint = PixelPoint::new(602, 977);
 
 
+/// Empty left felt keeps the captured pointer clear of outlines and scene probes.
+pub const POINTER_PARK: PixelPoint = PixelPoint::new(20, 500);
+
+
 /// Native stock face row shared with the collapsed-packet display.
 const DRAW_TOP: u32 = 747;
 
@@ -536,6 +540,8 @@ mod tests {
             19 => include_bytes!("../tests/fixtures/spider-SP19.png"),
             20 => include_bytes!("../tests/fixtures/spider-lower-toolbar.png"),
             21 => include_bytes!("../tests/fixtures/spider-no-draw-pile.png"),
+            22 => include_bytes!("../tests/fixtures/spider-SP21.png"),
+            23 => include_bytes!("../tests/fixtures/spider-SP22.png"),
             _ => panic!("unknown native Spider fixture"),
         };
 
@@ -565,6 +571,93 @@ mod tests {
         paint(frame, PixelRect::new(x + CARD_WIDTH + 2, top + 3, 3, bottom - top - 6), gold);
         paint(frame, PixelRect::new(x + 18, top, CARD_WIDTH - 36, 1), gold);
         paint(frame, PixelRect::new(x + 18, bottom - 1, CARD_WIDTH - 36, 1), gold);
+    }
+
+
+    /// Copy only measured neutral cursor pixels into decoded test memory.
+    /// The supplied original PNGs are never modified or re-encoded.
+    fn copy_actual_cursor(source: &CapturedFrame, frame: &mut CapturedFrame, hotspot: PixelPoint) -> usize {
+        let bounds = PixelRect::new(20, 920, 34, 47);
+        let mut copied = 0;
+
+
+        for y in bounds.y..bounds.bottom() {
+
+
+            for x in bounds.x..bounds.right() {
+                let rgb = pixel_rgb(source, x, y).expect("measured cursor pixel inside native frame");
+                let minimum = rgb.into_iter().min().unwrap();
+                let maximum = rgb.into_iter().max().unwrap();
+
+
+                if maximum - minimum > 12 || !(minimum >= 160 || maximum <= 65) {
+                    continue;
+                }
+
+                let target_x = u32::try_from(hotspot.x + x as i32 - 21).expect("cursor x is nonnegative");
+                let target_y = u32::try_from(hotspot.y + y as i32 - 921).expect("cursor y is nonnegative");
+                assert!(target_x < frame.width && target_y < frame.height);
+                let offset = target_y as usize * frame.stride + target_x as usize * 4;
+                frame.pixels.get_mut(offset..offset + 3)
+                    .expect("cursor destination inside decoded native frame").copy_from_slice(&rgb);
+                copied += 1;
+            }
+        }
+
+        copied
+    }
+
+
+    /// The previous source click can hide the newly exposed Jack's bottom bar.
+    /// These are supplied reconstructed boards, not an exact failed runtime PNG.
+    #[test]
+    fn actual_cursor_at_previous_queen_click_hides_jack_source() {
+        let queen = fixture(22);
+        let queen_action = canonical_action(SpiderTarget::Play {
+            column: 6, top: 145, bottom: 349,
+        }).unwrap();
+        assert_eq!(analyse(&queen).unwrap().prediction, PredictedAction::Action(queen_action));
+        let queen_click = PixelPoint::new(1_045, 309);
+        assert_eq!(queen_action.operation(), InputOperation::Click(queen_click));
+
+        let clear_jack = fixture(23);
+        let jack_action = canonical_action(SpiderTarget::Play {
+            column: 6, top: 123, bottom: 327,
+        }).unwrap();
+        assert_eq!(analyse(&clear_jack).unwrap().prediction, PredictedAction::Action(jack_action));
+
+        let mut covered_jack = fixture(23);
+        assert!(copy_actual_cursor(&queen, &mut covered_jack, queen_click) > 0);
+        assert!(is_gameplay_scene(&covered_jack).unwrap());
+        assert!(solver_active(&covered_jack).unwrap());
+        assert_eq!(analyse(&covered_jack).unwrap().prediction, PredictedAction::NoHighlight,
+            "actual cursor pixels cover the next source's required bottom crossbar");
+        assert_eq!(analyse(&clear_jack).unwrap().prediction, PredictedAction::Action(jack_action),
+            "a fresh clear source frame retains its original source geometry");
+    }
+
+
+    /// Parking must preserve gameplay gates and recommendations with a visible cursor.
+    #[test]
+    fn actual_cursor_park_preserves_all_native_gameplay_sources() {
+        let cursor_source = fixture(22);
+        let cursor_bounds = PixelRect::new(POINTER_PARK.x as u32, POINTER_PARK.y as u32, 33, 46);
+
+
+        for code in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 19, 20, 21, 22, 23] {
+            let original = fixture(code);
+            assert!(is_gameplay_scene(&original).unwrap(), "native gameplay fixture {code}");
+            assert!(fraction_at_least(&original, cursor_bounds, is_felt, 1_000),
+                "entire parked cursor bounds are clear felt in fixture {code}");
+            let prediction = analyse(&original).unwrap().prediction;
+            let solver = solver_active(&original).unwrap();
+            let mut parked = original.clone();
+            assert!(copy_actual_cursor(&cursor_source, &mut parked, POINTER_PARK) > 0);
+            assert!(is_gameplay_scene(&parked).unwrap(), "parked gameplay fixture {code}");
+            assert_eq!(solver_active(&parked).unwrap(), solver, "parked Solver fixture {code}");
+            assert_eq!(analyse(&parked).unwrap().prediction, prediction,
+                "parked cursor preserves the source prediction in fixture {code}");
+        }
     }
 
 
@@ -605,7 +698,7 @@ mod tests {
     fn native_scene_and_solver_controls_are_separate() {
 
 
-        for code in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 17, 18, 19, 20, 21] {
+        for code in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 17, 18, 19, 20, 21, 22, 23] {
             let frame = fixture(code);
             let gameplay = ![15, 17, 18].contains(&code);
             assert_eq!(is_gameplay_scene(&frame).unwrap(), gameplay, "SP fixture {code}");

@@ -1,4 +1,4 @@
-# Development conventions for v1.4.0 candidate 3
+# Development conventions for v1.4.0 candidate 4
 
 The exact base is pushed v1.4.0 candidate 2 at
 `aae11dee2792967cb375b368270e46c8a95e8c95`. Preserve the accepted earlier modes'
@@ -8,6 +8,14 @@ MOVE/Recycle uses D; TriPeaks retains delayed input-free no-HALO recovery.
 Spider's twenty native originals cover ten PLAY columns, stock dealing,
 automatic run packing, heavy compaction and the toolbar boundary. A single
 fresh source authorises one card/run click or D. No card/effect proof is added.
+Candidate 4 parks the pointer at (20, 500), where the full supplied 33-by-46
+cursor fits on measured clear felt outside scene/source probes, only after a
+source click's release is acknowledged. A shared checked QmpClient helper
+sends one absolute movement
+command with two axis events, no button/key input and no added delay. The
+existing editable card/run settle and fresh capture follow. Auxiliary movement
+is counted separately; the source still consumes one logical action slot.
+DRAW does not park. Initial, read-only and manual PNG captures remain input-free.
 The independent 2000 ms DRAW wait reflects Charlie's 1–2 second observation;
 the card/run default is now 1250 ms following Charlie's Beast tuning. Other
 settings remain editable. Spider owns its source geometry and
@@ -24,6 +32,13 @@ Spider accepts the original or this measured local button position after a
 confirmed win. Free Cell keeps its original location; no title, level or medal
 matching is introduced. Cover both OK positions in continuous restart tests,
 retaining the optional direct-New-Game branch and uncertain-input non-replay.
+Active Spider Solver is disabled: no refresh click is permitted on a no-HALO
+board.
+Use bounded input-free recaptures and independent completion checks instead.
+Inactive Solver retains one editable start wait, fresh capture and one
+activation per unresolved context. Default card/DRAW/observation/start waits
+remain 1250/2000/1000/3000 ms; the reported runtime used a configured 2000 ms
+observation interval, which does not change the default.
 
 Free Cell's approved runtime slice uses original FC01–FC21 native frames and
 its own source geometry and one-board terminal controls. It follows fresh
@@ -89,8 +104,10 @@ must be recognised before activating Solver and resuming from a new frame.
 `spider_terminal.rs` owns typed expected stages and the measured Spider Play
 location, reusing local caption/control checks through a bounded offset helper.
 `worker/spider_execution.rs` owns one-action execution, independent DRAW delay,
-bounded no-HALO recovery and optional-LEVEL-UP restart. Only continuous 0
-restarts; a fresh dealt board precedes Solver activation.
+post-click pointer parking, bounded input-free no-HALO observation and
+optional-LEVEL-UP restart. Only continuous 0 restarts; a fresh dealt board
+precedes inactive-Solver activation. `qmp.rs` owns the checked movement-only
+helper; it does not own Spider's park policy or change capture behaviour.
 The UI delegates persistent log I/O to `session_log.rs`.
 
 When adding a mode, supply its profile/detection policy and preserve the shared
@@ -143,7 +160,7 @@ results from another host do not prove Beast installation or live guest input.
 The candidate delivery notes record the checks actually executed.
 
 On the Beast, confirm that the installed package, launched executable and startup
-log identify **v1.4.0, candidate 3**. Select Free Cell and verify read-only Capture
+log identify **v1.4.0, candidate 4**. Select Free Cell and verify read-only Capture
 Frame, original-byte Capture PNG/Save PNG, initial Solver activation, CELL/PLAY
 single clicks and automatic SUIT-transfer recapture. Adjust the independent
 750/1000 ms settings, separate 3000 ms game-start wait, 20-observation allowance
@@ -155,6 +172,15 @@ ready local control authorises input. Unready controls receive bounded recapture
 mode and verify its accepted action/recovery behaviour, STOP and socket/mode
 invalidation. Preserve first-failure frames and complete session logs.
 
+Select Spider and verify source click → acknowledged release → movement-only
+park → configured settle → fresh capture. Check one source slot and separate
+auxiliary counts of one command/two absolute events, with no park after DRAW.
+Verify active no-HALO frames use bounded input-free recaptures and completion
+checks with zero Solver refresh clicks; inactive Solver gets one start wait,
+fresh capture and one activation. Check STOP and uncertain park delivery do
+not repeat the source click. Initial Capture Frame and manual PNG operations
+must send zero input. Retain candidate 3 Free Cell margin and higher-OK checks.
+
 Use compact tests for actual invariants: native source/scene discrimination,
 frame-layout rejection, finite budgets, automatic-transfer recapture, one-shot
 GAME WIN controls, STOP, uncertain-input non-replay and independent bounded
@@ -162,6 +188,10 @@ timings. Test counts are measured results, not coverage quotas. Historical
 Klondike card-effect diagnostics remain explicitly test-only and must not become
 Free Cell runtime requirements. The delivery review records actual tool versions,
 commands and failures; no old validation run establishes this candidate's results.
+The supplied-frame cursor simulation is supporting analysis, not a recovered
+runtime PNG or native Rust execution. Rust/Cargo are absent here; native build,
+tests, Clippy and live QMP remain pending Beast verification. See
+[candidate 4 evidence and limits](spider-v1.4.0-candidate-4.md).
 
 
 ## Historical candidate verification notes

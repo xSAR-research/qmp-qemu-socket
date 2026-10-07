@@ -217,6 +217,30 @@
       "mode": "RGBA",
       "observation": "Standard Level Up, Spider Grandmaster 2, level 105. Local OK caption exactly 19 pixels above FC10. Existing (959,812) click lies inside the gold button.",
       "attachment_note": "Supplied attachment is 1732335 bytes; associated session log records a saved PNG of 1109762 bytes. The supplied attachment is copied byte-identically; exact-byte identity to that logged saved PNG is unverified."
+    },
+    {
+      "id": "SP21",
+      "original_filename": "qmp-qemu-socket 261007 114356 MOVE-BEFORE-JACK.png",
+      "fixture": "spider-SP21.png",
+      "sha256": "05b043042a9dd0e157b1c9759b84cd9bf2ddf7fb004ede5f0b29fcf61e0781c0",
+      "bytes": 3076841,
+      "width": 1920,
+      "height": 1080,
+      "mode": "RGBA",
+      "observation": "Queen-before-Jack reconstruction, solid PLAY 6 source rows 145..349; click (1045,309). Original cursor hotspot (21,921).",
+      "attachment_note": "Byte-identical supplied original. User used Undo to reconstruct the same board four times; the exact failed runtime PNG was not captured. The cursor-occlusion diagnostic modifies only decoded test pixels in memory."
+    },
+    {
+      "id": "SP22",
+      "original_filename": "qmp-qemu-socket 261007 113029 This-was-the-STALL.png",
+      "fixture": "spider-SP22.png",
+      "sha256": "b472a0b3c04f519520178a719709e2f5c35a32e5e1e7d0412e7f692428b89692",
+      "bytes": 3072346,
+      "width": 1920,
+      "height": 1080,
+      "mode": "RGBA",
+      "observation": "Reconstructed Jack state, solid PLAY 6 source rows 123..327; cursor moved to left felt. Not the exact failed runtime capture.",
+      "attachment_note": "Byte-identical supplied original. User used Undo to reconstruct the same board four times; the exact failed runtime PNG was not captured. The cursor-occlusion diagnostic modifies only decoded test pixels in memory."
     }
   ],
   "updates": [
@@ -224,6 +248,10 @@
       "candidate": "v1.4.0, candidate 3",
       "base": "aae11dee2792967cb375b368270e46c8a95e8c95",
       "description": "SP20 supplies original native Spider Level Up with the local OK caption 19 pixels above FC10; no panel artwork or rank matching is required."
+    },
+    {
+      "candidate": "v1.4.0, candidate 4",
+      "description": "SP21 and SP22 supply original Queen-before-Jack and reconstructed Jack frames. A measured actual-cursor mask in decoded test memory reproduces the missing bottom crossbar after the Queen click. Pointer park (20,500) has clear full cursor bounds across all nineteen native gameplay fixtures. Exact failed runtime PNG was not captured; native Rust regressions were added but not executed in this environment."
     }
   ]
 }

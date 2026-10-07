@@ -207,6 +207,38 @@ impl QmpClient {
     }
 
 
+    /// Moves the absolute pointer without any button or keyboard transition.
+    ///
+    /// The matching acknowledgement is required before returning. A failed
+    /// or uncertain movement is not retried, and this adds no settle delay.
+    pub fn move_pointer(
+        &mut self,
+        guest_point: PixelPoint,
+        guest_width: u32,
+        guest_height: u32,
+    ) -> Result<(), QmpError> {
+        let pixel_x = u32::try_from(guest_point.x).map_err(|_| {
+            QmpError::Protocol(format!("negative guest X coordinate: {}", guest_point.x))
+        })?;
+        let pixel_y = u32::try_from(guest_point.y).map_err(|_| {
+            QmpError::Protocol(format!("negative guest Y coordinate: {}", guest_point.y))
+        })?;
+        let x = pixel_to_qmp_axis(pixel_x, guest_width)?;
+        let y = pixel_to_qmp_axis(pixel_y, guest_height)?;
+
+        self.execute(
+            "input-send-event",
+            Some(json!({
+                "events": [
+                    { "type": "abs", "data": { "axis": "x", "value": x } },
+                    { "type": "abs", "data": { "axis": "y", "value": y } }
+                ]
+            })),
+        )?;
+        Ok(())
+    }
+
+
     /// Sends a normal-duration absolute left click through QMP.
     pub fn click(
         &mut self,
@@ -625,6 +657,80 @@ mod tests {
         };
 
         assert_eq!(probe.current_absolute_pointer_name(), Some("tablet"));
+    }
+
+
+    /// Movement validates bounds and sends exactly two absolute events once.
+    #[test]
+    fn pointer_movement_rejects_invalid_points_and_sends_no_click() {
+        let (client_stream, mut server_stream) = UnixStream::pair().expect("create socket pair");
+        server_stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .expect("set mock server timeout");
+        let server_reader = server_stream.try_clone().expect("clone mock server");
+        let server = thread::spawn(move || {
+            let mut reader = BufReader::new(server_reader);
+            start_mock_qmp(&mut server_stream, &mut reader);
+            let request = read_request(&mut reader);
+            assert_eq!(request["execute"], "input-send-event");
+            assert_eq!(request["arguments"], json!({ "events": [
+                { "type": "abs", "data": { "axis": "x", "value": 341 } },
+                { "type": "abs", "data": { "axis": "y", "value": 15169 } }
+            ] }));
+            acknowledge(&mut server_stream, &request);
+            let mut line = String::new();
+            assert_eq!(reader.read_line(&mut line).expect("read after movement"), 0);
+        });
+        let mut client = QmpClient::from_connected_stream(Path::new("mock-qmp"), client_stream)
+            .expect("connect mock client");
+
+
+        for (point, width, height) in [
+            (PixelPoint::new(-1, 500), 1920, 1080),
+            (PixelPoint::new(20, -1), 1920, 1080),
+            (PixelPoint::new(1920, 500), 1920, 1080),
+            (PixelPoint::new(20, 1080), 1920, 1080),
+            (PixelPoint::new(20, 500), 0, 1080),
+            (PixelPoint::new(20, 500), 1920, 0),
+        ] {
+            assert!(client.move_pointer(point, width, height).is_err());
+        }
+
+        client.move_pointer(PixelPoint::new(20, 500), 1920, 1080)
+            .expect("acknowledged absolute movement");
+        drop(client);
+        server.join().expect("join movement mock");
+    }
+
+
+    /// A rejected pointer movement returns the error without replaying input.
+    #[test]
+    fn pointer_movement_requires_acknowledgement_without_retry() {
+        let (client_stream, mut server_stream) = UnixStream::pair().expect("create socket pair");
+        server_stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .expect("set mock server timeout");
+        let server_reader = server_stream.try_clone().expect("clone mock server");
+        let server = thread::spawn(move || {
+            let mut reader = BufReader::new(server_reader);
+            start_mock_qmp(&mut server_stream, &mut reader);
+            let request = read_request(&mut reader);
+            assert_eq!(request["execute"], "input-send-event");
+            assert_eq!(request["arguments"]["events"].as_array().expect("events").len(), 2);
+            write_packet(&mut server_stream, &json!({
+                "error": { "class": "GenericError", "desc": "movement rejected" },
+                "id": request_id(&request)
+            }));
+            let mut line = String::new();
+            assert_eq!(reader.read_line(&mut line).expect("read after error"), 0);
+        });
+        let mut client = QmpClient::from_connected_stream(Path::new("mock-qmp"), client_stream)
+            .expect("connect mock client");
+        let error = client.move_pointer(PixelPoint::new(20, 500), 1920, 1080)
+            .expect_err("movement requires a successful acknowledgement");
+        assert!(matches!(error, QmpError::Command(_)));
+        drop(client);
+        server.join().expect("join rejected movement mock");
     }
 
 

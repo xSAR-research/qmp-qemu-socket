@@ -1,11 +1,13 @@
 # QMP and capture design
 
 This describes the current shared transport and mode-owned input policies in
-v1.4.0 candidate 3. Free Cell and Spider use native mode-owned sources and
+v1.4.0 candidate 4. Free Cell and Spider use native mode-owned sources and
 independent one-board terminal sequences; capture-only requests never send input.
 Free Cell's clipped-source check reads paper in both visible card margins above
-Y947, avoiding a central pip; it does not compare moved-card pixels. Capture,
-input delivery and all settling/recovery timings are unchanged.
+Y947, avoiding a central pip; it does not compare moved-card pixels. Spider
+parks the pointer after an acknowledged source-click release, before its
+existing settle and capture. Active Spider Solver receives bounded input-free
+observations without a refresh click. Capture and timing defaults stay unchanged.
 Spider's higher LEVEL UP OK is recognised from the expected local control only;
 its existing click point and fresh one-shot progression remain.
 Later dated correction notes retain historical evidence rather than current
@@ -28,7 +30,8 @@ Before every guest input the worker requires:
 2. VM state `running`;
 3. the current pointer device to be absolute;
 4. no pending STOP request;
-5. one typed action from validated visual evidence.
+5. one typed action from validated visual evidence, or Spider's auxiliary
+   pointer park attached to an acknowledged source click.
 
 ## Capture
 
@@ -120,6 +123,17 @@ the proven Solver click at each board also establishes guest focus.
 Down and up are deliberately separate. Once a down command has been flushed,
 the release timing must not wait indefinitely for a delayed acknowledgement.
 If delivery becomes uncertain, the action is never sent again automatically.
+
+The shared movement-only QmpClient helper uses the same checked pixel-to-axis
+conversion and acknowledges one `input-send-event` command containing only
+the X and Y absolute events. It sends no button/key event and adds no delay.
+Spider alone calls it to park at (20, 500) after an acknowledged source-click
+release; the configured card/run settle and fresh capture then follow. The
+park is auxiliary input, counted as one QMP command and two events separately
+from the source click. It does not consume another logical gameplay slot.
+DRAW, Solver and terminal operations do not park. Initial/read-only/manual
+capture paths never call the helper. Uncertain park delivery stops without
+replaying the source click or movement.
 
 ## Mode-owned visual policy
 
@@ -304,6 +318,13 @@ original-byte PNG saving. A freshly recognised solid DRAW source sends one D
 press; a canonical PLAY source sends one click for the connected block. Source
 reads/clicks exclude rows Y>=947; clipped outlines use only visible card area.
 Dashed guides, COLLAPSED SUITS and absent stock never authorise input.
+An acknowledged source-click release is followed by movement-only parking at
+(20, 500), where the full supplied cursor fits on measured clear felt outside
+scene/source probes.
+One auxiliary command/two absolute events are reported separately from the
+one source action. The existing card/run settle follows the park and then
+captures anew; DRAW does not park and no added wait is introduced. Initial,
+read-only and manual exact-byte PNG captures send zero input.
 
 Card/run settling defaults to 1250 ms after Charlie's Beast tuning; DRAW
 dealing has its own 2000 ms wait
@@ -311,15 +332,19 @@ based on Charlie's observed 1–2 second deal/HALO latency. Observation and
 new-game waits initially use 1000/3000 ms. Settings are independent, editable
 and frozen per run. No before/after card-pixel effect witness is used.
 Automatic dealing or packing receives bounded input-free captures. Independent
-win review precedes a bounded Solver activation/refresh on supported gameplay;
-unknown scenes or uncertain inputs stop without retry.
+win review runs on fresh frames. Active Solver is disabled and never receives
+a refresh click. Supported inactive gameplay retains one start wait and fresh
+capture before one Solver activation per unresolved context. Unknown scenes
+or uncertain source, park, Solver or terminal inputs stop without retry.
 
 One-board win entry and ordered score/optional OK/New Game controls reuse the
 accepted local caption/button evidence. Spider owns its Play point at the
 measured +100 px Y offset. Each stage is captured freshly and clicked once;
 finite runs stop at a win, while continuous 0 may deal a new board and activate
-Solver after its separate start wait. No new QMP command, capture encoding,
-temporary-file policy or snapshot-save behaviour is introduced.
+inactive Solver after its separate start wait. The source-click park adds one
+movement-only command; capture encoding, temporary-file policy and exact-byte
+snapshot saving remain unchanged. Candidate 3's two local OK locations and all
+terminal click points remain. See [candidate 4 notes](spider-v1.4.0-candidate-4.md).
 
 
 ## Historical Klondike correction notes

@@ -1,5 +1,26 @@
 # Changelog
 
+## v1.4.0 — candidate 4
+
+- Move Spider's pointer to the measured clear-felt point at (20, 500)
+  after an acknowledged source-click release, before the existing editable
+  settle and fresh capture. DRAW does not park; one source remains one action.
+- Add a checked movement-only QmpClient helper. The auxiliary park sends one
+  QMP command containing two absolute-axis events, counted separately from
+  the source click; it sends no button/key event and adds no delay.
+- Treat active Spider Solver as disabled: no refresh click. Missing HALOs use
+  bounded input-free captures and independent completion checks. Inactive
+  Solver retains one start wait, fresh capture and one activation.
+- Retain candidate 3's Free Cell side-margin presence checks and Spider's
+  higher local LEVEL UP OK, with all timing defaults and other modes unchanged.
+  Initial/read-only/manual captures remain input-free and PNG saving exact.
+- Record the confirmed cursor-overlap report and supplied-frame simulation;
+  the exact rejected runtime PNG is unavailable. No card/effect matching or
+  gold-threshold relaxation is introduced. Native Rust and live QMP remain
+  pending Beast validation.
+- Pin this cumulative complete-file update to the same pushed candidate 2 at
+  `aae11dee2792967cb375b368270e46c8a95e8c95`.
+
 ## v1.4.0 — candidate 3
 
 - Correct Free Cell toolbar-clipped source detection when a central card pip
