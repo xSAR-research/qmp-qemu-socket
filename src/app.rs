@@ -1088,21 +1088,30 @@ impl QmpQemuSocketApp {
         ui.add_space(16.0);
 
 
+        let option_frame = egui::Frame::group(ui.style());
+        let frame_margin = option_frame.total_margin().sum();
+        let content_width = (ui.available_width() - frame_margin.x).max(0.0);
+        let mut content_height = 0.0;
+
+
         for strategy in SolvingStrategy::AVAILABLE {
-            ui.group(|ui| {
-                ui.set_min_width(600.0_f32.min(ui.available_width()));
+            let option = option_frame.show(ui, |ui| {
+                ui.set_width(content_width);
+                ui.set_min_height(content_height);
 
 
                 if bevel_button(ui, strategy.label(), SETUP_BLUE, false, true).clicked() {
                     self.select_strategy(strategy);
                 }
-                ui.label(strategy.description());
+                ui.add(egui::Label::new(strategy.description()).wrap());
 
 
                 if strategy == SolvingStrategy::ShortestPath {
-                    ui.strong("Preparation only: capture and inspect Pyramid. Card recognition and route calculation follow in later candidates.");
+                    ui.add(egui::Label::new(egui::RichText::new("Preparation only: capture and inspect Pyramid. Card recognition and route calculation follow in later candidates.").strong()).wrap());
                 }
             });
+            // The longer route-preparation option comes first and sets both cards' height.
+            content_height = option.response.rect.height() - frame_margin.y;
             ui.add_space(12.0);
         }
     }

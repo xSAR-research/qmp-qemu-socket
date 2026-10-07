@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.0.0 — candidate 3
+
+- Give the two startup strategy boxes the same available width and height,
+  with shared padding and wrapping descriptions when the window is resized.
+- Retain the promoted xsar dependency, strategy choices and controller behaviour.
+
 ## v2.0.0 — candidate 2
 
 - Pin xsar v0.2.0 to Charlie's promoted Git commit

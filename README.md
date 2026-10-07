@@ -14,8 +14,8 @@ the real purpose. Each fixture keeps independent target and effect policies.
 The target is to build in Dijkstra / A* shortest path problem solving rather
 than using the **Solver**, this will benefit drone route planning experience.
 
-This is **v2.0.0, candidate 2**, based on
-`78df8f1fc994442a06aa9eaa411414462e169727`. At startup choose a **Solving
+This is **v2.0.0, candidate 3**, based on
+`9ccf444d9cfebd05ce017456f05e965094bf08a1`. At startup choose a **Solving
 strategy**, separately from **Game Type**:
 
 | Choice | Current behaviour |
@@ -36,7 +36,7 @@ completion policy, screenshot acquisition and exact-byte saving remain here.
 Ordinary Cargo commands fetch this exact Git dependency. No local xsar checkout,
 paired override or crates.io publication is required to build the application.
 
-See [candidate notes](docs/strategy-v2.0.0-candidate-2.md). The committed
+See [candidate notes](docs/strategy-v2.0.0-candidate-3.md). The committed
 [Gate 1 plan](docs/QMP-QEMU-Strategy-xSAR-Gate1-Plan.md) records the original
 proposal and intake discrepancy; the missing files were restored in this base.
 
