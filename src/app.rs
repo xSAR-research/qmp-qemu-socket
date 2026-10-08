@@ -1111,7 +1111,7 @@ impl QmpQemuSocketApp {
 
 
                 if strategy == SolvingStrategy::ShortestPath {
-                    ui.add(egui::Label::new(egui::RichText::new("Preparation only: capture and inspect Pyramid. Card recognition and route calculation follow in later candidates.").strong()).wrap());
+                    ui.add(egui::Label::new(egui::RichText::new("Preparation only: capture and inspect Pyramid. Card recognition and route calculation follow in later releases.").strong()).wrap());
                 }
             });
             // The longer route-preparation option comes first and sets both cards' height.

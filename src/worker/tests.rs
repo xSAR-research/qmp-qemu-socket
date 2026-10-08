@@ -156,6 +156,93 @@ fn tripeaks_stock_frame(with_halo: bool) -> CapturedFrame {
 }
 
 
+/// Decode the unchanged supplied native reward panel through the production PNG path.
+fn tripeaks_reward_frame() -> CapturedFrame {
+    decode_png(include_bytes!("../../tests/fixtures/tripeaks-TP01.png"))
+        .expect("supplied native TriPeaks reward fixture")
+}
+
+
+/// Erase a narrow probe without changing any other part of a fixture.
+fn erase_reward_probe(frame: &mut CapturedFrame, bounds: PixelRect) {
+
+
+    for y in bounds.y..bounds.bottom() {
+
+
+        for x in bounds.x..bounds.right() {
+            let offset = y as usize * frame.stride + x as usize * 4;
+            frame.pixels[offset..offset + 4].copy_from_slice(&[0, 0, 0, 255]);
+        }
+    }
+}
+
+
+/// The supplied Congratulations/skip panel is positive terminal evidence, not a gameplay HALO.
+#[test]
+fn tripeaks_reward_original_fixture_is_narrowly_recognised() {
+    let frame = tripeaks_reward_frame();
+    assert_eq!(tripeaks_terminal::is_reward_overlay(&frame), Ok(true));
+    let (observation, _) = analyse_captured_frame(frame, &TableauScanState::for_mode(GameMode::TriPeaks)).unwrap();
+    assert!(!observation.gameplay_scene);
+    assert_eq!(observation.prediction, PredictedAction::NoHighlight);
+    assert_eq!(observation.observed_rows, None);
+}
+
+
+/// The fixed title, prompt and separate panel edges must each survive; generic dialogs are refused.
+#[test]
+fn tripeaks_reward_near_miss_missing_glyph_or_panel_is_refused() {
+    let original = tripeaks_reward_frame();
+
+
+    for probe in [
+        PixelRect::new(708, 200, 508, 68),
+        PixelRect::new(798, 838, 332, 36),
+        PixelRect::new(507, 400, 3, 20),
+        PixelRect::new(1_410, 400, 3, 20),
+        PixelRect::new(630, 330, 16, 20),
+    ] {
+        let mut frame = original.clone();
+        erase_reward_probe(&mut frame, probe);
+        assert_eq!(tripeaks_terminal::is_reward_overlay(&frame), Ok(false));
+    }
+    assert_eq!(tripeaks_terminal::is_reward_overlay(&tripeaks_stock_frame(true)), Ok(false));
+    assert_eq!(tripeaks_terminal::is_reward_overlay(&blank_frame(1_920, 1_080)), Ok(false));
+    assert_eq!(tripeaks_terminal::is_reward_overlay(&blank_frame(1_280, 720)), Ok(false));
+    let mut malformed = original;
+    malformed.pixels.truncate(16);
+    assert!(tripeaks_terminal::is_reward_overlay(&malformed).is_err());
+}
+
+
+/// Changing level, XP and central artwork cannot alter the fixed terminal fingerprint.
+#[test]
+fn tripeaks_reward_detector_excludes_variable_level_xp_and_pointer_artwork() {
+    let mut frame = tripeaks_reward_frame();
+    erase_reward_probe(&mut frame, PixelRect::new(700, 380, 520, 385));
+    erase_reward_probe(&mut frame, PixelRect::new(1_460, 180, 100, 100));
+    assert_eq!(tripeaks_terminal::is_reward_overlay(&frame), Ok(true));
+}
+
+
+/// One transient panel never establishes completion; missing evidence resets positives but not the budget.
+#[test]
+fn tripeaks_reward_confirmation_requires_two_consecutive_fresh_positives_and_is_bounded() {
+    use tripeaks_terminal::{RewardConfirmation, RewardConfirmationStep};
+    let mut evidence = RewardConfirmation::default();
+    assert!(!evidence.active());
+    assert_eq!(evidence.observe(true), RewardConfirmationStep::Observe);
+    assert!(evidence.active());
+    assert_eq!(evidence.observe(false), RewardConfirmationStep::Observe);
+    assert_eq!(evidence.observe(true), RewardConfirmationStep::Observe);
+    assert_eq!(evidence.observe(false), RewardConfirmationStep::Stop);
+    let mut stable = RewardConfirmation::default();
+    assert_eq!(stable.observe(true), RewardConfirmationStep::Observe);
+    assert_eq!(stable.observe(true), RewardConfirmationStep::Confirmed);
+}
+
+
 /// Add positive card-face evidence without inventing occupancy from a row hint.
 fn initial_recovery_frame(mode: GameMode, with_halo: bool) -> CapturedFrame {
     let mut frame = match mode {
@@ -1914,4 +2001,838 @@ fn spider_draw_shared_delivery_plan_accepts_only_the_canonical_key() {
     assert_eq!(format_step_plan(plan).expect("shared Spider key-delivery guard"),
         "Stable plan: Spider DRAW via qcode D; pointer unchanged; commands=2, events=2.");
     assert_eq!(format_action_status(PredictedAction::Action(action)), "Draw card — Spider DRAW");
+}
+
+
+/// Exercise the production worker, captures, classifier and xSAR transport through local QMP.
+mod tripeaks_reward_qmp_regressions {
+    use super::*;
+    use std::{
+        fs,
+        io::{BufRead, BufReader, Write},
+        os::unix::net::{UnixListener, UnixStream},
+        sync::atomic::AtomicU64,
+        thread,
+    };
+    use serde_json::{Value, json};
+    use crate::geometry::PixelPoint;
+    use crate::parameters::{
+        AnimationSettleDelays, CLICK_OFFSET_X, GAMEPLAY_FELT_PROBE_BOUNDS,
+        GOLD_RGB_CANDIDATES, HALO_GOLD_LINE_OFFSET_Y, HALO_GOLD_RUN_MIN,
+        SCORE_SKIP_CONTROL, SHARED_SOLVER_CONTROL, TABLEAU_CARD_REGIONS,
+    };
+
+
+    /// Original native capture; no reconstructed terminal artwork is used.
+    const REWARD_PNG: &[u8] = include_bytes!("../../tests/fixtures/tripeaks-TP01.png");
+    /// Unique temporary socket directories when Cargo runs tests concurrently.
+    static NEXT_REWARD_SOCKET: AtomicU64 = AtomicU64::new(1);
+
+
+    /// Inject one precise recovery or cancellation boundary through QMP.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum Scenario {
+        /// Acknowledged skip followed by fresh actionable gameplay.
+        Recover,
+        /// Cooperative STOP while the first reward capture is acknowledged.
+        StopAfterFirstReward,
+        /// Cooperative STOP at the terminal pre-input pointer probe.
+        StopAfterSkipProbe,
+        /// Causal button-down error followed by release-only transport recovery.
+        UncertainSkip,
+        /// Six unsupported animation captures precede the original reward overlay.
+        LateReward,
+        /// The terminal animation remains unsupported throughout the full budget.
+        UnknownOnly,
+        /// One positive reward candidate disappears throughout confirmation.
+        TransientReward,
+        /// Acknowledged skip loses positive reward evidence before a possible retry.
+        SkipDisappears,
+        /// Fresh canonical source pixels differ from reward by fewer than the effect floor.
+        InsufficientEffect,
+        /// A visible nonempty redeal resumes the existing missing-HALO Solver path.
+        RedealNoHalo,
+    }
+
+
+    /// Original pixels supplied for each independently requested screendump.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum CaptureKind {
+        /// Canonical sole exposed top-row card.
+        Initial,
+        /// Unmodified user-supplied reward overlay.
+        Reward,
+        /// Fresh actionable stock recommendation following the skip.
+        Recovered,
+        /// Cleared card effect with no recognised terminal or gameplay scene.
+        Unsupported,
+        /// Positive row-four face evidence with a recognised felt scene and no HALO.
+        Nonempty,
+    }
+
+
+    /// Semantic record of the actual commands received by the local QMP server.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum WireEvent {
+        /// One fresh filesystem screenshot request.
+        Capture(CaptureKind),
+        /// Fresh running-VM and active-pointer input probe completed.
+        Probe,
+        /// Absolute pointer movement to a mapped native pixel coordinate.
+        Move((i64, i64)),
+        /// One guest left-button press, counted separately from releases.
+        Down((i64, i64)),
+        /// Idempotent button release, including xSAR's release-only recovery.
+        Up,
+    }
+
+
+    /// Completed server evidence retained after production worker termination.
+    #[derive(Debug, Default)]
+    struct WireReport {
+        /// Ordered requests and input transitions observed on all connections.
+        events: Vec<WireEvent>,
+        /// Independently acquired original reward frames.
+        reward_captures: usize,
+        /// Independently acquired unsupported terminal-animation frames.
+        unsupported_captures: usize,
+        /// Positive nonempty gameplay observations before the existing Solver recovery.
+        nonempty_captures: usize,
+        /// Normal connection plus any release-only recovery connection.
+        connections: usize,
+        /// Release events acknowledged on the recovery connection.
+        recovery_releases: usize,
+        /// Whether this run injected STOP at the fresh skip probe.
+        stopped_after_probe: bool,
+    }
+
+
+    impl WireReport {
+        /// Count actual presses at one audited coordinate.
+        fn downs_at(&self, point: (i64, i64)) -> usize {
+            self.events.iter().filter(|event| **event == WireEvent::Down(point)).count()
+        }
+        /// Count all presses, catching unexpected controls and replayed actions.
+        fn downs(&self) -> usize {
+            self.events.iter().filter(|event| matches!(event, WireEvent::Down(_))).count()
+        }
+    }
+
+
+    /// Remove only this test's unique socket directory after both peers exit.
+    struct SocketDirectory(
+        /// Unique directory containing only this test's socket and capture files.
+        PathBuf,
+    );
+    impl Drop for SocketDirectory {
+        /// Clean up the test-owned directory after the server thread is joined.
+        fn drop(&mut self) { let _ = fs::remove_dir_all(&self.0); }
+    }
+
+
+    /// Convert an audited pixel coordinate through the production mapping.
+    fn wire_point(point: PixelPoint) -> (i64, i64) {
+        let mapped = pixel_point_to_qmp(point, NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT)
+            .expect("canonical test point maps to QMP");
+        (i64::from(mapped.x), i64::from(mapped.y))
+    }
+
+
+    /// Paint only explicitly calibrated fixture rectangles.
+    fn paint(frame: &mut CapturedFrame, bounds: PixelRect, rgba: [u8; 4]) {
+        for y in bounds.y..bounds.bottom() {
+            for x in bounds.x..bounds.right() {
+                let offset = y as usize * frame.stride + x as usize * 4;
+                frame.pixels[offset..offset + 4].copy_from_slice(&rgba);
+            }
+        }
+    }
+
+
+    /// One exposed r1c3 card with canonical HALO and independently selectable effect evidence.
+    fn last_top_card(material_effect: bool) -> (CapturedFrame, PredictedAction) {
+        let mut frame = if material_effect {
+            blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT)
+        } else {
+            decode_png(REWARD_PNG).expect("original pixels under weak-effect source")
+        };
+        paint(&mut frame, GAMEPLAY_FELT_PROBE_BOUNDS, [20, 140, 60, 255]);
+        let card = TABLEAU_CARD_REGIONS[2];
+        if material_effect {
+            paint(&mut frame, card.card_bounds, [255; 4]);
+        } else {
+            // All lower-row probes are outside r1c3's audited effect rectangle.
+            // Remove incidental white artwork without changing that rectangle.
+            for row in GameMode::TriPeaks.profile().tableau_rows.iter().skip(1) {
+                paint(&mut frame, row.face_probe_bounds, [0, 0, 0, 255]);
+            }
+            let face = GameMode::TriPeaks.profile().tableau_rows[0].face_probe_bounds;
+            paint(&mut frame, PixelRect::new(card.card_bounds.x + 5, face.y,
+                crate::parameters::FACE_UP_WHITE_BLOCK_MIN_WIDTH, face.height), [255; 4]);
+        }
+        let anchor = PixelPoint::new(
+            card.click_point.x - CLICK_OFFSET_X,
+            (card.card_bounds.bottom() + HALO_GOLD_LINE_OFFSET_Y) as i32,
+        );
+        let gold = GOLD_RGB_CANDIDATES[0];
+        paint(&mut frame, PixelRect::new(
+            anchor.x as u32, anchor.y as u32, HALO_GOLD_RUN_MIN + 1, 1,
+        ), [gold[0], gold[1], gold[2], 255]);
+        let expected = PredictedAction::Action(GameMode::TriPeaks.profile()
+            .tableau_action(2, anchor).expect("r1c3 canonical action"));
+        let state = TableauScanState::for_mode(GameMode::TriPeaks);
+        let analysis = analyse_frame_with_state(&frame, &state).expect("native last-card analysis");
+        assert_eq!(analysis.prediction, expected);
+        assert_eq!(analysis.top_row_face_up_count, 1);
+        assert_eq!(analysis.observed_rows, RowMask::single_for(1, 4));
+        assert!(is_gameplay_scene_for_mode(&frame, GameMode::TriPeaks)
+            .expect("last-card gameplay fingerprint"));
+        (frame, expected)
+    }
+
+
+    /// No PNG encoder is exported by xSAR. This test-only lossless encoder uses
+    /// standard PNG RGBA rows and stored zlib blocks, without adding a dependency.
+    fn encode_native_png(frame: &CapturedFrame) -> Vec<u8> {
+        /// PNG CRC32 over chunk type and bytes, using a local lookup table.
+        fn crc(bytes: impl Iterator<Item = u8>) -> u32 {
+            let mut table = [0_u32; 256];
+            for (index, value) in table.iter_mut().enumerate() {
+                let mut remainder = index as u32;
+                for _ in 0..8 {
+                    remainder = if remainder & 1 != 0 {
+                        (remainder >> 1) ^ 0xedb8_8320
+                    } else { remainder >> 1 };
+                }
+                *value = remainder;
+            }
+            let mut checksum = u32::MAX;
+            for byte in bytes {
+                checksum = (checksum >> 8) ^ table[((checksum ^ u32::from(byte)) & 255) as usize];
+            }
+            !checksum
+        }
+        /// Append one length-prefixed PNG chunk and its checked CRC.
+        fn chunk(png: &mut Vec<u8>, kind: &[u8; 4], data: &[u8]) {
+            png.extend_from_slice(&(data.len() as u32).to_be_bytes());
+            png.extend_from_slice(kind);
+            png.extend_from_slice(data);
+            png.extend_from_slice(&crc(kind.iter().copied().chain(data.iter().copied())).to_be_bytes());
+        }
+        let row_bytes = frame.width as usize * 4;
+        let mut raw = Vec::with_capacity((row_bytes + 1) * frame.height as usize);
+        for y in 0..frame.height as usize {
+            raw.push(0); // PNG filter None.
+            raw.extend_from_slice(&frame.pixels[y * frame.stride..y * frame.stride + row_bytes]);
+        }
+        let mut compressed = vec![0x78, 0x01]; // Valid zlib header, stored DEFLATE.
+        let count = raw.len().div_ceil(65_535);
+        for (index, block) in raw.chunks(65_535).enumerate() {
+            compressed.push(u8::from(index + 1 == count));
+            let length = block.len() as u16;
+            compressed.extend_from_slice(&length.to_le_bytes());
+            compressed.extend_from_slice(&(!length).to_le_bytes());
+            compressed.extend_from_slice(block);
+        }
+        let (mut a, mut b) = (1_u32, 0_u32);
+        for block in raw.chunks(5_552) {
+            for &byte in block { a += u32::from(byte); b += a; }
+            a %= 65_521;
+            b %= 65_521;
+        }
+        compressed.extend_from_slice(&((b << 16) | a).to_be_bytes());
+        let mut png = b"\x89PNG\r\n\x1a\n".to_vec();
+        let mut header = Vec::new();
+        header.extend_from_slice(&frame.width.to_be_bytes());
+        header.extend_from_slice(&frame.height.to_be_bytes());
+        header.extend_from_slice(&[8, 6, 0, 0, 0]);
+        chunk(&mut png, b"IHDR", &header);
+        chunk(&mut png, b"IDAT", &compressed);
+        chunk(&mut png, b"IEND", &[]);
+        let round_trip = decode_png(&png).expect("test PNG decodes through production xSAR");
+        assert_eq!(round_trip.pixels, frame.pixels);
+        png
+    }
+
+
+    /// Flush one newline-delimited QMP response before reading another request.
+    fn packet(stream: &mut UnixStream, value: Value) {
+        serde_json::to_writer(&mut *stream, &value).expect("mock QMP packet");
+        stream.write_all(b"\n").expect("mock QMP newline");
+        stream.flush().expect("mock QMP flush");
+    }
+    /// Acknowledge one exact numeric QMP request identifier.
+    fn ack(stream: &mut UnixStream, id: u64) { packet(stream, json!({"return": {}, "id": id})); }
+
+
+    /// Bounded local accept, including xSAR's release-only recovery connection.
+    fn accept(listener: &UnixListener) -> UnixStream {
+        let deadline = Instant::now() + Duration::from_secs(3);
+        loop {
+            match listener.accept() {
+                Ok((stream, _)) => return stream,
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    assert!(Instant::now() < deadline, "mock QMP accept timed out");
+                    thread::sleep(Duration::from_millis(5));
+                }
+                Err(error) => panic!("mock QMP accept: {error}"),
+            }
+        }
+    }
+
+
+    /// Serve original pixels and record semantic input ordering through real QMP.
+    fn serve(
+        listener: UnixListener, initial_png: Vec<u8>, recovered_png: Vec<u8>, unsupported_png: Vec<u8>, nonempty_png: Vec<u8>,
+        scenario: Scenario, cancel: Arc<AtomicBool>,
+    ) -> WireReport {
+        let mut report = WireReport::default();
+        let skip = wire_point(SCORE_SKIP_CONTROL.click_point);
+        let mut position = (0_i64, 0_i64);
+        let mut pending_skip_error = None;
+        let mut error_delivered = false;
+        loop {
+            let mut stream = accept(&listener);
+            report.connections += 1;
+            stream.set_read_timeout(Some(Duration::from_secs(15))).expect("mock QMP read timeout");
+            let mut reader = BufReader::new(stream.try_clone().expect("mock QMP stream clone"));
+            packet(&mut stream, json!({"QMP": {"version": {"qemu": {"major": 11, "minor": 0, "micro": 0}}, "capabilities": []}}));
+            loop {
+                let mut line = String::new();
+                if reader.read_line(&mut line).expect("read production QMP request") == 0 { break; }
+                let request: Value = serde_json::from_str(&line).expect("production QMP request JSON");
+                let id = request["id"].as_u64().expect("production QMP numeric id");
+                match request["execute"].as_str().expect("production QMP execute") {
+                    "qmp_capabilities" => ack(&mut stream, id),
+                    "query-status" => packet(&mut stream, json!({"return": {"running": true, "status": "running"}, "id": id})),
+                    "query-mice" => {
+                        report.events.push(WireEvent::Probe);
+                        if scenario == Scenario::StopAfterSkipProbe && report.reward_captures >= 2 {
+                            report.stopped_after_probe = true;
+                            cancel.store(true, Ordering::Release);
+                        }
+                        packet(&mut stream, json!({"return": [{"name": "QEMU HID Tablet", "index": 0, "current": true, "absolute": true}], "id": id}));
+                    }
+                    "screendump" => {
+                        assert_eq!(request["arguments"]["format"], "png");
+                        let (kind, bytes) = if !report.events.iter().any(|event| matches!(event, WireEvent::Capture(_))) {
+                            (CaptureKind::Initial, initial_png.as_slice())
+                        } else if report.downs_at(skip) > 0 {
+                            assert_ne!(scenario, Scenario::UncertainSkip, "uncertain skip must stop before any further capture");
+                            if scenario == Scenario::SkipDisappears {
+                                report.unsupported_captures += 1;
+                                (CaptureKind::Unsupported, unsupported_png.as_slice())
+                            } else {
+                                (CaptureKind::Recovered, recovered_png.as_slice())
+                            }
+                        } else if scenario == Scenario::UnknownOnly
+                            || (scenario == Scenario::LateReward && report.unsupported_captures < 6)
+                            || (scenario == Scenario::TransientReward && report.reward_captures >= 1)
+                        {
+                            report.unsupported_captures += 1;
+                            (CaptureKind::Unsupported, unsupported_png.as_slice())
+                        } else if scenario == Scenario::RedealNoHalo {
+                            if report.unsupported_captures == 0 {
+                                report.unsupported_captures += 1;
+                                (CaptureKind::Unsupported, unsupported_png.as_slice())
+                            } else if report.downs_at(wire_point(SHARED_SOLVER_CONTROL.click_point)) > 0 {
+                                (CaptureKind::Recovered, recovered_png.as_slice())
+                            } else {
+                                report.nonempty_captures += 1;
+                                (CaptureKind::Nonempty, nonempty_png.as_slice())
+                            }
+                        } else {
+                            report.reward_captures += 1;
+                            (CaptureKind::Reward, REWARD_PNG)
+                        };
+                        report.events.push(WireEvent::Capture(kind));
+                        // The production capture guard already reserved this file.
+                        fs::write(request["arguments"]["filename"].as_str().expect("absolute capture filename"), bytes)
+                            .expect("mock QEMU writes original PNG");
+                        if scenario == Scenario::StopAfterFirstReward && kind == CaptureKind::Reward {
+                            cancel.store(true, Ordering::Release);
+                        }
+                        if scenario == Scenario::SkipDisappears && report.unsupported_captures == 3 {
+                            cancel.store(true, Ordering::Release);
+                        }
+                        ack(&mut stream, id);
+                    }
+                    "input-send-event" => {
+                        let events = request["arguments"]["events"].as_array().expect("QMP input events");
+                        let mut has_move = false;
+                        let mut down = false;
+                        let mut up = false;
+                        for event in events {
+                            match event["type"].as_str().expect("QMP event type") {
+                                "abs" => {
+                                    let value = event["data"]["value"].as_i64().expect("absolute axis value");
+                                    match event["data"]["axis"].as_str().expect("absolute axis") {
+                                        "x" => position.0 = value,
+                                        "y" => position.1 = value,
+                                        other => panic!("unexpected absolute axis: {other}"),
+                                    }
+                                    has_move = true;
+                                }
+                                "btn" => {
+                                    assert_eq!(event["data"]["button"], "left");
+                                    if event["data"]["down"].as_bool().expect("button direction") { down = true; } else { up = true; }
+                                }
+                                other => panic!("unexpected gameplay/recovery event: {other}"),
+                            }
+                        }
+                        if has_move { report.events.push(WireEvent::Move(position)); }
+                        if down {
+                            report.events.push(WireEvent::Down(position));
+                            assert!(report.connections == 1, "release-only recovery must never press down");
+                        }
+                        if up {
+                            report.events.push(WireEvent::Up);
+                            if report.connections > 1 { report.recovery_releases += 1; }
+                        }
+                        if scenario == Scenario::UncertainSkip && down && position == skip {
+                            assert!(pending_skip_error.is_none() && !error_delivered, "skip down was retried");
+                            pending_skip_error = Some(id);
+                            // xSAR sends UP before collecting DOWN/UP acknowledgements.
+                        } else if up && pending_skip_error.is_some() {
+                            let down_id = pending_skip_error.take().expect("pending injected down id");
+                            packet(&mut stream, json!({"error": {"class": "GenericError", "desc": "injected uncertain reward skip"}, "id": down_id}));
+                            error_delivered = true;
+                            // Leave the paired UP unacknowledged. Permit only release recovery.
+                        } else if error_delivered && report.connections == 1 {
+                            assert!(up && !down && !has_move, "only an old-stream release may follow uncertain skip");
+                        } else {
+                            ack(&mut stream, id);
+                        }
+                    }
+                    command => panic!("unexpected production QMP command: {command}"),
+                }
+            }
+            if scenario == Scenario::UncertainSkip && error_delivered && report.connections == 1 {
+                continue;
+            }
+            break;
+        }
+        report
+    }
+
+
+    /// Combined wire, worker notification and last original-frame evidence.
+    struct ResultEvidence {
+        /// Complete semantic command trace from the real transport boundary.
+        wire: WireReport,
+        /// Ordered production worker notifications.
+        events: Vec<WorkerEvent>,
+        /// Final bounded preview, preserving the captured pixels.
+        latest: LatestWorkerFrame,
+        /// Committed board count after the production run stopped.
+        completed_boards: usize,
+        /// Exact expected actionable post-skip frame.
+        recovered: CapturedFrame,
+        /// Exact cleared, unsupported animation frame for bounded negative runs.
+        unsupported: CapturedFrame,
+    }
+
+
+    /// Run one final-card action through concrete QMP and the shared terminal controller.
+    fn run(scenario: Scenario) -> ResultEvidence {
+        let directory = SocketDirectory(std::env::temp_dir().join(format!(
+            "tripeaks-reward-qmp-{}-{}", std::process::id(), NEXT_REWARD_SOCKET.fetch_add(1, Ordering::Relaxed),
+        )));
+        fs::create_dir(&directory.0).expect("unique mock QMP directory");
+        let socket = directory.0.join("qmp.sock");
+        let listener = UnixListener::bind(&socket).expect("mock QMP Unix socket");
+        listener.set_nonblocking(true).expect("bounded mock accept");
+        let material_effect = scenario != Scenario::InsufficientEffect;
+        let (initial, approved) = last_top_card(material_effect);
+        let recovered = tripeaks_stock_frame(true);
+        let unsupported = blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT);
+        let mut nonempty = tripeaks_stock_frame(false);
+        let row_four = GameMode::TriPeaks.profile().tableau_rows[3].face_probe_bounds;
+        paint(&mut nonempty, PixelRect::new(row_four.x, row_four.y,
+            crate::parameters::FACE_UP_WHITE_BLOCK_MIN_WIDTH, row_four.height), [255; 4]);
+        let state = TableauScanState::for_mode(GameMode::TriPeaks);
+        assert!(matches!(analyse_frame_with_state(&recovered, &state).expect("recovered frame analysis").prediction, PredictedAction::Action(_)));
+        let original_reward = decode_png(REWARD_PNG).expect("original reward fixture");
+        assert_eq!((original_reward.width, original_reward.height), (NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT));
+        assert!(!is_gameplay_scene_for_mode(&original_reward, GameMode::TriPeaks).expect("reward is outside gameplay"));
+        let plan = plan_step(approved).expect("canonical final plan");
+        let changed = materially_changed_pixels(&initial, &original_reward,
+            plan.input().effect_bounds(), plan.input().effect_exclusion_bounds(),
+            ACTION_CHANGE_CHANNEL_THRESHOLD).expect("original reward effect comparison");
+        if material_effect {
+            assert!(changed >= plan.input().minimum_changed_pixels(), "reward proves the final action effect");
+        } else {
+            assert!(changed < plan.input().minimum_changed_pixels(), "positive terminal artwork cannot satisfy effect proof");
+            assert!(changed <= 64, "only the 16x4 card-face evidence changed within the source rectangle");
+        }
+        let clear_effect = materially_changed_pixels(&initial, &unsupported,
+            plan.input().effect_bounds(), plan.input().effect_exclusion_bounds(),
+            ACTION_CHANGE_CHANNEL_THRESHOLD).expect("unsupported animation still proves card removal");
+        assert!(clear_effect >= plan.input().minimum_changed_pixels());
+        let (unsupported_observation, _) = analyse_captured_frame(unsupported.clone(), &state)
+            .expect("native unsupported animation classification");
+        assert!(!unsupported_observation.gameplay_scene);
+        assert_eq!(unsupported_observation.prediction, PredictedAction::NoHighlight);
+        assert_eq!(unsupported_observation.observed_rows, None);
+        let (nonempty_observation, _) = analyse_captured_frame(nonempty.clone(), &state)
+            .expect("positive native redeal classification");
+        assert!(nonempty_observation.gameplay_scene);
+        assert_eq!(nonempty_observation.prediction, PredictedAction::NoHighlight);
+        assert_eq!(nonempty_observation.observed_rows, RowMask::single_for(4, 4));
+        let initial_png = encode_native_png(&initial);
+        let recovered_png = encode_native_png(&recovered);
+        let unsupported_png = encode_native_png(&unsupported);
+        let nonempty_png = if scenario == Scenario::RedealNoHalo { encode_native_png(&nonempty) } else { Vec::new() };
+        let cancel = Arc::new(AtomicBool::new(false));
+        let server_cancel = Arc::clone(&cancel);
+        let server = thread::spawn(move || serve(listener, initial_png, recovered_png, unsupported_png, nonempty_png, scenario, server_cancel));
+        let (events, receiver) = mpsc::channel();
+        let sink = WorkerEventSink {
+            events, latest_frame: LatestFrameSlot::default(),
+            capture_context: Mutex::new(Some(vision_context(&socket, GameMode::TriPeaks))),
+        };
+        let mut scan_state = TableauScanState::for_mode(GameMode::TriPeaks);
+        let mut completed_boards = GameMode::TriPeaks.profile().boards_per_game - 1;
+        let delays = AnimationSettleDelays::from_millis(0, 0, 0).with_tripeaks_reobserve_millis(0);
+        run_execute_steps(socket, approved, StepRunSettings::new(delays, 1),
+            &mut scan_state, &mut completed_boards, &sink, &cancel);
+        let wire = server.join().expect("production worker mock QMP server");
+        let events = receiver.try_iter().map(|event| event.event).collect();
+        let latest = sink.latest_frame.take().expect("worker retains latest original capture");
+        ResultEvidence { wire, events, latest, completed_boards, recovered, unsupported }
+    }
+
+
+    /// Count positively accepted gameplay actions without counting terminal setup.
+    fn action_count(evidence: &ResultEvidence) -> usize {
+        evidence.events.iter().filter(|event| matches!(event, WorkerEvent::ActionCompleted { .. })).count()
+    }
+    /// Reject replay, Solver input or any control outside the final source and centre skip.
+    fn assert_only_original_and_skip(evidence: &ResultEvidence, skips: usize) {
+        let source = wire_point(TABLEAU_CARD_REGIONS[2].click_point);
+        let skip = wire_point(SCORE_SKIP_CONTROL.click_point);
+        assert_eq!(evidence.wire.downs_at(source), 1, "original gameplay source was delivered once");
+        assert_eq!(evidence.wire.downs_at(skip), skips, "centre skip count");
+        assert_eq!(evidence.wire.downs_at(wire_point(SHARED_SOLVER_CONTROL.click_point)), 0, "reward recovery sends no Solver refresh");
+        assert_eq!(evidence.wire.downs(), 1 + skips, "no other gameplay or terminal input");
+    }
+
+
+    /// Two fresh original terminal observations establish effect proof before one skip.
+    #[test]
+    #[ignore = "requires local AF_UNIX sockets"]
+    fn tripeaks_original_reward_two_fresh_captures_skip_once_and_recover_through_qmp() {
+        let evidence = run(Scenario::Recover);
+        assert_only_original_and_skip(&evidence, 1);
+        let skip = wire_point(SCORE_SKIP_CONTROL.click_point);
+        let source = wire_point(TABLEAU_CARD_REGIONS[2].click_point);
+        let source_down = evidence.wire.events.iter().position(|event| *event == WireEvent::Down(source)).expect("source input");
+        let skip_down = evidence.wire.events.iter().position(|event| *event == WireEvent::Down(skip)).expect("skip input");
+        let confirmations = evidence.wire.events[source_down + 1..skip_down].iter()
+            .filter(|event| **event == WireEvent::Capture(CaptureKind::Reward)).count();
+        assert!(confirmations >= 2, "two separate reward screendumps preceded skip authority");
+        assert!(confirmations <= 6, "confirmation and shared terminal entry remain bounded");
+        assert_eq!(action_count(&evidence), 1);
+        assert!(evidence.events.iter().any(|event| matches!(event,
+            WorkerEvent::ActionCompleted { changed_pixels, continued_from_halo: false, .. }
+            if *changed_pixels >= crate::parameters::MINIMUM_TABLEAU_CHANGED_PIXELS)));
+        assert!(evidence.events.iter().any(|event| matches!(event,
+            WorkerEvent::BoardProgress { completed_boards: 3, .. })));
+        assert!(evidence.events.iter().any(|event| matches!(event,
+            WorkerEvent::RunCompleted { requested_operations: 1, verified_operations: 1, .. })));
+        assert_eq!(evidence.completed_boards, 0, "actionable recovered board clears stale completion state");
+        assert_eq!(evidence.latest.frame.pixels, evidence.recovered.pixels);
+        assert!(matches!(evidence.latest.prediction, Some(PredictedAction::Action(_))));
+    }
+
+
+    /// Classify immutable native frames and build the actual production final-card proof input.
+    fn native_reward_proof_pair(material_effect: bool) -> (StepPlan, FrameObservation, FrameObservation) {
+        let (frame, expected) = last_top_card(material_effect);
+        let scan = TableauScanState::for_mode(GameMode::TriPeaks);
+        let (before, _) = analyse_captured_frame(frame, &scan).expect("fresh planning classification");
+        let (after, _) = analyse_captured_frame(decode_png(REWARD_PNG).unwrap(), &scan)
+            .expect("fresh result classification");
+        (plan_step(expected).unwrap(), before, after)
+    }
+
+
+    /// Native proof accepts the supplied panel only with actual sole-card context and material effect.
+    #[test]
+    fn tripeaks_reward_native_proof_accepts_final_card_and_actual_effect() {
+        let (plan, before, after) = native_reward_proof_pair(true);
+        let changed = tripeaks_terminal::reward_action_evidence(plan, &before, &after)
+            .expect("supported final-card proof").expect("positive native panel");
+        assert!(changed >= plan.input().minimum_changed_pixels());
+        let mut confirmation = tripeaks_terminal::RewardConfirmation::default();
+        assert_eq!(confirmation.observe(true), tripeaks_terminal::RewardConfirmationStep::Observe);
+        let (_, _, independently_classified) = native_reward_proof_pair(true);
+        assert!(tripeaks_terminal::reward_action_evidence(plan, &before, &independently_classified).unwrap().is_some());
+        assert_eq!(confirmation.observe(true), tripeaks_terminal::RewardConfirmationStep::Confirmed);
+    }
+
+
+    /// Native original pixels with a tiny source-probe change cannot meet the existing effect floor.
+    #[test]
+    fn tripeaks_reward_native_proof_rejects_insufficient_effect() {
+        let (plan, before, after) = native_reward_proof_pair(false);
+        let changed = materially_changed_pixels(&before.frame, &after.frame,
+            plan.input().effect_bounds(), plan.input().effect_exclusion_bounds(), ACTION_CHANGE_CHANNEL_THRESHOLD).unwrap();
+        assert!(changed <= 64);
+        assert!(changed < plan.input().minimum_changed_pixels());
+        let error = tripeaks_terminal::reward_action_evidence(plan, &before, &after).unwrap_err();
+        assert!(error.contains("effect") && error.contains("required="));
+    }
+
+
+    /// Draw, foreign actions and forged top-row input definitions cannot adopt reward authority.
+    #[test]
+    fn tripeaks_reward_native_proof_refuses_unrelated_or_noncanonical_context() {
+        let (plan, before, after) = native_reward_proof_pair(true);
+        let (stock, _) = analyse_captured_frame(tripeaks_stock_frame(true),
+            &TableauScanState::for_mode(GameMode::TriPeaks)).unwrap();
+        let draw = plan_step(stock.prediction).unwrap();
+        assert!(tripeaks_terminal::reward_action_evidence(draw, &stock, &after).is_err());
+        let foreign = plan_step(PredictedAction::Action(
+            pyramid::action_for_kind(PyramidTargetKind::Move).unwrap())).unwrap();
+        assert!(tripeaks_terminal::reward_action_evidence(foreign, &before, &after).is_err());
+        let mut forged = plan.input().action();
+        forged.specification.operation = InputOperation::PressDrawKey;
+        let forged_plan = plan_step(PredictedAction::Action(forged)).unwrap();
+        assert!(tripeaks_terminal::reward_action_evidence(forged_plan, &before, &after).is_err());
+    }
+
+
+    /// Actual fresh gameplay classifications and positive row evidence cannot become terminal input.
+    #[test]
+    fn tripeaks_reward_native_proof_refuses_fresh_target_and_nonempty_rows() {
+        let (plan, before, _) = native_reward_proof_pair(true);
+        let scan = TableauScanState::for_mode(GameMode::TriPeaks);
+
+
+        for with_halo in [false, true] {
+            let mut frame = decode_png(REWARD_PNG).unwrap();
+            paint(&mut frame, GAMEPLAY_FELT_PROBE_BOUNDS, [20, 140, 60, 255]);
+            let card = TABLEAU_CARD_REGIONS[2];
+            let face = GameMode::TriPeaks.profile().tableau_rows[0].face_probe_bounds;
+            paint(&mut frame, PixelRect::new(card.card_bounds.x + 5, face.y,
+                crate::parameters::FACE_UP_WHITE_BLOCK_MIN_WIDTH, face.height), [255; 4]);
+
+
+            if with_halo {
+                let anchor = plan.input().action().anchor;
+                let gold = GOLD_RGB_CANDIDATES[0];
+                paint(&mut frame, PixelRect::new(anchor.x as u32, anchor.y as u32,
+                    HALO_GOLD_RUN_MIN + 1, 1), [gold[0], gold[1], gold[2], 255]);
+            }
+            assert_eq!(tripeaks_terminal::is_reward_overlay(&frame), Ok(true));
+            let (after, _) = analyse_captured_frame(frame, &scan).unwrap();
+            assert!(after.gameplay_scene && after.observed_rows.is_some());
+            assert_eq!(matches!(after.prediction, PredictedAction::Action(_)), with_halo);
+            assert!(tripeaks_terminal::reward_action_evidence(plan, &before, &after).is_err());
+        }
+    }
+
+
+    /// A second genuinely exposed top-row card prevents the sole-final-card completion shortcut.
+    #[test]
+    fn tripeaks_reward_native_proof_refuses_another_exposed_card() {
+        let (plan, before, after) = native_reward_proof_pair(true);
+        let mut frame = before.frame;
+        paint(&mut frame, TABLEAU_CARD_REGIONS[1].card_bounds, [255; 4]);
+        let scan = TableauScanState::for_mode(GameMode::TriPeaks);
+        let (before, _) = analyse_captured_frame(frame, &scan).unwrap();
+        assert_eq!(before.prediction, plan.before());
+        assert_eq!(analyse_frame_with_state(&before.frame, &scan).unwrap().top_row_face_up_count, 2);
+        assert!(tripeaks_terminal::reward_action_evidence(plan, &before, &after).is_err());
+    }
+
+
+    /// The synthetic host-QMP fixture encoder is verified independently of socket availability.
+    #[test]
+    fn tripeaks_reward_native_qmp_fixture_png_roundtrip_preserves_context() {
+        let (frame, expected) = last_top_card(true);
+        let decoded = decode_png(&encode_native_png(&frame)).unwrap();
+        assert_eq!(decoded.pixels, frame.pixels);
+        let (observation, _) = analyse_captured_frame(decoded,
+            &TableauScanState::for_mode(GameMode::TriPeaks)).unwrap();
+        assert_eq!(observation.prediction, expected);
+        assert!(tripeaks_terminal::last_tableau_context(plan_step(expected).unwrap(), &observation).unwrap());
+    }
+
+
+    /// STOP after one candidate retains original pixels without committing a win.
+    #[test]
+    #[ignore = "requires local AF_UNIX sockets"]
+    fn tripeaks_stop_after_first_original_reward_capture_sends_no_terminal_input() {
+        let evidence = run(Scenario::StopAfterFirstReward);
+        assert_only_original_and_skip(&evidence, 0);
+        assert_eq!(evidence.wire.reward_captures, 1);
+        assert_eq!(action_count(&evidence), 0);
+        assert_eq!(evidence.completed_boards, 2, "one terminal candidate cannot commit completion");
+        assert_eq!(evidence.latest.frame.pixels, decode_png(REWARD_PNG).unwrap().pixels);
+        assert!(evidence.events.iter().any(|event| matches!(event, WorkerEvent::Log(message) if message.contains("STOP"))));
+    }
+
+
+    /// STOP after the fresh terminal probe closes the final pre-input race.
+    #[test]
+    #[ignore = "requires local AF_UNIX sockets"]
+    fn tripeaks_stop_after_fresh_skip_probe_sends_no_centre_press() {
+        let evidence = run(Scenario::StopAfterSkipProbe);
+        assert_only_original_and_skip(&evidence, 0);
+        assert!(evidence.wire.stopped_after_probe, "STOP was raised at the terminal pre-input probe");
+        assert!(evidence.wire.reward_captures >= 2);
+        assert_eq!(action_count(&evidence), 1, "final gameplay action was already effect verified");
+        assert!(!evidence.events.iter().any(|event| matches!(event, WorkerEvent::RunCompleted { .. })));
+        assert_eq!(evidence.latest.frame.pixels, decode_png(REWARD_PNG).unwrap().pixels);
+    }
+
+
+    /// Uncertain skip acknowledgement permits only releases and stops the controller.
+    #[test]
+    #[ignore = "requires local AF_UNIX sockets"]
+    fn tripeaks_uncertain_reward_skip_allows_release_only_and_never_repeats_input() {
+        let evidence = run(Scenario::UncertainSkip);
+        assert_only_original_and_skip(&evidence, 1);
+        assert_eq!(action_count(&evidence), 1);
+        assert_eq!(evidence.wire.connections, 2, "xSAR opened only its release-recovery connection");
+        assert_eq!(evidence.wire.recovery_releases, 1);
+        assert!(!evidence.wire.events.contains(&WireEvent::Capture(CaptureKind::Recovered)));
+        assert!(!evidence.events.iter().any(|event| matches!(event, WorkerEvent::RunCompleted { .. })));
+        assert!(evidence.events.iter().any(|event| matches!(event, WorkerEvent::State(WorkerState::Uncertain))));
+        assert!(evidence.events.iter().any(|event| matches!(event, WorkerEvent::Log(message)
+            if message.contains("injected uncertain reward skip") && message.contains("uncertain"))));
+        assert_eq!(evidence.latest.frame.pixels, decode_png(REWARD_PNG).unwrap().pixels);
+    }
+
+
+    /// Reward animation may arrive after six unsupported result frames without input.
+    #[test]
+    #[ignore = "requires local AF_UNIX sockets"]
+    fn tripeaks_late_reward_outlasts_four_captures_then_skips_once_through_qmp() {
+        let evidence = run(Scenario::LateReward);
+        assert_only_original_and_skip(&evidence, 1);
+        assert_eq!(evidence.wire.unsupported_captures, 6);
+        assert!(evidence.wire.unsupported_captures > 4, "terminal animation has a distinct bounded allowance");
+        let first_reward = evidence.wire.events.iter().position(|event|
+            *event == WireEvent::Capture(CaptureKind::Reward)).expect("late original reward capture");
+        assert_eq!(evidence.wire.events[..first_reward].iter().filter(|event|
+            **event == WireEvent::Capture(CaptureKind::Unsupported)).count(), 6);
+        assert_eq!(evidence.wire.events[..first_reward].iter().filter(|event|
+            matches!(event, WireEvent::Down(_))).count(), 1, "late animation remains input-free after the final card");
+        assert_eq!(action_count(&evidence), 1);
+        assert!(evidence.events.iter().any(|event| matches!(event,
+            WorkerEvent::RunCompleted { requested_operations: 1, verified_operations: 1, .. })));
+        assert_eq!(evidence.completed_boards, 0);
+        assert_eq!(evidence.latest.frame.pixels, evidence.recovered.pixels);
+    }
+
+
+    /// Twenty unsupported captures stop before any completion or terminal input.
+    #[test]
+    #[ignore = "requires local AF_UNIX sockets"]
+    fn tripeaks_unknown_terminal_animation_stops_at_twenty_fresh_qmp_captures() {
+        let evidence = run(Scenario::UnknownOnly);
+        assert_only_original_and_skip(&evidence, 0);
+        assert_eq!(evidence.wire.unsupported_captures, 20);
+        assert_eq!(evidence.wire.reward_captures, 0);
+        assert_eq!(action_count(&evidence), 0);
+        assert_eq!(evidence.completed_boards, 2, "unknown frames cannot commit completion");
+        assert_eq!(evidence.latest.frame.pixels, evidence.unsupported.pixels);
+        assert!(!evidence.events.iter().any(|event| matches!(event,
+            WorkerEvent::RunCompleted { .. } | WorkerEvent::GameCompleted)));
+        assert!(evidence.events.iter().any(|event| matches!(event, WorkerEvent::State(WorkerState::Uncertain))));
+    }
+
+
+    /// One disappearing reward candidate cannot survive its four-capture confirmation budget.
+    #[test]
+    #[ignore = "requires local AF_UNIX sockets"]
+    fn tripeaks_transient_reward_stops_after_four_confirmation_captures_without_skip() {
+        let evidence = run(Scenario::TransientReward);
+        assert_only_original_and_skip(&evidence, 0);
+        assert_eq!(evidence.wire.reward_captures, 1);
+        assert_eq!(evidence.wire.unsupported_captures, 3);
+        assert_eq!(action_count(&evidence), 0);
+        assert_eq!(evidence.completed_boards, 2);
+        assert_eq!(evidence.latest.frame.pixels, evidence.unsupported.pixels);
+        assert!(!evidence.events.iter().any(|event| matches!(event,
+            WorkerEvent::RunCompleted { .. } | WorkerEvent::GameCompleted)));
+        assert!(evidence.events.iter().any(|event| matches!(event, WorkerEvent::State(WorkerState::Uncertain))));
+    }
+
+
+    /// A second non-gameplay frame cannot retry skip without fresh positive reward evidence.
+    #[test]
+    #[ignore = "requires local AF_UNIX sockets"]
+    fn tripeaks_reward_disappearing_after_skip_refuses_centre_retry_through_qmp() {
+        let evidence = run(Scenario::SkipDisappears);
+        assert_only_original_and_skip(&evidence, 1);
+        assert_eq!(evidence.wire.unsupported_captures, 3);
+        let skip = wire_point(SCORE_SKIP_CONTROL.click_point);
+        let skip_down = evidence.wire.events.iter().position(|event|
+            *event == WireEvent::Down(skip)).expect("first acknowledged skip");
+        let unsupported = evidence.wire.events[skip_down + 1..].iter().filter(|event|
+            **event == WireEvent::Capture(CaptureKind::Unsupported)).count();
+        assert_eq!(unsupported, 3, "two input-free unknown rounds preceded STOP on the third");
+        assert!(!evidence.wire.events[skip_down + 1..].iter().any(|event|
+            matches!(event, WireEvent::Down(_))), "fresh unknown frames never authorise a retry");
+        assert_eq!(action_count(&evidence), 1);
+        assert_eq!(evidence.completed_boards, 3, "only the already-confirmed win remains committed");
+        assert_eq!(evidence.latest.frame.pixels, evidence.unsupported.pixels);
+        assert!(!evidence.events.iter().any(|event| matches!(event,
+            WorkerEvent::RunCompleted { .. } | WorkerEvent::GameCompleted)));
+        assert!(evidence.events.iter().any(|event| matches!(event, WorkerEvent::Log(message) if message.contains("STOP"))));
+    }
+
+
+    /// Original reward recognition cannot replace the previous action's material effect proof.
+    #[test]
+    #[ignore = "requires local AF_UNIX sockets"]
+    fn tripeaks_original_reward_with_insufficient_source_effect_refuses_completion_through_qmp() {
+        let evidence = run(Scenario::InsufficientEffect);
+        assert_only_original_and_skip(&evidence, 0);
+        assert_eq!(evidence.wire.reward_captures, 1);
+        assert_eq!(action_count(&evidence), 0);
+        assert_eq!(evidence.completed_boards, 2);
+        assert_eq!(evidence.latest.frame.pixels, decode_png(REWARD_PNG).unwrap().pixels);
+        assert!(!evidence.events.iter().any(|event| matches!(event,
+            WorkerEvent::RunCompleted { .. } | WorkerEvent::GameCompleted)));
+        assert!(evidence.events.iter().any(|event| matches!(event, WorkerEvent::State(WorkerState::Uncertain))));
+        assert!(evidence.events.iter().any(|event| matches!(event, WorkerEvent::Log(message)
+            if message.contains("effect") && message.contains("required="))));
+    }
+
+
+    /// Positive no-HALO gameplay clears terminal waiting and preserves the existing redeal policy.
+    #[test]
+    #[ignore = "requires local AF_UNIX sockets"]
+    fn tripeaks_nonempty_no_halo_redeal_resumes_existing_solver_recovery_through_qmp() {
+        let evidence = run(Scenario::RedealNoHalo);
+        let source = wire_point(TABLEAU_CARD_REGIONS[2].click_point);
+        let solver = wire_point(SHARED_SOLVER_CONTROL.click_point);
+        let skip = wire_point(SCORE_SKIP_CONTROL.click_point);
+        assert_eq!(evidence.wire.downs_at(source), 1);
+        assert_eq!(evidence.wire.downs_at(solver), 1);
+        assert_eq!(evidence.wire.downs_at(skip), 0);
+        assert_eq!(evidence.wire.downs(), 2, "only the original final-row source and existing Solver recovery were delivered");
+        assert_eq!(evidence.wire.unsupported_captures, 1);
+        assert_eq!(evidence.wire.reward_captures, 0);
+        assert!(evidence.wire.nonempty_captures > 0);
+        let solver_down = evidence.wire.events.iter().position(|event|
+            *event == WireEvent::Down(solver)).expect("existing Solver recovery");
+        assert!(evidence.wire.events[..solver_down].contains(&WireEvent::Capture(CaptureKind::Nonempty)),
+            "positive nonempty gameplay precedes Solver authority");
+        assert_eq!(action_count(&evidence), 1);
+        assert!(evidence.events.iter().any(|event| matches!(event,
+            WorkerEvent::ActionCompleted { changed_pixels, continued_from_halo: false, .. }
+            if *changed_pixels >= crate::parameters::MINIMUM_TABLEAU_CHANGED_PIXELS)));
+        assert!(evidence.events.iter().any(|event| matches!(event,
+            WorkerEvent::RunCompleted { requested_operations: 1, verified_operations: 1, .. })));
+        assert_eq!(evidence.completed_boards, 2, "redeal evidence cannot force a game win");
+        assert!(!evidence.events.iter().any(|event| matches!(event,
+            WorkerEvent::BoardProgress { completed_boards: 3, .. } | WorkerEvent::GameCompleted)));
+        assert_eq!(evidence.latest.frame.pixels, evidence.recovered.pixels);
+    }
 }

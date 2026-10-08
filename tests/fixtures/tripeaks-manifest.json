@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "fixtures": [
+    {
+      "id": "TP01",
+      "path": "tripeaks-TP01.png",
+      "width": 1920,
+      "height": 1080,
+      "format": "RGBA PNG",
+      "bytes": 2098416,
+      "sha256": "1cce002aeecee0d167b9b9e0099bce5361bbc9cadb77629ff18216eb670441d6",
+      "source": "Supplied qmp-qemu-socket 261008 201458 FAIL-TriPeaks.png attachment",
+      "context": "Manual capture following final top-row column-3 action 146 and guarded stop; exact fourth observation unavailable",
+      "expected_scene": "TriPeaks Congratulations reward overlay with fixed Click anywhere to skip prompt",
+      "authority": "Positive visual candidate only; fresh final-card context, material effect and consecutive confirmations are separately required"
+    }
+  ]
+}

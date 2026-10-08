@@ -11,6 +11,7 @@ mod klondike_execution;
 mod post_game;
 mod pyramid_execution;
 mod spider_execution;
+mod tripeaks_terminal;
 
 use std::{
     fs::{self, OpenOptions},
@@ -1273,7 +1274,9 @@ fn run_execute_steps(
                     match post_game::run_post_game_restart(
                         &mut qmp,
                         &socket_path,
-                        (scan_state.mode() == GameMode::Pyramid).then_some(&next_observation),
+                        (scan_state.mode() == GameMode::Pyramid
+                            || tripeaks_terminal::is_reward_overlay(&next_observation.frame) == Ok(true))
+                            .then_some(&next_observation),
                         scan_state,
                         completed_boards,
                         event_tx,
@@ -2063,6 +2066,8 @@ fn execute_guarded_action(
     let mut missing_halo_phase = 0u8;
     let mut solver_recovery_clicks = 0usize;
     let mut halo_recovery = TriPeaksHaloRecovery::default();
+    let mut reward_confirmation = tripeaks_terminal::RewardConfirmation::default();
+    let mut awaiting_reward_animation = false;
 
 
     let (after, observation, changed_pixels, board_completed, series_complete) = loop {
@@ -2108,6 +2113,162 @@ fn execute_guarded_action(
             .iter()
             .map(|observation| observation.prediction)
             .collect();
+
+
+        // A positively calibrated reward panel precedes the ordinary missing-HALO
+        // scene gate. Generic non-gameplay pixels never enter this terminal path.
+        let reward_candidate = match after_series.observations.last() {
+            Some(observation) => tripeaks_terminal::is_reward_overlay(&observation.frame),
+            None => Err("TriPeaks terminal observation contained no frame".to_owned()),
+        };
+        let reward_candidate = match reward_candidate {
+            Ok(candidate) => candidate,
+            Err(error) => return Err(action_failure(
+                action_started, profile, WorkerState::Uncertain, error,
+                after_series.observations.pop(), FailureFramePhase::PostAction,
+            )),
+        };
+
+
+        if reward_candidate || reward_confirmation.active() {
+            let evidence = before_series.observations.last()
+                .zip(after_series.observations.last())
+                .ok_or_else(|| "TriPeaks terminal comparison is missing a frame".to_owned())
+                .and_then(|(before, after)| tripeaks_terminal::reward_action_evidence(plan, before, after));
+            let (positive, changed) = match evidence {
+                Ok(Some(changed)) => (true, changed),
+                Ok(None) => (false, 0),
+                Err(error) => return Err(action_failure(
+                    action_started, profile, WorkerState::Uncertain, error,
+                    after_series.observations.pop(), FailureFramePhase::PostAction,
+                )),
+            };
+            profile.validation_effect += verification_started.elapsed();
+
+
+            match reward_confirmation.observe(positive) {
+                tripeaks_terminal::RewardConfirmationStep::Confirmed => {
+                    *completed_boards = boards_per_game;
+                    send_log(event_tx, format!(
+                        "TriPeaks game win confirmed from two consecutive fresh Congratulations/reward/skip panels after the sole exposed top-row card click; last-action effect pixels={changed} (required={required_changed_pixels}). No card or Solver input was retried; entering the guarded reward-skip transition."
+                    ));
+                    let observation = after_series.observations.pop()
+                        .expect("confirmed fresh terminal observation");
+                    break (PredictedAction::NoHighlight, observation, changed, true, true);
+                }
+                tripeaks_terminal::RewardConfirmationStep::Stop => {
+                    return Err(action_failure(
+                        action_started, profile, WorkerState::Uncertain,
+                        format!(
+                            "TriPeaks reward evidence did not remain positive for two consecutive frames within {} confirmation captures; no completion or terminal input authorised. The last card was not retried.",
+                            tripeaks_terminal::REWARD_CONFIRMATION_CAPTURES,
+                        ),
+                        after_series.observations.pop(), FailureFramePhase::PostAction,
+                    ));
+                }
+                tripeaks_terminal::RewardConfirmationStep::Observe => {
+                    send_log(event_tx, format!(
+                        "TriPeaks reward candidate positive={positive}; capturing fresh confirmation after {} ms without input (at most {} captures from the first candidate). Disappearing evidence resets consecutive positives.",
+                        settings.animation_delays().tripeaks_reobserve.as_millis(),
+                        tripeaks_terminal::REWARD_CONFIRMATION_CAPTURES,
+                    ));
+
+
+                    match cancellable_wait(settings.animation_delays().tripeaks_reobserve, cancel_requested) {
+                        Ok(waited) => profile.intentional_wait += waited,
+                        Err(waited) => {
+                            profile.intentional_wait += waited;
+                            return Err(action_failure(
+                                action_started, profile, WorkerState::Ready,
+                                "STOP was requested during TriPeaks reward confirmation; no terminal input was sent and the last card was not retried.".to_owned(),
+                                after_series.observations.pop(), FailureFramePhase::PostAction,
+                            ));
+                        }
+                    }
+                    observation_round = observation_round.saturating_add(1);
+                    continue;
+                }
+            }
+        }
+
+
+        // A final-card clear may precede the fully drawn reward panel. Unsupported
+        // pixels authorise only a bounded wait here, never a win or modal click.
+        if awaiting_reward_animation && recognised_gameplay
+            && (after_predictions.iter().any(|prediction| *prediction != PredictedAction::NoHighlight)
+                || after_series.observations.last().is_some_and(|observation| observation.observed_rows.is_some()))
+        {
+            awaiting_reward_animation = false;
+            send_log(event_tx,
+                "TriPeaks pending-terminal wait ended on fresh nonempty or actionable gameplay; resuming the existing effect/redeal/HALO policy without terminal input.".to_owned());
+        }
+
+
+        if awaiting_reward_animation || (!recognised_gameplay
+            && after_predictions == [PredictedAction::NoHighlight]
+            && after_series.observations.last().is_some_and(|observation| observation.observed_rows.is_none()))
+        {
+            let animation_evidence = before_series.observations.last()
+                .zip(after_series.observations.last())
+                .ok_or_else(|| "TriPeaks pending-terminal observation is missing a frame".to_owned())
+                .and_then(|(before, after)| {
+
+
+                    if !tripeaks_terminal::last_tableau_context(plan, before)? {
+                        return Ok(false);
+                    }
+                    let changed = materially_changed_pixels(
+                        &before.frame, &after.frame, effect_bounds, exclusion_bounds,
+                        ACTION_CHANGE_CHANNEL_THRESHOLD,
+                    )?;
+                    Ok(changed >= required_changed_pixels)
+                });
+            let eligible = match animation_evidence {
+                Ok(eligible) => eligible,
+                Err(error) => return Err(action_failure(
+                    action_started, profile, WorkerState::Uncertain, error,
+                    after_series.observations.pop(), FailureFramePhase::PostAction,
+                )),
+            };
+
+
+            if (awaiting_reward_animation || eligible)
+                && !after_predictions.iter().any(|prediction| matches!(prediction, PredictedAction::Action(_)))
+            {
+                awaiting_reward_animation = true;
+                profile.validation_effect += verification_started.elapsed();
+
+
+                if observation_round >= POST_GAME_MAX_OBSERVATION_ROUNDS {
+                    return Err(action_failure(
+                        action_started, profile, WorkerState::Uncertain,
+                        format!(
+                            "TriPeaks final-card terminal wait stopped after {POST_GAME_MAX_OBSERVATION_ROUNDS} post-action captures without a positively recognised reward panel. Unsupported scene pixels never authorised completion, Solver or centre input; the last card was not retried."
+                        ),
+                        after_series.observations.pop(), FailureFramePhase::PostAction,
+                    ));
+                }
+                send_log(event_tx, format!(
+                    "TriPeaks final-card effect is proven but the reward panel is not yet positively recognised; input-free terminal observation {observation_round}/{POST_GAME_MAX_OBSERVATION_ROUNDS}, waiting {} ms. No completion, Solver or centre input authorised.",
+                    settings.animation_delays().tripeaks_reobserve.as_millis(),
+                ));
+
+
+                match cancellable_wait(settings.animation_delays().tripeaks_reobserve, cancel_requested) {
+                    Ok(waited) => profile.intentional_wait += waited,
+                    Err(waited) => {
+                        profile.intentional_wait += waited;
+                        return Err(action_failure(
+                            action_started, profile, WorkerState::Ready,
+                            "STOP was requested during TriPeaks final-card terminal observation; no terminal input was sent and the card was not retried.".to_owned(),
+                            after_series.observations.pop(), FailureFramePhase::PostAction,
+                        ));
+                    }
+                }
+                observation_round = observation_round.saturating_add(1);
+                continue;
+            }
+        }
 
 
         if after_predictions

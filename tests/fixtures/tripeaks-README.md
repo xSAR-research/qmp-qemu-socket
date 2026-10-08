@@ -1,0 +1,11 @@
+# TriPeaks supplied reward-overlay fixture
+
+`tripeaks-TP01.png` is the unchanged PNG supplied by Charlie for the TriPeaks stop after final action 146, top-row column 3. It shows the Congratulations reward panel, LEVEL 3,105 and “Click anywhere to skip” at native 1920 × 1080.
+
+The attachment is 2,098,416 bytes, SHA-256 `1cce002aeecee0d167b9b9e0099bce5361bbc9cadb77629ff18216eb670441d6`. The accompanying session log says its earlier saved PNG was 1,333,621 bytes. This fixture preserves the supplied attachment and does not assert byte identity with that earlier saved file. It was captured manually after the guarded stop, so it does not establish the exact pixels of the fourth post-action observation.
+
+The detector calibrates the fixed Congratulations title, fixed skip prompt and separate panel edges. Level, XP, changing reward artwork, pointer and desktop chrome are excluded. Tests retain the original attachment, erase individual stable probes to establish refusal, and erase the variable central content to demonstrate that it supplies no authority.
+
+Recognition alone does not establish a win. The production worker requires a fresh canonical sole exposed top-row card context, the existing cursor-excluded last-action effect threshold, and two consecutive fresh matching reward captures. Partial or unknown terminal animation permits only bounded input-free observation; no completion, Solver or centre click is authorised by an unsupported scene alone. Fresh nonempty gameplay returns to the existing controller policy. Each attempted reward skip requires fresh positive reward evidence; uncertain delivery stops without replay.
+
+The ten production-QMP regressions use local Unix sockets and are explicitly ignored by default because this execution environment refuses AF_UNIX socket creation. They are compiled with the suite and must run on the Linux host with `cargo test --locked -- --include-ignored` before live launch. Ten native detector, confirmation and production-proof tests run without sockets. The local focused result was 10 passed, 10 ignored; this is not a claim that the transport or live guest was exercised locally. Host regressions cover the exact reward handover, bounded observation/refusal, skip delivery and actionable recovery; they do not supply every New Game/Play screen of a complete live restart.

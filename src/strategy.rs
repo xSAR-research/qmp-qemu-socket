@@ -34,7 +34,7 @@ impl SolvingStrategy {
     }
 
 
-    /// Explain the actual capability of this candidate before selection.
+    /// Explain the selected method before strategy selection.
     pub const fn description(self) -> &'static str {
 
 

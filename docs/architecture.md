@@ -1,5 +1,11 @@
 # Architecture and control flow
 
+Current release: **v2.0.8**, based on promoted application commit
+`d142fa7994dc3da961103d80fdad37d341d0e538`. The earlier extraction baseline
+below records when the shared xsar boundary was introduced. Current solving
+methods and game summaries are in [README](../README.md); the reward-overlay
+transition is described in [release notes](release-v2.0.8.md).
+
 ## Current boundary
 
 Version 2.0.0 candidate 2 starts from the complete pushed v1.4.0 candidate 4
@@ -57,6 +63,7 @@ application. Search and card recognition are future independent modules.
 | `qmp.rs` | application vocabulary and timing adapter over xSAR transport |
 | `worker.rs` | worker commands/events, capture, guarded execution, timing and cancellation |
 | `worker/post_game.rs` | shared score, Level Up, New Game, Play and Solver progression |
+| `worker/tripeaks_terminal.rs` | narrowly evidenced TriPeaks reward recognition and final-card terminal confirmation |
 | `worker/pyramid_execution.rs` | Pyramid effect, fresh-pair continuation and redeal checks |
 | `worker/klondike_execution.rs` | Klondike execution, bounded recovery, independent completion and continuous terminal progression |
 | `worker/freecell_execution.rs` | Free Cell fresh-source actions, automatic-transfer observations and deterministic one-board restart |
@@ -88,8 +95,10 @@ flowchart TD
     G -->|"Unsupported or uncertain"| H["Stop with latest frame"]
 ```
 
-TriPeaks and Pyramid freshly reproduce the approved initial prediction and keep
-their accepted result-verification policies. An effect-verified result or
+TriPeaks and Pyramid freshly reproduce a concrete approved initial prediction;
+an explicit no-HALO request may use bounded scene-gated Solver setup to obtain
+its first canonical target. Both keep their accepted result-verification policies.
+An effect-verified result or
 Pyramid's qualified repeated Left/Right HALO pair becomes the next planning
 frame. Klondike, Free Cell and Spider previews are advisory: each fresh supported scene and canonical
 Solver recommendation authorises one operation, then editable settle and fresh

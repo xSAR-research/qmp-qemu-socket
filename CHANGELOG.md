@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.0.8 — TriPeaks reward transition and solving-method documentation
+
+- Recognise the supplied TriPeaks Congratulations reward overlay after a final top-row card action, retaining the existing effect threshold and requiring two consecutive fresh terminal observations.
+- Enter the bounded post-game sequence from confirmed reward evidence instead of rejecting the overlay as an unsupported gameplay scene. Require fresh recognised reward evidence before each reward-skip attempt; preserve STOP and uncertain-input non-retry.
+- Restructure the README around Computer Vision solving and Shortest path route calculation, with their current capabilities, a general process diagram and a closing description of each of the five game types.
+- Use plain release version 2.0.8 in Cargo metadata, window title and session logs. The lockfile changes only the application version; the xsar revision and all dependency versions remain pinned.
+
 ## v2.0.0, candidate 7 — CLASSIC baseline and Solver startup recovery
 
 - Share the established CLASSIC-blue colour predicate between Klondike and Spider, including Spider stock occupancy and Draw checks. Keep card-back colour separate from scene, Solver and closed-HALO authority.

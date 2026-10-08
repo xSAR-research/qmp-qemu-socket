@@ -12,8 +12,8 @@ use crate::{
 pub const APP_NAME: &str = env!("CARGO_PKG_NAME");
 
 
-/// Package version and candidate number shown by the UI and session log.
-pub const RELEASE_LABEL: &str = concat!("v", env!("CARGO_PKG_VERSION"), ", candidate 7");
+/// Release version shown by the UI and session log.
+pub const RELEASE_LABEL: &str = concat!("v", env!("CARGO_PKG_VERSION"));
 
 
 /// Initial application window width in egui logical points.

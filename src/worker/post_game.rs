@@ -70,6 +70,12 @@ pub(super) fn run_post_game_restart(
     let mut intentional_wait = Duration::ZERO;
     let mut input_wall = Duration::ZERO;
     let boards_per_game = scan_state.mode().profile().boards_per_game;
+    // Only this positively confirmed TriPeaks reward entry gets the new skip
+    // evidence policy. Pyramid and existing score-counting transitions retain theirs.
+    let reward_entry = scan_state.mode() == crate::game::GameMode::TriPeaks
+        && initial_observation.is_some_and(|observation|
+            super::tripeaks_terminal::is_reward_overlay(&observation.frame) == Ok(true)
+        );
 
 
     let mut known_terminal_stage = match known_post_game_stage(initial_observation) {
@@ -110,6 +116,7 @@ pub(super) fn run_post_game_restart(
 
         let mut pre_score_round = 1usize;
         let mut consecutive_non_gameplay = 0usize;
+        let mut consecutive_reward = 0usize;
 
 
         loop {
@@ -157,6 +164,9 @@ pub(super) fn run_post_game_restart(
             }
 
 
+            let reward_visible = reward_entry
+                && super::tripeaks_terminal::is_reward_overlay(&observation.frame)?;
+            consecutive_reward = if reward_visible { consecutive_reward.saturating_add(1) } else { 0 };
             consecutive_non_gameplay = if observation.gameplay_scene || level_up_ambiguous {
                 0
             } else {
@@ -164,7 +174,9 @@ pub(super) fn run_post_game_restart(
             };
 
 
-            if consecutive_non_gameplay < 2 {
+            if (reward_entry && consecutive_reward < 2)
+                || (!reward_entry && consecutive_non_gameplay < 2)
+            {
                 require_post_game_observation_retry_budget(
                     pre_score_round,
                     "pre-score transition",
@@ -172,7 +184,7 @@ pub(super) fn run_post_game_restart(
                 send_log(
                     event_tx,
                     format!(
-                        "WAITING: pre-score round {pre_score_round}/{POST_GAME_MAX_OBSERVATION_ROUNDS} has {consecutive_non_gameplay}/2 consecutive non-gameplay observations; rechecking in {} ms without input.",
+                        "WAITING: pre-score round {pre_score_round}/{POST_GAME_MAX_OBSERVATION_ROUNDS} has non-gameplay={consecutive_non_gameplay}/2, positive TriPeaks reward={consecutive_reward}/2, reward entry={reward_entry}; rechecking in {} ms without input.",
                         BOARD_TRANSITION_REOBSERVE_DELAY.as_millis(),
                     ),
                 );
@@ -192,7 +204,8 @@ pub(super) fn run_post_game_restart(
             send_log(
                 event_tx,
                 format!(
-                    "Two consecutive non-gameplay captures preceded score-counting panel click attempt {score_skip_click_attempts}/{SCORE_SKIP_MAX_CLICK_ATTEMPTS} at guest pixel ({}, {}) with a {} ms hold; waiting {} ms before classifying Level Up.",
+                    "Two consecutive {} captures preceded score-counting/reward panel click attempt {score_skip_click_attempts}/{SCORE_SKIP_MAX_CLICK_ATTEMPTS} at guest pixel ({}, {}) with a {} ms hold; waiting {} ms before classifying Level Up.",
+                    if reward_entry { "positively recognised TriPeaks reward" } else { "non-gameplay" },
                     SCORE_SKIP_CONTROL.click_point.x,
                     SCORE_SKIP_CONTROL.click_point.y,
                     POST_GAME_MOUSE_HOLD.as_millis(),
@@ -421,7 +434,7 @@ pub(super) fn run_post_game_restart(
                 target.stage,
                 observation.gameplay_scene,
                 observation_round,
-            ) {
+            ) && (!reward_entry || super::tripeaks_terminal::is_reward_overlay(&observation.frame)?) {
                 send_state(event_tx, WorkerState::Acting);
                 send_status(event_tx, "Skip score counting".to_owned());
                 input_wall +=

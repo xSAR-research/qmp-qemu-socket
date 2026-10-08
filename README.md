@@ -1,542 +1,143 @@
 # qmp-qemu-socket
 
-Rust desktop agent for **vision** (calibrated detectors and effect proofs),
-**allow-listed QMP↔QEMU control**, and an **egui** UI. It connects to an
-existing QEMU QMP Unix socket, captures the guest display, and issues only
-guarded mouse/keyboard actions the policy allows. It does not launch QEMU or
-create the socket.
+Release **v2.0.8**.
 
-Microsoft Solitaire & Casual Games modes used here — TriPeaks, Pyramid, Klondike,
-Free Cell and Spider — are **disposable guest fixtures** for exercising
-capture, detection and guarded input on shared QMP facilities. They are not
-the real purpose. Each fixture keeps independent target and effect policies.
+## Computer Vision solving
 
-The target is to build in Dijkstra / A* shortest path problem solving rather
-than using the **Solver**, this will benefit drone route planning experience.
+The implemented Computer Vision methodology follows the built-in **Solver** in Microsoft Solitaire & Casual Games. The Rust application captures a Windows 11 guest display through an existing QEMU QMP Unix socket, recognises a supported source **HALO**, and sends the corresponding guarded mouse click or keyboard operation. An egui desktop interface displays the captured frame, selected game, execution controls and diagnostic output.
 
-This is **v2.0.0, candidate 7**, based on the promoted commit
-`98f974083246044d04db5cf4298fd07590733250` and the installed candidate 6.
-CLASSIC blue is the shared card-back calibration baseline. Spider now uses
-the same blue colour predicate as Klondike. Explicitly requested TriPeaks
-and Pyramid runs can recover a missing initial HALO through bounded fresh
-observations and one scene-gated Solver activation. Initial captures remain
-read-only. The game menu follows Klondike, Spider, Free Cell, Pyramid,
-TriPeaks. See [candidate notes](docs/classic-v2.0.0-candidate-7.md).
-At startup choose a **Solving
-strategy**, separately from **Game Type**:
+The guest supplies the move recommendation; the application supplies visual recognition, input delivery and game-specific transition handling. It does not independently choose moves by reading card identities. The five games provide repeatable environments for exercising capture, image processing and remote control while developing reusable primitives for route-planning experiments.
 
-| Choice | Current behaviour |
+## Shortest Path route calculation
+
+The second methodology is intended to build an independent state model and search for a route using **Dijkstra or A***, rather than follow the guest's Solver. The longer-term goal includes evaluating move costs, deciding when to defer an available move, and replanning when new information reveals an impasse. This work is intended to inform future drone route-planning experiments; no drone controller is implemented here.
+
+The implemented stage is **read-only Pyramid preparation**: capture a board, inspect its calibrated regions and preview or save the original PNG. Independent card recognition, a complete deal model, stock reconnaissance, Undo All reset, shortest-path search and calculated-route execution are not implemented. Choosing this strategy disables Solver, gameplay and terminal input at both the UI and worker boundaries.
+
+## Strategy selection and execution
+
+Choose a solving strategy before any automatic QMP connection or capture begins. **Game Type** is a separate selection for Computer Vision solving, displayed in this order: **Klondike, Spider, Free Cell, Pyramid, TriPeaks**. The initial Computer Vision game remains TriPeaks. Shortest Path preparation currently selects Pyramid only.
+
+Strategy, game and socket changes clear prior prediction and progress authority. Requests and results carry the selected strategy, game, socket and a selection generation, preventing a late worker result from restoring an earlier selection.
+
+| Control | Behaviour |
 | --- | --- |
-| Shortest path route calculation | Read-only Pyramid preparation: capture, inspect calibrated slots and preview/save original PNGs. Card recognition, Dijkstra/A* search and route execution are not implemented yet. |
-| Computer Vision solving | The five existing guest Solver/HALO controllers, with their accepted gameplay, timings and terminal flows. |
+| Capture Frame | Obtain a fresh read-only advisory image and prediction. |
+| Single Step | Request at most one gameplay action from fresh supported evidence. Solver setup, where allowed, is separate from that gameplay budget. |
+| Multiple Steps | Follow fresh supported targets up to a finite budget, or use **0 = continuous** until STOP or a guarded stop. |
+| Params | Change the existing socket path and bounded, game-specific timings while idle. Timing edits apply to the next run. |
+| STOP | Cancel further input and interrupt cancellable waits. An in-flight QMP operation may complete or time out before the worker returns. |
+| Capture PNG | Capture, inspect, label and save one original PNG without guest input. |
 
-No QMP capture starts until a choice is made. Strategy changes are available
-while idle and clear old prediction/progress authority. Requests and results
-carry strategy, game, socket and selection generation so late results cannot
-revive an earlier selection. Preparation hides CV timings and disables every
-Solver, gameplay and terminal input at both UI and worker boundaries.
+A HALO is source evidence, not proof that a previous move succeeded. TriPeaks and Pyramid retain their own effect, removal and redeal checks. Klondike, Free Cell and Spider follow fresh supported Solver recommendations without comparing source and recipient card pixels; their logs distinguish acknowledged actions from proven effects. Missing HALOs, an exhausted stock pile and QMP acknowledgements alone never establish a win.
 
-Reusable QMP, geometry, RGBA/PNG and predicate scans come from optional
-features in **xsar v0.2.0**, pinned to Charlie's promoted commit
-`1a719b359a51d1e1e3113224193a779c76de82f8`. Game calibration, source selection,
-completion policy, screenshot acquisition and exact-byte saving remain here.
-Ordinary Cargo commands fetch this exact Git dependency. No local xsar checkout,
-paired override or crates.io publication is required to build the application.
+An explicit TriPeaks or Pyramid run may start from a current **No HALO** preview. The worker takes one fresh capture and up to three delayed observations. If unresolved, a positively recognised nonempty board may authorise one reserved Solver setup, followed by an immediate capture and up to three more delayed observations. Only a fresh canonical target authorises gameplay. A concrete preview still has to match its fresh initial target; ordinary capture and game selection remain read-only.
 
-See [candidate notes](docs/strategy-v2.0.0-candidate-3.md). The committed
-[Gate 1 plan](docs/QMP-QEMU-Strategy-xSAR-Gate1-Plan.md) records the original
-proposal and intake discrepancy; the missing files were restored in this base.
+The general flow is:
 
-## Build and source spacing
-
-`rust-toolchain.toml` selects floating `nightly`, with Clippy and Rustfmt
-components. `Cargo.toml` declares edition 2024 and minimum Rust `1.101.0`.
-The channel name is not a dated compiler pin. Record the actual compiler and
-Cargo versions used; stable compatibility has not been established here.
-
-```text
-rustc --version
-cargo --version
-cargo check --locked
-cargo test --locked
-RUSTDOCFLAGS='-D warnings' cargo doc --locked --no-deps --document-private-items
-cargo clippy --locked --all-targets -- -D warnings
-cargo build --locked --release
+```mermaid
+flowchart TD
+    A["Choose strategy"] -->|Preparation| B["Read-only Pyramid capture"]
+    B --> C["Inspect regions and save PNG"]
+    A -->|Computer Vision| D["Fresh capture and classification"]
+    D --> E{"Supported evidence?"}
+    E -->|Source| F["Guarded input and settle"]
+    F --> D
+    E -->|Completion| G["Game-specific terminal handling"]
+    G --> D
+    E -->|Unresolved| H["Bounded observation or stop"]
+    H -->|Resolved| D
 ```
 
-Do not run `rustfmt` or `cargo fmt` for this candidate. Charlie requested two
-blank lines before Rust definitions (above their documentation/attributes)
-and statement blocks, including existing source. The committed nightly and
-rustfmt configuration and existing source spacing are preserved; no formatter
-is part of this candidate.
+The diagram shows the controller's decision loop. Each game supplies its own recognition and completion rules; finite budgets, STOP and uncertain input can end the loop. Terminal restart is governed by the selected game's policy, rather than inferred from the absence of a source.
 
+## QMP and display requirements
 
+The application connects to an **existing local QMP Unix socket**. It does not launch QEMU or create its listener. The default filename is `qmp-qemu-socket.sock` under `XDG_RUNTIME_DIR`; use **Params** or `QMP_SOCKET_PATH` to select another existing absolute socket path. The application and QEMU must both be able to access the capture directory in their host filesystem namespaces.
+
+The current game calibration requires the primary guest display at **1920 × 1080**, with display and text scaling at **100%**. Frames are validated against that layout; detections do not rescale coordinates or guess a different board geometry. Before guest input, the worker checks QMP health, VM running state, a current absolute pointer, STOP and the selected game/strategy context. Uncertain input delivery stops without replaying the operation.
+
+Automatic capture is currently **file-backed**. QEMU's `screendump` writes a temporary PNG beside the socket; the worker reads its original bytes, decodes RGBA8 pixels and attempts to remove the temporary file. Detection then runs on the decoded image in memory. This is not file-free framebuffer capture, and failed cleanup or forced termination can leave a temporary PNG behind.
+
+Decoded Computer Vision observations update the application's image control, including delayed HALO observations and post-game transitions. A bounded latest-frame slot replaces older pending images, so the UI shows the newest available observation rather than accumulating a frame queue. Display publication introduces no additional QMP screen grab and does not grant input authority.
+
+The application uses the optional QMP, PNG, checked geometry and image-predicate facilities from **xsar v0.2.0**, pinned to Git commit `1a719b359a51d1e1e3113224193a779c76de82f8`. Game calibration, source selection, capture acquisition, completion policy and exact-byte saving remain application-owned. Ordinary Cargo commands fetch that Git dependency; a local xsar checkout or crates.io publication is not required.
+
+## Captures and diagnostic records
+
+**Capture PNG** obtains a separate fresh, read-only QMP screenshot. The dialog displays that capture while an optional label is entered. **Save PNG** or Enter writes the retained original PNG bytes without another screen grab; **Recapture** replaces the pending capture, and **Cancel** discards it. Preview scaling and target overlays do not alter the saved image.
+
+`QMP_SNAPSHOT_DIR` selects the save directory. Otherwise the application uses `$HOME/Pictures/Screenshots`, then `$HOME/Pictures`, when those directories exist, and finally the system temporary directory. Saved files use a local timestamp, a bounded label and exclusive mode-0600 creation.
+
+Private session logs use `QMP_SESSION_LOG_DIR`, otherwise `$HOME/tmp` when it exists, otherwise the system temporary directory. The `qmp-qemu-socket-*.log` files retain the full session independently of the on-screen output. The visible buffer retains at most 2000 entries and rolls over after every three completed games. **Text size** changes the visible output labels only; copied and logged text are unchanged.
+
+When a run stops on uncertain evidence, retain its log and an original PNG of the guest state before manually advancing it. A saved image establishes its own observed state; it should not be assumed to be byte-identical to a different capture named in an earlier log.
+
+## Build and verification
+
+Build from the repository root on the Linux development host. `rust-toolchain.toml` selects floating **nightly** with Clippy and Rustfmt components; `Cargo.toml` declares edition 2024 and minimum Rust **1.101.0**. The channel is not a dated compiler pin, so record the actual compiler and Cargo versions used. Stable compatibility is not established by the toolchain file.
+
+1. Validate the source and documentation.
+
+```zsh
+rustc --version &&
+cargo --version &&
+cargo check --locked &&
+cargo test --locked -- --include-ignored &&
+RUSTDOCFLAGS='-D warnings' cargo doc --locked --no-deps --document-private-items &&
+cargo clippy --locked --all-targets -- -D warnings
+```
+
+The integration tests require local Unix socket creation. `--include-ignored`
+runs that explicit host-test group as well as the ordinary suite; restricted
+executors can run the ordinary suite but must report these tests as unverified.
+
+2. Build the release executable in the repository's target directory.
+
+```zsh
+CARGO_TARGET_DIR="$PWD/target" cargo build --locked --release
+```
+
+3. Launch the validated release.
+
+```zsh
+./target/release/qmp-qemu-socket
+```
+
+Build and test results do not establish live guest behaviour. Verify the selected game, HALO handling, transitions, image updates and STOP against the intended guest configuration. Formatting is separate from these checks; follow the repository's documented source-spacing policy.
+
+## Design and historical evidence
+
+The [v2.0.8 release notes](docs/release-v2.0.8.md) describe this release's changes and verification. Supporting material includes [architecture](docs/architecture.md), [QMP and capture design](docs/qmp-and-capture.md), [Pyramid execution](docs/pyramid-execution.md) and [development conventions](docs/development.md).
+
+Earlier implementation decisions and fixture limitations remain in the [development records](docs/), including the [strategy split](docs/strategy-v2.0.0-candidate-2.md), [CLASSIC baseline and Solver startup](docs/classic-v2.0.0-candidate-7.md), [Free Cell OK layouts](docs/freecell-v2.0.0-candidate-4.md) and [capture preview publication](docs/capture-preview-v2.0.0-candidate-5.md). Those dated records retain their original scope; earlier Klondike card-effect experiments do not describe its current Solver-led execution policy.
+
+## Klondike
+
+Klondike uses the calibrated **Draw 1** layout. Selection priority is **DRAW/RECYCLE → RIGHT HALO → RIGHT Solve → lowest tableau source → SUIT piles**. Draw sends the confirmed `d` shortcut; recycle clicks the recognised stock control. The changing waste fan and source-run geometry are measured from each fresh frame. A supported solid source receives one click, including a run or a source from a SUIT pile; dashed destinations are not clicked. The separate **Solve** control can authorise automatic finishing when its own lettering, interior, empty-stock and scene checks pass. The lower-toolbar **Solver** remains the recommendation control.
+
+Each acknowledged gameplay operation consumes one budget slot, followed by editable settle and a fresh capture. Ordinary missing-HALO recovery is bounded and permits at most one Solver refresh per unresolved context; unknown scenes or uncertain delivery stop. Independent positive completion evidence is required before terminal handling. Finite runs stop at the confirmed win; continuous mode follows the supported score, optional Level Up, New Game, Draw 1 Play and fresh-board stages. CLASSIC blue backs and previously measured red backs remain supported; colour alone cannot authorise input.
 
 ## Spider
 
-Board names are **GAME PLAY AREA / PLAY 1–10**, **COLLAPSED SUITS** at the
-bottom left and **DRAW PILE** at the bottom right. Select Spider, then Single
-Step or Multiple Steps. Read-only captures never activate Solver or send input.
+Spider scans ten **PLAY** columns, the lower-right **DRAW PILE** and the display-only **COLLAPSED SUITS** area. A highlighted Draw has priority and sends `d` to deal one card to each column. Otherwise the controller selects the lowest supported solid PLAY source, with left-to-right ties, and clicks its visible bottom-card area. Connected overlapping outlines form one source; dashed destinations and collapsed suits are never clicked. Source reads and clicks remain above the calibrated toolbar cutoff. After a released PLAY click, a movement-only pointer park at `(20, 500)` clears the source area before settling and recapturing; Draw does not park.
 
-Each action uses a fresh supported board and a solid source HALO. Check DRAW
-first; otherwise scan PLAY columns bottom-up and left-to-right. DRAW sends one
-`d` key press, dealing one card to every column. A highlighted card/run receives
-one click in its visible bottom-card area. Connected overlapping card outlines
-are one source; dark dashed destination guides are never clicked. No ranks,
-recipient cards, previous positions or changed-pixel move effects are compared.
-After the source click's button release is acknowledged, Spider sends one
-movement-only command to (20, 500), on measured clear felt outside scene/source
-probes, then uses the configured card/run settle and captures anew. The park sends no
-button/key event, adds no wait and is not used after DRAW. It is auxiliary
-movement: one QMP command with two absolute-axis events, counted separately;
-the card/run still consumes one logical action slot. Initial and read-only
-captures, including manual PNG capture/recapture/save, send no input.
-
-Source detection and clicks stay above **Y=947**, the measured toolbar cutoff.
-A complete source ending at that boundary or a source continuing behind the
-icons remains eligible from its visible outline and card area. Compression and
-expansion are measured anew. The DRAW PILE disappears when exhausted; its
-absence does not establish completion. Completed King-to-Ace runs pack into
-COLLAPSED SUITS automatically, with no click on those packets. Spider has no
-Recycle, SUIT-return or Solve-button input.
-
-**Params** has four independent editable intervals: **after card/run action**
-1250 ms, **after DRAW deal** 2000 ms, **re-observation** 1000 ms and **after game
-start** 3000 ms. Each accepts 0–5000 ms. The DRAW default covers Charlie's
-observed 1–2 second deal/HALO wait. Charlie requested the 1250 ms card/run
-default after observing stack animation before HALO appeared during Beast play.
-The new-game default retains the accepted 3000 ms starting value.
-**Actions per Multi-Step** starts at **0 = continuous**; a positive budget
-counts acknowledged card/run and DRAW actions. Single Step sends at most one
-logical gameplay action. Timing and budget settings are frozen for each run.
-
-Automatic deals and run packing can leave a frame without a HALO. Bounded
-input-free observations allow those movements to finish; independent win entry
-is checked on fresh frames. The active Solver button is disabled, so Spider
-never refreshes it. A supported inactive-Solver board receives one game-start
-wait and fresh input-free capture before one activation. Unknown scenes and
-uncertain delivery stop with the latest frame and log. Missing HALO alone
-never authorises DRAW.
-
-**One Spider board is one game.** Continuous mode follows score skip → optional
-Level Up OK → New Game → Spider Play → new-game deal wait → Solver if needed →
-fresh capture. After score skip, each frame checks OK and New Game; a game
-without LEVEL UP proceeds directly to New Game. Expected controls use their
-local word/button evidence, independent of level, rank, fireworks and panel
-colours. Spider's Play button is 100 px lower than Free Cell's measured button.
-Finite runs recognise a win and stop without restarting.
-
-[Original Spider fixtures](tests/fixtures/spider-README.md) cover both Easy and
-Grandmaster layouts, stock dealing, long/compacted runs, empty columns, toolbar
-clipping, automatic packing and the observed terminal controls. SP16 was not
-observed; the optional OK control uses the accepted local check. Charlie reports
-successful candidate 1 gameplay. Candidate 2 corrects a test that conflated
-equal-duration score and game-start waits; the runtime sequence is unchanged.
-Candidate 3 retains both evidenced local OK positions. Candidate 4 follows the
-confirmed cursor-overlap report; its supplied-frame simulation reproduces the
-miss, but the exact rejected runtime PNG is unavailable.
-Native Rust validation remains a Beast check for this delivery.
-
+Stock recognition retains measured red support and uses the shared CLASSIC-blue predicate, alongside the existing closed-outline, occupancy, scene and active-Solver guards. Live play across all five game types has been reported successful. Automated CLASSIC-blue Draw fixture coverage remains synthetic; an original native blue Draw fixture has not yet been supplied. The controller may activate an inactive Solver once on a supported board, but does not refresh an active Solver. Missing HALOs and an exhausted stock do not prove completion. One board is one game: finite runs stop at recognised win entry, while continuous mode follows score skip, optional OK, New Game, Spider Play and fresh-board Solver activation through bounded observations.
 
 ## Free Cell
 
-Board names are **CELL 1–4** at the upper left, **PLAY 1–8** across the tableau,
-and **SUIT 1–4** at the upper right, numbered left to right. Select Free Cell,
-then Single Step or Multiple Steps. Read-only Capture Frame and Capture PNG
-never activate Solver or send gameplay input.
+Free Cell checks **CELL 1–4** before the lowest supported source in **PLAY 1–8**, with left-to-right ties. One solid highlighted source block receives one bottom-card click, followed by editable settling and a fresh observation. Repeated source positions are valid, and a run extending behind the toolbar is accepted only from its visible source geometry and card paper. Dashed destination guides are not sources. The **SUIT 1–4** piles are display-only for input selection; there is no Draw, Recycle or Solve operation, and no card-back recognition is needed for its face-up layout.
 
-Each run starts with a fresh frame; its preview is advisory. Scan CELL first,
-then PLAY bottom-up and left-to-right. One solid highlighted source block
-receives one bottom-card click, including an entire run, followed by editable
-settle and a fresh frame. Dashed destination guides are not sources. There is
-no card-rank, recipient-card, position-change or changed-pixel move proof.
-Repeated source positions are valid. SUIT piles are never scanned for input;
-Free Cell has no Draw, Recycle or Solve operation.
+Automatic suit transfers can temporarily remove the HALO. An inactive Solver receives a game-start wait and fresh capture before activation; an active Solver receives one delayed input-free observation before a possible refresh. Activation and refresh share one reserve per unresolved context, and further observations remain bounded. Unknown scenes and uncertain delivery stop. One board is one game. Independent win entry precedes the score-skip, optional Level Up OK, New Game and Play sequence, which restarts only in continuous mode. Local OK recognition includes the original layout and the evidenced higher and lower positions; rank, medal and surrounding artwork do not supply button authority.
 
-Automatic SUIT transfers can temporarily leave no HALO. A positive win-entry
-check is independent of source detection. A supported active-Solver board first
-receives one input-free re-observation; if no HALO or win appears, refresh Solver
-once, settle and capture anew. An inactive-Solver board waits the separate
-game-start interval and captures freshly before activation. Each unresolved
-context permits at most one Solver click; unknown scenes and uncertain input
-never authorise recovery input. Further observations remain bounded.
+## Pyramid
 
-**Params** offers **action / automatic-transfer settle** and **re-observation**
-intervals, initially **750/1000 ms**, plus **After Free Cell game start**, initially
-**3000 ms** as confirmed by Charlie. All three are editable from 0 to 5000 ms.
-**Delayed observations per unresolved stage** remains **20**, bounded **1–100**. **Actions per Multi-Step**
-defaults to **0 = continuous**; finite budgets are **1–10000**. Step Once sends
-at most one source action. Settings are snapshotted for each run.
+Computer Vision Pyramid uses 31 calibrated targets: **Move/Recycle, Left, Right**, then the 28 tableau cards from the bottom row upward and left to right. Multiple highlights are expected; the first eligible source supplies one operation, allowing the guest Solver to remove a pair or a King. A highlighted Move/Recycle uses `d`, while pile and tableau sources use one click. Unlike the three source-only controllers, Pyramid retains positive effect and card-removal checks. Only a clicked card whose removal is verified becomes consumed; lower controls remain repeatable. A narrowly supported repeated Left/Right pair may continue from fresh HALOs without claiming the preceding effect or advancing completion.
 
-**One Free Cell board is one game.** GAME WIN entry requires the score/skip
-panel or the completed-game New Game panel; missing HALO, isolated OK and Play
-do not establish a win. Only continuous mode follows score skip → optional OK
-→ New Game → Play → fresh board → Solver activation → fresh HALO. After score
-counting, each fresh frame checks both OK and New Game. A game without a level
-change proceeds directly to New Game; if both controls appear ready, input stops. Expected
-controls use their local lettering and button body, not level, rank, medal,
-fireworks or surrounding artwork. Each acknowledged click is sent once; an
-unready next stage receives input-free observations, not click retries.
+No-HALO startup may reserve one Solver setup only after positive nonempty-board evidence. Ordinary post-action and redeal observations retain their separate bounded policies, and unknown occupancy cannot invent an available card or completed board. Confirmed redeals reset consumed-card state; the shared progress and post-game controller handles the calibrated three-board game flow. Pyramid is also the sole current **Shortest Path preparation** fixture: that strategy captures and saves without gameplay, stock surveying, Undo All input or route calculation.
 
-The original **FC01–FC19** PNGs are included with hashes. FC15 shows New Game
-after a win without LEVEL UP. FC14/FC16/FC17 show sources overlapping the toolbar.
-Source reads and clicks stay above **Y=947**; a clipped source needs a closed
-visible top, connected exterior rails to that boundary and visible card paper
-around its click. The reported lower boundary is a cutoff, not a hidden edge. FC18/FC19 show
-closed source bottoms ending exactly at the exclusive cutoff; these retain
-complete-outline authority without treating the rounded corner as clipped. See
-[Free Cell Gate 1](docs/freecell-gate-1.md) and the candidate review for evidence,
-validation limits and Beast checks. Native Rust validation was not available
-in the delivery workspace; build/test and live GAME WIN validation remain
-mandatory before acceptance.
+## TriPeaks
 
-## Klondike Draw 1
+TriPeaks combines calibrated lower-panel controls with tableau scans that follow exposed rows and widen when fresh card evidence requires it. A supported stock recommendation sends `d`; a supported tableau recommendation clicks its fixed card location. The controller retains cursor-excluded action-effect checks and uses fresh accepted result frames to plan subsequent operations. Explicit no-HALO startup and late-HALO recovery use bounded observation and positively gated Solver setup; neither a missing source nor an acknowledgement establishes removal or completion.
 
-Select **Klondike**, activate the guest Solver and capture a fresh frame.
-Selection priority is **DRAW/RECYCLE → RIGHT HALO → RIGHT Solve → tableau bottom
-upwards → SUIT piles → completion evidence**.
-An ordinary stock draw sends the confirmed `d` shortcut; exhausted-stock recycle
-clicks its recognised highlighted area. RIGHT detection follows the up-to-three
-card fan. A solid highlighted source block receives one click, including a whole
-run or a source from a SUIT pile. The dark dashed destination is never clicked.
-Newly exposed tableau cards reveal automatically.
-
-Tall source runs can overlap the guest toolbar, which begins at **Y=947** in
-the calibrated frame. Live tableau HALO detection reads only rows above that
-boundary. A run continuing beneath it needs a visible closed top, connected
-opposing rails reaching the boundary and bright card paper. Its reported bottom
-is the visible cutoff, not an estimate of the hidden card edge. The existing
-upper-card click stays above the toolbar. Solver and terminal controls retain
-their separate areas; full-frame PNG capture and saving remain unchanged.
-
-**Params** provides independent Klondike card/draw/recycle, Solve-animation and
-recapture intervals, initially **750/750/1000 ms**, editable from 0 to 5000 ms. They are
-user-approved starting settings, not measured animation timings. Single Step
-sends at most one gameplay operation; Multi-Step defaults to **0**, with a
-positive range of **1–10000**, plus **0 = continuous until STOP or a guarded
-stop condition**. Recovery remains bounded for each action in continuous mode.
-Timing edits apply to the next run.
-
-The Klondike preview is advisory. The worker captures fresh supported scene and
-canonical target evidence, sends one operation, settles and observes anew. Each
-acknowledged gameplay action consumes one finite budget slot. Single Step stops
-after that action and result; remaining finite slots and continuous mode follow
-each fresh valid HALO, including repeated targets and changing stack geometry.
-
-Missing HALOs receive at most three delayed input-free observations, then an
-independent completion check. A recognised gameplay scene may receive one Solver
-refresh per unresolved context, followed immediately by capture and at most three
-further delayed observations. Normal pointer settle, hold and acknowledgements
-still apply. Unknown scenes or uncertain delivery stop; no uncertain input is
-replayed. Recovery alone does not consume a gameplay slot.
-
-The separate **Solve** button can replace RIGHT when the guest offers automatic
-finishing. Its stable button interior and complete lettering, with empty stock and a
-recognised scene, authorise one click without waiting for the animated outer HALO.
-The click is followed by its
-separate editable animation delay and up to 20 delayed read-only completion
-observations, using the existing post-game bound and editable Klondike
-re-observation interval. Two consecutive positive observations are still required;
-ordinary card recovery retains its three-observation bound.
-An unresolved result stops for review without retrying Solve or Solver.
-The lower-toolbar **Solver** control remains the hint/recommendation control.
-
-Live Klondike play does not compare source or recipient card pixels. Logs count
-acknowledged Solver-directed actions and keep their effects explicitly unproven.
-The previous effect analyser and native regressions remain test-only diagnostics.
-An acknowledged no-op retaining a valid HALO can produce another fresh action in
-continuous mode; completion still requires independent positive evidence.
-
-**One Klondike board is one game.** A win requires two fresh positive observations:
-either an intact active Solver banner with every calibrated right-interior pixel
-gold and none black, or independently recognised completed-game artwork. No black
-on a green background or blue overlay is insufficient. Finite runs stop at the
-confirmed win. Only continuous Multi-Step **0** may then advance through the
-score-skip, Level Up OK, New Game, Draw 1 Play and fresh-board Solver
-stages, one guarded click each, before resuming from a fresh actionable board.
-After independent win confirmation, the expected OK, New Game and Play buttons
-are checked locally for a gold body and printed-caption contrast. Rank, medal,
-title, surrounding frame and fireworks colours do not gate these three clicks.
-Their ordered readiness waits allow up to 20 delayed input-free observations;
-fresh-deal Solver/HALO recovery retains its separate shorter bound.
-Unknown stages, unsupported target evidence or uncertain delivery stop with
-the latest frame and logs.
-Klondike owns these controls independently of the shared three-board controller.
-See [accepted Klondike boundary notes](docs/klondike-v1.2.6-candidate-11.md)
-and [current architecture](docs/architecture.md) for policy and evidence limits.
-
-## QMP connection
-
-The default socket filename is `qmp-qemu-socket.sock` in `XDG_RUNTIME_DIR`.
-The QEMU `-qmp unix:` path must match the path shown under Params. Set
-`QMP_SOCKET_PATH` when launching the application to use a different existing
-socket during a QEMU launch configuration change. Params also permits changing
-the path in the running application, followed by a fresh read-only capture.
-
-On the Beast the socket is `/run/user/1000/qmp-qemu-socket.sock`. Use that
-absolute path; the application connects to QEMU's existing listener and does
-not launch QEMU or create its socket. Temporary capture files are placed beside
-this socket, independent of the repository working directory.
-
-QMP captures and guarded actions use the 1920×1080 primary display calibration
-with guest display and text scaling at 100%.
-
-## TriPeaks late-HALO recovery
-
-After a no-HALO result, TriPeaks takes up to three delayed input-free captures
-before considering one Solver refresh on a recognised gameplay scene. A fresh
-stock HALO proceeds directly to D. The delay is editable in Params, defaults
-to 1000 ms and is snapshotted for the active run. After Solver, at most three
-further delayed observations are allowed in that unresolved context. Persistent
-absence stops with the latest frame; ordinary recovery cannot repeatedly click
-Solver. Existing action-effect and board/redeal checks remain in place.
-
-## Pyramid gameplay
-
-Select **Pyramid**, activate the guest's **Solver**, and capture a fresh frame.
-**Single Step** and **Multiple Steps** require a concrete prediction belonging
-to the selected mode and socket. The worker freshly validates the initial
-prediction, sends D for a highlighted MOVE/Recycle or clicks one card/pile target,
-waits the configured settle time (default 1000 ms
-after Move or 2000 ms after a card/pile click), and verifies the result. Each
-verified result becomes the next planning frame without another pre-click
-screenshot. **STOP** cancels the active run.
-
-If a verified action has no eligible halo yet, the worker waits the configured
-repeat interval (default 1000 ms) and
-takes another QMP screenshot, up to a bounded limit. It does not click Solver
-on an ordinary halo-free Move, card, Left or Right result. Solver recovery is
-reserved for a positively verified new board with no halo after repeated
-observations. An unverified action stops and displays its latest result frame
-for inspection; use **Capture Frame** for a new approved preview before running
-again.
-
-**Params** exposes separate Pyramid **Move / Recycle**, **Card / Left / Right**,
-and **repeat observation** delays, each editable from 0 to 5000 ms. They are
-session settings captured when the next run starts; Restore execution defaults
-sets them to 1000/2000/1000 ms. For a late MOVE halo after cards fly away, increase
-**Card / Left / Right** and/or **repeat observation**. TriPeaks retains its own
-draw/tableau settings. Double-click a number to type milliseconds, or drag it;
-STOP any active run and close the snapshot dialog before editing. Labels identify
-the click that starts the wait: a card-to-MOVE transition uses the card delay.
-The package-derived candidate label is displayed in the title and Params.
-
-The 1.2.0 baseline refactors the existing Solver-driven controller without
-adding a game mode or self-solving algorithm. Shared post-game handling,
-Pyramid result handling and session-file logging have focused modules. Rustdoc
-comments describe functions and data contracts; unused provisional rank-reader
-and card-history scaffolding has been removed. See [development notes](docs/development.md)
-for naming, documentation and verification conventions.
-
-Candidate 2 removed the unused BGRA pixel format and its conversion branches.
-The current PNG decoder produces RGBA8: eight bits per channel, four bytes per
-pixel. RGBA decoding and padded-row detection checks remain covered by tests.
-
-Pyramid Left/Right verification can also use the positive removal of the single
-other highlighted tableau card from the planning frame. This covers a pile
-replacement whose visible change is too small outside the cursor exclusion.
-When that unique pre-highlighted partner is the opposite pile, verification
-measures both pile interiors together against the 128-pixel minimum, or accepts
-the partner's positive disappearance. This also covers consecutive Left/Right
-pairs whose replacement cards have similar faces. Unrelated pile changes are
-excluded from this additional verification path.
-The detector still requires recognised gameplay and known pile-face evidence;
-a new halo or loss of the old halo alone does not prove the previous effect.
-An identical **LEFT–RIGHT pair may repeat**: after the configured card settle
-and a fresh capture, the same unique eligible pair's HALOs authorise the next
-operation even when its pixels have not changed. A tableau card must remain
-visible, and no final-card, board-complete or redeal phase may be pending.
-This is logged and counted separately as **continued from fresh halo**, without
-claiming removal or advancing a completion counter. Step Once still sends one
-click; Multi-Step plans the next click from that fresh frame. Per-action evidence
-logs include both pile measurements, the unique highlighted partner, the qualifying pair's combined count and any removed partner.
-
-A final-apex redeal requires restored cards and `AnotherBoard` progress in two
-consecutive fresh captures. A conflicting progress reading triggers bounded
-input-free recaptures and logs the measured right-probe pixels. Old consumed
-card state is reset before selecting a target on the verified new board. A
-persistent conflict stops for inspection; it never authorises a score click.
-The shared progress probe samples the bar interior at `(1050, 87, 38, 2)`.
-The previous y=84 probe sampled its gold border; the supplied new-board PNG
-provides the regression pixels for this correction.
-
-The priority is **Move → Left → Right → Cards**, with cards scanned left to
-right from row 7 up to the apex. Multiple highlighted cards are expected;
-only the first eligible target is clicked. The guest Solver removes the pair
-from that one click, and a highlighted King also needs only one click.
-
-Only a clicked card whose removal was verified is marked consumed for the
-current board. Move and the two piles remain repeatable. Missing halos, QMP
-acknowledgements and arbitrary visual changes cannot mark a card consumed or
-authorise a Move click. Unknown or unresolved results stop after bounded
-observation. Mode/socket changes and **Clear Output** invalidate retained
-progress; a confirmed new board also resets its card state.
-If a guarded run stopped across a missed redeal, **Capture Frame** can recover
-without cycling Game Type: a fresh halo on a card previously verified removed
-invalidates the old board record. The same frame is re-scanned without another
-screen dump or guest input. The separate automatic transition fault was tracked
-in issue #7 and is now resolved.
-
-**Detailed output** uses a fixed panel height, increased by about 2.5 lines.
-When opened it reserves that space from the preview; further window growth
-still goes to the image.
-
-Automatic capture currently uses a temporary PNG beside the socket: QEMU writes
-the file, the worker reads it and decodes RGBA pixels, and normal cleanup tries
-to remove the file. Detection then operates on that decoded frame in memory.
-This is not file-free or native-framebuffer capture. File-free automatic
-capture remains a separate requirement that needs implementation and measurement.
-
-## Capturing an original PNG
-
-Click **Capture PNG** to request one fresh read-only QMP screenshot. The dialog
-displays that capture while you enter an optional label. The label field has
-keyboard focus; Enter or **Save PNG** writes the exact captured PNG bytes without
-another screen dump. Right-click the field for Cut, Copy and Paste. **Recapture**
-replaces the pending image, while **Cancel** discards it without saving.
-
-The default output directory is `$HOME/Pictures/Screenshots`, then
-`$HOME/Pictures`, then the system temporary directory. Override it with
-`QMP_SNAPSHOT_DIR`. Files use a local timestamp, a bounded label and exclusive
-mode-0600 creation. The image displayed in the dialog may be scaled to fit;
-the PNG on disk retains the original 1920×1080 bytes.
-
-## Post-game handling
-
-TriPeaks and Pyramid use the same visual progress probe and guarded post-game
-sequence. Klondike uses its separate one-board policy described above. After a
-verified TriPeaks/Pyramid board completion, the Solver header progress probe
-selects redeal or game completion; the session board counter is advisory.
-Before the first score-skip click, fresh frames check whether an actionable
-new board or a terminal dialog has appeared. Two consecutive non-gameplay
-frames are needed before a score-skip click; other transition frames receive
-bounded input-free recaptures. A recovered old board does not count as a
-completed game in the UI.
-The controller waits three seconds after each score-panel click. If Level Up is not yet visible, it makes an input-free follow-up capture before considering
-a bounded score-skip retry. The general inter-stage wait remains one second.
-A tall Level Up OK button may fill both calibrated layout probes; a strong
-gold bridge and button interior must connect them before the lower click point
-is used. Ambiguous layouts are recaptured with a bounded wait and no input.
-When a fresh frame shows New Game already visible instead of Level Up, a
-second fresh frame must confirm New Game before continuing.
-
-Challenge Complete **Continue** geometry is recorded in Params for a future
-challenge flow; no automatic Continue click is enabled.
-
-## Diagnostic records
-
-Private session logs use `QMP_SESSION_LOG_DIR` when set, otherwise `$HOME/tmp`
-when it exists, otherwise the system temporary directory. On the Beast, keep
-`/home/charlie/tmp` available for retained evidence. Log files use the
-`qmp-qemu-socket-` prefix and mode 0600; the on-screen log is bounded separately
-from the full session log.
-
-See `docs/qmp-and-capture.md` and `docs/architecture.md` for the capture and
-input contracts, and `docs/pyramid-execution.md` for Pyramid geometry,
-verification rules and evidence limits. The candidate review records tests
-actually run; live King, pair, pile, recycle and transition checks remain part
-of Beast acceptance.
-
-## Historical candidate evidence
-
-The following entries retain the decisions and validation limits of their
-deliveries. Earlier card-effect witnesses and toolbar/icon exceptions are
-historical diagnostics; the current Klondike policy above supersedes them.
-
-
-## v1.2.4 candidate 1 evidence
-
-The latest ten-card column 6 source is 604 pixels high and closes at rows
-991–993 beneath Undo All. Detection accepts only the measured overlap; its click
-and effect proof remain above the toolbar. Solve recognition also accepts the
-recorded positive red warming of its outer border without widening its inner
-artwork, glyph, empty-stock or scene checks. Priority is unchanged.
-
-The new settled Congratulations frame passes the existing terminal signatures.
-The prior short Solve completion budget expired before that frame was captured.
-This candidate uses the existing longer post-game observation bound after Solve,
-with no additional gameplay or Solver input while waiting. See
-[the candidate notes](docs/klondike-v1.2.4-candidate-1.md) for evidence and limits.
-
-## v1.2.4 candidate 2 evidence
-
-K44–K49 cover a horizontally displaced source, the later bottom-card failure,
-Solve availability and Level Up at level 49. Unsupported post-action frames now
-receive bounded input-free recapture before refusal. Bottom-card continuation
-retains independent source evidence and remains distinct from full effect proof.
-The Level Up signature avoids the measured text shadow and admits narrowly
-bounded warm particle lighting. Timings and the terminal advancement budget stay.
-
-The supplied settled Solve frame already selects Solve with candidate 1. Candidate2
-logs empty-stock, artwork and glyph counts alongside scene/selected target for
-fresh run observations, so another live refusal can be diagnosed without guessing
-at later screenshot pixels. See [the candidate notes](docs/klondike-v1.2.4-candidate-2.md)
-for provenance, bounded policies and Beast checks.
-
-## v1.2.5 candidate 1 evidence
-
-K50/K51 reconstruct the bottom 4-clubs transfer to SUIT after an Undo. The next
-source is 5-clubs in column 3; the exposed card in column 1 is 5-diamonds. The
-source retains mostly white paper and uneven printed-detail changes. A narrowly
-guarded stable-paper comparison can support continuation to the fresh HALO;
-the prior complete effect remains unverified. No rank or suit is read by code.
-
-New Solve diagnostics show complete lettering repeatedly passing while the full
-button template fails. Detection now uses the stable interior and lettering,
-with stock and scene guards, independently of the animated outer ring. K52
-adds the measured two-pixel centred Level Up label shift. Terminal diagnostics
-report recognised stages and named guard failures. Exact frames after the last
-reported OK click were not supplied, so their refusal remains a live check.
-See [candidate notes](docs/klondike-v1.2.5-candidate-1.md).
-
-
-## v1.2.6 candidate 2 installation recovery
-
-The previous candidate was not applied: its preview and apply both refused the
-changed HEAD, and the subsequent build/test/launch remained v1.2.5. This delivery
-rebuilds exact-base/content records for f9167a0 while preserving the revised
-project-purpose opening above. Download hashes prove package integrity; they
-do not establish installation or executable identity. The candidate commands
-verify installed source before each build/test/run step. Stop on any failure.
-
-This candidate includes the prior measured New Game pointer-probe correction
-and bounded read-only settling of a nearly recognised Solve control. Full Solve
-input authority, STOP, mode/socket invalidation and uncertain-input refusal
-remain. See `docs/klondike-v1.2.6-candidate-1.md` for the original evidence and
-`docs/klondike-v1.2.6-candidate-2.md` for recovery and current verification limits.
-
-## Klondike v1.2.6 candidate 3 correction
-
-Candidate 3 retains the candidate 2 New Game/Solve fixes and adds narrowly
-measured long-outline, clear-gutter and source-evidence handling. Stack reflow is compared
-in card-relative coordinates; printed source support can authorise fresh-HALO
-continuation while the complete previous effect remains unverified. Disjoint
-chromatic felt ranges support the queen and King transfers under the same bounds. See
-[the candidate 3 notes](docs/klondike-v1.2.6-candidate-3.md) for evidence and limits.
-
-Packaging revision r2 is pinned to committed candidate 2 at
-`7d869c22a6ca98179cd3efc8f83552d2edd1ada7`. It replaces the refused f916-based
-package without changing candidate-3 Rust code or fixtures. Base and candidate
-contents are checked as complete states. Rollback restores this committed base.
-Mixed or unknown files stop; a HEAD refusal reports expected and actual commits.
-Run `--verify-installed` before every build/run block; this requires candidate 3.
-
-## Candidate 10 verification and output readability
-
-Candidate 10 includes the candidate 9 Hint-shadow fix and the measured Undo All
-border overlay correction. K91-K93 record level-101 restart buttons; K94 records
-the later manual source frame with Undo All overlapping its lower gold edge.
-These manual PNGs are evidence, not assertions of exact historical worker timing.
-See [candidate 10 notes](docs/klondike-v1.2.6-candidate-10.md).
-
-Detailed output uses separate selectable labels in a vertical scroll area.
-**Text size** adjusts only those labels, from 10 to 24 logical points. Copy Output
-and copied/logged text remain unchanged. Mouse-drag selection does not scroll
-beyond the viewport. The visible buffer retains at most 2000 entries and clears
-after every three completed games; the complete session file remains on disk.
-Entries have no individual byte limit, and copying the complete file temporarily
-loads its text into memory. The entry bound is not a fixed byte-memory bound.
-
-### Candidate 5 capture display
-
-TriPeaks, Pyramid and Klondike now publish intermediate decoded QMP captures to the existing latest-frame image control, including waiting and post-game observations. The display coalesces pending frames rather than queuing them. Diagnostic publication does not authorise input. Free Cell and Spider keep their existing observation display policy.
+TriPeaks uses the shared calibrated three-board progress, redeal and post-game flow. The final-win reward overlay has its own narrow recognition path: only a qualifying delivered top-row card action, the existing effect threshold, no fresh actionable target or occupied row evidence, and two consecutive supported reward-overlay frames can establish that completion. The recognised Congratulations/skip controls then use the existing guarded terminal sequence and budgets; changing level, XP and surrounding artwork are not template conditions. Unrecognised transitions stop for inspection rather than being treated as a win.
