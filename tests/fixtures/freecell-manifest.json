@@ -174,6 +174,22 @@
       "fixture_sha256": "d70790454d63c1864890fe2e8967272fa62601359dc7f2551c4502707f927aec",
       "bytes": 3457697,
       "observation": "PLAY 7 eight of diamonds source reaches the toolbar; dashed SUIT 3 destination. Central diamond pips obscure the old paper probe while both card side margins remain visible."
+    },
+    {
+      "fixture": "freecell-FC22.png",
+      "source": "qmp-qemu-socket 261008 093811 Fail-LEVEL-UP.png",
+      "source_sha256": "dc65f47e122f4ba923a859367b2473f052a566a4568d4a25d9d7e548ca129b88",
+      "fixture_sha256": "dc65f47e122f4ba923a859367b2473f052a566a4568d4a25d9d7e548ca129b88",
+      "bytes": 1733697,
+      "observation": "Free Cell level 102 Grandmaster Level Up; local OK glyph is 19 pixels higher than FC10, with unchanged X and the existing click still inside gold."
+    },
+    {
+      "fixture": "freecell-FC23.png",
+      "source": "qmp-qemu-socket 261007 172628 FAIL-Level-Up.png",
+      "source_sha256": "cb956a888140fdecd679b2418dbef8a50bfb6c4236fa148832e36e8b6968fa14",
+      "fixture_sha256": "cb956a888140fdecd679b2418dbef8a50bfb6c4236fa148832e36e8b6968fa14",
+      "bytes": 1865555,
+      "observation": "Free Cell level 80 Superstar Level Up; local OK glyph is 12 pixels lower than FC10, with unchanged X and the existing click still inside gold."
     }
   ],
   "toolbar_source_policy": "Source reads and clicks remain above Y947; FC14/FC16/FC17 and FC20/FC21 support clipped PLAY sources with visible paper at both card side margins; FC18/FC19 support fully closed bottoms ending at the exclusive cutoff.",

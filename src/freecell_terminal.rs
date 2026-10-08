@@ -1,6 +1,7 @@
 //! Free Cell's one-board win and deterministic restart controls.
 //!
-//! FC09-FC12 measure the score-skip, OK, New Game and Play regions. Independent
+//! FC09-FC12 measure the score-skip, OK, New Game and Play regions; FC22/FC23
+//! measure Free Cell's higher and lower local OK layouts. Independent
 //! entry recognises Congratulations plus its skip caption or New Game button.
 //! An isolated OK or Play button never establishes a win. Once a win is known,
 //! readiness reads only the expected local control, not level, rank, medal,
@@ -271,11 +272,28 @@ pub fn expected_control_ready(
     validate_frame(frame)?;
     let (caption, body) = match stage {
         TerminalStage::Score => return caption_ready(frame, &SCORE_SKIP),
-        TerminalStage::LevelUp => (&LEVEL_UP_OK, PixelRect::new(848, 788, 223, 50)),
+        TerminalStage::LevelUp => return level_up_control_ready(frame),
         TerminalStage::NewGame => (&NEW_GAME, PixelRect::new(640, 824, 291, 56)),
         TerminalStage::Play => return play_control_ready_at(frame, 0),
     };
     Ok(button_body_ready(frame, body)? && caption_ready(frame, caption)?)
+}
+
+
+/// Free Cell's expected OK control at the three supplied vertical layouts.
+/// FC10 is the original location, FC22 is 19 pixels higher and FC23 is 12
+/// pixels lower. Align the whole local control; no level or artwork is sampled.
+fn level_up_control_ready(frame: &CapturedFrame) -> Result<bool, HaloDetectionError> {
+
+
+    for y_offset in [0, -19, 12] {
+
+
+        if level_up_control_ready_at(frame, y_offset)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 
@@ -307,8 +325,8 @@ pub(crate) fn play_control_ready_at(
 
 
 /// Reuse only the local OK control at an evidenced signed vertical offset.
-/// Spider SP20 places the same caption 19 pixels higher than FC10. Free Cell's
-/// accepted readiness and win entry remain at their original locations.
+/// Spider SP20 and Free Cell FC22 place the caption 19 pixels higher than FC10;
+/// Free Cell FC23 places it 12 pixels lower. Each caller chooses its own layouts.
 pub(crate) fn level_up_control_ready_at(
     frame: &CapturedFrame,
     y_offset: i32,
@@ -395,6 +413,8 @@ mod tests {
             12 => include_bytes!("../tests/fixtures/freecell-FC12.png"),
             13 => include_bytes!("../tests/fixtures/freecell-FC13.png"),
             15 => include_bytes!("../tests/fixtures/freecell-FC15.png"),
+            22 => include_bytes!("../tests/fixtures/freecell-FC22.png"),
+            23 => include_bytes!("../tests/fixtures/freecell-FC23.png"),
             _ => panic!("unsupported Free Cell terminal fixture {number}"),
         };
         decode_png(bytes).expect("decode native Free Cell terminal fixture")
@@ -421,6 +441,28 @@ mod tests {
     }
 
 
+    /// The supplied higher/lower OK layouts preserve the original input point.
+    #[test]
+    fn shifted_freecell_level_up_controls_keep_local_readiness_and_click() {
+
+
+        for (number, y_offset) in [(22, -19), (23, 12)] {
+            let frame = fixture(number);
+            assert!(!level_up_control_ready_at(&frame, 0).unwrap());
+            assert!(level_up_control_ready_at(&frame, y_offset).unwrap());
+            assert!(expected_control_ready(&frame, TerminalStage::LevelUp).unwrap());
+            let point = click_point(TerminalStage::LevelUp);
+            assert!(is_button_gold(pixel_rgb(&frame, point.x as u32, point.y as u32).unwrap()));
+
+
+            for stage in [TerminalStage::Score, TerminalStage::NewGame, TerminalStage::Play] {
+                assert!(!expected_control_ready(&frame, stage).unwrap());
+            }
+            assert_eq!(classify_win_entry(&frame).unwrap(), None);
+        }
+    }
+
+
     /// OK and Play are never promoted to independent completion evidence.
     #[test]
     fn win_entry_requires_congratulations_and_its_own_local_control() {
@@ -428,7 +470,7 @@ mod tests {
         assert_eq!(classify_win_entry(&fixture(11)).unwrap(), Some(TerminalStage::NewGame));
 
 
-        for number in [10, 12, 13] {
+        for number in [10, 12, 13, 22, 23] {
             assert_eq!(classify_win_entry(&fixture(number)).unwrap(), None);
         }
     }
@@ -455,6 +497,8 @@ mod tests {
         for (number, stage, bounds) in [
             (9, TerminalStage::Score, PixelRect::new(790, 826, 340, 56)),
             (10, TerminalStage::LevelUp, PixelRect::new(838, 778, 245, 70)),
+            (22, TerminalStage::LevelUp, PixelRect::new(838, 759, 245, 70)),
+            (23, TerminalStage::LevelUp, PixelRect::new(838, 790, 245, 70)),
             (11, TerminalStage::NewGame, PixelRect::new(630, 814, 311, 76)),
             (12, TerminalStage::Play, PixelRect::new(600, 725, 218, 72)),
         ] {
@@ -515,6 +559,8 @@ mod tests {
 
         for (number, stage, bounds) in [
             (10, TerminalStage::LevelUp, PixelRect::new(838, 778, 245, 70)),
+            (22, TerminalStage::LevelUp, PixelRect::new(838, 759, 245, 70)),
+            (23, TerminalStage::LevelUp, PixelRect::new(838, 790, 245, 70)),
             (11, TerminalStage::NewGame, PixelRect::new(630, 814, 311, 76)),
             (12, TerminalStage::Play, PixelRect::new(600, 725, 218, 72)),
         ] {

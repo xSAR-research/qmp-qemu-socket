@@ -127,7 +127,7 @@ pub(super) fn verify_pyramid_action(
                     "Pyramid result observation {observation_rounds} (phase {phase_round}/{observation_limit}); one fresh capture, no replay of the previous card or Move input."
                 ),
             );
-            let mut series = capture_series(qmp, socket_path, scan_state, cancel_requested)?;
+            let mut series = capture_series(qmp, socket_path, scan_state, event_tx, cancel_requested)?;
             profile.capture.add_assign(series.timing);
             last_observation = series.observations.pop();
             let observation = last_observation

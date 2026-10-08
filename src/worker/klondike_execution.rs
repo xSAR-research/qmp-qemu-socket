@@ -175,6 +175,7 @@ impl KlondikeIo for QmpKlondikeIo<'_> {
         require_running(self.cancel_requested)?;
         let started = Instant::now();
         let (frame, timing) = capture_screen(self.qmp, self.socket_path)?;
+        self.event_tx.publish_diagnostic_frame(frame.clone());
         let result = classify_captured_result(frame, self.scan_state, self.cancel_requested);
         send_log(self.event_tx, format!(
             "PROFILE Klondike observation: acquisition and classification={:.1} ms; screendump={:.1} ms, decode={:.1} ms.",
@@ -199,7 +200,10 @@ impl KlondikeIo for QmpKlondikeIo<'_> {
 
     fn capture_diagnostic(&mut self) -> Result<CapturedFrame, String> {
         require_running(self.cancel_requested)?;
-        capture_screen(self.qmp, self.socket_path).map(|(frame, _timing)| frame)
+        capture_screen(self.qmp, self.socket_path).map(|(frame, _timing)| {
+            self.event_tx.publish_diagnostic_frame(frame.clone());
+            frame
+        })
     }
 
 

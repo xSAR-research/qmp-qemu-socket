@@ -1675,6 +1675,7 @@ fn execute_guarded_action(
                     qmp,
                     socket_path,
                     &pre_action_scan_state,
+                    event_tx,
                     cancel_requested,
                 ) {
                     Ok(series) => series,
@@ -2048,6 +2049,7 @@ fn execute_guarded_action(
             qmp,
             socket_path,
             &post_action_scan_state,
+            event_tx,
             cancel_requested,
         ) {
             Ok(series) => series,
@@ -2998,7 +3000,7 @@ fn capture_and_analyse(
     }
 
     send_state(event_tx, WorkerState::Capturing);
-    let (observation, timing) = capture_with_client(&mut qmp, socket_path, scan_state)?;
+    let (observation, timing) = capture_with_client(&mut qmp, socket_path, scan_state, event_tx)?;
 
     // `qmp` and the capture guard both drop here. No connection or image file is
     // retained after the event has been constructed.
@@ -3048,19 +3050,35 @@ struct FrameObservation {
 }
 
 
-/// Capture once using an existing QMP connection, then analyse the decoded frame.
+/// Capture once using an existing QMP connection, publish inspection pixels, then analyse.
 ///
 /// Returns observation and stage timings, propagating file, decode and detector errors.
 fn capture_with_client(
     qmp: &mut QmpClient,
     socket_path: &Path,
     scan_state: &TableauScanState,
+    event_tx: &WorkerEventSink,
 ) -> Result<(FrameObservation, CaptureTiming), String> {
     let (frame, mut timing) = capture_screen(qmp, socket_path)?;
-    let (observation, detection) = analyse_captured_frame(frame, scan_state)?;
+    let (observation, detection) = publish_and_analyse_captured_frame(frame, scan_state, event_tx)?;
     timing.detection = detection;
 
     Ok((observation, timing))
+}
+
+
+/// Publish decoded pixels before analysis without granting the preview input authority.
+///
+/// Each shared capture replaces the bounded preview slot, including observations
+/// awaiting a HALO or terminal control. Accepted results retain their existing
+/// publication policy; analysis errors leave these pixels available for inspection.
+fn publish_and_analyse_captured_frame(
+    frame: CapturedFrame,
+    scan_state: &TableauScanState,
+    event_tx: &WorkerEventSink,
+) -> Result<(FrameObservation, Duration), String> {
+    event_tx.publish_diagnostic_frame(frame.clone());
+    analyse_captured_frame(frame, scan_state)
 }
 
 
@@ -3227,6 +3245,7 @@ fn capture_series(
     qmp: &mut QmpClient,
     socket_path: &Path,
     scan_state: &TableauScanState,
+    event_tx: &WorkerEventSink,
     cancel_requested: &AtomicBool,
 ) -> Result<CaptureSeries, String> {
 
@@ -3234,7 +3253,7 @@ fn capture_series(
     if cancel_requested.load(Ordering::Acquire) {
         return Err("STOP was requested before the next capture".to_owned());
     }
-    let (observation, timing) = capture_with_client(qmp, socket_path, scan_state)?;
+    let (observation, timing) = capture_with_client(qmp, socket_path, scan_state, event_tx)?;
 
 
     if cancel_requested.load(Ordering::Acquire) {

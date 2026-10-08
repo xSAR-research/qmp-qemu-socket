@@ -1,5 +1,20 @@
 # Changelog
 
+## v2.0.0, candidate 5 — live capture previews
+
+- Publish intermediate TriPeaks, Pyramid and Klondike QMP captures to the existing bounded latest-frame display slot, including delayed and post-game observations.
+- Publish diagnostic pixels before analysis without granting input authority; retain candidate 4 Free Cell OK recognition.
+
+## v2.0.0 — candidate 4
+
+- Recognise Free Cell's expected local Level Up OK at its original location,
+  19 pixels higher (FC22) and 12 pixels lower (FC23). Preserve the caption/body
+  thresholds, fixed click, optional Level Up flow and independent win entry.
+- Keep Spider's accepted OK checks explicitly at its existing offsets 0/-19,
+  so Free Cell's lower layout does not change Spider policy.
+- Add original supplied PNGs and focused terminal-control regressions. Preserve
+  all gameplay, strategy selection, timings, xSAR pin and exact-byte PNG saving.
+
 ## v2.0.0 — candidate 3
 
 - Give the two startup strategy boxes the same available width and height,

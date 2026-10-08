@@ -82,9 +82,8 @@ fn both_game_modes_allow_the_shared_guarded_input_path() {
 }
 
 
-/// Preparation retains captured pixels even when Computer Vision would approve a HALO.
-#[test]
-fn preparation_frame_has_no_prediction_from_an_actionable_pyramid_halo() {
+/// Build the recognised Pyramid legend and optional MOVE HALO used by worker tests.
+fn pyramid_move_frame(with_halo: bool) -> CapturedFrame {
     let mut frame = blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT);
 
 
@@ -106,18 +105,60 @@ fn preparation_frame_has_no_prediction_from_an_actionable_pyramid_halo() {
             }
         }
     }
-    let move_slot = pyramid::PYRAMID_TARGETS[0];
-    let halo = pyramid::halo_probe(move_slot);
 
 
-    for y in halo.y..halo.bottom() {
+    if with_halo {
+        let move_slot = pyramid::PYRAMID_TARGETS[0];
+        let halo = pyramid::halo_probe(move_slot);
 
 
-        for x in halo.x..halo.right() {
-            let offset = y as usize * frame.stride + x as usize * 4;
-            frame.pixels[offset..offset + 4].copy_from_slice(&[237, 207, 109, 255]);
+        for y in halo.y..halo.bottom() {
+
+
+            for x in halo.x..halo.right() {
+                let offset = y as usize * frame.stride + x as usize * 4;
+                frame.pixels[offset..offset + 4].copy_from_slice(&[237, 207, 109, 255]);
+            }
         }
     }
+    frame
+}
+
+
+/// Build the recognised TriPeaks felt and optional stock HALO used by worker tests.
+fn tripeaks_stock_frame(with_halo: bool) -> CapturedFrame {
+    let mut frame = blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT);
+    let felt = crate::parameters::GAMEPLAY_FELT_PROBE_BOUNDS;
+
+
+    for y in felt.y..felt.bottom() {
+
+
+        for x in felt.x..felt.right() {
+            let offset = y as usize * frame.stride + x as usize * 4;
+            frame.pixels[offset..offset + 4].copy_from_slice(&[20, 140, 60, 255]);
+        }
+    }
+
+
+    if with_halo {
+        let bounds = crate::parameters::STOCK_HALO_SCAN_BOUNDS;
+
+
+        for x in bounds.x..bounds.x + crate::parameters::HALO_GOLD_RUN_MIN + 1 {
+            let offset = bounds.y as usize * frame.stride + x as usize * 4;
+            frame.pixels[offset..offset + 3]
+                .copy_from_slice(&crate::parameters::GOLD_RGB_CANDIDATES[0]);
+        }
+    }
+    frame
+}
+
+
+/// Preparation retains captured pixels even when Computer Vision would approve a HALO.
+#[test]
+fn preparation_frame_has_no_prediction_from_an_actionable_pyramid_halo() {
+    let frame = pyramid_move_frame(true);
     let vision = pyramid::analyse(&frame, &pyramid::PyramidBoardState::new())
         .expect("recognised Pyramid fixture");
     assert!(matches!(vision.prediction,
@@ -534,6 +575,130 @@ fn dialog_observation(variants: &[PostGameControlVariant]) -> FrameObservation {
         observed_rows: None,
         gameplay_scene: false,
         game_progress: Some(GameProgress::GameComplete),
+    }
+}
+
+
+/// Intermediate previews expose exact pixels while preserving actionable controller analysis.
+#[test]
+fn intermediate_legacy_capture_preserves_controller_prediction_without_preview_authority() {
+
+
+    for (mode, frame) in [
+        (GameMode::TriPeaks, tripeaks_stock_frame(true)),
+        (GameMode::Pyramid, pyramid_move_frame(true)),
+    ] {
+        let state = TableauScanState::for_mode(mode);
+        let context = ControllerContext {
+            generation: 5,
+            ..vision_context("/tmp/current-qmp.sock", mode)
+        };
+        let (events, receiver) = mpsc::channel();
+        let sink = WorkerEventSink {
+            events,
+            latest_frame: LatestFrameSlot::default(),
+            capture_context: Mutex::new(Some(context.clone())),
+        };
+        let original_pixels = frame.pixels.clone();
+        let (expected, _) = analyse_captured_frame(frame.clone(), &state)
+            .expect("recognised legacy gameplay fixture");
+        assert!(matches!(expected.prediction, PredictedAction::Action(_)));
+        let (actual, _) = publish_and_analyse_captured_frame(frame, &state, &sink)
+            .expect("published and classified legacy capture");
+        assert_eq!(actual.prediction, expected.prediction);
+        assert_eq!(actual.observed_rows, expected.observed_rows);
+        assert_eq!(actual.gameplay_scene, expected.gameplay_scene);
+        assert_eq!(actual.game_progress, expected.game_progress);
+        assert_eq!(actual.frame.pixels, original_pixels);
+
+        let latest = sink.latest_frame.take().expect("intermediate captured preview");
+        assert_eq!(latest.frame.pixels, original_pixels);
+        assert_eq!(latest.context, Some(context));
+        assert_eq!(latest.prediction, None);
+        assert!(latest.diagnostic);
+        assert!(!latest.log_prediction);
+        assert_eq!(latest.coalesced_frames, 0);
+        assert!(sink.latest_frame.take().is_none());
+        assert!(receiver.try_recv().is_err());
+    }
+}
+
+
+/// Missing-HALO re-observations replace stale previews without growing an image queue.
+#[test]
+fn intermediate_legacy_missing_halo_captures_keep_only_latest_pixels() {
+
+
+    for (mode, frame) in [
+        (GameMode::TriPeaks, tripeaks_stock_frame(false)),
+        (GameMode::Pyramid, pyramid_move_frame(false)),
+    ] {
+        let state = TableauScanState::for_mode(mode);
+        let context = vision_context("/tmp/current-qmp.sock", mode);
+        let (events, _receiver) = mpsc::channel();
+        let sink = WorkerEventSink {
+            events,
+            latest_frame: LatestFrameSlot::default(),
+            capture_context: Mutex::new(Some(context.clone())),
+        };
+        let mut newest_pixels = Vec::new();
+
+
+        for marker in 1..=4 {
+            let mut captured = frame.clone();
+            captured.pixels[..4].copy_from_slice(&[marker, 0, 0, 255]);
+            newest_pixels = captured.pixels.clone();
+            let (observation, _) = publish_and_analyse_captured_frame(captured, &state, &sink)
+                .expect("fresh supported capture without a HALO");
+            assert!(observation.gameplay_scene);
+            assert_eq!(observation.prediction, PredictedAction::NoHighlight);
+        }
+
+        let latest = sink.latest_frame.take().expect("newest no-HALO capture");
+        assert_eq!(latest.frame.pixels, newest_pixels);
+        assert_eq!(latest.context, Some(context));
+        assert_eq!(latest.prediction, None);
+        assert!(latest.diagnostic);
+        assert!(!latest.log_prediction);
+        assert_eq!(latest.coalesced_frames, 3);
+        assert!(sink.latest_frame.take().is_none());
+    }
+}
+
+
+/// A decoded non-native frame remains inspectable even when calibrated analysis rejects it.
+#[test]
+fn intermediate_legacy_capture_retains_pixels_when_analysis_rejects_dimensions() {
+
+
+    for mode in [GameMode::TriPeaks, GameMode::Pyramid] {
+        let state = TableauScanState::for_mode(mode);
+        let context = vision_context("/tmp/current-qmp.sock", mode);
+        let (events, _receiver) = mpsc::channel();
+        let sink = WorkerEventSink {
+            events,
+            latest_frame: LatestFrameSlot::default(),
+            capture_context: Mutex::new(Some(context.clone())),
+        };
+        sink.publish_frame(
+            blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT),
+            PredictedAction::NoHighlight,
+            false,
+        );
+        let mut captured = blank_frame(1_280, 720);
+        captured.pixels[..4].copy_from_slice(&[71, 81, 91, 255]);
+        let original_pixels = captured.pixels.clone();
+        assert!(publish_and_analyse_captured_frame(captured, &state, &sink).is_err());
+
+        let latest = sink.latest_frame.take().expect("decoded rejected capture");
+        assert_eq!((latest.frame.width, latest.frame.height), (1_280, 720));
+        assert_eq!(latest.frame.pixels, original_pixels);
+        assert_eq!(latest.context, Some(context));
+        assert_eq!(latest.prediction, None);
+        assert!(latest.diagnostic);
+        assert!(!latest.log_prediction);
+        assert_eq!(latest.coalesced_frames, 1);
+        assert!(sink.latest_frame.take().is_none());
     }
 }
 
@@ -1269,30 +1434,7 @@ fn tripeaks_delayed_stock_halo_uses_fresh_draw_without_solver() {
 
 
     for observation_round in 1..=3 {
-        let mut frame = blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT);
-        let felt = crate::parameters::GAMEPLAY_FELT_PROBE_BOUNDS;
-
-
-        for y in felt.y..felt.bottom() {
-
-
-            for x in felt.x..felt.right() {
-                let offset = y as usize * frame.stride + x as usize * 4;
-                frame.pixels[offset..offset + 4].copy_from_slice(&[20, 140, 60, 255]);
-            }
-        }
-
-
-        if observation_round == 3 {
-            let bounds = crate::parameters::STOCK_HALO_SCAN_BOUNDS;
-
-
-            for x in bounds.x..bounds.x + crate::parameters::HALO_GOLD_RUN_MIN + 1 {
-                let offset = bounds.y as usize * frame.stride + x as usize * 4;
-                frame.pixels[offset..offset + 3]
-                    .copy_from_slice(&crate::parameters::GOLD_RGB_CANDIDATES[0]);
-            }
-        }
+        let frame = tripeaks_stock_frame(observation_round == 3);
         let (observation, _) = analyse_captured_frame(frame, &scan_state)
             .expect("classify one fresh TriPeaks frame");
         assert!(observation.gameplay_scene);

@@ -99,3 +99,15 @@ FC20/FC21's supplied attachments contain 3,331,493/3,457,697 bytes; their logs
 record saved PNGs of 2,645,645/2,743,438 bytes. Fixture hashes prove equality to
 the supplied attachments, not those earlier encodings. The reason for these
 encoding differences is unknown; exact-byte capture and saving code are unchanged.
+
+
+## v2.0.0 candidate 4: shifted local Level Up OK
+
+FC22 is the supplied level-102 PNG with OK 19 pixels higher than FC10; FC23
+is the supplied level-80 PNG with OK 12 pixels lower. Both have identical
+horizontal lettering bounds and keep the existing (959, 812) click inside
+the gold button. The fixture files are complete byte-identical attachments.
+Only the expected local OK word and body are aligned together; level, medal,
+fireworks, modal frame and completed cards do not gate readiness. An isolated
+OK still does not establish a game win. Spider retains its offsets 0/-19.
+These captures establish local readiness, not live terminal-click success.

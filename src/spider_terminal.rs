@@ -73,7 +73,7 @@ pub fn expected_control_ready(
     if stage == TerminalStage::LevelUp {
 
 
-        if freecell_terminal::expected_control_ready(frame, SharedStage::LevelUp)? {
+        if freecell_terminal::level_up_control_ready_at(frame, 0)? {
             return Ok(true);
         }
         return freecell_terminal::level_up_control_ready_at(frame, -19);
@@ -170,12 +170,12 @@ mod tests {
 
 
     /// SP20's original OK word is 19 pixels higher; the accepted click still
-    /// lands inside its button. Free Cell's default location does not change.
+    /// lands inside its button. The original zero-offset control is absent.
     #[test]
     fn shifted_spider_level_up_uses_only_its_local_ok_without_win_authority() {
         let frame = fixture(20);
         assert!(expected_control_ready(&frame, TerminalStage::LevelUp).unwrap());
-        assert!(!freecell_terminal::expected_control_ready(&frame, SharedStage::LevelUp).unwrap());
+        assert!(!freecell_terminal::level_up_control_ready_at(&frame, 0).unwrap());
         assert!(freecell_terminal::level_up_control_ready_at(&frame, -19).unwrap());
         assert_eq!(classify_win_entry(&frame).unwrap(), None);
         let click = click_point(TerminalStage::LevelUp);

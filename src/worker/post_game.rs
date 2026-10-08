@@ -115,7 +115,7 @@ pub(super) fn run_post_game_restart(
         loop {
             send_status(event_tx, "Verifying game-end transition".to_owned());
             let (observation, timing) =
-                capture_with_client(qmp, socket_path, scan_state).map_err(|error| {
+                capture_with_client(qmp, socket_path, scan_state, event_tx).map_err(|error| {
                     format!("Pre-score transition capture failed before input: {error}")
                 })?;
             capture_timing.add_assign(timing);
@@ -231,7 +231,7 @@ pub(super) fn run_post_game_restart(
         let matched_variant = loop {
             send_status(event_tx, format!("Waiting for {}", target.label));
             let (observation, timing) =
-                capture_with_client(qmp, socket_path, scan_state).map_err(|error| {
+                capture_with_client(qmp, socket_path, scan_state, event_tx).map_err(|error| {
                     format!(
                         "Post-game {} capture failed before input: {error}.",
                         target.label
@@ -565,7 +565,7 @@ pub(super) fn run_post_game_restart(
 
 
     let observation = loop {
-        let (observation, timing) = capture_with_client(qmp, socket_path, scan_state)
+        let (observation, timing) = capture_with_client(qmp, socket_path, scan_state, event_tx)
             .map_err(|error| format!("First post-Solver HALO capture failed: {error}"))?;
         capture_timing.add_assign(timing);
         publish_post_action_observation(event_tx, &observation);

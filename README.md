@@ -14,8 +14,13 @@ the real purpose. Each fixture keeps independent target and effect policies.
 The target is to build in Dijkstra / A* shortest path problem solving rather
 than using the **Solver**, this will benefit drone route planning experience.
 
-This is **v2.0.0, candidate 3**, based on
-`9ccf444d9cfebd05ce017456f05e965094bf08a1`. At startup choose a **Solving
+This is **v2.0.0, candidate 4**, based on
+`5d2d64bb6719af277802c717685d42da9e3bc59a`. Free Cell's expected Level Up
+OK check now accepts the original layout and the supplied 19-pixel higher and
+12-pixel lower layouts, retaining the existing click and control thresholds.
+Spider retains its existing two OK layouts. See
+[candidate notes](docs/freecell-v2.0.0-candidate-4.md).
+At startup choose a **Solving
 strategy**, separately from **Game Type**:
 
 | Choice | Current behaviour |
@@ -529,3 +534,7 @@ beyond the viewport. The visible buffer retains at most 2000 entries and clears
 after every three completed games; the complete session file remains on disk.
 Entries have no individual byte limit, and copying the complete file temporarily
 loads its text into memory. The entry bound is not a fixed byte-memory bound.
+
+### Candidate 5 capture display
+
+TriPeaks, Pyramid and Klondike now publish intermediate decoded QMP captures to the existing latest-frame image control, including waiting and post-game observations. The display coalesces pending frames rather than queuing them. Diagnostic publication does not authorise input. Free Cell and Spider keep their existing observation display policy.
