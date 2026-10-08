@@ -1,5 +1,5 @@
 {
-  "description": "Original-byte and derived sparse regression fixtures. Listed half-open rectangles preserve original RGBA pixels exactly at original coordinates. Sparse fixtures black all unlisted pixels, without resizing. K69 and K70-K94 are complete byte-identical original uploads. Per-file retained_rectangles_xyxy overrides the default rectangle list. Manual frames are not asserted to be the historical automatic worker frames.",
+  "description": "Original-byte and derived sparse regression fixtures. Listed half-open rectangles preserve original RGBA pixels exactly at original coordinates. Sparse fixtures black all unlisted pixels, without resizing. K69 and K70-K97 are complete byte-identical original uploads. Per-file retained_rectangles_xyxy overrides the default rectangle list. Manual frames are not asserted to be the historical automatic worker frames.",
   "frame": [
     1920,
     1080
@@ -2364,6 +2364,52 @@
         ]
       ],
       "observation": "Sixth tableau column five-card 6hearts/5spades/4hearts/3spades/2hearts source lower gold edge overlaps UndoAll overlay. Dashed column4 destination beneath7spades is a guide. Manual PNG supports settled geometry, not historical worker-frame byte identity or measured timing."
+    },
+    {
+      "fixture": "K96.png",
+      "source": "qmp-qemu-socket 261008 173432 No-HALO.png",
+      "source_sha256": "ff3f7f1ffad482809aa3b8f29d91e79038b4abfc92b3631edd629ee28fec58e2",
+      "fixture_sha256": "ff3f7f1ffad482809aa3b8f29d91e79038b4abfc92b3631edd629ee28fec58e2",
+      "bytes": 3807608,
+      "source_bytes": 3807608,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "full_original_png": true,
+      "retained_rectangles_xyxy": [
+        [
+          0,
+          0,
+          1920,
+          1080
+        ]
+      ],
+      "observation": "Red-backed initial seven-column Klondike deal. Solver banner absent; no source HALO. Positively recognised scene permits bounded Solver activation only inside an explicitly requested run."
+    },
+    {
+      "fixture": "K97.png",
+      "source": "qmp-qemu-socket 261008 173704 FAIL-Klondike-HALO.png",
+      "source_sha256": "b28859e8654817bd3ca3c52320eea5f9948d8b5beac941d687dedd06e5050e9c",
+      "fixture_sha256": "b28859e8654817bd3ca3c52320eea5f9948d8b5beac941d687dedd06e5050e9c",
+      "bytes": 3597873,
+      "source_bytes": 3597873,
+      "source_mode": "RGBA",
+      "source_dimensions": [
+        1920,
+        1080
+      ],
+      "full_original_png": true,
+      "retained_rectangles_xyxy": [
+        [
+          0,
+          0,
+          1920,
+          1080
+        ]
+      ],
+      "observation": "Same red-backed deal with active Solver banner, solid J-spades source in column7 rows443..632 and dark dashed Q-diamonds landing guide in column2. Both frames are observation evidence; no live action effect or timing is inferred."
     }
   ],
   "solve_control_template": {

@@ -1725,6 +1725,88 @@ fn native_hint_phase(number: u8) -> FrameObservation {
 }
 
 
+/// The native red deal is recognised with Solver off; the production controller
+/// waits through its existing read-only budget, then follows fresh K97 evidence.
+/// Repeated fixture observations model recovery flow, not measured live timing.
+#[test]
+fn native_red_back_deal_activates_solver_once_then_uses_fresh_source() {
+    let off = native_hint_phase(96);
+    let on = native_hint_phase(97);
+    assert!(off.gameplay_scene && on.gameplay_scene);
+    assert_eq!(off.prediction, PredictedAction::NoHighlight);
+    assert_eq!(on.prediction, canonical(KlondikeTarget::Tableau { column: 7, top: 443, bottom: 632 }));
+
+
+    for limit in [0, 1] {
+        let mut frames = (0..=REOBSERVATION_LIMIT).map(|_| copy_observation(&off)).collect::<Vec<_>>();
+        frames.extend([copy_observation(&on), copy_observation(&on)]);
+        let stop = AtomicBool::new(false);
+        let mut io = fake_frames(frames);
+        io.native_terminal_analysis = true;
+
+
+        if limit == 0 {
+            io.stop_on_probe = Some(&stop);
+            io.probes_before_stop = 2;
+        }
+        let (result, attempted, latest) = exercise(&mut io, off.prediction, limit, &stop);
+
+
+        if limit == 1 {
+            assert_eq!(result, Ok(RunOutcome::Completed { verified: 0, halo: 1 }));
+        } else {
+            assert!(result.unwrap_err().contains("STOP"));
+        }
+        assert!(attempted && io.frames.is_empty());
+        assert_eq!(io.inputs, [on.prediction]);
+        assert!(io.terminal_inputs.is_empty());
+        assert_eq!(io.trace.iter().filter(|entry| **entry == "solver").count(), 1);
+        let solver = io.trace.iter().position(|entry| *entry == "solver").unwrap();
+        assert_eq!(io.trace[..solver].iter().filter(|entry| **entry == "capture").count(), REOBSERVATION_LIMIT + 1);
+        assert_eq!(io.trace[solver + 1], "capture", "Solver is followed immediately by a fresh capture");
+        assert_eq!(latest.unwrap().prediction, on.prediction);
+    }
+}
+
+
+/// A fresh native red-backed source goes directly to its canonical action;
+/// an already active Solver must not be toggled during this Step Once request.
+#[test]
+fn native_red_back_halo_plays_one_source_without_solver_refresh() {
+    let on = native_hint_phase(97);
+    let mut io = fake_frames(vec![copy_observation(&on), copy_observation(&on)]);
+    io.native_terminal_analysis = true;
+    let (result, attempted, latest) = exercise(&mut io, PredictedAction::NoHighlight, 1, &AtomicBool::new(false));
+    assert_eq!(result, Ok(RunOutcome::Completed { verified: 0, halo: 1 }));
+    assert!(attempted && io.frames.is_empty());
+    assert_eq!(io.inputs, [on.prediction]);
+    assert_eq!(io.trace, ["capture", "probe", "input", "wait", "capture"]);
+    assert!(!io.trace.contains(&"solver") && io.terminal_inputs.is_empty());
+    assert_eq!(latest.unwrap().prediction, on.prediction);
+}
+
+
+/// Persistent native red no-HALO pixels remain bounded after one activation;
+/// absent recommendations never become speculative gameplay or terminal input.
+#[test]
+fn native_red_back_no_halo_stops_after_one_bounded_solver_refresh() {
+    let off = native_hint_phase(96);
+
+
+    for limit in [0, 1] {
+        let frames = (0..2 * (REOBSERVATION_LIMIT + 1)).map(|_| copy_observation(&off)).collect();
+        let mut io = fake_frames(frames);
+        io.native_terminal_analysis = true;
+        let (result, attempted, latest) = exercise(&mut io, off.prediction, limit, &AtomicBool::new(false));
+        assert!(result.is_err() && attempted && io.frames.is_empty());
+        assert!(io.inputs.is_empty() && io.terminal_inputs.is_empty());
+        assert_eq!(io.trace.iter().filter(|entry| **entry == "solver").count(), 1);
+        assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), 2 * (REOBSERVATION_LIMIT + 1));
+        assert_eq!(latest.unwrap().prediction, PredictedAction::NoHighlight);
+    }
+}
+
+
 
 
 /// Assemble native terminal artwork from separate original fixtures. This

@@ -740,3 +740,38 @@ card-identity checks on the live HALO loop. Historical lower-border/icon damage
 tests now separately require the live prediction to remain unchanged; visible
 source damage still refuses input. Native fixtures establish recognition and
 bounded geometry, not animation timing or Beast gameplay acceptance.
+
+
+### K96-K97: red-backed initial deal and bounded Solver recovery
+
+These two fixtures are complete byte-identical copies of Charlie's 8 October
+1920×1080 uploads; their source and fixture hashes match in `manifest.json`.
+K96 is `qmp-qemu-socket 261008 173432 No-HALO.png`: Solver is off and there is
+no source HALO. K97 is `qmp-qemu-socket 261008 173704 FAIL-Klondike-HALO.png`:
+the active banner recommends the J-spades source in column 7; the dashed dark
+Q-diamonds landing guide in column 2 is never an input target. No pixels are
+masked, resized or re-encoded. No live action or timing is inferred from this
+manual pair.
+
+Both images retain all four complete felt probes and all four foundation
+strips. The earlier blue-only scene palette recognises just one of seven
+tableau strips: column 1 has 552/552 white pixels while columns 2–7 each have
+184/552 white pixels and 368 red-back pixels. The measured additive red band
+recognises 276 red pixels, leaving one 92-pixel antialias row outside the band;
+the resulting 460/552 support passes without changing the existing 70% per-strip
+threshold, five-column/three-foundation requirement or 95% felt probes. The
+13,900-pixel stock interior has zero blue-back pixels; all satisfy the new
+red-back relation. Green remains below 70, separating it from every source
+gold predicate, while opposed red contrast separates it from felt, neutral
+paper and the existing blue theme. Unknown card-back palettes remain refused.
+
+K97's existing source recogniser already supplies bounds `(1398,443,132,189)`,
+click `(1464,483)`, a complete 96-pixel lower edge, a closed top, connected
+rails and 749/1152 white face pixels. No source colour, geometry or action
+threshold changes. K96 stays read-only with no predicted action; controller
+tests use four fresh K96 observations before the existing single Solver
+activation, then the fresh K97 recommendation. Persistent no-HALO, STOP,
+missing scene probes or banner, damaged solid outlines and dashed destinations
+retain their existing bounded refusal behaviour. Synthetic stock-HALO tests
+combine the original red interior with an established stock outline solely
+to test Draw classification; they are not original live stock-HALO captures.

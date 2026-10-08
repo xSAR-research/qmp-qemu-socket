@@ -6,6 +6,7 @@
 //! are handled by focused child modules.
 
 mod freecell_execution;
+mod initial_recovery;
 mod klondike_execution;
 mod post_game;
 mod pyramid_execution;
@@ -1602,8 +1603,8 @@ struct ActionFailure {
 
 /// Source of planning authority for the next guarded action.
 enum PlanningFrame {
-    /// The advisory UI prediction is only a constraint. One fresh capture must
-    /// reproduce it before the first input in a run.
+    /// A concrete advisory target must be reproduced by fresh pixels. An explicit
+    /// NoHighlight request may instead use bounded setup to obtain a fresh target.
     InitialConstraint(PredictedAction),
     /// A fresh post-action frame accepted through effect verification or the
     /// settled Pyramid halo rule. It is the next action's immutable plan.
@@ -1662,6 +1663,35 @@ fn execute_guarded_action(
 
 
     let (mut before_series, plan) = match planning_frame {
+        PlanningFrame::InitialConstraint(PredictedAction::NoHighlight)
+            if matches!(scan_state.mode(), GameMode::TriPeaks | GameMode::Pyramid) =>
+        {
+            send_log(event_tx, format!(
+                "{} explicit no-HALO request: one fresh capture plus at most {} delayed observations before one positively gated Solver setup; immediate capture plus at most {} delayed observations afterwards. Initial, mode-change and manual captures remain read-only.",
+                scan_state.mode(), initial_recovery::INITIAL_HALO_REOBSERVATIONS,
+                initial_recovery::INITIAL_HALO_REOBSERVATIONS,
+            ));
+            let recovered = initial_recovery::recover_initial_target(
+                scan_state.mode(),
+                &mut initial_recovery::QmpInitialRecovery {
+                    qmp, scan_state, context, settings, profile: &mut profile,
+                },
+            );
+            match recovered {
+                Ok((observation, plan)) => (
+                    CaptureSeries {
+                        observations: vec![observation],
+                        // Recovery already accounted for its captures in the action profile.
+                        timing: CaptureTiming::default(),
+                    },
+                    plan,
+                ),
+                Err(failure) => return Err(action_failure(
+                    action_started, profile, failure.state, failure.message, failure.observation,
+                    if failure.solver_reserved { FailureFramePhase::PostAction } else { FailureFramePhase::PreAction },
+                )),
+            }
+        }
         PlanningFrame::InitialConstraint(expected_prediction) => {
             let mut pre_action_round = 1usize;
 

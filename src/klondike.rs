@@ -1,7 +1,7 @@
 //! Klondike Draw 1 Solver targets and mode-owned observation policy.
 //! Historical pixel-effect proofs remain test-only diagnostic regressions.
 //!
-//! Geometry is measured from Charlie's 1920x1080 captures K01-K95. Live tableau
+//! Geometry is measured from Charlie's 1920x1080 captures K01-K97. Live tableau
 //! recognition stops above the guest toolbar. A visible source needs a closed
 //! lower edge or rails reaching that boundary, a closed top and a bright
 //! card interior. Dashed dark destinations never grant click authority. The
@@ -374,10 +374,21 @@ fn is_white([red, green, blue]: [u8; 3]) -> bool {
 }
 
 
-/// The blue card-back design shown in all evidenced non-empty stock captures.
+/// Red stock artwork measured in K96/K97, with green below every gold predicate.
+/// Their native stock interiors range from RGB `[157,49,43]` to `[242,69,76]`.
+/// Opposed red contrast separates the back from blue artwork, felt and paper;
+/// colour alone never supplies a stock HALO, Solver banner or gameplay scene.
+fn is_red_back([red, green, blue]: [u8; 3]) -> bool {
+    red >= 150 && green < 70 && blue <= 100
+        && i16::from(red) - i16::from(green) >= 80
+        && i16::from(red) - i16::from(blue) >= 80
+}
+
+
+/// Blue or measured red stock artwork; the closed stock HALO remains separate.
 fn is_back([red, green, blue]: [u8; 3]) -> bool {
-    blue >= 100 && i16::from(blue) - i16::from(red) >= 40
-        && i16::from(blue) - i16::from(green) >= 15
+    crate::game::is_classic_blue_back([red, green, blue])
+        || is_red_back([red, green, blue])
 }
 
 
@@ -403,6 +414,7 @@ fn is_slot_edge(rgb: [u8; 3]) -> bool {
     let [red, green, blue] = rgb;
     (red >= 190 && green >= 190 && blue >= 190)
         || (blue >= 105 && i16::from(blue) - i16::from(red) >= 30)
+        || is_red_back(rgb)
         || (red >= 40 && green >= 145
             && i16::from(green) - i16::from(red) >= 40
             && i16::from(green) - i16::from(blue) >= 25)
@@ -1164,19 +1176,24 @@ fn select_target_using_tableau(
 
     if solver_active && find_solid_outline(frame, upper_scan(390), false)?.is_some() {
         let inside = PixelRect::new(406, 130, 100, 139);
+        let total_pixels = inside.width * inside.height;
+        let supported_back_pixels = count_pixels(frame, inside, is_back);
+        let felt_pixels = count_pixels(frame, inside, is_felt);
 
 
-        if fraction_at_least(frame, inside, is_back, 500) {
+        if supported_back_pixels * 1_000 >= total_pixels * 500 {
             return Ok(Some(KlondikeTarget::Draw));
         }
 
 
-        if fraction_at_least(frame, inside, is_felt, 900) {
+        if felt_pixels * 1_000 >= total_pixels * 900 {
             return Ok(Some(KlondikeTarget::Recycle));
         }
 
-        return Err(HaloDetectionError::MissingProfileCalibration {
-            target: "Klondike highlighted stock interior",
+        return Err(HaloDetectionError::UnclassifiedKlondikeStock {
+            supported_back_pixels,
+            felt_pixels,
+            total_pixels,
         });
     }
 
@@ -7915,7 +7932,7 @@ mod tests {
     fn all_recorded_live_targets_ignore_every_pixel_at_and_below_toolbar() {
 
 
-        for number in 1..=95 {
+        for number in 1..=97 {
             let native = fixture(number);
             let expected = analyse(&native).unwrap().prediction;
 
@@ -7958,6 +7975,163 @@ mod tests {
         let mut malformed = native;
         malformed.pixels.pop();
         assert_eq!(find_tableau_source(&malformed, scan), Err(HaloDetectionError::InvalidFrameLayout));
+    }
+
+
+    /// The red initial deal supplies scene evidence without inventing a target;
+    /// activating Solver reveals a source already supported by ordinary geometry.
+    #[test]
+    fn native_red_back_deal_and_solver_source_keep_scene_and_halo_separate() {
+
+
+        for number in [96, 97] {
+            let frame = fixture(number);
+            assert!(is_gameplay_scene(&frame).unwrap(), "K{number} red-backed deal");
+            assert_eq!(count_pixels(&frame, PixelRect::new(406, 130, 100, 139), is_back), 13_900);
+
+
+            for column in 0..7 {
+                assert_eq!(count_pixels(&frame, PixelRect::new(FIRST_COLUMN_X + COLUMN_PITCH * column + 20,
+                    TABLEAU_Y, 92, 6), is_slot_edge), if column == 0 { 552 } else { 460 },
+                    "K{number} column{column}: the red antialias row remains outside the stock band");
+            }
+            assert!(!completion_evidence(&frame).unwrap().complete_candidate);
+        }
+        let off = fixture(96);
+        assert!(!has_solver_banner(&off));
+        assert_eq!(analyse(&off).unwrap().prediction, PredictedAction::NoHighlight);
+        let on = fixture(97);
+        assert!(has_solver_banner(&on));
+        let source = action(&on);
+        assert_eq!(source.target, ActionTarget::Klondike(KlondikeTarget::Tableau { column: 7, top: 443, bottom: 632 }));
+        assert_eq!(source.operation(), InputOperation::Click(PixelPoint::new(1_464, 483)));
+        assert_eq!(find_tableau_source(&on, PixelRect::new(558, TABLEAU_SCAN_TOP, CARD_WIDTH,
+            TOOLBAR_TOP - TABLEAU_SCAN_TOP)).unwrap(), None, "the dashed Q-diamonds guide is not a source");
+    }
+
+
+    /// New artwork remains disjoint from source gold and known scene colours;
+    /// the measured band does not grant support to its unknown neighbours.
+    #[test]
+    fn measured_red_back_band_refuses_other_colours_and_boundary_neighbours() {
+
+
+        for rgb in [[157, 49, 43], [242, 69, 76], [150, 69, 70]] {
+            assert!(is_red_back(rgb));
+            assert!(!is_edge_gold(rgb) && !is_rail_gold(rgb) && !is_toolbar_shadow_gold(rgb));
+            assert!(!is_white(rgb) && !is_felt(rgb));
+            let [red, green, blue] = rgb;
+            assert!(!(blue >= 100 && i16::from(blue) - i16::from(red) >= 40
+                && i16::from(blue) - i16::from(green) >= 15));
+        }
+
+
+        for rgb in [[255, 255, 255], [20, 70, 180], [12, 82, 45], [220, 180, 100],
+            [165, 80, 40], [96, 87, 43], [150, 70, 70], [150, 69, 71],
+            [149, 60, 50], [200, 69, 121], [250, 60, 101], [0, 0, 0]]
+        {
+            assert!(!is_red_back(rgb), "unknown/non-back RGB {rgb:?}");
+        }
+    }
+
+
+    /// Recognising red artwork cannot restore missing felt or layout context;
+    /// unknown back palettes keep the same column-count refusal.
+    #[test]
+    fn native_red_back_scene_keeps_all_felt_and_layout_guards() {
+        let native = fixture(97);
+
+
+        for bounds in [PixelRect::new(160, 310, 16, 16), PixelRect::new(1_730, 310, 16, 16),
+            PixelRect::new(874, 710, 7, 28), PixelRect::new(1_208, 840, 7, 28),
+            PixelRect::new(410, TABLEAU_Y, 92 + 2 * COLUMN_PITCH, 6),
+            PixelRect::new(914, UPPER_Y, 92 + COLUMN_PITCH, 6)]
+        {
+            let mut damaged = native.clone();
+            paint(&mut damaged, bounds, [0, 0, 0]);
+            assert!(!is_gameplay_scene(&damaged).unwrap(), "missing context {bounds:?}");
+            assert_eq!(analyse(&damaged).unwrap().prediction, PredictedAction::NoHighlight);
+        }
+
+
+        for rgb in [[200, 70, 50], [200, 69, 121], [149, 60, 50]] {
+            let mut changed = native.clone();
+
+
+            for column in 1..7 {
+                let x = FIRST_COLUMN_X + COLUMN_PITCH * column + 20;
+
+
+                for y in TABLEAU_Y..TABLEAU_Y + 6 {
+
+
+                    for xx in x..x + 92 {
+
+
+                        if pixel_rgb(&native, xx, y).is_some_and(is_red_back) {
+                            paint(&mut changed, PixelRect::new(xx, y, 1, 1), rgb);
+                        }
+                    }
+                }
+            }
+            assert!(!is_gameplay_scene(&changed).unwrap(), "unknown palette {rgb:?}");
+            assert_eq!(analyse(&changed).unwrap().prediction, PredictedAction::NoHighlight);
+        }
+    }
+
+
+    /// A synthetic red stock combines genuine red interior with K03's closed
+    /// stock HALO. It supplies no claim about a captured live Draw action.
+    #[test]
+    fn red_back_draw_still_requires_closed_stock_halo_banner_and_scene() {
+        let native = fixture(97);
+        let mut draw = native.clone();
+        copy_region(&fixture(3), &mut draw, PixelRect::new(378, 100, 164, 204), PixelPoint::new(378, 100));
+        copy_region(&native, &mut draw, PixelRect::new(406, 130, 100, 139), PixelPoint::new(406, 130));
+        assert_eq!(action(&draw).target, ActionTarget::Klondike(KlondikeTarget::Draw));
+        assert_eq!(count_pixels(&draw, PixelRect::new(406, 130, 100, 139), is_back), 13_900);
+        let mut no_banner = draw.clone();
+        paint(&mut no_banner, PixelRect::new(824, 34, 272, 58), [0, 0, 0]);
+        assert!(is_gameplay_scene(&no_banner).unwrap());
+        assert_eq!(analyse(&no_banner).unwrap().prediction, PredictedAction::NoHighlight);
+
+
+        for bounds in [PixelRect::new(408, 100, 96, 16), PixelRect::new(408, 280, 96, 20),
+            PixelRect::new(381, 155, 9, 30), PixelRect::new(522, 155, 10, 30)]
+        {
+            let mut broken = draw.clone();
+            paint(&mut broken, bounds, [0, 0, 0]);
+            assert_ne!(analyse(&broken).unwrap().prediction, canonical_action(KlondikeTarget::Draw)
+                .map(PredictedAction::Action).unwrap(), "missing stock border {bounds:?}");
+        }
+        let mut unknown = draw.clone();
+        paint(&mut unknown, PixelRect::new(406, 130, 100, 139), [200, 70, 50]);
+        assert_eq!(analyse(&unknown), Err(HaloDetectionError::UnclassifiedKlondikeStock {
+            supported_back_pixels: 0, felt_pixels: 0, total_pixels: 13_900,
+        }));
+        let mut no_scene = draw;
+        paint(&mut no_scene, PixelRect::new(160, 310, 16, 16), [0, 0, 0]);
+        assert_eq!(analyse(&no_scene).unwrap().prediction, PredictedAction::NoHighlight);
+    }
+
+
+    /// Genuine red source artwork still needs intact Solver rails, closed
+    /// source edges and bright paper; a dashed guide cannot inherit authority.
+    #[test]
+    fn native_red_back_source_keeps_banner_and_positive_outline_guards() {
+        let native = fixture(97);
+
+
+        for bounds in [PixelRect::new(824, 34, 272, 58), PixelRect::new(1_416, 618, 96, 18),
+            PixelRect::new(1_416, 437, 96, 8), PixelRect::new(1_389, 500, 9, 30),
+            PixelRect::new(1_530, 500, 10, 30), PixelRect::new(1_416, 586, 96, 21)]
+        {
+            let mut broken = native.clone();
+            paint(&mut broken, bounds, [0, 0, 0]);
+            assert!(is_gameplay_scene(&broken).unwrap());
+            assert_eq!(analyse(&broken).unwrap().prediction, PredictedAction::NoHighlight,
+                "missing source/banner evidence {bounds:?}");
+        }
     }
 
 }

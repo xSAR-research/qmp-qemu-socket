@@ -1009,7 +1009,11 @@ impl QmpQemuSocketApp {
         }
 
 
-        if matches!(self.game_mode, GameMode::Klondike | GameMode::FreeCell | GameMode::Spider)
+        if matches!(self.game_mode, GameMode::TriPeaks | GameMode::Pyramid)
+            && approved_prediction == PredictedAction::NoHighlight
+        {
+            self.push_log(format!("{} initial missing-HALO recovery uses one fresh capture and at most three delayed observations, then at most one Solver setup on a positively recognised nonempty board. It captures immediately afterwards and waits for at most three further observations. Only a fresh canonical HALO authorises gameplay; Single Step sends at most one gameplay action. Setup does not consume its action budget.", self.game_mode));
+        } else if matches!(self.game_mode, GameMode::Klondike | GameMode::FreeCell | GameMode::Spider)
             && approved_prediction == PredictedAction::NoHighlight
         {
             self.push_log(format!("{} missing-HALO recovery first uses bounded input-free captures and independent completion checks. A recognised gameplay scene may refresh Solver once, then obtain fresh evidence. Step Once sends at most one gameplay action; only continuous Multi-Step 0 advances confirmed wins through supported terminal controls.", self.game_mode));
@@ -1319,6 +1323,8 @@ impl QmpQemuSocketApp {
                         "Follow one fresh PLAY source HALO or DRAW via D, wait the separate editable settle and recapture; no card-pixel move proof"
                     } else if self.game_mode == GameMode::FreeCell {
                         "Follow one fresh CELL or PLAY source HALO, settle and recapture; activate Solver once only if it is off; no card-pixel move proof"
+                    } else if matches!(self.game_mode, GameMode::TriPeaks | GameMode::Pyramid) && self.prediction == Some(PredictedAction::NoHighlight) {
+                        "Observe a fresh nonempty board, set up Solver at most once if no HALO appears, then execute at most one fresh canonical gameplay action with the existing effect checks"
                     } else if self.game_mode == GameMode::Klondike && self.prediction == Some(PredictedAction::NoHighlight) {
                         "Observe for a fresh HALO or completion; a recognised board may refresh Solver once, then send at most one gameplay action and capture its result"
                     } else if prediction_is_klondike_solve(self.prediction) {
@@ -1339,6 +1345,8 @@ impl QmpQemuSocketApp {
                         "Follow fresh DRAW/PLAY HALOs; 0 continues through one-board GAME WIN, optional OK, New Game, Play and Solver activation; collapsed suits are display-only"
                     } else if self.game_mode == GameMode::FreeCell {
                         "Follow fresh CELL/PLAY HALOs; 0 continues through one-board GAME WIN, OK, New Game, Play and Solver activation; no SUIT, Draw or Solve inputs"
+                    } else if matches!(self.game_mode, GameMode::TriPeaks | GameMode::Pyramid) && self.prediction == Some(PredictedAction::NoHighlight) {
+                        "Obtain a fresh canonical HALO through bounded observation and at most one Solver setup on a recognised nonempty board, then follow the configured action limit and existing effect checks"
                     } else if self.game_mode == GameMode::Klondike
                         && self.prediction == Some(PredictedAction::NoHighlight)
                         && self.selected_multi_step_actions() == UNBOUNDED_MULTI_STEP_ACTIONS
@@ -2810,8 +2818,7 @@ fn prediction_is_klondike_solve(prediction: Option<PredictedAction>) -> bool {
 fn prediction_is_actionable(mode: GameMode, prediction: PredictedAction) -> bool {
 
 
-    if matches!(mode, GameMode::Klondike | GameMode::FreeCell | GameMode::Spider)
-        && prediction == PredictedAction::NoHighlight
+    if prediction == PredictedAction::NoHighlight
     {
         return mode.input_authorised();
     }
@@ -3307,8 +3314,8 @@ mod tests {
 
     /// Checks mode ownership and input-method gating for actionable preview predictions.
     #[test]
-    fn only_concrete_single_predictions_enable_step_once() {
-        assert!(!prediction_is_actionable(
+    fn concrete_targets_and_supported_no_halo_requests_enable_step_once() {
+        assert!(prediction_is_actionable(
             GameMode::TriPeaks,
             PredictedAction::NoHighlight
         ));
@@ -3389,7 +3396,7 @@ mod tests {
         use crate::klondike::{KlondikeTarget, canonical_action};
 
         assert!(prediction_is_actionable(GameMode::Klondike, PredictedAction::NoHighlight));
-        assert!(!prediction_is_actionable(GameMode::Pyramid, PredictedAction::NoHighlight));
+        assert!(prediction_is_actionable(GameMode::Pyramid, PredictedAction::NoHighlight));
         assert!(!prediction_is_actionable(
             GameMode::Klondike,
             PredictedAction::Ambiguous { highlight_count: 2 },

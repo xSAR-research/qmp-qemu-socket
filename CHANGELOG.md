@@ -1,5 +1,20 @@
 # Changelog
 
+## v2.0.0, candidate 7 — CLASSIC baseline and Solver startup recovery
+
+- Share the established CLASSIC-blue colour predicate between Klondike and Spider, including Spider stock occupancy and Draw checks. Keep card-back colour separate from scene, Solver and closed-HALO authority.
+- Permit explicitly requested TriPeaks and Pyramid runs from a no-HALO preview, with bounded input-free observations and at most one Solver activation on a positively recognised, non-empty board.
+- Preserve concrete-preview validation, game-specific action effect checks, STOP and uncertain-input non-retry. Initial strategy, mode-change and manual captures remain read-only.
+- Order the Game Type menu as Klondike, Spider, Free Cell, Pyramid, TriPeaks.
+- Correct RGB literal formatting in Klondike rustdoc. Report back/felt counts for an unclassified highlighted stock rather than claiming its game profile is missing.
+- Establish CLASSIC as the acceptance baseline for all five game types. Pyramid and Free Cell require no card-back detector. Native CLASSIC-blue Spider Draw evidence remains pending; synthetic palette regressions do not claim live calibration.
+
+## v2.0.0, candidate 6 — Klondike red card backs
+
+- Recognise the supplied red card-back artwork in existing Klondike tableau scene strips and highlighted stock interiors, alongside the accepted blue backs.
+- Restore the existing bounded Solver recovery for recognised red-backed gameplay without a HALO, and recognise the supplied column-seven Jack HALO without changing its thresholds or geometry.
+- Retain read-only initial captures, candidate 5 live previews, STOP, existing action budgets and Free Cell shifted OK recognition.
+
 ## v2.0.0, candidate 5 — live capture previews
 
 - Publish intermediate TriPeaks, Pyramid and Klondike QMP captures to the existing bounded latest-frame display slot, including delayed and post-game observations.

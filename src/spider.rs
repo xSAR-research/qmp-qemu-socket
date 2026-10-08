@@ -12,7 +12,7 @@ use crate::{
     detector::{HaloDetectionError, pixel_rgb},
     game::{
         ActionSpecification, ActionTarget, AnimationClass, GameProfile, GuidedAction,
-        InputOperation, RepeatTargetPolicy, TargetSelectionPolicy,
+        InputOperation, RepeatTargetPolicy, TargetSelectionPolicy, is_classic_blue_back,
     },
     geometry::{PixelPoint, PixelRect},
     tracker::{FrameAnalysis, PredictedAction},
@@ -163,10 +163,12 @@ fn is_paper([red, green, blue]: [u8; 3]) -> bool {
 }
 
 
-/// All supplied Spider stock packets use this broad red-back family.
+/// Retain the supplied red backs and the established CLASSIC blue palette.
+/// Blue Spider coverage is synthetic until a native blue stock frame is supplied.
 fn is_stock_back([red, green, blue]: [u8; 3]) -> bool {
-    red >= 100 && i16::from(red) - i16::from(green) >= 30
-        && i16::from(red) - i16::from(blue) >= 30
+    (red >= 100 && i16::from(red) - i16::from(green) >= 30
+        && i16::from(red) - i16::from(blue) >= 30)
+        || is_classic_blue_back([red, green, blue])
 }
 
 
@@ -571,6 +573,111 @@ mod tests {
         paint(frame, PixelRect::new(x + CARD_WIDTH + 2, top + 3, 3, bottom - top - 6), gold);
         paint(frame, PixelRect::new(x + 18, top, CARD_WIDTH - 36, 1), gold);
         paint(frame, PixelRect::new(x + 18, bottom - 1, CARD_WIDTH - 36, 1), gold);
+    }
+
+
+    /// Replace only a measured SP08 stock interior in decoded test memory.
+    /// This is synthetic palette coverage, not a native CLASSIC blue screenshot.
+    fn synthetic_classic_blue_draw() -> CapturedFrame {
+        let mut frame = fixture(8);
+        paint(&mut frame, PixelRect::new(1_535, 752, 130, 176), [30, 60, 180]);
+        frame
+    }
+
+
+    /// Remove the bounded stock outline without changing the blue back interior.
+    fn erase_stock_outline(frame: &mut CapturedFrame) {
+        for y in DRAW_TOP - 12..TOOLBAR_TOP {
+            for x in DRAW_X_START - 10..DRAW_X_END + CARD_WIDTH + 11 {
+                if pixel_rgb(frame, x, y).is_some_and(is_gold) {
+                    paint(frame, PixelRect::new(x, y, 1, 1), [20, 120, 75]);
+                }
+            }
+        }
+    }
+
+
+    /// A supported blue palette preserves stock occupancy and the existing Draw action.
+    #[test]
+    fn synthetic_classic_blue_stock_retains_draw_priority_and_play_exclusion() {
+        let mut blue = synthetic_classic_blue_draw();
+        assert!(stock_is_present(&blue));
+        assert_eq!(play_scan_bottom(PLAY_X[8], stock_is_present(&blue), None), DRAW_TOP,
+            "blue stock reserves its display area from PLAY9 scans");
+        assert!(is_gameplay_scene(&blue).unwrap());
+        assert!(solver_active(&blue).unwrap());
+        assert!(draw_is_highlighted(&blue));
+        let draw = PredictedAction::Action(canonical_action(SpiderTarget::Draw).unwrap());
+        assert_eq!(analyse(&blue).unwrap().prediction, draw);
+
+        paint_source(&mut blue, PLAY_X[0], 300, 505);
+        assert_eq!(analyse(&blue).unwrap().prediction, draw,
+            "blue Draw keeps priority over a simultaneous PLAY source");
+        assert!(stock_is_present(&fixture(8)), "native red stock remains supported");
+        assert_eq!(analyse(&fixture(8)).unwrap().prediction, draw);
+    }
+
+
+    /// Blue artwork grants no input without a solid, closed stock source outline.
+    #[test]
+    fn synthetic_classic_blue_stock_without_solid_outline_cannot_draw() {
+        let mut blue = synthetic_classic_blue_draw();
+        erase_stock_outline(&mut blue);
+        assert!(stock_is_present(&blue));
+        assert!(is_gameplay_scene(&blue).unwrap());
+        assert!(solver_active(&blue).unwrap());
+        assert!(!draw_is_highlighted(&blue), "a blue back alone is not a source");
+        assert_eq!(analyse(&blue).unwrap().prediction, PredictedAction::NoHighlight);
+
+        let gold = [235, 195, 90];
+        let x = DRAW_X_END;
+        for y in (DRAW_TOP..TOOLBAR_TOP - 6).step_by(16) {
+            paint(&mut blue, PixelRect::new(x - 5, y, 3, 6), gold);
+            paint(&mut blue, PixelRect::new(x + CARD_WIDTH + 2, y, 3, 6), gold);
+        }
+        for left in (x + 18..x + CARD_WIDTH - 18).step_by(16) {
+            let width = 8.min(x + CARD_WIDTH - 18 - left);
+            paint(&mut blue, PixelRect::new(left, DRAW_TOP - 10, width, 1), gold);
+            paint(&mut blue, PixelRect::new(left, TOOLBAR_TOP - 5, width, 1), gold);
+        }
+        assert!(stock_is_present(&blue));
+        assert!(!draw_is_highlighted(&blue), "dashed guides cannot authorise Draw");
+        assert_eq!(analyse(&blue).unwrap().prediction, PredictedAction::NoHighlight);
+    }
+
+
+    /// Even a closed blue-stock HALO cannot bypass gameplay or Solver activation.
+    #[test]
+    fn synthetic_classic_blue_draw_keeps_scene_and_solver_guards() {
+        let mut inactive = synthetic_classic_blue_draw();
+        paint(&mut inactive, PixelRect::new(828, 36, 263, 1), [0, 0, 0]);
+        assert!(draw_is_highlighted(&inactive));
+        assert!(is_gameplay_scene(&inactive).unwrap());
+        assert!(!solver_active(&inactive).unwrap());
+        assert_eq!(analyse(&inactive).unwrap().prediction, PredictedAction::NoHighlight);
+
+        let mut unsupported = synthetic_classic_blue_draw();
+        paint(&mut unsupported, PixelRect::new(70, 350, 24, 24), [0, 0, 0]);
+        assert!(draw_is_highlighted(&unsupported));
+        assert!(solver_active(&unsupported).unwrap());
+        assert!(!is_gameplay_scene(&unsupported).unwrap());
+        assert_eq!(analyse(&unsupported).unwrap().prediction, PredictedAction::NoHighlight);
+    }
+
+
+    /// The same positive stock-occupancy boundary applies to reference blue pixels.
+    #[test]
+    fn synthetic_classic_blue_stock_keeps_eighty_percent_occupancy() {
+        let mut at_boundary = synthetic_classic_blue_draw();
+        paint(&mut at_boundary, PixelRect::new(1_535, 770, 90, 28), [255, 255, 255]);
+        assert!(stock_is_present(&at_boundary), "80 percent positive back occupancy remains sufficient");
+        assert!(draw_is_highlighted(&at_boundary));
+
+        let mut below_boundary = synthetic_classic_blue_draw();
+        paint(&mut below_boundary, PixelRect::new(1_535, 770, 90, 29), [255, 255, 255]);
+        assert!(!stock_is_present(&below_boundary));
+        assert!(!draw_is_highlighted(&below_boundary));
+        assert_eq!(analyse(&below_boundary).unwrap().prediction, PredictedAction::NoHighlight);
     }
 
 

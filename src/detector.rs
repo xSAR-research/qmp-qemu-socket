@@ -132,6 +132,16 @@ pub enum HaloDetectionError {
         /// Human-readable detector name used in the error.
         target: &'static str,
     },
+    /// A closed Klondike stock HALO contains neither supported backs nor empty felt.
+    #[error("Klondike highlighted stock interior is unclassified: supported back={supported_back_pixels}/{total_pixels} (required 50%); felt={felt_pixels}/{total_pixels} (required 90%); no Draw or Recycle input authorised")]
+    UnclassifiedKlondikeStock {
+        /// Pixels matching the supported card-back colours.
+        supported_back_pixels: u32,
+        /// Pixels matching undimmed empty-stock felt.
+        felt_pixels: u32,
+        /// Total pixels in the calibrated stock-interior probe.
+        total_pixels: u32,
+    },
     /// Storage length, stride or pixel geometry is inconsistent.
     #[error("captured frame has an invalid pixel layout")]
     InvalidFrameLayout,

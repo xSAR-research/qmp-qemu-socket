@@ -13,6 +13,14 @@ use crate::{
 };
 
 
+/// Shared CLASSIC blue card-back palette, independent of input authority.
+/// Geometry, occupancy, scene and source-outline guards remain caller-owned.
+pub(crate) fn is_classic_blue_back([red, green, blue]: [u8; 3]) -> bool {
+    blue >= 100 && i16::from(blue) - i16::from(red) >= 40
+        && i16::from(blue) - i16::from(green) >= 15
+}
+
+
 /// User-selectable game identity.
 ///
 /// Each mode supplies its own target detector and effect evidence while the
@@ -36,8 +44,8 @@ pub enum GameMode {
 impl GameMode {
 
 
-    /// Modes exposed by the game selector, with the default first.
-    pub const AVAILABLE: [Self; 5] = [Self::TriPeaks, Self::Pyramid, Self::Klondike, Self::FreeCell, Self::Spider];
+    /// Modes exposed in the requested selector order, independent of the default.
+    pub const AVAILABLE: [Self; 5] = [Self::Klondike, Self::Spider, Self::FreeCell, Self::Pyramid, Self::TriPeaks];
 
 
     /// Return the stable game name used in controls and logs.
@@ -540,6 +548,22 @@ mod tests {
     use super::*;
 
 
+    /// Blue artwork keeps the existing chroma boundaries and excludes other families.
+    #[test]
+    fn classic_blue_palette_keeps_boundaries_and_non_back_colours_separate() {
+        for rgb in [[60, 85, 100], [30, 60, 180], [0, 0, 255]] {
+            assert!(is_classic_blue_back(rgb), "supported CLASSIC blue {rgb:?}");
+        }
+        for rgb in [
+            [59, 84, 99], [61, 85, 100], [60, 86, 100],
+            [221, 67, 67], [235, 195, 90], [20, 120, 75], [255, 255, 255],
+            [0, 0, 0], [100, 100, 100],
+        ] {
+            assert!(!is_classic_blue_back(rgb), "outside CLASSIC blue {rgb:?}");
+        }
+    }
+
+
     /// Klondike cannot inherit the established modes' three-board progress authority.
     #[test]
     fn klondike_has_independent_geometry_and_no_shared_progress() {
@@ -564,7 +588,7 @@ mod tests {
         let profile = mode.profile();
 
         assert_eq!(mode, GameMode::TriPeaks);
-        assert_eq!(GameMode::AVAILABLE, [GameMode::TriPeaks, GameMode::Pyramid, GameMode::Klondike, GameMode::FreeCell, GameMode::Spider]);
+        assert_eq!(GameMode::AVAILABLE, [GameMode::Klondike, GameMode::Spider, GameMode::FreeCell, GameMode::Pyramid, GameMode::TriPeaks]);
         assert!(GameMode::TriPeaks.input_authorised());
         assert!(!GameMode::TriPeaks.calibration_only());
         assert!(GameMode::Pyramid.input_authorised());

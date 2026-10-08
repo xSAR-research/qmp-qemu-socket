@@ -11,6 +11,7 @@ use super::pyramid_execution::{
     pyramid_solver_recovery_authorised,
 };
 use super::*;
+use super::initial_recovery::{InitialRecoveryIo, recover_initial_target};
 use crate::parameters::{
     LEVEL_UP_SHARED_BUTTON_BRIDGE, LEVEL_UP_SHARED_BUTTON_INTERIOR, POST_GAME_MAX_CLICK_ATTEMPTS,
     POST_GAME_TARGETS, PostGameControlVariant, PostGameStage, SCORE_SKIP_MAX_CLICK_ATTEMPTS,
@@ -152,6 +153,340 @@ fn tripeaks_stock_frame(with_halo: bool) -> CapturedFrame {
         }
     }
     frame
+}
+
+
+/// Add positive card-face evidence without inventing occupancy from a row hint.
+fn initial_recovery_frame(mode: GameMode, with_halo: bool) -> CapturedFrame {
+    let mut frame = match mode {
+        GameMode::TriPeaks => tripeaks_stock_frame(with_halo),
+        GameMode::Pyramid => pyramid_move_frame(with_halo),
+        _ => panic!("startup fixture belongs to the shared controller"),
+    };
+    let face = match mode {
+        GameMode::TriPeaks => {
+            let probe = mode.profile().tableau_rows.last().unwrap().face_probe_bounds;
+            PixelRect::new(probe.x, probe.y, crate::parameters::FACE_UP_WHITE_BLOCK_MIN_WIDTH, probe.height)
+        }
+        GameMode::Pyramid => {
+            let slot = pyramid::PYRAMID_TARGETS.iter().find(|slot|
+                slot.kind == PyramidTargetKind::Card { row: 7, column: 1 }
+            ).unwrap();
+            PixelRect::new(slot.bounds.x + 40, slot.bounds.y + 178, 60, 4)
+        }
+        _ => unreachable!(),
+    };
+
+
+    for y in face.y..face.bottom() {
+
+
+        for x in face.x..face.right() {
+            let offset = y as usize * frame.stride + x as usize * 4;
+            frame.pixels[offset..offset + 4].copy_from_slice(&[255; 4]);
+        }
+    }
+    frame
+}
+
+
+/// Injectable I/O records real startup order while classifying each supplied frame in production.
+struct StartupTestIo {
+    frames: std::collections::VecDeque<CapturedFrame>,
+    scan_state: TableauScanState,
+    trace: Vec<&'static str>,
+    captures: usize,
+    waits: usize,
+    solver_attempts: usize,
+    stopped: bool,
+    stop_after_capture: Option<usize>,
+    stop_on_wait: bool,
+    stop_after_solver: bool,
+    solver_error: bool,
+    prediction_override: Option<PredictedAction>,
+}
+
+
+impl StartupTestIo {
+    fn new(mode: GameMode, frames: Vec<CapturedFrame>) -> Self {
+        Self {
+            frames: frames.into(), scan_state: TableauScanState::for_mode(mode), trace: Vec::new(),
+            captures: 0, waits: 0, solver_attempts: 0, stopped: false,
+            stop_after_capture: None, stop_on_wait: false, stop_after_solver: false,
+            solver_error: false, prediction_override: None,
+        }
+    }
+}
+
+
+impl InitialRecoveryIo for StartupTestIo {
+    fn stopped(&self) -> bool { self.stopped }
+
+
+    fn capture(&mut self) -> Result<FrameObservation, String> {
+        self.trace.push("capture");
+        self.captures += 1;
+        let frame = self.frames.pop_front().ok_or_else(|| "injected capture failed".to_owned())?;
+        let (mut observation, _) = analyse_captured_frame(frame, &self.scan_state)?;
+
+
+        if let Some(prediction) = self.prediction_override { observation.prediction = prediction; }
+
+
+        if self.stop_after_capture == Some(self.captures) { self.stopped = true; }
+        Ok(observation)
+    }
+
+
+    fn wait(&mut self, delayed_round: usize, after_solver: bool) -> Result<(), String> {
+        assert!((1..=3).contains(&delayed_round));
+        assert_eq!(after_solver, self.solver_attempts == 1);
+        self.trace.push("wait");
+        self.waits += 1;
+
+
+        if self.stop_on_wait {
+            self.stopped = true;
+            Err("injected STOP during wait".to_owned())
+        } else { Ok(()) }
+    }
+
+
+    fn refresh_solver(&mut self) -> Result<(), String> {
+        self.trace.push("solver");
+        self.solver_attempts += 1;
+        assert_eq!(self.solver_attempts, 1, "uncertain input must never be retried");
+
+
+        if self.stop_after_solver { self.stopped = true; }
+
+
+        if self.solver_error { Err("injected uncertain Solver delivery".to_owned()) } else { Ok(()) }
+    }
+}
+
+
+/// A target in the initial or delayed fresh frame needs no Solver setup in either mode.
+#[test]
+fn initial_no_halo_request_adopts_fresh_or_delayed_canonical_target() {
+
+
+    for mode in [GameMode::TriPeaks, GameMode::Pyramid] {
+
+
+        for no_halo_frames in 0..=3 {
+            let mut frames: Vec<_> = (0..no_halo_frames).map(|_| initial_recovery_frame(mode, false)).collect();
+            frames.push(initial_recovery_frame(mode, true));
+            let mut io = StartupTestIo::new(mode, frames);
+            let (observation, plan) = recover_initial_target(mode, &mut io)
+                .unwrap_or_else(|error| panic!("{}", error.message));
+            assert!(observation.gameplay_scene);
+            assert_eq!(plan.before(), observation.prediction);
+            assert_eq!(plan.input().action().target.mode(), mode);
+            assert_eq!(plan.input().operation(), InputOperation::PressDrawKey);
+            assert_eq!(io.captures, no_halo_frames + 1);
+            assert_eq!(io.waits, no_halo_frames);
+            assert_eq!(io.solver_attempts, 0);
+        }
+    }
+}
+
+
+/// One Solver setup precedes an immediate capture; it returns one gameplay plan without spending it.
+#[test]
+fn initial_no_halo_solver_setup_then_fresh_target_preserves_step_once_budget() {
+
+
+    for mode in [GameMode::TriPeaks, GameMode::Pyramid] {
+        let settings = StepRunSettings::new(crate::parameters::AnimationSettleDelays::default(), STEP_ONCE_ACTIONS);
+        let mut frames: Vec<_> = (0..4).map(|_| initial_recovery_frame(mode, false)).collect();
+        frames.push(initial_recovery_frame(mode, true));
+        let mut io = StartupTestIo::new(mode, frames);
+        let (_, plan) = recover_initial_target(mode, &mut io)
+            .unwrap_or_else(|error| panic!("{}", error.message));
+        assert_eq!(io.trace, ["capture", "wait", "capture", "wait", "capture", "wait", "capture", "solver", "capture"]);
+        assert_eq!(io.solver_attempts, 1);
+        assert_eq!(settings.operation_limit(), 1);
+        assert_eq!(plan.input().operation(), InputOperation::PressDrawKey);
+        // Startup emits no Draw/card action; the unchanged executor receives exactly one plan.
+        assert_eq!(plan.input().qmp_command_count(), 2);
+        // Obtaining a HALO does not relax the existing effect requirement.
+        assert!(verify_post_action(&plan, plan.before(), false).is_err());
+    }
+}
+
+
+/// Persistent absence exhausts exactly eight captures, six delays and one consumed setup.
+#[test]
+fn initial_no_halo_absence_after_solver_stops_at_exact_budget() {
+
+
+    for mode in [GameMode::TriPeaks, GameMode::Pyramid] {
+        let frames = (0..8).map(|_| initial_recovery_frame(mode, false)).collect();
+        let mut io = StartupTestIo::new(mode, frames);
+        let failure = recover_initial_target(mode, &mut io).err().expect("missing target must stop");
+        assert!(failure.solver_reserved);
+        assert!(failure.observation.is_some());
+        assert_eq!(failure.state, WorkerState::Uncertain);
+        assert!(failure.message.contains("gameplay input sent: 0"));
+        assert_eq!((io.captures, io.waits, io.solver_attempts), (8, 6, 1));
+        assert!(io.frames.is_empty());
+    }
+}
+
+
+/// Empty, unsupported and unknown Pyramid occupancy cannot enable Solver by row-mask inference.
+#[test]
+fn initial_no_halo_solver_requires_latest_positive_nonempty_scene() {
+
+
+    for mode in [GameMode::TriPeaks, GameMode::Pyramid] {
+        let empty = match mode {
+            GameMode::TriPeaks => tripeaks_stock_frame(false),
+            GameMode::Pyramid => pyramid_move_frame(false),
+            _ => unreachable!(),
+        };
+        let mut unknown = empty.clone();
+
+
+        if mode == GameMode::Pyramid {
+            let slot = pyramid::PYRAMID_TARGETS.iter().find(|slot|
+                slot.kind == PyramidTargetKind::Card { row: 7, column: 1 }
+            ).unwrap();
+
+
+            for y in slot.bounds.y + 178..slot.bounds.y + 182 {
+
+
+                for x in slot.bounds.x + 40..slot.bounds.x + 100 {
+                    let offset = y as usize * unknown.stride + x as usize * 4;
+                    unknown.pixels[offset..offset + 4].copy_from_slice(&[100, 100, 100, 255]);
+                }
+            }
+            let (observation, _) = analyse_captured_frame(unknown.clone(), &TableauScanState::for_mode(mode)).unwrap();
+            assert!(observation.observed_rows.is_some(), "unknown occupancy gives a row hint, not positive card authority");
+            assert!(!pyramid::has_visible_tableau_card(&unknown).unwrap());
+        }
+
+
+        for refused in [empty, unknown, blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT)] {
+            // Prior occupied frames cannot lend authority to the latest empty/unknown/dialog frame.
+            let mut frames = vec![initial_recovery_frame(mode, false); 3];
+            frames.push(refused);
+            let mut io = StartupTestIo::new(mode, frames);
+            let failure = recover_initial_target(mode, &mut io).err().expect("no positive card evidence");
+            assert!(!failure.solver_reserved);
+            assert!(failure.observation.is_some());
+            assert_eq!((io.captures, io.waits, io.solver_attempts), (4, 3, 0));
+        }
+    }
+}
+
+
+/// Cancellation at each startup boundary retains the latest pixels and permits no later input.
+#[test]
+fn initial_no_halo_stop_before_during_or_after_capture_and_solver_is_final() {
+
+
+    for mode in [GameMode::TriPeaks, GameMode::Pyramid] {
+
+
+        for boundary in 0..4 {
+            let mut io = StartupTestIo::new(mode, vec![initial_recovery_frame(mode, false); 8]);
+
+
+            match boundary {
+                0 => io.stopped = true,
+                1 => io.stop_on_wait = true,
+                2 => io.stop_after_capture = Some(1),
+                3 => io.stop_after_solver = true,
+                _ => unreachable!(),
+            }
+            let failure = recover_initial_target(mode, &mut io).err().expect("STOP must terminate");
+            assert_eq!(failure.state, WorkerState::Ready);
+            let counts = match boundary { 0 => (0, 0, 0), 1 => (1, 1, 0), 2 => (1, 0, 0), 3 => (4, 3, 1), _ => unreachable!() };
+            assert_eq!((io.captures, io.waits, io.solver_attempts), counts);
+            assert_eq!(failure.observation.is_some(), boundary != 0);
+            assert_eq!(failure.solver_reserved, boundary == 3);
+        }
+    }
+}
+
+
+/// Uncertain Solver acknowledgement consumes the reservation and cannot trigger another capture/input.
+#[test]
+fn initial_no_halo_uncertain_solver_delivery_is_not_retried() {
+
+
+    for mode in [GameMode::TriPeaks, GameMode::Pyramid] {
+        let mut io = StartupTestIo::new(mode, vec![initial_recovery_frame(mode, false); 8]);
+        io.solver_error = true;
+        let failure = recover_initial_target(mode, &mut io).err().expect("uncertain delivery must stop");
+        assert!(failure.solver_reserved);
+        assert!(failure.message.contains("uncertain Solver delivery"));
+        assert!(failure.observation.is_some());
+        assert_eq!((io.captures, io.waits, io.solver_attempts), (4, 3, 1));
+        assert_eq!(io.trace.last(), Some(&"solver"));
+    }
+}
+
+
+/// Forged inputs, foreign targets and ambiguous predictions fail before any setup or gameplay input.
+#[test]
+fn initial_no_halo_fresh_target_must_be_canonical_and_unique() {
+    let mut forged = GameMode::TriPeaks.profile().bottom_action(0, crate::geometry::PixelPoint::new(842, 870)).unwrap();
+    forged.specification.operation = InputOperation::Click(crate::geometry::PixelPoint::new(10, 10));
+
+
+    for mode in [GameMode::TriPeaks, GameMode::Pyramid] {
+
+
+        for prediction in [
+            PredictedAction::Action(forged),
+            PredictedAction::Action(crate::klondike::canonical_action(crate::klondike::KlondikeTarget::Draw).unwrap()),
+            PredictedAction::Ambiguous { highlight_count: 2 },
+            PredictedAction::CalibrationOnly { mode },
+        ] {
+            let mut io = StartupTestIo::new(mode, vec![initial_recovery_frame(mode, true)]);
+            io.prediction_override = Some(prediction);
+            let failure = recover_initial_target(mode, &mut io).err().expect("invalid target cannot authorise input");
+            assert!(!failure.solver_reserved);
+            assert_eq!((io.captures, io.waits, io.solver_attempts), (1, 0, 0));
+        }
+    }
+}
+
+
+/// Explicit Single Step requests queue NoHighlight as recovery authority while freezing a one-action limit.
+#[test]
+fn initial_no_halo_step_once_request_reaches_worker_with_one_gameplay_slot() {
+
+
+    for mode in [GameMode::TriPeaks, GameMode::Pyramid] {
+        let (command_tx, command_rx) = mpsc::channel();
+        let (_events, event_rx) = mpsc::channel();
+        let cancel_requested = Arc::new(AtomicBool::new(true));
+        let handle = WorkerHandle {
+            command_tx, event_rx, latest_frame: LatestFrameSlot::default(), join: None,
+            cancel_requested: Arc::clone(&cancel_requested),
+        };
+        handle.execute_steps(
+            vision_context("/nonexistent-startup-test/qmp.sock", mode), PredictedAction::NoHighlight,
+            StepRunSettings::new(crate::parameters::AnimationSettleDelays::default(), STEP_ONCE_ACTIONS),
+        ).unwrap();
+        assert!(!cancel_requested.load(Ordering::Acquire));
+
+
+        match command_rx.try_recv().expect("explicit request is queued") {
+            WorkerCommand::ExecuteSteps { context, approved_prediction, settings } => {
+                assert_eq!(context.game_mode, mode);
+                assert_eq!(approved_prediction, PredictedAction::NoHighlight);
+                assert_eq!(settings.operation_limit(), 1);
+            }
+            _ => panic!("only execution was requested"),
+        }
+        assert!(matches!(command_rx.try_recv(), Err(mpsc::TryRecvError::Empty)));
+    }
 }
 
 

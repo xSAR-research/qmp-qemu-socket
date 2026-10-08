@@ -14,12 +14,14 @@ the real purpose. Each fixture keeps independent target and effect policies.
 The target is to build in Dijkstra / A* shortest path problem solving rather
 than using the **Solver**, this will benefit drone route planning experience.
 
-This is **v2.0.0, candidate 4**, based on
-`5d2d64bb6719af277802c717685d42da9e3bc59a`. Free Cell's expected Level Up
-OK check now accepts the original layout and the supplied 19-pixel higher and
-12-pixel lower layouts, retaining the existing click and control thresholds.
-Spider retains its existing two OK layouts. See
-[candidate notes](docs/freecell-v2.0.0-candidate-4.md).
+This is **v2.0.0, candidate 7**, based on the promoted commit
+`98f974083246044d04db5cf4298fd07590733250` and the installed candidate 6.
+CLASSIC blue is the shared card-back calibration baseline. Spider now uses
+the same blue colour predicate as Klondike. Explicitly requested TriPeaks
+and Pyramid runs can recover a missing initial HALO through bounded fresh
+observations and one scene-gated Solver activation. Initial captures remain
+read-only. The game menu follows Klondike, Spider, Free Cell, Pyramid,
+TriPeaks. See [candidate notes](docs/classic-v2.0.0-candidate-7.md).
 At startup choose a **Solving
 strategy**, separately from **Game Type**:
 
@@ -57,7 +59,7 @@ rustc --version
 cargo --version
 cargo check --locked
 cargo test --locked
-cargo doc --locked --no-deps
+RUSTDOCFLAGS='-D warnings' cargo doc --locked --no-deps --document-private-items
 cargo clippy --locked --all-targets -- -D warnings
 cargo build --locked --release
 ```
