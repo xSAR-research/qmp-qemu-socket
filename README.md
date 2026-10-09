@@ -1,6 +1,6 @@
 # qmp-qemu-socket
 
-Release **v2.0.8**.
+Release **v2.0.10**.
 
 ## Computer Vision solving
 
@@ -108,7 +108,7 @@ Build and test results do not establish live guest behaviour. Verify the selecte
 
 ## Design and historical evidence
 
-The [v2.0.8 release notes](docs/release-v2.0.8.md) describe this release's changes and verification. Supporting material includes [architecture](docs/architecture.md), [QMP and capture design](docs/qmp-and-capture.md), [Pyramid execution](docs/pyramid-execution.md) and [development conventions](docs/development.md).
+The [v2.0.10 release notes](docs/release-v2.0.10.md) describe the bounded TriPeaks terminal acquisition allowance and verification. Supporting material includes [architecture](docs/architecture.md), [QMP and capture design](docs/qmp-and-capture.md), [Pyramid execution](docs/pyramid-execution.md) and [development conventions](docs/development.md).
 
 Earlier implementation decisions and fixture limitations remain in the [development records](docs/), including the [strategy split](docs/strategy-v2.0.0-candidate-2.md), [CLASSIC baseline and Solver startup](docs/classic-v2.0.0-candidate-7.md), [Free Cell OK layouts](docs/freecell-v2.0.0-candidate-4.md) and [capture preview publication](docs/capture-preview-v2.0.0-candidate-5.md). Those dated records retain their original scope; earlier Klondike card-effect experiments do not describe its current Solver-led execution policy.
 
@@ -140,4 +140,4 @@ No-HALO startup may reserve one Solver setup only after positive nonempty-board 
 
 TriPeaks combines calibrated lower-panel controls with tableau scans that follow exposed rows and widen when fresh card evidence requires it. A supported stock recommendation sends `d`; a supported tableau recommendation clicks its fixed card location. The controller retains cursor-excluded action-effect checks and uses fresh accepted result frames to plan subsequent operations. Explicit no-HALO startup and late-HALO recovery use bounded observation and positively gated Solver setup; neither a missing source nor an acknowledgement establishes removal or completion.
 
-TriPeaks uses the shared calibrated three-board progress, redeal and post-game flow. The final-win reward overlay has its own narrow recognition path: only a qualifying delivered top-row card action, the existing effect threshold, no fresh actionable target or occupied row evidence, and two consecutive supported reward-overlay frames can establish that completion. The recognised Congratulations/skip controls then use the existing guarded terminal sequence and budgets; changing level, XP and surrounding artwork are not template conditions. Unrecognised transitions stop for inspection rather than being treated as a win.
+TriPeaks uses the shared calibrated three-board progress, redeal and post-game flow. The final-win transition has its own narrow recognition path: only a qualifying delivered top-row card action, the existing effect threshold, no fresh actionable target or occupied row evidence, and two consecutive frames of the same supported terminal type can establish that completion. The supported types are the Congratulations reward panel and the separately recognised Level Up panel covering that reward. Qualified final-card acquisition permits up to 30 total post-action captures; a recognised candidate receives the separate four-capture confirmation allowance. A confirmed Level Up entry goes directly to its freshly recognised OK control without a preceding centre skip. If OK reveals the reward panel, two fresh positive observations authorise its bounded skip before New Game. The guarded terminal sequence and budgets remain bounded; changing level, XP and central rank artwork are not template conditions. Unrecognised transitions stop for inspection rather than being treated as a win.

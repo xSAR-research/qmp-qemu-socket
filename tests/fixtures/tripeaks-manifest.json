@@ -13,6 +13,32 @@
       "context": "Manual capture following final top-row column-3 action 146 and guarded stop; exact fourth observation unavailable",
       "expected_scene": "TriPeaks Congratulations reward overlay with fixed Click anywhere to skip prompt",
       "authority": "Positive visual candidate only; fresh final-card context, material effect and consecutive confirmations are separately required"
+    },
+    {
+      "id": "TP02",
+      "path": "tripeaks-TP02.png",
+      "width": 1920,
+      "height": 1080,
+      "format": "RGBA PNG",
+      "bytes": 1741560,
+      "sha256": "6b73803c9accba96b821473e3178aa18c2b02312ce635dc91dbe810b53b9bea7",
+      "source": "Supplied qmp-qemu-socket 261008 214244 TriPeak-GAME-WIN.png attachment",
+      "context": "Manual read-only snapshot roughly 339 seconds after action 420 top-row column-2 guarded stop; twenty earlier result frames unavailable; log saved-byte count differs",
+      "expected_scene": "Foreground LEVEL-UP! with unique existing raised OK over the dimmed Congratulations reward panel and uncovered skip caption",
+      "authority": "Positive visual candidate only; fresh canonical sole final-card context, actual material effect and two consecutive fresh observations of the same terminal kind are separately required"
+    },
+    {
+      "id": "TP03",
+      "path": "tripeaks-TP03.png",
+      "width": 1920,
+      "height": 1080,
+      "format": "RGBA PNG",
+      "bytes": 1744870,
+      "sha256": "3c9ad40600ff5723d2f73df6e1a343edbc5fd0663c5d38c6f1398ac7e9214fa9",
+      "source": "Supplied qmp-qemu-socket 261009 001602 TriPeaks-Level-Up.png attachment",
+      "context": "Manual read-only screenshot acquired 164.933 seconds after action 1407 top-row column-2 stop at 20 captures in a v2.0.9 session with 9 earlier successful restarts; earlier result frames unavailable; log reports 1105809 saved bytes",
+      "expected_scene": "Existing foreground LEVEL-UP! over dim reward panel with raised OK and tolerated title-overlapping pointer",
+      "authority": "Existing positive visual candidate only; no mask change and no claim that the same scene appeared within the earlier 20 observations"
     }
   ]
 }

@@ -1,10 +1,11 @@
 # Architecture and control flow
 
-Current release: **v2.0.8**, based on promoted application commit
-`d142fa7994dc3da961103d80fdad37d341d0e538`. The earlier extraction baseline
+Current release: **v2.0.10**, retaining delivered v2.0.9 changes over promoted commit
+`cf4e5c696052d248b39c956cab6492099ab44020`. The earlier extraction baseline
 below records when the shared xsar boundary was introduced. Current solving
-methods and game summaries are in [README](../README.md); the reward-overlay
-transition is described in [release notes](release-v2.0.8.md).
+methods and game summaries are in [README](../README.md); the reward and
+direct Level Up transitions and acquisition limits are described in
+[release notes](release-v2.0.10.md).
 
 ## Current boundary
 
@@ -63,7 +64,7 @@ application. Search and card recognition are future independent modules.
 | `qmp.rs` | application vocabulary and timing adapter over xSAR transport |
 | `worker.rs` | worker commands/events, capture, guarded execution, timing and cancellation |
 | `worker/post_game.rs` | shared score, Level Up, New Game, Play and Solver progression |
-| `worker/tripeaks_terminal.rs` | narrowly evidenced TriPeaks reward recognition and final-card terminal confirmation |
+| `worker/tripeaks_terminal.rs` | narrow TriPeaks reward and Level Up recognition with final-card terminal confirmation |
 | `worker/pyramid_execution.rs` | Pyramid effect, fresh-pair continuation and redeal checks |
 | `worker/klondike_execution.rs` | Klondike execution, bounded recovery, independent completion and continuous terminal progression |
 | `worker/freecell_execution.rs` | Free Cell fresh-source actions, automatic-transfer observations and deterministic one-board restart |

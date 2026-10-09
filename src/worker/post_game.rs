@@ -70,11 +70,15 @@ pub(super) fn run_post_game_restart(
     let mut intentional_wait = Duration::ZERO;
     let mut input_wall = Duration::ZERO;
     let boards_per_game = scan_state.mode().profile().boards_per_game;
-    // Only this positively confirmed TriPeaks reward entry gets the new skip
+    // Only a positively confirmed TriPeaks terminal entry gets the narrow skip
     // evidence policy. Pyramid and existing score-counting transitions retain theirs.
-    let reward_entry = scan_state.mode() == crate::game::GameMode::TriPeaks
+    let guarded_tripeaks_entry = scan_state.mode() == crate::game::GameMode::TriPeaks
         && initial_observation.is_some_and(|observation|
-            super::tripeaks_terminal::is_reward_overlay(&observation.frame) == Ok(true)
+            super::tripeaks_terminal::terminal_kind(&observation.frame).is_ok_and(|kind| kind.is_some())
+        );
+    let direct_level_up_entry = guarded_tripeaks_entry
+        && initial_observation.is_some_and(|observation|
+            super::tripeaks_terminal::is_direct_level_up_overlay(&observation.frame) == Ok(true)
         );
 
 
@@ -164,7 +168,7 @@ pub(super) fn run_post_game_restart(
             }
 
 
-            let reward_visible = reward_entry
+            let reward_visible = guarded_tripeaks_entry
                 && super::tripeaks_terminal::is_reward_overlay(&observation.frame)?;
             consecutive_reward = if reward_visible { consecutive_reward.saturating_add(1) } else { 0 };
             consecutive_non_gameplay = if observation.gameplay_scene || level_up_ambiguous {
@@ -174,8 +178,8 @@ pub(super) fn run_post_game_restart(
             };
 
 
-            if (reward_entry && consecutive_reward < 2)
-                || (!reward_entry && consecutive_non_gameplay < 2)
+            if (guarded_tripeaks_entry && consecutive_reward < 2)
+                || (!guarded_tripeaks_entry && consecutive_non_gameplay < 2)
             {
                 require_post_game_observation_retry_budget(
                     pre_score_round,
@@ -184,7 +188,7 @@ pub(super) fn run_post_game_restart(
                 send_log(
                     event_tx,
                     format!(
-                        "WAITING: pre-score round {pre_score_round}/{POST_GAME_MAX_OBSERVATION_ROUNDS} has non-gameplay={consecutive_non_gameplay}/2, positive TriPeaks reward={consecutive_reward}/2, reward entry={reward_entry}; rechecking in {} ms without input.",
+                        "WAITING: pre-score round {pre_score_round}/{POST_GAME_MAX_OBSERVATION_ROUNDS} has non-gameplay={consecutive_non_gameplay}/2, positive TriPeaks reward={consecutive_reward}/2, guarded TriPeaks entry={guarded_tripeaks_entry}; rechecking in {} ms without input.",
                         BOARD_TRANSITION_REOBSERVE_DELAY.as_millis(),
                     ),
                 );
@@ -205,7 +209,7 @@ pub(super) fn run_post_game_restart(
                 event_tx,
                 format!(
                     "Two consecutive {} captures preceded score-counting/reward panel click attempt {score_skip_click_attempts}/{SCORE_SKIP_MAX_CLICK_ATTEMPTS} at guest pixel ({}, {}) with a {} ms hold; waiting {} ms before classifying Level Up.",
-                    if reward_entry { "positively recognised TriPeaks reward" } else { "non-gameplay" },
+                    if guarded_tripeaks_entry { "positively recognised TriPeaks reward" } else { "non-gameplay" },
                     SCORE_SKIP_CONTROL.click_point.x,
                     SCORE_SKIP_CONTROL.click_point.y,
                     POST_GAME_MOUSE_HOLD.as_millis(),
@@ -239,6 +243,7 @@ pub(super) fn run_post_game_restart(
 
     while let Some(target) = POST_GAME_TARGETS.get(target_index).copied() {
         let mut observation_round = 1usize;
+        let mut consecutive_post_ok_reward = 0usize;
 
 
         let matched_variant = loop {
@@ -270,8 +275,11 @@ pub(super) fn run_post_game_restart(
                 return Ok(PostGameOutcome::RecoveredGameplay(observation));
             }
 
-            let earlier = earlier_visible_post_game_target(&observation, target_index);
-            let current = resolve_post_game_target(&observation, target);
+            let earlier = earlier_visible_post_game_target(&observation, target_index, direct_level_up_entry);
+            let current = resolve_post_game_target_for_entry(&observation, target, direct_level_up_entry);
+            let post_ok_reward = direct_level_up_entry && target.stage == PostGameStage::NewGame
+                && click_attempts[0] > 0 && super::tripeaks_terminal::is_reward_overlay(&observation.frame)?;
+            consecutive_post_ok_reward = if post_ok_reward { consecutive_post_ok_reward.saturating_add(1) } else { 0 };
 
 
             if let Some(error) = earlier.as_ref().err().or(current.as_ref().err()) {
@@ -316,6 +324,11 @@ pub(super) fn run_post_game_restart(
                         stale_target.label, stale_variant.label,
                     )
                 })?;
+
+
+                if cancel_requested.load(Ordering::Acquire) {
+                    return Err(format!("STOP was requested after the fresh {} retry probe; no further input was sent.", stale_target.label));
+                }
 
                 send_state(event_tx, WorkerState::Acting);
                 send_status(
@@ -430,20 +443,26 @@ pub(super) fn run_post_game_restart(
             require_post_game_observation_retry_budget(observation_round, target.label)?;
 
 
-            if score_skip_retry_is_authorised(
+            let guarded_post_ok_skip = post_ok_reward && consecutive_post_ok_reward >= 2;
+
+
+            if guarded_post_ok_skip || (score_skip_retry_is_authorised(
                 target.stage,
                 observation.gameplay_scene,
                 observation_round,
-            ) && (!reward_entry || super::tripeaks_terminal::is_reward_overlay(&observation.frame)?) {
+            ) && !direct_level_up_entry
+                && (!guarded_tripeaks_entry || super::tripeaks_terminal::is_reward_overlay(&observation.frame)?))
+            {
                 send_state(event_tx, WorkerState::Acting);
                 send_status(event_tx, "Skip score counting".to_owned());
                 input_wall +=
                     send_score_skip_click(qmp, cancel_requested, score_skip_click_attempts)?;
                 score_skip_click_attempts = score_skip_click_attempts.saturating_add(1);
+                consecutive_post_ok_reward = 0;
                 send_log(
                     event_tx,
                     format!(
-                        "RETRY: post-game stage {} was not recognised on observation round {observation_round}; score-skip centre click attempt {score_skip_click_attempts}/{SCORE_SKIP_MAX_CLICK_ATTEMPTS} was sent at guest pixel ({}, {}) with a {} ms hold. Waiting {} ms before the next capture; press STOP to end the loop.",
+                        "RETRY: post-game stage {} was not recognised on observation round {observation_round}; score-skip centre click attempt {score_skip_click_attempts}/{SCORE_SKIP_MAX_CLICK_ATTEMPTS} was sent at guest pixel ({}, {}) with a {} ms hold, confirmed post-OK reward={guarded_post_ok_skip}. Waiting {} ms before the next capture; press STOP to end the loop.",
                         target.label,
                         SCORE_SKIP_CONTROL.click_point.x,
                         SCORE_SKIP_CONTROL.click_point.y,
@@ -492,6 +511,11 @@ pub(super) fn run_post_game_restart(
                 target.label
             )
         })?;
+
+
+        if cancel_requested.load(Ordering::Acquire) {
+            return Err(format!("STOP was requested after the fresh {} probe; no further input was sent.", target.label));
+        }
 
         send_state(event_tx, WorkerState::Acting);
         send_status(event_tx, post_game_click_status(target.stage).to_owned());
@@ -795,6 +819,25 @@ pub(super) fn is_level_up_ambiguity(error: &str) -> bool {
 }
 
 
+/// A direct TriPeaks entry requires the full fresh Level Up fingerprint for each OK.
+///
+/// Gold alone cannot retry a foreground modal after its audited underlay disappears.
+pub(super) fn resolve_post_game_target_for_entry(
+    observation: &FrameObservation,
+    target: PostGameTarget,
+    direct_level_up_entry: bool,
+) -> Result<Option<PostGameControlVariant>, String> {
+
+
+    if direct_level_up_entry && target.stage == PostGameStage::LevelUpOk
+        && !super::tripeaks_terminal::is_direct_level_up_overlay(&observation.frame)?
+    {
+        return Ok(None);
+    }
+    resolve_post_game_target(observation, target)
+}
+
+
 /// Find the latest still-visible control preceding the expected post-game stage.
 ///
 /// Returns its index, target and verified variant, or an error for an invalid
@@ -802,6 +845,7 @@ pub(super) fn is_level_up_ambiguity(error: &str) -> bool {
 pub(super) fn earlier_visible_post_game_target(
     observation: &FrameObservation,
     expected_target_index: usize,
+    direct_level_up_entry: bool,
 ) -> Result<Option<(usize, PostGameTarget, PostGameControlVariant)>, String> {
     // A QMP acknowledgement proves delivery, not that the guest accepted the
     // click. Re-detect earlier controls before authorising a later-stage click.
@@ -813,7 +857,7 @@ pub(super) fn earlier_visible_post_game_target(
     for (index, target) in earlier_targets.iter().copied().enumerate().rev() {
 
 
-        if let Some(variant) = resolve_post_game_target(observation, target)? {
+        if let Some(variant) = resolve_post_game_target_for_entry(observation, target, direct_level_up_entry)? {
             return Ok(Some((index, target, variant)));
         }
     }

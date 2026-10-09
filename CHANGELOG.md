@@ -1,5 +1,25 @@
 # Changelog
 
+## v2.0.10 — TriPeaks terminal acquisition margin
+
+- Give qualified TriPeaks final-card terminal acquisition a separate allowance of
+  30 total post-action captures instead of the shared 20-round limit.
+- Preserve terminal masks, two same-kind positives, the four-capture confirmation
+  allowance, STOP, effect proof and uncertain-input non-replay; other game and
+  shared post-game limits remain unchanged.
+- Retain the original TP03 Level Up screenshot as positive evidence with accurate
+  late-capture provenance, and cover late candidates, exhaustion and cancellation.
+- Deliver a guarded upgrade from the exact installed v2.0.9 state at its established
+  base; dependency pins and the xSAR boundary remain unchanged.
+
+## v2.0.9 — TriPeaks direct Level Up transition
+
+- Recognise the supplied Level Up modal covering a TriPeaks reward panel after a qualifying final-card action.
+- Require the existing material effect proof and two fresh confirmations of the same terminal type before entering the guarded restart flow.
+- Enter an already visible Level Up stage at its existing raised OK control without a preceding centre click; skip a subsequently revealed reward panel only after fresh positive confirmation.
+- Retain bounded observation, fresh input checks, STOP and uncertain-delivery refusal; add native screenshot and controller regressions.
+- Bump only the application version from 2.0.8 to 2.0.9; dependency pins remain unchanged.
+
 ## v2.0.8 — TriPeaks reward transition and solving-method documentation
 
 - Recognise the supplied TriPeaks Congratulations reward overlay after a final top-row card action, retaining the existing effect threshold and requiring two consecutive fresh terminal observations.
