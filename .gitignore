@@ -4,6 +4,7 @@
 *.raw
 .idea/
 .vscode/
+*.code-workspace
 
 # Trigger Tree: ignore local telemetry, retain project configuration
 !.trigger-tree/
@@ -14,4 +15,5 @@
 
 # Local developer and agent notes
 AGENTS.md
-
+/AGENTS-original.md
+/HANDOFF-xsar-next.md

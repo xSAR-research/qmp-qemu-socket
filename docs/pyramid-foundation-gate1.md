@@ -1,30 +1,32 @@
 # Outcome 2 — Pyramid foundation Gate 1
 
-Date: 10 October 2026, Australia/Brisbane.
+Date: 10 October 2026; baseline updated 11 October 2026, Australia/Brisbane.
 Status: Charlie approved Foundation Gate 2 in this conversation. The model,
 codec, feature, dependency, version and acceptance scope below is approved;
-implementation awaits the baseline prerequisite described in section 1.
+the RGB prerequisite is now promoted and foundation implementation is authorised.
+Gate 2 implementation and validation are recorded in
+[the foundation delivery report](pyramid-foundation-gate2.md); human review and
+promotion are not implied by those automated results.
 
 ## 1. Baseline and scope
 
 | Repository | Current HEAD | Local package |
 | --- | --- | --- |
-| qmp-qemu-socket | e59e06c49f7112b2dac1a7634999ae6f6fcd7344 | 2.0.11 development |
-| xsar | 1a719b359a51d1e1e3113224193a779c76de82f8 | 0.2.1 development |
+| qmp-qemu-socket | 8446fbb41bc3d99e4c959fb01ccb4762e4ad7901 | 2.0.11 promoted |
+| xsar | 987856a0b5cb95aec2788551e050e18f7469b1ef | 0.2.1 promoted foundation base |
 | basic-route-planning | 9f78868bc0afaf9d3fe3d2a53a7d14af96e6dee0 | 0.1.0 scaffold |
 
-Use the existing sibling checkouts under `/home/charlie/repo/RUST/`. The RGB
-slice is still uncommitted: xSAR has its six reviewed affected files; the app
-has its implementation, tests and documentation changes. Preserve those edits,
-both indexes, local instructions, handoff files and unrelated workspace files.
-The console still prints `Hello, world!` and has no dependencies. No remote
-refresh, reset, branch change or instruction-file replacement is needed.
+Use the existing sibling checkouts under `/home/charlie/repo/RUST/`. Charlie
+promoted the RGB crate first, then the application, and explicitly authorised
+foundation code. Preserve both indexes, unrelated workspace changes and any
+user-managed local instruction deletions. No remote refresh, reset, branch
+change or instruction-file replacement is required.
 
-The application currently consumes local xSAR through `path = "../xsar"`.
-The crate's README and changelog now describe that arrangement, rather than
-requiring the initial temporary source override. RGB Gate 3 acceptance and
-Gate 4 promotion remain outstanding. Establish that accepted promoted baseline
-before implementing another xSAR slice; this design review may proceed now.
+The application manifest and lock now consume the exact promoted xSAR Git
+revision above with qmp/png/image_matching and defaults disabled. Do not replace
+that release pin with a development path. A private temporary consumer override
+may verify compatibility with the unpromoted foundation. The console-intake
+implementation remains separately gated; no console changes belong here.
 
 The next bounded implementation is pure card/Pyramid models and a versioned,
 bounded JSON codec in xSAR. Proposed release: **xSAR 0.3.0**, retaining existing
@@ -32,7 +34,7 @@ APIs, default features, edition 2021 and MSRV 1.101.0. Update its manifest and
 root lock entry together only after approval. No application or console version
 change belongs to this foundation slice.
 
-Observed tools: rustc 1.101.0-nightly (`a30aa9064`, 2026-10-08) and Cargo
+Implementation tools on 11 October: rustc 1.101.0-nightly (`32dba69d6`, 2026-10-09) and Cargo
 1.101.0-nightly (`29c5daa1a`, 2026-10-07). Use explicit installed nightly for
 xSAR validation; do not alter host defaults or add a toolchain file to the
 console. Its eventual MSRV/toolchain policy belongs to console-intake Gate 1.
