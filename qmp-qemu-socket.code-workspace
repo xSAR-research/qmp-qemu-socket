@@ -3,6 +3,9 @@
     {
       "path": ".",
     },
+    {
+      "path": "../xsar",
+    },
   ],
   "settings": {
     "cSpell.words": [
@@ -13,7 +16,7 @@
       "reobserve",
       "RGBA",
       "screendump",
-      "tripeaks"
+      "tripeaks",
     ],
   },
 }

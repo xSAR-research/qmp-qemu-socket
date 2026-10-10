@@ -2,6 +2,8 @@
 
 use std::fmt;
 
+use xsar::image_matching::{MatchError, comparison};
+
 use crate::{
     capture::CapturedFrame,
     detector::{HaloDetectionError, pixel_rgb},
@@ -816,45 +818,60 @@ fn changed_pile_interior(
     // The inset removes border/halo changes. Exclude the clicked cursor region
     // explicitly; pointer movement is not evidence of a delivered game action.
     let bounds = PixelRect::new(
-        pile.bounds.x + 12,
-        pile.bounds.y + 12,
-        pile.bounds.width - 24,
-        pile.bounds.height - 24,
+        pile.bounds.x.checked_add(12).ok_or(HaloDetectionError::BoundsOutsideFrame)?,
+        pile.bounds.y.checked_add(12).ok_or(HaloDetectionError::BoundsOutsideFrame)?,
+        pile.bounds.width.checked_sub(24).ok_or(HaloDetectionError::BoundsOutsideFrame)?,
+        pile.bounds.height.checked_sub(24).ok_or(HaloDetectionError::BoundsOutsideFrame)?,
     );
     // The previous verified frame may retain the cursor over either pile.
     // Exclude both old and new possible pile hotspots, not just the new click.
-    let exclusions = [MOVE_TARGET, LEFT_TARGET, RIGHT_TARGET]
+    let optional_exclusions = [MOVE_TARGET, LEFT_TARGET, RIGHT_TARGET]
         .map(|target| guided_action(target).effect_exclusion_bounds());
-    let mut changed = 0;
+    let mut exclusions = [PixelRect::default(); 3];
+    let mut exclusion_count = 0;
 
 
-    for y in bounds.y..bounds.bottom() {
+    for exclusion in optional_exclusions.into_iter().flatten() {
+        exclusions[exclusion_count] = exclusion;
+        exclusion_count += 1;
+    }
+    let before = before
+        .as_view()
+        .map_err(|_| HaloDetectionError::InvalidFrameLayout)?;
+    let after = after
+        .as_view()
+        .map_err(|_| HaloDetectionError::InvalidFrameLayout)?;
+    let changed = comparison::count_rgb_changes(
+        before,
+        after,
+        bounds,
+        &exclusions[..exclusion_count],
+        ACTION_CHANGE_CHANNEL_THRESHOLD,
+    )
+    .map_err(comparison_error)?;
+    usize::try_from(changed).map_err(|_| HaloDetectionError::InvalidFrameLayout)
+}
 
 
-        for x in bounds.x..bounds.right() {
-            let point = PixelPoint::new(x as i32, y as i32);
-
-
-            if exclusions
-                .iter()
-                .any(|excluded| excluded.is_some_and(|bounds| bounds.contains(point)))
-            {
-                continue;
-            }
-            let old = pixel_rgb(before, x, y).ok_or(HaloDetectionError::InvalidFrameLayout)?;
-            let new = pixel_rgb(after, x, y).ok_or(HaloDetectionError::InvalidFrameLayout)?;
-
-
-            if old
-                .into_iter()
-                .zip(new)
-                .any(|(old, new)| old.abs_diff(new) >= ACTION_CHANGE_CHANNEL_THRESHOLD)
-            {
-                changed += 1;
-            }
+/// Retain the detector's error vocabulary without converting invalid evidence to zero.
+fn comparison_error(error: comparison::ComparisonError) -> HaloDetectionError {
+    match error {
+        comparison::ComparisonError::DimensionsDiffer { .. }
+        | comparison::ComparisonError::InvalidInput(MatchError::BoundsOutsideFrame)
+        | comparison::ComparisonError::InvalidExclusion {
+            source: MatchError::BoundsOutsideFrame,
+            ..
+        } => HaloDetectionError::BoundsOutsideFrame,
+        comparison::ComparisonError::InvalidInput(MatchError::EmptyBounds)
+        | comparison::ComparisonError::InvalidExclusion {
+            source: MatchError::EmptyBounds,
+            ..
+        } => HaloDetectionError::EmptyBounds,
+        comparison::ComparisonError::InvalidInput(_)
+        | comparison::ComparisonError::InvalidExclusion { .. } => {
+            HaloDetectionError::InvalidFrameLayout
         }
     }
-    Ok(changed)
 }
 
 
@@ -1630,6 +1647,82 @@ mod tests {
                 WHITE,
             );
         }
+    }
+
+
+    /// Shared RGB measurement preserves exact pile counts with a differently padded result.
+    #[test]
+    fn pile_comparison_preserves_exact_counts_across_padded_strides() {
+        let before = pile_pair();
+        let mut after = before.clone();
+        paint_pile_changes(&mut after, LEFT_TARGET, 127);
+        paint_pile_changes(&mut after, RIGHT_TARGET, 4);
+        let alpha_offset = (LEFT_TARGET.bounds.y as usize + 60) * after.stride
+            + (LEFT_TARGET.bounds.x as usize + 18) * 4
+            + 3;
+        after.pixels[alpha_offset] = 0;
+        let mut padded = after.clone();
+        padded.stride += 16;
+        padded.pixels = vec![255; padded.stride * padded.height as usize];
+
+
+        for row in 0..after.height as usize {
+            padded.pixels[row * padded.stride..row * padded.stride + after.stride]
+                .copy_from_slice(&after.pixels[row * after.stride..(row + 1) * after.stride]);
+        }
+
+
+        for (pile, expected) in [(LEFT_TARGET, 127), (RIGHT_TARGET, 4)] {
+            assert_eq!(changed_pile_interior(&before, &after, pile), Ok(expected));
+            assert_eq!(changed_pile_interior(&before, &padded, pile), Ok(expected));
+            assert_eq!(changed_pile_interior(&padded, &before, pile), Ok(expected));
+        }
+    }
+
+
+    /// Invalid layouts, dimensions and inset geometry remain detector errors.
+    #[test]
+    fn pile_comparison_rejects_invalid_evidence_without_zero_fallback() {
+        let frame = pile_pair();
+        let mut malformed = frame.clone();
+        malformed.pixels.pop();
+        assert_eq!(
+            changed_pile_interior(&frame, &malformed, LEFT_TARGET),
+            Err(HaloDetectionError::InvalidFrameLayout)
+        );
+        assert_eq!(
+            changed_pile_interior(&malformed, &frame, LEFT_TARGET),
+            Err(HaloDetectionError::InvalidFrameLayout)
+        );
+        let mut mismatched = frame.clone();
+        mismatched.width -= 1;
+        assert_eq!(
+            changed_pile_interior(&frame, &mismatched, LEFT_TARGET),
+            Err(HaloDetectionError::BoundsOutsideFrame)
+        );
+
+
+        for bounds in [
+            PixelRect::new(u32::MAX, 0, 139, 187),
+            PixelRect::new(0, 0, 23, 187),
+        ] {
+            let pile = PyramidTargetSlot {
+                bounds,
+                ..LEFT_TARGET
+            };
+            assert_eq!(
+                changed_pile_interior(&frame, &frame, pile),
+                Err(HaloDetectionError::BoundsOutsideFrame)
+            );
+        }
+        let empty = PyramidTargetSlot {
+            bounds: PixelRect::new(0, 0, 24, 187),
+            ..LEFT_TARGET
+        };
+        assert_eq!(
+            changed_pile_interior(&frame, &frame, empty),
+            Err(HaloDetectionError::EmptyBounds)
+        );
     }
 
 

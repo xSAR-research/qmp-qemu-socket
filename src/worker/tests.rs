@@ -1469,6 +1469,93 @@ fn effect_comparison_applies_threshold_and_cursor_exclusion() {
 }
 
 
+/// Keep exact RGB counts with different strides, alpha changes and a partial ROI.
+#[test]
+fn effect_comparison_preserves_padded_rgb_counts_and_mask_intersections() {
+    let before = blank_frame(3, 2);
+    let mut after = before.clone();
+    after.stride = 16;
+    after.pixels = vec![255; 32];
+
+
+    for row in 0..2 {
+        after.pixels[row * 16..row * 16 + 12].fill(0);
+
+
+        for column in 0..3 {
+            after.pixels[row * 16 + column * 4 + 3] = 255;
+        }
+    }
+    after.pixels[0] = 20;
+    after.pixels[5] = 19;
+    after.pixels[26] = 255;
+    let bounds = PixelRect::new(0, 0, 3, 2);
+    let exclusion = Some(PixelRect::new(0, 0, 1, 1));
+    assert_eq!(
+        materially_changed_pixels(&before, &after, bounds, None, 20),
+        Ok(2)
+    );
+    assert_eq!(
+        materially_changed_pixels(&after, &before, bounds, None, 20),
+        Ok(2)
+    );
+    assert_eq!(
+        materially_changed_pixels(&before, &after, bounds, exclusion, 20),
+        Ok(1)
+    );
+    assert_eq!(
+        materially_changed_pixels(&before, &after, bounds, None, 255),
+        Ok(1)
+    );
+    assert_eq!(
+        materially_changed_pixels(&before, &before, bounds, exclusion, 0),
+        Ok(5)
+    );
+    assert_eq!(
+        materially_changed_pixels(&before, &after, PixelRect::new(1, 0, 2, 2), exclusion, 20),
+        Ok(1)
+    );
+}
+
+
+/// Invalid masks and either malformed frame stop comparison rather than return zero.
+#[test]
+fn effect_comparison_rejects_invalid_masks_and_independent_layouts() {
+    let frame = blank_frame(3, 2);
+    let bounds = PixelRect::new(0, 0, 3, 2);
+
+
+    for exclusion in [
+        PixelRect::new(0, 0, 0, 1),
+        PixelRect::new(2, 0, 2, 1),
+        PixelRect::new(u32::MAX, 0, 2, 1),
+    ] {
+        let error =
+            materially_changed_pixels(&frame, &frame, bounds, Some(exclusion), 20).unwrap_err();
+        assert!(error.contains("exclusion 0"));
+    }
+    let mut malformed = frame.clone();
+    malformed.stride = usize::MAX;
+    assert!(
+        materially_changed_pixels(&malformed, &frame, bounds, None, 20)
+            .unwrap_err()
+            .contains("before frame")
+    );
+    assert!(
+        materially_changed_pixels(&frame, &malformed, bounds, None, 20)
+            .unwrap_err()
+            .contains("after frame")
+    );
+    malformed.stride = frame.stride;
+    malformed.pixels.pop();
+    assert!(materially_changed_pixels(&frame, &malformed, bounds, None, 20).is_err());
+    assert!(
+        materially_changed_pixels(&frame, &frame, PixelRect::new(u32::MAX, 0, 2, 1), None, 20)
+            .is_err()
+    );
+}
+
+
 /// Check lower-row evidence or any actionable halo prevents premature TriPeaks completion.
 #[test]
 fn row_three_halo_forbids_completion_when_row_one_is_empty() {

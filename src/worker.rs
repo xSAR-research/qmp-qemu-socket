@@ -29,7 +29,7 @@ use std::{
 
 use crate::{
     capture::{CapturedFrame, decode_png},
-    detector::{detect_game_progress_for_profile, pixel_rgb},
+    detector::detect_game_progress_for_profile,
     game::{ActionTarget, GameMode, GameProgress, InputOperation},
     geometry::{PixelRect, pixel_point_to_qmp, pixel_rect_to_qmp},
     pyramid,
@@ -3472,57 +3472,22 @@ fn materially_changed_pixels(
     exclusion: Option<PixelRect>,
     threshold: u8,
 ) -> Result<usize, String> {
-
-
-    if !before.is_layout_valid() || !after.is_layout_valid() {
-        return Err("effect comparison received an invalid frame layout".to_owned());
-    }
-
-
-    if (before.width, before.height) != (after.width, after.height) {
-        return Err(format!(
-            "effect comparison dimensions differ: {}x{} versus {}x{}",
-            before.width, before.height, after.width, after.height
-        ));
-    }
-
-
-    if bounds.is_empty() || bounds.right() > before.width || bounds.bottom() > before.height {
-        return Err(format!(
-            "effect ROI ({}, {}, {}, {}) lies outside {}x{}",
-            bounds.x, bounds.y, bounds.width, bounds.height, before.width, before.height
-        ));
-    }
-
-    let mut changed = 0usize;
-
-
-    for y in bounds.y..bounds.bottom() {
-
-
-        for x in bounds.x..bounds.right() {
-            let point = crate::geometry::PixelPoint::new(x as i32, y as i32);
-
-
-            if exclusion.is_some_and(|excluded| excluded.contains(point)) {
-                continue;
-            }
-            let before_rgb = pixel_rgb(before, x, y)
-                .ok_or_else(|| format!("could not read before pixel ({x}, {y})"))?;
-            let after_rgb = pixel_rgb(after, x, y)
-                .ok_or_else(|| format!("could not read after pixel ({x}, {y})"))?;
-
-
-            if before_rgb
-                .into_iter()
-                .zip(after_rgb)
-                .any(|(left, right)| left.abs_diff(right) >= threshold)
-            {
-                changed = changed.saturating_add(1);
-            }
-        }
-    }
-    Ok(changed)
+    let before = before
+        .as_view()
+        .map_err(|error| format!("effect comparison before frame: {error}"))?;
+    let after = after
+        .as_view()
+        .map_err(|error| format!("effect comparison after frame: {error}"))?;
+    let changed = xsar::image_matching::comparison::count_rgb_changes(
+        before,
+        after,
+        bounds,
+        exclusion.as_slice(),
+        threshold,
+    )
+    .map_err(|error| format!("effect comparison failed: {error}"))?;
+    usize::try_from(changed)
+        .map_err(|_| "effect comparison count exceeds the host counter range".to_owned())
 }
 
 

@@ -1,4 +1,37 @@
-# Development conventions for v2.0.0 candidate 2
+# Development conventions
+
+## Current two-frame comparison slice: v2.0.11
+
+The accepted application base is `e59e06c49f7112b2dac1a7634999ae6f6fcd7344`,
+originally using xSAR `1a719b359a51d1e1e3113224193a779c76de82f8`. Gate 2 adds
+shared RGB measurement in xSAR 0.2.1 and replaces only the two application
+counting loops. Keep game thresholds, cursor geometry and input/effect policy
+local. Pyramid's three optional mask entries contain two actual rectangles:
+Move uses D and contributes no cursor mask. Do not add one during extraction.
+
+Charlie promoted xSAR 0.2.1 at `987856a0b5cb95aec2788551e050e18f7469b1ef`.
+The application manifest and lockfile now select that exact Git revision with
+defaults off and the existing qmp/png/image_matching features. No host-only path
+or source override is needed for normal builds. Record Cargo's selected source
+and use locked checks after narrowly resolving a dependency-source change.
+The earlier sibling-path and isolated paired builds remain historical evidence.
+For future paired development, use an isolated temporary override and keep it
+outside promotion files. Promote the crate first, update the consumer's exact
+Git pin without unrelated upgrades, revalidate and obtain consumer acceptance.
+Registry publication is separate; the commit subject does not set Cargo's version.
+
+As authorised on 10 October 2026, rustfmt and cargo fmt, including `--check`,
+are permitted. Preserve existing toolchain/formatter configuration and keep
+formatting within the approved change. Preserve the established two-blank-line
+layout. The formatter prohibitions in the dated records below are superseded.
+Use explicit installed nightly selection for xSAR when the host default is
+below its unchanged MSRV. Required implementation checks remain locked check,
+tests, strict private rustdoc, Clippy and release build, with feature coverage
+for the crate and explicit include-ignored host evidence for the application.
+
+See [v2.0.11 implementation and evidence](release-v2.0.11.md).
+
+## Historical v2.0.0 candidate 2 conventions
 
 The exact application base is `78df8f1fc994442a06aa9eaa411414462e169727`.
 The xsar Git dependency is pinned to Charlie's promoted commit

@@ -1,6 +1,7 @@
 # qmp-qemu-socket
 
-Release **v2.0.10**.
+Development **v2.0.11**, pinned to promoted xSAR **0.2.1**; application promotion is pending.
+The accepted five-game release remains v2.0.10.
 
 ## Computer Vision solving
 
@@ -61,7 +62,7 @@ Automatic capture is currently **file-backed**. QEMU's `screendump` writes a tem
 
 Decoded Computer Vision observations update the application's image control, including delayed HALO observations and post-game transitions. A bounded latest-frame slot replaces older pending images, so the UI shows the newest available observation rather than accumulating a frame queue. Display publication introduces no additional QMP screen grab and does not grant input authority.
 
-The application uses the optional QMP, PNG, checked geometry and image-predicate facilities from **xsar v0.2.0**, pinned to Git commit `1a719b359a51d1e1e3113224193a779c76de82f8`. Game calibration, source selection, capture acquisition, completion policy and exact-byte saving remain application-owned. Ordinary Cargo commands fetch that Git dependency; a local xsar checkout or crates.io publication is not required.
+The application uses the optional QMP, PNG, checked geometry, image-predicate and RGB-comparison facilities from **xsar v0.2.1**, pinned to promoted Git revision `987856a0b5cb95aec2788551e050e18f7469b1ef`. Game calibration, source selection, capture acquisition, completion policy and exact-byte saving remain application-owned. Ordinary Cargo commands use that exact Git source; no sibling checkout or crates.io publication is required. Uncommitted changes in Charlie's xSAR checkout are not implicitly included in release builds.
 
 ## Captures and diagnostic records
 
@@ -74,6 +75,12 @@ Private session logs use `QMP_SESSION_LOG_DIR`, otherwise `$HOME/tmp` when it ex
 When a run stops on uncertain evidence, retain its log and an original PNG of the guest state before manually advancing it. A saved image establishes its own observed state; it should not be assumed to be byte-identical to a different capture named in an earlier log.
 
 ## Build and verification
+
+The manifest and lockfile select xSAR 0.2.1 at the exact promoted Git revision
+above. Cargo fetches it over HTTPS when it is not already cached; subsequent
+locked builds use that source rather than a local development path. See the
+[v2.0.11 notes](docs/release-v2.0.11.md) for validation evidence and the remaining
+application acceptance/promotion boundary.
 
 Build from the repository root on the Linux development host. `rust-toolchain.toml` selects floating **nightly** with Clippy and Rustfmt components; `Cargo.toml` declares edition 2024 and minimum Rust **1.101.0**. The channel is not a dated compiler pin, so record the actual compiler and Cargo versions used. Stable compatibility is not established by the toolchain file.
 
@@ -107,6 +114,9 @@ CARGO_TARGET_DIR="$PWD/target" cargo build --locked --release
 Build and test results do not establish live guest behaviour. Verify the selected game, HALO handling, transitions, image updates and STOP against the intended guest configuration. Formatting is separate from these checks; follow the repository's documented source-spacing policy.
 
 ## Design and historical evidence
+
+The [v2.0.11 development notes](docs/release-v2.0.11.md) describe shared RGB
+measurement, paired and Git-pinned validation, and the application promotion boundary.
 
 The [v2.0.10 release notes](docs/release-v2.0.10.md) describe the bounded TriPeaks terminal acquisition allowance and verification. Supporting material includes [architecture](docs/architecture.md), [QMP and capture design](docs/qmp-and-capture.md), [Pyramid execution](docs/pyramid-execution.md) and [development conventions](docs/development.md).
 
