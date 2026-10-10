@@ -13,6 +13,7 @@ mod geometry;
 mod klondike;
 mod parameters;
 mod pyramid;
+mod pyramid_recon;
 mod qmp;
 mod session_log;
 mod snapshot;

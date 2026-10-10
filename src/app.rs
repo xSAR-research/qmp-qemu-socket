@@ -17,6 +17,7 @@ use crate::{
     game::{ActionTarget, GameMode, InputOperation},
     geometry::{PixelPoint, PixelRect},
     pyramid::{self, PYRAMID_TARGETS},
+    pyramid_recon::ReconRequest,
     session_log::SessionLog,
     snapshot::SnapshotArtifact,
     strategy::{ControllerContext, SolvingStrategy},
@@ -77,6 +78,14 @@ const MINIMUM_OUTPUT_TEXT_SIZE_POINTS: f32 = 10.0;
 const MAXIMUM_OUTPUT_TEXT_SIZE_POINTS: f32 = 24.0;
 
 
+/// Maximum UTF-8 bytes accepted for each reconnaissance pathname.
+const RECON_PATH_MAX_BYTES: usize = 4096;
+
+
+/// Maximum ASCII bytes in the exported deal's explicit identity token.
+const RECON_DEAL_ID_MAX_BYTES: usize = 64;
+
+
 /// UI ownership of a dispatched run until worker completion or cancellation arrives.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ActiveRun {
@@ -84,6 +93,71 @@ enum ActiveRun {
     StepOnce,
     /// A bounded or continuous sequence using accepted result frames.
     MultiStep,
+    /// A separate scan/restoration/export operation, released only by its finished event.
+    Reconnaissance,
+}
+
+
+/// Session-only reconnaissance inputs; no native calibration or input consent is supplied by default.
+#[derive(Default)]
+struct ReconnaissanceForm {
+    /// Explicit path to a profile validated against native captures by the worker.
+    profile_path: String,
+    /// Explicit destination selected by the operator, never inferred from the profile.
+    output_path: String,
+    /// Nonempty bounded ASCII token used to identify the original deal.
+    deal_id: String,
+    /// Exact selected context for which the operator confirmed an untouched Solver-off board.
+    confirmed_context: Option<ControllerContext>,
+}
+
+
+impl ReconnaissanceForm {
+
+
+    /// Check bounded UI values and fresh explicit consent without filesystem or guest I/O.
+    ///
+    /// The worker separately validates the profile, scene, destination and every input.
+    fn validate(&self, context: &ControllerContext) -> Result<(), &'static str> {
+
+
+        if !reconnaissance_path_is_valid(&self.profile_path) {
+            return Err("Provide a native profile path: 1–4096 UTF-8 bytes, without control characters.");
+        }
+
+
+        if !reconnaissance_path_is_valid(&self.output_path) {
+            return Err("Provide an output JSON path: 1–4096 UTF-8 bytes, without control characters.");
+        }
+
+
+        if self.deal_id.is_empty()
+            || self.deal_id.len() > RECON_DEAL_ID_MAX_BYTES
+            || !self.deal_id.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+        {
+            return Err("Deal ID must contain 1–64 ASCII letters, digits, hyphens or underscores.");
+        }
+
+
+        if self.confirmed_context.as_ref() != Some(context) {
+            return Err("Confirm an untouched supported Pyramid board with Solver OFF for this context.");
+        }
+        Ok(())
+    }
+
+
+    /// Consume consent once, preserving literal pathnames and refusing malformed requests.
+    fn take_request(&mut self, context: &ControllerContext) -> Result<ReconRequest, &'static str> {
+        let validation = self.validate(context);
+        self.confirmed_context = None;
+        validation?;
+        Ok(ReconRequest {
+            profile_path: PathBuf::from(&self.profile_path),
+            output_path: PathBuf::from(&self.output_path),
+            deal_id: self.deal_id.clone(),
+            initial_board_confirmed: true,
+        })
+    }
 }
 
 
@@ -114,6 +188,10 @@ pub struct QmpQemuSocketApp {
     strategy_choice_pending: bool,
     /// Selection generation rejects results from an earlier switch or socket.
     context_generation: u64,
+    /// Bounded operator inputs and single-use consent for the separate reconnaissance command.
+    reconnaissance_form: ReconnaissanceForm,
+    /// Last completed reconnaissance report, independent of generic worker status messages.
+    reconnaissance_report: Option<String>,
     /// Editable local socket pathname; edits revoke preview authority.
     qmp_socket_path: String,
     /// Bounded visible tail of timestamped session output.
@@ -261,6 +339,8 @@ impl QmpQemuSocketApp {
             solving_strategy: SolvingStrategy::ComputerVision,
             strategy_choice_pending: true,
             context_generation: 0,
+            reconnaissance_form: ReconnaissanceForm::default(),
+            reconnaissance_report: None,
             qmp_socket_path,
             log_lines: Vec::new(),
             output_expanded: false,
@@ -543,20 +623,14 @@ impl QmpQemuSocketApp {
 
 
                     if matches!(state, WorkerState::Detached) {
-                        self.stop_requested = false;
+
+
+                        if self.active_run != Some(ActiveRun::Reconnaissance) {
+                            self.stop_requested = false;
+                        }
                         self.invalidate_preview();
                     }
-
-
-                    if matches!(
-                        state,
-                        WorkerState::Detached
-                            | WorkerState::Ready
-                            | WorkerState::Uncertain
-                            | WorkerState::Error
-                    ) {
-                        self.active_run = None;
-                    }
+                    self.active_run = active_run_after_worker_state(self.active_run, state);
 
 
                     if matches!(state, WorkerState::Error) {
@@ -641,6 +715,12 @@ impl QmpQemuSocketApp {
                     verified_operations,
                     halo_operations,
                 } => {
+
+
+                    if self.active_run == Some(ActiveRun::Reconnaissance) {
+                        self.push_log("Ignored a gameplay completion while waiting for reconnaissance to finish.");
+                        continue;
+                    }
                     self.active_run = None;
                     self.current_status = "Ready".to_owned();
                     let requested = format_operation_limit(requested_operations);
@@ -656,6 +736,29 @@ impl QmpQemuSocketApp {
                             "Execution run completed: verified {verified_operations} operation(s), continued from fresh recommendation {halo_operations} operation(s), from a {requested} request; final prediction={}; guest-input retries=0.",
                             concise_prediction(prediction),
                         ));
+                    }
+                }
+                WorkerEvent::ReconnaissanceFinished { result } => {
+
+
+                    if self.active_run != Some(ActiveRun::Reconnaissance) {
+                        self.push_log("Ignored a reconnaissance completion without an active reconnaissance request.");
+                        continue;
+                    }
+                    let report = reconnaissance_result_message(&result, self.stop_requested);
+                    self.current_status = match (&result, self.stop_requested) {
+                        (Ok(_), _) => "Pyramid JSON exported",
+                        (Err(_), true) => "Reconnaissance stopped — inspect the board",
+                        (Err(_), false) => "Reconnaissance failed — inspect the board",
+                    }.to_owned();
+                    self.active_run = None;
+                    self.reconnaissance_form.confirmed_context = None;
+                    self.reconnaissance_report = Some(report.clone());
+                    self.push_log(report);
+
+
+                    if self.worker_state == WorkerState::Detached {
+                        self.stop_requested = false;
                     }
                 }
             }
@@ -929,7 +1032,7 @@ impl QmpQemuSocketApp {
 
 
         if self.strategy_choice_pending || !self.solving_strategy.permits_input() {
-            self.push_log(format!("{request_name} refused: independent Pyramid preparation is read-only; recognition and route calculation are not implemented; guest input sent=0."));
+            self.push_log(format!("{request_name} refused: independent Pyramid preparation is read-only; use the separate guarded reconnaissance control for acquisition. Route calculation is not implemented; guest input sent=0."));
             return;
         }
 
@@ -1045,6 +1148,112 @@ impl QmpQemuSocketApp {
     }
 
 
+    /// Queue only the separate reconnaissance command after rechecking all current UI gates.
+    ///
+    /// Consumes the checkbox on dispatch, and holds run ownership until the worker's
+    /// dedicated finished event. No profile reading or guest input occurs on the UI thread.
+    fn dispatch_reconnaissance(&mut self) {
+        let context = self.current_preview_context();
+
+
+        if !reconnaissance_controls_enabled(
+            &context, self.strategy_choice_pending, self.active_run, self.worker_state,
+            self.stop_requested, self.show_snapshot_dialog, self.snapshot_capture_pending,
+        ) {
+            self.reconnaissance_form.confirmed_context = None;
+            self.push_log("Reconnaissance refused: select Pyramid independent preparation and wait for an idle worker, closed snapshot review and completed STOP.");
+            return;
+        }
+        let request = match self.reconnaissance_form.take_request(&context) {
+            Ok(request) => request,
+            Err(error) => {
+                self.push_log(format!("Reconnaissance refused before dispatch: {error}"));
+                return;
+            }
+        };
+        self.invalidate_preview();
+        self.reconnaissance_report = None;
+        self.active_run = Some(ActiveRun::Reconnaissance);
+        self.worker_state = WorkerState::Validating;
+        self.current_status = "Validating reconnaissance profile and board".to_owned();
+        self.push_log("Separate Pyramid reconnaissance requested: only freshly guarded D, Undo All and confirmed OK inputs are permitted. STOP revokes restoration input; failure may leave the board changed. No search or Solver activation is requested.");
+
+
+        if let Err(error) = self.worker.reconnoitre(context, request) {
+            self.active_run = None;
+            self.worker_state = WorkerState::Error;
+            self.current_status = "Reconnaissance dispatch failed".to_owned();
+            let report = format!("Reconnaissance request was not accepted: {error}. No successful export reported.");
+            self.reconnaissance_report = Some(report.clone());
+            self.push_log(report);
+        }
+    }
+
+
+    /// Render explicit acquisition consent separately from read-only preparation and CV input.
+    ///
+    /// A missing or invalid native profile is refused by the worker; selecting a path
+    /// or ticking this checkbox never proves that the guest scene is supported.
+    fn reconnaissance_controls(&mut self, ui: &mut egui::Ui) {
+        let context = self.current_preview_context();
+
+
+        if context.strategy != SolvingStrategy::ShortestPath || context.game_mode != GameMode::Pyramid {
+            return;
+        }
+        let controls_enabled = reconnaissance_controls_enabled(
+            &context, self.strategy_choice_pending, self.active_run, self.worker_state,
+            self.stop_requested, self.show_snapshot_dialog, self.snapshot_capture_pending,
+        );
+        egui::CollapsingHeader::new("Guarded Pyramid reconnaissance → JSON")
+            .default_open(false)
+            .show(ui, |ui| {
+                ui.label("Requires a native profile validated from captures. There is no built-in calibration fallback: missing, invalid or unsupported native evidence refuses guest input.");
+                ui.colored_label(Color32::YELLOW, "This operation uses D, Undo All and its confirmed OK. STOP prevents further input, including cleanup/restoration; failure may leave the board changed.");
+                ui.label("A complete JSON export requires 28 tableau cards, 24 ordered DRAW cards and verified restoration. No search or ordinary gameplay is started.");
+                ui.add_enabled_ui(controls_enabled, |ui| {
+                    ui.label("Validated native profile path");
+                    let profile_changed = ui.add(egui::TextEdit::singleline(&mut self.reconnaissance_form.profile_path)
+                        .char_limit(RECON_PATH_MAX_BYTES).desired_width(f32::INFINITY)).changed();
+                    ui.label("Output JSON path (existing files are not overwritten)");
+                    let output_changed = ui.add(egui::TextEdit::singleline(&mut self.reconnaissance_form.output_path)
+                        .char_limit(RECON_PATH_MAX_BYTES).desired_width(f32::INFINITY)).changed();
+                    ui.small("Paths are literal: no tilde or environment-variable expansion. Each path is limited to 4096 UTF-8 bytes.");
+                    ui.label("Deal ID (1–64 ASCII letters, digits, hyphens or underscores)");
+                    let deal_changed = ui.add(egui::TextEdit::singleline(&mut self.reconnaissance_form.deal_id)
+                        .char_limit(RECON_DEAL_ID_MAX_BYTES)).changed();
+
+
+                    if profile_changed || output_changed || deal_changed {
+                        self.reconnaissance_form.confirmed_context = None;
+                    }
+                    let mut confirmed = self.reconnaissance_form.confirmed_context.as_ref() == Some(&context);
+
+
+                    if ui.checkbox(&mut confirmed, "I confirm an untouched supported Pyramid board, with Solver OFF.").changed() {
+                        self.reconnaissance_form.confirmed_context = confirmed.then(|| context.clone());
+                    }
+                });
+                let validation = self.reconnaissance_form.validate(&context);
+
+
+                if let Err(reason) = validation {
+                    ui.small(reason);
+                }
+
+
+                if bevel_button(ui, "Start reconnaissance → JSON", ACTION_GREEN, false, controls_enabled && validation.is_ok()).clicked() {
+                    self.dispatch_reconnaissance();
+                }
+            });
+
+
+        if let Some(report) = &self.reconnaissance_report {
+            ui.label(report);
+        }
+    }
+
+
     /// Select a controller only while idle, revoke old authority and capture fresh pixels.
     fn select_strategy(&mut self, strategy: SolvingStrategy) {
 
@@ -1060,6 +1269,8 @@ impl QmpQemuSocketApp {
         self.solving_strategy = strategy;
         self.strategy_choice_pending = false;
         self.context_generation = self.context_generation.wrapping_add(1);
+        self.reconnaissance_form.confirmed_context = None;
+        self.reconnaissance_report = None;
 
 
         self.game_mode = match strategy {
@@ -1111,7 +1322,7 @@ impl QmpQemuSocketApp {
 
 
                 if strategy == SolvingStrategy::ShortestPath {
-                    ui.add(egui::Label::new(egui::RichText::new("Preparation only: capture and inspect Pyramid. Card recognition and route calculation follow in later releases.").strong()).wrap());
+                    ui.add(egui::Label::new(egui::RichText::new("Capture and inspect Pyramid without input. Card recognition and restored-deal JSON export belong to a separate, explicitly confirmed reconnaissance operation requiring a validated native profile. No built-in calibration fallback exists; search and route calculation are not implemented.").strong()).wrap());
                 }
             });
             // The longer route-preparation option comes first and sets both cards' height.
@@ -1163,8 +1374,8 @@ impl QmpQemuSocketApp {
 
 
         if self.solving_strategy == SolvingStrategy::ShortestPath {
-            ui.strong("Pyramid · Preparation only");
-            ui.label("Card recognition and route calculation are not implemented yet.");
+            ui.strong("Pyramid · Read-only preparation / guarded reconnaissance");
+            ui.label("Capture controls remain read-only. Card recognition belongs to separately authorised reconnaissance; search and route calculation are not implemented.");
         }
         ui.horizontal(|ui| {
             ui.label("Game Type");
@@ -1189,6 +1400,8 @@ impl QmpQemuSocketApp {
             if self.game_mode != previous_mode {
                 self.computer_vision_game_mode = self.game_mode;
                 self.context_generation = self.context_generation.wrapping_add(1);
+                self.reconnaissance_form.confirmed_context = None;
+                self.reconnaissance_report = None;
                 self.invalidate_preview();
                 preview_available = false;
                 self.current_board = 1;
@@ -1290,11 +1503,16 @@ impl QmpQemuSocketApp {
 
                     if bevel_button(ui, "STOP", STATE_RED, false, true).clicked() {
                         self.stop_requested = true;
+                        self.reconnaissance_form.confirmed_context = None;
                         self.current_status = "Stopping…".to_owned();
 
 
                         if let Err(error) = self.worker.disconnect(self.current_preview_context()) {
-                            self.active_run = None;
+
+
+                            if self.active_run != Some(ActiveRun::Reconnaissance) {
+                                self.active_run = None;
+                            }
                             self.worker_state = WorkerState::Error;
                             self.current_status = "Stop request failed".to_owned();
                             self.push_log(error);
@@ -1369,6 +1587,7 @@ impl QmpQemuSocketApp {
                 }
             }
         });
+        self.reconnaissance_controls(ui);
     }
 
 
@@ -1377,7 +1596,7 @@ impl QmpQemuSocketApp {
     /// Pointer clicks here log coordinates only; overlays never modify captured
     /// pixels or the original PNG retained by the snapshot dialog.
     fn preview(&mut self, ui: &mut egui::Ui) {
-        ui.heading(if self.solving_strategy == SolvingStrategy::ShortestPath { "Pyramid preparation capture" } else { "QMP capture and target preview" });
+        ui.heading(if self.solving_strategy == SolvingStrategy::ShortestPath { "Pyramid capture and reconnaissance preview" } else { "QMP capture and target preview" });
 
 
         match self.captured_dimensions {
@@ -1387,7 +1606,7 @@ impl QmpQemuSocketApp {
                 ));
             }
             Some((width, height)) if self.solving_strategy == SolvingStrategy::ShortestPath => {
-                ui.label(format!("Fresh raw capture: {width}x{height}. Inspect pixels or save the original PNG; no card identity or route has been calculated."));
+                ui.label(format!("Raw capture: {width}x{height}. Preview pixels are advisory; Capture Frame/PNG do not start reconnaissance or search."));
             }
             Some((width, height)) => {
                 ui.label(format!(
@@ -1636,7 +1855,7 @@ impl QmpQemuSocketApp {
 
 
                 if self.solving_strategy == SolvingStrategy::ShortestPath {
-                    ui.strong("Pyramid · Preparation only");
+                    ui.strong("Pyramid · Preparation / reconnaissance");
                 } else if self.game_mode.calibration_only() {
                     ui.strong(format!("{} — calibration only", self.game_mode));
                 } else {
@@ -1692,6 +1911,8 @@ impl QmpQemuSocketApp {
 
                 if socket_edit.changed() {
                     self.context_generation = self.context_generation.wrapping_add(1);
+                    self.reconnaissance_form.confirmed_context = None;
+                    self.reconnaissance_report = None;
                     self.invalidate_preview();
                     self.current_status = "Socket changed — capture required".to_owned();
                     self.push_log("QMP socket changed locally; prior preview authority was discarded. Capture a fresh read-only frame before input.");
@@ -1700,9 +1921,9 @@ impl QmpQemuSocketApp {
 
 
                 if self.solving_strategy == SolvingStrategy::ShortestPath {
-                    ui.strong("Pyramid preparation");
+                    ui.strong("Pyramid preparation and reconnaissance");
                     ui.label("Capture Frame obtains fresh raw pixels. Capture PNG previews and saves the exact original PNG.");
-                    ui.label("Native frame: 1920×1080. Card recognition, route calculation and exploratory Undo controls are not implemented yet.");
+                    ui.label("The separate reconnaissance controls require an explicit validated native profile and fresh untouched-board confirmation. There is no built-in calibration fallback. They do not enable Single Step or Multiple Steps; search and route calculation are not implemented.");
                     return;
                 }
                 ui.label("Execution settings for the next Step Once or Multi-Step run");
@@ -2546,6 +2767,68 @@ fn controls_are_mutable(
     stop_requested: bool,
 ) -> bool {
     active_run.is_none() && !state.is_busy() && !stop_requested
+}
+
+
+/// Keep reconnaissance owned until its dedicated completion, preserving legacy CV release rules.
+fn active_run_after_worker_state(active_run: Option<ActiveRun>, state: WorkerState) -> Option<ActiveRun> {
+
+
+    if active_run != Some(ActiveRun::Reconnaissance)
+        && matches!(state, WorkerState::Detached | WorkerState::Ready | WorkerState::Uncertain | WorkerState::Error)
+    {
+        None
+    } else {
+        active_run
+    }
+}
+
+
+/// Permit only idle, explicitly selected Pyramid preparation to offer the separate scan operation.
+///
+/// This does not enable `ShortestPath::permits_input`, validate a profile or send input.
+fn reconnaissance_controls_enabled(
+    context: &ControllerContext,
+    startup_choice_pending: bool,
+    active_run: Option<ActiveRun>,
+    state: WorkerState,
+    stop_requested: bool,
+    snapshot_open: bool,
+    snapshot_pending: bool,
+) -> bool {
+    context.strategy == SolvingStrategy::ShortestPath
+        && context.game_mode == GameMode::Pyramid
+        && !startup_choice_pending
+        && controls_are_mutable(active_run, state, stop_requested)
+        && !snapshot_open
+        && !snapshot_pending
+}
+
+
+/// Reject empty, excessive or control-containing UI paths without trimming valid pathname bytes.
+fn reconnaissance_path_is_valid(value: &str) -> bool {
+    !value.trim().is_empty()
+        && value.len() <= RECON_PATH_MAX_BYTES
+        && !value.chars().any(char::is_control)
+}
+
+
+/// Preserve the worker's publication evidence, including errors after a completed export.
+fn reconnaissance_result_message(result: &Result<PathBuf, String>, stop_requested: bool) -> String {
+
+
+    match result {
+        Ok(path) => format!(
+            "Pyramid deal exported to {}. The worker verified the complete inventory and original-board restoration.{}",
+            path.display(),
+            if stop_requested { " STOP was also requested; this result reports the completed export, not further input authority." } else { "" },
+        ),
+        Err(error) => format!(
+            "Reconnaissance {}: {error}. Inspect the reported publication status, output path and guest state before any new attempt.{}",
+            if stop_requested { "stopped" } else { "failed" },
+            if stop_requested { " STOP prohibits automatic cleanup or restoration input." } else { " Inspect the guest before confirming another untouched-board scan." },
+        ),
+    }
 }
 
 
@@ -3648,6 +3931,181 @@ mod tests {
         assert!(!preview_is_current(Some((NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT)), Some(&old), &current, true, false, false));
         assert!(!worker_result_is_current(Some(&old), &current, false));
         assert!(preview_is_current(Some((NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT)), Some(&current), &current, true, false, false));
+    }
+
+
+    /// Construct one explicit preparation context without connecting to a socket.
+    fn reconnaissance_test_context() -> ControllerContext {
+        ControllerContext::new(PathBuf::from("/tmp/recon-ui-test.sock"), GameMode::Pyramid, SolvingStrategy::ShortestPath, 7)
+    }
+
+
+    /// Construct bounded user-entered values without supplying consent or native evidence.
+    fn reconnaissance_test_form() -> ReconnaissanceForm {
+        ReconnaissanceForm {
+            profile_path: "/tmp/validated native profile.json".to_owned(),
+            output_path: "/tmp/original deal.json".to_owned(),
+            deal_id: "Pyramid_2026-10-11".to_owned(),
+            confirmed_context: None,
+        }
+    }
+
+
+    /// No default, wrong-context or already-consumed confirmation can dispatch another scan.
+    #[test]
+    fn reconnaissance_confirmation_is_explicit_context_bound_and_single_use() {
+        let context = reconnaissance_test_context();
+        assert!(ReconnaissanceForm::default().confirmed_context.is_none());
+        let mut form = reconnaissance_test_form();
+        assert!(form.take_request(&context).is_err());
+        form.confirmed_context = Some(context.clone());
+        let request = form.take_request(&context).expect("explicitly confirmed bounded request");
+        assert_eq!(request.profile_path, PathBuf::from(&form.profile_path));
+        assert_eq!(request.output_path, PathBuf::from(&form.output_path));
+        assert_eq!(request.deal_id, form.deal_id);
+        assert!(request.initial_board_confirmed);
+        assert!(form.confirmed_context.is_none());
+        assert!(form.take_request(&context).is_err());
+
+
+        for stale in [
+            ControllerContext::new(context.socket_path.clone(), context.game_mode, context.strategy, 6),
+            ControllerContext::new(PathBuf::from("/tmp/earlier.sock"), context.game_mode, context.strategy, 7),
+            ControllerContext::new(context.socket_path.clone(), GameMode::Spider, context.strategy, 7),
+            ControllerContext::new(context.socket_path.clone(), context.game_mode, SolvingStrategy::ComputerVision, 7),
+        ] {
+            form.confirmed_context = Some(stale.clone());
+            assert!(form.take_request(&context).is_err());
+            assert!(form.confirmed_context.is_none());
+            assert!(!worker_result_is_current(Some(&stale), &context, false));
+        }
+        assert!(worker_result_is_current(Some(&context), &context, false));
+        assert!(!SolvingStrategy::ShortestPath.permits_input());
+    }
+
+
+    /// Byte limits and exact token syntax reject malformed forms before worker dispatch.
+    #[test]
+    fn reconnaissance_form_enforces_bounds_and_preserves_literal_paths() {
+        let context = reconnaissance_test_context();
+        let mut form = reconnaissance_test_form();
+
+
+        for deal_id in ["".to_owned(), "a".repeat(65), "two words".to_owned(), "é".to_owned(), "id\n".to_owned(), "../deal".to_owned()] {
+            form.deal_id = deal_id;
+            form.confirmed_context = Some(context.clone());
+            assert!(form.take_request(&context).is_err());
+            assert!(form.confirmed_context.is_none());
+        }
+        form.deal_id = "a".repeat(RECON_DEAL_ID_MAX_BYTES);
+        form.profile_path = "p".repeat(RECON_PATH_MAX_BYTES);
+        form.output_path = "é".repeat(RECON_PATH_MAX_BYTES / 2);
+        form.confirmed_context = Some(context.clone());
+        assert!(form.take_request(&context).is_ok());
+
+
+        for pathname in ["".to_owned(), "   ".to_owned(), "p".repeat(4097), "é".repeat(2049), "file\0.json".to_owned(), "file\n.json".to_owned()] {
+            assert!(!reconnaissance_path_is_valid(&pathname));
+            let mut invalid_form = reconnaissance_test_form();
+            invalid_form.profile_path = pathname.clone();
+            invalid_form.confirmed_context = Some(context.clone());
+            assert!(invalid_form.take_request(&context).is_err());
+            invalid_form.profile_path = "/tmp/profile.json".to_owned();
+            invalid_form.output_path = pathname;
+            invalid_form.confirmed_context = Some(context.clone());
+            assert!(invalid_form.take_request(&context).is_err());
+        }
+        form.profile_path = " profile with spaces.json ".to_owned();
+        form.output_path = " output with spaces.json ".to_owned();
+        form.confirmed_context = Some(context.clone());
+        let request = form.take_request(&context).expect("literal paths preserve spaces");
+        assert_eq!(request.profile_path, PathBuf::from(" profile with spaces.json "));
+        assert_eq!(request.output_path, PathBuf::from(" output with spaces.json "));
+    }
+
+
+    /// Existing run, capture, STOP and snapshot ownership always blocks reconnaissance dispatch.
+    #[test]
+    fn reconnaissance_gates_do_not_enable_generic_strategy_input() {
+        let context = reconnaissance_test_context();
+        assert!(reconnaissance_controls_enabled(&context, false, None, WorkerState::Ready, false, false, false));
+        assert!(!reconnaissance_controls_enabled(&context, true, None, WorkerState::Ready, false, false, false));
+        assert!(!reconnaissance_controls_enabled(&context, false, None, WorkerState::Ready, true, false, false));
+        assert!(!reconnaissance_controls_enabled(&context, false, None, WorkerState::Ready, false, true, false));
+        assert!(!reconnaissance_controls_enabled(&context, false, None, WorkerState::Ready, false, false, true));
+
+
+        for active_run in [ActiveRun::StepOnce, ActiveRun::MultiStep, ActiveRun::Reconnaissance] {
+            assert!(!reconnaissance_controls_enabled(&context, false, Some(active_run), WorkerState::Ready, false, false, false));
+        }
+
+
+        for state in [WorkerState::Connecting, WorkerState::Capturing, WorkerState::Validating, WorkerState::Acting, WorkerState::Verifying] {
+            assert!(!reconnaissance_controls_enabled(&context, false, None, state, false, false, false));
+        }
+
+
+        for game in GameMode::AVAILABLE {
+
+
+            for strategy in SolvingStrategy::AVAILABLE {
+                let selection = ControllerContext::new(context.socket_path.clone(), game, strategy, 7);
+                assert_eq!(
+                    reconnaissance_controls_enabled(&selection, false, None, WorkerState::Ready, false, false, false),
+                    game == GameMode::Pyramid && strategy == SolvingStrategy::ShortestPath,
+                );
+            }
+        }
+        assert!(!SolvingStrategy::ShortestPath.permits_input());
+    }
+
+
+    /// Generic worker states never release reconnaissance early or alter legacy CV ownership rules.
+    #[test]
+    fn reconnaissance_ownership_survives_generic_terminal_states() {
+
+
+        for state in [WorkerState::Detached, WorkerState::Ready, WorkerState::Uncertain, WorkerState::Error] {
+            assert_eq!(active_run_after_worker_state(Some(ActiveRun::Reconnaissance), state), Some(ActiveRun::Reconnaissance));
+            assert_eq!(active_run_after_worker_state(Some(ActiveRun::StepOnce), state), None);
+            assert_eq!(active_run_after_worker_state(Some(ActiveRun::MultiStep), state), None);
+            assert!(!controls_are_mutable(Some(ActiveRun::Reconnaissance), state, false));
+        }
+
+
+        for state in [WorkerState::Connecting, WorkerState::Capturing, WorkerState::Validating, WorkerState::Acting, WorkerState::Verifying] {
+
+
+            for active_run in [ActiveRun::StepOnce, ActiveRun::MultiStep, ActiveRun::Reconnaissance] {
+                assert_eq!(active_run_after_worker_state(Some(active_run), state), Some(active_run));
+            }
+        }
+    }
+
+
+    /// Error presentation neither invents success nor contradicts an already-published result.
+    #[test]
+    fn reconnaissance_reports_export_failure_and_stop_without_implying_cleanup() {
+        let failure = Err("unreadable LEFT card".to_owned());
+        let failed = reconnaissance_result_message(&failure, false);
+        assert!(failed.contains("failed"));
+        assert!(failed.contains("Inspect the reported publication status"));
+        assert!(failed.contains("guest state before any new attempt"));
+        let stopped = reconnaissance_result_message(&failure, true);
+        assert!(stopped.contains("stopped"));
+        assert!(stopped.contains("STOP prohibits automatic cleanup"));
+        let published_error = Err("diagnostic persistence failed; publication=published".to_owned());
+        let published_report = reconnaissance_result_message(&published_error, false);
+        assert!(published_report.contains("publication=published"));
+        assert!(!published_report.contains("No successful export"));
+        assert!(!published_report.contains("restoration is not guaranteed"));
+        let success = Ok(PathBuf::from("/tmp/complete-deal.json"));
+        let exported = reconnaissance_result_message(&success, false);
+        assert!(exported.contains("exported to /tmp/complete-deal.json"));
+        assert!(exported.contains("worker verified"));
+        let exported_before_stop = reconnaissance_result_message(&success, true);
+        assert!(exported_before_stop.contains("completed export"));
+        assert!(!exported_before_stop.contains("No successful export"));
     }
 
 }

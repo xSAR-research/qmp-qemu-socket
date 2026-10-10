@@ -1,6 +1,6 @@
 [package]
 name = "qmp-qemu-socket"
-version = "2.0.11"
+version = "2.1.0"
 edition = "2024"
 rust-version = "1.101.0"
 description = "A guarded QEMU/QMP controller operating on a Windows 11 VM running `Solitaire & Casual Games` application. This is to experiment with remote control and optimised screen image processing. Also Dijkstra/A* algorithm implementation for solving games."
@@ -25,6 +25,7 @@ xsar = { git = "https://github.com/xsar-research/xsar", rev = "987856a0b5cb95aec
     "qmp",
     "png",
     "image_matching",
+    "pyramid_json",
 ] }
 
 [profile.release]

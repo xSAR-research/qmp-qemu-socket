@@ -1,5 +1,21 @@
 # Changelog
 
+## v2.1.0 — Pyramid reconnaissance to JSON (development)
+
+- Add a separately confirmed, bounded Pyramid scan; ordinary independent
+  preparation remains read-only and all five CV controllers retain their policy.
+- Read native rank/suit evidence in logical tableau order and first-draw stock
+  order, require proven advancement and positive exhaustion, then verify the
+  complete Undo All modal and original-board restoration before publication.
+- Preserve STOP/context revocation, uncertain-input non-replay, original PNG
+  diagnostics and the existing coalesced capture preview.
+- Consume xSAR 0.3.0's checked complete-deal model, strict JSON codec and atomic
+  no-overwrite publisher through an external paired-development override.
+  Crate promotion, exact consumer repin and live acceptance remain separate gates.
+- Retain original native calibration provenance and explicitly distinguish
+  fixture/controller tests from successful live acquisition. No route search,
+  console changes or Spider XP change is included.
+
 ## v2.0.10 — TriPeaks terminal acquisition margin
 
 - Give qualified TriPeaks final-card terminal acquisition a separate allowance of

@@ -5,10 +5,10 @@ use std::path::PathBuf;
 use crate::game::GameMode;
 
 
-/// User-selected controller; independent solving currently offers preparation only.
+/// User-selected controller; independent preparation does not grant general input.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SolvingStrategy {
-    /// Read-only Pyramid preparation for a future independent card/search engine.
+    /// Read-only Pyramid preparation; reconnaissance uses separate explicit authority.
     ShortestPath,
     /// Existing guest Solver/HALO controllers for all five game types.
     #[default]
@@ -45,7 +45,7 @@ impl SolvingStrategy {
     }
 
 
-    /// Whether this strategy has an implemented controller authorised to request input.
+    /// Whether ordinary execution requests may grant gameplay input, excluding reconnaissance.
     pub const fn permits_input(self) -> bool {
         matches!(self, Self::ComputerVision)
     }

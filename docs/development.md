@@ -1,6 +1,27 @@
 # Development conventions
 
-## Current two-frame comparison slice: v2.0.11
+## Current reconnaissance slice: v2.1.0
+
+Charlie authorised the complete Pyramid reconnaissance-to-JSON implementation
+on 11 October 2026. The promoted application base is
+`ba1a82beb3ea39242d91ead39ebdbd1198847f84` (2.0.11). Paired development consumes
+the reviewed, uncommitted xSAR 0.3.0 model/JSON foundation and publisher from
+`/home/charlie/repo/RUST/xsar`; its promoted HEAD remains
+`987856a0b5cb95aec2788551e050e18f7469b1ef`. Console intake and search are deferred.
+
+The external validation config is
+`/tmp/pyramid-recon-build.5qifGKcG/local-xsar.toml`, supplied to Cargo with
+`--config` alongside `--locked`. It contains a source patch for the existing
+xSAR Git URL and is intentionally outside the checkout. Its local source and
+the corresponding paired lock state are not independently promotable. Promote
+xSAR first, repin the consumer to that exact commit, regenerate only the
+affected dependency source and rerun locked validation before app promotion.
+
+See [reconnaissance and restoration](pyramid-reconnaissance.md) and
+[native profile validation](pyramid-recon-profile.md). No build result is proof
+of a real guest scan or restoration; those require Charlie's Gate 3 acceptance.
+
+## Historical two-frame comparison slice: v2.0.11
 
 The accepted application base is `e59e06c49f7112b2dac1a7634999ae6f6fcd7344`,
 originally using xSAR `1a719b359a51d1e1e3113224193a779c76de82f8`. Gate 2 adds

@@ -1732,7 +1732,7 @@ checksum = "d55d956fa96f5ec02be2e13af0e20391a5aa83d6a074e3ad368959d0fab299ea"
 
 [[package]]
 name = "qmp-qemu-socket"
-version = "2.0.11"
+version = "2.1.0"
 dependencies = [
  "eframe",
  "egui-winit",
@@ -1921,6 +1921,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4148590afebada386688f18773da617792bf2ef03ffc1e4cbd2b1d45b023e0ba"
 dependencies = [
  "serde_core",
+ "serde_derive",
 ]
 
 [[package]]
@@ -2953,10 +2954,10 @@ checksum = "e450f9b2ed1dff33c94c12589a87338689467b9c4f5d8a5710bd09a847d2c8a7"
 
 [[package]]
 name = "xsar"
-version = "0.2.1"
-source = "git+https://github.com/xsar-research/xsar?rev=987856a0b5cb95aec2788551e050e18f7469b1ef#987856a0b5cb95aec2788551e050e18f7469b1ef"
+version = "0.3.0"
 dependencies = [
  "image",
+ "serde",
  "serde_json",
  "thiserror 2.0.21",
 ]

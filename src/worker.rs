@@ -10,6 +10,7 @@ mod initial_recovery;
 mod klondike_execution;
 mod post_game;
 mod pyramid_execution;
+mod pyramid_reconnaissance;
 mod spider_execution;
 mod tripeaks_terminal;
 
@@ -203,6 +204,13 @@ enum WorkerCommand {
         /// Immutable operation limit and animation timings for this run.
         settings: Box<StepRunSettings>,
     },
+    /// Acquire and restore one Pyramid deal under separate reconnaissance authority.
+    Reconnoitre {
+        /// Immutable socket, game, strategy and selection generation.
+        context: ControllerContext,
+        /// Explicit board confirmation, native profile and output destination.
+        request: crate::pyramid_recon::ReconRequest,
+    },
     /// Clear local board and scan history without touching the guest.
     ResetProgress(ControllerContext),
     /// Stop the current run and discard its capture context.
@@ -218,6 +226,11 @@ pub enum WorkerEvent {
     Log(String),
     /// Concise current-operation text for the status area.
     Status(String),
+    /// Reconnaissance ended; only success identifies a published complete deal.
+    ReconnaissanceFinished {
+        /// Published path or a diagnostic failure, with no automatic input retry.
+        result: Result<PathBuf, String>,
+    },
     /// One fresh original PNG and its decoded preview are ready.
     SnapshotPrepared {
         /// Manual snapshot request identifier.
@@ -337,6 +350,8 @@ struct LatestFrameState {
 struct LatestFrameSlot {
     /// Mutex-protected single preview and replacement count.
     state: Arc<Mutex<LatestFrameState>>,
+    /// Shared selection and one-run latch, independent of advisory preview pixels.
+    reconnaissance: pyramid_reconnaissance::ReconControl,
 }
 
 
@@ -523,6 +538,7 @@ impl WorkerHandle {
     ///
     /// Returns an error if the worker command channel has closed.
     pub fn capture_frame(&self, context: ControllerContext) -> Result<(), String> {
+        self.latest_frame.reconnaissance.select(&context, &self.cancel_requested)?;
         context.validate()?;
         // Requests one read-only QMP screendump and frame analysis.
         self.command_tx
@@ -540,6 +556,7 @@ impl WorkerHandle {
         context: ControllerContext,
         request_id: u64,
     ) -> Result<(), String> {
+        self.latest_frame.reconnaissance.select(&context, &self.cancel_requested)?;
         context.validate()?;
         self.command_tx
             .send(WorkerCommand::PrepareSnapshot {
@@ -561,6 +578,7 @@ impl WorkerHandle {
         approved_prediction: PredictedAction,
         settings: StepRunSettings,
     ) -> Result<(), String> {
+        self.latest_frame.reconnaissance.select(&context, &self.cancel_requested)?;
         // Requests one guarded run. Every operation requires fresh
         // validation and emits at most one input sequence.
         context.validate()?;
@@ -594,14 +612,36 @@ impl WorkerHandle {
         {
             return Err("Multi-Step input is disabled at compile time".to_owned());
         }
-        self.cancel_requested.store(false, Ordering::Release);
-        self.command_tx
-            .send(WorkerCommand::ExecuteSteps {
-                context,
-                approved_prediction,
-                settings: Box::new(settings),
-            })
-            .map_err(|error| format!("QMP worker is unavailable: {error}"))
+        self.latest_frame.reconnaissance.queue_execution(&self.cancel_requested, || {
+            self.command_tx
+                .send(WorkerCommand::ExecuteSteps {
+                    context,
+                    approved_prediction,
+                    settings: Box::new(settings),
+                })
+                .map_err(|error| format!("QMP worker is unavailable: {error}"))
+        })
+    }
+
+
+    /// Queue the separately authorised Pyramid scan without enabling normal strategy input.
+    ///
+    /// Rejects unconfirmed boards, other controllers and overlapping reconnaissance.
+    /// A queued or running scan owns its STOP latch until its finished event.
+    pub fn reconnoitre(
+        &self,
+        context: ControllerContext,
+        request: crate::pyramid_recon::ReconRequest,
+    ) -> Result<(), String> {
+        self.latest_frame.reconnaissance.select(&context, &self.cancel_requested)?;
+        pyramid_reconnaissance::validate_request(&context, &request)?;
+        self.latest_frame.reconnaissance.queue_reconnaissance(
+            &context, &self.cancel_requested, || {
+                self.command_tx.send(WorkerCommand::Reconnoitre {
+                    context: context.clone(), request,
+                }).map_err(|error| format!("QMP worker is unavailable: {error}"))
+            },
+        )
     }
 
 
@@ -610,7 +650,7 @@ impl WorkerHandle {
     /// Returns an error if the worker channel has closed; QEMU remains running.
     pub fn disconnect(&self, context: ControllerContext) -> Result<(), String> {
         // Requests that the worker return to its detached state.
-        self.cancel_requested.store(true, Ordering::Release);
+        self.latest_frame.reconnaissance.stop(Some(&context), &self.cancel_requested);
         self.command_tx
             .send(WorkerCommand::Disconnect(context))
             .map_err(|error| format!("QMP worker is unavailable: {error}"))
@@ -621,6 +661,7 @@ impl WorkerHandle {
     ///
     /// Returns an error if the worker command channel has closed.
     pub fn reset_progress(&self, context: ControllerContext) -> Result<(), String> {
+        self.latest_frame.reconnaissance.select(&context, &self.cancel_requested)?;
         // Resets the board counter and bounded row scan without touching QMP.
         self.command_tx
             .send(WorkerCommand::ResetProgress(context))
@@ -650,7 +691,7 @@ impl Drop for WorkerHandle {
     /// Request STOP, send shutdown and join the QMP worker before releasing the handle.
     fn drop(&mut self) {
         // Shuts down and joins the worker thread when its handle is released.
-        self.cancel_requested.store(true, Ordering::Release);
+        self.latest_frame.reconnaissance.stop(None, &self.cancel_requested);
         let _ = self.command_tx.send(WorkerCommand::Shutdown);
 
 
@@ -714,6 +755,10 @@ fn run_worker(
                 send_board_progress(&event_tx, &scan_state, completed_boards);
                 run_execute_steps(context.socket_path, approved_prediction, *settings, &mut scan_state,
                     &mut completed_boards, &event_tx, &cancel_requested);
+            }
+            WorkerCommand::Reconnoitre { context, request } => {
+                event_tx.set_capture_context(Some(context.clone()));
+                pyramid_reconnaissance::run(&context, &request, &event_tx, &cancel_requested);
             }
             WorkerCommand::ResetProgress(context) => {
                 event_tx.set_capture_context(Some(context.clone()));
@@ -788,7 +833,7 @@ fn ensure_strategy_input_authorised(strategy: SolvingStrategy) -> Result<(), Str
 
 
     if !strategy.permits_input() {
-        return Err("Pyramid preparation is read-only; card recognition and route calculation are not implemented; input sent: 0".to_owned());
+        return Err("Pyramid preparation is read-only; reconnaissance requires its separate command and native profile. Route calculation is not implemented; input sent: 0".to_owned());
     }
     Ok(())
 }
@@ -822,8 +867,8 @@ fn run_preparation_capture(context: &ControllerContext, event_tx: &WorkerEventSi
         Ok((frame, prediction)) => {
             event_tx.latest_frame.publish(frame, prediction, false, false, Some(context.clone()));
             send_state(event_tx, WorkerState::Ready);
-            send_status(event_tx, "Pyramid preparation only — recognition and route calculation pending".to_owned());
-            send_log(event_tx, "Fresh raw Pyramid preparation capture; no HALO analysis or guest input. Card recognition and route calculation are not implemented.".to_owned());
+            send_status(event_tx, "Pyramid preparation only — read-only preview".to_owned());
+            send_log(event_tx, "Fresh raw Pyramid preparation capture; no HALO analysis, card recognition or guest input was performed by this read-only command. Reconnaissance requires its separate command and native profile; route calculation is not implemented.".to_owned());
         }
         Err(error) => step_failed_before_input(event_tx, error),
     }

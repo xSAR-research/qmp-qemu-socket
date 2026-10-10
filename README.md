@@ -1,7 +1,8 @@
 # qmp-qemu-socket
 
-Development **v2.0.11**, pinned to promoted xSAR **0.2.1**; application promotion is pending.
-The accepted five-game release remains v2.0.10.
+Development **v2.1.0** adds guarded Pyramid reconnaissance and restored-deal JSON.
+The promoted application baseline is **v2.0.11**; the accepted five-game CV behaviour remains unchanged.
+This work currently requires paired local xSAR **0.3.0** validation, pending crate promotion and an exact consumer repin.
 
 ## Computer Vision solving
 
@@ -13,7 +14,7 @@ The guest supplies the move recommendation; the application supplies visual reco
 
 The second methodology is intended to build an independent state model and search for a route using **Dijkstra or A***, rather than follow the guest's Solver. The longer-term goal includes evaluating move costs, deciding when to defer an available move, and replanning when new information reveals an impasse. This work is intended to inform future drone route-planning experiments; no drone controller is implemented here.
 
-The implemented stage is **read-only Pyramid preparation**: capture a board, inspect its calibrated regions and preview or save the original PNG. Independent card recognition, a complete deal model, stock reconnaissance, Undo All reset, shortest-path search and calculated-route execution are not implemented. Choosing this strategy disables Solver, gameplay and terminal input at both the UI and worker boundaries.
+Ordinary Pyramid preparation remains **read-only**: capture a board, inspect its calibrated regions and preview or save the original PNG. A separate, explicitly confirmed **Guarded Pyramid reconnaissance → JSON** operation reads the original tableau and ordered DRAW cards, verifies Undo All restoration and publishes a validated complete deal through xSAR. It requires a native calibration profile and grants only bounded D, Undo All and specific confirmation-OK input. It does not enable Solver, ordinary gameplay, shortest-path search or calculated-route execution. See the [reconnaissance contract and acceptance boundary](docs/pyramid-reconnaissance.md); implementation and fixture tests are not live guest acceptance.
 
 ## Strategy selection and execution
 
@@ -29,6 +30,7 @@ Strategy, game and socket changes clear prior prediction and progress authority.
 | Params | Change the existing socket path and bounded, game-specific timings while idle. Timing edits apply to the next run. |
 | STOP | Cancel further input and interrupt cancellable waits. An in-flight QMP operation may complete or time out before the worker returns. |
 | Capture PNG | Capture, inspect, label and save one original PNG without guest input. |
+| Start reconnaissance → JSON | Separately confirmed Pyramid acquisition with native recognition, bounded stock advances, verified restoration and no-overwrite output. STOP revokes restoration input too. |
 
 A HALO is source evidence, not proof that a previous move succeeded. TriPeaks and Pyramid retain their own effect, removal and redeal checks. Klondike, Free Cell and Spider follow fresh supported Solver recommendations without comparing source and recipient card pixels; their logs distinguish acknowledged actions from proven effects. Missing HALOs, an exhausted stock pile and QMP acknowledgements alone never establish a win.
 
@@ -62,7 +64,7 @@ Automatic capture is currently **file-backed**. QEMU's `screendump` writes a tem
 
 Decoded Computer Vision observations update the application's image control, including delayed HALO observations and post-game transitions. A bounded latest-frame slot replaces older pending images, so the UI shows the newest available observation rather than accumulating a frame queue. Display publication introduces no additional QMP screen grab and does not grant input authority.
 
-The application uses the optional QMP, PNG, checked geometry, image-predicate and RGB-comparison facilities from **xsar v0.2.1**, pinned to promoted Git revision `987856a0b5cb95aec2788551e050e18f7469b1ef`. Game calibration, source selection, capture acquisition, completion policy and exact-byte saving remain application-owned. Ordinary Cargo commands use that exact Git source; no sibling checkout or crates.io publication is required. Uncommitted changes in Charlie's xSAR checkout are not implicitly included in release builds.
+The promoted application uses xSAR **0.2.1** at Git revision `987856a0b5cb95aec2788551e050e18f7469b1ef`. This development slice additionally consumes the local **0.3.0** card/deal model, strict JSON codec and no-overwrite filesystem publisher. Game calibration, capture/input authority, reconnaissance and restoration remain application-owned. A temporary external Cargo source override selects the reviewed local crate during paired validation; it is not a promotion file. The old Git revision alone cannot build the new JSON-enabled application. Promote xSAR first, then pin this consumer to that exact commit and revalidate. No registry publication is implied.
 
 ## Captures and diagnostic records
 
@@ -76,11 +78,13 @@ When a run stops on uncertain evidence, retain its log and an original PNG of th
 
 ## Build and verification
 
-The manifest and lockfile select xSAR 0.2.1 at the exact promoted Git revision
-above. Cargo fetches it over HTTPS when it is not already cached; subsequent
-locked builds use that source rather than a local development path. See the
-[v2.0.11 notes](docs/release-v2.0.11.md) for validation evidence and the remaining
-application acceptance/promotion boundary.
+**Paired-development boundary:** the commands below describe the normal
+Git-pinned workflow after the 0.3.0 crate has been promoted and the consumer
+repinned. Until then, every Cargo invocation needs the reviewed external source
+override described in [development conventions](docs/development.md). Do not
+commit a machine-specific path, promote the current paired lock state, or assume
+the old 0.2.1 Git pin provides the new APIs. The [v2.0.11 notes](docs/release-v2.0.11.md)
+retain historical RGB-slice evidence.
 
 Build from the repository root on the Linux development host. `rust-toolchain.toml` selects floating **nightly** with Clippy and Rustfmt components; `Cargo.toml` declares edition 2024 and minimum Rust **1.101.0**. The channel is not a dated compiler pin, so record the actual compiler and Cargo versions used. Stable compatibility is not established by the toolchain file.
 
@@ -114,6 +118,12 @@ CARGO_TARGET_DIR="$PWD/target" cargo build --locked --release
 Build and test results do not establish live guest behaviour. Verify the selected game, HALO handling, transitions, image updates and STOP against the intended guest configuration. Formatting is separate from these checks; follow the repository's documented source-spacing policy.
 
 ## Design and historical evidence
+
+The [Pyramid reconnaissance contract](docs/pyramid-reconnaissance.md) and
+[native profile contract](docs/pyramid-recon-profile.md) describe the new input
+boundary, recognition evidence, limits and remaining live acceptance.
+The [v2.1.0 validation report](docs/release-v2.1.0.md) records actual checks,
+executable/profile identities and the crate-first promotion boundary.
 
 The [v2.0.11 development notes](docs/release-v2.0.11.md) describe shared RGB
 measurement, paired and Git-pinned validation, and the application promotion boundary.

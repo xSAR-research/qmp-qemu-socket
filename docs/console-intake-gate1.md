@@ -4,6 +4,14 @@ Date: 11 October 2026, Australia/Brisbane.
 Status: Charlie authorised this Gate 1 review. Gate 2 implementation is not
 approved by that request. No console source, dependency or version was changed.
 
+Subsequent scope decision, 11 October 2026: Charlie authorised the complete
+application reconnaissance-to-JSON pipeline instead. Console implementation is
+deferred; the application's real xSAR consumer now supplies paired model/codec/
+publisher integration. The historical console-first promotion sequence below
+is not a prerequisite for this newly authorised slice. See
+[the current reconnaissance contract](pyramid-reconnaissance.md); crate-first
+promotion and exact consumer repinning still apply.
+
 ## 1. Baseline and promotion boundary
 
 | Repository | Observed HEAD | Package and local state |
