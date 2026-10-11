@@ -1,8 +1,8 @@
 # qmp-qemu-socket
 
-Development **v2.1.0** adds guarded Pyramid reconnaissance and restored-deal JSON.
-The promoted application baseline is **v2.0.11**; the accepted five-game CV behaviour remains unchanged.
-This work currently requires paired local xSAR **0.3.0** validation, pending crate promotion and an exact consumer repin.
+Development **v2.2.0** exports explicit card labels, values 1..13 and suits through xSAR's schema-2 codec.
+The preceding **v2.1.0** live Pyramid scan successfully restored the original board and exported its complete deal; the accepted five-game CV behaviour remains unchanged.
+This work currently requires paired local xSAR **0.4.0** validation, pending crate promotion and an exact consumer repin.
 
 ## Computer Vision solving
 
@@ -64,7 +64,7 @@ Automatic capture is currently **file-backed**. QEMU's `screendump` writes a tem
 
 Decoded Computer Vision observations update the application's image control, including delayed HALO observations and post-game transitions. A bounded latest-frame slot replaces older pending images, so the UI shows the newest available observation rather than accumulating a frame queue. Display publication introduces no additional QMP screen grab and does not grant input authority.
 
-The promoted application uses xSAR **0.2.1** at Git revision `987856a0b5cb95aec2788551e050e18f7469b1ef`. This development slice additionally consumes the local **0.3.0** card/deal model, strict JSON codec and no-overwrite filesystem publisher. Game calibration, capture/input authority, reconnaissance and restoration remain application-owned. A temporary external Cargo source override selects the reviewed local crate during paired validation; it is not a promotion file. The old Git revision alone cannot build the new JSON-enabled application. Promote xSAR first, then pin this consumer to that exact commit and revalidate. No registry publication is implied.
+The manifest pins xSAR **0.4.0** at Git revision `ab226a65d3bbc2b4914a5cecfb2d3247364c7536`, including the card/deal model, strict schema-1/2 reader, schema-2 writer and no-overwrite filesystem publisher. Game calibration, capture/input authority, reconnaissance and restoration remain application-owned. Ordinary builds use this promoted Git source and require no local xSAR checkout or temporary source override. No registry publication is implied.
 
 ## Captures and diagnostic records
 
@@ -78,13 +78,12 @@ When a run stops on uncertain evidence, retain its log and an original PNG of th
 
 ## Build and verification
 
-**Paired-development boundary:** the commands below describe the normal
-Git-pinned workflow after the 0.3.0 crate has been promoted and the consumer
-repinned. Until then, every Cargo invocation needs the reviewed external source
-override described in [development conventions](docs/development.md). Do not
-commit a machine-specific path, promote the current paired lock state, or assume
-the old 0.2.1 Git pin provides the new APIs. The [v2.0.11 notes](docs/release-v2.0.11.md)
-retain historical RGB-slice evidence.
+The commands below use the promoted Git dependency recorded in the manifest
+and lockfile. Earlier paired validation used an external local source override;
+that override is unnecessary for normal builds and remains outside promotion
+files. See [development conventions](docs/development.md) and the
+[v2.2.0 validation record](docs/release-v2.2.0.md). The
+[v2.0.11 notes](docs/release-v2.0.11.md) retain historical RGB-slice evidence.
 
 Build from the repository root on the Linux development host. `rust-toolchain.toml` selects floating **nightly** with Clippy and Rustfmt components; `Cargo.toml` declares edition 2024 and minimum Rust **1.101.0**. The channel is not a dated compiler pin, so record the actual compiler and Cargo versions used. Stable compatibility is not established by the toolchain file.
 
@@ -122,8 +121,10 @@ Build and test results do not establish live guest behaviour. Verify the selecte
 The [Pyramid reconnaissance contract](docs/pyramid-reconnaissance.md) and
 [native profile contract](docs/pyramid-recon-profile.md) describe the new input
 boundary, recognition evidence, limits and remaining live acceptance.
-The [v2.1.0 validation report](docs/release-v2.1.0.md) records actual checks,
-executable/profile identities and the crate-first promotion boundary.
+The [v2.2.0 validation report](docs/release-v2.2.0.md) records current schema-2
+checks, the converted accepted deal and the crate-first promotion boundary.
+The [v2.1.0 validation report](docs/release-v2.1.0.md) retains historical checks
+and executable/profile identities for the preceding acquisition implementation.
 
 The [v2.0.11 development notes](docs/release-v2.0.11.md) describe shared RGB
 measurement, paired and Git-pinned validation, and the application promotion boundary.

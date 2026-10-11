@@ -1,0 +1,776 @@
+{
+  "evidence_schema": "pyramid-native-profile-provenance-v1",
+  "profile": "native-profile.json",
+  "profile_sha256": "796f3debfa098715fac781f4aa69de1dc4eaefb91af5ca996db7dc8e12474577",
+  "native_reader_sha256": "7e609a6e80727d903d8c5ec4d81c02cf3acdece5ae8ec3e573392a877d0bc998",
+  "source_manifest": "manifest.json",
+  "original_count": 29,
+  "patches": [
+    {
+      "role": "board.scene.0",
+      "source_id": "current-start",
+      "source_file": "originals/current-start.png",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "bounds": [
+        1810,
+        132,
+        78,
+        40
+      ],
+      "raw_rgb_sha256": "71c85e5cdd38ae71a5deb52540500e853ceab6660eb647e32878e6fed5120d8f",
+      "pixel_count": 3120,
+      "selected_mean_min": 29,
+      "selected_mean_max": 255,
+      "selected_mean_range": 226,
+      "tolerance": 6,
+      "tolerance_evidence": {
+        "comparison_sources": [
+          "issue1-20",
+          "current-exhausted",
+          "gate3-start-refusal",
+          "gate3-exhausted-refusal"
+        ],
+        "maximum_absolute_rgb_deltas": [
+          6,
+          0,
+          6,
+          6
+        ],
+        "unchanged_tolerance": 6,
+        "glyph_xor_limits_unchanged": true
+      },
+      "previous_bounds": [
+        1810,
+        132,
+        78,
+        50
+      ],
+      "calibration_correction": "Retain the complete K entry and separator through y170, or complete 9/4 entry and separator through y322; omit incomplete glyphs from the next chart row. All retained pixels remain selected. This reduces spatial coverage, not channel strictness."
+    },
+    {
+      "role": "board.scene.1",
+      "source_id": "current-start",
+      "source_file": "originals/current-start.png",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "bounds": [
+        1815,
+        281,
+        67,
+        42
+      ],
+      "raw_rgb_sha256": "1465526ab335334c3805752bfb1dcfe61e2ca80b4600f161c40d22cd7c78b772",
+      "pixel_count": 2814,
+      "selected_mean_min": 26,
+      "selected_mean_max": 255,
+      "selected_mean_range": 229,
+      "tolerance": 8,
+      "tolerance_evidence": {
+        "comparison_sources": [
+          "issue1-20",
+          "current-exhausted",
+          "gate3-start-refusal",
+          "gate3-exhausted-refusal"
+        ],
+        "maximum_absolute_rgb_deltas": [
+          6,
+          0,
+          7,
+          7
+        ],
+        "unchanged_tolerance": 8,
+        "glyph_xor_limits_unchanged": true
+      },
+      "previous_bounds": [
+        1815,
+        281,
+        67,
+        54
+      ],
+      "calibration_correction": "Retain the complete K entry and separator through y170, or complete 9/4 entry and separator through y322; omit incomplete glyphs from the next chart row. All retained pixels remain selected. This reduces spatial coverage, not channel strictness."
+    },
+    {
+      "role": "board.scene.2",
+      "source_id": "current-start",
+      "source_file": "originals/current-start.png",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "bounds": [
+        931,
+        695,
+        60,
+        50
+      ],
+      "raw_rgb_sha256": "0cde5bf093ca5ae712dd26ac38055e83dccaea755f92e1670607975cc1757a5d",
+      "pixel_count": 3000,
+      "selected_mean_min": 29,
+      "selected_mean_max": 255,
+      "selected_mean_range": 226,
+      "tolerance": 4
+    },
+    {
+      "role": "board.solver_off",
+      "source_id": "current-start",
+      "source_file": "originals/current-start.png",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "bounds": [
+        585,
+        959,
+        35,
+        36
+      ],
+      "raw_rgb_sha256": "d1b8f8724254dbe0122358a155a1a7eba91dbb822b62c5076cb932471642d07f",
+      "pixel_count": 1260,
+      "selected_mean_min": 15,
+      "selected_mean_max": 230,
+      "selected_mean_range": 215,
+      "tolerance": 4
+    },
+    {
+      "role": "board.undo_all",
+      "source_id": "current-exhausted",
+      "source_file": "originals/current-exhausted.png",
+      "source_sha256": "b352d1645b15b2cb58d2a7a64e8b25a845ca91c955e3d66861cb76be1d352ef6",
+      "bounds": [
+        1301,
+        959,
+        38,
+        38
+      ],
+      "raw_rgb_sha256": "5b53fb4b14dba02490ac37d1bfbeacf1db1b1a752154b2b9f4cae4643af74b29",
+      "pixel_count": 1444,
+      "selected_mean_min": 13,
+      "selected_mean_max": 207,
+      "selected_mean_range": 194,
+      "tolerance": 4
+    },
+    {
+      "role": "board.left_empty",
+      "source_id": "current-exhausted",
+      "source_file": "originals/current-exhausted.png",
+      "source_sha256": "b352d1645b15b2cb58d2a7a64e8b25a845ca91c955e3d66861cb76be1d352ef6",
+      "bounds": [
+        767,
+        712,
+        60,
+        60
+      ],
+      "raw_rgb_sha256": "7adc540688059e4c6fe97e21ed476921b0d04edc6be3ca400853bba399f6c786",
+      "pixel_count": 3600,
+      "selected_mean_min": 32,
+      "selected_mean_max": 120,
+      "selected_mean_range": 88,
+      "tolerance": 4
+    },
+    {
+      "role": "board.right_empty",
+      "source_id": "current-start",
+      "source_file": "originals/current-start.png",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "bounds": [
+        1022,
+        678,
+        60,
+        60
+      ],
+      "raw_rgb_sha256": "455e89115feccf2d0e0ab3686354dbd8bd11ebe72b14d55994be65386c401fd8",
+      "pixel_count": 3600,
+      "selected_mean_min": 28,
+      "selected_mean_max": 130,
+      "selected_mean_range": 102,
+      "tolerance": 4
+    },
+    {
+      "role": "dialog.panel",
+      "source_id": "undo-all-confirmation",
+      "source_file": "originals/undo-all-confirmation.png",
+      "source_sha256": "78da9587035ee2707ffacf4adaf493a2a55e1ed5c28712bd5765dca23b30a9e0",
+      "bounds": [
+        535,
+        400,
+        64,
+        64
+      ],
+      "raw_rgb_sha256": "1b26224a35aba318c083cad2f6a227f688c733dc4010a46d152f9c94863c72b0",
+      "pixel_count": 4096,
+      "selected_mean_min": 60,
+      "selected_mean_max": 251,
+      "selected_mean_range": 191,
+      "tolerance": 4,
+      "calibration_correction": "Use the actual solid panel interior, not the rounded corner that included variable backdrop pixels."
+    },
+    {
+      "role": "dialog.title",
+      "source_id": "undo-all-confirmation",
+      "source_file": "originals/undo-all-confirmation.png",
+      "source_sha256": "78da9587035ee2707ffacf4adaf493a2a55e1ed5c28712bd5765dca23b30a9e0",
+      "bounds": [
+        729,
+        417,
+        178,
+        22
+      ],
+      "raw_rgb_sha256": "429fc9ba5e7f1994d362ace2d080f3810f0b13bf73deda546ec396ff59633c21",
+      "pixel_count": 3916,
+      "selected_mean_min": 79,
+      "selected_mean_max": 255,
+      "selected_mean_range": 176,
+      "tolerance": 9,
+      "previous_tolerance": 4,
+      "tolerance_evidence": {
+        "comparison_sources": [
+          "gate3-undo-modal",
+          "gate3-undo-modal-operator"
+        ],
+        "maximum_absolute_rgb_deltas": [
+          9,
+          9
+        ],
+        "pixels_exceeding_previous_tolerance": [
+          340,
+          340
+        ],
+        "crops_rgb_masks_unchanged": true,
+        "limitation": "Wider per-channel bounds apply to every selected pixel, not just observed text-edge differences; same-modal captures are not independent negative-scene coverage."
+      },
+      "stable_selection": {
+        "role": "dialog.title",
+        "selected_pixels": 2598,
+        "exact_ink_pixels": 906,
+        "mask_ascii_sha256": "0959b99a8fc9662967d0e8aa23b9a89c6c7e5f21d5390c8173f7bd9328f76729",
+        "maximum_selected_rgb_deltas": [
+          5,
+          5,
+          5
+        ],
+        "unchanged_tolerance": 9,
+        "rule": "Select the centre iff its RGB equals exact ink (white for title/body/Cancel; black for OK), OR every RGB channel has max-min <=16 over its 3x3 neighbourhood in the original full frame, including a one-pixel halo outside the unchanged ROI. No live observation participates in mask selection."
+      }
+    },
+    {
+      "role": "dialog.body",
+      "source_id": "undo-all-confirmation",
+      "source_file": "originals/undo-all-confirmation.png",
+      "source_sha256": "78da9587035ee2707ffacf4adaf493a2a55e1ed5c28712bd5765dca23b30a9e0",
+      "bounds": [
+        852,
+        474,
+        144,
+        28
+      ],
+      "raw_rgb_sha256": "788ee094a7a272e6e0fe0497178b5eba0628e385dbb094c42162f8cdfc8f4e2a",
+      "pixel_count": 4032,
+      "selected_mean_min": 86,
+      "selected_mean_max": 255,
+      "selected_mean_range": 169,
+      "tolerance": 10,
+      "previous_tolerance": 4,
+      "tolerance_evidence": {
+        "comparison_sources": [
+          "gate3-undo-modal",
+          "gate3-undo-modal-operator"
+        ],
+        "maximum_absolute_rgb_deltas": [
+          10,
+          10
+        ],
+        "pixels_exceeding_previous_tolerance": [
+          489,
+          489
+        ],
+        "crops_rgb_masks_unchanged": true,
+        "limitation": "Wider per-channel bounds apply to every selected pixel, not just observed text-edge differences; same-modal captures are not independent negative-scene coverage."
+      },
+      "stable_selection": {
+        "role": "dialog.body",
+        "selected_pixels": 2383,
+        "exact_ink_pixels": 337,
+        "mask_ascii_sha256": "3699bf7fe33aa49c84f1b29afca875e07028e1e7171c95fc077731b1bbc144d7",
+        "maximum_selected_rgb_deltas": [
+          7,
+          7,
+          5
+        ],
+        "unchanged_tolerance": 10,
+        "rule": "Select the centre iff its RGB equals exact ink (white for title/body/Cancel; black for OK), OR every RGB channel has max-min <=16 over its 3x3 neighbourhood in the original full frame, including a one-pixel halo outside the unchanged ROI. No live observation participates in mask selection."
+      }
+    },
+    {
+      "role": "dialog.cancel",
+      "source_id": "undo-all-confirmation",
+      "source_file": "originals/undo-all-confirmation.png",
+      "source_sha256": "78da9587035ee2707ffacf4adaf493a2a55e1ed5c28712bd5765dca23b30a9e0",
+      "bounds": [
+        1075,
+        615,
+        119,
+        31
+      ],
+      "raw_rgb_sha256": "9ca08b97d6f6a5d0ae0105770d38cb8de59432d6b069f2c7e45449b894c9dc54",
+      "pixel_count": 3689,
+      "selected_mean_min": 97,
+      "selected_mean_max": 255,
+      "selected_mean_range": 158,
+      "tolerance": 9,
+      "previous_tolerance": 4,
+      "tolerance_evidence": {
+        "comparison_sources": [
+          "gate3-undo-modal",
+          "gate3-undo-modal-operator"
+        ],
+        "maximum_absolute_rgb_deltas": [
+          9,
+          9
+        ],
+        "pixels_exceeding_previous_tolerance": [
+          282,
+          282
+        ],
+        "crops_rgb_masks_unchanged": true,
+        "limitation": "Wider per-channel bounds apply to every selected pixel, not just observed text-edge differences; same-modal captures are not independent negative-scene coverage."
+      },
+      "stable_selection": {
+        "role": "dialog.cancel",
+        "selected_pixels": 2333,
+        "exact_ink_pixels": 436,
+        "mask_ascii_sha256": "f3441d64ce8b77e4a72af06df9e127d00b7b4d40725e185a2c1fa92fc6af770f",
+        "maximum_selected_rgb_deltas": [
+          5,
+          5,
+          5
+        ],
+        "unchanged_tolerance": 9,
+        "rule": "Select the centre iff its RGB equals exact ink (white for title/body/Cancel; black for OK), OR every RGB channel has max-min <=16 over its 3x3 neighbourhood in the original full frame, including a one-pixel halo outside the unchanged ROI. No live observation participates in mask selection."
+      }
+    },
+    {
+      "role": "dialog.ok",
+      "source_id": "undo-all-confirmation",
+      "source_file": "originals/undo-all-confirmation.png",
+      "source_sha256": "78da9587035ee2707ffacf4adaf493a2a55e1ed5c28712bd5765dca23b30a9e0",
+      "bounds": [
+        763,
+        611,
+        65,
+        38
+      ],
+      "raw_rgb_sha256": "38d9db8f257dea5efba9cc454604c9a4ad4aec45abf4a77664eba3779e1bcdcb",
+      "pixel_count": 2470,
+      "selected_mean_min": 0,
+      "selected_mean_max": 241,
+      "selected_mean_range": 241,
+      "tolerance": 8,
+      "previous_tolerance": 4,
+      "tolerance_evidence": {
+        "comparison_sources": [
+          "gate3-undo-modal",
+          "gate3-undo-modal-operator"
+        ],
+        "maximum_absolute_rgb_deltas": [
+          8,
+          8
+        ],
+        "pixels_exceeding_previous_tolerance": [
+          115,
+          115
+        ],
+        "crops_rgb_masks_unchanged": true,
+        "limitation": "Wider per-channel bounds apply to every selected pixel, not just observed text-edge differences; same-modal captures are not independent negative-scene coverage."
+      },
+      "stable_selection": {
+        "role": "dialog.ok",
+        "selected_pixels": 1758,
+        "exact_ink_pixels": 250,
+        "mask_ascii_sha256": "09fa5a7a98e32f01220297795cda29839a53adb0e92fbfb5bee8ea7ef2e4eb13",
+        "maximum_selected_rgb_deltas": [
+          4,
+          4,
+          6
+        ],
+        "unchanged_tolerance": 8,
+        "rule": "Select the centre iff its RGB equals exact ink (white for title/body/Cancel; black for OK), OR every RGB channel has max-min <=16 over its 3x3 neighbourhood in the original full frame, including a one-pixel halo outside the unchanged ROI. No live observation participates in mask selection."
+      }
+    },
+    {
+      "role": "dialog.backdrop.menu",
+      "source_id": "undo-all-confirmation",
+      "source_file": "originals/undo-all-confirmation.png",
+      "source_sha256": "78da9587035ee2707ffacf4adaf493a2a55e1ed5c28712bd5765dca23b30a9e0",
+      "bounds": [
+        8,
+        41,
+        49,
+        49
+      ],
+      "raw_rgb_sha256": "f4aad8a1182e8b0e45c591077cc7e5b57692c77777031a05e9ba094a649f4a19",
+      "pixel_count": 2401,
+      "selected_mean_min": 6,
+      "selected_mean_max": 51,
+      "selected_mean_range": 45,
+      "tolerance": 4
+    },
+    {
+      "role": "dialog.backdrop.fullscreen",
+      "source_id": "undo-all-confirmation",
+      "source_file": "originals/undo-all-confirmation.png",
+      "source_sha256": "78da9587035ee2707ffacf4adaf493a2a55e1ed5c28712bd5765dca23b30a9e0",
+      "bounds": [
+        1868,
+        43,
+        41,
+        40
+      ],
+      "raw_rgb_sha256": "b7e3c406e08b7ff9a3354da7b92d896f8327b84588c792e5d5a172480ba7f6ef",
+      "pixel_count": 1640,
+      "selected_mean_min": 6,
+      "selected_mean_max": 51,
+      "selected_mean_range": 45,
+      "tolerance": 4
+    }
+  ],
+  "dialog_evidence": {
+    "source_id": "undo-all-confirmation",
+    "modal_count": 1,
+    "checkbox": "unchecked_not_clicked",
+    "backdrop_avoids_card_identities": true,
+    "unseen_board_history_not_inferred": true
+  },
+  "remaining_validation": [
+    "Parent whole-application final validation of the frozen evidence and its newly added production adverse tests",
+    "Live ordered24-stock acquisition, positive exhaustion and restoration acceptance",
+    "Native LEFT ranks2,4,5,6,9 and exhaustive52identity/layout coverage"
+  ],
+  "current_endpoints": "Current start/exhausted positive samples included; not a complete capture/input transition trace or restoration proof.",
+  "glyph_calibration_extension": [
+    {
+      "component": "rank",
+      "source_observation": "current-start-r4c2",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "source_bounds": [
+        792,
+        278,
+        27,
+        24
+      ],
+      "previously_refused_observations_covered": [
+        "current-start-r4c2",
+        "current-exhausted-r4c2"
+      ]
+    },
+    {
+      "component": "rank",
+      "source_observation": "current-start-r5c3",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "source_bounds": [
+        892,
+        331,
+        27,
+        24
+      ],
+      "previously_refused_observations_covered": [
+        "current-start-r5c3",
+        "current-exhausted-r5c3"
+      ]
+    },
+    {
+      "component": "rank",
+      "source_observation": "current-start-r3c1",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "source_bounds": [
+        692,
+        224,
+        27,
+        24
+      ],
+      "previously_refused_observations_covered": [
+        "current-exhausted-RIGHT"
+      ]
+    },
+    {
+      "component": "suit",
+      "source_observation": "current-start-r2c2",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "source_bounds": [
+        995,
+        195,
+        20,
+        16
+      ],
+      "previously_refused_observations_covered": [
+        "current-start-r2c2",
+        "current-exhausted-r2c2"
+      ]
+    },
+    {
+      "component": "suit",
+      "source_observation": "current-start-r4c1",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "source_bounds": [
+        594,
+        302,
+        20,
+        16
+      ],
+      "previously_refused_observations_covered": [
+        "current-start-r4c1",
+        "current-exhausted-r4c1"
+      ]
+    },
+    {
+      "component": "suit",
+      "source_observation": "current-start-r4c2",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "source_bounds": [
+        795,
+        302,
+        20,
+        16
+      ],
+      "previously_refused_observations_covered": [
+        "current-start-r4c4",
+        "current-exhausted-r4c4"
+      ]
+    },
+    {
+      "component": "suit",
+      "source_observation": "current-start-r6c1",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "source_bounds": [
+        394,
+        408,
+        20,
+        16
+      ],
+      "previously_refused_observations_covered": [
+        "current-start-r6c1",
+        "current-exhausted-r6c1"
+      ]
+    },
+    {
+      "component": "suit",
+      "source_observation": "current-start-r7c3",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "source_bounds": [
+        695,
+        462,
+        20,
+        16
+      ],
+      "previously_refused_observations_covered": [
+        "current-start-r7c3",
+        "current-exhausted-r7c3"
+      ]
+    },
+    {
+      "component": "suit",
+      "source_observation": "current-start-LEFT",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "source_bounds": [
+        764,
+        708,
+        20,
+        16
+      ],
+      "previously_refused_observations_covered": [
+        "current-start-LEFT"
+      ]
+    }
+  ],
+  "suit_roi_correction": {
+    "previous_roi": [
+      5,
+      30,
+      20,
+      18
+    ],
+    "corrected_roi": [
+      5,
+      30,
+      20,
+      16
+    ],
+    "reason": "Actual LEFT K diamonds has adjacent King hand artwork at relative rows46-47. Exclude those rows rather than weaken mixed-colour rejection.",
+    "source_observation": "current-start-LEFT",
+    "removes_below_glyph_face_art": true,
+    "source_pixels_unchanged": true,
+    "rank_distance_cap": 24,
+    "suit_distance_cap": 8,
+    "scope": "Compare a discriminating glyph region, not necessarily the entire glyph outline; some club/spade stem pixels extend to row46."
+  },
+  "validation": {
+    "native_provenance_audit": {
+      "unchanged_originals": 23,
+      "exact_glyph_samples": 68,
+      "exact_runtime_patches": 14,
+      "runtime_host_paths": false,
+      "passed": true
+    },
+    "independent_reference": {
+      "native_positives": 104,
+      "negatives": 1255,
+      "failures": 0,
+      "historical_left_held_out": 16,
+      "current_start_left_diamond_suit_is_training": true,
+      "result_sha256": "0fa046a905f9b2e4f385b13799b66f254b0bdc0561d41c3e74eb33846909e299"
+    },
+    "rust_native_profile": {
+      "tests_passed": 6,
+      "tests_failed": 0,
+      "tests_ignored": 0,
+      "native_positives": 104,
+      "glyph_adverse_cases": 1040,
+      "native_empty_pile_cases": 7,
+      "scope": "Isolated snapshot of the actual production vision module with only test-module/include-path wiring changes; actual xSAR PNG decoding; final delivered root profile loaded from disk.",
+      "source_vision_sha256": "82cf20aaba5e8a3bc780b59f68352c7ae5bbd6605e866550d0a8ca55d3d4ed91",
+      "log_name": "rust-native-profile-final-interior.log",
+      "log_sha256": "df3f8f6b6e8131cde2520d02f49abde230e605091d379b6c802d50d3377ce829",
+      "full_application_suite_claimed": false,
+      "live_qmp_or_input_performed": false
+    },
+    "original_logs_preserved": true,
+    "operator_supplied_endpoints_are_not_observed_transition_or_restoration_proof": true
+  },
+  "gate3_scene_correction": {
+    "previous_profile_sha256": "4e43d55d5302c7a275a4937fc046434ee7df3a7a511855eaf94c030883bea4ed",
+    "failed_profile_id": "pyramid-native-1920-classic-blue-v1",
+    "corrected_profile_id": "pyramid-native-1920-classic-blue-v2",
+    "reported_runs": [
+      ".pyramid-recon-2880038-0",
+      ".pyramid-recon-2880038-2"
+    ],
+    "failure": "Unknown native scene; input authority revoked",
+    "each_run_captures": 1,
+    "each_run_inputs": 0,
+    "publication": "not_attempted",
+    "scene_mismatch_pixels_before": [
+      16,
+      1
+    ],
+    "maximum_delta_before": [
+      10,
+      10
+    ],
+    "tolerances_unchanged": [
+      6,
+      8
+    ],
+    "first_capture_state": "exhausted LEFT; RIGHT Q diamonds; not an untouched start",
+    "second_capture_state": "LEFT K diamonds; RIGHT empty; original tableau; Solver off",
+    "retained_original_sha256": [
+      "9c3e3cde56674181f196fc42340927e02ab2a00c1050021e99d5bc09e2ad8c65",
+      "f6043267d22cbf3731df684bb5aefec25a2b6714b80a0c19b1d214f7d8e83baa"
+    ],
+    "prior_validation_note": "The validation object records the preceding 23-original delivery; new regression results are recorded separately in the Gate 3 correction document. Neither is live acquisition/restoration acceptance."
+  },
+  "gate3_modal_correction": {
+    "previous_profile_sha256": "cd8a04cf5a2878fd7e6be5ecaa86cb472f9e2396a02ecb5b2f47d7423f5252cb",
+    "profile_id": "pyramid-native-1920-classic-blue-v3",
+    "failed_run": ".pyramid-recon-2887595-0",
+    "captures": 28,
+    "tableau_count": 28,
+    "stock_count": 24,
+    "unique_standard_deck_identities": 52,
+    "draws_acknowledged": 24,
+    "undo_all_acknowledged": 1,
+    "confirm_attempted": 0,
+    "restored": false,
+    "publication_status": "not_attempted",
+    "unchanged_panel_backdrop_tolerances": [
+      4,
+      4,
+      4
+    ],
+    "automatic_resume": false,
+    "evidence_boundary": "Recorded full inventory is incomplete diagnostic evidence, not restored planning input. Validation for the v3 correction is in docs/pyramid-recon-modal-correction.md."
+  },
+  "gate3_stable_text_correction": {
+    "date": "2026-10-11",
+    "previous_profile_sha256": "3dab5de86b93b1c1c156782d508f2b27b4ba2174c6b594781c97fd7ce91e4836",
+    "failed_run": "/home/charlie/tmp/.pyramid-recon-2887595-1",
+    "latest_original_sha256": "0ff2e8c36f59a0eb13dd495ed9d859428bd7bdcefad963bdcf63b313463a9510",
+    "v3_failure": "Five Cancel pixels reached delta 10 at tolerance 9; five OK pixels reached delta 9 at tolerance 8. Other five components passed.",
+    "source_file": "originals/undo-all-confirmation.png",
+    "source_sha256": "78da9587035ee2707ffacf4adaf493a2a55e1ed5c28712bd5765dca23b30a9e0",
+    "selection_rule": "Select the centre iff its RGB equals exact ink (white for title/body/Cancel; black for OK), OR every RGB channel has max-min <=16 over its 3x3 neighbourhood in the original full frame, including a one-pixel halo outside the unchanged ROI. No live observation participates in mask selection.",
+    "measurements": [
+      {
+        "role": "dialog.title",
+        "selected_pixels": 2598,
+        "exact_ink_pixels": 906,
+        "mask_ascii_sha256": "0959b99a8fc9662967d0e8aa23b9a89c6c7e5f21d5390c8173f7bd9328f76729",
+        "maximum_selected_rgb_deltas": [
+          5,
+          5,
+          5
+        ],
+        "unchanged_tolerance": 9
+      },
+      {
+        "role": "dialog.body",
+        "selected_pixels": 2383,
+        "exact_ink_pixels": 337,
+        "mask_ascii_sha256": "3699bf7fe33aa49c84f1b29afca875e07028e1e7171c95fc077731b1bbc144d7",
+        "maximum_selected_rgb_deltas": [
+          7,
+          7,
+          5
+        ],
+        "unchanged_tolerance": 10
+      },
+      {
+        "role": "dialog.cancel",
+        "selected_pixels": 2333,
+        "exact_ink_pixels": 436,
+        "mask_ascii_sha256": "f3441d64ce8b77e4a72af06df9e127d00b7b4d40725e185a2c1fa92fc6af770f",
+        "maximum_selected_rgb_deltas": [
+          5,
+          5,
+          5
+        ],
+        "unchanged_tolerance": 9
+      },
+      {
+        "role": "dialog.ok",
+        "selected_pixels": 1758,
+        "exact_ink_pixels": 250,
+        "mask_ascii_sha256": "09fa5a7a98e32f01220297795cda29839a53adb0e92fbfb5bee8ea7ef2e4eb13",
+        "maximum_selected_rgb_deltas": [
+          4,
+          4,
+          6
+        ],
+        "unchanged_tolerance": 8
+      }
+    ],
+    "comparison_source_order": [
+      "gate3-undo-modal",
+      "gate3-undo-modal-operator",
+      "gate3-undo-modal-repeat"
+    ],
+    "rejected_candidate": "Flat-neighbourhood-only selection excluded all foreground evidence for two thin body components. It was not installed.",
+    "acceptance_tradeoff": "Excluded transition pixels are unconstrained. Fewer constraints widen acceptance despite unchanged tolerances. Retained ink and negative space are tested; this is not full-text OCR or a universal false-positive guarantee.",
+    "unchanged": "Every RGB sample, ROI, target, tolerance, card reader, panel/backdrop mask and controller authority rule.",
+    "live_boundary": "The repeated scan recorded the same unique 28+24 inventory/order but attempted zero OK operations. Restoration and complete JSON publication remain unverified.",
+    "validation": {
+      "evidence_root": "/tmp/pyramid-recon-stable.BxGtrrEm",
+      "focused_tests": 53,
+      "full_tests": 695,
+      "failed": 0,
+      "ignored": 0,
+      "full_include_ignored": true,
+      "full_seconds": 82.67,
+      "cargo_check": "passed",
+      "strict_all_target_clippy": "passed",
+      "strict_private_rustdoc": "passed",
+      "native_release": "passed_unchanged_hash",
+      "foreground_audit": "Eight-connected original foreground min(RGB)>=192 for white, max(RGB)<=64 for black: 25 components of at least eight pixels retain selected ink. The only smaller component is the excluded 1-pixel body ROI-edge fragment at (0,8), RGB(193,208,228). This is an explicit blind spot, not a retained complete letter.",
+      "native_acceptance": "All four retained modal observations recognised. Complete live restoration/export remains unverified.",
+      "final_full_log": "full-tests-final.log",
+      "final_clippy_log": "clippy-reviewed.log"
+    },
+    "independent_review": {
+      "result": "No blocking implementation concern within bounded signature contract; source-only masks and four native positives independently verified.",
+      "counter_blind_spots": "Body e counter rectangles (5,9,7,4) and (33,9,7,4) relative to body, native (857,483,7,4) and (885,483,7,4), have no selected distinguishing negative samples. Independently filling either white preserves all seven component matches. Parent reproduced this limitation; no competing native dialog positive demonstrated.",
+      "test_correction": "Title A/l bridge mutation changed to relative (145,10,16,2) to actually join the strokes. Full suite rerun passed.",
+      "scope": "Read-only review; no source edits or guest input by subagent."
+    }
+  }
+}

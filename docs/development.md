@@ -1,6 +1,35 @@
 # Development conventions
 
-## Current reconnaissance slice: v2.1.0
+## Current schema-2 slice: v2.2.0
+
+Charlie approved schema-2 integration after successful live acquisition and
+restoration on 11 October 2026. Local application HEAD is
+`57215a90fd2836cb13a0d1b14400c5d5d417e9f9`; Charlie promoted the complete xSAR
+implementation at `ab226a65d3bbc2b4914a5cecfb2d3247364c7536`. Preserve all existing
+uncommitted reconnaissance work. Package versions are application 2.2.0 and
+xSAR 0.4.0, with manifest and root lock entries updated together and no unrelated
+dependency changes. Capture, recognition and all controller policies are unchanged.
+
+xSAR owns the const rank/value mapping and strict schema-1/2 reader. Writers
+emit schema 2 with exactly `card`, `value` and `suit` for every card. Numeric
+values never replace suit identity. The root document schema is independent of
+the native calibration profile's unchanged schema 1/profile ID v4.
+
+The manifest and lockfile select xSAR 0.4.0 at that exact Git revision. Normal
+validation uses `--locked` without an external config or local source patch;
+`--offline` additionally requires the committed source and dependencies to be
+cached. Earlier paired validation used
+`/tmp/pyramid-schema2.4FXYLJL6/local-xsar.toml`; retain that historical evidence
+outside promotion files. The application is promoted after Git-backed validation
+and consumer acceptance.
+
+The accepted schema-1 export remains unchanged. Explicit conversion reads it
+through xSAR, writes to a distinct no-overwrite destination and preserves its
+original producer/source/restoration metadata. That conversion does not execute
+a new scan or grant input authority. Console intake and search remain separate.
+See [the v2.2.0 delivery record](release-v2.2.0.md).
+
+## Historical reconnaissance slice: v2.1.0
 
 Charlie authorised the complete Pyramid reconnaissance-to-JSON implementation
 on 11 October 2026. The promoted application base is

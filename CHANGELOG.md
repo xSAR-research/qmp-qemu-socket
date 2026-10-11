@@ -1,5 +1,19 @@
 # Changelog
 
+## v2.2.0 — Explicit card values and schema-2 export (development)
+
+- Consume xSAR 0.4.0's schema-2 writer with exact `card`, integer `value` and
+  `suit` records. A=1 through K=13; suits remain part of every captured identity.
+- Keep numeric mapping and strict schema validation in xSAR, including schema-1
+  reading and refusal of contradictory labels, values, suits or mixed shapes.
+- Preserve the original accepted v2.1.0 live export; a separately published
+  schema-2 conversion changes representation only, not acquisition provenance.
+- Preserve all five CV controllers, native profile v4, STOP/context checks,
+  restoration and no-overwrite publication. Console intake and search stay separate.
+- Pin the promoted xSAR 0.4.0 implementation at
+  `ab226a65d3bbc2b4914a5cecfb2d3247364c7536` and record its Git source in the
+  lockfile. Ordinary builds require no local source override.
+
 ## v2.1.0 — Pyramid reconnaissance to JSON (development)
 
 - Add a separately confirmed, bounded Pyramid scan; ordinary independent

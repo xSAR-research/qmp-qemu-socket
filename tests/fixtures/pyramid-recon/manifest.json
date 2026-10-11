@@ -1,0 +1,4607 @@
+{
+  "evidence_schema": "pyramid-native-observations-v1",
+  "game": "pyramid",
+  "native_dimensions": [
+    1920,
+    1080
+  ],
+  "source_record": "../../../docs/pyramid-calibration.md",
+  "evidence_status": "historical_native_fixtures_not_live_acceptance",
+  "native_artwork": "Visible face artwork; CLASSIC BLUE selection is operator policy, not proved by hidden card backs.",
+  "originals": [
+    {
+      "id": "issue1-01",
+      "file": "originals/issue1-01.png",
+      "sha256": "1d716a39b03793d90480b9da764365f9034ed52447c276d9e32dada593deb5fb",
+      "bytes": 2747713,
+      "dimensions": [
+        1920,
+        1080
+      ],
+      "format": "PNG",
+      "mode": "RGB",
+      "source_url": "https://github.com/user-attachments/assets/090264d5-72c0-4810-9e5e-1a0ad8676e39",
+      "original_bytes": true,
+      "transformation": "none"
+    },
+    {
+      "id": "issue1-02",
+      "file": "originals/issue1-02.png",
+      "sha256": "158debb5a3f75a8573e60574fb0ee2c0ebb0b468d82e87c1ddd0d4106abfe0db",
+      "bytes": 2753954,
+      "dimensions": [
+        1920,
+        1080
+      ],
+      "format": "PNG",
+      "mode": "RGB",
+      "source_url": "https://github.com/user-attachments/assets/566784b4-f31b-46e0-89ac-35bade4caf3b",
+      "original_bytes": true,
+      "transformation": "none"
+    },
+    {
+      "id": "issue1-03",
+      "file": "originals/issue1-03.png",
+      "sha256": "bd2e8f9e9042315d96fe180837c943a1c05192af01702189e40dac5264d6641d",
+      "bytes": 2753214,
+      "dimensions": [
+        1920,
+        1080
+      ],
+      "format": "PNG",
+      "mode": "RGB",
+      "source_url": "https://github.com/user-attachments/assets/313104e3-e02b-486a-a09c-7e9a0627c288",
+      "original_bytes": true,
+      "transformation": "none"
+    },
+    {
+      "id": "issue1-04",
+      "file": "originals/issue1-04.png",
+      "sha256": "027228b614c86d4ba37eddac9a307864545e6b93364f687c6d110796adf4a334",
+      "bytes": 2756913,
+      "dimensions": [
+        1920,
+        1080
+      ],
+      "format": "PNG",
+      "mode": "RGB",
+      "source_url": "https://github.com/user-attachments/assets/d5e0391a-5249-4e24-8fc1-865a4d04edf2",
+      "original_bytes": true,
+      "transformation": "none"
+    },
+    {
+      "id": "issue1-05",
+      "file": "originals/issue1-05.png",
+      "sha256": "0b7ecd4541697080aac687ed45707eb21c50b840cb525885ceb16bcadbba835b",
+      "bytes": 2773879,
+      "dimensions": [
+        1920,
+        1080
+      ],
+      "format": "PNG",
+      "mode": "RGB",
+      "source_url": "https://github.com/user-attachments/assets/3d8b0f10-2f25-476b-9fa1-037a15646db6",
+      "original_bytes": true,
+      "transformation": "none"
+    },
+    {
+      "id": "issue1-06",
+      "file": "originals/issue1-06.png",
+      "sha256": "4b0ac00cfe50906e2c41d38397d9efb135b8c0408bec2e5345a42ff734cd4a79",
+      "bytes": 2773178,
+      "dimensions": [
+        1920,
+        1080
+      ],
+      "format": "PNG",
+      "mode": "RGB",
+      "source_url": "https://github.com/user-attachments/assets/4f1151fd-3ace-4571-852f-f85d956651c0",
+      "original_bytes": true,
+      "transformation": "none"
+    },
+    {
+      "id": "issue1-07",
+      "file": "originals/issue1-07.png",
+      "sha256": "f8d306c5bb54dabe2f494b82472fc366c6c9a51cb98fc52dd87b6e21130d6e97",
+      "bytes": 2750770,
+      "dimensions": [
+        1920,
+        1080
+      ],
+      "format": "PNG",
+      "mode": "RGB",
+      "source_url": "https://github.com/user-attachments/assets/b9689321-bb93-4633-944f-cd8b378157c8",
+      "original_bytes": true,
+      "transformation": "none"
+    },
+    {
+      "id": "issue1-08",
+      "file": "originals/issue1-08.png",
+      "sha256": "abb34ba0991b66d70221ae7476d60cf357d35a1001f7dcbe60d65273ec97cfbd",
+      "bytes": 2750801,
+      "dimensions": [
+        1920,
+        1080
+      ],
+      "format": "PNG",
+      "mode": "RGB",
+      "source_url": "https://github.com/user-attachments/assets/cc42d55c-ef1c-4fe6-ada1-0e09289bea35",
+      "original_bytes": true,
+      "transformation": "none"
+    },
+    {
+      "id": "issue1-09",
+      "file": "originals/issue1-09.png",
+      "sha256": "709f61472fa77fd011b282a5db99cc444370993d5fda28e7b635a5720a0c387d",
+      "bytes": 2716396,
+      "dimensions": [
+        1920,
+        1080
+      ],
+      "format": "PNG",
+      "mode": "RGB",
+      "source_url": "https://github.com/user-attachments/assets/9a883543-5fce-43eb-97ea-9e1812dc6589",
+      "original_bytes": true,
+      "transformation": "none"
+    },
+    {
+      "id": "issue1-10",
+      "file": "originals/issue1-10.png",
+      "sha256": "54598168b9c9d4596128298d767bab438e74c02ce9a1f84ffc921cd202f0d00c",
+      "bytes": 2684324,
+      "dimensions": [
+        1920,
+        1080
+      ],
+      "format": "PNG",
+      "mode": "RGB",
+      "source_url": "https://github.com/user-attachments/assets/39d9375c-fc24-4ae8-9054-9e82034c6488",
+      "original_bytes": true,
+      "transformation": "none"
+    },
+    {
+      "id": "issue1-11",
+      "file": "originals/issue1-11.png",
+      "sha256": "0128d77e9a2e1a15fe293de4bd1e5213c8a83982d7f021b16ebf04b9bf3baeab",
+      "bytes": 2717084,
+      "dimensions": [
+        1920,
+        1080
+      ],
+      "format": "PNG",
+      "mode": "RGB",
+      "source_url": "https://github.com/user-attachments/assets/cab341b8-f44b-41ba-acc9-5a04dcf26ac1",
+      "original_bytes": true,
+      "transformation": "none"
+    },
+    {
+      "id": "issue1-12",
+      "file": "originals/issue1-12.png",
+      "sha256": "4f7be1260d8ee4e448ec21c5d138f17a2e06d7308f0e69eb4107da8ceff7a9cf",
+      "bytes": 2692396,
+      "dimensions": [
+        1920,
+        1080
+      ],
+      "format": "PNG",
+      "mode": "RGB",
+      "source_url": "https://github.com/user-attachments/assets/01606b42-949b-44d0-8905-32215189f95c",
+      "original_bytes": true,
+      "transformation": "none"
+    },
+    {
+      "id": "issue1-13",
+      "file": "originals/issue1-13.png",
+      "sha256": "3de038a307e753448ff938c1b0b021a20509842cc77e04e14a04859a45367c3f",
+      "bytes": 2706787,
+      "dimensions": [
+        1920,
+        1080
+      ],
+      "format": "PNG",
+      "mode": "RGB",
+      "source_url": "https://github.com/user-attachments/assets/5bed27e1-754c-4891-bd12-a6a6a35a331c",
+      "original_bytes": true,
+      "transformation": "none"
+    },
+    {
+      "id": "issue1-14",
+      "file": "originals/issue1-14.png",
+      "sha256": "6fc20afff852550f1e677c9cb3ab9fb6612f76442800ca9bc5756f6bdc37cf44",
+      "bytes": 2677347,
+      "dimensions": [
+        1920,
+        1080
+      ],
+      "format": "PNG",
+      "mode": "RGB",
+      "source_url": "https://github.com/user-attachments/assets/3b794d76-e6d5-4c62-968c-af630755eee3",
+      "original_bytes": true,
+      "transformation": "none"
+    },
+    {
+      "id": "issue1-15",
+      "file": "originals/issue1-15.png",
+      "sha256": "9f196b7e34ae053bd1cd7dc82cea5e2d54c2c8f1d5d0723f0c339785d690f0cd",
+      "bytes": 2683336,
+      "dimensions": [
+        1920,
+        1080
+      ],
+      "format": "PNG",
+      "mode": "RGB",
+      "source_url": "https://github.com/user-attachments/assets/d550e14c-b051-4294-a11f-a2233b9976ee",
+      "original_bytes": true,
+      "transformation": "none"
+    },
+    {
+      "id": "issue1-16",
+      "file": "originals/issue1-16.png",
+      "sha256": "aa3a89bcfd91433285d885499920079b513971c5c0d5d5bf3c71ec5d38ab9bfe",
+      "bytes": 2635545,
+      "dimensions": [
+        1920,
+        1080
+      ],
+      "format": "PNG",
+      "mode": "RGB",
+      "source_url": "https://github.com/user-attachments/assets/be228391-1336-4150-9b35-863c4a8af682",
+      "original_bytes": true,
+      "transformation": "none"
+    },
+    {
+      "id": "issue1-17",
+      "file": "originals/issue1-17.png",
+      "sha256": "50d0f134d153f9e86e0ce9b7fdfa84d83616b3eaa53d28a131be2645b21d88a0",
+      "bytes": 2658979,
+      "dimensions": [
+        1920,
+        1080
+      ],
+      "format": "PNG",
+      "mode": "RGB",
+      "source_url": "https://github.com/user-attachments/assets/5867f96c-ee78-4c86-90bb-d41bca7692d7",
+      "original_bytes": true,
+      "transformation": "none"
+    },
+    {
+      "id": "issue1-18",
+      "file": "originals/issue1-18.png",
+      "sha256": "84b4ba2e92b29ed9600cca4cf20186a234a902b06b1ec6a085992253afbd4d9a",
+      "bytes": 2639111,
+      "dimensions": [
+        1920,
+        1080
+      ],
+      "format": "PNG",
+      "mode": "RGB",
+      "source_url": "https://github.com/user-attachments/assets/ec2e887e-5589-4e23-bb99-64547d241090",
+      "original_bytes": true,
+      "transformation": "none"
+    },
+    {
+      "id": "issue1-19",
+      "file": "originals/issue1-19.png",
+      "sha256": "20b8e6e77eb1dba45116aa4584d949fc47737a77f0029db55b2879d536acc001",
+      "bytes": 2597031,
+      "dimensions": [
+        1920,
+        1080
+      ],
+      "format": "PNG",
+      "mode": "RGB",
+      "source_url": "https://github.com/user-attachments/assets/6f1c7dc8-cfcd-41b6-8afb-4f33c45e1a71",
+      "original_bytes": true,
+      "transformation": "none"
+    },
+    {
+      "id": "issue1-20",
+      "file": "originals/issue1-20.png",
+      "sha256": "e8b646f8c02ce841629e7e3da5ed181c5f17e093a004841bdf0060249da51653",
+      "bytes": 2749342,
+      "dimensions": [
+        1920,
+        1080
+      ],
+      "format": "PNG",
+      "mode": "RGB",
+      "source_url": "https://github.com/user-attachments/assets/01a5c756-0b6d-4a2a-8ca1-48f0c1e3431c",
+      "original_bytes": true,
+      "transformation": "none"
+    },
+    {
+      "id": "undo-all-confirmation",
+      "file": "originals/undo-all-confirmation.png",
+      "sha256": "78da9587035ee2707ffacf4adaf493a2a55e1ed5c28712bd5765dca23b30a9e0",
+      "bytes": 1621123,
+      "dimensions": [
+        1920,
+        1080
+      ],
+      "format": "PNG",
+      "mode": "RGB",
+      "source_url": null,
+      "source_file_name": "qmp-qemu-socket-PYRAMID-Undo-All-OK.png",
+      "source_kind": "operator_supplied_original_2026_10_11",
+      "original_bytes": true,
+      "transformation": "none"
+    },
+    {
+      "id": "current-start",
+      "file": "originals/current-start.png",
+      "sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "bytes": 2791269,
+      "dimensions": [
+        1920,
+        1080
+      ],
+      "format": "PNG",
+      "mode": "RGB",
+      "source_url": null,
+      "source_file_name": "qmp-qemu-socket-PYRAMID-start-no-SOLVER.png",
+      "source_kind": "operator_supplied_original_2026_10_11",
+      "original_bytes": true,
+      "transformation": "none"
+    },
+    {
+      "id": "current-exhausted",
+      "file": "originals/current-exhausted.png",
+      "sha256": "b352d1645b15b2cb58d2a7a64e8b25a845ca91c955e3d66861cb76be1d352ef6",
+      "bytes": 2789718,
+      "dimensions": [
+        1920,
+        1080
+      ],
+      "format": "PNG",
+      "mode": "RGB",
+      "source_url": null,
+      "source_file_name": "qmp-qemu-socket-PYRAMID-exhausted-left-DRAW-pile.png",
+      "source_kind": "operator_supplied_original_2026_10_11",
+      "original_bytes": true,
+      "transformation": "none"
+    },
+    {
+      "id": "gate3-exhausted-refusal",
+      "file": "originals/gate3-exhausted-refusal.png",
+      "sha256": "9c3e3cde56674181f196fc42340927e02ab2a00c1050021e99d5bc09e2ad8c65",
+      "bytes": 2789194,
+      "dimensions": [
+        1920,
+        1080
+      ],
+      "format": "PNG",
+      "mode": "RGB",
+      "source_file": "/home/charlie/tmp/.pyramid-recon-2880038-0/latest.png",
+      "original_bytes": true,
+      "transformation": "none",
+      "evidence": "Failed live Gate 3 attempt: one capture, zero input, no publication. Not an accepted reconnaissance sequence."
+    },
+    {
+      "id": "gate3-start-refusal",
+      "file": "originals/gate3-start-refusal.png",
+      "sha256": "f6043267d22cbf3731df684bb5aefec25a2b6714b80a0c19b1d214f7d8e83baa",
+      "bytes": 2790330,
+      "dimensions": [
+        1920,
+        1080
+      ],
+      "format": "PNG",
+      "mode": "RGB",
+      "source_file": "/home/charlie/tmp/.pyramid-recon-2880038-2/latest.png",
+      "original_bytes": true,
+      "transformation": "none",
+      "evidence": "Failed live Gate 3 attempt: one capture, zero input, no publication. Not an accepted reconnaissance sequence."
+    },
+    {
+      "id": "gate3-undo-baseline",
+      "file": "originals/gate3-undo-baseline.png",
+      "sha256": "4148fababc943fb3670ef705b00f1aa612bcaaa7a4523e67d18274617f507e94",
+      "bytes": 2790807,
+      "dimensions": [
+        1920,
+        1080
+      ],
+      "format": "PNG",
+      "mode": "RGB",
+      "source_file": "/home/charlie/tmp/.pyramid-recon-2887595-0/baseline.png",
+      "original_bytes": true,
+      "transformation": "none",
+      "evidence": "Live modal refusal after 24 D and one Undo All acknowledgement; no OK attempt, restoration or complete publication. Operator screenshot is a later observation of the same untouched dialog."
+    },
+    {
+      "id": "gate3-undo-modal",
+      "file": "originals/gate3-undo-modal.png",
+      "sha256": "1fea2be304f49907e103042e4784e04e1206173ebc3d2869a54e366a5253370b",
+      "bytes": 1615338,
+      "dimensions": [
+        1920,
+        1080
+      ],
+      "format": "PNG",
+      "mode": "RGB",
+      "source_file": "/home/charlie/tmp/.pyramid-recon-2887595-0/latest.png",
+      "original_bytes": true,
+      "transformation": "none",
+      "evidence": "Live modal refusal after 24 D and one Undo All acknowledgement; no OK attempt, restoration or complete publication. Operator screenshot is a later observation of the same untouched dialog."
+    },
+    {
+      "id": "gate3-undo-modal-operator",
+      "file": "originals/gate3-undo-modal-operator.png",
+      "sha256": "5ebaad57410791e09a77bdf029eef4ef259d573b1f659789d00d1da86dfb3f04",
+      "bytes": 1615426,
+      "dimensions": [
+        1920,
+        1080
+      ],
+      "format": "PNG",
+      "mode": "RGB",
+      "source_file": "/home/charlie/Pictures/Screenshots/qmp-qemu-socket-Undo-All-OK.png",
+      "original_bytes": true,
+      "transformation": "none",
+      "evidence": "Live modal refusal after 24 D and one Undo All acknowledgement; no OK attempt, restoration or complete publication. Operator screenshot is a later observation of the same untouched dialog."
+    },
+    {
+      "id": "gate3-undo-modal-repeat",
+      "file": "originals/gate3-undo-modal-repeat.png",
+      "sha256": "0ff2e8c36f59a0eb13dd495ed9d859428bd7bdcefad963bdcf63b313463a9510",
+      "bytes": 1615302,
+      "dimensions": [
+        1920,
+        1080
+      ],
+      "format": "PNG",
+      "mode": "RGB",
+      "source_file": "/home/charlie/tmp/.pyramid-recon-2887595-1/latest.png",
+      "original_bytes": true,
+      "transformation": "none",
+      "evidence": "Repeated v3 modal refusal: same complete ordered inventory, 24 D acknowledgements, one Undo All acknowledgement, zero OK attempts or publication."
+    }
+  ],
+  "labelled_card_observations": [
+    {
+      "id": "issue1-20-r1c1",
+      "source_id": "issue1-20",
+      "source_sha256": "e8b646f8c02ce841629e7e3da5ed181c5f17e093a004841bdf0060249da51653",
+      "location": "r1c1",
+      "origin": [
+        890,
+        112
+      ],
+      "corner_bounds": [
+        890,
+        112,
+        36,
+        50
+      ],
+      "rank": "5",
+      "suit": "spades",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": true,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 0,
+        "column": 0,
+        "index": 0
+      }
+    },
+    {
+      "id": "issue1-20-r2c1",
+      "source_id": "issue1-20",
+      "source_sha256": "e8b646f8c02ce841629e7e3da5ed181c5f17e093a004841bdf0060249da51653",
+      "location": "r2c1",
+      "origin": [
+        790,
+        165
+      ],
+      "corner_bounds": [
+        790,
+        165,
+        36,
+        50
+      ],
+      "rank": "2",
+      "suit": "clubs",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": true,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 1,
+        "column": 0,
+        "index": 1
+      }
+    },
+    {
+      "id": "issue1-20-r2c2",
+      "source_id": "issue1-20",
+      "source_sha256": "e8b646f8c02ce841629e7e3da5ed181c5f17e093a004841bdf0060249da51653",
+      "location": "r2c2",
+      "origin": [
+        990,
+        165
+      ],
+      "corner_bounds": [
+        990,
+        165,
+        36,
+        50
+      ],
+      "rank": "9",
+      "suit": "spades",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": true,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 1,
+        "column": 1,
+        "index": 2
+      }
+    },
+    {
+      "id": "issue1-20-r3c1",
+      "source_id": "issue1-20",
+      "source_sha256": "e8b646f8c02ce841629e7e3da5ed181c5f17e093a004841bdf0060249da51653",
+      "location": "r3c1",
+      "origin": [
+        690,
+        218
+      ],
+      "corner_bounds": [
+        690,
+        218,
+        36,
+        50
+      ],
+      "rank": "J",
+      "suit": "clubs",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": true,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 2,
+        "column": 0,
+        "index": 3
+      }
+    },
+    {
+      "id": "issue1-20-r3c2",
+      "source_id": "issue1-20",
+      "source_sha256": "e8b646f8c02ce841629e7e3da5ed181c5f17e093a004841bdf0060249da51653",
+      "location": "r3c2",
+      "origin": [
+        890,
+        218
+      ],
+      "corner_bounds": [
+        890,
+        218,
+        36,
+        50
+      ],
+      "rank": "6",
+      "suit": "clubs",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": true,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 2,
+        "column": 1,
+        "index": 4
+      }
+    },
+    {
+      "id": "issue1-20-r3c3",
+      "source_id": "issue1-20",
+      "source_sha256": "e8b646f8c02ce841629e7e3da5ed181c5f17e093a004841bdf0060249da51653",
+      "location": "r3c3",
+      "origin": [
+        1091,
+        218
+      ],
+      "corner_bounds": [
+        1091,
+        218,
+        36,
+        50
+      ],
+      "rank": "3",
+      "suit": "spades",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": true,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 2,
+        "column": 2,
+        "index": 5
+      }
+    },
+    {
+      "id": "issue1-20-r4c1",
+      "source_id": "issue1-20",
+      "source_sha256": "e8b646f8c02ce841629e7e3da5ed181c5f17e093a004841bdf0060249da51653",
+      "location": "r4c1",
+      "origin": [
+        589,
+        272
+      ],
+      "corner_bounds": [
+        589,
+        272,
+        36,
+        50
+      ],
+      "rank": "8",
+      "suit": "spades",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": true,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 3,
+        "column": 0,
+        "index": 6
+      }
+    },
+    {
+      "id": "issue1-20-r4c2",
+      "source_id": "issue1-20",
+      "source_sha256": "e8b646f8c02ce841629e7e3da5ed181c5f17e093a004841bdf0060249da51653",
+      "location": "r4c2",
+      "origin": [
+        790,
+        272
+      ],
+      "corner_bounds": [
+        790,
+        272,
+        36,
+        50
+      ],
+      "rank": "9",
+      "suit": "clubs",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": true,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 3,
+        "column": 1,
+        "index": 7
+      }
+    },
+    {
+      "id": "issue1-20-r4c3",
+      "source_id": "issue1-20",
+      "source_sha256": "e8b646f8c02ce841629e7e3da5ed181c5f17e093a004841bdf0060249da51653",
+      "location": "r4c3",
+      "origin": [
+        990,
+        272
+      ],
+      "corner_bounds": [
+        990,
+        272,
+        36,
+        50
+      ],
+      "rank": "6",
+      "suit": "hearts",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": true,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 3,
+        "column": 2,
+        "index": 8
+      }
+    },
+    {
+      "id": "issue1-20-r4c4",
+      "source_id": "issue1-20",
+      "source_sha256": "e8b646f8c02ce841629e7e3da5ed181c5f17e093a004841bdf0060249da51653",
+      "location": "r4c4",
+      "origin": [
+        1191,
+        272
+      ],
+      "corner_bounds": [
+        1191,
+        272,
+        36,
+        50
+      ],
+      "rank": "6",
+      "suit": "spades",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": true,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 3,
+        "column": 3,
+        "index": 9
+      }
+    },
+    {
+      "id": "issue1-20-r5c1",
+      "source_id": "issue1-20",
+      "source_sha256": "e8b646f8c02ce841629e7e3da5ed181c5f17e093a004841bdf0060249da51653",
+      "location": "r5c1",
+      "origin": [
+        489,
+        325
+      ],
+      "corner_bounds": [
+        489,
+        325,
+        36,
+        50
+      ],
+      "rank": "A",
+      "suit": "diamonds",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": true,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 4,
+        "column": 0,
+        "index": 10
+      }
+    },
+    {
+      "id": "issue1-20-r5c2",
+      "source_id": "issue1-20",
+      "source_sha256": "e8b646f8c02ce841629e7e3da5ed181c5f17e093a004841bdf0060249da51653",
+      "location": "r5c2",
+      "origin": [
+        690,
+        325
+      ],
+      "corner_bounds": [
+        690,
+        325,
+        36,
+        50
+      ],
+      "rank": "10",
+      "suit": "spades",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": true,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 4,
+        "column": 1,
+        "index": 11
+      }
+    },
+    {
+      "id": "issue1-20-r5c3",
+      "source_id": "issue1-20",
+      "source_sha256": "e8b646f8c02ce841629e7e3da5ed181c5f17e093a004841bdf0060249da51653",
+      "location": "r5c3",
+      "origin": [
+        890,
+        325
+      ],
+      "corner_bounds": [
+        890,
+        325,
+        36,
+        50
+      ],
+      "rank": "4",
+      "suit": "diamonds",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": true,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 4,
+        "column": 2,
+        "index": 12
+      }
+    },
+    {
+      "id": "issue1-20-r5c4",
+      "source_id": "issue1-20",
+      "source_sha256": "e8b646f8c02ce841629e7e3da5ed181c5f17e093a004841bdf0060249da51653",
+      "location": "r5c4",
+      "origin": [
+        1091,
+        325
+      ],
+      "corner_bounds": [
+        1091,
+        325,
+        36,
+        50
+      ],
+      "rank": "2",
+      "suit": "spades",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": true,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 4,
+        "column": 3,
+        "index": 13
+      }
+    },
+    {
+      "id": "issue1-20-r5c5",
+      "source_id": "issue1-20",
+      "source_sha256": "e8b646f8c02ce841629e7e3da5ed181c5f17e093a004841bdf0060249da51653",
+      "location": "r5c5",
+      "origin": [
+        1291,
+        325
+      ],
+      "corner_bounds": [
+        1291,
+        325,
+        36,
+        50
+      ],
+      "rank": "7",
+      "suit": "clubs",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": true,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 4,
+        "column": 4,
+        "index": 14
+      }
+    },
+    {
+      "id": "issue1-20-r6c1",
+      "source_id": "issue1-20",
+      "source_sha256": "e8b646f8c02ce841629e7e3da5ed181c5f17e093a004841bdf0060249da51653",
+      "location": "r6c1",
+      "origin": [
+        389,
+        378
+      ],
+      "corner_bounds": [
+        389,
+        378,
+        36,
+        50
+      ],
+      "rank": "5",
+      "suit": "hearts",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": true,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 5,
+        "column": 0,
+        "index": 15
+      }
+    },
+    {
+      "id": "issue1-20-r6c2",
+      "source_id": "issue1-20",
+      "source_sha256": "e8b646f8c02ce841629e7e3da5ed181c5f17e093a004841bdf0060249da51653",
+      "location": "r6c2",
+      "origin": [
+        589,
+        378
+      ],
+      "corner_bounds": [
+        589,
+        378,
+        36,
+        50
+      ],
+      "rank": "3",
+      "suit": "hearts",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": true,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 5,
+        "column": 1,
+        "index": 16
+      }
+    },
+    {
+      "id": "issue1-20-r6c3",
+      "source_id": "issue1-20",
+      "source_sha256": "e8b646f8c02ce841629e7e3da5ed181c5f17e093a004841bdf0060249da51653",
+      "location": "r6c3",
+      "origin": [
+        790,
+        378
+      ],
+      "corner_bounds": [
+        790,
+        378,
+        36,
+        50
+      ],
+      "rank": "2",
+      "suit": "hearts",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": true,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 5,
+        "column": 2,
+        "index": 17
+      }
+    },
+    {
+      "id": "issue1-20-r6c4",
+      "source_id": "issue1-20",
+      "source_sha256": "e8b646f8c02ce841629e7e3da5ed181c5f17e093a004841bdf0060249da51653",
+      "location": "r6c4",
+      "origin": [
+        990,
+        378
+      ],
+      "corner_bounds": [
+        990,
+        378,
+        36,
+        50
+      ],
+      "rank": "4",
+      "suit": "hearts",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": true,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 5,
+        "column": 3,
+        "index": 18
+      }
+    },
+    {
+      "id": "issue1-20-r6c5",
+      "source_id": "issue1-20",
+      "source_sha256": "e8b646f8c02ce841629e7e3da5ed181c5f17e093a004841bdf0060249da51653",
+      "location": "r6c5",
+      "origin": [
+        1191,
+        378
+      ],
+      "corner_bounds": [
+        1191,
+        378,
+        36,
+        50
+      ],
+      "rank": "5",
+      "suit": "clubs",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": true,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 5,
+        "column": 4,
+        "index": 19
+      }
+    },
+    {
+      "id": "issue1-20-r6c6",
+      "source_id": "issue1-20",
+      "source_sha256": "e8b646f8c02ce841629e7e3da5ed181c5f17e093a004841bdf0060249da51653",
+      "location": "r6c6",
+      "origin": [
+        1392,
+        378
+      ],
+      "corner_bounds": [
+        1392,
+        378,
+        36,
+        50
+      ],
+      "rank": "4",
+      "suit": "clubs",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": true,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 5,
+        "column": 5,
+        "index": 20
+      }
+    },
+    {
+      "id": "issue1-20-r7c1",
+      "source_id": "issue1-20",
+      "source_sha256": "e8b646f8c02ce841629e7e3da5ed181c5f17e093a004841bdf0060249da51653",
+      "location": "r7c1",
+      "origin": [
+        288,
+        432
+      ],
+      "corner_bounds": [
+        288,
+        432,
+        36,
+        50
+      ],
+      "rank": "10",
+      "suit": "diamonds",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": true,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 6,
+        "column": 0,
+        "index": 21
+      }
+    },
+    {
+      "id": "issue1-20-r7c2",
+      "source_id": "issue1-20",
+      "source_sha256": "e8b646f8c02ce841629e7e3da5ed181c5f17e093a004841bdf0060249da51653",
+      "location": "r7c2",
+      "origin": [
+        489,
+        432
+      ],
+      "corner_bounds": [
+        489,
+        432,
+        36,
+        50
+      ],
+      "rank": "J",
+      "suit": "diamonds",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": true,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 6,
+        "column": 1,
+        "index": 22
+      }
+    },
+    {
+      "id": "issue1-20-r7c3",
+      "source_id": "issue1-20",
+      "source_sha256": "e8b646f8c02ce841629e7e3da5ed181c5f17e093a004841bdf0060249da51653",
+      "location": "r7c3",
+      "origin": [
+        690,
+        432
+      ],
+      "corner_bounds": [
+        690,
+        432,
+        36,
+        50
+      ],
+      "rank": "8",
+      "suit": "diamonds",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": true,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 6,
+        "column": 2,
+        "index": 23
+      }
+    },
+    {
+      "id": "issue1-20-r7c4",
+      "source_id": "issue1-20",
+      "source_sha256": "e8b646f8c02ce841629e7e3da5ed181c5f17e093a004841bdf0060249da51653",
+      "location": "r7c4",
+      "origin": [
+        890,
+        432
+      ],
+      "corner_bounds": [
+        890,
+        432,
+        36,
+        50
+      ],
+      "rank": "3",
+      "suit": "diamonds",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": true,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 6,
+        "column": 3,
+        "index": 24
+      }
+    },
+    {
+      "id": "issue1-20-r7c5",
+      "source_id": "issue1-20",
+      "source_sha256": "e8b646f8c02ce841629e7e3da5ed181c5f17e093a004841bdf0060249da51653",
+      "location": "r7c5",
+      "origin": [
+        1091,
+        432
+      ],
+      "corner_bounds": [
+        1091,
+        432,
+        36,
+        50
+      ],
+      "rank": "A",
+      "suit": "hearts",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": true,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 6,
+        "column": 4,
+        "index": 25
+      }
+    },
+    {
+      "id": "issue1-20-r7c6",
+      "source_id": "issue1-20",
+      "source_sha256": "e8b646f8c02ce841629e7e3da5ed181c5f17e093a004841bdf0060249da51653",
+      "location": "r7c6",
+      "origin": [
+        1291,
+        432
+      ],
+      "corner_bounds": [
+        1291,
+        432,
+        36,
+        50
+      ],
+      "rank": "8",
+      "suit": "hearts",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": true,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 6,
+        "column": 5,
+        "index": 26
+      }
+    },
+    {
+      "id": "issue1-20-r7c7",
+      "source_id": "issue1-20",
+      "source_sha256": "e8b646f8c02ce841629e7e3da5ed181c5f17e093a004841bdf0060249da51653",
+      "location": "r7c7",
+      "origin": [
+        1492,
+        432
+      ],
+      "corner_bounds": [
+        1492,
+        432,
+        36,
+        50
+      ],
+      "rank": "9",
+      "suit": "diamonds",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": true,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 6,
+        "column": 6,
+        "index": 27
+      }
+    },
+    {
+      "id": "issue1-04-r5c4",
+      "source_id": "issue1-04",
+      "source_sha256": "027228b614c86d4ba37eddac9a307864545e6b93364f687c6d110796adf4a334",
+      "location": "r5c4",
+      "origin": [
+        1091,
+        325
+      ],
+      "corner_bounds": [
+        1091,
+        325,
+        36,
+        50
+      ],
+      "rank": "K",
+      "suit": "spades",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": true,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 4,
+        "column": 3,
+        "index": 13
+      }
+    },
+    {
+      "id": "issue1-01-r4c3",
+      "source_id": "issue1-01",
+      "source_sha256": "1d716a39b03793d90480b9da764365f9034ed52447c276d9e32dada593deb5fb",
+      "location": "r4c3",
+      "origin": [
+        990,
+        272
+      ],
+      "corner_bounds": [
+        990,
+        272,
+        36,
+        50
+      ],
+      "rank": "Q",
+      "suit": "diamonds",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": true,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 3,
+        "column": 2,
+        "index": 8
+      }
+    },
+    {
+      "id": "issue1-01-LEFT",
+      "source_id": "issue1-01",
+      "source_sha256": "1d716a39b03793d90480b9da764365f9034ed52447c276d9e32dada593deb5fb",
+      "location": "LEFT",
+      "origin": [
+        759,
+        678
+      ],
+      "corner_bounds": [
+        759,
+        678,
+        36,
+        50
+      ],
+      "rank": "7",
+      "suit": "hearts",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false
+    },
+    {
+      "id": "issue1-02-LEFT",
+      "source_id": "issue1-02",
+      "source_sha256": "158debb5a3f75a8573e60574fb0ee2c0ebb0b468d82e87c1ddd0d4106abfe0db",
+      "location": "LEFT",
+      "origin": [
+        759,
+        678
+      ],
+      "corner_bounds": [
+        759,
+        678,
+        36,
+        50
+      ],
+      "rank": "7",
+      "suit": "hearts",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false
+    },
+    {
+      "id": "issue1-03-LEFT",
+      "source_id": "issue1-03",
+      "source_sha256": "bd2e8f9e9042315d96fe180837c943a1c05192af01702189e40dac5264d6641d",
+      "location": "LEFT",
+      "origin": [
+        759,
+        678
+      ],
+      "corner_bounds": [
+        759,
+        678,
+        36,
+        50
+      ],
+      "rank": "7",
+      "suit": "hearts",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false
+    },
+    {
+      "id": "issue1-04-LEFT",
+      "source_id": "issue1-04",
+      "source_sha256": "027228b614c86d4ba37eddac9a307864545e6b93364f687c6d110796adf4a334",
+      "location": "LEFT",
+      "origin": [
+        759,
+        678
+      ],
+      "corner_bounds": [
+        759,
+        678,
+        36,
+        50
+      ],
+      "rank": "7",
+      "suit": "hearts",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false
+    },
+    {
+      "id": "issue1-05-LEFT",
+      "source_id": "issue1-05",
+      "source_sha256": "0b7ecd4541697080aac687ed45707eb21c50b840cb525885ceb16bcadbba835b",
+      "location": "LEFT",
+      "origin": [
+        759,
+        678
+      ],
+      "corner_bounds": [
+        759,
+        678,
+        36,
+        50
+      ],
+      "rank": "8",
+      "suit": "clubs",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false
+    },
+    {
+      "id": "issue1-10-LEFT",
+      "source_id": "issue1-10",
+      "source_sha256": "54598168b9c9d4596128298d767bab438e74c02ce9a1f84ffc921cd202f0d00c",
+      "location": "LEFT",
+      "origin": [
+        759,
+        678
+      ],
+      "corner_bounds": [
+        759,
+        678,
+        36,
+        50
+      ],
+      "rank": "3",
+      "suit": "clubs",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false
+    },
+    {
+      "id": "issue1-11-LEFT",
+      "source_id": "issue1-11",
+      "source_sha256": "0128d77e9a2e1a15fe293de4bd1e5213c8a83982d7f021b16ebf04b9bf3baeab",
+      "location": "LEFT",
+      "origin": [
+        759,
+        678
+      ],
+      "corner_bounds": [
+        759,
+        678,
+        36,
+        50
+      ],
+      "rank": "A",
+      "suit": "spades",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false
+    },
+    {
+      "id": "issue1-12-LEFT",
+      "source_id": "issue1-12",
+      "source_sha256": "4f7be1260d8ee4e448ec21c5d138f17a2e06d7308f0e69eb4107da8ceff7a9cf",
+      "location": "LEFT",
+      "origin": [
+        759,
+        678
+      ],
+      "corner_bounds": [
+        759,
+        678,
+        36,
+        50
+      ],
+      "rank": "J",
+      "suit": "spades",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false
+    },
+    {
+      "id": "issue1-13-LEFT",
+      "source_id": "issue1-13",
+      "source_sha256": "3de038a307e753448ff938c1b0b021a20509842cc77e04e14a04859a45367c3f",
+      "location": "LEFT",
+      "origin": [
+        759,
+        678
+      ],
+      "corner_bounds": [
+        759,
+        678,
+        36,
+        50
+      ],
+      "rank": "K",
+      "suit": "hearts",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false
+    },
+    {
+      "id": "issue1-14-LEFT",
+      "source_id": "issue1-14",
+      "source_sha256": "6fc20afff852550f1e677c9cb3ab9fb6612f76442800ca9bc5756f6bdc37cf44",
+      "location": "LEFT",
+      "origin": [
+        759,
+        678
+      ],
+      "corner_bounds": [
+        759,
+        678,
+        36,
+        50
+      ],
+      "rank": "7",
+      "suit": "spades",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false
+    },
+    {
+      "id": "issue1-15-LEFT",
+      "source_id": "issue1-15",
+      "source_sha256": "9f196b7e34ae053bd1cd7dc82cea5e2d54c2c8f1d5d0723f0c339785d690f0cd",
+      "location": "LEFT",
+      "origin": [
+        759,
+        678
+      ],
+      "corner_bounds": [
+        759,
+        678,
+        36,
+        50
+      ],
+      "rank": "10",
+      "suit": "clubs",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false
+    },
+    {
+      "id": "issue1-16-LEFT",
+      "source_id": "issue1-16",
+      "source_sha256": "aa3a89bcfd91433285d885499920079b513971c5c0d5d5bf3c71ec5d38ab9bfe",
+      "location": "LEFT",
+      "origin": [
+        759,
+        678
+      ],
+      "corner_bounds": [
+        759,
+        678,
+        36,
+        50
+      ],
+      "rank": "A",
+      "suit": "clubs",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false
+    },
+    {
+      "id": "issue1-17-LEFT",
+      "source_id": "issue1-17",
+      "source_sha256": "50d0f134d153f9e86e0ce9b7fdfa84d83616b3eaa53d28a131be2645b21d88a0",
+      "location": "LEFT",
+      "origin": [
+        759,
+        678
+      ],
+      "corner_bounds": [
+        759,
+        678,
+        36,
+        50
+      ],
+      "rank": "8",
+      "suit": "clubs",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false
+    },
+    {
+      "id": "issue1-18-LEFT",
+      "source_id": "issue1-18",
+      "source_sha256": "84b4ba2e92b29ed9600cca4cf20186a234a902b06b1ec6a085992253afbd4d9a",
+      "location": "LEFT",
+      "origin": [
+        759,
+        678
+      ],
+      "corner_bounds": [
+        759,
+        678,
+        36,
+        50
+      ],
+      "rank": "Q",
+      "suit": "clubs",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false
+    },
+    {
+      "id": "issue1-19-LEFT",
+      "source_id": "issue1-19",
+      "source_sha256": "20b8e6e77eb1dba45116aa4584d949fc47737a77f0029db55b2879d536acc001",
+      "location": "LEFT",
+      "origin": [
+        759,
+        678
+      ],
+      "corner_bounds": [
+        759,
+        678,
+        36,
+        50
+      ],
+      "rank": "Q",
+      "suit": "clubs",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false
+    },
+    {
+      "id": "issue1-20-LEFT",
+      "source_id": "issue1-20",
+      "source_sha256": "e8b646f8c02ce841629e7e3da5ed181c5f17e093a004841bdf0060249da51653",
+      "location": "LEFT",
+      "origin": [
+        759,
+        678
+      ],
+      "corner_bounds": [
+        759,
+        678,
+        36,
+        50
+      ],
+      "rank": "Q",
+      "suit": "clubs",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false
+    }
+  ],
+  "initial_board": {
+    "source_id": "issue1-20",
+    "solver": "off",
+    "score": 0,
+    "boards": "1 of 3",
+    "tableau": [
+      {
+        "id": "issue1-20-r1c1",
+        "rank": "5",
+        "suit": "spades",
+        "origin": [
+          890,
+          112
+        ],
+        "logical_tableau_position": {
+          "row": 0,
+          "column": 0,
+          "index": 0
+        }
+      },
+      {
+        "id": "issue1-20-r2c1",
+        "rank": "2",
+        "suit": "clubs",
+        "origin": [
+          790,
+          165
+        ],
+        "logical_tableau_position": {
+          "row": 1,
+          "column": 0,
+          "index": 1
+        }
+      },
+      {
+        "id": "issue1-20-r2c2",
+        "rank": "9",
+        "suit": "spades",
+        "origin": [
+          990,
+          165
+        ],
+        "logical_tableau_position": {
+          "row": 1,
+          "column": 1,
+          "index": 2
+        }
+      },
+      {
+        "id": "issue1-20-r3c1",
+        "rank": "J",
+        "suit": "clubs",
+        "origin": [
+          690,
+          218
+        ],
+        "logical_tableau_position": {
+          "row": 2,
+          "column": 0,
+          "index": 3
+        }
+      },
+      {
+        "id": "issue1-20-r3c2",
+        "rank": "6",
+        "suit": "clubs",
+        "origin": [
+          890,
+          218
+        ],
+        "logical_tableau_position": {
+          "row": 2,
+          "column": 1,
+          "index": 4
+        }
+      },
+      {
+        "id": "issue1-20-r3c3",
+        "rank": "3",
+        "suit": "spades",
+        "origin": [
+          1091,
+          218
+        ],
+        "logical_tableau_position": {
+          "row": 2,
+          "column": 2,
+          "index": 5
+        }
+      },
+      {
+        "id": "issue1-20-r4c1",
+        "rank": "8",
+        "suit": "spades",
+        "origin": [
+          589,
+          272
+        ],
+        "logical_tableau_position": {
+          "row": 3,
+          "column": 0,
+          "index": 6
+        }
+      },
+      {
+        "id": "issue1-20-r4c2",
+        "rank": "9",
+        "suit": "clubs",
+        "origin": [
+          790,
+          272
+        ],
+        "logical_tableau_position": {
+          "row": 3,
+          "column": 1,
+          "index": 7
+        }
+      },
+      {
+        "id": "issue1-20-r4c3",
+        "rank": "6",
+        "suit": "hearts",
+        "origin": [
+          990,
+          272
+        ],
+        "logical_tableau_position": {
+          "row": 3,
+          "column": 2,
+          "index": 8
+        }
+      },
+      {
+        "id": "issue1-20-r4c4",
+        "rank": "6",
+        "suit": "spades",
+        "origin": [
+          1191,
+          272
+        ],
+        "logical_tableau_position": {
+          "row": 3,
+          "column": 3,
+          "index": 9
+        }
+      },
+      {
+        "id": "issue1-20-r5c1",
+        "rank": "A",
+        "suit": "diamonds",
+        "origin": [
+          489,
+          325
+        ],
+        "logical_tableau_position": {
+          "row": 4,
+          "column": 0,
+          "index": 10
+        }
+      },
+      {
+        "id": "issue1-20-r5c2",
+        "rank": "10",
+        "suit": "spades",
+        "origin": [
+          690,
+          325
+        ],
+        "logical_tableau_position": {
+          "row": 4,
+          "column": 1,
+          "index": 11
+        }
+      },
+      {
+        "id": "issue1-20-r5c3",
+        "rank": "4",
+        "suit": "diamonds",
+        "origin": [
+          890,
+          325
+        ],
+        "logical_tableau_position": {
+          "row": 4,
+          "column": 2,
+          "index": 12
+        }
+      },
+      {
+        "id": "issue1-20-r5c4",
+        "rank": "2",
+        "suit": "spades",
+        "origin": [
+          1091,
+          325
+        ],
+        "logical_tableau_position": {
+          "row": 4,
+          "column": 3,
+          "index": 13
+        }
+      },
+      {
+        "id": "issue1-20-r5c5",
+        "rank": "7",
+        "suit": "clubs",
+        "origin": [
+          1291,
+          325
+        ],
+        "logical_tableau_position": {
+          "row": 4,
+          "column": 4,
+          "index": 14
+        }
+      },
+      {
+        "id": "issue1-20-r6c1",
+        "rank": "5",
+        "suit": "hearts",
+        "origin": [
+          389,
+          378
+        ],
+        "logical_tableau_position": {
+          "row": 5,
+          "column": 0,
+          "index": 15
+        }
+      },
+      {
+        "id": "issue1-20-r6c2",
+        "rank": "3",
+        "suit": "hearts",
+        "origin": [
+          589,
+          378
+        ],
+        "logical_tableau_position": {
+          "row": 5,
+          "column": 1,
+          "index": 16
+        }
+      },
+      {
+        "id": "issue1-20-r6c3",
+        "rank": "2",
+        "suit": "hearts",
+        "origin": [
+          790,
+          378
+        ],
+        "logical_tableau_position": {
+          "row": 5,
+          "column": 2,
+          "index": 17
+        }
+      },
+      {
+        "id": "issue1-20-r6c4",
+        "rank": "4",
+        "suit": "hearts",
+        "origin": [
+          990,
+          378
+        ],
+        "logical_tableau_position": {
+          "row": 5,
+          "column": 3,
+          "index": 18
+        }
+      },
+      {
+        "id": "issue1-20-r6c5",
+        "rank": "5",
+        "suit": "clubs",
+        "origin": [
+          1191,
+          378
+        ],
+        "logical_tableau_position": {
+          "row": 5,
+          "column": 4,
+          "index": 19
+        }
+      },
+      {
+        "id": "issue1-20-r6c6",
+        "rank": "4",
+        "suit": "clubs",
+        "origin": [
+          1392,
+          378
+        ],
+        "logical_tableau_position": {
+          "row": 5,
+          "column": 5,
+          "index": 20
+        }
+      },
+      {
+        "id": "issue1-20-r7c1",
+        "rank": "10",
+        "suit": "diamonds",
+        "origin": [
+          288,
+          432
+        ],
+        "logical_tableau_position": {
+          "row": 6,
+          "column": 0,
+          "index": 21
+        }
+      },
+      {
+        "id": "issue1-20-r7c2",
+        "rank": "J",
+        "suit": "diamonds",
+        "origin": [
+          489,
+          432
+        ],
+        "logical_tableau_position": {
+          "row": 6,
+          "column": 1,
+          "index": 22
+        }
+      },
+      {
+        "id": "issue1-20-r7c3",
+        "rank": "8",
+        "suit": "diamonds",
+        "origin": [
+          690,
+          432
+        ],
+        "logical_tableau_position": {
+          "row": 6,
+          "column": 2,
+          "index": 23
+        }
+      },
+      {
+        "id": "issue1-20-r7c4",
+        "rank": "3",
+        "suit": "diamonds",
+        "origin": [
+          890,
+          432
+        ],
+        "logical_tableau_position": {
+          "row": 6,
+          "column": 3,
+          "index": 24
+        }
+      },
+      {
+        "id": "issue1-20-r7c5",
+        "rank": "A",
+        "suit": "hearts",
+        "origin": [
+          1091,
+          432
+        ],
+        "logical_tableau_position": {
+          "row": 6,
+          "column": 4,
+          "index": 25
+        }
+      },
+      {
+        "id": "issue1-20-r7c6",
+        "rank": "8",
+        "suit": "hearts",
+        "origin": [
+          1291,
+          432
+        ],
+        "logical_tableau_position": {
+          "row": 6,
+          "column": 5,
+          "index": 26
+        }
+      },
+      {
+        "id": "issue1-20-r7c7",
+        "rank": "9",
+        "suit": "diamonds",
+        "origin": [
+          1492,
+          432
+        ],
+        "logical_tableau_position": {
+          "row": 6,
+          "column": 6,
+          "index": 27
+        }
+      }
+    ],
+    "left": {
+      "rank": "Q",
+      "suit": "clubs",
+      "ordinal": 0
+    },
+    "right": "positively_empty_outline",
+    "undo_all": "disabled",
+    "complete_deal": false,
+    "known_card_count": 29,
+    "unobserved_stock_ordinals": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23
+    ]
+  },
+  "scene_observations": {
+    "empty_left_source_ids": [
+      "issue1-06",
+      "issue1-07",
+      "issue1-08",
+      "issue1-09",
+      "current-exhausted"
+    ],
+    "empty_left_context": "Historical images06-09 are SolverON/partial; current-exhausted is SolverOFF/full28tableau. No intervening 24-transition sequence is supplied.",
+    "undo_all_enabled_source_ids": [
+      "issue1-01",
+      "issue1-02",
+      "issue1-03",
+      "issue1-04",
+      "issue1-05",
+      "issue1-06",
+      "issue1-07",
+      "issue1-08",
+      "issue1-09",
+      "issue1-10",
+      "issue1-11",
+      "issue1-12",
+      "issue1-13",
+      "issue1-14",
+      "issue1-15",
+      "issue1-16",
+      "issue1-17",
+      "issue1-18",
+      "current-exhausted"
+    ],
+    "undo_all_disabled_source_ids": [
+      "issue1-19",
+      "issue1-20",
+      "current-start"
+    ],
+    "undo_confirmation": {
+      "availability": "native_original_supplied",
+      "source_id": "undo-all-confirmation",
+      "signature_profile": "native-profile.json",
+      "ok_target": [
+        792,
+        630
+      ],
+      "checkbox": "visibly_unchecked_not_an_input_target",
+      "proves_scan_exhaustion": false,
+      "proves_restoration": false,
+      "prior_board_state": "arbitrary_partially_played_board"
+    },
+    "undo_all_correction": "Image19 was initially visually misclassified as enabled; exact toolbar RGB equals disabled image20. Corrected before acceptance."
+  },
+  "missing_native_proof": [
+    "Complete observed24-transition stock scan and restoration",
+    "LEFT ranks2,4,5,6,9"
+  ],
+  "source_order_is_temporal": false,
+  "current_start_board": {
+    "source_id": "current-start",
+    "solver": "off",
+    "tableau": [
+      {
+        "id": "current-start-r1c1",
+        "rank": "2",
+        "suit": "diamonds",
+        "origin": [
+          890,
+          112
+        ],
+        "logical_tableau_position": {
+          "row": 0,
+          "column": 0,
+          "index": 0
+        }
+      },
+      {
+        "id": "current-start-r2c1",
+        "rank": "9",
+        "suit": "spades",
+        "origin": [
+          790,
+          165
+        ],
+        "logical_tableau_position": {
+          "row": 1,
+          "column": 0,
+          "index": 1
+        }
+      },
+      {
+        "id": "current-start-r2c2",
+        "rank": "A",
+        "suit": "clubs",
+        "origin": [
+          990,
+          165
+        ],
+        "logical_tableau_position": {
+          "row": 1,
+          "column": 1,
+          "index": 2
+        }
+      },
+      {
+        "id": "current-start-r3c1",
+        "rank": "Q",
+        "suit": "clubs",
+        "origin": [
+          690,
+          218
+        ],
+        "logical_tableau_position": {
+          "row": 2,
+          "column": 0,
+          "index": 3
+        }
+      },
+      {
+        "id": "current-start-r3c2",
+        "rank": "4",
+        "suit": "clubs",
+        "origin": [
+          890,
+          218
+        ],
+        "logical_tableau_position": {
+          "row": 2,
+          "column": 1,
+          "index": 4
+        }
+      },
+      {
+        "id": "current-start-r3c3",
+        "rank": "5",
+        "suit": "hearts",
+        "origin": [
+          1091,
+          218
+        ],
+        "logical_tableau_position": {
+          "row": 2,
+          "column": 2,
+          "index": 5
+        }
+      },
+      {
+        "id": "current-start-r4c1",
+        "rank": "K",
+        "suit": "clubs",
+        "origin": [
+          589,
+          272
+        ],
+        "logical_tableau_position": {
+          "row": 3,
+          "column": 0,
+          "index": 6
+        }
+      },
+      {
+        "id": "current-start-r4c2",
+        "rank": "10",
+        "suit": "hearts",
+        "origin": [
+          790,
+          272
+        ],
+        "logical_tableau_position": {
+          "row": 3,
+          "column": 1,
+          "index": 7
+        }
+      },
+      {
+        "id": "current-start-r4c3",
+        "rank": "2",
+        "suit": "hearts",
+        "origin": [
+          990,
+          272
+        ],
+        "logical_tableau_position": {
+          "row": 3,
+          "column": 2,
+          "index": 8
+        }
+      },
+      {
+        "id": "current-start-r4c4",
+        "rank": "K",
+        "suit": "hearts",
+        "origin": [
+          1191,
+          272
+        ],
+        "logical_tableau_position": {
+          "row": 3,
+          "column": 3,
+          "index": 9
+        }
+      },
+      {
+        "id": "current-start-r5c1",
+        "rank": "8",
+        "suit": "clubs",
+        "origin": [
+          489,
+          325
+        ],
+        "logical_tableau_position": {
+          "row": 4,
+          "column": 0,
+          "index": 10
+        }
+      },
+      {
+        "id": "current-start-r5c2",
+        "rank": "K",
+        "suit": "spades",
+        "origin": [
+          690,
+          325
+        ],
+        "logical_tableau_position": {
+          "row": 4,
+          "column": 1,
+          "index": 11
+        }
+      },
+      {
+        "id": "current-start-r5c3",
+        "rank": "10",
+        "suit": "diamonds",
+        "origin": [
+          890,
+          325
+        ],
+        "logical_tableau_position": {
+          "row": 4,
+          "column": 2,
+          "index": 12
+        }
+      },
+      {
+        "id": "current-start-r5c4",
+        "rank": "6",
+        "suit": "clubs",
+        "origin": [
+          1091,
+          325
+        ],
+        "logical_tableau_position": {
+          "row": 4,
+          "column": 3,
+          "index": 13
+        }
+      },
+      {
+        "id": "current-start-r5c5",
+        "rank": "4",
+        "suit": "hearts",
+        "origin": [
+          1291,
+          325
+        ],
+        "logical_tableau_position": {
+          "row": 4,
+          "column": 4,
+          "index": 14
+        }
+      },
+      {
+        "id": "current-start-r6c1",
+        "rank": "3",
+        "suit": "diamonds",
+        "origin": [
+          389,
+          378
+        ],
+        "logical_tableau_position": {
+          "row": 5,
+          "column": 0,
+          "index": 15
+        }
+      },
+      {
+        "id": "current-start-r6c2",
+        "rank": "Q",
+        "suit": "hearts",
+        "origin": [
+          589,
+          378
+        ],
+        "logical_tableau_position": {
+          "row": 5,
+          "column": 1,
+          "index": 16
+        }
+      },
+      {
+        "id": "current-start-r6c3",
+        "rank": "9",
+        "suit": "hearts",
+        "origin": [
+          790,
+          378
+        ],
+        "logical_tableau_position": {
+          "row": 5,
+          "column": 2,
+          "index": 17
+        }
+      },
+      {
+        "id": "current-start-r6c4",
+        "rank": "6",
+        "suit": "hearts",
+        "origin": [
+          990,
+          378
+        ],
+        "logical_tableau_position": {
+          "row": 5,
+          "column": 3,
+          "index": 18
+        }
+      },
+      {
+        "id": "current-start-r6c5",
+        "rank": "3",
+        "suit": "clubs",
+        "origin": [
+          1191,
+          378
+        ],
+        "logical_tableau_position": {
+          "row": 5,
+          "column": 4,
+          "index": 19
+        }
+      },
+      {
+        "id": "current-start-r6c6",
+        "rank": "8",
+        "suit": "spades",
+        "origin": [
+          1392,
+          378
+        ],
+        "logical_tableau_position": {
+          "row": 5,
+          "column": 5,
+          "index": 20
+        }
+      },
+      {
+        "id": "current-start-r7c1",
+        "rank": "6",
+        "suit": "spades",
+        "origin": [
+          288,
+          432
+        ],
+        "logical_tableau_position": {
+          "row": 6,
+          "column": 0,
+          "index": 21
+        }
+      },
+      {
+        "id": "current-start-r7c2",
+        "rank": "A",
+        "suit": "spades",
+        "origin": [
+          489,
+          432
+        ],
+        "logical_tableau_position": {
+          "row": 6,
+          "column": 1,
+          "index": 22
+        }
+      },
+      {
+        "id": "current-start-r7c3",
+        "rank": "2",
+        "suit": "clubs",
+        "origin": [
+          690,
+          432
+        ],
+        "logical_tableau_position": {
+          "row": 6,
+          "column": 2,
+          "index": 23
+        }
+      },
+      {
+        "id": "current-start-r7c4",
+        "rank": "Q",
+        "suit": "spades",
+        "origin": [
+          890,
+          432
+        ],
+        "logical_tableau_position": {
+          "row": 6,
+          "column": 3,
+          "index": 24
+        }
+      },
+      {
+        "id": "current-start-r7c5",
+        "rank": "8",
+        "suit": "diamonds",
+        "origin": [
+          1091,
+          432
+        ],
+        "logical_tableau_position": {
+          "row": 6,
+          "column": 4,
+          "index": 25
+        }
+      },
+      {
+        "id": "current-start-r7c6",
+        "rank": "4",
+        "suit": "diamonds",
+        "origin": [
+          1291,
+          432
+        ],
+        "logical_tableau_position": {
+          "row": 6,
+          "column": 5,
+          "index": 26
+        }
+      },
+      {
+        "id": "current-start-r7c7",
+        "rank": "4",
+        "suit": "spades",
+        "origin": [
+          1492,
+          432
+        ],
+        "logical_tableau_position": {
+          "row": 6,
+          "column": 6,
+          "index": 27
+        }
+      }
+    ],
+    "left": {
+      "rank": "K",
+      "suit": "diamonds",
+      "ordinal": 0
+    },
+    "right": "positively_empty_outline",
+    "undo_all": "disabled",
+    "complete_deal": false,
+    "complete_transition_sequence": false,
+    "restoration_proven": false
+  },
+  "current_exhausted_board": {
+    "source_id": "current-exhausted",
+    "solver": "off",
+    "tableau": [
+      {
+        "id": "current-exhausted-r1c1",
+        "rank": "2",
+        "suit": "diamonds",
+        "origin": [
+          890,
+          112
+        ],
+        "logical_tableau_position": {
+          "row": 0,
+          "column": 0,
+          "index": 0
+        }
+      },
+      {
+        "id": "current-exhausted-r2c1",
+        "rank": "9",
+        "suit": "spades",
+        "origin": [
+          790,
+          165
+        ],
+        "logical_tableau_position": {
+          "row": 1,
+          "column": 0,
+          "index": 1
+        }
+      },
+      {
+        "id": "current-exhausted-r2c2",
+        "rank": "A",
+        "suit": "clubs",
+        "origin": [
+          990,
+          165
+        ],
+        "logical_tableau_position": {
+          "row": 1,
+          "column": 1,
+          "index": 2
+        }
+      },
+      {
+        "id": "current-exhausted-r3c1",
+        "rank": "Q",
+        "suit": "clubs",
+        "origin": [
+          690,
+          218
+        ],
+        "logical_tableau_position": {
+          "row": 2,
+          "column": 0,
+          "index": 3
+        }
+      },
+      {
+        "id": "current-exhausted-r3c2",
+        "rank": "4",
+        "suit": "clubs",
+        "origin": [
+          890,
+          218
+        ],
+        "logical_tableau_position": {
+          "row": 2,
+          "column": 1,
+          "index": 4
+        }
+      },
+      {
+        "id": "current-exhausted-r3c3",
+        "rank": "5",
+        "suit": "hearts",
+        "origin": [
+          1091,
+          218
+        ],
+        "logical_tableau_position": {
+          "row": 2,
+          "column": 2,
+          "index": 5
+        }
+      },
+      {
+        "id": "current-exhausted-r4c1",
+        "rank": "K",
+        "suit": "clubs",
+        "origin": [
+          589,
+          272
+        ],
+        "logical_tableau_position": {
+          "row": 3,
+          "column": 0,
+          "index": 6
+        }
+      },
+      {
+        "id": "current-exhausted-r4c2",
+        "rank": "10",
+        "suit": "hearts",
+        "origin": [
+          790,
+          272
+        ],
+        "logical_tableau_position": {
+          "row": 3,
+          "column": 1,
+          "index": 7
+        }
+      },
+      {
+        "id": "current-exhausted-r4c3",
+        "rank": "2",
+        "suit": "hearts",
+        "origin": [
+          990,
+          272
+        ],
+        "logical_tableau_position": {
+          "row": 3,
+          "column": 2,
+          "index": 8
+        }
+      },
+      {
+        "id": "current-exhausted-r4c4",
+        "rank": "K",
+        "suit": "hearts",
+        "origin": [
+          1191,
+          272
+        ],
+        "logical_tableau_position": {
+          "row": 3,
+          "column": 3,
+          "index": 9
+        }
+      },
+      {
+        "id": "current-exhausted-r5c1",
+        "rank": "8",
+        "suit": "clubs",
+        "origin": [
+          489,
+          325
+        ],
+        "logical_tableau_position": {
+          "row": 4,
+          "column": 0,
+          "index": 10
+        }
+      },
+      {
+        "id": "current-exhausted-r5c2",
+        "rank": "K",
+        "suit": "spades",
+        "origin": [
+          690,
+          325
+        ],
+        "logical_tableau_position": {
+          "row": 4,
+          "column": 1,
+          "index": 11
+        }
+      },
+      {
+        "id": "current-exhausted-r5c3",
+        "rank": "10",
+        "suit": "diamonds",
+        "origin": [
+          890,
+          325
+        ],
+        "logical_tableau_position": {
+          "row": 4,
+          "column": 2,
+          "index": 12
+        }
+      },
+      {
+        "id": "current-exhausted-r5c4",
+        "rank": "6",
+        "suit": "clubs",
+        "origin": [
+          1091,
+          325
+        ],
+        "logical_tableau_position": {
+          "row": 4,
+          "column": 3,
+          "index": 13
+        }
+      },
+      {
+        "id": "current-exhausted-r5c5",
+        "rank": "4",
+        "suit": "hearts",
+        "origin": [
+          1291,
+          325
+        ],
+        "logical_tableau_position": {
+          "row": 4,
+          "column": 4,
+          "index": 14
+        }
+      },
+      {
+        "id": "current-exhausted-r6c1",
+        "rank": "3",
+        "suit": "diamonds",
+        "origin": [
+          389,
+          378
+        ],
+        "logical_tableau_position": {
+          "row": 5,
+          "column": 0,
+          "index": 15
+        }
+      },
+      {
+        "id": "current-exhausted-r6c2",
+        "rank": "Q",
+        "suit": "hearts",
+        "origin": [
+          589,
+          378
+        ],
+        "logical_tableau_position": {
+          "row": 5,
+          "column": 1,
+          "index": 16
+        }
+      },
+      {
+        "id": "current-exhausted-r6c3",
+        "rank": "9",
+        "suit": "hearts",
+        "origin": [
+          790,
+          378
+        ],
+        "logical_tableau_position": {
+          "row": 5,
+          "column": 2,
+          "index": 17
+        }
+      },
+      {
+        "id": "current-exhausted-r6c4",
+        "rank": "6",
+        "suit": "hearts",
+        "origin": [
+          990,
+          378
+        ],
+        "logical_tableau_position": {
+          "row": 5,
+          "column": 3,
+          "index": 18
+        }
+      },
+      {
+        "id": "current-exhausted-r6c5",
+        "rank": "3",
+        "suit": "clubs",
+        "origin": [
+          1191,
+          378
+        ],
+        "logical_tableau_position": {
+          "row": 5,
+          "column": 4,
+          "index": 19
+        }
+      },
+      {
+        "id": "current-exhausted-r6c6",
+        "rank": "8",
+        "suit": "spades",
+        "origin": [
+          1392,
+          378
+        ],
+        "logical_tableau_position": {
+          "row": 5,
+          "column": 5,
+          "index": 20
+        }
+      },
+      {
+        "id": "current-exhausted-r7c1",
+        "rank": "6",
+        "suit": "spades",
+        "origin": [
+          288,
+          432
+        ],
+        "logical_tableau_position": {
+          "row": 6,
+          "column": 0,
+          "index": 21
+        }
+      },
+      {
+        "id": "current-exhausted-r7c2",
+        "rank": "A",
+        "suit": "spades",
+        "origin": [
+          489,
+          432
+        ],
+        "logical_tableau_position": {
+          "row": 6,
+          "column": 1,
+          "index": 22
+        }
+      },
+      {
+        "id": "current-exhausted-r7c3",
+        "rank": "2",
+        "suit": "clubs",
+        "origin": [
+          690,
+          432
+        ],
+        "logical_tableau_position": {
+          "row": 6,
+          "column": 2,
+          "index": 23
+        }
+      },
+      {
+        "id": "current-exhausted-r7c4",
+        "rank": "Q",
+        "suit": "spades",
+        "origin": [
+          890,
+          432
+        ],
+        "logical_tableau_position": {
+          "row": 6,
+          "column": 3,
+          "index": 24
+        }
+      },
+      {
+        "id": "current-exhausted-r7c5",
+        "rank": "8",
+        "suit": "diamonds",
+        "origin": [
+          1091,
+          432
+        ],
+        "logical_tableau_position": {
+          "row": 6,
+          "column": 4,
+          "index": 25
+        }
+      },
+      {
+        "id": "current-exhausted-r7c6",
+        "rank": "4",
+        "suit": "diamonds",
+        "origin": [
+          1291,
+          432
+        ],
+        "logical_tableau_position": {
+          "row": 6,
+          "column": 5,
+          "index": 26
+        }
+      },
+      {
+        "id": "current-exhausted-r7c7",
+        "rank": "4",
+        "suit": "spades",
+        "origin": [
+          1492,
+          432
+        ],
+        "logical_tableau_position": {
+          "row": 6,
+          "column": 6,
+          "index": 27
+        }
+      }
+    ],
+    "left": "positively_empty_circle",
+    "right": {
+      "rank": "Q",
+      "suit": "diamonds"
+    },
+    "undo_all": "enabled",
+    "complete_deal": false,
+    "complete_transition_sequence": false,
+    "restoration_proven": false
+  },
+  "endpoint_card_observations": [
+    {
+      "id": "current-start-r1c1",
+      "source_id": "current-start",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "location": "r1c1",
+      "origin": [
+        890,
+        112
+      ],
+      "corner_bounds": [
+        890,
+        112,
+        36,
+        50
+      ],
+      "rank": "2",
+      "suit": "diamonds",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 0,
+        "column": 0,
+        "index": 0
+      }
+    },
+    {
+      "id": "current-start-r2c1",
+      "source_id": "current-start",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "location": "r2c1",
+      "origin": [
+        790,
+        165
+      ],
+      "corner_bounds": [
+        790,
+        165,
+        36,
+        50
+      ],
+      "rank": "9",
+      "suit": "spades",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 1,
+        "column": 0,
+        "index": 1
+      }
+    },
+    {
+      "id": "current-start-r2c2",
+      "source_id": "current-start",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "location": "r2c2",
+      "origin": [
+        990,
+        165
+      ],
+      "corner_bounds": [
+        990,
+        165,
+        36,
+        50
+      ],
+      "rank": "A",
+      "suit": "clubs",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": true,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 1,
+        "column": 1,
+        "index": 2
+      },
+      "training_components": [
+        "suit"
+      ]
+    },
+    {
+      "id": "current-start-r3c1",
+      "source_id": "current-start",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "location": "r3c1",
+      "origin": [
+        690,
+        218
+      ],
+      "corner_bounds": [
+        690,
+        218,
+        36,
+        50
+      ],
+      "rank": "Q",
+      "suit": "clubs",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": true,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 2,
+        "column": 0,
+        "index": 3
+      },
+      "training_components": [
+        "rank"
+      ]
+    },
+    {
+      "id": "current-start-r3c2",
+      "source_id": "current-start",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "location": "r3c2",
+      "origin": [
+        890,
+        218
+      ],
+      "corner_bounds": [
+        890,
+        218,
+        36,
+        50
+      ],
+      "rank": "4",
+      "suit": "clubs",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 2,
+        "column": 1,
+        "index": 4
+      }
+    },
+    {
+      "id": "current-start-r3c3",
+      "source_id": "current-start",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "location": "r3c3",
+      "origin": [
+        1091,
+        218
+      ],
+      "corner_bounds": [
+        1091,
+        218,
+        36,
+        50
+      ],
+      "rank": "5",
+      "suit": "hearts",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 2,
+        "column": 2,
+        "index": 5
+      }
+    },
+    {
+      "id": "current-start-r4c1",
+      "source_id": "current-start",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "location": "r4c1",
+      "origin": [
+        589,
+        272
+      ],
+      "corner_bounds": [
+        589,
+        272,
+        36,
+        50
+      ],
+      "rank": "K",
+      "suit": "clubs",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": true,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 3,
+        "column": 0,
+        "index": 6
+      },
+      "training_components": [
+        "suit"
+      ]
+    },
+    {
+      "id": "current-start-r4c2",
+      "source_id": "current-start",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "location": "r4c2",
+      "origin": [
+        790,
+        272
+      ],
+      "corner_bounds": [
+        790,
+        272,
+        36,
+        50
+      ],
+      "rank": "10",
+      "suit": "hearts",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": true,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 3,
+        "column": 1,
+        "index": 7
+      },
+      "training_components": [
+        "rank",
+        "suit"
+      ]
+    },
+    {
+      "id": "current-start-r4c3",
+      "source_id": "current-start",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "location": "r4c3",
+      "origin": [
+        990,
+        272
+      ],
+      "corner_bounds": [
+        990,
+        272,
+        36,
+        50
+      ],
+      "rank": "2",
+      "suit": "hearts",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 3,
+        "column": 2,
+        "index": 8
+      }
+    },
+    {
+      "id": "current-start-r4c4",
+      "source_id": "current-start",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "location": "r4c4",
+      "origin": [
+        1191,
+        272
+      ],
+      "corner_bounds": [
+        1191,
+        272,
+        36,
+        50
+      ],
+      "rank": "K",
+      "suit": "hearts",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 3,
+        "column": 3,
+        "index": 9
+      }
+    },
+    {
+      "id": "current-start-r5c1",
+      "source_id": "current-start",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "location": "r5c1",
+      "origin": [
+        489,
+        325
+      ],
+      "corner_bounds": [
+        489,
+        325,
+        36,
+        50
+      ],
+      "rank": "8",
+      "suit": "clubs",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 4,
+        "column": 0,
+        "index": 10
+      }
+    },
+    {
+      "id": "current-start-r5c2",
+      "source_id": "current-start",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "location": "r5c2",
+      "origin": [
+        690,
+        325
+      ],
+      "corner_bounds": [
+        690,
+        325,
+        36,
+        50
+      ],
+      "rank": "K",
+      "suit": "spades",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 4,
+        "column": 1,
+        "index": 11
+      }
+    },
+    {
+      "id": "current-start-r5c3",
+      "source_id": "current-start",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "location": "r5c3",
+      "origin": [
+        890,
+        325
+      ],
+      "corner_bounds": [
+        890,
+        325,
+        36,
+        50
+      ],
+      "rank": "10",
+      "suit": "diamonds",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": true,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 4,
+        "column": 2,
+        "index": 12
+      },
+      "training_components": [
+        "rank"
+      ]
+    },
+    {
+      "id": "current-start-r5c4",
+      "source_id": "current-start",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "location": "r5c4",
+      "origin": [
+        1091,
+        325
+      ],
+      "corner_bounds": [
+        1091,
+        325,
+        36,
+        50
+      ],
+      "rank": "6",
+      "suit": "clubs",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 4,
+        "column": 3,
+        "index": 13
+      }
+    },
+    {
+      "id": "current-start-r5c5",
+      "source_id": "current-start",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "location": "r5c5",
+      "origin": [
+        1291,
+        325
+      ],
+      "corner_bounds": [
+        1291,
+        325,
+        36,
+        50
+      ],
+      "rank": "4",
+      "suit": "hearts",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 4,
+        "column": 4,
+        "index": 14
+      }
+    },
+    {
+      "id": "current-start-r6c1",
+      "source_id": "current-start",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "location": "r6c1",
+      "origin": [
+        389,
+        378
+      ],
+      "corner_bounds": [
+        389,
+        378,
+        36,
+        50
+      ],
+      "rank": "3",
+      "suit": "diamonds",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": true,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 5,
+        "column": 0,
+        "index": 15
+      },
+      "training_components": [
+        "suit"
+      ]
+    },
+    {
+      "id": "current-start-r6c2",
+      "source_id": "current-start",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "location": "r6c2",
+      "origin": [
+        589,
+        378
+      ],
+      "corner_bounds": [
+        589,
+        378,
+        36,
+        50
+      ],
+      "rank": "Q",
+      "suit": "hearts",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 5,
+        "column": 1,
+        "index": 16
+      }
+    },
+    {
+      "id": "current-start-r6c3",
+      "source_id": "current-start",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "location": "r6c3",
+      "origin": [
+        790,
+        378
+      ],
+      "corner_bounds": [
+        790,
+        378,
+        36,
+        50
+      ],
+      "rank": "9",
+      "suit": "hearts",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 5,
+        "column": 2,
+        "index": 17
+      }
+    },
+    {
+      "id": "current-start-r6c4",
+      "source_id": "current-start",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "location": "r6c4",
+      "origin": [
+        990,
+        378
+      ],
+      "corner_bounds": [
+        990,
+        378,
+        36,
+        50
+      ],
+      "rank": "6",
+      "suit": "hearts",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 5,
+        "column": 3,
+        "index": 18
+      }
+    },
+    {
+      "id": "current-start-r6c5",
+      "source_id": "current-start",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "location": "r6c5",
+      "origin": [
+        1191,
+        378
+      ],
+      "corner_bounds": [
+        1191,
+        378,
+        36,
+        50
+      ],
+      "rank": "3",
+      "suit": "clubs",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 5,
+        "column": 4,
+        "index": 19
+      }
+    },
+    {
+      "id": "current-start-r6c6",
+      "source_id": "current-start",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "location": "r6c6",
+      "origin": [
+        1392,
+        378
+      ],
+      "corner_bounds": [
+        1392,
+        378,
+        36,
+        50
+      ],
+      "rank": "8",
+      "suit": "spades",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 5,
+        "column": 5,
+        "index": 20
+      }
+    },
+    {
+      "id": "current-start-r7c1",
+      "source_id": "current-start",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "location": "r7c1",
+      "origin": [
+        288,
+        432
+      ],
+      "corner_bounds": [
+        288,
+        432,
+        36,
+        50
+      ],
+      "rank": "6",
+      "suit": "spades",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 6,
+        "column": 0,
+        "index": 21
+      }
+    },
+    {
+      "id": "current-start-r7c2",
+      "source_id": "current-start",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "location": "r7c2",
+      "origin": [
+        489,
+        432
+      ],
+      "corner_bounds": [
+        489,
+        432,
+        36,
+        50
+      ],
+      "rank": "A",
+      "suit": "spades",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 6,
+        "column": 1,
+        "index": 22
+      }
+    },
+    {
+      "id": "current-start-r7c3",
+      "source_id": "current-start",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "location": "r7c3",
+      "origin": [
+        690,
+        432
+      ],
+      "corner_bounds": [
+        690,
+        432,
+        36,
+        50
+      ],
+      "rank": "2",
+      "suit": "clubs",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": true,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 6,
+        "column": 2,
+        "index": 23
+      },
+      "training_components": [
+        "suit"
+      ]
+    },
+    {
+      "id": "current-start-r7c4",
+      "source_id": "current-start",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "location": "r7c4",
+      "origin": [
+        890,
+        432
+      ],
+      "corner_bounds": [
+        890,
+        432,
+        36,
+        50
+      ],
+      "rank": "Q",
+      "suit": "spades",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 6,
+        "column": 3,
+        "index": 24
+      }
+    },
+    {
+      "id": "current-start-r7c5",
+      "source_id": "current-start",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "location": "r7c5",
+      "origin": [
+        1091,
+        432
+      ],
+      "corner_bounds": [
+        1091,
+        432,
+        36,
+        50
+      ],
+      "rank": "8",
+      "suit": "diamonds",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 6,
+        "column": 4,
+        "index": 25
+      }
+    },
+    {
+      "id": "current-start-r7c6",
+      "source_id": "current-start",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "location": "r7c6",
+      "origin": [
+        1291,
+        432
+      ],
+      "corner_bounds": [
+        1291,
+        432,
+        36,
+        50
+      ],
+      "rank": "4",
+      "suit": "diamonds",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 6,
+        "column": 5,
+        "index": 26
+      }
+    },
+    {
+      "id": "current-start-r7c7",
+      "source_id": "current-start",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "location": "r7c7",
+      "origin": [
+        1492,
+        432
+      ],
+      "corner_bounds": [
+        1492,
+        432,
+        36,
+        50
+      ],
+      "rank": "4",
+      "suit": "spades",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 6,
+        "column": 6,
+        "index": 27
+      }
+    },
+    {
+      "id": "current-start-LEFT",
+      "source_id": "current-start",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "location": "LEFT",
+      "origin": [
+        759,
+        678
+      ],
+      "corner_bounds": [
+        759,
+        678,
+        36,
+        50
+      ],
+      "rank": "K",
+      "suit": "diamonds",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": true,
+      "recognition_authority": false,
+      "training_components": [
+        "suit"
+      ]
+    },
+    {
+      "id": "current-exhausted-r1c1",
+      "source_id": "current-exhausted",
+      "source_sha256": "b352d1645b15b2cb58d2a7a64e8b25a845ca91c955e3d66861cb76be1d352ef6",
+      "location": "r1c1",
+      "origin": [
+        890,
+        112
+      ],
+      "corner_bounds": [
+        890,
+        112,
+        36,
+        50
+      ],
+      "rank": "2",
+      "suit": "diamonds",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 0,
+        "column": 0,
+        "index": 0
+      }
+    },
+    {
+      "id": "current-exhausted-r2c1",
+      "source_id": "current-exhausted",
+      "source_sha256": "b352d1645b15b2cb58d2a7a64e8b25a845ca91c955e3d66861cb76be1d352ef6",
+      "location": "r2c1",
+      "origin": [
+        790,
+        165
+      ],
+      "corner_bounds": [
+        790,
+        165,
+        36,
+        50
+      ],
+      "rank": "9",
+      "suit": "spades",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 1,
+        "column": 0,
+        "index": 1
+      }
+    },
+    {
+      "id": "current-exhausted-r2c2",
+      "source_id": "current-exhausted",
+      "source_sha256": "b352d1645b15b2cb58d2a7a64e8b25a845ca91c955e3d66861cb76be1d352ef6",
+      "location": "r2c2",
+      "origin": [
+        990,
+        165
+      ],
+      "corner_bounds": [
+        990,
+        165,
+        36,
+        50
+      ],
+      "rank": "A",
+      "suit": "clubs",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 1,
+        "column": 1,
+        "index": 2
+      }
+    },
+    {
+      "id": "current-exhausted-r3c1",
+      "source_id": "current-exhausted",
+      "source_sha256": "b352d1645b15b2cb58d2a7a64e8b25a845ca91c955e3d66861cb76be1d352ef6",
+      "location": "r3c1",
+      "origin": [
+        690,
+        218
+      ],
+      "corner_bounds": [
+        690,
+        218,
+        36,
+        50
+      ],
+      "rank": "Q",
+      "suit": "clubs",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 2,
+        "column": 0,
+        "index": 3
+      }
+    },
+    {
+      "id": "current-exhausted-r3c2",
+      "source_id": "current-exhausted",
+      "source_sha256": "b352d1645b15b2cb58d2a7a64e8b25a845ca91c955e3d66861cb76be1d352ef6",
+      "location": "r3c2",
+      "origin": [
+        890,
+        218
+      ],
+      "corner_bounds": [
+        890,
+        218,
+        36,
+        50
+      ],
+      "rank": "4",
+      "suit": "clubs",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 2,
+        "column": 1,
+        "index": 4
+      }
+    },
+    {
+      "id": "current-exhausted-r3c3",
+      "source_id": "current-exhausted",
+      "source_sha256": "b352d1645b15b2cb58d2a7a64e8b25a845ca91c955e3d66861cb76be1d352ef6",
+      "location": "r3c3",
+      "origin": [
+        1091,
+        218
+      ],
+      "corner_bounds": [
+        1091,
+        218,
+        36,
+        50
+      ],
+      "rank": "5",
+      "suit": "hearts",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 2,
+        "column": 2,
+        "index": 5
+      }
+    },
+    {
+      "id": "current-exhausted-r4c1",
+      "source_id": "current-exhausted",
+      "source_sha256": "b352d1645b15b2cb58d2a7a64e8b25a845ca91c955e3d66861cb76be1d352ef6",
+      "location": "r4c1",
+      "origin": [
+        589,
+        272
+      ],
+      "corner_bounds": [
+        589,
+        272,
+        36,
+        50
+      ],
+      "rank": "K",
+      "suit": "clubs",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 3,
+        "column": 0,
+        "index": 6
+      }
+    },
+    {
+      "id": "current-exhausted-r4c2",
+      "source_id": "current-exhausted",
+      "source_sha256": "b352d1645b15b2cb58d2a7a64e8b25a845ca91c955e3d66861cb76be1d352ef6",
+      "location": "r4c2",
+      "origin": [
+        790,
+        272
+      ],
+      "corner_bounds": [
+        790,
+        272,
+        36,
+        50
+      ],
+      "rank": "10",
+      "suit": "hearts",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 3,
+        "column": 1,
+        "index": 7
+      }
+    },
+    {
+      "id": "current-exhausted-r4c3",
+      "source_id": "current-exhausted",
+      "source_sha256": "b352d1645b15b2cb58d2a7a64e8b25a845ca91c955e3d66861cb76be1d352ef6",
+      "location": "r4c3",
+      "origin": [
+        990,
+        272
+      ],
+      "corner_bounds": [
+        990,
+        272,
+        36,
+        50
+      ],
+      "rank": "2",
+      "suit": "hearts",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 3,
+        "column": 2,
+        "index": 8
+      }
+    },
+    {
+      "id": "current-exhausted-r4c4",
+      "source_id": "current-exhausted",
+      "source_sha256": "b352d1645b15b2cb58d2a7a64e8b25a845ca91c955e3d66861cb76be1d352ef6",
+      "location": "r4c4",
+      "origin": [
+        1191,
+        272
+      ],
+      "corner_bounds": [
+        1191,
+        272,
+        36,
+        50
+      ],
+      "rank": "K",
+      "suit": "hearts",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 3,
+        "column": 3,
+        "index": 9
+      }
+    },
+    {
+      "id": "current-exhausted-r5c1",
+      "source_id": "current-exhausted",
+      "source_sha256": "b352d1645b15b2cb58d2a7a64e8b25a845ca91c955e3d66861cb76be1d352ef6",
+      "location": "r5c1",
+      "origin": [
+        489,
+        325
+      ],
+      "corner_bounds": [
+        489,
+        325,
+        36,
+        50
+      ],
+      "rank": "8",
+      "suit": "clubs",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 4,
+        "column": 0,
+        "index": 10
+      }
+    },
+    {
+      "id": "current-exhausted-r5c2",
+      "source_id": "current-exhausted",
+      "source_sha256": "b352d1645b15b2cb58d2a7a64e8b25a845ca91c955e3d66861cb76be1d352ef6",
+      "location": "r5c2",
+      "origin": [
+        690,
+        325
+      ],
+      "corner_bounds": [
+        690,
+        325,
+        36,
+        50
+      ],
+      "rank": "K",
+      "suit": "spades",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 4,
+        "column": 1,
+        "index": 11
+      }
+    },
+    {
+      "id": "current-exhausted-r5c3",
+      "source_id": "current-exhausted",
+      "source_sha256": "b352d1645b15b2cb58d2a7a64e8b25a845ca91c955e3d66861cb76be1d352ef6",
+      "location": "r5c3",
+      "origin": [
+        890,
+        325
+      ],
+      "corner_bounds": [
+        890,
+        325,
+        36,
+        50
+      ],
+      "rank": "10",
+      "suit": "diamonds",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 4,
+        "column": 2,
+        "index": 12
+      }
+    },
+    {
+      "id": "current-exhausted-r5c4",
+      "source_id": "current-exhausted",
+      "source_sha256": "b352d1645b15b2cb58d2a7a64e8b25a845ca91c955e3d66861cb76be1d352ef6",
+      "location": "r5c4",
+      "origin": [
+        1091,
+        325
+      ],
+      "corner_bounds": [
+        1091,
+        325,
+        36,
+        50
+      ],
+      "rank": "6",
+      "suit": "clubs",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 4,
+        "column": 3,
+        "index": 13
+      }
+    },
+    {
+      "id": "current-exhausted-r5c5",
+      "source_id": "current-exhausted",
+      "source_sha256": "b352d1645b15b2cb58d2a7a64e8b25a845ca91c955e3d66861cb76be1d352ef6",
+      "location": "r5c5",
+      "origin": [
+        1291,
+        325
+      ],
+      "corner_bounds": [
+        1291,
+        325,
+        36,
+        50
+      ],
+      "rank": "4",
+      "suit": "hearts",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 4,
+        "column": 4,
+        "index": 14
+      }
+    },
+    {
+      "id": "current-exhausted-r6c1",
+      "source_id": "current-exhausted",
+      "source_sha256": "b352d1645b15b2cb58d2a7a64e8b25a845ca91c955e3d66861cb76be1d352ef6",
+      "location": "r6c1",
+      "origin": [
+        389,
+        378
+      ],
+      "corner_bounds": [
+        389,
+        378,
+        36,
+        50
+      ],
+      "rank": "3",
+      "suit": "diamonds",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 5,
+        "column": 0,
+        "index": 15
+      }
+    },
+    {
+      "id": "current-exhausted-r6c2",
+      "source_id": "current-exhausted",
+      "source_sha256": "b352d1645b15b2cb58d2a7a64e8b25a845ca91c955e3d66861cb76be1d352ef6",
+      "location": "r6c2",
+      "origin": [
+        589,
+        378
+      ],
+      "corner_bounds": [
+        589,
+        378,
+        36,
+        50
+      ],
+      "rank": "Q",
+      "suit": "hearts",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 5,
+        "column": 1,
+        "index": 16
+      }
+    },
+    {
+      "id": "current-exhausted-r6c3",
+      "source_id": "current-exhausted",
+      "source_sha256": "b352d1645b15b2cb58d2a7a64e8b25a845ca91c955e3d66861cb76be1d352ef6",
+      "location": "r6c3",
+      "origin": [
+        790,
+        378
+      ],
+      "corner_bounds": [
+        790,
+        378,
+        36,
+        50
+      ],
+      "rank": "9",
+      "suit": "hearts",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 5,
+        "column": 2,
+        "index": 17
+      }
+    },
+    {
+      "id": "current-exhausted-r6c4",
+      "source_id": "current-exhausted",
+      "source_sha256": "b352d1645b15b2cb58d2a7a64e8b25a845ca91c955e3d66861cb76be1d352ef6",
+      "location": "r6c4",
+      "origin": [
+        990,
+        378
+      ],
+      "corner_bounds": [
+        990,
+        378,
+        36,
+        50
+      ],
+      "rank": "6",
+      "suit": "hearts",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 5,
+        "column": 3,
+        "index": 18
+      }
+    },
+    {
+      "id": "current-exhausted-r6c5",
+      "source_id": "current-exhausted",
+      "source_sha256": "b352d1645b15b2cb58d2a7a64e8b25a845ca91c955e3d66861cb76be1d352ef6",
+      "location": "r6c5",
+      "origin": [
+        1191,
+        378
+      ],
+      "corner_bounds": [
+        1191,
+        378,
+        36,
+        50
+      ],
+      "rank": "3",
+      "suit": "clubs",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 5,
+        "column": 4,
+        "index": 19
+      }
+    },
+    {
+      "id": "current-exhausted-r6c6",
+      "source_id": "current-exhausted",
+      "source_sha256": "b352d1645b15b2cb58d2a7a64e8b25a845ca91c955e3d66861cb76be1d352ef6",
+      "location": "r6c6",
+      "origin": [
+        1392,
+        378
+      ],
+      "corner_bounds": [
+        1392,
+        378,
+        36,
+        50
+      ],
+      "rank": "8",
+      "suit": "spades",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 5,
+        "column": 5,
+        "index": 20
+      }
+    },
+    {
+      "id": "current-exhausted-r7c1",
+      "source_id": "current-exhausted",
+      "source_sha256": "b352d1645b15b2cb58d2a7a64e8b25a845ca91c955e3d66861cb76be1d352ef6",
+      "location": "r7c1",
+      "origin": [
+        288,
+        432
+      ],
+      "corner_bounds": [
+        288,
+        432,
+        36,
+        50
+      ],
+      "rank": "6",
+      "suit": "spades",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 6,
+        "column": 0,
+        "index": 21
+      }
+    },
+    {
+      "id": "current-exhausted-r7c2",
+      "source_id": "current-exhausted",
+      "source_sha256": "b352d1645b15b2cb58d2a7a64e8b25a845ca91c955e3d66861cb76be1d352ef6",
+      "location": "r7c2",
+      "origin": [
+        489,
+        432
+      ],
+      "corner_bounds": [
+        489,
+        432,
+        36,
+        50
+      ],
+      "rank": "A",
+      "suit": "spades",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 6,
+        "column": 1,
+        "index": 22
+      }
+    },
+    {
+      "id": "current-exhausted-r7c3",
+      "source_id": "current-exhausted",
+      "source_sha256": "b352d1645b15b2cb58d2a7a64e8b25a845ca91c955e3d66861cb76be1d352ef6",
+      "location": "r7c3",
+      "origin": [
+        690,
+        432
+      ],
+      "corner_bounds": [
+        690,
+        432,
+        36,
+        50
+      ],
+      "rank": "2",
+      "suit": "clubs",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 6,
+        "column": 2,
+        "index": 23
+      }
+    },
+    {
+      "id": "current-exhausted-r7c4",
+      "source_id": "current-exhausted",
+      "source_sha256": "b352d1645b15b2cb58d2a7a64e8b25a845ca91c955e3d66861cb76be1d352ef6",
+      "location": "r7c4",
+      "origin": [
+        890,
+        432
+      ],
+      "corner_bounds": [
+        890,
+        432,
+        36,
+        50
+      ],
+      "rank": "Q",
+      "suit": "spades",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 6,
+        "column": 3,
+        "index": 24
+      }
+    },
+    {
+      "id": "current-exhausted-r7c5",
+      "source_id": "current-exhausted",
+      "source_sha256": "b352d1645b15b2cb58d2a7a64e8b25a845ca91c955e3d66861cb76be1d352ef6",
+      "location": "r7c5",
+      "origin": [
+        1091,
+        432
+      ],
+      "corner_bounds": [
+        1091,
+        432,
+        36,
+        50
+      ],
+      "rank": "8",
+      "suit": "diamonds",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 6,
+        "column": 4,
+        "index": 25
+      }
+    },
+    {
+      "id": "current-exhausted-r7c6",
+      "source_id": "current-exhausted",
+      "source_sha256": "b352d1645b15b2cb58d2a7a64e8b25a845ca91c955e3d66861cb76be1d352ef6",
+      "location": "r7c6",
+      "origin": [
+        1291,
+        432
+      ],
+      "corner_bounds": [
+        1291,
+        432,
+        36,
+        50
+      ],
+      "rank": "4",
+      "suit": "diamonds",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 6,
+        "column": 5,
+        "index": 26
+      }
+    },
+    {
+      "id": "current-exhausted-r7c7",
+      "source_id": "current-exhausted",
+      "source_sha256": "b352d1645b15b2cb58d2a7a64e8b25a845ca91c955e3d66861cb76be1d352ef6",
+      "location": "r7c7",
+      "origin": [
+        1492,
+        432
+      ],
+      "corner_bounds": [
+        1492,
+        432,
+        36,
+        50
+      ],
+      "rank": "4",
+      "suit": "spades",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false,
+      "logical_tableau_position": {
+        "row": 6,
+        "column": 6,
+        "index": 27
+      }
+    },
+    {
+      "id": "current-exhausted-RIGHT",
+      "source_id": "current-exhausted",
+      "source_sha256": "b352d1645b15b2cb58d2a7a64e8b25a845ca91c955e3d66861cb76be1d352ef6",
+      "location": "RIGHT",
+      "origin": [
+        1022,
+        678
+      ],
+      "corner_bounds": [
+        1022,
+        678,
+        36,
+        50
+      ],
+      "rank": "Q",
+      "suit": "diamonds",
+      "label_method": "direct_visual_rank_and_suit",
+      "template_training": false,
+      "recognition_authority": false
+    }
+  ],
+  "current_endpoint_comparison": {
+    "all28_tableau_envelopes_byte_identical": true,
+    "tableau_rgb_sha256": [
+      "6fda8202da9cc06dd6fe2f425be44828f7b923c7f7d803e3dbb71d480f880032",
+      "abddec3ff0b04f3549616c7f903e8aceecda91ee9de05b382be4535815905d7e",
+      "922e917332173da4f6d181c427d724ba26e846491ff57740f3caecc9a5269261",
+      "8d97912b3a501c3ea7a9c21113d106cbe0e8af596d805958a5ebee30e1fa5765",
+      "c0b1622835c227eb9ffccad83394afb9746c45cd1a1ca8e53f0baaf02d1d548c",
+      "8d7d2a24dedbce92764fbfc015605362c057cc1d5102dad6e41cb9e150337a70",
+      "dd0e9709a5e30f776efa3cdc5b1a04fde624e2ea525ecb16cccb73960236e974",
+      "8fb588dfeabdf65f0a7058245f3e6da7344986569418a2cb448e58a7d3e80ff3",
+      "6833c4b2007e8cba50f76beaedec1d3c9efb808314ee3b9fa04615ae74771f40",
+      "e7553f9000e9ff6473b3d6bbd7cbaf3390c9449534d68f7ca22a1881c9dfbc78",
+      "b3b32ab6e79a66d9eaeec5255f0dae67ffa307b9da0b331a4721aa4fa3c75227",
+      "4ca630638868d5c83d3cc8f79e1017226b3c21579ff52d3474a02bf1f41da27a",
+      "5cae627e97081671a00938d5e3c7f5c45a6fac006130ec7638f0f09d460690ac",
+      "4acb410f0a32b314f8f2ed715d5582bf08244739b9669bdcbbe72385d82486a1",
+      "57c86b598f0cc97426257990673b4a3e5fa80fc3dd7cd1b39d1cbf748f7e40f6",
+      "5896cc815dda13fc42fe11d80928d25f4adb7327fdc14bd08cb8ac1b3c993a8a",
+      "590b1be37708620fc09279fb91f5025ad58440fb144e4a736a071b9cccf33bcf",
+      "ebdd77e0390b3408368167d111623c263917e2542f5ff8e0c9a9d1c9460a7f04",
+      "8036e401737ae37cd50afdf6b304acc0a4ac919d34ba80f5434b37fa5091733e",
+      "a33e47df68d1808d2a84defa0d410bb0301256926abe5dd913e99290cff8db23",
+      "d12f9193c8f875c4867c565d619f807815463acbdcdb7696cd74a78a169252b3",
+      "2adb9f1dcc2da369e4308323168c6c7ac0d52850e90094913d7b1e7ecaf5c0d9",
+      "444f078cdc948d0925527c46253781aec83e6e91ed2d63890e00de97a929efd8",
+      "a6a665645fa93c143d9a4da88c660f6fe77634cae2563be77a122d254b6f8a50",
+      "28941a577525cb71e0ebc2e4eea4b9075f649bbff066c0459cdea961dd0c1aef",
+      "69bc29aadf068b29ad76bfc267fb0d4e31c42ab0bf401f1a3d5bd66a3def8f9f",
+      "25d9c925bded81248682f12fb91eba591dd0befd51274cc1bcfc5249288cc36a",
+      "a96c4d0d7571900ad6e792d85673d816d8f00df22c309ecb48245d96e7092822"
+    ],
+    "proves_transition_count": false,
+    "proves_stock_inventory": false,
+    "proves_restoration": false
+  },
+  "native_glyph_calibration_extension": {
+    "reason": "New supplied start/exhausted observations exposed genuine previously absent glyph rasterisation variants.",
+    "added_variants": [
+      {
+        "component": "rank",
+        "source_observation": "current-start-r4c2",
+        "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+        "source_bounds": [
+          792,
+          278,
+          27,
+          24
+        ],
+        "previously_refused_observations_covered": [
+          "current-start-r4c2",
+          "current-exhausted-r4c2"
+        ]
+      },
+      {
+        "component": "rank",
+        "source_observation": "current-start-r5c3",
+        "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+        "source_bounds": [
+          892,
+          331,
+          27,
+          24
+        ],
+        "previously_refused_observations_covered": [
+          "current-start-r5c3",
+          "current-exhausted-r5c3"
+        ]
+      },
+      {
+        "component": "rank",
+        "source_observation": "current-start-r3c1",
+        "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+        "source_bounds": [
+          692,
+          224,
+          27,
+          24
+        ],
+        "previously_refused_observations_covered": [
+          "current-exhausted-RIGHT"
+        ]
+      },
+      {
+        "component": "suit",
+        "source_observation": "current-start-r2c2",
+        "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+        "source_bounds": [
+          995,
+          195,
+          20,
+          16
+        ],
+        "previously_refused_observations_covered": [
+          "current-start-r2c2",
+          "current-exhausted-r2c2"
+        ]
+      },
+      {
+        "component": "suit",
+        "source_observation": "current-start-r4c1",
+        "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+        "source_bounds": [
+          594,
+          302,
+          20,
+          16
+        ],
+        "previously_refused_observations_covered": [
+          "current-start-r4c1",
+          "current-exhausted-r4c1"
+        ]
+      },
+      {
+        "component": "suit",
+        "source_observation": "current-start-r4c2",
+        "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+        "source_bounds": [
+          795,
+          302,
+          20,
+          16
+        ],
+        "previously_refused_observations_covered": [
+          "current-start-r4c4",
+          "current-exhausted-r4c4"
+        ]
+      },
+      {
+        "component": "suit",
+        "source_observation": "current-start-r6c1",
+        "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+        "source_bounds": [
+          394,
+          408,
+          20,
+          16
+        ],
+        "previously_refused_observations_covered": [
+          "current-start-r6c1",
+          "current-exhausted-r6c1"
+        ]
+      },
+      {
+        "component": "suit",
+        "source_observation": "current-start-r7c3",
+        "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+        "source_bounds": [
+          695,
+          462,
+          20,
+          16
+        ],
+        "previously_refused_observations_covered": [
+          "current-start-r7c3",
+          "current-exhausted-r7c3"
+        ]
+      },
+      {
+        "component": "suit",
+        "source_observation": "current-start-LEFT",
+        "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+        "source_bounds": [
+          764,
+          708,
+          20,
+          16
+        ],
+        "previously_refused_observations_covered": [
+          "current-start-LEFT"
+        ]
+      }
+    ],
+    "rank_distance_cap": 24,
+    "suit_distance_cap": 8,
+    "historical_left_observations_still_held_out": 16,
+    "current_start_left_diamond_used_for_suit_training": true,
+    "complete_52_identity_validation": false,
+    "suit_roi_correction": {
+      "previous_roi": [
+        5,
+        30,
+        20,
+        18
+      ],
+      "corrected_roi": [
+        5,
+        30,
+        20,
+        16
+      ],
+      "reason": "Actual LEFT K diamonds has adjacent King hand artwork at relative rows46-47. Exclude those rows rather than weaken mixed-colour rejection.",
+      "source_observation": "current-start-LEFT",
+      "removes_below_glyph_face_art": true,
+      "source_pixels_unchanged": true,
+      "rank_distance_cap": 24,
+      "suit_distance_cap": 8,
+      "scope": "Compare a discriminating glyph region, not necessarily the entire glyph outline; some club/spade stem pixels extend to row46."
+    }
+  }
+}
