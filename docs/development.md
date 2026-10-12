@@ -13,7 +13,9 @@ dependency changes. Capture, recognition and all controller policies are unchang
 xSAR owns the const rank/value mapping and strict schema-1/2 reader. Writers
 emit schema 2 with exactly `card`, `value` and `suit` for every card. Numeric
 values never replace suit identity. The root document schema is independent of
-the native calibration profile's unchanged schema 1/profile ID v4.
+the native calibration profile's unchanged schema 1. The current bundled
+profile v5 is a separately documented [chart-rendering correction](pyramid-recon-chart-rendering-correction.md);
+it does not change the deal schema, card reader or controller input policy.
 
 The manifest and lockfile select xSAR 0.4.0 at that exact Git revision. Normal
 validation uses `--locked` without an external config or local source patch;

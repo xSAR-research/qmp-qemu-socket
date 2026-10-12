@@ -977,6 +977,26 @@ mod tests {
     use serde_json::json;
 
 
+    /// Source-only near-white chart stroke cores include the off-white 4 crossbar.
+    const CHART_CORE_INK_MINIMUM: u8 = 249;
+
+
+    /// Reference separator rows use this inclusive per-channel foreground floor.
+    const CHART_SEPARATOR_INK_MINIMUM: u8 = 192;
+
+
+    /// Four fifths of the original ROI row must be foreground to retain it whole.
+    const CHART_SEPARATOR_COVERAGE_NUMERATOR: u32 = 4;
+
+
+    /// Denominator of the source-only separator-row foreground coverage rule.
+    const CHART_SEPARATOR_COVERAGE_DENOMINATOR: u32 = 5;
+
+
+    /// Existing modal and chart calibration allows this original 3x3 RGB range.
+    const NATIVE_TEXT_FLAT_CHANNEL_RANGE: u8 = 16;
+
+
     /// Construct a labelled test deck with no implication of screen recognition.
     fn deck() -> Vec<Card> {
         Suit::ALL.into_iter().flat_map(|suit| {
@@ -1734,7 +1754,7 @@ mod tests {
 
 
     /// Reproduce calibration selection from the original alone, including its one-pixel halo.
-    fn native_modal_stable_selection(frame: &CapturedFrame, bounds: PixelRect, black_ink: bool) -> Vec<bool> {
+    fn native_text_stable_selection(frame: &CapturedFrame, bounds: PixelRect, black_ink: bool) -> Vec<bool> {
         assert!(bounds.x > 0 && bounds.y > 0 && bounds.right() < frame.width && bounds.bottom() < frame.height);
         let ink = if black_ink { [0, 0, 0] } else { [255, 255, 255] };
         let mut selection = Vec::new();
@@ -1759,7 +1779,7 @@ mod tests {
                 }
                 let offset = row as usize * frame.stride + column as usize * 4;
                 selection.push(frame.pixels[offset..offset + 3] == ink
-                    || maximum.iter().zip(minimum).all(|(high, low)| high - low <= 16));
+                    || maximum.iter().zip(minimum).all(|(high, low)| high - low <= NATIVE_TEXT_FLAT_CHANNEL_RANGE));
             }
         }
         selection
@@ -1779,7 +1799,7 @@ mod tests {
                 assert!(pattern.pixels.iter().all(Option::is_some));
                 continue;
             }
-            let selected = native_modal_stable_selection(&original, pattern.bounds, index == 4);
+            let selected = native_text_stable_selection(&original, pattern.bounds, index == 4);
             assert_eq!(selected.iter().filter(|selected| **selected).count(), [2598, 2383, 2333, 1758][index - 1]);
             assert_eq!(selected, pattern.pixels.iter().map(Option::is_some).collect::<Vec<_>>());
             let excluded = selected.iter().position(|selected| !selected).expect("unstable transition excluded");
@@ -2008,6 +2028,424 @@ mod tests {
     }
 
 
+    /// A dense v4 chart refuses the retained first frame; v5 reads the unchanged deal.
+    #[test]
+    fn bundled_native_profile_recognises_gate3_chart_rendering_refusal() {
+        let original = native_original("gate3-chart-rendering-refusal");
+        let bytes = std::fs::read(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/pyramid-recon/native-profile.json"),
+        )
+        .expect("runtime profile");
+        let mut dense_value: Value = serde_json::from_slice(&bytes).expect("profile JSON");
+
+
+        for pattern in dense_value["board"]["scene"]
+            .as_array_mut()
+            .expect("chart patches")
+            .iter_mut()
+            .take(2)
+        {
+            let count = pattern["samples"]["mask"].as_str().expect("mask").len();
+            pattern["samples"]["mask"] = json!("1".repeat(count));
+        }
+        let dense = ReconVision::from_bytes(
+            &serde_json::to_vec(&dense_value).expect("dense reference profile"),
+        )
+        .expect("unchanged dense mechanism");
+        assert_eq!(
+            dense
+                .observe(&original)
+                .expect("original first-capture refusal"),
+            ReconScene::Unknown
+        );
+        let vision = bundled_native_vision();
+        assert_eq!(vision.profile_id(), "pyramid-native-1920-classic-blue-v5");
+        let expected = vision
+            .observe(&native_original("current-start"))
+            .expect("independently labelled original deal");
+        assert!(matches!(expected, ReconScene::Board(_)));
+        assert_eq!(
+            vision.observe(&original).expect("retained live frame"),
+            expected
+        );
+    }
+
+
+    /// Identify a complete separator row from original bright-pixel coverage alone.
+    fn native_chart_separator_row(frame: &CapturedFrame, bounds: PixelRect, row: u32) -> bool {
+        let view = frame.as_view().expect("valid source frame");
+        let foreground = (bounds.x..bounds.right())
+            .filter(|column| {
+                view.pixel_rgb(*column, bounds.y + row)
+                    .expect("source row in bounds")
+                    .iter()
+                    .all(|channel| *channel >= CHART_SEPARATOR_INK_MINIMUM)
+            })
+            .count() as u32;
+        foreground * CHART_SEPARATOR_COVERAGE_DENOMINATOR
+            >= bounds.width * CHART_SEPARATOR_COVERAGE_NUMERATOR
+    }
+
+
+    /// Preserve source-only bright stroke cores and complete off-white separator rows.
+    fn native_chart_stable_selection(frame: &CapturedFrame, bounds: PixelRect) -> Vec<bool> {
+        let mut selected = native_text_stable_selection(frame, bounds, false);
+        let view = frame.as_view().expect("valid original frame");
+
+
+        for row in 0..bounds.height {
+            let separator = native_chart_separator_row(frame, bounds, row);
+
+
+            for column in 0..bounds.width {
+                let index = (row * bounds.width + column) as usize;
+                selected[index] |= separator
+                    || view
+                        .pixel_rgb(bounds.x + column, bounds.y + row)
+                        .expect("original patch in bounds")
+                        .iter()
+                        .all(|channel| *channel >= CHART_CORE_INK_MINIMUM);
+            }
+        }
+        selected
+    }
+
+
+    /// Both chart masks reproduce the original alone, retaining every measured separator.
+    #[test]
+    fn bundled_chart_masks_reproduce_source_only_selection() {
+        let vision = bundled_native_vision();
+        let original = native_original("current-start");
+        let expected = vision.observe(&original).expect("original board");
+        let view = original.as_view().expect("source view");
+        let separator_rows: [&[u32]; 2] = [&[37, 38], &[2, 3, 40, 41]];
+
+
+        for (index, pattern) in vision.board.scene[..2].iter().enumerate() {
+            let selected = native_chart_stable_selection(&original, pattern.bounds);
+            assert_eq!(
+                selected.iter().filter(|selected| **selected).count(),
+                [2355, 1728][index]
+            );
+            assert_eq!(
+                selected,
+                pattern
+                    .pixels
+                    .iter()
+                    .map(Option::is_some)
+                    .collect::<Vec<_>>()
+            );
+            let rows: Vec<_> = (0..pattern.bounds.height)
+                .filter(|row| native_chart_separator_row(&original, pattern.bounds, *row))
+                .collect();
+            assert_eq!(rows, separator_rows[index]);
+
+
+            for (sample, expected) in pattern.pixels.iter().enumerate() {
+                if let Some(expected) = expected {
+                    assert_eq!(
+                        view.pixel_rgb(
+                            pattern.bounds.x + sample as u32 % pattern.bounds.width,
+                            pattern.bounds.y + sample as u32 / pattern.bounds.width
+                        )
+                        .expect("source sample"),
+                        *expected
+                    );
+                }
+            }
+            let excluded = selected
+                .iter()
+                .position(|selected| !selected)
+                .expect("excluded transition");
+            let row = pattern.bounds.y + excluded as u32 / pattern.bounds.width;
+            let column = pattern.bounds.x + excluded as u32 % pattern.bounds.width;
+            let offset = row as usize * original.stride + column as usize * 4;
+            let mut changed = original.clone();
+            changed.pixels[offset..offset + 3].copy_from_slice(&[255, 0, 255]);
+            assert_eq!(
+                vision
+                    .observe(&changed)
+                    .expect("explicit excluded-pixel blind spot"),
+                expected
+            );
+        }
+    }
+
+
+    /// Calibration thresholds are inclusive and distinguish their adjacent source values.
+    #[test]
+    fn native_chart_selection_thresholds_are_exact() {
+        let mut frame = native_original("current-start");
+
+
+        for width in [78, 67] {
+            let bounds = PixelRect::new(100, 100, width, 1);
+            let required = (width * CHART_SEPARATOR_COVERAGE_NUMERATOR)
+                .div_ceil(CHART_SEPARATOR_COVERAGE_DENOMINATOR);
+
+
+            for count in [required - 1, required] {
+                for ink in [CHART_SEPARATOR_INK_MINIMUM - 1, CHART_SEPARATOR_INK_MINIMUM] {
+                    for column in 0..width {
+                        let offset = 100 * frame.stride + (100 + column) as usize * 4;
+                        frame.pixels[offset..offset + 3].fill(if column < count { ink } else { 0 });
+                    }
+                    assert_eq!(
+                        native_chart_separator_row(&frame, bounds, 0),
+                        count == required && ink == CHART_SEPARATOR_INK_MINIMUM
+                    );
+                }
+            }
+        }
+        let bounds = PixelRect::new(100, 100, 78, 1);
+
+
+        for ink in [CHART_CORE_INK_MINIMUM - 1, CHART_CORE_INK_MINIMUM] {
+            for row in 99..=101 {
+                for column in 99..=179 {
+                    let offset = row * frame.stride + column * 4;
+                    frame.pixels[offset..offset + 3].fill(0);
+                }
+            }
+            let offset = 100 * frame.stride + 110 * 4;
+            frame.pixels[offset..offset + 3].fill(ink);
+            assert_eq!(
+                native_chart_stable_selection(&frame, bounds)[10],
+                ink == CHART_CORE_INK_MINIMUM
+            );
+        }
+
+
+        for range in [
+            NATIVE_TEXT_FLAT_CHANNEL_RANGE,
+            NATIVE_TEXT_FLAT_CHANNEL_RANGE + 1,
+        ] {
+            let offset = 99 * frame.stride + 99 * 4;
+            frame.pixels[offset..offset + 3].fill(range);
+            assert_eq!(
+                native_text_stable_selection(&frame, PixelRect::new(100, 100, 1, 1), false),
+                [range == NATIVE_TEXT_FLAT_CHANNEL_RANGE]
+            );
+        }
+    }
+
+
+    /// Synthetic edits distinguish erased foreground, filled counters and joined strokes.
+    enum ChartMutation {
+        /// Change only original bright foreground, leaving its surrounding background intact.
+        EraseInk,
+        /// Fill only the original dark negative-space samples within a counter.
+        FillCounter,
+        /// Join separated original foreground strokes with a continuous white rectangle.
+        Bridge,
+    }
+
+
+    /// K/9/4 strokes, counters, actual bridges and off-white separators remain discriminating.
+    #[test]
+    fn bundled_chart_masks_reject_ink_only_erasure_and_shape_changes() {
+        let vision = bundled_native_vision();
+        let original = native_original("current-start");
+
+
+        for (label, index, bounds, mutation) in [
+            (
+                "K stem",
+                0,
+                PixelRect::new(35, 5, 2, 17),
+                ChartMutation::EraseInk,
+            ),
+            (
+                "K upper arm",
+                0,
+                PixelRect::new(39, 5, 8, 7),
+                ChartMutation::EraseInk,
+            ),
+            (
+                "K lower arm",
+                0,
+                PixelRect::new(39, 15, 9, 8),
+                ChartMutation::EraseInk,
+            ),
+            (
+                "K joined strokes",
+                0,
+                PixelRect::new(35, 5, 11, 1),
+                ChartMutation::Bridge,
+            ),
+            (
+                "9 counter",
+                1,
+                PixelRect::new(15, 14, 6, 5),
+                ChartMutation::FillCounter,
+            ),
+            (
+                "9 tail",
+                1,
+                PixelRect::new(12, 27, 10, 2),
+                ChartMutation::EraseInk,
+            ),
+            (
+                "4 counter",
+                1,
+                PixelRect::new(54, 17, 3, 4),
+                ChartMutation::FillCounter,
+            ),
+            (
+                "4 diagonal",
+                1,
+                PixelRect::new(49, 18, 7, 4),
+                ChartMutation::EraseInk,
+            ),
+            (
+                "4 off-white crossbar",
+                1,
+                PixelRect::new(51, 23, 6, 1),
+                ChartMutation::EraseInk,
+            ),
+            (
+                "K separator",
+                0,
+                PixelRect::new(0, 37, 78, 2),
+                ChartMutation::EraseInk,
+            ),
+            (
+                "9/4 upper separator",
+                1,
+                PixelRect::new(0, 2, 67, 2),
+                ChartMutation::EraseInk,
+            ),
+            (
+                "9/4 lower separator",
+                1,
+                PixelRect::new(0, 40, 67, 2),
+                ChartMutation::EraseInk,
+            ),
+        ] {
+            let pattern = &vision.board.scene[index];
+            let mut changed = original.clone();
+            let mut witnesses = 0;
+
+
+            for row in bounds.y..bounds.bottom() {
+                for column in bounds.x..bounds.right() {
+                    let offset = (pattern.bounds.y + row) as usize * original.stride
+                        + (pattern.bounds.x + column) as usize * 4;
+                    let actual = &original.pixels[offset..offset + 3];
+                    let replacement = match mutation {
+                        ChartMutation::EraseInk
+                            if actual
+                                .iter()
+                                .all(|channel| *channel >= CHART_SEPARATOR_INK_MINIMUM) =>
+                        {
+                            [24, 80, 54]
+                        }
+                        ChartMutation::FillCounter
+                            if actual.iter().all(|channel| *channel < 128) =>
+                        {
+                            [255, 255, 255]
+                        }
+                        ChartMutation::Bridge => [255, 255, 255],
+                        _ => continue,
+                    };
+                    changed.pixels[offset..offset + 3].copy_from_slice(&replacement);
+
+
+                    if let Some(expected) =
+                        pattern.pixels[(row * pattern.bounds.width + column) as usize]
+                    {
+                        witnesses += usize::from(expected.iter().zip(replacement).any(
+                            |(channel, observed)| channel.abs_diff(observed) > pattern.tolerance,
+                        ));
+                    }
+                }
+            }
+            assert!(
+                witnesses > 0,
+                "{label}: edit reaches retained distinguishing samples"
+            );
+            assert_eq!(
+                vision.observe(&changed).expect("derived shape mutation"),
+                ReconScene::Unknown,
+                "{label}"
+            );
+        }
+    }
+
+
+    /// Selected chart ink, background and separators keep inclusive per-channel RGB caps.
+    #[test]
+    fn bundled_chart_selected_witnesses_keep_exact_rgb_limits() {
+        let vision = bundled_native_vision();
+        let original = native_original("current-start");
+        let expected = vision.observe(&original).expect("source board");
+
+
+        for (index, pattern) in vision.board.scene[..2].iter().enumerate() {
+            let ink = pattern
+                .pixels
+                .iter()
+                .position(|sample| {
+                    sample.is_some_and(|rgb| {
+                        rgb.iter().all(|channel| *channel >= CHART_CORE_INK_MINIMUM)
+                    })
+                })
+                .expect("retained bright ink");
+            let background = pattern
+                .pixels
+                .iter()
+                .position(|sample| {
+                    sample.is_some_and(|rgb| rgb.iter().all(|channel| *channel < 128))
+                })
+                .expect("retained negative space");
+            let separator_row = [37, 2][index];
+            let separator = pattern
+                .pixels
+                .iter()
+                .enumerate()
+                .find_map(|(sample, expected)| {
+                    (sample as u32 / pattern.bounds.width == separator_row
+                        && expected.is_some_and(|rgb| {
+                            rgb.iter()
+                                .all(|channel| *channel >= CHART_SEPARATOR_INK_MINIMUM)
+                        }))
+                    .then_some(sample)
+                })
+                .expect("retained separator ink");
+
+
+            for sample in [ink, background, separator] {
+                let row = pattern.bounds.y + sample as u32 / pattern.bounds.width;
+                let column = pattern.bounds.x + sample as u32 % pattern.bounds.width;
+                let offset = row as usize * original.stride + column as usize * 4;
+
+
+                for channel in 0..3 {
+                    let reference = original.pixels[offset + channel];
+
+
+                    for delta in [pattern.tolerance, pattern.tolerance + 1] {
+                        let mut changed = original.clone();
+                        changed.pixels[offset + channel] = reference
+                            .checked_add(delta)
+                            .unwrap_or_else(|| reference - delta);
+                        let observed = vision.observe(&changed).expect("selected channel mutation");
+                        assert_eq!(
+                            observed,
+                            if delta == pattern.tolerance {
+                                expected.clone()
+                            } else {
+                                ReconScene::Unknown
+                            }
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+
     /// Each full rule-chart entry, the stock arrow and Solver-OFF evidence remain mandatory.
     #[test]
     fn bundled_native_scene_refuses_erased_components_after_row_boundary_correction() {
@@ -2037,7 +2475,7 @@ mod tests {
     }
 
 
-    /// Removed next-row fragments are independent; retained edge pixels and RGB caps are not.
+    /// Removed next-row fragments are independent; retained selected pixels and RGB caps are not.
     #[test]
     fn bundled_native_chart_boundaries_preserve_exact_selected_pixel_limits() {
         let vision = bundled_native_vision();
@@ -2069,9 +2507,10 @@ mod tests {
 
         for (index, pattern) in vision.board.scene[..2].iter().enumerate() {
             assert_eq!(pattern.tolerance, [6, 8][index]);
-            assert!(pattern.pixels.iter().all(Option::is_some));
-            let row = pattern.bounds.bottom() - 1;
-            let offset = row as usize * original.stride + pattern.bounds.x as usize * 4;
+            let sample = pattern.pixels.iter().rposition(Option::is_some).expect("selected chart sample");
+            let row = pattern.bounds.y + sample as u32 / pattern.bounds.width;
+            let column = pattern.bounds.x + sample as u32 % pattern.bounds.width;
+            let offset = row as usize * original.stride + column as usize * 4;
             let reference = original.pixels[offset];
 
 

@@ -54,26 +54,35 @@ Verify the window/session version, executable path and `/proc/<pid>/exe`
 checksum before testing. Updating source or a file on disk does not update an
 existing process. There are no reconnaissance CLI options; use the GUI panel.
 
-The following scripts are retained in the validation evidence directory. They
-have been syntax-checked, not executed against the live application. They run
+The following v5-pinned scripts are retained in the chart-correction evidence
+directory. They have been syntax-checked, not used to launch or operate the
+live application. They run
 as separate zsh processes, so `exit`/`exec` cannot replace the interactive shell;
 see [zsh command execution](https://zsh.sourceforge.io/Doc/Release/Shell-Grammar.html).
 The launcher refuses an existing controller and mismatched executable/profile
 hashes. It does not install anything or start reconnaissance automatically.
+
+The chart-rendering correction changes the profile to v5. Local validation
+passed all 702 tests, including host-only tests, plus strict docs, Clippy,
+check and release. The older scripts under `/tmp/pyramid-git-pin.KWcKZAfa/`
+intentionally pin v4 and will refuse the new profile; use the scripts below
+instead of bypassing a checksum. An already-running verified idle controller
+loads the selected profile anew for every scan; profile data alone needs no
+restart. No controller was running at the post-build process check.
 
 1. Close the old controller normally, then deliberately launch the verified build.
    Run as the normal desktop user, without sudo.
 
 ```zsh
 printf 'Launch the verified Pyramid reconnaissance test build\n'
-/usr/bin/zsh /tmp/pyramid-git-pin.KWcKZAfa/launch-verified.zsh
+/usr/bin/zsh -f /home/charlie/tmp/pyramid-recon-failure-2974057.cjxsCM2W/launch-verified-v5.zsh
 ```
 
 2. In a second terminal, verify the one running process before guest input.
 
 ```zsh
 printf 'Verify the actual running controller, not just its file on disk\n'
-/usr/bin/zsh /tmp/pyramid-git-pin.KWcKZAfa/verify-running.zsh
+/usr/bin/zsh -f /home/charlie/tmp/pyramid-recon-failure-2974057.cjxsCM2W/verify-running-v5.zsh
 ```
 
 In the panel, use the absolute profile path ending in
@@ -85,8 +94,9 @@ succeeds, and the application refuses an existing destination.
 
 ## 4. Successful scan
 
-Use the corrected native profile `pyramid-native-1920-classic-blue-v4` described
-in the [stable-text correction record](pyramid-recon-stable-text-correction.md), retaining
+Use the corrected native profile `pyramid-native-1920-classic-blue-v5` described
+in the [chart-rendering correction record](pyramid-recon-chart-rendering-correction.md), retaining
+the [stable modal-text correction](pyramid-recon-stable-text-correction.md) and
 the earlier [chart correction](pyramid-recon-gate3-correction.md). The same
 profile pathname is loaded anew before each reconnaissance operation; no restart
 is needed solely for this data correction. After editing any form field, tick

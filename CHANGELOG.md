@@ -1,5 +1,29 @@
 # Changelog
 
+## v2.3.0 — Client/server TCP screen capture architecture and terminal button calibration (development)
+
+- Transition worker screen capture from host QMP screendumps to a guest-side
+  client/server TCP stream using xSAR's `ScreenCaptureClient::capture_full()`.
+- Stream uncompressed full-display BGRA pixels directly from the guest daemon
+  over localhost TCP (default `127.0.0.1:9999`) and convert to RGBA in-place,
+  eliminating QMP temporary file reservations, disk I/O and PNG decode latency
+  from active game-solving and observation loops.
+- Cache a thread-local `ScreenCaptureClient` on the dedicated worker thread to
+  maintain a persistent TCP connection across cycles with automatic reconnection
+  on transport interruption.
+- Synthesise PNG bytes on demand via `xsar::capture::encode_png` only when raw
+  bytes are explicitly required (manual snapshot preview/saving and Pyramid
+  reconnaissance diagnostic baselines), keeping solving loops free of PNG
+  compression overhead.
+- Preserve the legacy QMP screendump implementation in `src/worker.rs` under an
+  explicit heading labelled with `#[allow(dead_code)]` for reference.
+- Correct the native OK button location and detection bounds for Klondike and
+  Free Cell when levelling up in the game win sequence, updating target click
+  coordinates to (960, 760) and (959, 760) to align with measured modal dialogs.
+- Enforce strict layout and dimension validation on every captured frame,
+  preserving existing game profiles, STOP/cancellation guards and CV controller
+  policies across all five game types.
+
 ## v2.2.0 — Explicit card values and schema-2 export (development)
 
 - Consume xSAR 0.4.0's schema-2 writer with exact `card`, integer `value` and

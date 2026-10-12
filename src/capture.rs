@@ -1,7 +1,8 @@
-//! Shared PNG decoding and RGBA frame representation provided by xSAR.
+//! Shared PNG decoding, PNG encoding, RGBA frame and TCP capture client provided by xSAR.
 //!
-//! The worker still obtains original bytes through a QMP temporary PNG file.
+//! Captures are performed over guest-side TCP using ScreenCaptureClient.
 //! Snapshot ownership, exact-byte saving and cleanup remain application policy.
 
-pub use xsar::capture::decode_png;
+pub use xsar::capture::{decode_png, encode_png};
 pub use xsar::image_matching::{CapturedFrame, PixelFormat};
+pub use xsar::tcp::ScreenCaptureClient;

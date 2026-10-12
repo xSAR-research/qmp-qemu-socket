@@ -182,7 +182,7 @@ No native near-identical non-Undo confirmation has been supplied. See the
 [modal correction record](../../../docs/pyramid-recon-modal-correction.md).
 
 The repeated scan still refused ten Cancel/OK pixels exceeding v3 limits by one.
-Current `pyramid-native-1920-classic-blue-v4` instead changes only the four text
+The preceding `pyramid-native-1920-classic-blue-v4` instead changes only the four text
 masks and ID. Its source-only selection retains pure-ink centres OR samples with
 every RGB channel's original 3x3 range at most 16, including a one-pixel halo
 outside the ROI. RGB, ROIs and tolerances remain unchanged. All seven components
@@ -190,6 +190,19 @@ remain required, but excluded samples are unconstrained: this is a documented
 acceptance widening, not full OCR. Fixed rule/count/hash, retained ink, negative
 space and selected-channel boundary tests accompany the change. See the
 [stable-text correction record](../../../docs/pyramid-recon-stable-text-correction.md).
+
+The next first-capture failure exposed ten 9/4 chart transition samples beyond
+the unchanged tolerance 8. Current profile v5 retains source-only bright stroke
+cores (`min(RGB)>=249`), original locally flat samples (3x3 channel range at most
+16), and complete off-white separator rows (at least four fifths of original row
+pixels have `min(RGB)>=192`). Only two chart masks and the ID change; RGB, bounds,
+tolerances, readers and modal/authority rules remain unchanged. A pure-white-only
+candidate was rejected because it would omit separator and 4-crossbar evidence.
+The actual original `gate3-chart-rendering-refusal.png` is retained unchanged;
+it labels Grandmaster, not Easy, and its failed run attempted zero inputs.
+Source-only reproduction, ink-only stroke/separator erasure, counter/bridge edits
+and selected RGB boundary tests accompany this bounded acceptance widening.
+See the [chart-rendering correction record](../../../docs/pyramid-recon-chart-rendering-correction.md).
 
 ## Validation and remaining proof
 

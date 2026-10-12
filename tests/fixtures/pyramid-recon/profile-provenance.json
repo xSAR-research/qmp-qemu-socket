@@ -772,5 +772,59 @@
       "test_correction": "Title A/l bridge mutation changed to relative (145,10,16,2) to actually join the strokes. Full suite rerun passed.",
       "scope": "Read-only review; no source edits or guest input by subagent."
     }
+  },
+  "gate3_chart_stable_mask_correction": {
+    "date": "2026-10-11",
+    "previous_profile_id": "pyramid-native-1920-classic-blue-v4",
+    "previous_profile_sha256": "796f3debfa098715fac781f4aa69de1dc4eaefb91af5ca996db7dc8e12474577",
+    "profile_id": "pyramid-native-1920-classic-blue-v5",
+    "profile_sha256": "b48e0b1a20aec2439422a1b967de1468d5553cc9a12077784356c3b68bcfd3e7",
+    "failed_run": ".pyramid-recon-2974057-2",
+    "failed_original_sha256": "07b8cf87aeb2a5ad8b6c3afd5f2e1fcef87c83855a65846ff1c92ad0651173cb",
+    "failure": "First capture: ten selected board.scene[1] pixels exceed tolerance8; maximum delta10. No D, Undo All or OK attempted; publication not_attempted.",
+    "selection_rule": "Using only unchanged current-start: retain the complete row if at least four fifths of its centre samples have min(RGB)>=192; otherwise retain a bright core centre with min(RGB)>=249 OR every channel has range<=16 over the original full-frame 3x3 neighbourhood, including a one-pixel ROI halo. Bright cores include off-white thin strokes such as the 4 crossbar; the full-row branch preserves off-white separators.",
+    "measurements": [
+      {
+        "component": "board.scene[0]",
+        "bounds": [
+          1810,
+          132,
+          78,
+          40
+        ],
+        "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+        "separator_rows_relative": [
+          37,
+          38
+        ],
+        "selected_pixels": 2355,
+        "exact_white_ink_pixels": 45,
+        "mask_ascii_sha256": "7bad658831e9d6e15bd5b4dfcfe84b12a6ab1ff90b1cf10061aec7e8c88b7bc6",
+        "unchanged_tolerance": 6
+      },
+      {
+        "component": "board.scene[1]",
+        "bounds": [
+          1815,
+          281,
+          67,
+          42
+        ],
+        "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+        "separator_rows_relative": [
+          2,
+          3,
+          40,
+          41
+        ],
+        "selected_pixels": 1728,
+        "exact_white_ink_pixels": 85,
+        "mask_ascii_sha256": "22abcf9fe202d7fdf80703ab5dccc1944864952d4b9315c39e4322a6c1802da8",
+        "unchanged_tolerance": 8
+      }
+    ],
+    "unchanged": "All RGB values, bounds, tolerances, card readers, modal masks, controls, input authority, STOP/context checks, restoration and publication policy. Only two chart masks and profile ID change.",
+    "acceptance_tradeoff": "Excluded transition pixels are unconstrained. Masking widens scene acceptance; retained K/9/4 ink, separators and selected negative space remain mandatory. These are bounded sampled signatures, not full OCR or a universal false-positive guarantee.",
+    "live_boundary": "Latest retained frame labels Grandmaster. This correction does not prove a fresh Easy scan, complete acquisition, restoration or publication. Regression and validation results are recorded in docs/pyramid-recon-chart-rendering-correction.md."
   }
 }

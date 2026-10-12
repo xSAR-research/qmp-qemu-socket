@@ -102,13 +102,13 @@ The integration tests require local Unix socket creation. `--include-ignored`
 runs that explicit host-test group as well as the ordinary suite; restricted
 executors can run the ordinary suite but must report these tests as unverified.
 
-2. Build the release executable in the repository's target directory.
+- Build the release executable in the repository's target directory.
 
 ```zsh
 CARGO_TARGET_DIR="$PWD/target" cargo build --locked --release
 ```
 
-3. Launch the validated release.
+- Launch the validated release.
 
 ```zsh
 ./target/release/qmp-qemu-socket

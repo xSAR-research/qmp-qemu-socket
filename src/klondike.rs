@@ -3535,7 +3535,7 @@ mod tests {
 
 
     /// Every ordinary bracket remains required. The existing shadow predicate
-    /// bridges only952..962; an absent/overdark rail or a new twelve-row weak
+    /// bridges only952..962; an absent/over-dark rail or a new twelve-row weak
     /// band elsewhere still breaks the unchanged ten-row gap policy.
     #[test]
     fn hint_shadow_rail_bridge_requires_measured_band_and_ordinary_brackets() {

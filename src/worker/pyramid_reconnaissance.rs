@@ -516,7 +516,7 @@ fn publish_once(
 }
 
 
-/// Distinguish no attempt, acknowledged nonpublication, uncertainty and publication.
+/// Distinguish no attempt, acknowledged non-publication, uncertainty and publication.
 fn publication_label(publication: Option<PublicationStatus>) -> &'static str {
 
 

@@ -499,7 +499,7 @@ positive mode-owned board evidence before Solver or gameplay input.
 Pyramid Move/Recycle uses the confirmed D shortcut only when its fixed four-pixel
 HALO probe passes. The other 30 targets retain clicks. TriPeaks's ordinary no-HALO
 recovery owns three delayed observations before one Solver refresh and three
-afterward; its interval is session-editable and immutable per run. This does not
+afterwards; its interval is session-editable and immutable per run. This does not
 change existing effect verification or independently authorised redeal handling.
 
 The Undo All overlay is represented by one measured bounded envelope, supported

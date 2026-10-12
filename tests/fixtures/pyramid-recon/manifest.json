@@ -455,6 +455,22 @@
       "original_bytes": true,
       "transformation": "none",
       "evidence": "Repeated v3 modal refusal: same complete ordered inventory, 24 D acknowledgements, one Undo All acknowledgement, zero OK attempts or publication."
+    },
+    {
+      "id": "gate3-chart-rendering-refusal",
+      "file": "originals/gate3-chart-rendering-refusal.png",
+      "sha256": "07b8cf87aeb2a5ad8b6c3afd5f2e1fcef87c83855a65846ff1c92ad0651173cb",
+      "bytes": 2789817,
+      "dimensions": [
+        1920,
+        1080
+      ],
+      "format": "PNG",
+      "mode": "RGB",
+      "source_record": "../../../docs/pyramid-recon-chart-rendering-correction.md",
+      "original_bytes": true,
+      "transformation": "none",
+      "evidence_note": "First observation of operator-reported run .pyramid-recon-2974057-2; zero input attempts; Grandmaster label, not an Easy capture."
     }
   ],
   "labelled_card_observations": [

@@ -15,6 +15,7 @@ mod spider_execution;
 mod tripeaks_terminal;
 
 use std::{
+    cell::RefCell,
     fs::{self, OpenOptions},
     io::{ErrorKind, Read},
     os::unix::fs::OpenOptionsExt,
@@ -29,7 +30,7 @@ use std::{
 };
 
 use crate::{
-    capture::{CapturedFrame, decode_png},
+    capture::{CapturedFrame, PixelFormat, ScreenCaptureClient, decode_png, encode_png},
     detector::detect_game_progress_for_profile,
     game::{ActionTarget, GameMode, GameProgress, InputOperation},
     geometry::{PixelRect, pixel_point_to_qmp, pixel_rect_to_qmp},
@@ -3321,22 +3322,75 @@ fn publish_and_analyse_captured_frame(
 }
 
 
-/// Capture one decoded frame and timings, discarding the original PNG bytes from memory.
-fn capture_screen(
-    qmp: &mut QmpClient,
-    socket_path: &Path,
-) -> Result<(CapturedFrame, CaptureTiming), String> {
-    let (frame, _png, timing) = capture_screen_with_png(qmp, socket_path)?;
+thread_local! {
+    static TCP_CAPTURE_CLIENT: RefCell<ScreenCaptureClient> =
+        RefCell::new(ScreenCaptureClient::new(None));
+}
+
+
+/// Capture one full-display frame over guest-side TCP using [`ScreenCaptureClient`].
+///
+/// Requests uncompressed BGRA pixels directly from the guest TCP server, converts them
+/// to RGBA in-place, and maps timings into [`CaptureTiming`]. Returns an error if the
+/// guest server is unreachable or protocol validation fails.
+fn capture_screen_via_tcp() -> Result<(CapturedFrame, CaptureTiming), String> {
+    let (tcp_frame, tcp_timing) = TCP_CAPTURE_CLIENT
+        .with(|cell| cell.borrow_mut().capture_full())
+        .map_err(|error| format!("TCP capture failed: {error}"))?;
+
+    let frame = CapturedFrame {
+        width: tcp_frame.width,
+        height: tcp_frame.height,
+        stride: tcp_frame.stride,
+        format: PixelFormat::Rgba8,
+        pixels: tcp_frame.pixels,
+    };
+
+    let timing = CaptureTiming {
+        captures: 1,
+        reserve: Duration::ZERO,
+        screendump: Duration::from_secs_f64((tcp_timing.connect_ms + tcp_timing.request_ms) / 1000.0),
+        file_read: Duration::from_secs_f64(tcp_timing.pixel_read_ms / 1000.0),
+        decode: Duration::from_secs_f64(tcp_timing.conversion_ms / 1000.0),
+        detection: Duration::ZERO,
+    };
+
     Ok((frame, timing))
 }
 
 
+/// Capture one decoded frame and timings via guest TCP without PNG overhead.
+fn capture_screen(
+    _qmp: &mut QmpClient,
+    _socket_path: &Path,
+) -> Result<(CapturedFrame, CaptureTiming), String> {
+    capture_screen_via_tcp()
+}
+
+
+/// Capture one frame via guest TCP and encode its pixels to PNG for callers requiring raw bytes.
+///
+/// Returns the decoded frame, synthesised PNG bytes and timings for manual preview/save
+/// and diagnostic records.
+fn capture_screen_with_png(
+    _qmp: &mut QmpClient,
+    _socket_path: &Path,
+) -> Result<(CapturedFrame, Vec<u8>, CaptureTiming), String> {
+    let (frame, timing) = capture_screen_via_tcp()?;
+    let png = encode_png(&frame).map_err(|error| format!("PNG encode failed: {error}"))?;
+    Ok((frame, png, timing))
+}
+
+
+// ============================================================================
+// Legacy QMP-QEMU screendump implementation (preserved reference)
+// ============================================================================
+
 /// Capture one full-display QMP PNG through a private temporary file and decode its pixels.
 ///
-/// Returns the decoded frame, original bytes and timings for manual preview/save.
-/// The file guard removes the temporary PNG on normal cleanup. Empty/oversized
-/// files, capture failures, I/O failures and decode errors are rejected.
-fn capture_screen_with_png(
+/// Preserved legacy implementation; active capture flows through guest-side TCP.
+#[allow(dead_code)]
+fn capture_screen_with_png_legacy_qmp(
     qmp: &mut QmpClient,
     socket_path: &Path,
 ) -> Result<(CapturedFrame, Vec<u8>, CaptureTiming), String> {
@@ -3386,6 +3440,7 @@ fn capture_screen_with_png(
 
     Ok((frame, png, timing))
 }
+
 
 
 /// Classify one immutable frame under the supplied game and scan state without QMP access.
@@ -3707,10 +3762,12 @@ fn cancellable_wait(
 
 
 /// Guard owning a private temporary QMP PNG path until normal cleanup.
+#[allow(dead_code)]
 struct CaptureArtifact {
     /// Exclusively reserved path beside the QMP socket.
     file_name: PathBuf,
 }
+
 
 
 impl CaptureArtifact {

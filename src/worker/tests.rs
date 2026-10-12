@@ -3766,3 +3766,38 @@ mod tripeaks_reward_qmp_regressions {
             WorkerEvent::GameCompleted | WorkerEvent::BoardProgress { completed_boards: 3, .. })));
     }
 }
+
+/// When the guest TCP capture server is unreachable, capture_screen_via_tcp
+/// fails immediately with a descriptive error without hanging.
+#[test]
+fn capture_via_tcp_fails_gracefully_when_server_unreachable() {
+    let result = capture_screen_via_tcp();
+    assert!(result.is_err());
+    let error = result.unwrap_err();
+    assert!(
+        error.starts_with("TCP capture failed:"),
+        "expected 'TCP capture failed:', got: {error}"
+    );
+}
+
+/// Verifies encode_png correctly encodes a synthesised CapturedFrame to valid PNG bytes.
+#[test]
+fn encode_png_synthesizes_valid_png() {
+    let frame = CapturedFrame {
+        width: 2,
+        height: 2,
+        stride: 8,
+        format: PixelFormat::Rgba8,
+        pixels: vec![
+            255, 0, 0, 255,   0, 255, 0, 255,
+            0, 0, 255, 255,   255, 255, 255, 255,
+        ],
+    };
+    let encoded = encode_png(&frame).expect("encode frame to PNG");
+    assert!(!encoded.is_empty());
+    let decoded = decode_png(&encoded).expect("decode synthesised PNG");
+    assert_eq!((decoded.width, decoded.height), (2, 2));
+    assert_eq!(decoded.pixels, frame.pixels);
+}
+
+
