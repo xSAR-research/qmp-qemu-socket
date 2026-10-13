@@ -1,5 +1,20 @@
 # Changelog
 
+## v2.2.2-candidate.1 — Spider Level Up black-run search
+
+- Search only Spider's expected OK region for five consecutive exact-black RGB
+  pixels, visiting rows bottom-up and each row left-to-right. Click the returned
+  full-frame coordinate instead of a fixed Level Up point.
+- Retry a missing post-score OK once with a fresh capture, while still allowing
+  the optional Level Up screen to be absent when New Game is ready. Retain the
+  latest failed capture in the egui diagnostic preview when the retry fails.
+- Send every OK search boundary, result and attempt through the session and
+  on-screen log path. Keep other games and capture transport unchanged.
+- Consume the sibling xsar 0.4.2-candidate.1 helper and add the native Spider
+  level-505 screenshot plus detector and worker regressions.
+- Candidate awaiting local Rust build/tests and live Spider acceptance; fixture
+  measurements alone do not establish successful guest interaction.
+
 ## v2.2.0 — Explicit card values and schema-2 export (development)
 
 - Consume xSAR 0.4.0's schema-2 writer with exact `card`, integer `value` and

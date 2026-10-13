@@ -7,7 +7,8 @@
 //! A missing HALO does not establish a win: positive terminal caption/control
 //! evidence does. Only continuous runs advance the expected terminal controls.
 //! After score skip, Level Up is optional: inspect local OK and New Game
-//! readiness on each fresh frame and accept exactly one ready control.
+//! readiness on each fresh frame and accept exactly one ready control. One miss
+//! receives one input-free recapture; a second miss stops with that frame retained.
 //! An inactive Solver board receives an editable start delay and fresh capture
 //! before activation once per unresolved context. Active no-HALO gameplay receives
 //! bounded input-free observations, with no Solver refresh or allowance reset.
@@ -25,6 +26,7 @@ use crate::{
     spider,
     spider_terminal::{self, TerminalStage},
     game::{ActionTarget, GameMode, InputOperation},
+    geometry::PixelPoint,
     parameters::{
         SPIDER_MAX_MULTI_STEP_ACTIONS, LEVEL_UP_APPEAR_DELAY, NOMINAL_FRAME_HEIGHT,
         NOMINAL_FRAME_WIDTH, POST_GAME_MOUSE_HOLD, POST_GAME_STAGE_DELAY,
@@ -72,7 +74,7 @@ trait SpiderIo {
 
 
     /// Click exactly one freshly ready expected terminal control.
-    fn terminal(&mut self, stage: TerminalStage) -> Result<(), String>;
+    fn terminal(&mut self, stage: TerminalStage, point: PixelPoint) -> Result<(), String>;
 
 
     /// Perform an interruptible settle or observation delay.
@@ -142,10 +144,13 @@ impl SpiderIo for QmpSpiderIo<'_> {
     }
 
 
-    fn terminal(&mut self, stage: TerminalStage) -> Result<(), String> {
+    fn terminal(&mut self, stage: TerminalStage, point: PixelPoint) -> Result<(), String> {
         require_running(self.cancel_requested)?;
+        if point == PixelPoint::new(0, 0) {
+            return Err("Spider terminal control has no detected click point; no input sent".to_owned());
+        }
         self.qmp.click_with_hold(
-            spider_terminal::click_point(stage), NOMINAL_FRAME_WIDTH,
+            point, NOMINAL_FRAME_WIDTH,
             NOMINAL_FRAME_HEIGHT, POST_GAME_MOUSE_HOLD,
         ).map_err(|error| format!("Spider {stage} delivery is uncertain: {error}; no retry permitted"))
     }
@@ -249,7 +254,7 @@ fn drive_run(
     validate_operation_limit(settings.operation_limit())?;
     let delays = settings.animation_delays();
     send_log(event_tx, format!(
-        "Spider fresh-HALO execution: game-start delay={} ms, card/automatic-pack settle={} ms, DRAW deal settle={} ms, no-HALO observation={} ms, delayed allowance={}. Initial inactive Solver receives one start delay and fresh capture before one activation per unresolved context. After Play, the same game-start delay runs once before observing the new board. Active no-HALO gameplay receives bounded input-free observations with no Solver refresh; activation does not reset the delayed allowance. One source click or DRAW key press consumes one action; Solver and terminal clicks do not. Each acknowledged released source click parks the pointer on validated felt before settling: one separate QMP movement command with two absolute events, no click and no extra action. DRAW uses qcode D, has its own deal wait and does not park. No card identity, pixel difference, COLLAPSED SUITS input, Recycle or Solve is used. Continuous 0 may restart one-board games through Score, optional Level Up OK, New Game and Play. After score skip, exactly one ready local OK or New Game control selects the next stage. When neither control is ready, bounded captures follow; when both are ready, execution stops without input.",
+        "Spider fresh-HALO execution: game-start delay={} ms, card/automatic-pack settle={} ms, DRAW deal settle={} ms, no-HALO observation={} ms, delayed allowance={}. Initial inactive Solver receives one start delay and fresh capture before one activation per unresolved context. After Play, the same game-start delay runs once before observing the new board. Active no-HALO gameplay receives bounded input-free observations with no Solver refresh; activation does not reset the delayed allowance. One source click or DRAW key press consumes one action; Solver and terminal clicks do not. Each acknowledged released source click parks the pointer on validated felt before settling: one separate QMP movement command with two absolute events, no click and no extra action. DRAW uses qcode D, has its own deal wait and does not park. No card identity, pixel difference, COLLAPSED SUITS input, Recycle or Solve is used. Continuous 0 may restart one-board games through Score, optional Level Up OK, New Game and Play. After score skip, exactly one ready local OK or New Game control selects the next stage. When neither control is ready, one fresh input-free capture and repeat search follow; a second miss stops with the latest frame retained; when both are ready, execution stops without input.",
         delays.spider_game_start.as_millis(), delays.spider_settle.as_millis(), delays.spider_draw_settle.as_millis(), delays.spider_reobserve.as_millis(), settings.spider_observation_limit(),
     ));
     capture_latest(io, latest, event_tx, cancel_requested)?;
@@ -407,16 +412,24 @@ fn restart_game(
     input_attempted: &mut bool,
 ) -> Result<(), String> {
     let mut stage = initial_stage;
+    let mut ready_point = None;
 
 
     loop {
-        await_expected_control(io, latest, stage, settings, event_tx, cancel_requested)?;
+        let point = if let Some(point) = ready_point.take() {
+            point
+        } else {
+            await_expected_control(io, latest, stage, settings, event_tx, cancel_requested)?
+        };
+        if point == PixelPoint::new(0, 0) {
+            return Err("Spider expected terminal control returned no match; no input authorised".to_owned());
+        }
         guard_input(io, cancel_requested)?;
         send_state(event_tx, WorkerState::Acting);
         send_status(event_tx, stage.to_string());
-        send_log(event_tx, format!("Spider deterministic GAME WIN control: {stage}; one click at {:?}; unrelated panel colours, levels and artwork are not conditions.", spider_terminal::click_point(stage)));
+        send_log(event_tx, format!("Spider deterministic GAME WIN control: {stage}; one click at {:?}; unrelated panel colours, levels and artwork are not conditions.", point));
         *input_attempted = true;
-        io.terminal(stage)?;
+        io.terminal(stage, point)?;
         let settle = match stage {
             TerminalStage::Score => LEVEL_UP_APPEAR_DELAY,
             TerminalStage::Play => settings.animation_delays().spider_game_start,
@@ -427,9 +440,13 @@ fn restart_game(
 
 
         match stage {
-            TerminalStage::Score => stage = await_post_score_control(
-                io, latest, settings, event_tx, cancel_requested,
-            )?,
+            TerminalStage::Score => {
+                let (next_stage, point) = await_post_score_control(
+                    io, latest, settings, event_tx, cancel_requested,
+                )?;
+                stage = next_stage;
+                ready_point = Some(point);
+            },
             TerminalStage::LevelUp => stage = TerminalStage::NewGame,
             TerminalStage::NewGame => stage = TerminalStage::Play,
             TerminalStage::Play => break,
@@ -463,49 +480,67 @@ fn restart_game(
 }
 
 
-/// Resolve optional Level Up from this fresh frame's two local controls only.
-/// No ready control receives bounded input-free captures. Two ready controls
-/// are uncertain and stop; neither artwork nor a prior stage supplies a guess.
+/// Log every Level Up search through the existing on-screen and session-log sink.
+fn search_level_up(
+    frame: &CapturedFrame,
+    attempt: usize,
+    attempts: usize,
+    event_tx: &WorkerEventSink,
+) -> Result<PixelPoint, String> {
+    let bounds = spider_terminal::LEVEL_UP_SEARCH;
+    let result = spider_terminal::level_up_click_point(frame);
+    let description = match &result {
+        Ok(point) => format!("({}, {})", point.x, point.y),
+        Err(error) => format!("error: {error}"),
+    };
+    send_log(event_tx, format!(
+        "Spider Level Up OK search {attempt}/{attempts}: X={}..={}, Y={}..={} inclusive; bottom-to-top rows, left-to-right pixels; {} consecutive RGB(0,0,0); result={description}.",
+        bounds.x, bounds.right() - 1, bounds.y, bounds.bottom() - 1,
+        spider_terminal::LEVEL_UP_BLACK_RUN,
+    ));
+    result.map_err(|error| format!("Spider post-score OK search failed: {error}"))
+}
+
+
+/// Resolve optional Level Up from the fresh OK search and New Game control.
+/// A missing pair receives exactly one input-free recapture and repeat search.
+/// Two ready controls stop without input. Return the measured point with its
+/// stage so the subsequent input uses this same checked frame without rescanning.
 fn await_post_score_control(
     io: &mut impl SpiderIo,
     latest: &mut Option<FrameObservation>,
     settings: StepRunSettings,
     event_tx: &WorkerEventSink,
     cancel_requested: &AtomicBool,
-) -> Result<TerminalStage, String> {
-
-
-    for delayed in 0..=settings.spider_observation_limit() {
+) -> Result<(TerminalStage, PixelPoint), String> {
+    for attempt in 1..=2 {
         require_running(cancel_requested)?;
         let frame = &current(latest)?.frame;
-        let ok_ready = spider_terminal::expected_control_ready(frame, TerminalStage::LevelUp)
-            .map_err(|error| format!("Spider post-score OK readiness failed: {error}"))?;
-        let new_game_ready = spider_terminal::expected_control_ready(frame, TerminalStage::NewGame)
+        let ok_point = search_level_up(frame, attempt, 2, event_tx)?;
+        let new_game_point = spider_terminal::expected_control_point(frame, TerminalStage::NewGame)
             .map_err(|error| format!("Spider post-score New Game readiness failed: {error}"))?;
 
-
-        match (ok_ready, new_game_ready) {
+        match (ok_point != PixelPoint::new(0, 0), new_game_point != PixelPoint::new(0, 0)) {
             (true, false) => {
                 send_log(event_tx, "Spider post-score branch: local OK ready; optional Level Up selected.".to_owned());
-                return Ok(TerminalStage::LevelUp);
+                return Ok((TerminalStage::LevelUp, ok_point));
             }
             (false, true) => {
                 send_log(event_tx, "Spider post-score branch: local New Game ready; no Level Up step required.".to_owned());
-                return Ok(TerminalStage::NewGame);
+                return Ok((TerminalStage::NewGame, new_game_point));
             }
             (true, true) => return Err("Spider post-score controls are uncertain: both OK and New Game are ready; no branch input authorised".to_owned()),
             (false, false) => {}
         }
 
-
-        if delayed == settings.spider_observation_limit() {
+        if attempt == 2 {
             break;
         }
-        send_log(event_tx, format!("Spider post-score input-free observation {}/{}: neither local OK nor New Game is ready; score skip is not repeated.", delayed + 1, settings.spider_observation_limit()));
+        send_log(event_tx, "Spider post-score OK/New Game absent: one input-free recapture and repeat search; score skip is not repeated.".to_owned());
         io.wait(settings.animation_delays().spider_reobserve)?;
         capture_latest(io, latest, event_tx, cancel_requested)?;
     }
-    Err("Spider expected post-score OK or New Game did not become ready within the bounded observation allowance; score skip was not retried".to_owned())
+    Err("Spider expected post-score OK or New Game absent after one fresh recapture and repeat search; latest failed frame retained for preview; score skip was not retried".to_owned())
 }
 
 
@@ -517,24 +552,30 @@ fn await_expected_control(
     settings: StepRunSettings,
     event_tx: &WorkerEventSink,
     cancel_requested: &AtomicBool,
-) -> Result<(), String> {
+) -> Result<PixelPoint, String> {
 
 
-    for delayed in 0..=settings.spider_observation_limit() {
+    let retries = if stage == TerminalStage::LevelUp { 1 } else { settings.spider_observation_limit() };
+    for delayed in 0..=retries {
         require_running(cancel_requested)?;
 
 
-        if spider_terminal::expected_control_ready(&current(latest)?.frame, stage)
-            .map_err(|error| format!("Spider expected {stage} readiness failed: {error}"))?
-        {
-            return Ok(());
+        let point = if stage == TerminalStage::LevelUp {
+            search_level_up(&current(latest)?.frame, delayed + 1,
+                retries + 1, event_tx)?
+        } else {
+            spider_terminal::expected_control_point(&current(latest)?.frame, stage)
+                .map_err(|error| format!("Spider expected {stage} readiness failed: {error}"))?
+        };
+        if point != PixelPoint::new(0, 0) {
+            return Ok(point);
         }
 
 
-        if delayed == settings.spider_observation_limit() {
+        if delayed == retries {
             break;
         }
-        send_log(event_tx, format!("Spider terminal input-free observation {}/{}: waiting only for expected {stage}; prior click is not repeated.", delayed + 1, settings.spider_observation_limit()));
+        send_log(event_tx, format!("Spider terminal input-free observation {}/{}: waiting only for expected {stage}; prior click is not repeated.", delayed + 1, retries));
         io.wait(settings.animation_delays().spider_reobserve)?;
         capture_latest(io, latest, event_tx, cancel_requested)?;
     }
@@ -686,6 +727,8 @@ mod tests {
         calls: Vec<IoCall>,
         /// Attempted terminal controls in order.
         controls: Vec<TerminalStage>,
+        /// Measured full-frame coordinates passed to the terminal adapter.
+        control_points: Vec<PixelPoint>,
         /// Attempted Solver inputs, independent from the action budget.
         solver_clicks: usize,
         /// Acquisition count immediately before each Solver input.
@@ -761,9 +804,11 @@ mod tests {
         }
 
 
-        fn terminal(&mut self, stage: TerminalStage) -> Result<(), String> {
+        fn terminal(&mut self, stage: TerminalStage, point: PixelPoint) -> Result<(), String> {
             self.calls.push(IoCall::Terminal(stage));
+            assert_ne!(point, PixelPoint::new(0, 0), "no-match sentinel must never reach input");
             self.controls.push(stage);
+            self.control_points.push(point);
 
 
             if self.fault == Fault::Terminal { Err("injected uncertain terminal".to_owned()) } else { Ok(()) }
@@ -796,7 +841,14 @@ mod tests {
     }
 
 
-    /// A native-sized flat frame supplies no scene, HALO or terminal authority.
+    /// Byte-identical native Spider level-505 screenshot supplied by Charlie.
+    fn level_up_505() -> CapturedFrame {
+        decode_png(include_bytes!("../../tests/fixtures/spider-level-up-505.png")).unwrap()
+    }
+
+
+    /// A native-sized flat frame supplies no independent win or scene authority.
+    /// Exact black pixels alone can satisfy the context-dependent OK run rule.
     fn unknown() -> CapturedFrame {
         CapturedFrame { width: 1_920, height: 1_080, stride: 7_680,
             format: PixelFormat::Rgba8, pixels: vec![0; 7_680 * 1_080] }
@@ -827,7 +879,7 @@ mod tests {
     /// Exhaustion deliberately reveals unexpected captures or repeated inputs.
     fn fake(frames: Vec<CapturedFrame>, cancel: &AtomicBool) -> FakeIo<'_> {
         FakeIo { frames: frames.into(), sources: Vec::new(), pointer_parks: 0,
-            calls: Vec::new(), controls: Vec::new(),
+            calls: Vec::new(), controls: Vec::new(), control_points: Vec::new(),
             solver_clicks: 0, solver_capture_counts: Vec::new(), captures: 0,
             waits: Vec::new(), fault: Fault::None, cancel }
     }
@@ -1079,14 +1131,14 @@ mod tests {
     }
 
 
-    /// Legacy and SP20 optional-OK paths, plus direct New Game, reach Spider's
+    /// Legacy, SP20 and level-505 optional OK, plus direct New Game, reach Spider's
     /// own Play location. Ordered waits distinguish score settling from the
     /// editable deal; only an inactive Solver receives activation.
     #[test]
     fn continuous_win_restart_handles_optional_level_up_and_spider_play() {
 
 
-        for level_up_fixture in [Some(10), Some(20), None] {
+        for level_up_fixture in [Some("FC10"), Some("SP20"), Some("505"), None] {
             let with_level_up = level_up_fixture.is_some();
 
 
@@ -1098,8 +1150,12 @@ mod tests {
                 let mut frames = vec![fixture(15)];
 
 
-                if let Some(number) = level_up_fixture {
-                    frames.push(if number == 10 { level_up() } else { fixture(number) });
+                if let Some(name) = level_up_fixture {
+                    frames.push(match name {
+                        "FC10" => level_up(),
+                        "SP20" => fixture(20),
+                        _ => level_up_505(),
+                    });
                 }
                 frames.extend([fixture(17), fixture(18)]);
 
@@ -1129,6 +1185,14 @@ mod tests {
                     vec![if with_level_up { 5 } else { 4 }]
                 };
                 assert_eq!(io.controls, controls, "{branch}");
+                if let Some(name) = level_up_fixture {
+                    let expected = match name {
+                        "FC10" => PixelPoint::new(941, 822),
+                        "SP20" => PixelPoint::new(942, 803),
+                        _ => PixelPoint::new(944, 771),
+                    };
+                    assert_eq!(io.control_points[1], expected, "{branch}");
+                }
                 assert_eq!(io.solver_clicks, usize::from(!solver_already_active), "{branch}");
                 assert_eq!(io.solver_capture_counts, solver_capture_counts, "{branch}");
                 assert_eq!(io.sources.len(), 1, "{branch}");
@@ -1150,7 +1214,7 @@ mod tests {
         assert!(io.sources.is_empty() && io.controls.is_empty());
 
 
-        for frame in [level_up(), fixture(20)] {
+        for frame in [level_up(), fixture(20), level_up_505()] {
             let mut io = fake(vec![frame.clone(), frame.clone(), frame], &cancel);
             assert!(run(&mut io, 0, &mut None).unwrap_err().contains("allowance exhausted"));
             assert!(io.sources.is_empty() && io.controls.is_empty());
@@ -1159,16 +1223,80 @@ mod tests {
     }
 
 
-    /// A score screen that never advances exhausts observations rather than
-    /// repeating its acknowledged score-skip input.
+    /// A score screen that never advances stops after one fresh retry rather
+    /// than repeating its acknowledged score-skip input.
     #[test]
     fn stalled_terminal_transition_never_repeats_prior_click() {
         let cancel = AtomicBool::new(false);
-        let mut io = fake(vec![fixture(15); 4], &cancel);
+        let mut io = fake(vec![fixture(15); 3], &cancel);
         assert!(run(&mut io, 0, &mut None).unwrap_err().contains("expected"));
         assert_eq!(io.controls, [TerminalStage::Score]);
         assert_eq!(io.solver_clicks, 0);
         assert!(io.sources.is_empty());
+    }
+
+
+    /// A delayed OK gets one new frame; its measured point reaches input unchanged.
+    #[test]
+    fn post_score_retry_finds_level_up_and_uses_that_frames_coordinates() {
+        let cancel = AtomicBool::new(false);
+        let mut io = fake(vec![fixture(15), fixture(15), level_up_505(), fixture(17), fixture(18),
+            fixture(19), fixture(2)], &cancel);
+        let settings = StepRunSettings::new(AnimationSettleDelays::default(), 0)
+            .with_spider_observation_limit(20);
+        let (result, events) = run_with_events(&mut io, settings, &mut None);
+        assert_eq!(result.unwrap_err(), "fixture sequence exhausted");
+        assert_eq!(io.controls, [TerminalStage::Score, TerminalStage::LevelUp,
+            TerminalStage::NewGame, TerminalStage::Play]);
+        assert_eq!(io.control_points[1], PixelPoint::new(944, 771));
+        let searches: Vec<_> = events.iter().filter_map(|event| match event {
+            WorkerEvent::Log(message) if message.starts_with("Spider Level Up OK search") => Some(message),
+            _ => None,
+        }).collect();
+        assert_eq!(searches.len(), 2);
+        assert!(searches[0].contains("1/2") && searches[0].contains("result=(0, 0)"));
+        assert!(searches[1].contains("2/2") && searches[1].contains("result=(944, 771)"));
+        assert!(searches.iter().all(|message| message.contains("X=930..=990, Y=700..=850")));
+    }
+
+
+    /// A second missing result stops after exactly one retry and publishes its
+    /// own pixels for the egui diagnostic preview, without sending the sentinel.
+    #[test]
+    fn post_score_second_miss_stops_and_retains_latest_failed_preview() {
+        let cancel = AtomicBool::new(false);
+        let mut failed = fixture(15);
+        failed.pixels[..4].copy_from_slice(&[17, 23, 31, 255]);
+        let mut io = fake(vec![fixture(15), fixture(15), failed.clone()], &cancel);
+        let settings = StepRunSettings::new(AnimationSettleDelays::default(), 0)
+            .with_spider_observation_limit(20);
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let slot = super::super::LatestFrameSlot::default();
+        let events = WorkerEventSink {
+            events: sender, latest_frame: slot.clone(),
+            capture_context: std::sync::Mutex::new(None),
+        };
+        let mut latest = None;
+        let mut input_attempted = false;
+        let result = drive_run(&mut io, settings, &events, &cancel, &mut latest, &mut input_attempted);
+        assert!(result.unwrap_err().contains("after one fresh recapture and repeat search"));
+        assert_eq!(io.captures, 3);
+        assert_eq!(io.controls, [TerminalStage::Score]);
+        assert_eq!(io.control_points, [PixelPoint::new(960, 550)]);
+        assert!(io.sources.is_empty());
+        assert_eq!(io.solver_clicks, 0);
+        assert_eq!(io.waits, [LEVEL_UP_APPEAR_DELAY, settings.animation_delays().spider_reobserve]);
+        assert_eq!(latest.unwrap().frame.pixels, failed.pixels);
+        let preview = slot.take().unwrap();
+        assert!(preview.diagnostic);
+        assert_eq!(preview.prediction, None);
+        assert_eq!(preview.frame.pixels, failed.pixels);
+        let searches: Vec<_> = receiver.try_iter().filter_map(|notification| match notification.event {
+            WorkerEvent::Log(message) if message.starts_with("Spider Level Up OK search") => Some(message),
+            _ => None,
+        }).collect();
+        assert_eq!(searches.len(), 2);
+        assert!(searches.iter().all(|message| message.contains("result=(0, 0)")));
     }
 
 

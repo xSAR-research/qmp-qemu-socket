@@ -1,18 +1,22 @@
 //! Spider's one-board win and deterministic ordered restart controls.
 //!
 //! SP15/SP17 evidence the shared score-skip and New Game controls. SP18 places
-//! Play 100 pixels below Free Cell's location. Level Up is optional: SP20 adds
-//! the same local OK caption 19 pixels higher, while the accepted click remains
-//! inside both buttons. No Solve, missing DRAW or missing HALO is win authority.
-//! Shared local caption contrast excludes level and panel artwork.
+//! Play 100 pixels below Free Cell's location. Optional Level Up searches a
+//! bounded rectangle bottom-up for five consecutive exact-black RGB pixels.
+//! That run supplies the click point; it does not independently prove a win.
+//! No Solve, missing DRAW or missing HALO is win authority.
 
 use std::fmt;
+
+use thiserror::Error;
+use xsar::image_matching::{MatchError, find_black_run_bottom_up};
 
 use crate::{
     capture::CapturedFrame,
     detector::HaloDetectionError,
     freecell_terminal::{self, TerminalStage as SharedStage},
-    geometry::PixelPoint,
+    geometry::{PixelPoint, PixelRect},
+    parameters::{NOMINAL_FRAME_HEIGHT, NOMINAL_FRAME_WIDTH},
 };
 
 
@@ -58,27 +62,79 @@ const fn shared_stage(stage: TerminalStage) -> SharedStage {
 }
 
 
-/// Check only the expected local caption/control at its evidenced location.
-pub fn expected_control_ready(
+/// Gross search rectangle in full-frame pixels: X930..=990, Y700..=850.
+pub const LEVEL_UP_SEARCH: PixelRect = PixelRect::new(930, 700, 61, 151);
+
+
+/// Required contiguous RGB(0, 0, 0) pixels on one row; alpha is ignored.
+pub const LEVEL_UP_BLACK_RUN: u32 = 5;
+
+
+/// Preserve the precise validation error from the shared or bounded detector.
+#[derive(Debug, Error)]
+pub enum TerminalDetectionError {
+    /// Shared score, New Game or Play recognition rejected the frame.
+    #[error(transparent)]
+    Shared(#[from] HaloDetectionError),
+    /// Checked black-run scanning rejected the frame or bounds.
+    #[error(transparent)]
+    Scan(#[from] MatchError),
+    /// Full-frame click coordinates require the calibrated native geometry.
+    #[error("Spider terminal detection requires a 1920x1080 frame; received {width}x{height}")]
+    UnsupportedGeometry {
+        /// Observed frame width.
+        width: u32,
+        /// Observed frame height.
+        height: u32,
+    },
+}
+
+
+/// Return the first qualifying run's leftmost full-frame pixel, or (0, 0).
+/// The expected win-stage context supplies meaning; no glyph or colour-body
+/// checks are added to the five-black-pixel rule.
+pub fn level_up_click_point(frame: &CapturedFrame) -> Result<PixelPoint, TerminalDetectionError> {
+    let view = frame.as_view()?;
+    if frame.width != NOMINAL_FRAME_WIDTH || frame.height != NOMINAL_FRAME_HEIGHT {
+        return Err(TerminalDetectionError::UnsupportedGeometry {
+            width: frame.width, height: frame.height,
+        });
+    }
+    Ok(find_black_run_bottom_up(view, LEVEL_UP_SEARCH, LEVEL_UP_BLACK_RUN)?)
+}
+
+
+/// Return a freshly recognised control's click point, or (0, 0) if absent.
+/// Level Up uses its measured run; the other controls retain their fixed points.
+pub fn expected_control_point(
     frame: &CapturedFrame,
     stage: TerminalStage,
-) -> Result<bool, HaloDetectionError> {
-
-
-    if stage == TerminalStage::Play {
-        return freecell_terminal::play_control_ready_at(frame, 100);
-    }
-
-
+) -> Result<PixelPoint, TerminalDetectionError> {
     if stage == TerminalStage::LevelUp {
-
-
-        if freecell_terminal::level_up_control_ready_at(frame, 0)? {
-            return Ok(true);
-        }
-        return freecell_terminal::level_up_control_ready_at(frame, -19);
+        return level_up_click_point(frame);
     }
-    freecell_terminal::expected_control_ready(frame, shared_stage(stage))
+    let ready = if stage == TerminalStage::Play {
+        freecell_terminal::play_control_ready_at(frame, 100)?
+    } else {
+        freecell_terminal::expected_control_ready(frame, shared_stage(stage))?
+    };
+    Ok(if !ready {
+        PixelPoint::new(0, 0)
+    } else if stage == TerminalStage::Play {
+        PixelPoint::new(709, 861)
+    } else {
+        freecell_terminal::click_point(shared_stage(stage))
+    })
+}
+
+
+/// Check only the currently expected control; this does not establish a win.
+#[cfg(test)]
+fn expected_control_ready(
+    frame: &CapturedFrame,
+    stage: TerminalStage,
+) -> Result<bool, TerminalDetectionError> {
+    Ok(expected_control_point(frame, stage)? != PixelPoint::new(0, 0))
 }
 
 
@@ -92,17 +148,6 @@ pub fn classify_win_entry(
         Some(SharedStage::NewGame) => Some(TerminalStage::NewGame),
         Some(SharedStage::LevelUp | SharedStage::Play) | None => None,
     })
-}
-
-
-/// Fixed native click points inside the evidenced controls; no timing inferred.
-pub const fn click_point(stage: TerminalStage) -> PixelPoint {
-
-
-    match stage {
-        TerminalStage::Play => PixelPoint::new(709, 861),
-        _ => freecell_terminal::click_point(shared_stage(stage)),
-    }
 }
 
 
@@ -169,76 +214,56 @@ mod tests {
     }
 
 
-    /// SP20's original OK word is 19 pixels higher; the accepted click still
-    /// lands inside its button. The original zero-offset control is absent.
+    /// Native Level Up positions produce their own measured black-run clicks.
     #[test]
-    fn shifted_spider_level_up_uses_only_its_local_ok_without_win_authority() {
-        let frame = fixture(20);
-        assert!(expected_control_ready(&frame, TerminalStage::LevelUp).unwrap());
-        assert!(!freecell_terminal::level_up_control_ready_at(&frame, 0).unwrap());
-        assert!(freecell_terminal::level_up_control_ready_at(&frame, -19).unwrap());
-        assert_eq!(classify_win_entry(&frame).unwrap(), None);
-        let click = click_point(TerminalStage::LevelUp);
-        let [red, green, blue] = crate::detector::pixel_rgb(&frame,
-            click.x as u32, click.y as u32).unwrap();
-        assert!(red >= 140 && green >= 95
-            && u16::from(red) >= u16::from(blue) + 20
-            && u16::from(green) >= u16::from(blue) + 12);
-
-
-        for offset in [i32::MIN, i32::MAX, -787, 300] {
-            assert_eq!(freecell_terminal::level_up_control_ready_at(&frame, offset),
-                Err(HaloDetectionError::BoundsOutsideFrame));
+    fn level_up_locations_are_measured_without_win_authority() {
+        let current = decode_png(include_bytes!("../tests/fixtures/spider-level-up-505.png")).unwrap();
+        let legacy = decode_png(include_bytes!("../tests/fixtures/freecell-FC10.png")).unwrap();
+        for (frame, expected) in [
+            (legacy, PixelPoint::new(941, 822)),
+            (fixture(20), PixelPoint::new(942, 803)),
+            (current, PixelPoint::new(944, 771)),
+        ] {
+            assert_eq!(level_up_click_point(&frame).unwrap(), expected);
+            assert_eq!(expected_control_point(&frame, TerminalStage::LevelUp).unwrap(), expected);
+            assert_eq!(classify_win_entry(&frame).unwrap(), None);
         }
     }
 
 
-    /// The shifted region still requires the printed OK and warm button body;
-    /// erased local controls and flat frames do not grant terminal authority.
+    /// A valid image that contains the ROI still needs native geometry because
+    /// QMP click conversion uses the calibrated full-display dimensions.
     #[test]
-    fn shifted_ok_rejects_missing_caption_body_and_flat_frames() {
+    fn level_up_rejects_non_native_geometry_even_when_the_search_fits() {
+        let mut frame = fixture(20);
+        frame.width = 1_024;
+        frame.height = 900;
+        assert!(frame.as_view().is_ok());
+        assert!(LEVEL_UP_SEARCH.right() <= frame.width);
+        assert!(LEVEL_UP_SEARCH.bottom() <= frame.height);
+        assert!(matches!(level_up_click_point(&frame),
+            Err(TerminalDetectionError::UnsupportedGeometry { width: 1_024, height: 900 })));
+    }
 
 
-        for erase_caption in [true, false] {
-            let mut frame = fixture(20);
-            let bounds = if erase_caption {
-                crate::geometry::PixelRect::new(926, 767, 64, 52)
-            } else {
-                crate::geometry::PixelRect::new(848, 769, 223, 50)
-            };
-
-
-            for y in bounds.y..bounds.bottom() {
-
-
-                for x in bounds.x..bounds.right() {
-                    let index = y as usize * frame.stride + x as usize * 4;
-                    let [red, green, blue] = crate::detector::pixel_rgb(&frame, x, y).unwrap();
-
-
-                    if erase_caption {
-                        frame.pixels[index..index + 4].copy_from_slice(&[210, 180, 60, 255]);
-                    } else if red >= 140 && green >= 95
-                        && u16::from(red) >= u16::from(blue) + 20
-                        && u16::from(green) >= u16::from(blue) + 12 {
-                        frame.pixels[index..index + 4].copy_from_slice(&[120, 120, 120, 255]);
-                    }
-                }
+    /// The authorised rule examines only the supplied rectangle and exact RGB.
+    #[test]
+    fn missing_black_run_returns_zero_and_flat_black_is_not_win_authority() {
+        let mut frame = fixture(20);
+        for y in LEVEL_UP_SEARCH.y..LEVEL_UP_SEARCH.bottom() {
+            for x in LEVEL_UP_SEARCH.x..LEVEL_UP_SEARCH.right() {
+                let index = y as usize * frame.stride + x as usize * 4;
+                frame.pixels[index..index + 4].copy_from_slice(&[1, 1, 1, 255]);
             }
-            assert!(!expected_control_ready(&frame, TerminalStage::LevelUp).unwrap());
-            assert_eq!(classify_win_entry(&frame).unwrap(), None);
         }
+        assert_eq!(level_up_click_point(&frame).unwrap(), PixelPoint::new(0, 0));
+        assert!(!expected_control_ready(&frame, TerminalStage::LevelUp).unwrap());
+        assert_eq!(classify_win_entry(&frame).unwrap(), None);
 
-
-        for rgb in [[0, 0, 0], [210, 180, 60]] {
-            let mut frame = fixture(20);
-
-
-            for pixel in frame.pixels.as_chunks_mut::<4>().0 {
-                pixel.copy_from_slice(&[rgb[0], rgb[1], rgb[2], 255]);
-            }
-            assert!(!expected_control_ready(&frame, TerminalStage::LevelUp).unwrap());
-            assert_eq!(classify_win_entry(&frame).unwrap(), None);
+        for pixel in frame.pixels.as_chunks_mut::<4>().0 {
+            pixel.copy_from_slice(&[0, 0, 0, 255]);
         }
+        assert_eq!(level_up_click_point(&frame).unwrap(), PixelPoint::new(930, 850));
+        assert_eq!(classify_win_entry(&frame).unwrap(), None);
     }
 }

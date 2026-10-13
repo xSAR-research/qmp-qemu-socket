@@ -24,22 +24,34 @@ filenames, sizes and SHA-256 hashes in `spider-manifest.json`. Each is a
 | SP17 | Congratulations with New Game control. |
 | SP18 | Spider setup / Grandmaster four suits; Play is 100 px lower than Free Cell. |
 | SP19 | Fresh dealt Grandmaster board with Solver inactive. |
-| SP20 | Standard Level Up at Spider Grandmaster level 105; OK caption is 19 px above FC10, with the existing click still inside its button. |
+| SP20 | Standard Level Up at Spider Grandmaster level 105; measured five-black-pixel run starts at (942,803). |
 | SP21 | Queen before exposing the Jack; solid PLAY 6 source rows 145–349, click (1045,309); actual large cursor at (21,921). |
 | SP22 | Reconstructed Jack state; solid PLAY 6 source rows 123–327, with the cursor moved to left felt. |
 | SP-Lower-Toolbar | Easy board; PLAY 5 source continues behind toolbar icons. |
 | SP-no-DRAW-PILE | Easy board; DRAW absent, source PLAY 7; lower PLAY 10 box is a dashed destination guide. |
 
 SP16 was not captured because no LEVEL UP occurred in the recorded end sequence.
-SP20 now supplies the original Spider Level Up frame. Tests cover its local OK
-and the accepted Free Cell OK fixture used for the original Spider sequence.
-The controller checks either evidenced local OK location after a known win;
-level, rank, banner colour and medal artwork do not gate the click. SP20's
-existing click point remains inside the gold button, so input coordinates and
-timings do not change. No missing Spider frame is fabricated. SP20's supplied attachment is 1,732,335
-bytes; the session log reports a saved capture of 1,109,762 bytes. The fixture
-is byte-identical to the supplied attachment; identity to that logged saved
-PNG is unverified.
+SP20 supplies the original Spider Level Up frame. Its supplied attachment is
+1,732,335 bytes; the session log reports a saved capture of 1,109,762 bytes.
+The fixture is byte-identical to the supplied attachment; identity to that
+logged saved PNG is unverified.
+
+The additional `spider-level-up-505.png` is Charlie's native 1920x1080 capture
+from 13 October 2026, originally named
+`qmp-qemu-socket 261013 185842 SPIDER-Level-Up.png`. Its SHA-256 is
+`25b8e932c57fbb8931771f74b0542e43eb7e21665031b1b798b2d1d7f51df76b`.
+It is kept separately from the historical SP01-SP22 manifest and is copied
+byte-for-byte without image processing.
+
+The Level Up detector now searches X930..=990, Y700..=850 for five consecutive
+RGB(0,0,0) pixels on one row, visiting rows bottom-up and pixels left-to-right.
+The first run's leftmost pixel becomes the click point: (942,803) for SP20,
+(941,822) for the original Free Cell FC10 control, and (944,771) for level 505.
+The gold gradient, lettering template, medal and rank do not participate.
+A missing OK/New Game receives one fresh capture and repeat search; a second
+miss stops with the latest diagnostic image retained. Recognition is used only
+inside the independently established win sequence.
+
 Easy and Grandmaster captures establish the observed geometry and controls,
 not a contiguous same-difficulty game. The controller does not change difficulty.
 
