@@ -3535,17 +3535,14 @@ mod tests {
 
 
     /// Every ordinary bracket remains required. The existing shadow predicate
-    /// bridges only952..962; an absent/overdark rail or a new twelve-row weak
+    /// bridges only 952..962; an absent/over-dark rail or a new twelve-row weak
     /// band elsewhere still breaks the unchanged ten-row gap policy.
     #[test]
     fn hint_shadow_rail_bridge_requires_measured_band_and_ordinary_brackets() {
         let native = fixture(75);
         let scan = PixelRect::new(894, 332, 132, 666);
 
-
         for y in [949, 950, 963, 964] {
-
-
             for (x, width) in [(885, 9), (1026, 10)] {
                 let mut changed = native.clone();
                 paint(&mut changed, PixelRect::new(x, y, width, 1), [0, 0, 0]);

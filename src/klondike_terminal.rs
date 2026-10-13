@@ -1066,31 +1066,24 @@ pub(crate) fn inspect_expected_control(
 ) -> Result<Option<ExpectedControlEvidence>, HaloDetectionError> {
     super::validate_frame(frame)?;
 
-
     let (body, caption, gold_per_mille) = match stage {
-        TerminalStage::LevelUp => (PixelRect::new(848, 750, 224, 108),
-            PixelRect::new(928, 768, 62, 69), 550),
-        TerminalStage::NewGame => (PixelRect::new(642, 824, 288, 55),
-            PixelRect::new(693, 831, 191, 44), 800),
-        TerminalStage::Play => (PixelRect::new(612, 834, 191, 50),
-            PixelRect::new(673, 841, 72, 39), 850),
+        TerminalStage::LevelUp => (PixelRect::new(848, 715, 224, 108), PixelRect::new(928, 733, 62, 69), 550),
+        TerminalStage::NewGame => (PixelRect::new(642, 824, 288, 55), PixelRect::new(693, 831, 191, 44), 800),
+        TerminalStage::Play => (PixelRect::new(612, 834, 191, 50), PixelRect::new(673, 841, 72, 39), 850),
         TerminalStage::ScoreCounting | TerminalStage::SolverReady => return Ok(None),
     };
     let gold_pixels = super::count_pixels(frame, body, is_control_gold);
     let mut caption_ink_pixels = 0;
 
-
     for y in caption.y..caption.y + caption.height {
-
-
         for x in caption.x..caption.x + caption.width {
             let printed_ink = pixel_rgb(frame, x, y)
                 .is_some_and(|rgb| rgb.into_iter().all(|channel| channel <= 70));
 
-
-            if printed_ink && [(4, 0), (-4, 0), (0, 4), (0, -4)].into_iter()
-                .any(|(dx, dy)| {
-                    x.checked_add_signed(dx).zip(y.checked_add_signed(dy))
+            if printed_ink
+                && [(4, 0), (-4, 0), (0, 4), (0, -4)].into_iter().any(|(dx, dy)| {
+                    x.checked_add_signed(dx)
+                        .zip(y.checked_add_signed(dy))
                         .and_then(|(column, row)| pixel_rgb(frame, column, row))
                         .is_some_and(is_control_gold)
                 })
@@ -1100,8 +1093,11 @@ pub(crate) fn inspect_expected_control(
         }
     }
     Ok(Some(ExpectedControlEvidence {
-        stage, gold_pixels, body_pixels: body.width * body.height,
-        gold_per_mille, caption_ink_pixels,
+        stage,
+        gold_pixels,
+        body_pixels: body.width * body.height,
+        gold_per_mille,
+        caption_ink_pixels,
     }))
 }
 
@@ -1595,7 +1591,7 @@ mod tests {
     fn later_level_up_with_fireworks_retains_its_control_signature() {
         let frame = fixture(49);
         assert_eq!(classify_terminal(&frame).unwrap(), Some(TerminalStage::LevelUp));
-        assert_eq!(TerminalStage::LevelUp.click_point(), PixelPoint::new(960, 795));
+        assert_eq!(TerminalStage::LevelUp.click_point(), PixelPoint::new(960, 760));
         let mut changed_level = frame.clone();
         paint(&mut changed_level, PixelRect::new(1_110, 610, 60, 38), [0, 0, 0]);
         assert_eq!(classify_terminal(&changed_level).unwrap(), Some(TerminalStage::LevelUp));
@@ -1614,7 +1610,7 @@ mod tests {
         assert!(has_completed_medal_level_up(&frame));
         assert_eq!(classify_terminal(&frame).unwrap(), Some(TerminalStage::LevelUp));
         assert_eq!(pixel_rgb(&frame, 960, 795), Some([253, 248, 223]));
-        assert_eq!(TerminalStage::LevelUp.click_point(), PixelPoint::new(960, 795));
+        assert_eq!(TerminalStage::LevelUp.click_point(), PixelPoint::new(960, 760));
         assert_eq!(TerminalStage::LevelUp.mouse_hold(), POST_GAME_MOUSE_HOLD);
         assert_eq!(TerminalStage::LevelUp.settle_delay(Duration::ZERO), POST_GAME_STAGE_DELAY);
         let evidence = inspect_terminal_evidence(&frame).unwrap();
@@ -1634,7 +1630,7 @@ mod tests {
         assert!(has_completed_level_up_context(&frame));
         assert_eq!(pixel_rgb(&frame, 960, 795), Some([253, 248, 223]));
         assert_eq!(classify_terminal(&frame).unwrap(), Some(TerminalStage::LevelUp));
-        assert_eq!(TerminalStage::LevelUp.click_point(), PixelPoint::new(960, 795));
+        assert_eq!(TerminalStage::LevelUp.click_point(), PixelPoint::new(960, 760));
         assert_eq!(TerminalStage::LevelUp.mouse_hold(), POST_GAME_MOUSE_HOLD);
         assert_eq!(TerminalStage::LevelUp.settle_delay(Duration::ZERO), POST_GAME_STAGE_DELAY);
         let evidence = inspect_terminal_evidence(&frame).unwrap();
@@ -1894,7 +1890,7 @@ mod tests {
         assert!(matches_artwork(&frame, &LEVEL_UP_BUTTON_BODY));
         assert!(has_completed_level_up_context(&frame));
         assert_eq!(classify_terminal(&frame).unwrap(), Some(TerminalStage::LevelUp));
-        assert_eq!(TerminalStage::LevelUp.click_point(), PixelPoint::new(960, 795));
+        assert_eq!(TerminalStage::LevelUp.click_point(), PixelPoint::new(960, 760));
         let mut changed_level = frame.clone();
         paint(&mut changed_level, PixelRect::new(1_110, 610, 60, 38), [0, 0, 0]);
         assert_eq!(classify_terminal(&changed_level).unwrap(), Some(TerminalStage::LevelUp));

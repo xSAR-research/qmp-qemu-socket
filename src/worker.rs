@@ -14,7 +14,10 @@ mod pyramid_reconnaissance;
 mod spider_execution;
 mod tripeaks_terminal;
 
+// Reserved for future expansion to use the TCP screen capture server.
+#[allow(unused)]
 use std::{
+    cell::RefCell,
     fs::{self, OpenOptions},
     io::{ErrorKind, Read},
     os::unix::fs::OpenOptionsExt,
@@ -28,8 +31,10 @@ use std::{
     time::{Duration, Instant},
 };
 
+// Reserved for future expansion to use the TCP screen capture server.
+#[allow(unused)]
 use crate::{
-    capture::{CapturedFrame, decode_png},
+    capture::{CapturedFrame, PixelFormat, ScreenCaptureClient, decode_png, encode_png},
     detector::detect_game_progress_for_profile,
     game::{ActionTarget, GameMode, GameProgress, InputOperation},
     geometry::{PixelRect, pixel_point_to_qmp, pixel_rect_to_qmp},
