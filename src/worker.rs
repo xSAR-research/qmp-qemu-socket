@@ -7,6 +7,8 @@
 
 mod control_search;
 mod freecell_execution;
+#[cfg(test)]
+mod image_recording_tests;
 mod initial_recovery;
 mod klondike_execution;
 mod post_game;
@@ -39,6 +41,7 @@ use crate::{
     detector::detect_game_progress_for_profile,
     game::{ActionTarget, GameMode, GameProgress, InputOperation},
     geometry::{PixelRect, pixel_point_to_qmp, pixel_rect_to_qmp},
+    image_diagnostics::{ImageDiagnostics, ImageRecorder, RecordedImage},
     pyramid,
     qmp::QmpClient,
     stepper::{StepPlan, plan_step, verify_post_action},
@@ -420,6 +423,134 @@ impl LatestFrameSlot {
 }
 
 
+/// Per-worker clock and image recorder; ordinary captures keep only one entry candidate.
+struct WorkerImageDiagnostics {
+    /// Clock shared with the native UI and its session log.
+    started_at: Instant,
+    /// Whether startup enabled GAME WIN image recording.
+    enabled: bool,
+    /// Original-PNG cache and scoped file writer.
+    recorder: ImageRecorder,
+    /// Nested transition scopes, so an inner return cannot stop an outer scope.
+    depth: usize,
+}
+
+
+impl WorkerImageDiagnostics {
+    /// Attach the startup clock and writer to one serial QMP worker.
+    fn new(config: ImageDiagnostics) -> Self {
+        Self {
+            started_at: config.started_at,
+            enabled: config.directory.is_some(),
+            recorder: ImageRecorder::new(config),
+            depth: 0,
+        }
+    }
+}
+
+
+thread_local! {
+    /// Worker-thread-only recording state; UI and unrelated test threads cannot activate it.
+    static WORKER_IMAGE_DIAGNOSTICS: RefCell<Option<WorkerImageDiagnostics>> = const { RefCell::new(None) };
+}
+
+
+/// Timestamp an event at its source rather than when the UI eventually receives it.
+fn worker_elapsed() -> Option<Duration> {
+    WORKER_IMAGE_DIAGNOSTICS.with(|slot| slot.borrow().as_ref().map(|state| state.started_at.elapsed()))
+}
+
+
+/// Whether this worker is inside an independently authorised GAME WIN controller.
+fn game_win_images_active() -> bool {
+    WORKER_IMAGE_DIAGNOSTICS.with(|slot| slot.borrow().as_ref().is_some_and(|state| state.depth > 0))
+}
+
+
+/// End recording at the transition boundary while retaining all on-disk evidence.
+struct GameWinImageScope<'a> {
+    /// Sink for a source-timestamped end marker.
+    event_tx: &'a WorkerEventSink,
+    /// Disabled sessions do not change recording state or add transition log noise.
+    enabled: bool,
+}
+
+
+impl Drop for GameWinImageScope<'_> {
+    /// Close the outermost scope on readiness, cancellation, error or unwind.
+    fn drop(&mut self) {
+        if !self.enabled {
+            return;
+        }
+        let ended = WORKER_IMAGE_DIAGNOSTICS.with(|slot| {
+            let mut slot = slot.borrow_mut();
+            let Some(state) = slot.as_mut() else { return false; };
+            state.depth = state.depth.saturating_sub(1);
+            if state.depth == 0 {
+                state.recorder.end();
+                true
+            } else {
+                false
+            }
+        });
+        if ended {
+            send_log(self.event_tx, "GAME WIN image recording ended; saved PNGs remain until the next application start. Ordinary gameplay captures are not saved.".to_owned());
+        }
+    }
+}
+
+
+/// Save the cached entry frame, then retain every capture through the controller's return.
+///
+/// A write failure prevents subsequent controller input and preserves existing evidence.
+fn begin_game_win_images(event_tx: &WorkerEventSink) -> Result<GameWinImageScope<'_>, String> {
+    let (enabled, entry, outermost) = WORKER_IMAGE_DIAGNOSTICS.with(|slot| -> Result<_, String> {
+        let mut slot = slot.borrow_mut();
+        let Some(state) = slot.as_mut().filter(|state| state.enabled) else {
+            return Ok((false, None, false));
+        };
+        let outermost = state.depth == 0;
+        let entry = if outermost {
+            state.recorder.begin().map_err(|error| format!("GAME WIN entry PNG could not be saved: {error}; no further transition input authorised"))?
+        } else {
+            None
+        };
+        state.depth += 1;
+        Ok((true, entry, outermost))
+    })?;
+    if outermost {
+        send_log(event_tx, "GAME WIN image recording started: entry PNG plus every new capture until verified next-game readiness or a stopped transition. No additional screendumps are requested for recording.".to_owned());
+    }
+    if let Some(entry) = entry {
+        log_game_win_image(event_tx, &entry, "entry");
+    }
+    Ok(GameWinImageScope { event_tx, enabled })
+}
+
+
+/// Cache ordinary PNGs in memory or save active GAME WIN PNGs before recognition/input.
+fn record_game_win_png(png: &[u8], elapsed: Option<Duration>, event_tx: &WorkerEventSink) -> Result<(), String> {
+    let record = WORKER_IMAGE_DIAGNOSTICS.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        let Some(state) = slot.as_mut() else { return Ok(None); };
+        let elapsed = elapsed.unwrap_or_else(|| state.started_at.elapsed());
+        state.recorder.observe_png(png, elapsed)
+            .map_err(|error| format!("GAME WIN PNG could not be saved: {error}; no further transition input authorised"))
+    })?;
+    if let Some(record) = record {
+        log_game_win_image(event_tx, &record, "capture");
+    }
+    Ok(())
+}
+
+
+/// Correlate the exact filename and acquisition clock with the normal text log.
+fn log_game_win_image(event_tx: &WorkerEventSink, record: &RecordedImage, kind: &str) {
+    let elapsed_ms = record.elapsed.as_millis();
+    send_log(event_tx, format!("GAME WIN PNG ({kind}): capture=+{}.{:03}s; image={}; sequence={}; write={:.1} ms. Filename time is QMP completion; log prefix is worker emission time.", elapsed_ms / 1000, elapsed_ms % 1000, record.path.display(), record.sequence, milliseconds(record.write_duration)));
+}
+
+
 /// Worker-side delivery of small events and coalesced full-resolution preview frames.
 struct WorkerEventSink {
     /// Ordered event channel to the UI.
@@ -435,6 +566,8 @@ struct WorkerEventSink {
 pub struct ContextualWorkerEvent {
     /// Socket/game/strategy generation; absent only before any request.
     pub context: Option<ControllerContext>,
+    /// Elapsed startup time at worker emission, independent of UI polling latency.
+    pub emitted_at: Option<Duration>,
     /// Existing gameplay or capture notification.
     pub event: WorkerEvent,
 }
@@ -447,7 +580,7 @@ impl WorkerEventSink {
     fn send(&self, event: WorkerEvent) -> Result<(), Box<mpsc::SendError<ContextualWorkerEvent>>> {
         let context = self.capture_context.lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner).clone();
-        self.events.send(ContextualWorkerEvent { context, event }).map_err(Box::new)
+        self.events.send(ContextualWorkerEvent { context, emitted_at: worker_elapsed(), event }).map_err(Box::new)
     }
 
 
@@ -513,7 +646,7 @@ impl WorkerHandle {
     ///
     /// # Panics
     /// Panics if the operating system cannot create the worker thread.
-    pub fn spawn() -> Self {
+    pub(crate) fn spawn(diagnostics: ImageDiagnostics) -> Self {
         // Starts the QMP worker thread and creates its command and event channels.
         let (command_tx, command_rx) = mpsc::channel();
         let (event_tx, event_rx) = mpsc::channel();
@@ -527,7 +660,12 @@ impl WorkerHandle {
         let worker_cancel = Arc::clone(&cancel_requested);
         let join = thread::Builder::new()
             .name("qmp-socket".to_owned())
-            .spawn(move || run_worker(command_rx, event_sink, worker_cancel))
+            .spawn(move || {
+                WORKER_IMAGE_DIAGNOSTICS.with(|slot| {
+                    *slot.borrow_mut() = Some(WorkerImageDiagnostics::new(diagnostics));
+                });
+                run_worker(command_rx, event_sink, worker_cancel);
+            })
             .expect("failed to spawn QMP worker thread");
 
         Self {
@@ -863,7 +1001,7 @@ fn run_preparation_capture(context: &ControllerContext, event_tx: &WorkerEventSi
             return Err("Preparation capture refused because the VM is not running".to_owned());
         }
         send_state(event_tx, WorkerState::Capturing);
-        let (frame, _) = capture_screen(&mut qmp, &context.socket_path)?;
+        let (frame, _) = capture_screen(&mut qmp, &context.socket_path, event_tx)?;
         let prediction = preparation_prediction(&frame)?;
         Ok::<_, String>((frame, prediction))
     })();
@@ -1012,7 +1150,7 @@ fn run_prepare_snapshot(
             return Err("snapshot refused because the VM is not running".to_owned());
         }
         send_state(event_tx, WorkerState::Capturing);
-        let (frame, png, timing) = capture_screen_with_png(&mut qmp, socket_path)?;
+        let (frame, png, timing) = capture_screen_with_png(&mut qmp, socket_path, event_tx)?;
         let profile = scan_state.mode().profile();
 
 
@@ -3273,7 +3411,7 @@ fn capture_with_client(
     scan_state: &TableauScanState,
     event_tx: &WorkerEventSink,
 ) -> Result<(FrameObservation, CaptureTiming), String> {
-    let (frame, mut timing) = capture_screen(qmp, socket_path)?;
+    let (frame, mut timing) = capture_screen(qmp, socket_path, event_tx)?;
     let (observation, detection) = publish_and_analyse_captured_frame(frame, scan_state, event_tx)?;
     timing.detection = detection;
 
@@ -3300,8 +3438,9 @@ fn publish_and_analyse_captured_frame(
 fn capture_screen(
     qmp: &mut QmpClient,
     socket_path: &Path,
+    event_tx: &WorkerEventSink,
 ) -> Result<(CapturedFrame, CaptureTiming), String> {
-    let (frame, _png, timing) = capture_screen_with_png(qmp, socket_path)?;
+    let (frame, _png, timing) = capture_screen_with_png(qmp, socket_path, event_tx)?;
     Ok((frame, timing))
 }
 
@@ -3314,6 +3453,7 @@ fn capture_screen(
 fn capture_screen_with_png(
     qmp: &mut QmpClient,
     socket_path: &Path,
+    event_tx: &WorkerEventSink,
 ) -> Result<(CapturedFrame, Vec<u8>, CaptureTiming), String> {
     // Perform the one unavoidable full-display QMP screendump. Game-specific
     // regions are applied only after decode because QMP offers no crop input.
@@ -3326,10 +3466,12 @@ fn capture_screen_with_png(
     let capture_artifact = CaptureArtifact::reserve_beside(socket_path)?;
     timing.reserve = reserve_started.elapsed();
 
+    let request_elapsed = worker_elapsed();
     let screendump_started = Instant::now();
     qmp.screendump_png(capture_artifact.file_name())
         .map_err(|error| format!("QMP screendump failed: {error}"))?;
     timing.screendump = screendump_started.elapsed();
+    let capture_elapsed = worker_elapsed();
 
     let read_started = Instant::now();
     let png_size = fs::metadata(capture_artifact.file_name())
@@ -3354,6 +3496,11 @@ fn capture_screen_with_png(
         return Err("QMP PNG size changed outside the capture limit".to_owned());
     }
     timing.file_read = read_started.elapsed();
+
+    record_game_win_png(&png, capture_elapsed, event_tx)?;
+    if game_win_images_active() {
+        send_log(event_tx, format!("GAME WIN capture timing: request=+{:.3}s; QMP complete=+{:.3}s; screendump={:.1} ms; read={:.1} ms. The captured pixels were acquired within that QMP interval.", request_elapsed.unwrap_or_default().as_secs_f64(), capture_elapsed.unwrap_or_default().as_secs_f64(), milliseconds(timing.screendump), milliseconds(timing.file_read)));
+    }
 
     let decode_started = Instant::now();
     let frame = decode_png(&png).map_err(|error| format!("PNG decode failed: {error}"))?;

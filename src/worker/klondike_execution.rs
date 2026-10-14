@@ -185,7 +185,7 @@ impl KlondikeIo for QmpKlondikeIo<'_> {
     fn capture(&mut self) -> Result<CaptureResult, String> {
         require_running(self.cancel_requested)?;
         let started = Instant::now();
-        let (frame, timing) = capture_screen(self.qmp, self.socket_path)?;
+        let (frame, timing) = capture_screen(self.qmp, self.socket_path, self.event_tx)?;
         self.event_tx.publish_diagnostic_frame(frame.clone());
         let result = classify_captured_result(frame, self.scan_state, self.cancel_requested);
         send_log(self.event_tx, format!(
@@ -211,7 +211,7 @@ impl KlondikeIo for QmpKlondikeIo<'_> {
 
     fn capture_diagnostic(&mut self) -> Result<CapturedFrame, String> {
         require_running(self.cancel_requested)?;
-        capture_screen(self.qmp, self.socket_path).map(|(frame, _timing)| {
+        capture_screen(self.qmp, self.socket_path, self.event_tx).map(|(frame, _timing)| {
             self.event_tx.publish_diagnostic_frame(frame.clone());
             frame
         })
@@ -469,6 +469,7 @@ fn drive_run(
                 recovery.refreshed = false;
                 continue;
             }
+            let _game_win_images = super::begin_game_win_images(event_tx)?;
             return Ok(RunOutcome::GameWon { previous_verified: 0, previous_halo: halo_operations });
         }
         await_pending_solve(io, latest, settings, event_tx, cancel_requested)?;
@@ -511,6 +512,7 @@ fn drive_run(
                 continue;
             }
             return Ok(if complete {
+                let _game_win_images = super::begin_game_win_images(event_tx)?;
                 RunOutcome::GameWon { previous_verified: 0, previous_halo: halo_operations }
             } else {
                 RunOutcome::SolveRequested { previous_verified: 0, previous_halo: halo_operations }
@@ -699,6 +701,7 @@ fn resume_after_win(
     cancel_requested: &AtomicBool,
     input_attempted: &mut bool,
 ) -> Result<(), String> {
+    let _game_win_images = super::begin_game_win_images(event_tx)?;
     let mut stage = await_terminal_stage(io, latest, settings, event_tx, cancel_requested, None)?;
 
 

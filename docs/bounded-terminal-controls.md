@@ -1,7 +1,7 @@
 # Bounded terminal controls and search metrics
 
-Candidate: qmp-qemu-socket 2.2.2-candidate.4, based on the published checkpoint
-`a5dc6a7d7d4030f21beedd2fb1c00d6799ac74a6`. It uses the existing xsar
+Candidate: qmp-qemu-socket 2.2.2-candidate.6, based on the published checkpoint
+`faf07def83705c01e755601fdade70e5f460af36`. It uses the existing xsar
 helper from `5fa8a1a963a7d0591458a348cabd5c28099970bd` without changing that crate.
 
 ## Search contract
@@ -80,6 +80,10 @@ independent of the new three-search allowance.
 Capture transport is unchanged. The application still acquires QMP PNGs through
 a private temporary file and decodes them. The sibling Windows TCP server and
 the re-exported xSAR TCP client are not connected to this production path.
+
+`--image` adds scoped GAME WIN evidence without requesting extra captures or
+altering those search/wait policies. See [GAME WIN image diagnostics](game-win-images.md)
+for directory reset, capture/log correlation and the recording boundary.
 
 ## Metrics
 

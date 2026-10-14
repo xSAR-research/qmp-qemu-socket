@@ -1,5 +1,39 @@
 # Changelog
 
+## v2.2.2-candidate.6 — Strict Clippy verification repair
+
+- Use `inspect_err` for four cancellation paths which update the control-search
+  outcome and propagate the original error unchanged.
+- Combine the nested recapture condition without changing when a capture is counted.
+- Document private control-search counters and terminal-search test helpers.
+- Merge identical unsupported-frame branches in the mock-QMP scenario source,
+  retaining the same conditions, frame bytes and accounting.
+- Preserve GAME WIN-only image recording, the 1000 ms post-score wait, three
+  search attempts, detector geometry, input safeguards and dependencies.
+- Candidate.5 passed Beast Cargo check, all tests including ignored socket tests
+  and strict private rustdoc. Clippy stopped verification before the release build.
+  The repaired candidate requires its own strict verification and live acceptance.
+
+## v2.2.2-candidate.5 — GAME WIN image evidence
+
+- Add `--image` to retain the entry PNG and every subsequent capture only during
+  GAME WIN transitions, through freshly verified next-game Solver/HALO readiness.
+  Ordinary gameplay captures are not written to the diagnostic image directory.
+- Reset `/home/charlie/tmp/images` at each application start. Recreate it only
+  with `--image`; retain all transition PNGs until the next application start,
+  including evidence from stopped or failed transitions.
+- Save original QMP PNG bytes with elapsed-time filenames and a unique serial.
+  Correlate each filename, acquisition interval and write duration in the text
+  log using the same monotonic startup clock. Timestamp worker messages when
+  emitted so delayed UI polling cannot distort the sequence timing.
+- Stop transition input if recording fails; add regressions for startup cleanup,
+  directory boundaries, scoped recording, failed transitions and timestamping.
+- Preserve the 1000 ms post-score wait, three control searches, game recognition,
+  input safeguards, dependencies, xSAR and capture transport.
+- Beast compilation, all tests and strict private documentation passed on
+  14 October 2026. Strict Clippy failed; release build and live acceptance were
+  not reached by that verifier run. Candidate.6 repairs the identified lint issues.
+
 ## v2.2.2-candidate.4 — Earlier Level Up capture and three control searches
 
 - Reduce the shared score-skip-to-Level-Up wait from 3000 ms to 1000 ms.

@@ -19,16 +19,27 @@ use crate::{
 
 /// Accumulate one expected control's scans and emit a summary on every exit path.
 pub(super) struct ControlLookup<'a> {
+    /// Game label used in each scan and final summary.
     game: String,
+    /// Expected control whose bounded region this lookup examines.
     control: Control,
+    /// Per-game native bounds and required consecutive black run length.
     spec: SearchSpec,
+    /// Worker event sink receiving source-timestamped scan diagnostics.
     events: &'a WorkerEventSink,
+    /// Wall-clock origin including waits and captures while this lookup is alive.
     started: Instant,
+    /// Number of bounded scans attempted, including misses and scan errors.
     searches: u64,
+    /// Number of fresh capture attempts recorded by the controller.
     recaptures: u64,
+    /// Sum of pixels examined by successfully completed scans.
     pixels: u64,
+    /// Sum of rows examined by successfully completed scans.
     rows: u64,
+    /// Combined scanner time, separate from waits and capture wall time.
     scan_total: Duration,
+    /// Latest scan or controller exit state reported by the final summary.
     outcome: &'static str,
 }
 
@@ -122,6 +133,8 @@ impl Drop for ControlLookup<'_> {
 
 #[cfg(test)]
 mod tests {
+    //! Search diagnostics retain per-attempt and final-summary evidence.
+
     use super::*;
     use super::super::{LatestFrameSlot, WorkerEvent};
     use crate::{capture::{PixelFormat, decode_png}, terminal_controls::profiles::SPIDER_CONTROLS};

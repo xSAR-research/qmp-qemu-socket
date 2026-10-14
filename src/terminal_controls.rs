@@ -126,6 +126,8 @@ fn scan_error(error: MatchError) -> HaloDetectionError {
 
 #[cfg(test)]
 mod tests {
+    //! Native and synthetic frames verify bounded control coordinates and scan work.
+
     use super::*;
     use crate::{capture::{PixelFormat, decode_png}, game::GameMode, geometry::PixelRect};
     use profiles::{for_game, FREECELL_CONTROLS, KLONDIKE_CONTROLS, SPIDER_CONTROLS};
@@ -144,6 +146,7 @@ mod tests {
     }
 
 
+    /// Paint one exact-black horizontal run into an isolated native-size test frame.
     fn black_run(frame: &mut CapturedFrame, x: u32, y: u32, length: u32) {
         for column in x..x + length {
             let offset = y as usize * frame.stride + column as usize * 4;

@@ -2695,14 +2695,11 @@ mod tripeaks_reward_qmp_regressions {
                                 } else {
                                     (CaptureKind::NewGame, new_game_png.as_slice())
                                 }
-                            } else if scenario == Scenario::WashedOutLevelUp
-                                && report.level_up_captures >= 2 && report.unsupported_captures < 2
-                            {
-                                report.unsupported_captures += 1;
-                                (CaptureKind::Unsupported, unsupported_png.as_slice())
-                            } else if late_level_up_scenario(scenario)
+                            } else if (scenario == Scenario::WashedOutLevelUp
+                                && report.level_up_captures >= 2 && report.unsupported_captures < 2)
+                                || (late_level_up_scenario(scenario)
                                 && (report.unsupported_captures < if scenario == Scenario::CandidateTwentyOne { 20 } else { 29 }
-                                    || (scenario == Scenario::TransientCandidateThirty && report.level_up_captures > 0))
+                                    || (scenario == Scenario::TransientCandidateThirty && report.level_up_captures > 0)))
                             {
                                 report.unsupported_captures += 1;
                                 (CaptureKind::Unsupported, unsupported_png.as_slice())

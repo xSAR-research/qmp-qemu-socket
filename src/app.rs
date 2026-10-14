@@ -4,7 +4,7 @@
 //! only while its mode, socket and dimensions remain current; snapshot bytes and
 //! diagnostic frames are retained separately from that authority.
 
-use std::{path::PathBuf, time::Instant};
+use std::{path::PathBuf, time::{Duration, Instant}};
 
 use eframe::egui::{
     self, Align, Align2, Color32, FontId, Layout, Pos2, Rect, Sense, Stroke, TextBuffer,
@@ -16,6 +16,7 @@ use crate::{
     capture::{CapturedFrame, PixelFormat},
     game::{ActionTarget, GameMode, InputOperation},
     geometry::{PixelPoint, PixelRect},
+    image_diagnostics::ImageDiagnostics,
     pyramid::{self, PYRAMID_TARGETS},
     pyramid_recon::ReconRequest,
     session_log::SessionLog,
@@ -316,8 +317,8 @@ impl QmpQemuSocketApp {
     ///
     /// Uses the display handle for clipboard access. A log-creation failure is
     /// reported in the visible output and does not prevent the application opening.
-    pub fn new(creation_context: &eframe::CreationContext<'_>) -> Self {
-        let started_at = Instant::now();
+    pub(crate) fn new(creation_context: &eframe::CreationContext<'_>, diagnostics: ImageDiagnostics) -> Self {
+        let started_at = diagnostics.started_at;
         let qmp_socket_path = default_qmp_socket_path().display().to_string();
         let clipboard = Clipboard::new(
             creation_context
@@ -332,7 +333,7 @@ impl QmpQemuSocketApp {
             Err(error) => (None, Some(error.to_string())),
         };
         let mut app = Self {
-            worker: WorkerHandle::spawn(),
+            worker: WorkerHandle::spawn(diagnostics.clone()),
             worker_state: WorkerState::Detached,
             game_mode: GameMode::TriPeaks,
             computer_vision_game_mode: GameMode::TriPeaks,
@@ -418,6 +419,11 @@ impl QmpQemuSocketApp {
             ));
         }
         app.push_log(format!("QMP socket candidate: {}", app.qmp_socket_path));
+        if let Some(directory) = diagnostics.directory {
+            app.push_log(format!("--image enabled: saving only GAME WIN entry and subsequent captures through verified new-game readiness in {}. PNG filenames use the same startup elapsed clock as worker logs; ordinary gameplay captures are not saved.", directory.display()));
+        } else {
+            app.push_log("GAME WIN image recording disabled; /home/charlie/tmp/images was removed at startup.");
+        }
         app.push_log("Choose a solving strategy before connecting or capturing. The first capture after selection is one-shot and read-only.");
         app.push_log("The preview retains only the latest worker frame; stale full-resolution previews are coalesced while the UI is asleep or occluded.");
         app.push_log("Step Once and Multi-Step capture fresh evidence before input and reuse settled result frames. Klondike, Free Cell and Spider follow fresh Solver recommendations without card-pixel effect proof; their previews are advisory. Free Cell has no Draw, Recycle, Solve or SUIT-return input. TriPeaks/Pyramid retain their existing validation and effect policies.");
@@ -434,9 +440,15 @@ impl QmpQemuSocketApp {
     ///
     /// A write failure disables further file-backed logging and adds a visible warning.
     fn push_log(&mut self, message: impl Into<String>) {
+        self.push_log_at(self.started_at.elapsed(), message);
+    }
+
+
+    /// Retain a source timestamp so delayed UI polling cannot change worker chronology.
+    fn push_log_at(&mut self, elapsed: Duration, message: impl Into<String>) {
         let line = format!(
             "[+{:08.3}s] {}",
-            self.started_at.elapsed().as_secs_f64(),
+            elapsed.as_secs_f64(),
             message.into()
         );
         let session_error = self
@@ -550,20 +562,21 @@ impl QmpQemuSocketApp {
 
 
         for tagged in events {
+            let elapsed = tagged.emitted_at.unwrap_or_else(|| self.started_at.elapsed());
 
 
             if !worker_result_is_current(tagged.context.as_ref(), &self.current_preview_context(), self.strategy_choice_pending) {
 
 
                 if let WorkerEvent::Log(message) = tagged.event {
-                    self.push_log(format!("Earlier request: {message}"));
+                    self.push_log_at(elapsed, format!("Earlier request: {message}"));
                 }
                 continue;
             }
 
 
             match tagged.event {
-                WorkerEvent::Log(message) => self.push_log(message),
+                WorkerEvent::Log(message) => self.push_log_at(elapsed, message),
                 WorkerEvent::Status(message) => self.current_status = message,
                 WorkerEvent::SnapshotPrepared {
                     request_id,

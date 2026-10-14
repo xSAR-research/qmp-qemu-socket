@@ -57,6 +57,7 @@ pub(super) fn run_post_game_restart(
     event_tx: &WorkerEventSink,
     cancel_requested: &AtomicBool,
 ) -> Result<PostGameOutcome, String> {
+    let _game_win_images = super::begin_game_win_images(event_tx)?;
     // Advances the verified end-of-game UI through OK, New Game, Play, and Solver.
     // Every control uses a deliberate hold. Acknowledged dialog controls are
     // retired from input authority; only the expected stage is considered next.
@@ -238,8 +239,8 @@ pub(super) fn run_post_game_restart(
 
         let matched_variant = loop {
             send_status(event_tx, format!("Waiting for {}", target.label));
-            if observation_round > 1 {
-                if let Some(lookup) = lookup.as_mut() { lookup.note_recapture(); }
+            if observation_round > 1 && let Some(lookup) = lookup.as_mut() {
+                lookup.note_recapture();
             }
             let (observation, timing) =
                 capture_with_client(qmp, socket_path, scan_state, event_tx).map_err(|error| {
@@ -289,9 +290,8 @@ pub(super) fn run_post_game_restart(
                     POST_GAME_STAGE_DELAY,
                     cancel_requested,
                     "STOP was requested while verifying the New Game transition.",
-                ).map_err(|error| {
+                ).inspect_err(|_| {
                     if let Some(lookup) = lookup.as_mut() { lookup.set_outcome("cancelled"); }
-                    error
                 })?;
                 break None;
             }
@@ -367,9 +367,8 @@ pub(super) fn run_post_game_restart(
                     POST_GAME_STAGE_DELAY,
                     cancel_requested,
                     "STOP was requested after the post-game recovery Solver click.",
-                ).map_err(|error| {
+                ).inspect_err(|_| {
                     if let Some(lookup) = lookup.as_mut() { lookup.set_outcome("cancelled"); }
-                    error
                 })?;
                 observation_round = observation_round.saturating_add(1);
                 continue;
@@ -425,9 +424,8 @@ pub(super) fn run_post_game_restart(
                     LEVEL_UP_APPEAR_DELAY,
                     cancel_requested,
                     "STOP was requested while waiting after a score-skip retry.",
-                ).map_err(|error| {
+                ).inspect_err(|_| {
                     if let Some(lookup) = lookup.as_mut() { lookup.set_outcome("cancelled"); }
-                    error
                 })?;
                 observation_round = observation_round.saturating_add(1);
                 continue;
@@ -445,9 +443,8 @@ pub(super) fn run_post_game_restart(
                 BOARD_TRANSITION_REOBSERVE_DELAY,
                 cancel_requested,
                 "STOP was requested while waiting for the next post-game screen.",
-            ).map_err(|error| {
+            ).inspect_err(|_| {
                 if let Some(lookup) = lookup.as_mut() { lookup.set_outcome("cancelled"); }
-                error
             })?;
             observation_round = observation_round.saturating_add(1);
         };

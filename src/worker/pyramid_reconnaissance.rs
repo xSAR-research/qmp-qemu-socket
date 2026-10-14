@@ -419,7 +419,7 @@ impl ReconIo for QmpReconIo<'_> {
         }
         *self.captures += 1;
         send_state(self.events, WorkerState::Capturing);
-        let (frame, png, _) = capture_screen_with_png(self.qmp, &self.context.socket_path)?;
+        let (frame, png, _) = capture_screen_with_png(self.qmp, &self.context.socket_path, self.events)?;
         let recognition = self.vision.observe(&frame);
         self.events.publish_diagnostic_frame(frame);
         self.diagnostics.record_capture(png)?;

@@ -103,7 +103,7 @@ impl SpiderIo for QmpSpiderIo<'_> {
     fn capture(&mut self) -> Result<CapturedFrame, String> {
         require_running(self.cancel_requested)?;
         let started = Instant::now();
-        let (frame, timing) = capture_screen(self.qmp, self.socket_path)?;
+        let (frame, timing) = capture_screen(self.qmp, self.socket_path, self.event_tx)?;
         send_log(self.event_tx, format!(
             "PROFILE Spider capture: acquisition={:.1} ms; screendump={:.1} ms, decode={:.1} ms.",
             milliseconds(started.elapsed()), milliseconds(timing.screendump), milliseconds(timing.decode),
@@ -277,6 +277,7 @@ fn drive_run(
 
 
             if !settings.is_unbounded() {
+                let _game_win_images = super::begin_game_win_images(event_tx)?;
                 return Ok(RunOutcome::GameWon(actions));
             }
             restart_game(io, latest, stage, settings, event_tx, cancel_requested, input_attempted)?;
@@ -413,6 +414,7 @@ fn restart_game(
     cancel_requested: &AtomicBool,
     input_attempted: &mut bool,
 ) -> Result<(), String> {
+    let _game_win_images = super::begin_game_win_images(event_tx)?;
     let mut stage = initial_stage;
     let mut ready_point = None;
 
