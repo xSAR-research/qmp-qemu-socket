@@ -1,7 +1,7 @@
 # Bounded terminal controls and search metrics
 
-Candidate: qmp-qemu-socket 2.2.2-candidate.3, based on the live-confirmed Spider
-checkpoint `7c6c6fb3e4fecc866067045a3f36a9649bdf333d`. It uses the existing xsar
+Candidate: qmp-qemu-socket 2.2.2-candidate.4, based on the published checkpoint
+`a5dc6a7d7d4030f21beedd2fb1c00d6799ac74a6`. It uses the existing xsar
 helper from `5fa8a1a963a7d0591458a348cabd5c28099970bd` without changing that crate.
 
 ## Search contract
@@ -51,8 +51,8 @@ Congratulations, score, completed-board and fresh-game evidence retain their
 separate roles. The selected point travels with the stage to the input boundary;
 there is no subsequent replacement with a fixed button coordinate.
 
-An absent expected control receives one fresh capture and repeat search. A
-second miss stops with the latest captured image available as a diagnostic
+An absent expected control receives at most two fresh captures and repeat
+searches, for three total attempts. A third consecutive miss stops with the latest captured image available as a diagnostic
 preview. Optional OK/New Game branches may examine both rectangles on the same
 frame. The shared TriPeaks/Pyramid controller retires an earlier menu stage after its
 click is delivered; black runs in that earlier region cannot authorise another
@@ -61,6 +61,25 @@ at the optional Level Up step unless independent TriPeaks foreground-modal
 context proves that OK must be handled first. Recognised reward/gameplay
 recovery remains distinct from missing-control observations. Uncertain QMP input is not
 replayed by the search retry.
+
+`TERMINAL_CONTROL_SEARCH_ATTEMPTS` owns the missing-control budget across all
+five game types. It counts the initial frame as attempt one. Recognised reward
+or gameplay recovery remains a separate path with its existing observation and
+input budgets; those transitions can reset the consecutive-miss count in the
+shared TriPeaks/Pyramid controller. Therefore three is a limit on consecutive
+unresolved control frames, not a universal cap on every recovery episode.
+
+`LEVEL_UP_APPEAR_DELAY` is now 1000 ms after an acknowledged score-skip click,
+reduced from 3000 ms so the first OK search starts before the reported later
+fireworks. Capture and recognition add elapsed time beyond this intentional
+wait. Missing-control spacing remains unchanged: 2000 ms in the shared
+TriPeaks/Pyramid controller, and the existing editable reobserve interval in
+Free Cell, Spider and Klondike. Score, gameplay, Solver and click budgets are
+independent of the new three-search allowance.
+
+Capture transport is unchanged. The application still acquires QMP PNGs through
+a private temporary file and decodes them. The sibling Windows TCP server and
+the re-exported xSAR TCP client are not connected to this production path.
 
 ## Metrics
 
@@ -107,7 +126,11 @@ The shared scanner regression covers 29 native terminal captures against all
 three controls, including positive/negative pairs and the K53 retained-pointer
 case. Separate regressions cover exact visit counts, first/last legal runs,
 missing or invalid images, measured input coordinates, retries and diagnostic
-frame retention. The supplied native TriPeaks Play frame matches at (680,905). Native
+frame retention. Candidate.4 extends menu coverage to success on the third
+attempt, a third final miss, cancellation before the final recapture and
+input-free synthetic OK washout in an otherwise native Level Up panel. These
+are regression definitions; see the delivery record for execution status.
+The supplied native TriPeaks Play frame matches at (680,905). Native
 TriPeaks/Pyramid New Game and Pyramid Play captures are absent; those profile
 rectangles still require native-frame confirmation. The Pyramid log nevertheless
 records a successful New Game match at (863,862). Live transition acceptance is

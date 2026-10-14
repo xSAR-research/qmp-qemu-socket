@@ -1156,13 +1156,14 @@ fn continuous_solve_advances_one_board_terminal_cycle_then_obeys_stop() {
 #[test]
 fn terminal_same_stage_is_not_retried() {
     use klondike::terminal::TerminalStage;
-    let mut io = fake(&[(PredictedAction::NoHighlight, false); 2]);
-    io.terminal_stages = VecDeque::from([Some(TerminalStage::ScoreCounting); 3]);
+    let mut io = fake(&[(PredictedAction::NoHighlight, false); 3]);
+    io.terminal_stages = VecDeque::from([Some(TerminalStage::ScoreCounting); 4]);
     let (result, input_attempted, latest) = exercise_terminal(&mut io, &AtomicBool::new(false));
     assert!(result.unwrap_err().contains("advancement exhausted"));
     assert!(input_attempted);
     assert_eq!(io.terminal_inputs, [TerminalStage::ScoreCounting]);
-    assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), 2);
+    assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), 3);
+    assert!(io.frames.is_empty());
     assert!(latest.is_some());
 }
 
@@ -1171,13 +1172,14 @@ fn terminal_same_stage_is_not_retried() {
 #[test]
 fn terminal_unexpected_stage_stops_before_input() {
     use klondike::terminal::TerminalStage;
-    let mut io = fake(&[(PredictedAction::NoHighlight, false); 2]);
+    let mut io = fake(&[(PredictedAction::NoHighlight, false); 3]);
     io.terminal_stages = VecDeque::from([Some(TerminalStage::ScoreCounting), Some(TerminalStage::Play)]);
     let (result, _, _) = exercise_terminal(&mut io, &AtomicBool::new(false));
     assert!(result.unwrap_err().contains("advancement exhausted"));
     assert_eq!(io.terminal_inputs, [TerminalStage::ScoreCounting]);
     assert_eq!(io.trace.iter().filter(|entry| **entry == "probe").count(), 1);
-    assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), 2);
+    assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), 3);
+    assert!(io.frames.is_empty());
 }
 
 
@@ -1545,15 +1547,15 @@ fn native_grandmaster_buttons_restart_after_confirmed_win_without_theme_matching
 }
 
 
-/// One unchanged score panel triggers one fresh OK capture without repeating
+/// Two unchanged score panels trigger two fresh OK captures without repeating
 /// score input, then each measured control is clicked once.
 #[test]
-fn confirmed_win_retries_expected_ok_once_without_repeating_score_input() {
+fn confirmed_win_retries_expected_ok_twice_without_repeating_score_input() {
     use klondike::terminal::TerminalStage;
     let initial = native_hint_phase(25);
     let approved = initial.prediction;
     let mut frames = vec![initial, native_hint_phase(26), native_hint_phase(26)];
-    frames.push(native_hint_phase(26));
+    frames.extend((0..2).map(|_| native_hint_phase(26)));
     frames.extend([native_hint_phase(91), native_hint_phase(92), native_hint_phase(93),
         native_hint_phase(77), native_hint_phase(2)]);
     let stop = AtomicBool::new(false);
@@ -1565,7 +1567,9 @@ fn confirmed_win_retries_expected_ok_once_without_repeating_score_input() {
     assert!(result.unwrap_err().contains("STOP"));
     assert_eq!(io.terminal_inputs, [TerminalStage::ScoreCounting, TerminalStage::LevelUp,
         TerminalStage::NewGame, TerminalStage::Play, TerminalStage::SolverReady]);
-    assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), 9);
+    assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), 10);
+    assert_eq!(io.inputs, [approved]);
+    assert!(io.frames.is_empty());
     assert!(!io.trace.contains(&"solver"));
 }
 
@@ -1578,7 +1582,7 @@ fn confirmed_win_unchanged_native_ok_cannot_authorise_next_control() {
     let initial = native_hint_phase(25);
     let approved = initial.prediction;
     let mut frames = vec![initial, native_hint_phase(26), native_hint_phase(26), native_hint_phase(91)];
-    frames.extend((0..2).map(|_| native_hint_phase(91)));
+    frames.extend((0..3).map(|_| native_hint_phase(91)));
     let mut io = fake_frames(frames);
     io.native_terminal_analysis = true;
     let (result, attempted, latest) = exercise(&mut io, approved, 0, &AtomicBool::new(false));
@@ -2196,64 +2200,103 @@ fn native_toolbar_clipped_five_card_source_sends_one_step_once_click() {
 }
 
 
-/// All three searches use exactly one fresh retry and report its measured work.
+/// Every menu control can become ready on the second or third fresh search.
 #[test]
-fn bounded_control_retry_reports_searches_recapture_and_wall_time() {
+fn bounded_control_retries_report_searches_recaptures_and_wall_time() {
     use klondike::terminal::TerminalStage;
     for (previous, expected, number, point, label) in [
         (TerminalStage::ScoreCounting, TerminalStage::LevelUp, 91, PixelPoint::new(942, 804), "OK"),
         (TerminalStage::LevelUp, TerminalStage::NewGame, 92, PixelPoint::new(863, 862), "New Game"),
         (TerminalStage::NewGame, TerminalStage::Play, 93, PixelPoint::new(680, 861), "Play"),
     ] {
+        for attempt in [2usize, 3] {
+            let (events, receiver) = std::sync::mpsc::channel();
+            let sink = WorkerEventSink { events, latest_frame: super::super::LatestFrameSlot::default(), capture_context: std::sync::Mutex::new(None) };
+            let mut frames: Vec<_> = (2..attempt).map(|_| native_hint_phase(26)).collect();
+            frames.push(native_hint_phase(number));
+            let mut io = fake_frames(frames);
+            io.native_terminal_analysis = true;
+            let mut latest = Some(native_hint_phase(26));
+            let result = await_terminal_stage(&mut io, &mut latest,
+                StepRunSettings::new(AnimationSettleDelays::default(), 0), &sink,
+                &AtomicBool::new(false), Some(previous));
+            assert_eq!(result.unwrap(), Some((expected, point)));
+            let expected_trace: Vec<_> = (1..attempt).flat_map(|_| ["wait", "capture"]).collect();
+            assert_eq!(io.trace, expected_trace);
+            assert!(io.frames.is_empty());
+            assert!(io.terminal_inputs.is_empty() && io.inputs.is_empty());
+            let logs: Vec<_> = receiver.try_iter().filter_map(|notification| match notification.event {
+                WorkerEvent::Log(message) => Some(message), _ => None,
+            }).collect();
+            let summary = logs.iter().find(|line| line.contains(&format!("Klondike {label} search summary:"))).unwrap();
+            assert!(summary.contains(&format!("searches={attempt}; recaptures={}; second_grab=true;", attempt - 1)));
+            assert!(summary.contains("scan_total_ms=") && summary.contains("wall_ms="));
+            assert!(summary.ends_with("outcome=found."));
+            assert_eq!(logs.iter().filter(|line| line.contains(&format!("Klondike {label} search ")) && line.contains("inclusive;")).count(), attempt);
+        }
+    }
+}
+
+
+/// A confirmed win can first expose its entry OK on the third input-free capture.
+#[test]
+fn bounded_control_confirmed_win_entry_can_find_ok_on_third_search() {
+    use klondike::terminal::TerminalStage;
+    let (events, receiver) = std::sync::mpsc::channel();
+    let sink = WorkerEventSink { events, latest_frame: super::super::LatestFrameSlot::default(), capture_context: std::sync::Mutex::new(None) };
+    let mut unsupported = observation(PredictedAction::NoHighlight, false);
+    unsupported.frame.pixels.fill(255);
+    let mut io = fake_frames(vec![copy_observation(&unsupported), native_hint_phase(91)]);
+    io.native_terminal_analysis = true;
+    let mut latest = Some(unsupported);
+    let result = await_terminal_stage(&mut io, &mut latest,
+        StepRunSettings::new(AnimationSettleDelays::default(), 0), &sink,
+        &AtomicBool::new(false), None);
+    assert_eq!(result.unwrap(), Some((TerminalStage::LevelUp, PixelPoint::new(942, 804))));
+    assert_eq!(io.trace, ["wait", "capture", "wait", "capture"]);
+    assert!(io.frames.is_empty() && io.terminal_inputs.is_empty() && io.inputs.is_empty());
+    let logs: Vec<_> = receiver.try_iter().filter_map(|notification| match notification.event {
+        WorkerEvent::Log(message) => Some(message), _ => None,
+    }).collect();
+    assert!(logs.iter().any(|line| line.contains("Klondike OK search summary: searches=3; recaptures=2; second_grab=true;") && line.ends_with("outcome=found.")));
+}
+
+
+/// A third miss stops each menu lookup and publishes its full diagnostic image.
+#[test]
+fn bounded_control_third_miss_retains_latest_preview_and_summary() {
+    use klondike::terminal::TerminalStage;
+    for (previous, label) in [
+        (TerminalStage::ScoreCounting, "OK"),
+        (TerminalStage::LevelUp, "New Game"),
+        (TerminalStage::NewGame, "Play"),
+    ] {
         let (events, receiver) = std::sync::mpsc::channel();
         let sink = WorkerEventSink { events, latest_frame: super::super::LatestFrameSlot::default(), capture_context: std::sync::Mutex::new(None) };
-        let mut io = fake_frames(vec![native_hint_phase(number)]);
+        let mut second = native_hint_phase(26);
+        second.frame.pixels[0] ^= 1;
+        let mut third = native_hint_phase(26);
+        third.frame.pixels[0] ^= 2;
+        let third_pixels = third.frame.pixels.clone();
+        let mut io = fake_frames(vec![second, third]);
         io.native_terminal_analysis = true;
         let mut latest = Some(native_hint_phase(26));
         let result = await_terminal_stage(&mut io, &mut latest,
             StepRunSettings::new(AnimationSettleDelays::default(), 0), &sink,
             &AtomicBool::new(false), Some(previous));
-        assert_eq!(result.unwrap(), Some((expected, point)));
-        assert_eq!(io.trace, ["wait", "capture"]);
-        assert!(io.terminal_inputs.is_empty());
+        assert!(result.unwrap_err().contains("terminal advancement exhausted 2"));
+        assert_eq!(io.trace, ["wait", "capture", "wait", "capture"]);
+        assert!(io.frames.is_empty());
+        assert!(io.terminal_inputs.is_empty() && io.inputs.is_empty());
+        assert_eq!(latest.unwrap().frame.pixels, third_pixels);
+        let preview = sink.latest_frame.take().unwrap();
+        assert!(preview.diagnostic && preview.prediction.is_none());
+        assert_eq!(preview.frame.pixels, third_pixels);
         let logs: Vec<_> = receiver.try_iter().filter_map(|notification| match notification.event {
             WorkerEvent::Log(message) => Some(message), _ => None,
         }).collect();
-        let summary = logs.iter().find(|line| line.contains(&format!("Klondike {label} search summary:"))).unwrap();
-        assert!(summary.contains("searches=2; recaptures=1; second_grab=true;"));
-        assert!(summary.contains("scan_total_ms=") && summary.contains("wall_ms="));
-        assert!(summary.ends_with("outcome=found."));
-        assert_eq!(logs.iter().filter(|line| line.contains(&format!("Klondike {label} search ")) && line.contains("inclusive;")).count(), 2);
+        assert!(logs.iter().any(|line| line.contains(&format!("Klondike {label} search summary: searches=3; recaptures=2; second_grab=true;")) && line.ends_with("outcome=missing.")));
     }
-}
-
-
-/// A second miss stops after one retry and publishes its full diagnostic image.
-#[test]
-fn bounded_control_second_miss_retains_latest_preview_and_summary() {
-    use klondike::terminal::TerminalStage;
-    let (events, receiver) = std::sync::mpsc::channel();
-    let sink = WorkerEventSink { events, latest_frame: super::super::LatestFrameSlot::default(), capture_context: std::sync::Mutex::new(None) };
-    let mut retry = native_hint_phase(26);
-    retry.frame.pixels[0] ^= 1;
-    let retry_pixels = retry.frame.pixels.clone();
-    let mut io = fake_frames(vec![retry]);
-    io.native_terminal_analysis = true;
-    let mut latest = Some(native_hint_phase(26));
-    let result = await_terminal_stage(&mut io, &mut latest,
-        StepRunSettings::new(AnimationSettleDelays::default(), 0), &sink,
-        &AtomicBool::new(false), Some(TerminalStage::ScoreCounting));
-    assert!(result.unwrap_err().contains("terminal advancement exhausted 1"));
-    assert_eq!(io.trace, ["wait", "capture"]);
-    assert!(io.terminal_inputs.is_empty());
-    assert_eq!(latest.unwrap().frame.pixels, retry_pixels);
-    let preview = sink.latest_frame.take().unwrap();
-    assert!(preview.diagnostic && preview.prediction.is_none());
-    assert_eq!(preview.frame.pixels, retry_pixels);
-    let logs: Vec<_> = receiver.try_iter().filter_map(|notification| match notification.event {
-        WorkerEvent::Log(message) => Some(message), _ => None,
-    }).collect();
-    assert!(logs.iter().any(|line| line.contains("Klondike OK search summary: searches=2; recaptures=1; second_grab=true;") && line.ends_with("outcome=missing.")));
 }
 
 
@@ -2278,6 +2321,39 @@ fn bounded_control_cancelled_wait_reports_no_second_grab() {
         WorkerEvent::Log(message) => Some(message), _ => None,
     }).collect();
     assert!(logs.iter().any(|line| line.contains("searches=1; recaptures=0; second_grab=false;") && line.ends_with("outcome=cancelled-or-wait-error.")));
+}
+
+
+/// STOP before the third frame preserves the second miss and does not count a recapture.
+#[test]
+fn bounded_control_cancelled_second_wait_reports_no_third_capture() {
+    use klondike::terminal::TerminalStage;
+    let stop = AtomicBool::new(false);
+    let (events, receiver) = std::sync::mpsc::channel();
+    let sink = WorkerEventSink { events, latest_frame: super::super::LatestFrameSlot::default(), capture_context: std::sync::Mutex::new(None) };
+    let mut second = native_hint_phase(26);
+    second.frame.pixels[0] ^= 1;
+    let second_pixels = second.frame.pixels.clone();
+    let mut io = fake_frames(vec![second, native_hint_phase(91)]);
+    io.native_terminal_analysis = true;
+    io.stop_on_wait = Some(&stop);
+    io.waits_before_stop = 1;
+    let mut latest = Some(native_hint_phase(26));
+    let result = await_terminal_stage(&mut io, &mut latest,
+        StepRunSettings::new(AnimationSettleDelays::default(), 0), &sink,
+        &stop, Some(TerminalStage::ScoreCounting));
+    assert!(result.unwrap_err().contains("STOP"));
+    assert_eq!(io.trace, ["wait", "capture", "wait"]);
+    assert_eq!(io.frames.len(), 1, "the ready third frame must remain unread");
+    assert!(io.terminal_inputs.is_empty() && io.inputs.is_empty());
+    assert_eq!(latest.unwrap().frame.pixels, second_pixels);
+    let preview = sink.latest_frame.take().unwrap();
+    assert!(preview.diagnostic && preview.prediction.is_none());
+    assert_eq!(preview.frame.pixels, second_pixels);
+    let logs: Vec<_> = receiver.try_iter().filter_map(|notification| match notification.event {
+        WorkerEvent::Log(message) => Some(message), _ => None,
+    }).collect();
+    assert!(logs.iter().any(|line| line.contains("searches=2; recaptures=1; second_grab=true;") && line.ends_with("outcome=cancelled-or-wait-error.")));
 }
 
 

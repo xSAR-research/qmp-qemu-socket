@@ -1,5 +1,20 @@
 # Changelog
 
+## v2.2.2-candidate.4 — Earlier Level Up capture and three control searches
+
+- Reduce the shared score-skip-to-Level-Up wait from 3000 ms to 1000 ms.
+- Give absent OK, New Game and Play controls three total searches across all
+  five game types: the initial frame plus at most two fresh recaptures.
+- Centralise the attempt count and update Params and controller diagnostics.
+  Preserve existing retry spacing, click budgets, positive reward/gameplay
+  recovery, independent win evidence and uncertain-input safeguards.
+- Extend regressions for third-attempt success, exhausted three-frame lookups,
+  latest-frame retention, cancellation and no input replay. A synthetic washout
+  removes only exact-black OK ink from native Level Up pixels after confirmation.
+- Keep xSAR, the Windows screen-grab server and capture transport unchanged.
+- Rust compilation, tests and live game acceptance remain pending; the delivery
+  record separates completed local checks from required Beast verification.
+
 ## v2.2.2-candidate.3 — Forward-only menu transitions and diagnostic previews
 
 - Fix Pyramid's detected New Game being overridden by an incidental black run

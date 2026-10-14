@@ -47,7 +47,7 @@ use crate::parameters::{
     SPIDER_DEFAULT_OBSERVATION_LIMIT, SPIDER_DRAW_SETTLE_DELAY_MS, SPIDER_GAME_START_DELAY_MS,
     SPIDER_MAX_MULTI_STEP_ACTIONS, SPIDER_MAX_OBSERVATION_LIMIT, SPIDER_REOBSERVE_DELAY_MS,
     SPIDER_SETTLE_DELAY_MS, STEP_ONCE_ACTIONS, STEP_ONCE_INPUT_ENABLED,
-    TABLEAU_ANIMATION_SETTLE_DELAY_MS, TRIPEAKS_REOBSERVE_DELAY_MS,
+    TABLEAU_ANIMATION_SETTLE_DELAY_MS, TERMINAL_CONTROL_SEARCH_ATTEMPTS, TRIPEAKS_REOBSERVE_DELAY_MS,
     UNBOUNDED_MULTI_STEP_ACTIONS, VISIBLE_LOG_ROLLOVER_GAMES,
 };
 use crate::parameters::{AnimationSettleDelays, StepRunSettings};
@@ -2408,7 +2408,7 @@ impl QmpQemuSocketApp {
                     crate::terminal_controls::Control::Play] {
                     let search = controls.spec(control);
                     ui.monospace(format!(
-                        "terminal-{} = search {}; {} exact-black pixels; click at detected point; one fresh retry when absent",
+                        "terminal-{} = search {}; {} exact-black pixels; click at detected point; {TERMINAL_CONTROL_SEARCH_ATTEMPTS} total attempts when absent",
                         control.label(), format_rect(search.bounds), search.run_length,
                     ));
                 }

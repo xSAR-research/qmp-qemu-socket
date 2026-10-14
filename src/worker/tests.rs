@@ -2257,7 +2257,11 @@ mod tripeaks_reward_qmp_regressions {
         DirectLevelUp,
         /// New Game is absent once, then appears on the single fresh retry.
         DelayedNewGame,
-        /// New Game remains absent on both permitted expected-control captures.
+        /// New Game is absent twice, then appears on the final fresh retry.
+        ThirdAttemptNewGame,
+        /// Native Level Up ink is washed out twice after independent win confirmation.
+        WashedOutLevelUp,
+        /// New Game remains absent on all three permitted expected-control captures.
         MissingNewGame,
         /// Logged Pyramid coordinates include an expected New Game and unrelated OK-region ink.
         PyramidNewGameWithOldInk,
@@ -2300,7 +2304,8 @@ mod tripeaks_reward_qmp_regressions {
 
     /// Whether this scenario uses native Level Up plus synthetic later-stage controls.
     fn level_up_scenario(scenario: Scenario) -> bool {
-        matches!(scenario, Scenario::DirectLevelUp | Scenario::DelayedNewGame | Scenario::MissingNewGame
+        matches!(scenario, Scenario::DirectLevelUp | Scenario::DelayedNewGame
+            | Scenario::ThirdAttemptNewGame | Scenario::WashedOutLevelUp | Scenario::MissingNewGame
             | Scenario::PyramidNewGameWithOldInk | Scenario::PyramidMissingNewGameWithOldInk
             | Scenario::PyramidOptionalLevelUpWithOldInk | Scenario::StopAfterLevelUpProbe
             | Scenario::UncertainLevelUp | Scenario::RewardThenLevelUp | Scenario::MixedStageReset
@@ -2677,6 +2682,7 @@ mod tripeaks_reward_qmp_regressions {
                                     (CaptureKind::Unsupported, new_game_png.as_slice())
                                 } else if scenario == Scenario::MissingNewGame
                                     || (scenario == Scenario::DelayedNewGame && report.unsupported_captures == 0)
+                                    || (scenario == Scenario::ThirdAttemptNewGame && report.unsupported_captures < 2)
                                 {
                                     report.unsupported_captures += 1;
                                     (CaptureKind::Unsupported, unsupported_png.as_slice())
@@ -2689,6 +2695,11 @@ mod tripeaks_reward_qmp_regressions {
                                 } else {
                                     (CaptureKind::NewGame, new_game_png.as_slice())
                                 }
+                            } else if scenario == Scenario::WashedOutLevelUp
+                                && report.level_up_captures >= 2 && report.unsupported_captures < 2
+                            {
+                                report.unsupported_captures += 1;
+                                (CaptureKind::Unsupported, unsupported_png.as_slice())
                             } else if late_level_up_scenario(scenario)
                                 && (report.unsupported_captures < if scenario == Scenario::CandidateTwentyOne { 20 } else { 29 }
                                     || (scenario == Scenario::TransientCandidateThirty && report.level_up_captures > 0))
@@ -2871,7 +2882,21 @@ mod tripeaks_reward_qmp_regressions {
             last_top_card_at(1, material_effect)
         } else { last_top_card(material_effect) };
         let recovered = tripeaks_stock_frame(true);
-        let unsupported = dialog_observation(&[]).frame;
+        let unsupported = if scenario == Scenario::WashedOutLevelUp {
+            let mut frame = decode_png(LEVEL_UP_PNG).expect("native Level Up before synthetic washout");
+            let bounds = TRIPEAKS_CONTROLS.spec(Control::Ok).bounds;
+            for y in bounds.y..bounds.bottom() {
+                for x in bounds.x..bounds.right() {
+                    if crate::detector::pixel_rgb(&frame, x, y) == Some([0, 0, 0]) {
+                        paint(&mut frame, PixelRect::new(x, y, 1, 1), [200, 200, 200, 255]);
+                    }
+                }
+            }
+            assert_eq!(crate::terminal_controls::control_point(&frame, TRIPEAKS_CONTROLS.spec(Control::Ok)).unwrap(), PixelPoint::new(0, 0));
+            assert!(super::tripeaks_terminal::is_direct_level_up_context(&frame).unwrap(),
+                "only OK ink is obscured; independent native panel authority survives");
+            frame
+        } else { dialog_observation(&[]).frame };
         let mut nonempty = tripeaks_stock_frame(false);
         let row_four = GameMode::TriPeaks.profile().tableau_rows[3].face_probe_bounds;
         paint(&mut nonempty, PixelRect::new(row_four.x, row_four.y,
@@ -3029,10 +3054,10 @@ mod tripeaks_reward_qmp_regressions {
     /// Prior-region ink cannot renew the missing-control allowance or authorise another click.
     #[test]
     #[ignore = "requires local AF_UNIX sockets"]
-    fn pyramid_missing_new_game_with_old_ok_ink_stops_after_one_recapture() {
+    fn pyramid_missing_new_game_with_old_ok_ink_stops_after_two_recaptures() {
         let (result, wire, events, latest) = run_pyramid_menu(Scenario::PyramidMissingNewGameWithOldInk);
-        assert!(result.unwrap_err().contains("absent in two consecutive fresh captures"));
-        assert_eq!(wire.unsupported_captures, 2);
+        assert!(result.unwrap_err().contains("absent in 3 consecutive fresh captures"));
+        assert_eq!(wire.unsupported_captures, 3);
         assert_eq!(wire.downs(), 1);
         assert_eq!(wire.downs_at(wire_point(PixelPoint::new(944, 771))), 1);
         assert_eq!(wire.downs_at(wire_point(PixelPoint::new(944, 810))), 0);
@@ -3042,7 +3067,7 @@ mod tripeaks_reward_qmp_regressions {
         paint_black_run(&mut expected, 944, 810, 5);
         assert_eq!(latest.frame.pixels, expected.pixels);
         assert!(events.iter().any(|event| matches!(event, WorkerEvent::Log(message)
-            if message.contains("Pyramid New Game search summary: searches=2; recaptures=1; second_grab=true;")
+            if message.contains("Pyramid New Game search summary: searches=3; recaptures=2; second_grab=true;")
                 && message.ends_with("outcome=not-found."))));
     }
 
@@ -3456,19 +3481,19 @@ mod tripeaks_reward_qmp_regressions {
     }
 
 
-    /// A second non-gameplay frame cannot retry skip without fresh positive reward evidence.
+    /// Three missing-control captures cannot retry skip without fresh positive reward evidence.
     #[test]
     #[ignore = "requires local AF_UNIX sockets"]
     fn tripeaks_reward_disappearing_after_skip_refuses_centre_retry_through_qmp() {
         let evidence = run(Scenario::SkipDisappears);
         assert_only_original_and_skip(&evidence, 1);
-        assert_eq!(evidence.wire.unsupported_captures, 2);
+        assert_eq!(evidence.wire.unsupported_captures, 3);
         let skip = wire_point(SCORE_SKIP_CONTROL.click_point);
         let skip_down = evidence.wire.events.iter().position(|event|
             *event == WireEvent::Down(skip)).expect("first acknowledged skip");
         let unsupported = evidence.wire.events[skip_down + 1..].iter().filter(|event|
             **event == WireEvent::Capture(CaptureKind::Unsupported)).count();
-        assert_eq!(unsupported, 2, "one fresh retry exhausts the absent-control allowance");
+        assert_eq!(unsupported, 3, "two fresh retries exhaust the absent-control allowance");
         assert!(!evidence.wire.events[skip_down + 1..].iter().any(|event|
             matches!(event, WireEvent::Down(_))), "fresh unknown frames never authorise a retry");
         assert_eq!(action_count(&evidence), 1);
@@ -3476,7 +3501,7 @@ mod tripeaks_reward_qmp_regressions {
         assert_eq!(evidence.latest.frame.pixels, evidence.unsupported.pixels);
         assert!(!evidence.events.iter().any(|event| matches!(event,
             WorkerEvent::RunCompleted { .. } | WorkerEvent::GameCompleted)));
-        assert!(evidence.events.iter().any(|event| matches!(event, WorkerEvent::Log(message) if message.contains("absent in two consecutive fresh captures"))));
+        assert!(evidence.events.iter().any(|event| matches!(event, WorkerEvent::Log(message) if message.contains("absent in 3 consecutive fresh captures"))));
     }
 
 
@@ -3592,12 +3617,49 @@ mod tripeaks_reward_qmp_regressions {
     }
 
 
-    /// Two absent expected controls stop without clicking and retain the final failed pixels.
+    /// Two misses do not replay OK; the third fresh New Game frame supplies the input point.
     #[test]
     #[ignore = "requires local AF_UNIX sockets"]
-    fn tripeaks_missing_new_game_stops_after_one_recapture_and_retains_preview() {
-        let evidence = run(Scenario::MissingNewGame);
+    fn tripeaks_new_game_third_attempt_finds_control_without_replaying_ok() {
+        let evidence = run(Scenario::ThirdAttemptNewGame);
         assert_eq!(evidence.wire.unsupported_captures, 2);
+        assert_level_up_restart(&evidence, PixelPoint::new(943, 770));
+        assert!(evidence.events.iter().any(|event| matches!(event, WorkerEvent::Log(message)
+            if message.contains("TriPeaks New Game search 3:") && message.contains("result=(815, 840)"))));
+        assert!(evidence.events.iter().any(|event| matches!(event, WorkerEvent::Log(message)
+            if message.contains("TriPeaks New Game search summary: searches=3; recaptures=2;")
+                && message.ends_with("outcome=matched."))));
+    }
+
+
+    /// Synthetic washout changes only exact-black OK ink in a native panel after win confirmation.
+    #[test]
+    #[ignore = "requires local AF_UNIX sockets"]
+    fn tripeaks_washed_out_ok_uses_third_capture_without_centre_input() {
+        let evidence = run(Scenario::WashedOutLevelUp);
+        assert_eq!(evidence.wire.unsupported_captures, 2);
+        assert_level_up_restart(&evidence, PixelPoint::new(943, 770));
+        let ok = wire_point(PixelPoint::new(943, 770));
+        let ok_down = evidence.wire.events.iter().position(|event|
+            *event == WireEvent::Down(ok)).expect("one measured OK input after washout clears");
+        let misses: Vec<_> = evidence.wire.events.iter().enumerate().filter_map(|(index, event)|
+            (*event == WireEvent::Capture(CaptureKind::Unsupported)).then_some(index)).collect();
+        assert_eq!(misses.len(), 2);
+        assert!(misses[1] < ok_down);
+        assert!(!evidence.wire.events[misses[0]..ok_down].iter().any(|event|
+            matches!(event, WireEvent::Down(_))), "two washed-out frames authorise no input");
+        assert!(evidence.events.iter().any(|event| matches!(event, WorkerEvent::Log(message)
+            if message.contains("TriPeaks OK search summary: searches=3; recaptures=2;")
+                && message.ends_with("outcome=matched."))));
+    }
+
+
+    /// Three absent expected controls stop without clicking and retain the final failed pixels.
+    #[test]
+    #[ignore = "requires local AF_UNIX sockets"]
+    fn tripeaks_missing_new_game_stops_after_two_recaptures_and_retains_preview() {
+        let evidence = run(Scenario::MissingNewGame);
+        assert_eq!(evidence.wire.unsupported_captures, 3);
         assert_eq!(evidence.wire.downs(), 2, "only the final card and its measured OK were clicked");
         assert_eq!(evidence.wire.downs_at(wire_point(SCORE_SKIP_CONTROL.click_point)), 0);
         assert_eq!(evidence.wire.downs_at(wire_point(TEST_NEW_GAME_CONTROLS[0].click_point)), 0);
@@ -3605,7 +3667,7 @@ mod tripeaks_reward_qmp_regressions {
         assert!(evidence.events.iter().any(|event| matches!(event,
             WorkerEvent::State(WorkerState::Uncertain))));
         assert!(evidence.events.iter().any(|event| matches!(event, WorkerEvent::Log(message)
-            if message.contains("TriPeaks New Game search summary: searches=2; recaptures=1; second_grab=true;")
+            if message.contains("TriPeaks New Game search summary: searches=3; recaptures=2; second_grab=true;")
                 && message.contains("scan_total_ms=") && message.contains("wall_ms=")
                 && message.ends_with("outcome=not-found."))));
         assert!(!evidence.events.iter().any(|event| matches!(event,
@@ -3739,7 +3801,7 @@ mod tripeaks_reward_qmp_regressions {
     fn tripeaks_level_up_disappearing_into_reward_before_ok_refuses_skip_through_qmp() {
         let evidence = run(Scenario::LevelUpDisappearsBeforeOk);
         assert_eq!(evidence.wire.level_up_captures, 2);
-        assert_eq!(evidence.wire.reward_captures, 2);
+        assert_eq!(evidence.wire.reward_captures, 3);
         assert_eq!(evidence.wire.downs(), 1);
         assert_eq!(evidence.wire.downs_at(wire_point(TABLEAU_CARD_REGIONS[1].click_point)), 1);
         assert_eq!(action_count(&evidence), 1, "only the final card's confirmed win was committed");
@@ -3755,7 +3817,7 @@ mod tripeaks_reward_qmp_regressions {
     #[ignore = "requires local AF_UNIX sockets"]
     fn tripeaks_bare_gold_stale_ok_after_native_ack_is_not_retried_through_qmp() {
         let evidence = run(Scenario::StaleBareGoldAfterOk);
-        assert_eq!(evidence.wire.bare_gold_captures, 2);
+        assert_eq!(evidence.wire.bare_gold_captures, 3);
         assert_eq!(evidence.wire.downs(), 2);
         assert_eq!(evidence.wire.downs_at(wire_point(TABLEAU_CARD_REGIONS[1].click_point)), 1);
         assert_eq!(evidence.wire.downs_at(wire_point(native_level_up_control().click_point)), 1);

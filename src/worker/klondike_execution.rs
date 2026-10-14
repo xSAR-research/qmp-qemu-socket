@@ -37,7 +37,7 @@ use crate::{
     parameters::{
         KEY_HOLD, KLONDIKE_MAX_MULTI_STEP_ACTIONS, MOUSE_HOLD,
         NOMINAL_FRAME_HEIGHT, NOMINAL_FRAME_WIDTH, POINTER_SETTLE_DELAY, POST_GAME_MAX_OBSERVATION_ROUNDS,
-        SOLVER_MOUSE_HOLD, StepRunSettings,
+        SOLVER_MOUSE_HOLD, TERMINAL_CONTROL_SEARCH_ATTEMPTS, StepRunSettings,
     },
     qmp::QmpClient,
     stepper::{StepPlan, plan_step},
@@ -732,7 +732,7 @@ fn resume_after_win(
 /// The current fresh frame counts as the initial observation. The prior stage
 /// must advance in order. Only the expected local button is checked after a
 /// confirmed win; unrelated artwork is not classified. An absent or unchanged
-/// searched control receives one fresh screenshot retry without input replay.
+/// searched control receives at most two fresh screenshot retries without input replay.
 /// Fresh-deal and post-Solver observations retain the shorter gameplay budget.
 fn await_terminal_stage(
     io: &mut impl KlondikeIo,
@@ -753,7 +753,7 @@ fn await_terminal_stage(
 
 
     let reobservation_limit = match previous {
-        None | Some(TerminalStage::ScoreCounting | TerminalStage::LevelUp | TerminalStage::NewGame) => 1,
+        None | Some(TerminalStage::ScoreCounting | TerminalStage::LevelUp | TerminalStage::NewGame) => TERMINAL_CONTROL_SEARCH_ATTEMPTS - 1,
         Some(TerminalStage::Play | TerminalStage::SolverReady) => REOBSERVATION_LIMIT,
     };
     let mut delayed_observations = 0usize;
@@ -793,7 +793,7 @@ fn await_terminal_stage(
                 }
                 stage => {
                     // A confirmed win can enter directly at OK or New Game. Both
-                    // bounded lookups retain their own metrics across one retry.
+                    // bounded lookups retain their own metrics across both fresh retries.
                     let ok_lookup = entry_ok.get_or_insert_with(|| ControlLookup::new("Klondike", &KLONDIKE_CONTROLS, Control::Ok, event_tx));
                     let ok = io.expected_terminal_control(&current.frame, TerminalStage::LevelUp, Some(ok_lookup))?;
                     let new_game = if stage == Some(TerminalStage::LevelUp) && ok != PixelPoint::new(0, 0) {

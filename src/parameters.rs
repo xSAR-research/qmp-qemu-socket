@@ -920,10 +920,15 @@ pub const BOARDS_PER_GAME: usize = 3;
 pub const POST_GAME_STAGE_DELAY: Duration = Duration::from_secs(1);
 
 
-// Give the score-counting transition time to finish after each centre click
-// before looking for Level Up OK. Other post-game controls keep their settle.
+// Capture the Level Up caption before the later fireworks can obscure its ink.
+// Missing captions retain their separate, bounded fresh-observation allowance.
 /// Delay after score-skip clicks before looking for Level Up.
-pub const LEVEL_UP_APPEAR_DELAY: Duration = Duration::from_secs(3);
+pub const LEVEL_UP_APPEAR_DELAY: Duration = Duration::from_millis(1_000);
+
+
+/// Total missing-control searches: the initial frame plus at most two fresh retries.
+/// Recognised reward/gameplay recovery retains its separate existing budgets.
+pub const TERMINAL_CONTROL_SEARCH_ATTEMPTS: usize = 3;
 
 
 /// Delay between observations of an unresolved board transition.
@@ -1355,7 +1360,8 @@ mod tests {
         assert_eq!(BOARDS_PER_GAME, 3);
         assert_eq!(BOARD_REDEAL_SETTLE_DELAY, Duration::from_secs(4));
         assert_eq!(POST_GAME_STAGE_DELAY, Duration::from_secs(1));
-        assert_eq!(LEVEL_UP_APPEAR_DELAY, Duration::from_secs(3));
+        assert_eq!(LEVEL_UP_APPEAR_DELAY, Duration::from_millis(1_000));
+        assert_eq!(TERMINAL_CONTROL_SEARCH_ATTEMPTS, 3);
         assert_eq!(POST_GAME_MAX_OBSERVATION_ROUNDS, 20);
         assert_eq!(POST_GAME_MAX_CLICK_ATTEMPTS, 3);
         assert_eq!(SCORE_SKIP_MAX_CLICK_ATTEMPTS, 3);

@@ -21,6 +21,7 @@ use crate::{
         POST_GAME_MAX_CLICK_ATTEMPTS, POST_GAME_MAX_OBSERVATION_ROUNDS, POST_GAME_MOUSE_HOLD,
         POST_GAME_STAGE_DELAY, POST_GAME_TARGETS, PostGameControlVariant, PostGameStage,
         PostGameTarget, SCORE_SKIP_CONTROL, SCORE_SKIP_MAX_CLICK_ATTEMPTS, SOLVER_MOUSE_HOLD,
+        TERMINAL_CONTROL_SEARCH_ATTEMPTS,
     },
     geometry::PixelPoint,
     qmp::QmpClient,
@@ -59,7 +60,7 @@ pub(super) fn run_post_game_restart(
     // Advances the verified end-of-game UI through OK, New Game, Play, and Solver.
     // Every control uses a deliberate hold. Acknowledged dialog controls are
     // retired from input authority; only the expected stage is considered next.
-    // Missing controls receive one input-free fresh capture before stopping.
+    // Missing controls receive at most two input-free fresh captures before stopping.
     let transition_started = Instant::now();
     let mut capture_timing = CaptureTiming::default();
     let mut intentional_wait = Duration::ZERO;
@@ -385,12 +386,12 @@ pub(super) fn run_post_game_restart(
 
             if let Some(lookup) = lookup.as_mut() {
                 consecutive_control_misses += 1;
-                if consecutive_control_misses >= 2
+                if consecutive_control_misses >= TERMINAL_CONTROL_SEARCH_ATTEMPTS
                     && !(guarded_post_ok_skip || (score_retry && positive_reward))
                 {
                     lookup.set_outcome("not-found");
                     return Err(format!(
-                        "Post-game {} was absent in two consecutive fresh captures; the second was an input-free retry. Latest failed frame retained for inspection; neither failed frame authorised a control click.",
+                        "Post-game {} was absent in {TERMINAL_CONTROL_SEARCH_ATTEMPTS} consecutive fresh captures; the two recaptures were input-free retries. Latest failed frame retained for inspection; no failed frame authorised a control click.",
                         target.label,
                     ));
                 }
@@ -398,7 +399,7 @@ pub(super) fn run_post_game_restart(
 
             // A positively recognised reward transition retains its existing
             // input authority. An unknown non-gameplay frame cannot renew the
-            // two-search allowance by triggering a speculative score skip.
+            // missing-control allowance by triggering a speculative score skip.
             if guarded_post_ok_skip || score_retry {
                 consecutive_control_misses = 0;
                 if let Some(lookup) = lookup.as_mut() { lookup.set_outcome("reward-transition"); }
@@ -870,7 +871,7 @@ pub(super) fn score_skip_retry_is_authorised(
     gameplay_scene: bool,
     observation_round: usize,
 ) -> bool {
-    // After the first 3-second wait, give a score or Golden Ticket animation
+    // After the first Level Up wait, give a score or Golden Ticket animation
     // one more input-free observation before repeating a confirmed click.
     expected_stage == PostGameStage::LevelUpOk && !gameplay_scene && observation_round >= 2
 }
