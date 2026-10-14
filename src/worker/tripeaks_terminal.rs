@@ -8,10 +8,11 @@
 use super::{FrameObservation, materially_changed_pixels};
 use crate::{
     capture::CapturedFrame,
-    detector::{has_dialog_gold_button, pixel_rgb},
+    detector::pixel_rgb,
     game::{ActionTarget, GameMode},
     geometry::PixelRect,
-    parameters::{ACTION_CHANGE_CHANNEL_THRESHOLD, LEVEL_UP_CONTROL_VARIANTS, NOMINAL_FRAME_HEIGHT, NOMINAL_FRAME_WIDTH},
+    parameters::{ACTION_CHANGE_CHANNEL_THRESHOLD, NOMINAL_FRAME_HEIGHT, NOMINAL_FRAME_WIDTH},
+    terminal_controls::{Control, control_point, profiles::TRIPEAKS_CONTROLS},
     stepper::StepPlan,
     tracker::{PredictedAction, RowMask, TableauScanState, analyse_frame_with_state},
 };
@@ -234,11 +235,19 @@ pub(super) fn terminal_kind(frame: &CapturedFrame) -> Result<Option<TerminalKind
 }
 
 
-/// Require the fixed Level Up panel, its evidenced raised OK and the dim reward underlay.
+/// Require the fixed Level Up panel, a bounded OK match and the dim reward underlay.
 ///
 /// A progression modal without the uncovered reward prompt and borders is refused.
 /// Changing level, rank and central artwork never supply terminal authority.
 pub(super) fn is_direct_level_up_overlay(frame: &CapturedFrame) -> Result<bool, String> {
+    Ok(is_direct_level_up_context(frame)?
+        && control_point(frame, TRIPEAKS_CONTROLS.spec(Control::Ok)).map_err(|error| error.to_string())?
+            != crate::geometry::PixelPoint::new(0, 0))
+}
+
+
+/// Check independent panel authority without repeating a measured OK search.
+pub(super) fn is_direct_level_up_context(frame: &CapturedFrame) -> Result<bool, String> {
 
 
     if !frame.is_layout_valid() {
@@ -281,9 +290,7 @@ pub(super) fn is_direct_level_up_overlay(frame: &CapturedFrame) -> Result<bool, 
             return Ok(false);
         }
     }
-    let [legacy, raised] = LEVEL_UP_CONTROL_VARIANTS;
-    Ok(has_dialog_gold_button(frame, raised.probe_bounds).map_err(|error| error.to_string())?
-        && !has_dialog_gold_button(frame, legacy.probe_bounds).map_err(|error| error.to_string())?)
+    Ok(true)
 }
 
 

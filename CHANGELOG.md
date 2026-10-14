@@ -1,5 +1,44 @@
 # Changelog
 
+## v2.2.2-candidate.3 — Forward-only menu transitions and diagnostic previews
+
+- Fix Pyramid's detected New Game being overridden by an incidental black run
+  in the previous OK region. After a delivered menu click, search the next
+  expected control without replaying earlier menu inputs.
+- Prefer New Game when the optional Level Up step is absent. Preserve separately
+  verified foreground TriPeaks modal context before accepting underlying ink.
+- Keep one input-free recapture for an absent expected control, with accurate
+  failure wording and the latest restart frame explicitly marked diagnostic
+  for display after an uncertain stop.
+- Add mock-QMP coverage for New Game plus an OK-region distractor, missing New
+  Game with a distractor, and direct New Game entry without Level Up.
+- Carry forward the candidate.2 warning cleanup. Search calibration and xsar
+  remain unchanged. Rust tests and live acceptance of this fix remain pending.
+
+## v2.2.2-candidate.2 — Shared terminal controls and search metrics
+
+- Use the existing xsar black-run scanner for expected OK, New Game and Play
+  controls across TriPeaks, Pyramid, Klondike, Free Cell and Spider. Carry the
+  measured full-frame point through to input rather than retaining fixed clicks.
+- Centralise bounds and run lengths in per-game constant blocks in
+  `terminal_controls/profiles.rs`. Keep a wider vertical OK window, tighten
+  static New Game/Play windows per game, and use the selected block for search,
+  retry, logs and the Params panel. Keep xsar independent of all game layouts.
+- Log each attempted scan's bounds, result, pixel/row counts and scan duration.
+  Emit a per-lookup summary of searches, attempted recaptures, second-grab flag,
+  accumulated scan time, elapsed wall time and outcome through both log sinks.
+- Give missing expected controls one fresh capture retry and retain the latest
+  diagnostic image on failure. Keep independent game-win evidence and existing
+  positive transition/recovery policies separate from control location.
+- Add native control, telemetry, retry and measured-input regressions. Python
+  calibration passes all 28 available terminal captures; application Rust tests
+  and live acceptance of the expanded integration remain pending.
+- Reuse xsar `5fa8a1a` unchanged. TriPeaks/Pyramid New Game and Play lack native
+  positive screenshots in the repository and require live verification.
+- Remove obsolete dialog-gold detectors, their calibration constants and their
+  retired test coverage. Remove unused worker imports and import observation
+  limits directly in tests. Search bounds, matching and input behaviour are unchanged.
+
 ## v2.2.2-candidate.1 — Spider Level Up black-run search
 
 - Search only Spider's expected OK region for five consecutive exact-black RGB
@@ -12,8 +51,8 @@
   on-screen log path. Keep other games and capture transport unchanged.
 - Consume the sibling xsar 0.4.2-candidate.1 helper and add the native Spider
   level-505 screenshot plus detector and worker regressions.
-- Candidate awaiting local Rust build/tests and live Spider acceptance; fixture
-  measurements alone do not establish successful guest interaction.
+- Charlie confirmed successful live Spider operation on 13 October 2026 and
+  published the application checkpoint as `7c6c6fb` with xsar `5fa8a1a`.
 
 ## v2.2.0 — Explicit card values and schema-2 export (development)
 

@@ -2380,7 +2380,7 @@ impl QmpQemuSocketApp {
                         CHALLENGE_COMPLETE_CONTINUE_CONTROL.click_point.y,
                     ));
                     ui.monospace(format!(
-                        "post-game-bounds = {POST_GAME_MAX_OBSERVATION_ROUNDS} observations/stage, {POST_GAME_MAX_CLICK_ATTEMPTS} confirmed clicks/retry context"
+                        "post-game-recovery-bounds = {POST_GAME_MAX_OBSERVATION_ROUNDS} observations/context, {POST_GAME_MAX_CLICK_ATTEMPTS} confirmed clicks/retry context"
                     ));
                     ui.monospace(format!(
                         "score-skip-bound = {SCORE_SKIP_MAX_CLICK_ATTEMPTS} confirmed centre clicks total (initial included)"
@@ -2401,6 +2401,16 @@ impl QmpQemuSocketApp {
                             ));
                         }
                     }
+                }
+                let controls = crate::terminal_controls::profiles::for_game(self.game_mode);
+                for control in [crate::terminal_controls::Control::Ok,
+                    crate::terminal_controls::Control::NewGame,
+                    crate::terminal_controls::Control::Play] {
+                    let search = controls.spec(control);
+                    ui.monospace(format!(
+                        "terminal-{} = search {}; {} exact-black pixels; click at detected point; one fresh retry when absent",
+                        control.label(), format_rect(search.bounds), search.run_length,
+                    ));
                 }
                 ui.monospace(format!(
                     "pointer-settle = {} ms",

@@ -21,6 +21,7 @@ mod spider;
 mod spider_terminal;
 mod stepper;
 mod strategy;
+mod terminal_controls;
 mod tracker;
 mod tripeaks;
 mod worker;

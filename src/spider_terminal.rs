@@ -1,22 +1,19 @@
 //! Spider's one-board win and deterministic ordered restart controls.
 //!
-//! SP15/SP17 evidence the shared score-skip and New Game controls. SP18 places
-//! Play 100 pixels below Free Cell's location. Optional Level Up searches a
-//! bounded rectangle bottom-up for five consecutive exact-black RGB pixels.
+//! SP15/SP17 evidence score-skip and independent New Game win entry.
+//! OK, New Game and Play use Spider control rectangles, scanned bottom-up
+//! for five consecutive exact-black RGB pixels.
 //! That run supplies the click point; it does not independently prove a win.
 //! No Solve, missing DRAW or missing HALO is win authority.
 
 use std::fmt;
 
-use thiserror::Error;
-use xsar::image_matching::{MatchError, find_black_run_bottom_up};
-
 use crate::{
     capture::CapturedFrame,
     detector::HaloDetectionError,
     freecell_terminal::{self, TerminalStage as SharedStage},
-    geometry::{PixelPoint, PixelRect},
-    parameters::{NOMINAL_FRAME_HEIGHT, NOMINAL_FRAME_WIDTH},
+    geometry::PixelPoint,
+    terminal_controls::{self, Control, profiles::SPIDER_CONTROLS},
 };
 
 
@@ -62,78 +59,31 @@ const fn shared_stage(stage: TerminalStage) -> SharedStage {
 }
 
 
-/// Gross search rectangle in full-frame pixels: X930..=990, Y700..=850.
-pub const LEVEL_UP_SEARCH: PixelRect = PixelRect::new(930, 700, 61, 151);
-
-
-/// Required contiguous RGB(0, 0, 0) pixels on one row; alpha is ignored.
-pub const LEVEL_UP_BLACK_RUN: u32 = 5;
-
-
-/// Preserve the precise validation error from the shared or bounded detector.
-#[derive(Debug, Error)]
-pub enum TerminalDetectionError {
-    /// Shared score, New Game or Play recognition rejected the frame.
-    #[error(transparent)]
-    Shared(#[from] HaloDetectionError),
-    /// Checked black-run scanning rejected the frame or bounds.
-    #[error(transparent)]
-    Scan(#[from] MatchError),
-    /// Full-frame click coordinates require the calibrated native geometry.
-    #[error("Spider terminal detection requires a 1920x1080 frame; received {width}x{height}")]
-    UnsupportedGeometry {
-        /// Observed frame width.
-        width: u32,
-        /// Observed frame height.
-        height: u32,
-    },
+/// Map Spider stages to control identities; bounds remain in its own profile.
+pub const fn control(stage: TerminalStage) -> Option<Control> {
+    freecell_terminal::control(shared_stage(stage))
 }
 
 
-/// Return the first qualifying run's leftmost full-frame pixel, or (0, 0).
-/// The expected win-stage context supplies meaning; no glyph or colour-body
-/// checks are added to the five-black-pixel rule.
-pub fn level_up_click_point(frame: &CapturedFrame) -> Result<PixelPoint, TerminalDetectionError> {
-    let view = frame.as_view()?;
-    if frame.width != NOMINAL_FRAME_WIDTH || frame.height != NOMINAL_FRAME_HEIGHT {
-        return Err(TerminalDetectionError::UnsupportedGeometry {
-            width: frame.width, height: frame.height,
-        });
-    }
-    Ok(find_black_run_bottom_up(view, LEVEL_UP_SEARCH, LEVEL_UP_BLACK_RUN)?)
-}
-
-
-/// Return a freshly recognised control's click point, or (0, 0) if absent.
-/// Level Up uses its measured run; the other controls retain their fixed points.
+/// Return this frame's measured click point, or (0, 0) if absent.
 pub fn expected_control_point(
     frame: &CapturedFrame,
     stage: TerminalStage,
-) -> Result<PixelPoint, TerminalDetectionError> {
-    if stage == TerminalStage::LevelUp {
-        return level_up_click_point(frame);
+) -> Result<PixelPoint, HaloDetectionError> {
+    if let Some(control) = control(stage) {
+        terminal_controls::control_point(frame, SPIDER_CONTROLS.spec(control))
+    } else {
+        freecell_terminal::expected_control_point(frame, SharedStage::Score)
     }
-    let ready = if stage == TerminalStage::Play {
-        freecell_terminal::play_control_ready_at(frame, 100)?
-    } else {
-        freecell_terminal::expected_control_ready(frame, shared_stage(stage))?
-    };
-    Ok(if !ready {
-        PixelPoint::new(0, 0)
-    } else if stage == TerminalStage::Play {
-        PixelPoint::new(709, 861)
-    } else {
-        freecell_terminal::click_point(shared_stage(stage))
-    })
 }
 
 
-/// Check only the currently expected control; this does not establish a win.
+/// Check only the expected control; this does not establish a win.
 #[cfg(test)]
 fn expected_control_ready(
     frame: &CapturedFrame,
     stage: TerminalStage,
-) -> Result<bool, TerminalDetectionError> {
+) -> Result<bool, HaloDetectionError> {
     Ok(expected_control_point(frame, stage)? != PixelPoint::new(0, 0))
 }
 
@@ -190,17 +140,15 @@ mod tests {
     }
 
 
-    /// The accepted Free Cell Play location is preserved and cannot authorise
-    /// Spider Play; Spider's measured vertical shift does not alter Free Cell.
+    /// Per-game Play rectangles keep the two evidenced vertical layouts separate.
     #[test]
-    fn play_layouts_are_mode_specific_and_outside_offsets_stop() {
-        let frame = decode_png(include_bytes!("../tests/fixtures/freecell-FC12.png")).unwrap();
-        assert!(freecell_terminal::expected_control_ready(&frame, SharedStage::Play).unwrap());
-        assert!(!expected_control_ready(&frame, TerminalStage::Play).unwrap());
-        assert!(expected_control_ready(&fixture(18), TerminalStage::Play).unwrap());
-        assert!(!freecell_terminal::expected_control_ready(&fixture(18), SharedStage::Play).unwrap());
-        assert_eq!(freecell_terminal::play_control_ready_at(&frame, u32::MAX),
-            Err(HaloDetectionError::BoundsOutsideFrame));
+    fn play_layouts_use_their_games_measured_points() {
+        let freecell = decode_png(include_bytes!("../tests/fixtures/freecell-FC12.png")).unwrap();
+        assert_eq!(expected_control_point(&freecell, TerminalStage::Play).unwrap(), PixelPoint::new(0, 0));
+        assert_eq!(freecell_terminal::expected_control_point(&freecell, SharedStage::Play).unwrap(), PixelPoint::new(680, 762));
+        assert_eq!(freecell_terminal::expected_control_point(&fixture(18), SharedStage::Play).unwrap(), PixelPoint::new(0, 0));
+        assert_eq!(expected_control_point(&fixture(18), TerminalStage::Play).unwrap(), PixelPoint::new(679, 862));
+        assert_eq!(expected_control_point(&fixture(17), TerminalStage::NewGame).unwrap(), PixelPoint::new(863, 862));
     }
 
 
@@ -224,7 +172,6 @@ mod tests {
             (fixture(20), PixelPoint::new(942, 803)),
             (current, PixelPoint::new(944, 771)),
         ] {
-            assert_eq!(level_up_click_point(&frame).unwrap(), expected);
             assert_eq!(expected_control_point(&frame, TerminalStage::LevelUp).unwrap(), expected);
             assert_eq!(classify_win_entry(&frame).unwrap(), None);
         }
@@ -239,10 +186,10 @@ mod tests {
         frame.width = 1_024;
         frame.height = 900;
         assert!(frame.as_view().is_ok());
-        assert!(LEVEL_UP_SEARCH.right() <= frame.width);
-        assert!(LEVEL_UP_SEARCH.bottom() <= frame.height);
-        assert!(matches!(level_up_click_point(&frame),
-            Err(TerminalDetectionError::UnsupportedGeometry { width: 1_024, height: 900 })));
+        assert!(SPIDER_CONTROLS.spec(Control::Ok).bounds.right() <= frame.width);
+        assert!(SPIDER_CONTROLS.spec(Control::Ok).bounds.bottom() <= frame.height);
+        assert!(matches!(expected_control_point(&frame, TerminalStage::LevelUp),
+            Err(HaloDetectionError::InvalidFrameLayout)));
     }
 
 
@@ -250,20 +197,22 @@ mod tests {
     #[test]
     fn missing_black_run_returns_zero_and_flat_black_is_not_win_authority() {
         let mut frame = fixture(20);
-        for y in LEVEL_UP_SEARCH.y..LEVEL_UP_SEARCH.bottom() {
-            for x in LEVEL_UP_SEARCH.x..LEVEL_UP_SEARCH.right() {
+        let bounds = SPIDER_CONTROLS.spec(Control::Ok).bounds;
+        for y in bounds.y..bounds.bottom() {
+            for x in bounds.x..bounds.right() {
                 let index = y as usize * frame.stride + x as usize * 4;
                 frame.pixels[index..index + 4].copy_from_slice(&[1, 1, 1, 255]);
             }
         }
-        assert_eq!(level_up_click_point(&frame).unwrap(), PixelPoint::new(0, 0));
+        assert_eq!(expected_control_point(&frame, TerminalStage::LevelUp).unwrap(), PixelPoint::new(0, 0));
         assert!(!expected_control_ready(&frame, TerminalStage::LevelUp).unwrap());
         assert_eq!(classify_win_entry(&frame).unwrap(), None);
 
         for pixel in frame.pixels.as_chunks_mut::<4>().0 {
             pixel.copy_from_slice(&[0, 0, 0, 255]);
         }
-        assert_eq!(level_up_click_point(&frame).unwrap(), PixelPoint::new(930, 850));
+        assert_eq!(expected_control_point(&frame, TerminalStage::LevelUp).unwrap(),
+            PixelPoint::new(bounds.x as i32, (bounds.bottom() - 1) as i32));
         assert_eq!(classify_win_entry(&frame).unwrap(), None);
     }
 }

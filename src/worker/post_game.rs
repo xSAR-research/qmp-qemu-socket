@@ -11,30 +11,25 @@ use std::{
 
 use super::{
     CaptureTiming, FrameObservation, WorkerEventSink, WorkerState, capture_with_client,
-    click_shared_solver, milliseconds, publish_post_action_observation, send_board_progress,
+    click_shared_solver, milliseconds, publish_post_game_observation, send_board_progress,
     send_log, send_state, send_status, validate_probe, wait_or_stop,
 };
 use crate::{
-    capture::CapturedFrame,
-    detector::{dialog_gold_fraction_per_mille, has_dialog_gold_button},
     parameters::{
-        BOARD_TRANSITION_REOBSERVE_DELAY, LEVEL_UP_APPEAR_DELAY, LEVEL_UP_SHARED_BUTTON_BRIDGE,
-        LEVEL_UP_SHARED_BUTTON_INTERIOR, NOMINAL_FRAME_HEIGHT, NOMINAL_FRAME_WIDTH,
+        BOARD_TRANSITION_REOBSERVE_DELAY, LEVEL_UP_APPEAR_DELAY,
+        NOMINAL_FRAME_HEIGHT, NOMINAL_FRAME_WIDTH,
         POST_GAME_MAX_CLICK_ATTEMPTS, POST_GAME_MAX_OBSERVATION_ROUNDS, POST_GAME_MOUSE_HOLD,
         POST_GAME_STAGE_DELAY, POST_GAME_TARGETS, PostGameControlVariant, PostGameStage,
         PostGameTarget, SCORE_SKIP_CONTROL, SCORE_SKIP_MAX_CLICK_ATTEMPTS, SOLVER_MOUSE_HOLD,
     },
+    geometry::PixelPoint,
     qmp::QmpClient,
+    terminal_controls::{Control, control_point, profiles::{self, GameControlProfile}},
     tracker::{PredictedAction, TableauScanState},
 };
 
 
-/// Minimum gold coverage required in both probes joining one tall Level Up button.
-const LEVEL_UP_SHARED_BUTTON_GOLD_PER_MILLE: u32 = 650;
-
-
-/// Recognised error prefix that permits another input-free Level Up observation.
-const LEVEL_UP_AMBIGUITY_PREFIX: &str = "Level Up OK target is ambiguous:";
+use super::control_search::ControlLookup;
 
 
 /// Result of the shared terminal-screen controller.
@@ -62,14 +57,15 @@ pub(super) fn run_post_game_restart(
     cancel_requested: &AtomicBool,
 ) -> Result<PostGameOutcome, String> {
     // Advances the verified end-of-game UI through OK, New Game, Play, and Solver.
-    // Every control uses a deliberate hold; an earlier dialog is retried if a
-    // fresh capture proves that its prior click was not accepted. Observation
-    // and confirmed-delivery click retries are both explicitly bounded.
+    // Every control uses a deliberate hold. Acknowledged dialog controls are
+    // retired from input authority; only the expected stage is considered next.
+    // Missing controls receive one input-free fresh capture before stopping.
     let transition_started = Instant::now();
     let mut capture_timing = CaptureTiming::default();
     let mut intentional_wait = Duration::ZERO;
     let mut input_wall = Duration::ZERO;
     let boards_per_game = scan_state.mode().profile().boards_per_game;
+    let profile = profiles::for_game(scan_state.mode());
     // Only a positively confirmed TriPeaks terminal entry gets the narrow skip
     // evidence policy. Pyramid and existing score-counting transitions retain theirs.
     let guarded_tripeaks_entry = scan_state.mode() == crate::game::GameMode::TriPeaks
@@ -82,15 +78,15 @@ pub(super) fn run_post_game_restart(
         );
 
 
-    let mut known_terminal_stage = match known_post_game_stage(initial_observation) {
-        Ok(stage) => stage,
-        Err(error) if is_level_up_ambiguity(&error) => {
-            send_log(event_tx,
-                "The initial frame contains an ambiguous Level Up control; observing the dialog again before sending any post-game input.".to_owned());
-            Some(0)
-        }
-        Err(error) => return Err(error),
+    if let Some(observation) = initial_observation {
+        publish_post_game_observation(event_tx, observation);
+    }
+    let mut known_terminal_stage = if direct_level_up_entry {
+        Some(0)
+    } else {
+        known_post_game_stage(initial_observation, profile)?
     };
+
 
     *scan_state = TableauScanState::for_mode(scan_state.mode());
     send_state(event_tx, WorkerState::Verifying);
@@ -130,7 +126,7 @@ pub(super) fn run_post_game_restart(
                     format!("Pre-score transition capture failed before input: {error}")
                 })?;
             capture_timing.add_assign(timing);
-            publish_post_action_observation(event_tx, &observation);
+            publish_post_game_observation(event_tx, &observation);
 
 
             if observation.gameplay_scene
@@ -144,34 +140,24 @@ pub(super) fn run_post_game_restart(
                 return Ok(PostGameOutcome::RecoveredGameplay(observation));
             }
 
-            let mut level_up_ambiguous = false;
-
-
-            match known_post_game_stage(Some(&observation)) {
-                Ok(Some(stage)) => {
-                    known_terminal_stage = Some(stage);
-                    send_log(event_tx,
-                        "A terminal control appeared before score skip; entering its verified stage without a centre click.".to_owned());
-                    break;
-                }
-                Ok(None) => {}
-                Err(error) if is_level_up_ambiguity(&error) => {
-                    level_up_ambiguous = true;
-                    send_log(
-                        event_tx,
-                        format!(
-                            "WAITING: {error}; pre-score round {pre_score_round}/{POST_GAME_MAX_OBSERVATION_ROUNDS} sends no guest input."
-                        ),
-                    );
-                }
-                Err(error) => return Err(error),
+            let foreground_level_up = scan_state.mode() == crate::game::GameMode::TriPeaks
+                && super::tripeaks_terminal::is_direct_level_up_overlay(&observation.frame)?;
+            let observed_stage = if foreground_level_up {
+                Some(0)
+            } else {
+                known_post_game_stage(Some(&observation), profile)?
+            };
+            if let Some(stage) = observed_stage {
+                known_terminal_stage = Some(stage);
+                send_log(event_tx,
+                    "A terminal control appeared before score skip; entering its verified stage without a centre click.".to_owned());
+                break;
             }
-
 
             let reward_visible = guarded_tripeaks_entry
                 && super::tripeaks_terminal::is_reward_overlay(&observation.frame)?;
             consecutive_reward = if reward_visible { consecutive_reward.saturating_add(1) } else { 0 };
-            consecutive_non_gameplay = if observation.gameplay_scene || level_up_ambiguous {
+            consecutive_non_gameplay = if observation.gameplay_scene {
                 0
             } else {
                 consecutive_non_gameplay.saturating_add(1)
@@ -244,19 +230,26 @@ pub(super) fn run_post_game_restart(
     while let Some(target) = POST_GAME_TARGETS.get(target_index).copied() {
         let mut observation_round = 1usize;
         let mut consecutive_post_ok_reward = 0usize;
+        let mut consecutive_control_misses = 0usize;
+        let mut lookup = bounded_control(target.stage)
+            .map(|control| ControlLookup::new(scan_state.mode().label(), profile, control, event_tx));
 
 
         let matched_variant = loop {
             send_status(event_tx, format!("Waiting for {}", target.label));
+            if observation_round > 1 {
+                if let Some(lookup) = lookup.as_mut() { lookup.note_recapture(); }
+            }
             let (observation, timing) =
                 capture_with_client(qmp, socket_path, scan_state, event_tx).map_err(|error| {
+                    if let Some(lookup) = lookup.as_mut() { lookup.set_outcome("capture-error"); }
                     format!(
                         "Post-game {} capture failed before input: {error}.",
                         target.label
                     )
                 })?;
             capture_timing.add_assign(timing);
-            publish_post_action_observation(event_tx, &observation);
+            publish_post_game_observation(event_tx, &observation);
 
 
             if observation.gameplay_scene
@@ -272,134 +265,72 @@ pub(super) fn run_post_game_restart(
                         target.label,
                     ),
                 );
+                if let Some(lookup) = lookup.as_mut() { lookup.set_outcome("recovered-gameplay"); }
                 return Ok(PostGameOutcome::RecoveredGameplay(observation));
             }
 
-            let earlier = earlier_visible_post_game_target(&observation, target_index, direct_level_up_entry);
-            let current = resolve_post_game_target_for_entry(&observation, target, direct_level_up_entry);
-            let post_ok_reward = direct_level_up_entry && target.stage == PostGameStage::NewGame
-                && click_attempts[0] > 0 && super::tripeaks_terminal::is_reward_overlay(&observation.frame)?;
-            consecutive_post_ok_reward = if post_ok_reward { consecutive_post_ok_reward.saturating_add(1) } else { 0 };
-
-
-            if let Some(error) = earlier.as_ref().err().or(current.as_ref().err()) {
-
-
-                if is_level_up_ambiguity(error) {
-                    require_post_game_observation_retry_budget(observation_round, target.label)?;
-                    send_log(
-                        event_tx,
-                        format!(
-                            "WAITING: {error}; waiting {} ms and capturing again (round {observation_round}/{POST_GAME_MAX_OBSERVATION_ROUNDS}).",
-                            BOARD_TRANSITION_REOBSERVE_DELAY.as_millis(),
-                        ),
-                    );
-                    intentional_wait += wait_or_stop(
-                        BOARD_TRANSITION_REOBSERVE_DELAY,
-                        cancel_requested,
-                        "STOP was requested during ambiguous Level Up re-observation.",
-                    )?;
-                    observation_round = observation_round.saturating_add(1);
-                    continue;
-                }
-                return Err(error.clone());
-            }
-
-
-            if let Some((stale_index, stale_target, stale_variant)) = earlier? {
-                require_post_game_observation_retry_budget(observation_round, target.label)?;
-                require_post_game_click_retry_budget(
-                    click_attempts[stale_index],
-                    stale_target.label,
-                )?;
-                let reprobe = qmp.probe().map_err(|error| {
-                    format!(
-                        "Post-game stale {} variant {} QMP probe failed while waiting for {}: {error}",
-                        stale_target.label, stale_variant.label, target.label,
-                    )
-                })?;
-                validate_probe(&reprobe).map_err(|error| {
-                    format!(
-                        "Post-game stale {} variant {} retry refused by the fresh QMP probe: {error}",
-                        stale_target.label, stale_variant.label,
-                    )
-                })?;
-
-
-                if cancel_requested.load(Ordering::Acquire) {
-                    return Err(format!("STOP was requested after the fresh {} retry probe; no further input was sent.", stale_target.label));
-                }
-
-                send_state(event_tx, WorkerState::Acting);
-                send_status(
-                    event_tx,
-                    post_game_click_status(stale_target.stage).to_owned(),
-                );
-                let input_started = Instant::now();
-                qmp.click_with_hold(
-                    stale_variant.click_point,
-                    NOMINAL_FRAME_WIDTH,
-                    NOMINAL_FRAME_HEIGHT,
-                    POST_GAME_MOUSE_HOLD,
-                )
-                .map_err(|error| {
-                    format!(
-                        "Post-game stale {} variant {} retry result is uncertain: {error}. No further input followed the uncertain QMP result.",
-                        stale_target.label, stale_variant.label,
-                    )
-                })?;
-                input_wall += input_started.elapsed();
-                click_attempts[stale_index] = click_attempts[stale_index].saturating_add(1);
-                send_log(
-                    event_tx,
-                    format!(
-                        "RETRY: post-game stage {} variant {} remains visible while waiting for {}; click attempt {} sent at guest pixel ({}, {}) with a {} ms hold. Awaiting a verified screen transition.",
-                        stale_target.label,
-                        stale_variant.label,
-                        target.label,
-                        click_attempts[stale_index],
-                        stale_variant.click_point.x,
-                        stale_variant.click_point.y,
-                        POST_GAME_MOUSE_HOLD.as_millis(),
-                    ),
-                );
-                send_state(event_tx, WorkerState::Verifying);
-                intentional_wait += wait_or_stop(
-                    POST_GAME_STAGE_DELAY,
-                    cancel_requested,
-                    "STOP was requested after retrying a stale post-game stage.",
-                )?;
-                observation_round = observation_round.saturating_add(1);
-                continue;
-            }
-
-
-            if let Some(variant) = current? {
-                break Some(variant);
-            }
-
-
-            if target.stage == PostGameStage::LevelUpOk
-                && new_game_visible_while_awaiting_level_up(&observation)?
+            // New Game also covers games that do not award a level. A confirmed
+            // TriPeaks foreground modal must still be dismissed before its underlay.
+            let foreground_level_up = target.stage == PostGameStage::LevelUpOk
+                && scan_state.mode() == crate::game::GameMode::TriPeaks
+                && super::tripeaks_terminal::is_direct_level_up_context(&observation.frame)?;
+            if target.stage == PostGameStage::LevelUpOk && !foreground_level_up
+                && resolve_post_game_target_logged(&observation, POST_GAME_TARGETS[1], false,
+                    &format!("{} alternative", scan_state.mode().label()), event_tx, profile)?.is_some()
             {
+                if let Some(lookup) = lookup.as_mut() { lookup.set_outcome("advanced-to-New-Game"); }
                 send_log(
                     event_tx,
-                    "RECOVERED: Level Up OK is absent but the New Game control is visible in a fresh non-gameplay frame. Waiting for a second capture to verify New Game before sending input."
+                    "RECOVERED: New Game is visible in a fresh non-gameplay frame; optional Level Up is skipped. Waiting for a second capture to verify New Game before sending input."
                         .to_owned(),
                 );
                 intentional_wait += wait_or_stop(
                     POST_GAME_STAGE_DELAY,
                     cancel_requested,
                     "STOP was requested while verifying the New Game transition.",
-                )?;
+                ).map_err(|error| {
+                    if let Some(lookup) = lookup.as_mut() { lookup.set_outcome("cancelled"); }
+                    error
+                })?;
                 break None;
             }
 
+
+            let current = if let Some(lookup) = lookup.as_mut() {
+                if observation.gameplay_scene {
+                    Ok(None)
+                } else {
+                    let point = lookup.search(&observation.frame)?;
+                    if direct_level_up_entry && target.stage == PostGameStage::LevelUpOk
+                        && !super::tripeaks_terminal::is_direct_level_up_context(&observation.frame)?
+                    {
+                        lookup.set_outcome("rejected-context");
+                        send_log(event_tx, "TriPeaks OK search has no independent Level Up panel authority; no click is authorised.".to_owned());
+                        Ok(None)
+                    } else {
+                        Ok(measured_control(bounded_control(target.stage).expect("bounded lookup stage"), point, profile))
+                    }
+                }
+            } else {
+                resolve_post_game_target_for_entry(&observation, target, direct_level_up_entry, profile)
+            };
+            // A fresh match for the expected stage advances the sequence. Once
+            // it is visible, pixels in a completed stage's search region must
+            // not override it or authorise replay of the completed control.
+            if let Some(variant) = current? {
+                if let Some(lookup) = lookup.as_mut() { lookup.set_outcome("matched"); }
+                break Some(variant);
+            }
+
+            let post_ok_reward = direct_level_up_entry && target.stage == PostGameStage::NewGame
+                && click_attempts[0] > 0 && super::tripeaks_terminal::is_reward_overlay(&observation.frame)?;
+            consecutive_post_ok_reward = if post_ok_reward { consecutive_post_ok_reward.saturating_add(1) } else { 0 };
 
             if observation.gameplay_scene
                 && matches!(observation.prediction, PredictedAction::NoHighlight)
                 && target.stage != PostGameStage::Solver
             {
+                consecutive_control_misses = 0;
                 require_post_game_observation_retry_budget(observation_round, target.label)?;
                 require_post_game_click_retry_budget(
                     recovery_solver_click_attempts,
@@ -435,7 +366,10 @@ pub(super) fn run_post_game_restart(
                     POST_GAME_STAGE_DELAY,
                     cancel_requested,
                     "STOP was requested after the post-game recovery Solver click.",
-                )?;
+                ).map_err(|error| {
+                    if let Some(lookup) = lookup.as_mut() { lookup.set_outcome("cancelled"); }
+                    error
+                })?;
                 observation_round = observation_round.saturating_add(1);
                 continue;
             }
@@ -444,15 +378,30 @@ pub(super) fn run_post_game_restart(
 
 
             let guarded_post_ok_skip = post_ok_reward && consecutive_post_ok_reward >= 2;
+            let positive_reward = super::tripeaks_terminal::is_reward_overlay(&observation.frame)?;
+            let score_retry = score_skip_retry_is_authorised(
+                target.stage, observation.gameplay_scene, observation_round,
+            ) && !direct_level_up_entry && positive_reward;
 
+            if let Some(lookup) = lookup.as_mut() {
+                consecutive_control_misses += 1;
+                if consecutive_control_misses >= 2
+                    && !(guarded_post_ok_skip || (score_retry && positive_reward))
+                {
+                    lookup.set_outcome("not-found");
+                    return Err(format!(
+                        "Post-game {} was absent in two consecutive fresh captures; the second was an input-free retry. Latest failed frame retained for inspection; neither failed frame authorised a control click.",
+                        target.label,
+                    ));
+                }
+            }
 
-            if guarded_post_ok_skip || (score_skip_retry_is_authorised(
-                target.stage,
-                observation.gameplay_scene,
-                observation_round,
-            ) && !direct_level_up_entry
-                && (!guarded_tripeaks_entry || super::tripeaks_terminal::is_reward_overlay(&observation.frame)?))
-            {
+            // A positively recognised reward transition retains its existing
+            // input authority. An unknown non-gameplay frame cannot renew the
+            // two-search allowance by triggering a speculative score skip.
+            if guarded_post_ok_skip || score_retry {
+                consecutive_control_misses = 0;
+                if let Some(lookup) = lookup.as_mut() { lookup.set_outcome("reward-transition"); }
                 send_state(event_tx, WorkerState::Acting);
                 send_status(event_tx, "Skip score counting".to_owned());
                 input_wall +=
@@ -475,7 +424,10 @@ pub(super) fn run_post_game_restart(
                     LEVEL_UP_APPEAR_DELAY,
                     cancel_requested,
                     "STOP was requested while waiting after a score-skip retry.",
-                )?;
+                ).map_err(|error| {
+                    if let Some(lookup) = lookup.as_mut() { lookup.set_outcome("cancelled"); }
+                    error
+                })?;
                 observation_round = observation_round.saturating_add(1);
                 continue;
             }
@@ -492,11 +444,16 @@ pub(super) fn run_post_game_restart(
                 BOARD_TRANSITION_REOBSERVE_DELAY,
                 cancel_requested,
                 "STOP was requested while waiting for the next post-game screen.",
-            )?;
+            ).map_err(|error| {
+                if let Some(lookup) = lookup.as_mut() { lookup.set_outcome("cancelled"); }
+                error
+            })?;
             observation_round = observation_round.saturating_add(1);
         };
 
 
+        // Lookup wall time ends before QMP probing, clicking and the next-stage wait.
+        drop(lookup);
         let Some(matched_variant) = matched_variant else {
             target_index += 1;
             continue;
@@ -605,7 +562,7 @@ pub(super) fn run_post_game_restart(
         let (observation, timing) = capture_with_client(qmp, socket_path, scan_state, event_tx)
             .map_err(|error| format!("First post-Solver HALO capture failed: {error}"))?;
         capture_timing.add_assign(timing);
-        publish_post_action_observation(event_tx, &observation);
+        publish_post_game_observation(event_tx, &observation);
 
 
         if observation.gameplay_scene
@@ -709,169 +666,107 @@ pub(super) fn run_post_game_restart(
 }
 
 
-/// Resolve the control variant supported by this immutable observation.
+/// Map shared post-game stages to the bounded caption search.
+fn bounded_control(stage: PostGameStage) -> Option<Control> {
+    match stage {
+        PostGameStage::LevelUpOk => Some(Control::Ok),
+        PostGameStage::NewGame => Some(Control::NewGame),
+        PostGameStage::Play => Some(Control::Play),
+        PostGameStage::Solver => None,
+    }
+}
+
+
+/// Carry the measured coordinate through the existing post-game input contract.
+fn measured_control(control: Control, point: PixelPoint, profile: &GameControlProfile) -> Option<PostGameControlVariant> {
+    (point != PixelPoint::new(0, 0)).then_some(PostGameControlVariant::new(
+        "bounded-black-run", profile.spec(control).bounds, point,
+    ))
+}
+
+
+/// Resolve an expected control from this immutable observation.
 ///
-/// Gameplay authorises only Solver without a halo. Dialog probes require a
-/// non-gameplay frame; overlapping Level Up probes need a connected gold button.
-/// Returns `None` when absent and an error for ambiguous or invalid evidence.
+/// Gameplay authorises only Solver without a halo. The three dialog controls
+/// use the first exact-black run inside their own bounded caption rectangle.
 pub(super) fn resolve_post_game_target(
     observation: &FrameObservation,
     target: PostGameTarget,
+    profile: &GameControlProfile,
 ) -> Result<Option<PostGameControlVariant>, String> {
-
-
-    // Resolve the exact control variant that supplied fresh visual authority.
-    // Multiple probes can overlap one tall button, but only a strongly gold
-    // bridge across the gap and its left interior authorise the proven low
-    // click point. Disconnected probes stay ambiguous and receive no input.
     if target.requires_gameplay_scene {
-
-
         let [variant] = target.control_variants else {
-            return Err(format!(
-                "{} must have exactly one gameplay control variant",
-                target.label
-            ));
+            return Err(format!("{} must have exactly one gameplay control variant", target.label));
         };
         return Ok((observation.gameplay_scene
             && target.stage == PostGameStage::Solver
             && matches!(observation.prediction, PredictedAction::NoHighlight))
-        .then_some(*variant));
+            .then_some(*variant));
     }
-
-
     if observation.gameplay_scene {
         return Ok(None);
     }
-
-
-    if target.control_variants.is_empty() {
-        return Err(format!(
-            "{} has no configured control variants",
-            target.label
-        ));
-    }
-
-    let mut matched_variant: Option<PostGameControlVariant> = None;
-
-
-    for variant in target.control_variants.iter().copied() {
-        let is_visible =
-            has_dialog_gold_button(&observation.frame, variant.probe_bounds).map_err(|error| {
-                format!(
-                    "{} variant {} target analysis failed: {error}",
-                    target.label, variant.label
-                )
-            })?;
-
-
-        if !is_visible {
-            continue;
-        }
-
-
-        if let Some(previous) = matched_variant {
-
-
-            if target.stage == PostGameStage::LevelUpOk
-                && level_up_has_one_shared_button(&observation.frame)?
-            {
-                return Ok(Some(previous));
-            }
-            return Err(format!(
-                "{} target is ambiguous: variants {} and {} both matched; no guest input was sent",
-                target.label, previous.label, variant.label
-            ));
-        }
-        matched_variant = Some(variant);
-    }
-
-    Ok(matched_variant)
-}
-
-
-/// Require gold coverage across both the Level Up bridge and button interior.
-///
-/// Returns an error for unreadable probe pixels; disconnected gold regions do
-/// not authorise the shared lower click point.
-fn level_up_has_one_shared_button(frame: &CapturedFrame) -> Result<bool, String> {
-
-
-    for (label, probe) in [
-        ("bridge", LEVEL_UP_SHARED_BUTTON_BRIDGE),
-        ("interior", LEVEL_UP_SHARED_BUTTON_INTERIOR),
-    ] {
-        let fraction = dialog_gold_fraction_per_mille(frame, probe)
-            .map_err(|error| format!("Level Up shared button {label} analysis failed: {error}"))?;
-
-
-        if fraction < LEVEL_UP_SHARED_BUTTON_GOLD_PER_MILLE {
-            return Ok(false);
-        }
-    }
-    Ok(true)
-}
-
-
-/// Recognise the specific overlapping-Level-Up error eligible for input-free re-observation.
-pub(super) fn is_level_up_ambiguity(error: &str) -> bool {
-    error.starts_with(LEVEL_UP_AMBIGUITY_PREFIX)
+    let Some(control) = bounded_control(target.stage) else {
+        return Err(format!("{} is not a bounded dialog control", target.label));
+    };
+    let point = control_point(&observation.frame, profile.spec(control))
+        .map_err(|error| format!("{} target analysis failed: {error}", target.label))?;
+    Ok(measured_control(control, point, profile))
 }
 
 
 /// A direct TriPeaks entry requires the full fresh Level Up fingerprint for each OK.
 ///
-/// Gold alone cannot retry a foreground modal after its audited underlay disappears.
+/// A caption match cannot retry a foreground modal after its audited underlay disappears.
 pub(super) fn resolve_post_game_target_for_entry(
     observation: &FrameObservation,
     target: PostGameTarget,
     direct_level_up_entry: bool,
+    profile: &GameControlProfile,
 ) -> Result<Option<PostGameControlVariant>, String> {
 
 
     if direct_level_up_entry && target.stage == PostGameStage::LevelUpOk
-        && !super::tripeaks_terminal::is_direct_level_up_overlay(&observation.frame)?
+        && !super::tripeaks_terminal::is_direct_level_up_context(&observation.frame)?
     {
         return Ok(None);
     }
-    resolve_post_game_target(observation, target)
+    resolve_post_game_target(observation, target, profile)
 }
 
 
-/// Find the latest still-visible control preceding the expected post-game stage.
-///
-/// Returns its index, target and verified variant, or an error for an invalid
-/// index or ambiguous visual evidence. QMP delivery alone does not advance a stage.
-pub(super) fn earlier_visible_post_game_target(
+/// Log a recovery or alternative control search without repeating its pixel scan.
+fn resolve_post_game_target_logged(
     observation: &FrameObservation,
-    expected_target_index: usize,
+    target: PostGameTarget,
     direct_level_up_entry: bool,
-) -> Result<Option<(usize, PostGameTarget, PostGameControlVariant)>, String> {
-    // A QMP acknowledgement proves delivery, not that the guest accepted the
-    // click. Re-detect earlier controls before authorising a later-stage click.
-    let earlier_targets = POST_GAME_TARGETS
-        .get(..expected_target_index)
-        .ok_or_else(|| format!("invalid post-game target index: {expected_target_index}"))?;
-
-
-    for (index, target) in earlier_targets.iter().copied().enumerate().rev() {
-
-
-        if let Some(variant) = resolve_post_game_target_for_entry(observation, target, direct_level_up_entry)? {
-            return Ok(Some((index, target, variant)));
-        }
+    game: &str,
+    event_tx: &WorkerEventSink,
+    profile: &GameControlProfile,
+) -> Result<Option<PostGameControlVariant>, String> {
+    let Some(control) = bounded_control(target.stage) else {
+        return resolve_post_game_target_for_entry(observation, target, direct_level_up_entry, profile);
+    };
+    if observation.gameplay_scene { return Ok(None); }
+    let mut lookup = ControlLookup::new(game, profile, control, event_tx);
+    let point = lookup.search(&observation.frame)?;
+    if direct_level_up_entry && target.stage == PostGameStage::LevelUpOk
+        && !super::tripeaks_terminal::is_direct_level_up_context(&observation.frame)?
+    {
+        lookup.set_outcome("rejected-context");
+        return Ok(None);
     }
-
-    Ok(None)
+    Ok(measured_control(control, point, profile))
 }
 
 
 /// Allow a recognised Level Up dialog to supersede an already-verified board transition.
 ///
-/// Returns false without board-completion authority and propagates probe ambiguity.
+/// Returns false without board-completion authority and propagates invalid pixel storage.
 pub(super) fn level_up_overrides_board_progress(
     board_completion_verified: bool,
     observation: &FrameObservation,
+    profile: &GameControlProfile,
 ) -> Result<bool, String> {
 
 
@@ -881,15 +776,16 @@ pub(super) fn level_up_overrides_board_progress(
         return Ok(false);
     }
 
-    Ok(resolve_post_game_target(observation, POST_GAME_TARGETS[0])?.is_some())
+    Ok(resolve_post_game_target(observation, POST_GAME_TARGETS[0], profile)?.is_some())
 }
 
 
 /// Locate an already-visible Level Up or New Game stage in an optional observation.
 ///
-/// Returns `None` when neither is recognised and an error for ambiguous controls.
+/// Returns `None` when neither is recognised and an error for invalid pixel storage.
 pub(super) fn known_post_game_stage(
     observation: Option<&FrameObservation>,
+    profile: &GameControlProfile,
 ) -> Result<Option<usize>, String> {
 
 
@@ -898,23 +794,23 @@ pub(super) fn known_post_game_stage(
     };
 
 
-    if resolve_post_game_target(observation, POST_GAME_TARGETS[0])?.is_some() {
-        return Ok(Some(0));
+    if new_game_visible_while_awaiting_level_up(observation, profile)? {
+        return Ok(Some(1));
     }
 
-
-    if new_game_visible_while_awaiting_level_up(observation)? {
-        return Ok(Some(1));
+    if resolve_post_game_target(observation, POST_GAME_TARGETS[0], profile)?.is_some() {
+        return Ok(Some(0));
     }
     Ok(None)
 }
 
 
-/// Check for a positively recognised New Game control; propagate invalid or ambiguous probes.
+/// Check for a bounded New Game match; propagate invalid pixel storage.
 pub(super) fn new_game_visible_while_awaiting_level_up(
     observation: &FrameObservation,
+    profile: &GameControlProfile,
 ) -> Result<bool, String> {
-    Ok(resolve_post_game_target(observation, POST_GAME_TARGETS[1])?.is_some())
+    Ok(resolve_post_game_target(observation, POST_GAME_TARGETS[1], profile)?.is_some())
 }
 
 

@@ -31,6 +31,8 @@ struct FakeIo<'a> {
     terminal_stages: VecDeque<Option<klondike::terminal::TerminalStage>>,
     /// Ordered terminal controls, distinct from ordinary gameplay actions.
     terminal_inputs: Vec<klondike::terminal::TerminalStage>,
+    /// Native coordinates supplied by the bounded control detector.
+    terminal_points: Vec<PixelPoint>,
     /// Simulate a decoded frame whose analysis failed, retaining its pixels.
     capture_failure: Option<&'static str>,
     /// Make a gameplay delivery uncertain after recording its single attempt.
@@ -108,27 +110,44 @@ impl KlondikeIo for FakeIo<'_> {
 
 
         if self.native_terminal_analysis {
-            return klondike::terminal::classify_confirmed_win_entry(frame)
+            return klondike::terminal::classify_terminal(frame)
                 .map_err(|error| format!("native test terminal analysis failed: {error}"));
         }
         Ok(self.terminal_stages.pop_front().unwrap_or(None))
     }
 
 
-    fn expected_terminal_control(&mut self, frame: &CapturedFrame, stage: klondike::terminal::TerminalStage) -> Result<bool, String> {
-
-
+    fn expected_terminal_control(
+        &mut self,
+        frame: &CapturedFrame,
+        stage: klondike::terminal::TerminalStage,
+        lookup: Option<&mut ControlLookup<'_>>,
+    ) -> Result<PixelPoint, String> {
         if self.native_terminal_analysis {
-            return klondike::terminal::expected_control_ready(frame, stage)
+            if let Some(lookup) = lookup {
+                return lookup.search(frame);
+            }
+            return klondike::terminal::expected_control_point(frame, stage)
                 .map_err(|error| format!("native test expected control analysis failed: {error}"));
         }
-        Ok(self.terminal_stages.pop_front().flatten() == Some(stage))
+        Ok(if self.terminal_stages.pop_front().flatten() == Some(stage) {
+            match stage {
+                klondike::terminal::TerminalStage::LevelUp => PixelPoint::new(942, 804),
+                klondike::terminal::TerminalStage::NewGame => PixelPoint::new(863, 862),
+                klondike::terminal::TerminalStage::Play => PixelPoint::new(680, 861),
+                _ => stage.click_point(),
+            }
+        } else {
+            PixelPoint::new(0, 0)
+        })
     }
 
 
-    fn terminal_input(&mut self, stage: klondike::terminal::TerminalStage) -> Result<(), String> {
+    fn terminal_input(&mut self, stage: klondike::terminal::TerminalStage, point: PixelPoint) -> Result<(), String> {
+        assert_ne!(point, PixelPoint::new(0, 0), "the sentinel must never reach input");
         self.trace.push("terminal");
         self.terminal_inputs.push(stage);
+        self.terminal_points.push(point);
 
 
         if self.fail_input || self.fail_terminal_stage == Some(stage) {
@@ -230,7 +249,7 @@ fn fake<'a>(states: &[(PredictedAction, bool)]) -> FakeIo<'a> {
         completion_checks: 0,
         waits: Vec::new(),
         terminal_stages: VecDeque::new(),
-        terminal_inputs: Vec::new(),
+        terminal_inputs: Vec::new(), terminal_points: Vec::new(),
         capture_failure: None,
         fail_input: false,
         fail_terminal_stage: None,
@@ -837,7 +856,7 @@ fn stop_before_capture_and_after_probe_prevents_input() {
     let mut after_probe = FakeIo {
         frames: VecDeque::from([observation(draw(), true)]),
         trace: Vec::new(), native_terminal_analysis: false, inputs: Vec::new(),
-        completion_candidates: VecDeque::new(), completion_checks: 0, waits: Vec::new(), terminal_stages: VecDeque::new(), terminal_inputs: Vec::new(), capture_failure: None, fail_input: false, fail_terminal_stage: None, fail_solver: false,
+        completion_candidates: VecDeque::new(), completion_checks: 0, waits: Vec::new(), terminal_stages: VecDeque::new(), terminal_inputs: Vec::new(), terminal_points: Vec::new(), capture_failure: None, fail_input: false, fail_terminal_stage: None, fail_solver: false,
         stop_on_probe: Some(&stop), probes_before_stop: 0, stop_on_wait: None, waits_before_stop: 0,
         stop_on_capture: None,
         captures_before_stop: 0,
@@ -856,7 +875,7 @@ fn stop_during_settle_preserves_uncertain_input_without_next_capture() {
     let mut io = FakeIo {
         frames: VecDeque::from([observation(draw(), true)]),
         trace: Vec::new(), native_terminal_analysis: false, inputs: Vec::new(),
-        completion_candidates: VecDeque::new(), completion_checks: 0, waits: Vec::new(), terminal_stages: VecDeque::new(), terminal_inputs: Vec::new(), capture_failure: None, fail_input: false, fail_terminal_stage: None, fail_solver: false,
+        completion_candidates: VecDeque::new(), completion_checks: 0, waits: Vec::new(), terminal_stages: VecDeque::new(), terminal_inputs: Vec::new(), terminal_points: Vec::new(), capture_failure: None, fail_input: false, fail_terminal_stage: None, fail_solver: false,
         stop_on_probe: None, probes_before_stop: 0, stop_on_wait: Some(&stop), waits_before_stop: 0,
         stop_on_capture: None,
         captures_before_stop: 0,
@@ -1137,13 +1156,13 @@ fn continuous_solve_advances_one_board_terminal_cycle_then_obeys_stop() {
 #[test]
 fn terminal_same_stage_is_not_retried() {
     use klondike::terminal::TerminalStage;
-    let mut io = fake(&[(PredictedAction::NoHighlight, false); POST_GAME_MAX_OBSERVATION_ROUNDS + 1]);
-    io.terminal_stages = VecDeque::from([Some(TerminalStage::ScoreCounting); POST_GAME_MAX_OBSERVATION_ROUNDS + 2]);
+    let mut io = fake(&[(PredictedAction::NoHighlight, false); 2]);
+    io.terminal_stages = VecDeque::from([Some(TerminalStage::ScoreCounting); 3]);
     let (result, input_attempted, latest) = exercise_terminal(&mut io, &AtomicBool::new(false));
     assert!(result.unwrap_err().contains("advancement exhausted"));
     assert!(input_attempted);
     assert_eq!(io.terminal_inputs, [TerminalStage::ScoreCounting]);
-    assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), POST_GAME_MAX_OBSERVATION_ROUNDS + 1);
+    assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), 2);
     assert!(latest.is_some());
 }
 
@@ -1152,13 +1171,13 @@ fn terminal_same_stage_is_not_retried() {
 #[test]
 fn terminal_unexpected_stage_stops_before_input() {
     use klondike::terminal::TerminalStage;
-    let mut io = fake(&[(PredictedAction::NoHighlight, false); POST_GAME_MAX_OBSERVATION_ROUNDS + 1]);
+    let mut io = fake(&[(PredictedAction::NoHighlight, false); 2]);
     io.terminal_stages = VecDeque::from([Some(TerminalStage::ScoreCounting), Some(TerminalStage::Play)]);
     let (result, _, _) = exercise_terminal(&mut io, &AtomicBool::new(false));
     assert!(result.unwrap_err().contains("advancement exhausted"));
     assert_eq!(io.terminal_inputs, [TerminalStage::ScoreCounting]);
     assert_eq!(io.trace.iter().filter(|entry| **entry == "probe").count(), 1);
-    assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), POST_GAME_MAX_OBSERVATION_ROUNDS + 1);
+    assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), 2);
 }
 
 
@@ -1520,21 +1539,21 @@ fn native_grandmaster_buttons_restart_after_confirmed_win_without_theme_matching
     assert_eq!(io.terminal_inputs, [TerminalStage::ScoreCounting, TerminalStage::LevelUp,
         TerminalStage::NewGame, TerminalStage::Play, TerminalStage::SolverReady]);
     assert_eq!(io.completion_checks, 2);
+    assert_eq!(&io.terminal_points[1..4], &[PixelPoint::new(942, 804), PixelPoint::new(863, 862), PixelPoint::new(680, 861)]);
     assert!(io.frames.is_empty() && !io.trace.contains(&"solver"));
     assert_eq!(latest.unwrap().prediction, native_hint_phase(2).prediction);
 }
 
 
-/// Five unchanged score panels exceed the former short wait but do not replay
-/// score input. The existing terminal budget permits the delayed local OK frame,
-/// then one acknowledged click at every expected control, retaining editable waits.
+/// One unchanged score panel triggers one fresh OK capture without repeating
+/// score input, then each measured control is clicked once.
 #[test]
-fn confirmed_win_waits_for_late_expected_ok_without_repeating_score_input() {
+fn confirmed_win_retries_expected_ok_once_without_repeating_score_input() {
     use klondike::terminal::TerminalStage;
     let initial = native_hint_phase(25);
     let approved = initial.prediction;
     let mut frames = vec![initial, native_hint_phase(26), native_hint_phase(26)];
-    frames.extend((0..5).map(|_| native_hint_phase(26)));
+    frames.push(native_hint_phase(26));
     frames.extend([native_hint_phase(91), native_hint_phase(92), native_hint_phase(93),
         native_hint_phase(77), native_hint_phase(2)]);
     let stop = AtomicBool::new(false);
@@ -1546,7 +1565,7 @@ fn confirmed_win_waits_for_late_expected_ok_without_repeating_score_input() {
     assert!(result.unwrap_err().contains("STOP"));
     assert_eq!(io.terminal_inputs, [TerminalStage::ScoreCounting, TerminalStage::LevelUp,
         TerminalStage::NewGame, TerminalStage::Play, TerminalStage::SolverReady]);
-    assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), 13);
+    assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), 9);
     assert!(!io.trace.contains(&"solver"));
 }
 
@@ -1559,7 +1578,7 @@ fn confirmed_win_unchanged_native_ok_cannot_authorise_next_control() {
     let initial = native_hint_phase(25);
     let approved = initial.prediction;
     let mut frames = vec![initial, native_hint_phase(26), native_hint_phase(26), native_hint_phase(91)];
-    frames.extend((0..=POST_GAME_MAX_OBSERVATION_ROUNDS).map(|_| native_hint_phase(91)));
+    frames.extend((0..2).map(|_| native_hint_phase(91)));
     let mut io = fake_frames(frames);
     io.native_terminal_analysis = true;
     let (result, attempted, latest) = exercise(&mut io, approved, 0, &AtomicBool::new(false));
@@ -2174,4 +2193,110 @@ fn native_toolbar_clipped_five_card_source_sends_one_step_once_click() {
     assert_eq!(io.completion_checks, 0);
     assert!(io.frames.is_empty() && io.terminal_inputs.is_empty());
     assert_eq!(latest.unwrap().frame.pixels, before.frame.pixels);
+}
+
+
+/// All three searches use exactly one fresh retry and report its measured work.
+#[test]
+fn bounded_control_retry_reports_searches_recapture_and_wall_time() {
+    use klondike::terminal::TerminalStage;
+    for (previous, expected, number, point, label) in [
+        (TerminalStage::ScoreCounting, TerminalStage::LevelUp, 91, PixelPoint::new(942, 804), "OK"),
+        (TerminalStage::LevelUp, TerminalStage::NewGame, 92, PixelPoint::new(863, 862), "New Game"),
+        (TerminalStage::NewGame, TerminalStage::Play, 93, PixelPoint::new(680, 861), "Play"),
+    ] {
+        let (events, receiver) = std::sync::mpsc::channel();
+        let sink = WorkerEventSink { events, latest_frame: super::super::LatestFrameSlot::default(), capture_context: std::sync::Mutex::new(None) };
+        let mut io = fake_frames(vec![native_hint_phase(number)]);
+        io.native_terminal_analysis = true;
+        let mut latest = Some(native_hint_phase(26));
+        let result = await_terminal_stage(&mut io, &mut latest,
+            StepRunSettings::new(AnimationSettleDelays::default(), 0), &sink,
+            &AtomicBool::new(false), Some(previous));
+        assert_eq!(result.unwrap(), Some((expected, point)));
+        assert_eq!(io.trace, ["wait", "capture"]);
+        assert!(io.terminal_inputs.is_empty());
+        let logs: Vec<_> = receiver.try_iter().filter_map(|notification| match notification.event {
+            WorkerEvent::Log(message) => Some(message), _ => None,
+        }).collect();
+        let summary = logs.iter().find(|line| line.contains(&format!("Klondike {label} search summary:"))).unwrap();
+        assert!(summary.contains("searches=2; recaptures=1; second_grab=true;"));
+        assert!(summary.contains("scan_total_ms=") && summary.contains("wall_ms="));
+        assert!(summary.ends_with("outcome=found."));
+        assert_eq!(logs.iter().filter(|line| line.contains(&format!("Klondike {label} search ")) && line.contains("inclusive;")).count(), 2);
+    }
+}
+
+
+/// A second miss stops after one retry and publishes its full diagnostic image.
+#[test]
+fn bounded_control_second_miss_retains_latest_preview_and_summary() {
+    use klondike::terminal::TerminalStage;
+    let (events, receiver) = std::sync::mpsc::channel();
+    let sink = WorkerEventSink { events, latest_frame: super::super::LatestFrameSlot::default(), capture_context: std::sync::Mutex::new(None) };
+    let mut retry = native_hint_phase(26);
+    retry.frame.pixels[0] ^= 1;
+    let retry_pixels = retry.frame.pixels.clone();
+    let mut io = fake_frames(vec![retry]);
+    io.native_terminal_analysis = true;
+    let mut latest = Some(native_hint_phase(26));
+    let result = await_terminal_stage(&mut io, &mut latest,
+        StepRunSettings::new(AnimationSettleDelays::default(), 0), &sink,
+        &AtomicBool::new(false), Some(TerminalStage::ScoreCounting));
+    assert!(result.unwrap_err().contains("terminal advancement exhausted 1"));
+    assert_eq!(io.trace, ["wait", "capture"]);
+    assert!(io.terminal_inputs.is_empty());
+    assert_eq!(latest.unwrap().frame.pixels, retry_pixels);
+    let preview = sink.latest_frame.take().unwrap();
+    assert!(preview.diagnostic && preview.prediction.is_none());
+    assert_eq!(preview.frame.pixels, retry_pixels);
+    let logs: Vec<_> = receiver.try_iter().filter_map(|notification| match notification.event {
+        WorkerEvent::Log(message) => Some(message), _ => None,
+    }).collect();
+    assert!(logs.iter().any(|line| line.contains("Klondike OK search summary: searches=2; recaptures=1; second_grab=true;") && line.ends_with("outcome=missing.")));
+}
+
+
+/// STOP during the retry delay must not count a screenshot that was never taken.
+#[test]
+fn bounded_control_cancelled_wait_reports_no_second_grab() {
+    use klondike::terminal::TerminalStage;
+    let stop = AtomicBool::new(false);
+    let (events, receiver) = std::sync::mpsc::channel();
+    let sink = WorkerEventSink { events, latest_frame: super::super::LatestFrameSlot::default(), capture_context: std::sync::Mutex::new(None) };
+    let mut io = fake_frames(vec![native_hint_phase(91)]);
+    io.native_terminal_analysis = true;
+    io.stop_on_wait = Some(&stop);
+    let mut latest = Some(native_hint_phase(26));
+    let result = await_terminal_stage(&mut io, &mut latest,
+        StepRunSettings::new(AnimationSettleDelays::default(), 0), &sink,
+        &stop, Some(TerminalStage::ScoreCounting));
+    assert!(result.unwrap_err().contains("STOP"));
+    assert_eq!(io.trace, ["wait"]);
+    assert!(io.terminal_inputs.is_empty());
+    let logs: Vec<_> = receiver.try_iter().filter_map(|notification| match notification.event {
+        WorkerEvent::Log(message) => Some(message), _ => None,
+    }).collect();
+    assert!(logs.iter().any(|line| line.contains("searches=1; recaptures=0; second_grab=false;") && line.ends_with("outcome=cancelled-or-wait-error.")));
+}
+
+
+/// An immediately ready control reports one scan and no extra capture.
+#[test]
+fn bounded_control_first_match_reports_no_retry() {
+    use klondike::terminal::TerminalStage;
+    let (events, receiver) = std::sync::mpsc::channel();
+    let sink = WorkerEventSink { events, latest_frame: super::super::LatestFrameSlot::default(), capture_context: std::sync::Mutex::new(None) };
+    let mut io = fake_frames(Vec::new());
+    io.native_terminal_analysis = true;
+    let mut latest = Some(native_hint_phase(93));
+    let result = await_terminal_stage(&mut io, &mut latest,
+        StepRunSettings::new(AnimationSettleDelays::default(), 0), &sink,
+        &AtomicBool::new(false), Some(TerminalStage::NewGame));
+    assert_eq!(result.unwrap(), Some((TerminalStage::Play, PixelPoint::new(680, 861))));
+    assert!(io.trace.is_empty());
+    let logs: Vec<_> = receiver.try_iter().filter_map(|notification| match notification.event {
+        WorkerEvent::Log(message) => Some(message), _ => None,
+    }).collect();
+    assert!(logs.iter().any(|line| line.contains("Klondike Play search summary: searches=1; recaptures=0; second_grab=false;") && line.ends_with("outcome=found.")));
 }

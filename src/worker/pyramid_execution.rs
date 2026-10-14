@@ -17,7 +17,7 @@ use crate::{
     detector::measure_game_progress_for_profile,
     game::{ActionTarget, GameMode, GameProgress},
     parameters::{
-        ACTION_CHANGE_CHANNEL_THRESHOLD, BOARD_TRANSITION_REOBSERVE_DELAY,
+        ACTION_CHANGE_CHANNEL_THRESHOLD,
         POST_GAME_MAX_OBSERVATION_ROUNDS, SOLVER_MOUSE_HOLD, StepRunSettings,
     },
     pyramid::{self, PyramidTargetKind},
@@ -144,26 +144,12 @@ pub(super) fn verify_pyramid_action(
                 let terminal_visible = if board_completed || expected_final_transition {
 
 
-                    match post_game::level_up_overrides_board_progress(true, observation) {
+                    match post_game::level_up_overrides_board_progress(true, observation,
+                        &crate::terminal_controls::profiles::PYRAMID_CONTROLS) {
                         Ok(true) => true,
                         Ok(false) => {
-                            post_game::new_game_visible_while_awaiting_level_up(observation)?
-                        }
-                        Err(error) if post_game::is_level_up_ambiguity(&error) => {
-                            profile.validation_effect += analysis_started.elapsed();
-                            send_log(
-                                event_tx,
-                                format!(
-                                    "WAITING: {error}; the final Pyramid card was clicked once, so observing again in {} ms without input.",
-                                    BOARD_TRANSITION_REOBSERVE_DELAY.as_millis(),
-                                ),
-                            );
-                            profile.intentional_wait += wait_or_stop(
-                                BOARD_TRANSITION_REOBSERVE_DELAY,
-                                cancel_requested,
-                                "STOP was requested during ambiguous Pyramid Level Up re-observation.",
-                            )?;
-                            continue;
+                            post_game::new_game_visible_while_awaiting_level_up(observation,
+                                &crate::terminal_controls::profiles::PYRAMID_CONTROLS)?
                         }
                         Err(error) => return Err(error),
                     }

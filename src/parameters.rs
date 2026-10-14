@@ -541,7 +541,7 @@ pub struct ControlTarget {
 pub struct PostGameControlVariant {
     /// Diagnostic name of the observed layout variant.
     pub label: &'static str,
-    /// Guest-pixel gold probe paired with this specific layout.
+    /// Bounds that supplied the observed control, or the static Solver probe.
     pub probe_bounds: PixelRect,
     /// Guest-pixel click point permitted only after recognising this variant.
     pub click_point: PixelPoint,
@@ -569,7 +569,7 @@ pub struct PostGameTarget {
     pub stage: PostGameStage,
     /// Human-readable stage label for diagnostics and preview.
     pub label: &'static str,
-    /// Observed layouts that may satisfy this stage.
+    /// Static variants for Solver; dialog controls are measured from current pixels.
     pub control_variants: &'static [PostGameControlVariant],
     /// Whether recognising this control also requires a gameplay scene.
     pub requires_gameplay_scene: bool,
@@ -599,7 +599,7 @@ impl PostGameTarget {
 impl PostGameControlVariant {
 
 
-    /// Pair a layout-specific probe with its calibrated guest-pixel click point.
+    /// Pair an observed or calibrated region with its authorised guest-pixel point.
     pub const fn new(
         label: &'static str,
         probe_bounds: PixelRect,
@@ -671,53 +671,6 @@ pub const SHARED_TOOLBAR_CONTROLS: [(&str, ControlTarget); 3] = [
 ];
 
 
-// Level Up has two observed layouts. Each probe remains paired with the click
-// point calibrated for that layout so recognising one variant can never
-// authorise the other's click. The raised probe uses a clean patch to the right
-// of the OK text and remains disjoint from the proven legacy probe. A tall
-// button can cover both probes; that case needs additional body evidence.
-/// Observed Level Up button layouts, each with its own probe and click point.
-pub const LEVEL_UP_CONTROL_VARIANTS: [PostGameControlVariant; 2] = [
-    PostGameControlVariant::new(
-        "legacy-low",
-        PixelRect::new(990, 800, 80, 30),
-        PixelPoint::new(960, 795),
-    ),
-    PostGameControlVariant::new(
-        "raised",
-        PixelRect::new(1_010, 755, 50, 20),
-        PixelPoint::new(960, 770),
-    ),
-];
-
-
-// On a tall Level Up OK button, gold joins both layout bands across this
-// interior strip. A high gold fraction here and in the left button interior
-// can distinguish one tall button from two unrelated matching probes.
-/// Guest-pixel gold strip joining both probes on a tall Level Up button.
-pub const LEVEL_UP_SHARED_BUTTON_BRIDGE: PixelRect = PixelRect::new(1_010, 775, 50, 25);
-
-
-/// Independent guest-pixel interior patch confirming a tall Level Up button.
-pub const LEVEL_UP_SHARED_BUTTON_INTERIOR: PixelRect = PixelRect::new(945, 792, 115, 22);
-
-
-/// Calibrated New Game button probe and click point in guest pixels.
-pub const NEW_GAME_CONTROL_VARIANTS: [PostGameControlVariant; 1] = [PostGameControlVariant::new(
-    "default",
-    PixelRect::new(850, 850, 80, 30),
-    PixelPoint::new(792, 840),
-)];
-
-
-/// Calibrated Play button probe and click point in guest pixels.
-pub const PLAY_CONTROL_VARIANTS: [PostGameControlVariant; 1] = [PostGameControlVariant::new(
-    "default",
-    PixelRect::new(730, 905, 80, 30),
-    PixelPoint::new(705, 905),
-)];
-
-
 /// Shared Solver control represented for post-game stage recognition.
 pub const SOLVER_CONTROL_VARIANTS: [PostGameControlVariant; 1] = [PostGameControlVariant::new(
     "default",
@@ -726,25 +679,24 @@ pub const SOLVER_CONTROL_VARIANTS: [PostGameControlVariant; 1] = [PostGameContro
 )];
 
 
-// The post-game sequence is ordered and fail-closed. Dialog stages use
-// separate patches; the two Level Up layout bands can be part of one tall
-// button only with positive bridge and interior evidence. Solver requires a
-// gameplay frame with no halo before using its already-audited click point.
+// Dialog points are measured by terminal_controls in the current frame.
+// Only Solver retains a static target and requires a gameplay frame without
+// a halo before using its already-audited click point.
 /// Ordered Level Up, New Game, Play and Solver control definitions.
 pub const POST_GAME_TARGETS: [PostGameTarget; 4] = [
     PostGameTarget::new(
         PostGameStage::LevelUpOk,
         "Level Up OK",
-        &LEVEL_UP_CONTROL_VARIANTS,
+        &[],
         false,
     ),
     PostGameTarget::new(
         PostGameStage::NewGame,
         "New Game",
-        &NEW_GAME_CONTROL_VARIANTS,
+        &[],
         false,
     ),
-    PostGameTarget::new(PostGameStage::Play, "Play", &PLAY_CONTROL_VARIANTS, false),
+    PostGameTarget::new(PostGameStage::Play, "Play", &[], false),
     PostGameTarget::new(
         PostGameStage::Solver,
         "Solver",
@@ -777,32 +729,6 @@ pub const SHARED_SOLVER_PROGRESS_PROFILE: crate::game::GameProgressProfile =
         black_channel_maximum: SOLVER_PROGRESS_BLACK_CHANNEL_MAXIMUM,
         black_fraction_per_mille: SOLVER_PROGRESS_BLACK_FRACTION_PER_MILLE,
     };
-
-
-// Dialog buttons use a gold gradient rather than the exact two-colour halo.
-// The ordered stage machine also requires the correct scene class and band.
-/// Minimum 8-bit red channel accepted as a gold dialog-button pixel.
-pub const DIALOG_GOLD_RED_MINIMUM: u8 = 170;
-
-
-/// Minimum 8-bit green channel accepted as a gold dialog-button pixel.
-pub const DIALOG_GOLD_GREEN_MINIMUM: u8 = 105;
-
-
-/// Maximum 8-bit blue channel accepted as a gold dialog-button pixel.
-pub const DIALOG_GOLD_BLUE_MAXIMUM: u8 = 190;
-
-
-/// Minimum red-minus-green channel difference for a gold dialog button.
-pub const DIALOG_GOLD_RED_GREEN_DELTA_MINIMUM: u8 = 8;
-
-
-/// Minimum green-minus-blue channel difference for a gold dialog button.
-pub const DIALOG_GOLD_GREEN_BLUE_DELTA_MINIMUM: u8 = 18;
-
-
-/// Minimum gold share, in thousandths, inside a recognised dialog probe.
-pub const DIALOG_GOLD_REQUIRED_FRACTION_PER_MILLE: u32 = 80;
 
 
 // Convert a tableau gold-anchor coordinate to the intended card centre. The
@@ -1649,37 +1575,18 @@ mod tests {
     }
 
 
-    /// Verify stage ordering and the calibrated control variants and hit points.
+    /// Verify measured-dialog ordering and the retained static Solver point.
     #[test]
-    fn post_game_targets_preserve_order_variants_and_solver_coordinate() {
+    fn post_game_targets_preserve_order_and_only_solver_has_static_coordinate() {
         assert_eq!(POST_GAME_TARGETS.len(), 4);
         assert_eq!(POST_GAME_TARGETS[0].stage, PostGameStage::LevelUpOk);
         assert_eq!(POST_GAME_TARGETS[1].stage, PostGameStage::NewGame);
         assert_eq!(POST_GAME_TARGETS[2].stage, PostGameStage::Play);
         assert_eq!(POST_GAME_TARGETS[3].stage, PostGameStage::Solver);
 
-        let legacy_level_up = LEVEL_UP_CONTROL_VARIANTS[0];
-        let raised_level_up = LEVEL_UP_CONTROL_VARIANTS[1];
-        assert_eq!(
-            legacy_level_up.probe_bounds,
-            PixelRect::new(990, 800, 80, 30)
-        );
-        assert_eq!(legacy_level_up.click_point, PixelPoint::new(960, 795));
-        assert_eq!(
-            raised_level_up.probe_bounds,
-            PixelRect::new(1_010, 755, 50, 20)
-        );
-        assert_eq!(raised_level_up.click_point, PixelPoint::new(960, 770));
-        assert!(raised_level_up.probe_bounds.bottom() <= legacy_level_up.probe_bounds.y);
-        assert_eq!(POST_GAME_TARGETS[0].control_variants.len(), 2);
-        assert_eq!(
-            POST_GAME_TARGETS[1].control_variants[0].probe_bounds,
-            PixelRect::new(850, 850, 80, 30)
-        );
-        assert_eq!(
-            POST_GAME_TARGETS[2].control_variants[0].probe_bounds,
-            PixelRect::new(730, 905, 80, 30)
-        );
+        for target in &POST_GAME_TARGETS[..3] {
+            assert!(target.control_variants.is_empty(), "dialog coordinates must come from a fresh bounded search");
+        }
         assert_eq!(
             POST_GAME_TARGETS[3].control_variants[0].click_point,
             PixelPoint::new(602, 977)
@@ -1710,17 +1617,25 @@ mod tests {
         assert_eq!(BOARD_TRANSITION_REOBSERVE_DELAY, Duration::from_secs(2));
 
 
-        for target in POST_GAME_TARGETS {
-            assert!(!target.control_variants.is_empty());
-
-
-            for variant in target.control_variants {
-                assert_rect_fits_frame(variant.probe_bounds);
-                assert!(variant.click_point.x >= 0);
-                assert!(variant.click_point.y >= 0);
-                assert!((variant.click_point.x as u32) < NOMINAL_FRAME_WIDTH);
-                assert!((variant.click_point.y as u32) < NOMINAL_FRAME_HEIGHT);
+        for mode in crate::game::GameMode::AVAILABLE {
+            let profile = crate::terminal_controls::profiles::for_game(mode);
+            for control in [crate::terminal_controls::Control::Ok,
+                crate::terminal_controls::Control::NewGame,
+                crate::terminal_controls::Control::Play]
+            {
+                let spec = profile.spec(control);
+                assert_rect_fits_frame(spec.bounds);
+                assert!(spec.run_length > 0 && spec.run_length <= spec.bounds.width);
             }
+        }
+        let solver_variants = POST_GAME_TARGETS[3].control_variants;
+        assert_eq!(solver_variants.len(), 1);
+        for variant in solver_variants {
+            assert_rect_fits_frame(variant.probe_bounds);
+            assert!(variant.click_point.x >= 0);
+            assert!(variant.click_point.y >= 0);
+            assert!((variant.click_point.x as u32) < NOMINAL_FRAME_WIDTH);
+            assert!((variant.click_point.y as u32) < NOMINAL_FRAME_HEIGHT);
         }
     }
 

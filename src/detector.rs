@@ -9,9 +9,7 @@ use crate::{
     game::{GameProfile, GameProgress, GameplaySceneProfile},
     geometry::{PixelPoint, PixelRect},
     parameters::{
-        DIALOG_GOLD_BLUE_MAXIMUM, DIALOG_GOLD_GREEN_BLUE_DELTA_MINIMUM, DIALOG_GOLD_GREEN_MINIMUM,
-        DIALOG_GOLD_RED_GREEN_DELTA_MINIMUM, DIALOG_GOLD_RED_MINIMUM,
-        DIALOG_GOLD_REQUIRED_FRACTION_PER_MILLE, FACE_UP_WHITE_BLOCK_MIN_WIDTH,
+        FACE_UP_WHITE_BLOCK_MIN_WIDTH,
         FACE_UP_WHITE_CHANNEL_MINIMUM, GOLD_CHANNEL_TOLERANCE, GOLD_RGB_CANDIDATES,
         HALO_GOLD_LINE_OFFSET_Y, HALO_GOLD_RUN_MIN, HALO_GOLD_SCAN_HEIGHT,
         TABLEAU_RELAXED_GOLD_BLUE_MAXIMUM, TABLEAU_RELAXED_GOLD_GREEN_BLUE_DELTA_MINIMUM,
@@ -206,18 +204,6 @@ fn is_gameplay_felt_green(rgb: [u8; 3], profile: GameplaySceneProfile) -> bool {
 }
 
 
-/// Recognise the broad gold gradient used by post-game buttons.
-fn is_dialog_gold(rgb: [u8; 3]) -> bool {
-    let [red, green, blue] = rgb;
-
-    red >= DIALOG_GOLD_RED_MINIMUM
-        && green >= DIALOG_GOLD_GREEN_MINIMUM
-        && blue <= DIALOG_GOLD_BLUE_MAXIMUM
-        && i16::from(red) - i16::from(green) >= i16::from(DIALOG_GOLD_RED_GREEN_DELTA_MINIMUM)
-        && i16::from(green) - i16::from(blue) >= i16::from(DIALOG_GOLD_GREEN_BLUE_DELTA_MINIMUM)
-}
-
-
 /// Find the first long horizontal gold run on a card's calibrated halo lines.
 ///
 /// Only the two audited lines below the card are examined, avoiding both card
@@ -349,53 +335,6 @@ pub fn has_gameplay_felt_for_profile(
     }
 
     Ok(matching_pixels * 1_000 >= total_pixels * u64::from(scene.required_fraction_per_mille))
-}
-
-
-/// Report whether a calibrated dialog band contains enough gold-gradient pixels.
-///
-/// This detector is intentionally broader than halo matching. Callers must
-/// also enforce the ordered post-game stage and reject gameplay scenes.
-pub fn has_dialog_gold_button(
-    frame: &CapturedFrame,
-    probe_bounds: PixelRect,
-) -> Result<bool, HaloDetectionError> {
-    Ok(dialog_gold_fraction_per_mille(frame, probe_bounds)?
-        >= DIALOG_GOLD_REQUIRED_FRACTION_PER_MILLE)
-}
-
-
-/// Fraction of dialog-gold pixels inside an in-bounds region. The post-game
-/// controller uses a stronger threshold when two layout probes overlap the
-/// same button, while the individual variant probes keep their calibration.
-pub fn dialog_gold_fraction_per_mille(
-    frame: &CapturedFrame,
-    probe_bounds: PixelRect,
-) -> Result<u32, HaloDetectionError> {
-
-
-    if !frame.is_layout_valid() {
-        return Err(HaloDetectionError::InvalidFrameLayout);
-    }
-
-    let (right, bottom) = checked_bounds(probe_bounds, frame)?;
-    let total_pixels = u64::from(probe_bounds.width) * u64::from(probe_bounds.height);
-    let mut matching_pixels = 0_u64;
-
-
-    for y in probe_bounds.y..bottom {
-
-
-        for x in probe_bounds.x..right {
-
-
-            if pixel_rgb(frame, x, y).is_some_and(is_dialog_gold) {
-                matching_pixels = matching_pixels.saturating_add(1);
-            }
-        }
-    }
-
-    Ok((matching_pixels.saturating_mul(1_000) / total_pixels) as u32)
 }
 
 
@@ -1058,29 +997,6 @@ mod tests {
     }
 
 
-    /// Distinguish a qualifying gold button area from similarly bright neutral pixels.
-
-    #[test]
-    fn dialog_gold_requires_a_meaningful_gradient_area() {
-        let mut frame = rgba_frame(20, 20);
-        let probe = PixelRect::new(5, 5, 10, 10);
-
-
-        for x in 5..13 {
-            set_pixel(&mut frame, x, 5, [220, 170, 80]);
-        }
-        assert_eq!(has_dialog_gold_button(&frame, probe), Ok(true));
-
-        let mut false_colour = rgba_frame(20, 20);
-
-
-        for x in 5..13 {
-            set_pixel(&mut false_colour, x, 5, [220, 215, 210]);
-        }
-        assert_eq!(has_dialog_gold_button(&false_colour, probe), Ok(false));
-    }
-
-
     /// Check the black-versus-filled progress classification on the calibrated probe.
 
     #[test]
@@ -1282,10 +1198,6 @@ mod tests {
         assert_eq!(
             has_face_up_white_block(&rgba_frame(20, 20), PixelRect::new(10, 10, 20, 4)),
             Err(HaloDetectionError::BoundsOutsideFrame)
-        );
-        assert_eq!(
-            has_dialog_gold_button(&invalid_layout, PixelRect::new(10, 10, 20, 4)),
-            Err(HaloDetectionError::InvalidFrameLayout)
         );
     }
 }

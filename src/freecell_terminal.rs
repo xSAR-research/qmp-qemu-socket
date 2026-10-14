@@ -1,7 +1,6 @@
 //! Free Cell's one-board win and deterministic restart controls.
 //!
-//! FC09-FC12 measure the score-skip, OK, New Game and Play regions; FC22/FC23
-//! measure Free Cell's higher and lower local OK layouts. Independent
+//! Bounded black-run searches use Free Cell control rectangles. Independent
 //! entry recognises Congratulations plus its skip caption or New Game button.
 //! An isolated OK or Play button never establishes a win. Once a win is known,
 //! readiness reads only the expected local control, not level, rank, medal,
@@ -14,6 +13,7 @@ use crate::{
     capture::CapturedFrame,
     detector::{HaloDetectionError, pixel_rgb},
     geometry::{PixelPoint, PixelRect},
+    terminal_controls::{self, Control, profiles::FREECELL_CONTROLS},
 };
 
 
@@ -129,14 +129,6 @@ const SCORE_SKIP: Caption = Caption {
 };
 
 
-/// FC10's OK caption, independent of the current level and medal.
-const LEVEL_UP_OK: Caption = Caption {
-    bounds: PixelRect::new(930, 794, 56, 36),
-    ink: CaptionInk::Dark,
-    rows: &[0x0, 0x1b3c, 0xb66, 0xfc6, 0x7c6, 0xf46, 0x1b7e, 0x133c, 0x0],
-};
-
-
 /// FC11's New Game caption, excluding the neighbouring Home control.
 const NEW_GAME: Caption = Caption {
     bounds: PixelRect::new(695, 834, 184, 36),
@@ -152,14 +144,6 @@ const NEW_GAME: Caption = Caption {
         0xc0023000602,
         0x0,
     ],
-};
-
-
-/// FC12's Play caption, independent of the selected difficulty and XP reward.
-const PLAY: Caption = Caption {
-    bounds: PixelRect::new(675, 744, 68, 40),
-    ink: CaptionInk::Dark,
-    rows: &[0x0, 0x6e, 0x7a, 0x977a, 0xfe6e, 0x6f62, 0x6f62, 0x6000, 0x3000, 0x1000],
 };
 
 
@@ -271,103 +255,42 @@ fn button_body_ready(frame: &CapturedFrame, bounds: PixelRect) -> Result<bool, H
 }
 
 
-/// Inspect only the expected control after the worker has independently confirmed
-/// a win. Readiness alone does not establish completion or authorise a click.
+/// Translate an expected menu stage into its shared bounded search.
+pub const fn control(stage: TerminalStage) -> Option<Control> {
+    match stage {
+        TerminalStage::Score => None,
+        TerminalStage::LevelUp => Some(Control::Ok),
+        TerminalStage::NewGame => Some(Control::NewGame),
+        TerminalStage::Play => Some(Control::Play),
+    }
+}
+
+
+/// Return this frame's measured click coordinate, or (0, 0) if absent.
+/// Only score skip retains its fixed centre-screen click.
+pub fn expected_control_point(
+    frame: &CapturedFrame,
+    stage: TerminalStage,
+) -> Result<PixelPoint, HaloDetectionError> {
+    validate_frame(frame)?;
+    if let Some(control) = control(stage) {
+        return terminal_controls::control_point(frame, FREECELL_CONTROLS.spec(control));
+    }
+    Ok(if caption_ready(frame, &SCORE_SKIP)? {
+        PixelPoint::new(960, 550)
+    } else {
+        PixelPoint::new(0, 0)
+    })
+}
+
+
+/// Convenience for fixture assertions; readiness does not establish a win.
+#[cfg(test)]
 pub fn expected_control_ready(
     frame: &CapturedFrame,
     stage: TerminalStage,
 ) -> Result<bool, HaloDetectionError> {
-    validate_frame(frame)?;
-    let (caption, body) = match stage {
-        TerminalStage::Score => return caption_ready(frame, &SCORE_SKIP),
-        TerminalStage::LevelUp => return level_up_control_ready(frame),
-        TerminalStage::NewGame => (&NEW_GAME, PixelRect::new(640, 824, 291, 56)),
-        TerminalStage::Play => return play_control_ready_at(frame, 0),
-    };
-    Ok(button_body_ready(frame, body)? && caption_ready(frame, caption)?)
-}
-
-
-/// Check the expected OK control at the measured higher position.
-fn level_up_control_ready(frame: &CapturedFrame) -> Result<bool, HaloDetectionError> {
-    level_up_control_ready_at(frame, -52)
-}
-
-
-/// Reuse the local Play caption at an evidenced vertical layout offset.
-/// Free Cell uses zero; Spider's native SP18 places the same control 100 pixels
-/// lower. The offset changes only this expected control, never win authority.
-pub(crate) fn play_control_ready_at(
-    frame: &CapturedFrame,
-    y_offset: u32,
-) -> Result<bool, HaloDetectionError> {
-    validate_frame(frame)?;
-    let caption_bottom = PLAY
-        .bounds
-        .bottom()
-        .checked_add(y_offset)
-        .and_then(|bottom| bottom.checked_add(8))
-        .ok_or(HaloDetectionError::BoundsOutsideFrame)?;
-
-
-    if caption_bottom > frame.height {
-        return Err(HaloDetectionError::BoundsOutsideFrame);
-    }
-    let caption = Caption {
-        bounds: PixelRect::new(
-            PLAY.bounds.x,
-            PLAY.bounds.y + y_offset,
-            PLAY.bounds.width,
-            PLAY.bounds.height,
-        ),
-        ink: PLAY.ink,
-        rows: PLAY.rows,
-    };
-    let body = PixelRect::new(610, 735 + y_offset, 198, 52);
-    Ok(button_body_ready(frame, body)? && caption_ready(frame, &caption)?)
-}
-
-
-/// Reuse only the local OK control at an evidenced signed vertical offset.
-/// Spider SP20 and Free Cell FC22 place the caption 19 pixels higher than FC10;
-/// Free Cell FC23 places it 12 pixels lower. Each caller chooses its own layouts.
-pub(crate) fn level_up_control_ready_at(
-    frame: &CapturedFrame,
-    y_offset: i32,
-) -> Result<bool, HaloDetectionError> {
-    validate_frame(frame)?;
-    let caption_y = LEVEL_UP_OK
-        .bounds
-        .y
-        .checked_add_signed(y_offset)
-        .ok_or(HaloDetectionError::BoundsOutsideFrame)?;
-    let body_y = 788_u32
-        .checked_add_signed(y_offset)
-        .ok_or(HaloDetectionError::BoundsOutsideFrame)?;
-    let caption_bottom = caption_y
-        .checked_add(LEVEL_UP_OK.bounds.height)
-        .and_then(|bottom| bottom.checked_add(8))
-        .ok_or(HaloDetectionError::BoundsOutsideFrame)?;
-    let body_bottom = body_y
-        .checked_add(50)
-        .ok_or(HaloDetectionError::BoundsOutsideFrame)?;
-
-
-    if caption_y < 8 || caption_bottom > frame.height || body_bottom > frame.height {
-        return Err(HaloDetectionError::BoundsOutsideFrame);
-    }
-    let caption = Caption {
-        bounds: PixelRect::new(
-            LEVEL_UP_OK.bounds.x,
-            caption_y,
-            LEVEL_UP_OK.bounds.width,
-            LEVEL_UP_OK.bounds.height,
-        ),
-        ink: LEVEL_UP_OK.ink,
-        rows: LEVEL_UP_OK.rows,
-    };
-    let body = PixelRect::new(848, body_y, 223, 50);
-    Ok(button_body_ready(frame, body)? && caption_ready(frame, &caption)?)
+    Ok(expected_control_point(frame, stage)? != PixelPoint::new(0, 0))
 }
 
 
@@ -385,28 +308,16 @@ pub fn classify_win_entry(
     }
 
 
-    if expected_control_ready(frame, TerminalStage::NewGame)? {
+    if button_body_ready(frame, PixelRect::new(640, 824, 291, 56))?
+        && caption_ready(frame, &NEW_GAME)? {
         return Ok(Some(TerminalStage::NewGame));
     }
 
 
-    if expected_control_ready(frame, TerminalStage::Score)? {
+    if caption_ready(frame, &SCORE_SKIP)? {
         return Ok(Some(TerminalStage::Score));
     }
     Ok(None)
-}
-
-
-/// One fixed native point inside the observed control; no input timing is inferred.
-pub const fn click_point(stage: TerminalStage) -> PixelPoint {
-
-
-    match stage {
-        TerminalStage::Score => PixelPoint::new(960, 550),
-        TerminalStage::LevelUp => PixelPoint::new(959, 760),
-        TerminalStage::NewGame => PixelPoint::new(786, 852),
-        TerminalStage::Play => PixelPoint::new(709, 761),
-    }
 }
 
 
@@ -466,50 +377,19 @@ mod tests {
     }
 
 
-    /// The supplied higher/lower OK layouts preserve the original input point.
+    /// Native control movement supplies its own full-frame click coordinates.
     #[test]
-    fn shifted_freecell_level_up_controls_keep_local_readiness_and_click() {
-        assert_eq!(click_point(TerminalStage::LevelUp), PixelPoint::new(959, 760));
-        for (number, y_offset) in [(22, -19), (23, 12)] {
-            let frame = fixture(number);
-            assert!(!level_up_control_ready_at(&frame, 0).unwrap());
-            assert!(level_up_control_ready_at(&frame, y_offset).unwrap());
-            assert!(expected_control_ready(&frame, TerminalStage::LevelUp).unwrap());
-
-            for stage in [
-                TerminalStage::Score,
-                TerminalStage::NewGame,
-                TerminalStage::Play,
-            ] {
-                assert!(!expected_control_ready(&frame, stage).unwrap());
-            }
-            assert_eq!(classify_win_entry(&frame).unwrap(), None);
+    fn shifted_controls_return_measured_points() {
+        for (number, stage, point) in [
+            (10, TerminalStage::LevelUp, PixelPoint::new(941, 822)),
+            (22, TerminalStage::LevelUp, PixelPoint::new(942, 804)),
+            (23, TerminalStage::LevelUp, PixelPoint::new(943, 835)),
+            (11, TerminalStage::NewGame, PixelPoint::new(810, 861)),
+            (15, TerminalStage::NewGame, PixelPoint::new(863, 861)),
+            (12, TerminalStage::Play, PixelPoint::new(680, 762)),
+        ] {
+            assert_eq!(expected_control_point(&fixture(number), stage).unwrap(), point);
         }
-
-        let base = fixture(10);
-        let mut frame_52 = base.clone();
-        let button_src = PixelRect::new(848, 788, 223, 50);
-        let caption_src = LEVEL_UP_OK.bounds;
-        for y in button_src.y..button_src.bottom() {
-            for x in button_src.x..button_src.right() {
-                let rgb = pixel_rgb(&base, x, y).unwrap();
-                let dst_idx = (y as usize - 52) * frame_52.stride + x as usize * 4;
-                frame_52.pixels[dst_idx..dst_idx + 3].copy_from_slice(&rgb);
-            }
-        }
-        for y in caption_src.y..caption_src.bottom() {
-            for x in caption_src.x..caption_src.right() {
-                let rgb = pixel_rgb(&base, x, y).unwrap();
-                let dst_idx = (y as usize - 52) * frame_52.stride + x as usize * 4;
-                frame_52.pixels[dst_idx..dst_idx + 3].copy_from_slice(&rgb);
-            }
-        }
-        assert!(level_up_control_ready_at(&frame_52, -52).unwrap());
-        assert!(expected_control_ready(&frame_52, TerminalStage::LevelUp).unwrap());
-        let point = click_point(TerminalStage::LevelUp);
-        assert!(is_button_gold(
-            pixel_rgb(&frame_52, point.x as u32, point.y as u32).unwrap()
-        ));
     }
 
 
@@ -605,36 +485,18 @@ mod tests {
     }
 
 
-    /// Blank, flat white, generic gold and the fresh inactive-Solver deal all stop.
+    /// Flat black may satisfy the ink rule, but never supplies independent win proof.
     #[test]
-    fn unsupported_flat_frames_and_fresh_deal_never_have_terminal_authority() {
+    fn flat_frames_do_not_have_independent_terminal_authority() {
         let mut frame = fixture(13);
-
-
-        for stage in [
-            TerminalStage::Score,
-            TerminalStage::LevelUp,
-            TerminalStage::NewGame,
-            TerminalStage::Play,
-        ] {
-            assert!(!expected_control_ready(&frame, stage).unwrap());
-        }
-
-
         for rgb in [[0, 0, 0], [255, 255, 255], [210, 180, 60]] {
             for pixel in frame.pixels.as_chunks_mut::<4>().0 {
                 pixel.copy_from_slice(&[rgb[0], rgb[1], rgb[2], 255]);
             }
-
-
-            for stage in [
-                TerminalStage::Score,
-                TerminalStage::LevelUp,
-                TerminalStage::NewGame,
-                TerminalStage::Play,
-            ] {
-                assert!(!expected_control_ready(&frame, stage).unwrap());
+            for stage in [TerminalStage::LevelUp, TerminalStage::NewGame, TerminalStage::Play] {
+                assert_eq!(expected_control_ready(&frame, stage).unwrap(), rgb == [0, 0, 0]);
             }
+            assert!(!expected_control_ready(&frame, TerminalStage::Score).unwrap());
             assert_eq!(classify_win_entry(&frame).unwrap(), None);
         }
     }

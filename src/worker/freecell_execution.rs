@@ -15,7 +15,7 @@ use std::{path::Path, sync::atomic::{AtomicBool, Ordering}, time::{Duration, Ins
 
 use super::{
     FrameObservation, WorkerEvent, WorkerEventSink, WorkerState, capture_screen,
-    connect_and_probe, execute_planned_input, format_action_status,
+    connect_and_probe, control_search::ControlLookup, execute_planned_input, format_action_status,
     format_prediction_target, format_step_plan, milliseconds, send_log,
     send_state, send_status, validate_probe, wait_or_stop,
 };
@@ -24,6 +24,7 @@ use crate::{
     freecell,
     freecell_terminal::{self, TerminalStage},
     game::{ActionTarget, GameMode},
+    geometry::PixelPoint,
     parameters::{
         FREECELL_MAX_MULTI_STEP_ACTIONS, LEVEL_UP_APPEAR_DELAY, NOMINAL_FRAME_HEIGHT,
         NOMINAL_FRAME_WIDTH, POST_GAME_MOUSE_HOLD, POST_GAME_STAGE_DELAY,
@@ -32,6 +33,7 @@ use crate::{
     qmp::QmpClient,
     stepper::{StepPlan, plan_step},
     tracker::{PredictedAction, TableauScanState},
+    terminal_controls::{Control, profiles::FREECELL_CONTROLS},
 };
 
 
@@ -67,7 +69,7 @@ trait FreeCellIo {
 
 
     /// Click exactly one freshly ready expected terminal control.
-    fn terminal(&mut self, stage: TerminalStage) -> Result<(), String>;
+    fn terminal(&mut self, stage: TerminalStage, point: PixelPoint) -> Result<(), String>;
 
 
     /// Perform an interruptible settle or observation delay.
@@ -129,10 +131,13 @@ impl FreeCellIo for QmpFreeCellIo<'_> {
     }
 
 
-    fn terminal(&mut self, stage: TerminalStage) -> Result<(), String> {
+    fn terminal(&mut self, stage: TerminalStage, point: PixelPoint) -> Result<(), String> {
         require_running(self.cancel_requested)?;
+        if point == PixelPoint::new(0, 0) {
+            return Err("Free Cell terminal control has no detected click point; no input sent".to_owned());
+        }
         self.qmp.click_with_hold(
-            freecell_terminal::click_point(stage), NOMINAL_FRAME_WIDTH,
+            point, NOMINAL_FRAME_WIDTH,
             NOMINAL_FRAME_HEIGHT, POST_GAME_MOUSE_HOLD,
         ).map_err(|error| format!("Free Cell {stage} delivery is uncertain: {error}; no retry permitted"))
     }
@@ -236,7 +241,7 @@ fn drive_run(
     validate_operation_limit(settings.operation_limit())?;
     let delays = settings.animation_delays();
     send_log(event_tx, format!(
-        "Free Cell fresh-HALO execution: game-start delay={} ms, action/automatic-transfer settle={} ms, no-HALO observation={} ms, delayed allowance={}. Inactive Solver receives one start delay and fresh capture before activation. Active no-HALO gameplay receives one delayed input-free observation before one refresh; activation and refresh share one reserve per unresolved context. One source click consumes one action; Solver and terminal clicks do not. No card identity, pixel difference, SUIT input, Draw, Recycle or Solve is used. Continuous 0 may restart one-board games through Score, optional Level Up OK, New Game and Play. After score skip, exactly one ready local OK or New Game control selects the next stage; neither receives bounded recaptures and both stop without input.",
+        "Free Cell fresh-HALO execution: game-start delay={} ms, action/automatic-transfer settle={} ms, no-HALO observation={} ms, delayed allowance={}. Inactive Solver receives one start delay and fresh capture before activation. Active no-HALO gameplay receives one delayed input-free observation before one refresh; activation and refresh share one reserve per unresolved context. One source click consumes one action; Solver and terminal clicks do not. No card identity, pixel difference, SUIT input, Draw, Recycle or Solve is used. Continuous 0 may restart one-board games through Score, optional Level Up OK, New Game and Play. After score skip, exactly one ready local OK or New Game control selects the next stage; a missing pair receives one fresh capture and repeat search, and both stop without input. Each expected OK, New Game or Play gets at most two searches.",
         delays.freecell_game_start.as_millis(), delays.freecell_settle.as_millis(), delays.freecell_reobserve.as_millis(), settings.freecell_observation_limit(),
     ));
     capture_latest(io, latest, event_tx, cancel_requested)?;
@@ -398,24 +403,36 @@ fn restart_game(
     input_attempted: &mut bool,
 ) -> Result<(), String> {
     let mut stage = initial_stage;
+    let mut ready_point = None;
 
 
     loop {
-        await_expected_control(io, latest, stage, settings, event_tx, cancel_requested)?;
+        let point = if let Some(point) = ready_point.take() {
+            point
+        } else {
+            await_expected_control(io, latest, stage, settings, event_tx, cancel_requested)?
+        };
+        if point == PixelPoint::new(0, 0) {
+            return Err("Free Cell expected terminal control returned no match; no input authorised".to_owned());
+        }
         guard_input(io, cancel_requested)?;
         send_state(event_tx, WorkerState::Acting);
         send_status(event_tx, stage.to_string());
-        send_log(event_tx, format!("Free Cell deterministic GAME WIN control: {stage}; one click at {:?}; unrelated panel colours, levels and artwork are not conditions.", freecell_terminal::click_point(stage)));
+        send_log(event_tx, format!("Free Cell deterministic GAME WIN control: {stage}; one click at {:?}; unrelated panel colours, levels and artwork are not conditions.", point));
         *input_attempted = true;
-        io.terminal(stage)?;
+        io.terminal(stage, point)?;
         io.wait(if stage == TerminalStage::Score { LEVEL_UP_APPEAR_DELAY } else { POST_GAME_STAGE_DELAY })?;
         capture_latest(io, latest, event_tx, cancel_requested)?;
 
 
         match stage {
-            TerminalStage::Score => stage = await_post_score_control(
-                io, latest, settings, event_tx, cancel_requested,
-            )?,
+            TerminalStage::Score => {
+                let (next_stage, point) = await_post_score_control(
+                    io, latest, settings, event_tx, cancel_requested,
+                )?;
+                stage = next_stage;
+                ready_point = Some(point);
+            },
             TerminalStage::LevelUp => stage = TerminalStage::NewGame,
             TerminalStage::NewGame => stage = TerminalStage::Play,
             TerminalStage::Play => break,
@@ -449,53 +466,67 @@ fn restart_game(
 }
 
 
-/// Resolve optional Level Up from this fresh frame's two local controls only.
-/// No ready control receives bounded input-free captures. Two ready controls
-/// are uncertain and stop; neither artwork nor a prior stage supplies a guess.
+/// Resolve optional OK and New Game from the same fresh frame.
+/// Both candidates share at most one recapture; an ambiguous pair sends no input.
 fn await_post_score_control(
     io: &mut impl FreeCellIo,
     latest: &mut Option<FrameObservation>,
     settings: StepRunSettings,
     event_tx: &WorkerEventSink,
     cancel_requested: &AtomicBool,
-) -> Result<TerminalStage, String> {
-
-
-    for delayed in 0..=settings.freecell_observation_limit() {
+) -> Result<(TerminalStage, PixelPoint), String> {
+    let mut ok_lookup = ControlLookup::new("Free Cell", &FREECELL_CONTROLS, Control::Ok, event_tx);
+    let mut new_game_lookup = ControlLookup::new("Free Cell", &FREECELL_CONTROLS, Control::NewGame, event_tx);
+    for attempt in 1..=2 {
         require_running(cancel_requested)?;
         let frame = &current(latest)?.frame;
-        let ok_ready = freecell_terminal::expected_control_ready(frame, TerminalStage::LevelUp)
-            .map_err(|error| format!("Free Cell post-score OK readiness failed: {error}"))?;
-        let new_game_ready = freecell_terminal::expected_control_ready(frame, TerminalStage::NewGame)
-            .map_err(|error| format!("Free Cell post-score New Game readiness failed: {error}"))?;
-
-
-        match (ok_ready, new_game_ready) {
+        let ok_point = ok_lookup.search(frame)?;
+        let new_game_point = new_game_lookup.search(frame)?;
+        match (ok_point != PixelPoint::new(0, 0), new_game_point != PixelPoint::new(0, 0)) {
             (true, false) => {
+                ok_lookup.set_outcome("matched");
+                new_game_lookup.set_outcome("optional absent");
                 send_log(event_tx, "Free Cell post-score branch: local OK ready; optional Level Up selected.".to_owned());
-                return Ok(TerminalStage::LevelUp);
+                return Ok((TerminalStage::LevelUp, ok_point));
             }
             (false, true) => {
+                ok_lookup.set_outcome("optional absent");
+                new_game_lookup.set_outcome("matched");
                 send_log(event_tx, "Free Cell post-score branch: local New Game ready; no Level Up step required.".to_owned());
-                return Ok(TerminalStage::NewGame);
+                return Ok((TerminalStage::NewGame, new_game_point));
             }
-            (true, true) => return Err("Free Cell post-score controls are uncertain: both OK and New Game are ready; no branch input authorised".to_owned()),
+            (true, true) => {
+                ok_lookup.set_outcome("ambiguous");
+                new_game_lookup.set_outcome("ambiguous");
+                return Err("Free Cell post-score controls are uncertain: both OK and New Game are ready; no branch input authorised".to_owned());
+            }
             (false, false) => {}
         }
-
-
-        if delayed == settings.freecell_observation_limit() {
+        if attempt == 2 {
             break;
         }
-        send_log(event_tx, format!("Free Cell post-score input-free observation {}/{}: neither local OK nor New Game is ready; score skip is not repeated.", delayed + 1, settings.freecell_observation_limit()));
-        io.wait(settings.animation_delays().freecell_reobserve)?;
-        capture_latest(io, latest, event_tx, cancel_requested)?;
+        send_log(event_tx, "Free Cell post-score OK/New Game absent: one input-free recapture and repeat search; score skip is not repeated.".to_owned());
+        if let Err(error) = io.wait(settings.animation_delays().freecell_reobserve) {
+            ok_lookup.set_outcome("wait stopped");
+            new_game_lookup.set_outcome("wait stopped");
+            return Err(error);
+        }
+        ok_lookup.note_recapture();
+        new_game_lookup.note_recapture();
+        if let Err(error) = capture_latest(io, latest, event_tx, cancel_requested) {
+            ok_lookup.set_outcome("capture failed or stopped");
+            new_game_lookup.set_outcome("capture failed or stopped");
+            return Err(error);
+        }
     }
-    Err("Free Cell expected post-score OK or New Game did not become ready within the bounded observation allowance; score skip was not retried".to_owned())
+    ok_lookup.set_outcome("not found");
+    new_game_lookup.set_outcome("not found");
+    Err("Free Cell expected post-score OK or New Game absent after one fresh recapture and repeat search; latest failed frame retained for preview; score skip was not retried".to_owned())
 }
 
 
-/// Read only the expected caption/button until ready or the finite allowance ends.
+/// Each expected menu control receives one search and at most one fresh retry.
+/// Score skip retains its existing caption recognition and observation allowance.
 fn await_expected_control(
     io: &mut impl FreeCellIo,
     latest: &mut Option<FrameObservation>,
@@ -503,28 +534,36 @@ fn await_expected_control(
     settings: StepRunSettings,
     event_tx: &WorkerEventSink,
     cancel_requested: &AtomicBool,
-) -> Result<(), String> {
-
-
-    for delayed in 0..=settings.freecell_observation_limit() {
+) -> Result<PixelPoint, String> {
+    let mut lookup = freecell_terminal::control(stage)
+        .map(|control| ControlLookup::new("Free Cell", &FREECELL_CONTROLS, control, event_tx));
+    let retries = if lookup.is_some() { 1 } else { settings.freecell_observation_limit() };
+    for delayed in 0..=retries {
         require_running(cancel_requested)?;
-
-
-        if freecell_terminal::expected_control_ready(&current(latest)?.frame, stage)
-            .map_err(|error| format!("Free Cell expected {stage} readiness failed: {error}"))?
-        {
-            return Ok(());
+        let point = if let Some(lookup) = lookup.as_mut() {
+            lookup.search(&current(latest)?.frame)?
+        } else {
+            freecell_terminal::expected_control_point(&current(latest)?.frame, stage)
+                .map_err(|error| format!("Free Cell expected {stage} readiness failed: {error}"))?
+        };
+        if point != PixelPoint::new(0, 0) {
+            if let Some(lookup) = lookup.as_mut() { lookup.set_outcome("matched"); }
+            return Ok(point);
         }
-
-
-        if delayed == settings.freecell_observation_limit() {
-            break;
+        if delayed == retries { break; }
+        send_log(event_tx, format!("Free Cell terminal input-free observation {}/{}: waiting only for expected {stage}; prior click is not repeated.", delayed + 1, retries));
+        if let Err(error) = io.wait(settings.animation_delays().freecell_reobserve) {
+            if let Some(lookup) = lookup.as_mut() { lookup.set_outcome("wait stopped"); }
+            return Err(error);
         }
-        send_log(event_tx, format!("Free Cell terminal input-free observation {}/{}: waiting only for expected {stage}; prior click is not repeated.", delayed + 1, settings.freecell_observation_limit()));
-        io.wait(settings.animation_delays().freecell_reobserve)?;
-        capture_latest(io, latest, event_tx, cancel_requested)?;
+        if let Some(lookup) = lookup.as_mut() { lookup.note_recapture(); }
+        if let Err(error) = capture_latest(io, latest, event_tx, cancel_requested) {
+            if let Some(lookup) = lookup.as_mut() { lookup.set_outcome("capture failed or stopped"); }
+            return Err(error);
+        }
     }
-    Err(format!("Free Cell expected {stage} did not become ready within the bounded observation allowance; no terminal input retried"))
+    if let Some(lookup) = lookup.as_mut() { lookup.set_outcome("not found"); }
+    Err(format!("Free Cell expected {stage} did not become ready within the bounded observation allowance; latest failed frame retained for preview; no terminal input retried"))
 }
 
 
@@ -641,6 +680,8 @@ mod tests {
         sources: Vec<PredictedAction>,
         /// Attempted one-shot terminal controls in execution order.
         controls: Vec<TerminalStage>,
+        /// Detected full-frame coordinates delivered to the terminal adapter.
+        control_points: Vec<PixelPoint>,
         /// Attempted activations, independent from the source-action budget.
         solver_clicks: usize,
         /// Actual native banner state observed at each attempted Solver input.
@@ -704,8 +745,10 @@ mod tests {
         }
 
 
-        fn terminal(&mut self, stage: TerminalStage) -> Result<(), String> {
+        fn terminal(&mut self, stage: TerminalStage, point: PixelPoint) -> Result<(), String> {
+            assert_ne!(point, PixelPoint::new(0, 0));
             self.controls.push(stage);
+            self.control_points.push(point);
 
 
             if self.fault == Fault::Terminal { Err("injected uncertain terminal".to_owned()) } else { Ok(()) }
@@ -731,9 +774,9 @@ mod tests {
     }
 
 
-    /// Black native storage supplies no scene, HALO or terminal evidence.
+    /// Near-black native storage supplies no scene, HALO or black-run evidence.
     fn unknown() -> CapturedFrame {
-        CapturedFrame { width: 1_920, height: 1_080, stride: 7_680, format: PixelFormat::Rgba8, pixels: vec![0; 7_680 * 1_080] }
+        CapturedFrame { width: 1_920, height: 1_080, stride: 7_680, format: PixelFormat::Rgba8, pixels: vec![1; 7_680 * 1_080] }
     }
 
 
@@ -760,7 +803,7 @@ mod tests {
     /// Construct a deterministic adapter with no fabricated classifier outputs.
     fn fake(frames: Vec<CapturedFrame>, cancel: &AtomicBool) -> FakeIo<'_> {
         FakeIo {
-            frames: frames.into(), sources: Vec::new(), controls: Vec::new(),
+            frames: frames.into(), sources: Vec::new(), controls: Vec::new(), control_points: Vec::new(),
             solver_clicks: 0, solver_states: Vec::new(), solver_capture_counts: Vec::new(),
             last_solver_state: None, captures: 0, waits: Vec::new(), fault: Fault::None, cancel,
         }
@@ -981,6 +1024,8 @@ mod tests {
             let mut latest = None;
             assert_eq!(run(&mut io, 0, 3, &mut latest).unwrap_err(), "fixture sequence exhausted");
             assert_eq!(io.controls, [TerminalStage::Score, TerminalStage::LevelUp, TerminalStage::NewGame, TerminalStage::Play]);
+            assert_eq!(io.control_points, [PixelPoint::new(960, 550),
+                PixelPoint::new(941, 822), PixelPoint::new(810, 861), PixelPoint::new(680, 762)]);
             assert_eq!(io.solver_clicks, 1);
             assert_eq!(io.solver_states, [Some(false)]);
             assert_eq!(io.solver_capture_counts, [if prefix { 7 } else { 6 }]);
@@ -1011,7 +1056,7 @@ mod tests {
             let mut frames = vec![fixture(9)];
 
 
-            if delayed { frames.extend([fixture(9), unknown()]); }
+            if delayed { frames.push(fixture(9)); }
             frames.extend([fixture(15), fixture(12), fixture(13), fixture(13), fixture(2)]);
             let mut io = fake(frames, &cancel);
             assert_eq!(run(&mut io, 0, 3, &mut None).unwrap_err(), "fixture sequence exhausted");
@@ -1091,10 +1136,10 @@ mod tests {
     #[test]
     fn terminal_advancement_bound_never_replays_the_prior_control() {
         let cancel = AtomicBool::new(false);
-        let mut io = fake(vec![fixture(9), fixture(9), fixture(9), fixture(9)], &cancel);
+        let mut io = fake(vec![fixture(9), fixture(9), fixture(9)], &cancel);
         assert!(run(&mut io, 0, 2, &mut None).unwrap_err().contains("expected"));
         assert_eq!(io.controls, [TerminalStage::Score]);
-        assert_eq!(io.captures, 4);
+        assert_eq!(io.captures, 3);
         assert_eq!(io.solver_clicks, 0);
     }
 
@@ -1173,4 +1218,81 @@ mod tests {
         assert!(validate_operation_limit(FREECELL_MAX_MULTI_STEP_ACTIONS).is_ok());
         assert!(validate_operation_limit(FREECELL_MAX_MULTI_STEP_ACTIONS + 1).is_err());
     }
+
+    /// Every menu control reports one search or one retry, with measured input points.
+    #[test]
+    fn bounded_control_search_metrics_cover_immediate_and_retry_success() {
+        for (number, stage, expected) in [
+            (10, TerminalStage::LevelUp, PixelPoint::new(941, 822)),
+            (11, TerminalStage::NewGame, PixelPoint::new(810, 861)),
+            (12, TerminalStage::Play, PixelPoint::new(680, 762))
+        ] {
+            for delayed in [false, true] {
+                let cancel = AtomicBool::new(false);
+                let frames = if delayed { vec![fixture(9), fixture(number)] } else { vec![fixture(number)] };
+                let mut io = fake(frames, &cancel);
+                let settings = StepRunSettings::new(AnimationSettleDelays::default(), 0);
+                let (sender, receiver) = std::sync::mpsc::channel();
+                let events = WorkerEventSink {
+                    events: sender, latest_frame: super::super::LatestFrameSlot::default(),
+                    capture_context: std::sync::Mutex::new(None),
+                };
+                let mut latest = None;
+                capture_latest(&mut io, &mut latest, &events, &cancel).unwrap();
+                let point = await_expected_control(&mut io, &mut latest, stage, settings, &events, &cancel).unwrap();
+                assert_eq!(point, expected);
+                assert_eq!(io.captures, if delayed { 2 } else { 1 });
+                io.terminal(stage, point).unwrap();
+                assert_eq!(io.control_points, [expected]);
+                let logs: Vec<_> = receiver.try_iter().filter_map(|event| match event.event {
+                    WorkerEvent::Log(message) => Some(message), _ => None,
+                }).collect();
+                let summary = logs.iter().find(|log| log.contains("search summary:")).unwrap();
+                assert!(summary.contains(if delayed {
+                    "searches=2; recaptures=1; second_grab=true"
+                } else {
+                    "searches=1; recaptures=0; second_grab=false"
+                }));
+                assert!(summary.contains("scan_total_ms=") && summary.contains("wall_ms="));
+                assert!(summary.ends_with("outcome=matched."));
+                assert_eq!(logs.iter().filter(|log| log.contains("search summary:")).count(), 1);
+            }
+        }
+    }
+
+
+    /// Each missing menu control stops after the second scan with the newest preview.
+    #[test]
+    fn every_control_second_miss_retains_the_failed_frame_without_input() {
+        for stage in [TerminalStage::LevelUp, TerminalStage::NewGame, TerminalStage::Play] {
+            let cancel = AtomicBool::new(false);
+            let mut failed = fixture(9);
+            failed.pixels[..4].copy_from_slice(&[17, 23, 31, 255]);
+            let mut io = fake(vec![fixture(9), failed.clone()], &cancel);
+            let settings = StepRunSettings::new(AnimationSettleDelays::default(), 0);
+            let (sender, receiver) = std::sync::mpsc::channel();
+            let slot = super::super::LatestFrameSlot::default();
+            let events = WorkerEventSink {
+                events: sender, latest_frame: slot.clone(),
+                capture_context: std::sync::Mutex::new(None),
+            };
+            let mut latest = None;
+            capture_latest(&mut io, &mut latest, &events, &cancel).unwrap();
+            assert!(await_expected_control(&mut io, &mut latest, stage, settings, &events, &cancel)
+                .unwrap_err().contains("latest failed frame retained"));
+            assert_eq!(io.captures, 2);
+            assert!(io.controls.is_empty());
+            assert_eq!(latest.unwrap().frame.pixels, failed.pixels);
+            let preview = slot.take().unwrap();
+            assert!(preview.diagnostic);
+            assert_eq!(preview.frame.pixels, failed.pixels);
+            let logs: Vec<_> = receiver.try_iter().filter_map(|event| match event.event {
+                WorkerEvent::Log(message) => Some(message), _ => None,
+            }).collect();
+            let summary = logs.iter().find(|log| log.contains("search summary:")).unwrap();
+            assert!(summary.contains("searches=2; recaptures=1; second_grab=true"));
+            assert!(summary.ends_with("outcome=not found."));
+        }
+    }
+
 }

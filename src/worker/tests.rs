@@ -1,7 +1,7 @@
 //! Regression tests for worker state, capture bounds and guarded transition contracts.
 
 use super::post_game::{
-    earlier_visible_post_game_target, known_post_game_stage, level_up_overrides_board_progress,
+    known_post_game_stage, level_up_overrides_board_progress,
     new_game_visible_while_awaiting_level_up, post_game_click_status,
     require_post_game_click_retry_budget, require_post_game_observation_retry_budget,
     require_score_skip_click_budget, resolve_post_game_target, score_skip_retry_is_authorised,
@@ -13,13 +13,27 @@ use super::pyramid_execution::{
 use super::*;
 use super::initial_recovery::{InitialRecoveryIo, recover_initial_target};
 use crate::parameters::{
-    LEVEL_UP_SHARED_BUTTON_BRIDGE, LEVEL_UP_SHARED_BUTTON_INTERIOR, POST_GAME_MAX_CLICK_ATTEMPTS,
+    POST_GAME_MAX_CLICK_ATTEMPTS, POST_GAME_MAX_OBSERVATION_ROUNDS,
     POST_GAME_TARGETS, PostGameControlVariant, PostGameStage, SCORE_SKIP_MAX_CLICK_ATTEMPTS,
 };
 use crate::pyramid::PyramidTargetKind;
 use crate::strategy::{ControllerContext, SolvingStrategy};
 
-use crate::parameters::{LEVEL_UP_CONTROL_VARIANTS, NEW_GAME_CONTROL_VARIANTS};
+use crate::terminal_controls::{Control, profiles::{TRIPEAKS_CONTROLS, PYRAMID_CONTROLS}};
+use crate::geometry::PixelPoint;
+
+
+/// Synthetic caption placements exercise motion and stage separation without native fixture claims.
+const TEST_OK_CONTROLS: [PostGameControlVariant; 2] = [
+    PostGameControlVariant::new("bounded-black-run", TRIPEAKS_CONTROLS.spec(Control::Ok).bounds, PixelPoint::new(935, 795)),
+    PostGameControlVariant::new("bounded-black-run", TRIPEAKS_CONTROLS.spec(Control::Ok).bounds, PixelPoint::new(935, 770)),
+];
+const TEST_NEW_GAME_CONTROLS: [PostGameControlVariant; 1] = [
+    PostGameControlVariant::new("bounded-black-run", TRIPEAKS_CONTROLS.spec(Control::NewGame).bounds, PixelPoint::new(815, 840)),
+];
+const TEST_PLAY_CONTROLS: [PostGameControlVariant; 1] = [
+    PostGameControlVariant::new("bounded-black-run", TRIPEAKS_CONTROLS.spec(Control::Play).bounds, PixelPoint::new(680, 905)),
+];
 
 
 /// Construct a zero-filled RGBA frame for tests that supply their own scene evidence.
@@ -253,7 +267,7 @@ fn tripeaks_reward_confirmation_requires_two_consecutive_fresh_positives_and_is_
 
 /// The supplied foreground Level Up has a unique raised OK and no gameplay recommendation.
 #[test]
-fn tripeaks_level_up_original_fixture_selects_existing_raised_ok_only() {
+fn tripeaks_level_up_original_fixture_returns_measured_ok() {
     use tripeaks_terminal::TerminalKind;
     let frame = tripeaks_level_up_frame();
     assert_eq!(tripeaks_terminal::is_reward_overlay(&frame), Ok(false));
@@ -264,10 +278,10 @@ fn tripeaks_level_up_original_fixture_selects_existing_raised_ok_only() {
     assert!(!observation.gameplay_scene);
     assert_eq!(observation.prediction, PredictedAction::NoHighlight);
     assert_eq!(observation.observed_rows, None);
-    assert_eq!(resolve_post_game_target(&observation, POST_GAME_TARGETS[0]),
-        Ok(Some(crate::parameters::LEVEL_UP_CONTROL_VARIANTS[1])));
-    assert_eq!(known_post_game_stage(Some(&observation)), Ok(Some(0)));
-    assert_eq!(level_up_overrides_board_progress(false, &observation), Ok(false));
+    assert_eq!(resolve_post_game_target(&observation, POST_GAME_TARGETS[0], &TRIPEAKS_CONTROLS),
+        Ok(Some(measured_test_control(Control::Ok, 943, 770))));
+    assert_eq!(known_post_game_stage(Some(&observation), &TRIPEAKS_CONTROLS), Ok(Some(0)));
+    assert_eq!(level_up_overrides_board_progress(false, &observation, &TRIPEAKS_CONTROLS), Ok(false));
 }
 
 
@@ -281,21 +295,19 @@ fn tripeaks_level_up_tp03_original_passes_existing_terminal_and_control_guards()
     assert!(!observation.gameplay_scene);
     assert_eq!(observation.prediction, PredictedAction::NoHighlight);
     assert_eq!(observation.observed_rows, None);
-    assert_eq!(post_game::resolve_post_game_target_for_entry(&observation, POST_GAME_TARGETS[0], true),
-        Ok(Some(LEVEL_UP_CONTROL_VARIANTS[1])));
-    assert_eq!(known_post_game_stage(Some(&observation)), Ok(Some(0)));
+    assert_eq!(post_game::resolve_post_game_target_for_entry(&observation, POST_GAME_TARGETS[0], true, &TRIPEAKS_CONTROLS),
+        Ok(Some(measured_test_control(Control::Ok, 944, 771))));
+    assert_eq!(known_post_game_stage(Some(&observation), &TRIPEAKS_CONTROLS), Ok(Some(0)));
     assert_eq!(tripeaks_terminal::FINAL_CARD_ACQUISITION_CAPTURES, 30);
     assert_eq!(crate::parameters::POST_GAME_MAX_OBSERVATION_ROUNDS, 20);
     assert_eq!(tripeaks_terminal::TERMINAL_CONFIRMATION_CAPTURES, 4);
 }
 
 
-/// A progression modal without the audited dim reward underlay cannot grant a game win.
+/// A progression modal without its title, panel, underlay or bounded OK cannot grant a win.
 #[test]
-fn tripeaks_level_up_missing_title_underlay_panel_or_unique_ok_is_refused() {
+fn tripeaks_level_up_missing_title_underlay_panel_or_ok_is_refused() {
     let original = tripeaks_level_up_frame();
-
-
     for probe in [
         PixelRect::new(800, 234, 320, 60),
         PixelRect::new(798, 854, 100, 20),
@@ -306,36 +318,32 @@ fn tripeaks_level_up_missing_title_underlay_panel_or_unique_ok_is_refused() {
         PixelRect::new(1_320, 139, 50, 2),
         PixelRect::new(460, 400, 3, 40),
         PixelRect::new(1_457, 400, 3, 40),
-        crate::parameters::LEVEL_UP_CONTROL_VARIANTS[1].probe_bounds,
     ] {
         let mut frame = original.clone();
         erase_reward_probe(&mut frame, probe);
         assert_eq!(tripeaks_terminal::is_direct_level_up_overlay(&frame), Ok(false), "missing {probe:?}");
     }
-    let mut two_buttons = original;
-    let extra = crate::parameters::LEVEL_UP_CONTROL_VARIANTS[0].probe_bounds;
-
-
-    for y in extra.y..extra.bottom() {
-
-
-        for x in extra.x..extra.right() {
-            let offset = y as usize * two_buttons.stride + x as usize * 4;
-            two_buttons.pixels[offset..offset + 3].copy_from_slice(&crate::parameters::GOLD_RGB_CANDIDATES[0]);
+    let mut missing = original.clone();
+    // Remove caption ink while preserving the independent dim skip prompt below it.
+    for y in 700..831 {
+        for x in 930..955 {
+            let offset = y * missing.stride + x * 4;
+            missing.pixels[offset..offset + 4].copy_from_slice(&[40, 40, 40, 255]);
         }
     }
-    assert_eq!(tripeaks_terminal::is_direct_level_up_overlay(&two_buttons), Ok(false));
-    let mut swapped_button = two_buttons.clone();
-    erase_reward_probe(&mut swapped_button, crate::parameters::LEVEL_UP_CONTROL_VARIANTS[1].probe_bounds);
-    assert_eq!(tripeaks_terminal::is_direct_level_up_overlay(&swapped_button), Ok(false),
-        "the evidenced raised layout cannot authorise a synthetic legacy-low click");
-    let (swapped, _) = analyse_captured_frame(swapped_button, &TableauScanState::for_mode(GameMode::TriPeaks)).unwrap();
-    assert_eq!(post_game::resolve_post_game_target_for_entry(&swapped, POST_GAME_TARGETS[0], true), Ok(None));
-    assert_eq!(earlier_visible_post_game_target(&swapped, 1, true), Ok(None));
+    assert_eq!(tripeaks_terminal::is_direct_level_up_context(&missing), Ok(true));
+    assert_eq!(tripeaks_terminal::is_direct_level_up_overlay(&missing), Ok(false));
+    let mut moved = missing;
+    paint_black_run(&mut moved, 938, 805, 5);
+    assert_eq!(tripeaks_terminal::is_direct_level_up_overlay(&moved), Ok(true),
+        "moving OK inside the bounds retains independent terminal authority");
+    let (observation, _) = analyse_captured_frame(moved, &TableauScanState::for_mode(GameMode::TriPeaks)).unwrap();
+    assert_eq!(post_game::resolve_post_game_target_for_entry(&observation, POST_GAME_TARGETS[0], true, &TRIPEAKS_CONTROLS),
+        Ok(Some(measured_test_control(Control::Ok, 938, 805))));
     assert_eq!(tripeaks_terminal::is_direct_level_up_overlay(&tripeaks_reward_frame()), Ok(false));
     assert_eq!(tripeaks_terminal::is_direct_level_up_overlay(&tripeaks_stock_frame(true)), Ok(false));
     assert_eq!(tripeaks_terminal::is_direct_level_up_overlay(&blank_frame(1_280, 720)), Ok(false));
-    let mut malformed = tripeaks_level_up_frame();
+    let mut malformed = original;
     malformed.pixels.truncate(16);
     assert!(tripeaks_terminal::is_direct_level_up_overlay(&malformed).is_err());
 }
@@ -376,20 +384,17 @@ fn tripeaks_level_up_confirmation_requires_two_fresh_observations_of_same_kind()
 }
 
 
-/// Fresh bare gold cannot retry OK after a direct terminal handover loses its fixed panel evidence.
+/// A caption alone cannot retry OK after direct entry loses its independent panel evidence.
 #[test]
-fn tripeaks_level_up_direct_entry_rechecks_full_panel_for_current_and_stale_ok() {
+fn tripeaks_level_up_direct_entry_rechecks_full_panel_before_ok() {
     let scan = TableauScanState::for_mode(GameMode::TriPeaks);
     let (original, _) = analyse_captured_frame(tripeaks_level_up_frame(), &scan).unwrap();
-    let raised = crate::parameters::LEVEL_UP_CONTROL_VARIANTS[1];
-    assert_eq!(post_game::resolve_post_game_target_for_entry(&original, POST_GAME_TARGETS[0], true), Ok(Some(raised)));
-    assert_eq!(earlier_visible_post_game_target(&original, 1, true), Ok(Some((0, POST_GAME_TARGETS[0], raised))));
-    let gold_only = dialog_observation(&[raised]);
-    assert_eq!(resolve_post_game_target(&gold_only, POST_GAME_TARGETS[0]), Ok(Some(raised)));
-    assert_eq!(post_game::resolve_post_game_target_for_entry(&gold_only, POST_GAME_TARGETS[0], true), Ok(None));
-    assert_eq!(earlier_visible_post_game_target(&gold_only, 1, true), Ok(None));
-    assert_eq!(post_game::resolve_post_game_target_for_entry(&gold_only, POST_GAME_TARGETS[0], false), Ok(Some(raised)),
-        "existing non-direct and Pyramid control policy remains unchanged");
+    let measured = measured_test_control(Control::Ok, 943, 770);
+    assert_eq!(post_game::resolve_post_game_target_for_entry(&original, POST_GAME_TARGETS[0], true, &TRIPEAKS_CONTROLS), Ok(Some(measured)));
+    let caption_only = dialog_observation(&[measured]);
+    assert_eq!(resolve_post_game_target(&caption_only, POST_GAME_TARGETS[0], &TRIPEAKS_CONTROLS), Ok(Some(measured)));
+    assert_eq!(post_game::resolve_post_game_target_for_entry(&caption_only, POST_GAME_TARGETS[0], true, &TRIPEAKS_CONTROLS), Ok(None));
+    assert_eq!(post_game::resolve_post_game_target_for_entry(&caption_only, POST_GAME_TARGETS[0], false, &TRIPEAKS_CONTROLS), Ok(Some(measured)));
 }
 
 
@@ -1113,9 +1118,23 @@ fn row_observation(
 }
 
 
-/// Paint selected dialog probes gold in a non-gameplay frame for controller tests.
+/// Construct a measured result for assertions without consulting the production scanner.
+fn measured_test_control(control: Control, x: i32, y: i32) -> PostGameControlVariant {
+    PostGameControlVariant::new("bounded-black-run", TRIPEAKS_CONTROLS.spec(control).bounds, PixelPoint::new(x, y))
+}
+
+
+/// Paint exact black RGB without relying on alpha or a gold button background.
+fn paint_black_run(frame: &mut CapturedFrame, x: i32, y: i32, length: i32) {
+    for x in x..x + length {
+        let offset = y as usize * frame.stride + x as usize * 4;
+        frame.pixels[offset..offset + 4].copy_from_slice(&[0, 0, 0, 255]);
+    }
+}
+
+
+/// Paint selected caption runs in a non-gameplay frame for controller tests.
 fn dialog_observation(variants: &[PostGameControlVariant]) -> FrameObservation {
-    // Build a non-gameplay frame whose selected dialog-control probes are gold.
     let width = NOMINAL_FRAME_WIDTH as usize;
     let height = NOMINAL_FRAME_HEIGHT as usize;
     let mut frame = CapturedFrame {
@@ -1123,24 +1142,12 @@ fn dialog_observation(variants: &[PostGameControlVariant]) -> FrameObservation {
         height: NOMINAL_FRAME_HEIGHT,
         stride: width * 4,
         format: crate::capture::PixelFormat::Rgba8,
-        pixels: vec![0; width * height * 4],
+        pixels: [40, 40, 40, 255].repeat(width * height),
     };
-
-
     for variant in variants {
-        let probe = variant.probe_bounds;
-
-
-        for y in probe.y..probe.bottom() {
-
-
-            for x in probe.x..probe.right() {
-                let offset = y as usize * frame.stride + x as usize * 4;
-                frame.pixels[offset..offset + 4].copy_from_slice(&[220, 170, 80, 255]);
-            }
-        }
+        let point = variant.click_point;
+        paint_black_run(&mut frame, point.x, point.y, 5);
     }
-
     FrameObservation {
         frame,
         prediction: PredictedAction::NoHighlight,
@@ -1607,175 +1614,128 @@ fn row_three_halo_forbids_completion_when_row_one_is_empty() {
 /// Check Level Up supersedes progress evidence only after board completion is verified.
 #[test]
 fn level_up_dialog_overrides_only_a_verified_redeal_state() {
-    let observation = dialog_observation(&[LEVEL_UP_CONTROL_VARIANTS[1]]);
+    let observation = dialog_observation(&[TEST_OK_CONTROLS[1]]);
 
     assert_eq!(
-        level_up_overrides_board_progress(false, &observation),
+        level_up_overrides_board_progress(false, &observation, &TRIPEAKS_CONTROLS),
         Ok(false)
     );
     assert_eq!(
-        level_up_overrides_board_progress(true, &observation),
+        level_up_overrides_board_progress(true, &observation, &TRIPEAKS_CONTROLS),
         Ok(true)
     );
 }
 
 
-/// Check each calibrated gold probe authorises only its associated dialog stage.
+/// Each caption rectangle authorises only its associated dialog stage.
 #[test]
-fn dialog_probes_cannot_authorise_a_different_post_game_stage() {
+fn caption_bounds_cannot_authorise_a_different_post_game_stage() {
     let dialog_targets = &POST_GAME_TARGETS[..3];
-
-
-    for (expected_index, expected_target) in dialog_targets.iter().copied().enumerate() {
-
-
-        for expected_variant in expected_target.control_variants.iter().copied() {
-            let observation = dialog_observation(&[expected_variant]);
-
-
+    for (expected_index, controls) in [TEST_OK_CONTROLS.as_slice(),
+        TEST_NEW_GAME_CONTROLS.as_slice(), TEST_PLAY_CONTROLS.as_slice()].into_iter().enumerate()
+    {
+        for variant in controls.iter().copied() {
+            let observation = dialog_observation(&[variant]);
             for (actual_index, actual_target) in dialog_targets.iter().copied().enumerate() {
-                assert_eq!(
-                    resolve_post_game_target(&observation, actual_target),
-                    Ok((expected_index == actual_index).then_some(expected_variant))
-                );
+                assert_eq!(resolve_post_game_target(&observation, actual_target, &TRIPEAKS_CONTROLS),
+                    Ok((expected_index == actual_index).then_some(variant)));
             }
         }
     }
 }
 
 
-/// Check disconnected legacy and raised Level Up matches produce an explicit ambiguity error.
+/// Pyramid's supplied profile determines the crop independently of TriPeaks defaults.
 #[test]
-fn level_up_layout_ambiguity_fails_closed() {
-    let observation = dialog_observation(&LEVEL_UP_CONTROL_VARIANTS);
-    let error = resolve_post_game_target(&observation, POST_GAME_TARGETS[0])
-        .expect_err("both Level Up layouts must be ambiguous");
-
-    assert!(error.contains("legacy-low"));
-    assert!(error.contains("raised"));
-    assert!(error.contains("no guest input was sent"));
+fn pyramid_control_resolution_uses_its_explicit_profile() {
+    let mut profile = PYRAMID_CONTROLS;
+    profile.new_game.bounds = PixelRect::new(810, 830, 20, 20);
+    let mut observation = dialog_observation(&TEST_NEW_GAME_CONTROLS);
+    paint_black_run(&mut observation.frame, 850, 860, 5);
+    let resolved = resolve_post_game_target(&observation, POST_GAME_TARGETS[1], &profile)
+        .unwrap().unwrap();
+    assert_eq!(resolved.click_point, PixelPoint::new(815, 840));
+    assert_eq!(resolved.probe_bounds, profile.new_game.bounds);
+    assert_eq!(resolve_post_game_target(&observation, POST_GAME_TARGETS[1], &TRIPEAKS_CONTROLS)
+        .unwrap().unwrap().click_point, PixelPoint::new(850, 860));
 }
 
 
-/// Check connected gold probes resolve one tall Level Up button to the proven lower click.
+/// Two candidate rows resolve to the lower run, following the documented scan order.
 #[test]
-fn one_tall_level_up_button_connects_both_probes_and_uses_proven_low_click() {
-    let mut observation = dialog_observation(&LEVEL_UP_CONTROL_VARIANTS);
+fn multiple_ok_runs_use_first_bottom_up_coordinate() {
+    let observation = dialog_observation(&TEST_OK_CONTROLS);
+    assert_eq!(resolve_post_game_target(&observation, POST_GAME_TARGETS[0], &TRIPEAKS_CONTROLS),
+        Ok(Some(measured_test_control(Control::Ok, 935, 795))));
+    assert_eq!(known_post_game_stage(Some(&observation), &TRIPEAKS_CONTROLS), Ok(Some(0)));
+}
 
 
-    for bounds in [
-        LEVEL_UP_SHARED_BUTTON_BRIDGE,
-        LEVEL_UP_SHARED_BUTTON_INTERIOR,
-    ] {
-
-
+/// Gold coverage without the five exact-black caption pixels grants no control input.
+#[test]
+fn gold_buttons_without_caption_ink_do_not_authorise_post_game_clicks() {
+    let mut observation = dialog_observation(&[]);
+    for target in &POST_GAME_TARGETS[..3] {
+        let control = match target.stage {
+            PostGameStage::LevelUpOk => Control::Ok,
+            PostGameStage::NewGame => Control::NewGame,
+            PostGameStage::Play => Control::Play,
+            PostGameStage::Solver => unreachable!(),
+        };
+        let bounds = TRIPEAKS_CONTROLS.spec(control).bounds;
         for y in bounds.y..bounds.bottom() {
-
-
             for x in bounds.x..bounds.right() {
                 let offset = y as usize * observation.frame.stride + x as usize * 4;
                 observation.frame.pixels[offset..offset + 4].copy_from_slice(&[220, 170, 80, 255]);
             }
         }
+        assert_eq!(resolve_post_game_target(&observation, *target, &TRIPEAKS_CONTROLS), Ok(None));
     }
-
-    assert_eq!(
-        resolve_post_game_target(&observation, POST_GAME_TARGETS[0]),
-        Ok(Some(LEVEL_UP_CONTROL_VARIANTS[0]))
-    );
-    assert_eq!(known_post_game_stage(Some(&observation)), Ok(Some(0)));
 }
 
 
-/// Check gold in the probe gap alone cannot resolve an ambiguous Level Up button.
+/// A moved OK within the configured rectangle carries the actual coordinate through.
 #[test]
-fn a_gold_bridge_without_the_button_interior_cannot_authorise_a_click() {
-    let mut observation = dialog_observation(&LEVEL_UP_CONTROL_VARIANTS);
-    let bounds = LEVEL_UP_SHARED_BUTTON_BRIDGE;
-
-
-    for y in bounds.y..bounds.bottom() {
-
-
-        for x in bounds.x..bounds.right() {
-            let offset = y as usize * observation.frame.stride + x as usize * 4;
-            observation.frame.pixels[offset..offset + 4].copy_from_slice(&[220, 170, 80, 255]);
-        }
-    }
-    assert!(resolve_post_game_target(&observation, POST_GAME_TARGETS[0]).is_err());
-}
-
-
-/// Check the raised Level Up layout uses its calibrated click coordinate.
-#[test]
-fn raised_level_up_resolves_its_own_click_point() {
-    let raised = LEVEL_UP_CONTROL_VARIANTS[1];
-    let observation = dialog_observation(&[raised]);
-
-    assert_eq!(
-        resolve_post_game_target(&observation, POST_GAME_TARGETS[0]),
-        Ok(Some(raised))
-    );
-    assert_eq!(
-        raised.click_point,
-        crate::geometry::PixelPoint::new(960, 770)
-    );
+fn shifted_ok_resolves_its_measured_click_point() {
+    let measured = measured_test_control(Control::Ok, 947, 724);
+    let observation = dialog_observation(&[measured]);
+    assert_eq!(resolve_post_game_target(&observation, POST_GAME_TARGETS[0], &TRIPEAKS_CONTROLS), Ok(Some(measured)));
 }
 
 
 /// Check a visible New Game can advance recovery when Level Up was absent.
 #[test]
 fn new_game_can_be_verified_when_level_up_is_missing() {
-    let new_game = dialog_observation(&[NEW_GAME_CONTROL_VARIANTS[0]]);
+    let new_game = dialog_observation(&[TEST_NEW_GAME_CONTROLS[0]]);
     assert_eq!(
-        resolve_post_game_target(&new_game, POST_GAME_TARGETS[0]),
+        resolve_post_game_target(&new_game, POST_GAME_TARGETS[0], &TRIPEAKS_CONTROLS),
         Ok(None)
     );
     assert_eq!(
-        new_game_visible_while_awaiting_level_up(&new_game),
+        new_game_visible_while_awaiting_level_up(&new_game, &TRIPEAKS_CONTROLS),
         Ok(true)
     );
 
-    let level_up = dialog_observation(&[LEVEL_UP_CONTROL_VARIANTS[1]]);
+    let level_up = dialog_observation(&[TEST_OK_CONTROLS[1]]);
     assert_eq!(
-        new_game_visible_while_awaiting_level_up(&level_up),
+        new_game_visible_while_awaiting_level_up(&level_up, &TRIPEAKS_CONTROLS),
         Ok(false)
     );
 }
 
 
-/// Check restart entry selects only proven Level Up/New Game stages and rejects ambiguity.
+/// Restart entry selects only recognised Level Up/New Game stages.
 #[test]
 fn recognised_terminal_stage_skips_only_the_completed_post_game_steps() {
-    assert_eq!(known_post_game_stage(None), Ok(None));
+    assert_eq!(known_post_game_stage(None, &TRIPEAKS_CONTROLS), Ok(None));
     let unknown = dialog_observation(&[]);
-    assert_eq!(known_post_game_stage(Some(&unknown)), Ok(None));
-    let level_up = dialog_observation(&[LEVEL_UP_CONTROL_VARIANTS[0]]);
-    assert_eq!(known_post_game_stage(Some(&level_up)), Ok(Some(0)));
-    let new_game = dialog_observation(&[NEW_GAME_CONTROL_VARIANTS[0]]);
-    assert_eq!(known_post_game_stage(Some(&new_game)), Ok(Some(1)));
-    let ambiguous = dialog_observation(&LEVEL_UP_CONTROL_VARIANTS);
-    assert!(known_post_game_stage(Some(&ambiguous)).is_err());
-}
-
-
-/// Check a still-visible earlier control is identified before input to a later stage.
-#[test]
-fn stale_dialog_is_reported_before_the_expected_later_stage() {
-    let raised = LEVEL_UP_CONTROL_VARIANTS[1];
-    let level_up = dialog_observation(&[raised]);
-    assert_eq!(
-        earlier_visible_post_game_target(&level_up, 1, false),
-        Ok(Some((0, POST_GAME_TARGETS[0], raised)))
-    );
-
-    let new_game_variant = NEW_GAME_CONTROL_VARIANTS[0];
-    let new_game = dialog_observation(&[new_game_variant]);
-    assert_eq!(earlier_visible_post_game_target(&new_game, 1, false), Ok(None));
-    assert_eq!(
-        earlier_visible_post_game_target(&new_game, 2, false),
-        Ok(Some((1, POST_GAME_TARGETS[1], new_game_variant)))
-    );
+    assert_eq!(known_post_game_stage(Some(&unknown), &TRIPEAKS_CONTROLS), Ok(None));
+    let level_up = dialog_observation(&[TEST_OK_CONTROLS[0]]);
+    assert_eq!(known_post_game_stage(Some(&level_up), &TRIPEAKS_CONTROLS), Ok(Some(0)));
+    let new_game = dialog_observation(&[TEST_NEW_GAME_CONTROLS[0]]);
+    assert_eq!(known_post_game_stage(Some(&new_game), &TRIPEAKS_CONTROLS), Ok(Some(1)));
+    let multiple = dialog_observation(&TEST_OK_CONTROLS);
+    assert_eq!(known_post_game_stage(Some(&multiple), &TRIPEAKS_CONTROLS), Ok(Some(0)));
 }
 
 
@@ -2257,7 +2217,6 @@ mod tripeaks_reward_qmp_regressions {
         AnimationSettleDelays, CLICK_OFFSET_X, GAMEPLAY_FELT_PROBE_BOUNDS,
         GOLD_RGB_CANDIDATES, HALO_GOLD_LINE_OFFSET_Y, HALO_GOLD_RUN_MIN,
         SCORE_SKIP_CONTROL, SHARED_SOLVER_CONTROL, TABLEAU_CARD_REGIONS,
-        PLAY_CONTROL_VARIANTS,
     };
 
 
@@ -2296,6 +2255,16 @@ mod tripeaks_reward_qmp_regressions {
         RedealNoHalo,
         /// Direct native Level Up followed by the complete supported restart sequence.
         DirectLevelUp,
+        /// New Game is absent once, then appears on the single fresh retry.
+        DelayedNewGame,
+        /// New Game remains absent on both permitted expected-control captures.
+        MissingNewGame,
+        /// Logged Pyramid coordinates include an expected New Game and unrelated OK-region ink.
+        PyramidNewGameWithOldInk,
+        /// Unrelated OK-region ink persists while expected New Game remains absent.
+        PyramidMissingNewGameWithOldInk,
+        /// New Game is already visible without a Level Up, alongside unrelated OK-region ink.
+        PyramidOptionalLevelUpWithOldInk,
         /// STOP is raised after the fresh OK pointer probe and before button input.
         StopAfterLevelUpProbe,
         /// Uncertain native OK delivery permits only release recovery.
@@ -2310,7 +2279,7 @@ mod tripeaks_reward_qmp_regressions {
         LevelUpRewardAfterOk,
         /// Level Up disappears into reward before any OK delivery.
         LevelUpDisappearsBeforeOk,
-        /// A bare gold former OK probe cannot authorise another OK click.
+        /// A bare former OK caption cannot authorise another OK click.
         StaleBareGoldAfterOk,
         /// Reward and Level Up alternate throughout the four-capture allowance.
         AlternatingTerminalKinds,
@@ -2331,12 +2300,21 @@ mod tripeaks_reward_qmp_regressions {
 
     /// Whether this scenario uses native Level Up plus synthetic later-stage controls.
     fn level_up_scenario(scenario: Scenario) -> bool {
-        matches!(scenario, Scenario::DirectLevelUp | Scenario::StopAfterLevelUpProbe
+        matches!(scenario, Scenario::DirectLevelUp | Scenario::DelayedNewGame | Scenario::MissingNewGame
+            | Scenario::PyramidNewGameWithOldInk | Scenario::PyramidMissingNewGameWithOldInk
+            | Scenario::PyramidOptionalLevelUpWithOldInk | Scenario::StopAfterLevelUpProbe
             | Scenario::UncertainLevelUp | Scenario::RewardThenLevelUp | Scenario::MixedStageReset
             | Scenario::LateLevelUp | Scenario::LevelUpRewardAfterOk | Scenario::LevelUpDisappearsBeforeOk
             | Scenario::StaleBareGoldAfterOk | Scenario::AlternatingTerminalKinds
             | Scenario::CandidateTwentyOne | Scenario::CandidateThirty
             | Scenario::TransientCandidateThirty | Scenario::MixedCandidateThirty)
+    }
+
+
+    /// Isolated shared-controller episodes use the coordinates reported by the Pyramid run.
+    fn pyramid_menu_scenario(scenario: Scenario) -> bool {
+        matches!(scenario, Scenario::PyramidNewGameWithOldInk
+            | Scenario::PyramidMissingNewGameWithOldInk | Scenario::PyramidOptionalLevelUpWithOldInk)
     }
 
 
@@ -2366,7 +2344,7 @@ mod tripeaks_reward_qmp_regressions {
         NewGame,
         /// Existing calibrated synthetic Play control frame.
         Play,
-        /// A gold-only former OK probe without native dialog title or artwork.
+        /// A bare former OK caption without native dialog title or artwork.
         BareGold,
     }
 
@@ -2607,18 +2585,24 @@ mod tripeaks_reward_qmp_regressions {
         new_game_png: Vec<u8>,
         /// Existing synthetic calibrated Play control.
         play_png: Vec<u8>,
-        /// Bare gold OK probe, retaining none of the native Level Up evidence.
+        /// Bare OK caption, retaining none of the native Level Up panel evidence.
         bare_gold_png: Vec<u8>,
     }
 
 
     /// Resolve the calibrated OK variant from the actual native Level Up pixels.
     fn native_level_up_control() -> PostGameControlVariant {
-        let frame = decode_png(LEVEL_UP_PNG).expect("original Level Up fixture");
+        native_level_up_control_from(LEVEL_UP_PNG)
+    }
+
+
+    /// Each original fixture supplies its own measured coordinate.
+    fn native_level_up_control_from(png: &[u8]) -> PostGameControlVariant {
+        let frame = decode_png(png).expect("original Level Up fixture");
         let (observation, _) = analyse_captured_frame(frame,
             &TableauScanState::for_mode(GameMode::TriPeaks)).expect("native Level Up classification");
         assert!(!observation.gameplay_scene);
-        resolve_post_game_target(&observation, POST_GAME_TARGETS[0])
+        resolve_post_game_target(&observation, POST_GAME_TARGETS[0], &TRIPEAKS_CONTROLS)
             .expect("native Level Up control is unambiguous")
             .expect("native Level Up has one calibrated OK target")
     }
@@ -2634,9 +2618,14 @@ mod tripeaks_reward_qmp_regressions {
         let mut report = WireReport::default();
         let skip = wire_point(SCORE_SKIP_CONTROL.click_point);
         let level_up_png = if late_level_up_scenario(scenario) { LATE_LEVEL_UP_PNG } else { LEVEL_UP_PNG };
-        let level_up = if level_up_scenario(scenario) {
-            wire_point(native_level_up_control().click_point)
+        let level_up = if pyramid_menu_scenario(scenario) {
+            wire_point(PixelPoint::new(944, 771))
+        } else if level_up_scenario(scenario) {
+            wire_point(native_level_up_control_from(level_up_png).click_point)
         } else { (0, 0) };
+        let new_game = if pyramid_menu_scenario(scenario) {
+            wire_point(PixelPoint::new(863, 862))
+        } else { wire_point(TEST_NEW_GAME_CONTROLS[0].click_point) };
         let mut position = (0_i64, 0_i64);
         let mut pending_skip_error = None;
         let mut error_delivered = false;
@@ -2677,13 +2666,21 @@ mod tripeaks_reward_qmp_regressions {
                                 "uncertain OK must stop before any further capture");
                             if report.downs_at(wire_point(SHARED_SOLVER_CONTROL.click_point)) > 0 {
                                 (CaptureKind::Recovered, recovered_png.as_slice())
-                            } else if report.downs_at(wire_point(PLAY_CONTROL_VARIANTS[0].click_point)) > 0 {
+                            } else if report.downs_at(wire_point(TEST_PLAY_CONTROLS[0].click_point)) > 0 {
                                 report.nonempty_captures += 1;
                                 (CaptureKind::Nonempty, nonempty_png.as_slice())
-                            } else if report.downs_at(wire_point(NEW_GAME_CONTROL_VARIANTS[0].click_point)) > 0 {
+                            } else if report.downs_at(new_game) > 0 {
                                 (CaptureKind::Play, play_png.as_slice())
                             } else if report.downs_at(level_up) > 0 {
-                                if scenario == Scenario::LevelUpRewardAfterOk && report.downs_at(skip) == 0 {
+                                if scenario == Scenario::PyramidMissingNewGameWithOldInk {
+                                    report.unsupported_captures += 1;
+                                    (CaptureKind::Unsupported, new_game_png.as_slice())
+                                } else if scenario == Scenario::MissingNewGame
+                                    || (scenario == Scenario::DelayedNewGame && report.unsupported_captures == 0)
+                                {
+                                    report.unsupported_captures += 1;
+                                    (CaptureKind::Unsupported, unsupported_png.as_slice())
+                                } else if scenario == Scenario::LevelUpRewardAfterOk && report.downs_at(skip) == 0 {
                                     report.reward_captures += 1;
                                     (CaptureKind::Reward, REWARD_PNG)
                                 } else if scenario == Scenario::StaleBareGoldAfterOk {
@@ -2772,15 +2769,7 @@ mod tripeaks_reward_qmp_regressions {
                         if scenario == Scenario::StopAfterFirstReward && kind == CaptureKind::Reward {
                             cancel.store(true, Ordering::Release);
                         }
-                        if scenario == Scenario::SkipDisappears && report.unsupported_captures == 3 {
-                            cancel.store(true, Ordering::Release);
-                        }
                         if scenario == Scenario::MixedStageReset && report.level_up_captures == 2 {
-                            cancel.store(true, Ordering::Release);
-                        }
-                        if (scenario == Scenario::LevelUpDisappearsBeforeOk && report.reward_captures == 3)
-                            || (scenario == Scenario::StaleBareGoldAfterOk && report.bare_gold_captures == 3)
-                        {
                             cancel.store(true, Ordering::Release);
                         }
                         ack(&mut stream, id);
@@ -2882,7 +2871,7 @@ mod tripeaks_reward_qmp_regressions {
             last_top_card_at(1, material_effect)
         } else { last_top_card(material_effect) };
         let recovered = tripeaks_stock_frame(true);
-        let unsupported = blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT);
+        let unsupported = dialog_observation(&[]).frame;
         let mut nonempty = tripeaks_stock_frame(false);
         let row_four = GameMode::TriPeaks.profile().tableau_rows[3].face_probe_bounds;
         paint(&mut nonempty, PixelRect::new(row_four.x, row_four.y,
@@ -2931,8 +2920,8 @@ mod tripeaks_reward_qmp_regressions {
                 plan.input().effect_bounds(), plan.input().effect_exclusion_bounds(),
                 ACTION_CHANGE_CHANNEL_THRESHOLD).expect("native Level Up final-card effect proof");
             assert!(changed >= plan.input().minimum_changed_pixels());
-            (encode_native_png(&dialog_observation(&NEW_GAME_CONTROL_VARIANTS).frame),
-                encode_native_png(&dialog_observation(&PLAY_CONTROL_VARIANTS).frame))
+            (encode_native_png(&dialog_observation(&TEST_NEW_GAME_CONTROLS).frame),
+                encode_native_png(&dialog_observation(&TEST_PLAY_CONTROLS).frame))
         } else { (Vec::new(), Vec::new()) };
         let bare_gold_png = if scenario == Scenario::StaleBareGoldAfterOk {
             encode_native_png(&dialog_observation(&[native_level_up_control()]).frame)
@@ -2956,6 +2945,121 @@ mod tripeaks_reward_qmp_regressions {
         let events = receiver.try_iter().map(|event| event.event).collect();
         let latest = sink.latest_frame.take().expect("worker retains latest original capture");
         ResultEvidence { wire, events, latest, completed_boards, recovered, unsupported }
+    }
+
+
+    /// Run only the shared post-game controller with independently captured Pyramid menu frames.
+    /// Synthetic black runs reproduce the logged coordinates, without claiming a native fixture.
+    fn run_pyramid_menu(scenario: Scenario) -> (Result<bool, String>, WireReport, Vec<WorkerEvent>, LatestWorkerFrame) {
+        assert!(pyramid_menu_scenario(scenario));
+        let directory = SocketDirectory(std::env::temp_dir().join(format!(
+            "pyramid-menu-qmp-{}-{}", std::process::id(), NEXT_REWARD_SOCKET.fetch_add(1, Ordering::Relaxed),
+        )));
+        fs::create_dir(&directory.0).expect("unique Pyramid mock directory");
+        let socket = directory.0.join("qmp.sock");
+        let listener = UnixListener::bind(&socket).expect("Pyramid QMP mock socket");
+        listener.set_nonblocking(true).expect("bounded mock accept");
+        let mut next_menu = dialog_observation(&[]).frame;
+        paint_black_run(&mut next_menu, 944, 810, 5);
+        if scenario != Scenario::PyramidMissingNewGameWithOldInk {
+            paint_black_run(&mut next_menu, 863, 862, 5);
+        }
+        let initial = if scenario == Scenario::PyramidOptionalLevelUpWithOldInk {
+            next_menu.clone()
+        } else {
+            let mut frame = dialog_observation(&[]).frame;
+            paint_black_run(&mut frame, 944, 771, 5);
+            frame
+        };
+        let recovered = initial_recovery_frame(GameMode::Pyramid, true);
+        let nonempty = initial_recovery_frame(GameMode::Pyramid, false);
+        let mut scan = TableauScanState::for_mode(GameMode::Pyramid);
+        let (initial_observation, _) = analyse_captured_frame(initial.clone(), &scan).unwrap();
+        let pngs = MockPngs {
+            initial_png: encode_native_png(&initial),
+            recovered_png: encode_native_png(&recovered),
+            unsupported_png: encode_native_png(&dialog_observation(&[]).frame),
+            nonempty_png: encode_native_png(&nonempty),
+            new_game_png: encode_native_png(&next_menu),
+            play_png: encode_native_png(&dialog_observation(&TEST_PLAY_CONTROLS).frame),
+            bare_gold_png: Vec::new(),
+        };
+        let cancel = Arc::new(AtomicBool::new(false));
+        let server_cancel = Arc::clone(&cancel);
+        let server = thread::spawn(move || serve(listener, pngs, scenario, server_cancel));
+        let (events, receiver) = mpsc::channel();
+        let sink = WorkerEventSink {
+            events, latest_frame: LatestFrameSlot::default(),
+            capture_context: Mutex::new(Some(vision_context(&socket, GameMode::Pyramid))),
+        };
+        let (mut qmp, probe) = connect_and_probe(&socket).expect("Pyramid mock QMP connection");
+        validate_probe(&probe).expect("Pyramid mock input capability");
+        let mut boards = GameMode::Pyramid.profile().boards_per_game;
+        let result = post_game::run_post_game_restart(&mut qmp, &socket,
+            Some(&initial_observation), &mut scan, &mut boards, &sink, &cancel)
+            .map(|outcome| matches!(outcome, post_game::PostGameOutcome::Restarted(_)));
+        drop(qmp);
+        let wire = server.join().expect("Pyramid mock QMP completion");
+        let events = receiver.try_iter().map(|event| event.event).collect();
+        let latest = sink.latest_frame.take().expect("latest Pyramid post-game frame");
+        (result, wire, events, latest)
+    }
+
+
+    /// Expected New Game wins when a previous control region also contains matching pixels.
+    #[test]
+    #[ignore = "requires local AF_UNIX sockets"]
+    fn pyramid_expected_new_game_with_old_ok_ink_advances_without_replay() {
+        let (result, wire, events, _) = run_pyramid_menu(Scenario::PyramidNewGameWithOldInk);
+        assert_eq!(result, Ok(true));
+        let downs: Vec<_> = wire.events.iter().filter_map(|event| match event {
+            WireEvent::Down(point) => Some(*point), _ => None,
+        }).collect();
+        assert_eq!(downs, [wire_point(PixelPoint::new(944, 771)),
+            wire_point(PixelPoint::new(863, 862)), wire_point(TEST_PLAY_CONTROLS[0].click_point),
+            wire_point(SHARED_SOLVER_CONTROL.click_point)]);
+        assert_eq!(wire.downs_at(wire_point(PixelPoint::new(944, 810))), 0);
+        assert!(events.iter().any(|event| matches!(event, WorkerEvent::Log(message)
+            if message.contains("Pyramid New Game search 1:") && message.contains("result=(863, 862)"))));
+        assert!(!events.iter().any(|event| matches!(event, WorkerEvent::Log(message)
+            if message.contains("recovery OK search") || message.contains("RETRY: post-game stage Level Up"))));
+    }
+
+
+    /// Prior-region ink cannot renew the missing-control allowance or authorise another click.
+    #[test]
+    #[ignore = "requires local AF_UNIX sockets"]
+    fn pyramid_missing_new_game_with_old_ok_ink_stops_after_one_recapture() {
+        let (result, wire, events, latest) = run_pyramid_menu(Scenario::PyramidMissingNewGameWithOldInk);
+        assert!(result.unwrap_err().contains("absent in two consecutive fresh captures"));
+        assert_eq!(wire.unsupported_captures, 2);
+        assert_eq!(wire.downs(), 1);
+        assert_eq!(wire.downs_at(wire_point(PixelPoint::new(944, 771))), 1);
+        assert_eq!(wire.downs_at(wire_point(PixelPoint::new(944, 810))), 0);
+        assert!(latest.diagnostic);
+        assert_eq!(latest.prediction, None);
+        let mut expected = dialog_observation(&[]).frame;
+        paint_black_run(&mut expected, 944, 810, 5);
+        assert_eq!(latest.frame.pixels, expected.pixels);
+        assert!(events.iter().any(|event| matches!(event, WorkerEvent::Log(message)
+            if message.contains("Pyramid New Game search summary: searches=2; recaptures=1; second_grab=true;")
+                && message.ends_with("outcome=not-found."))));
+    }
+
+
+    /// Optional Level Up is skipped when New Game and unrelated OK-region ink are initially visible.
+    #[test]
+    #[ignore = "requires local AF_UNIX sockets"]
+    fn pyramid_optional_level_up_with_new_game_and_old_ink_sends_no_ok() {
+        let (result, wire, _, _) = run_pyramid_menu(Scenario::PyramidOptionalLevelUpWithOldInk);
+        assert_eq!(result, Ok(true));
+        let downs: Vec<_> = wire.events.iter().filter_map(|event| match event {
+            WireEvent::Down(point) => Some(*point), _ => None,
+        }).collect();
+        assert_eq!(downs, [wire_point(PixelPoint::new(863, 862)),
+            wire_point(TEST_PLAY_CONTROLS[0].click_point), wire_point(SHARED_SOLVER_CONTROL.click_point)]);
+        assert_eq!(wire.downs_at(wire_point(PixelPoint::new(944, 810))), 0);
+        assert_eq!(wire.downs_at(wire_point(PixelPoint::new(944, 771))), 0);
     }
 
 
@@ -3358,13 +3462,13 @@ mod tripeaks_reward_qmp_regressions {
     fn tripeaks_reward_disappearing_after_skip_refuses_centre_retry_through_qmp() {
         let evidence = run(Scenario::SkipDisappears);
         assert_only_original_and_skip(&evidence, 1);
-        assert_eq!(evidence.wire.unsupported_captures, 3);
+        assert_eq!(evidence.wire.unsupported_captures, 2);
         let skip = wire_point(SCORE_SKIP_CONTROL.click_point);
         let skip_down = evidence.wire.events.iter().position(|event|
             *event == WireEvent::Down(skip)).expect("first acknowledged skip");
         let unsupported = evidence.wire.events[skip_down + 1..].iter().filter(|event|
             **event == WireEvent::Capture(CaptureKind::Unsupported)).count();
-        assert_eq!(unsupported, 3, "two input-free unknown rounds preceded STOP on the third");
+        assert_eq!(unsupported, 2, "one fresh retry exhausts the absent-control allowance");
         assert!(!evidence.wire.events[skip_down + 1..].iter().any(|event|
             matches!(event, WireEvent::Down(_))), "fresh unknown frames never authorise a retry");
         assert_eq!(action_count(&evidence), 1);
@@ -3372,7 +3476,7 @@ mod tripeaks_reward_qmp_regressions {
         assert_eq!(evidence.latest.frame.pixels, evidence.unsupported.pixels);
         assert!(!evidence.events.iter().any(|event| matches!(event,
             WorkerEvent::RunCompleted { .. } | WorkerEvent::GameCompleted)));
-        assert!(evidence.events.iter().any(|event| matches!(event, WorkerEvent::Log(message) if message.contains("STOP"))));
+        assert!(evidence.events.iter().any(|event| matches!(event, WorkerEvent::Log(message) if message.contains("absent in two consecutive fresh captures"))));
     }
 
 
@@ -3427,12 +3531,12 @@ mod tripeaks_reward_qmp_regressions {
 
 
     /// Successful native OK handover follows only the supported later-stage controls.
-    fn assert_level_up_restart(evidence: &ResultEvidence) {
+    fn assert_level_up_restart(evidence: &ResultEvidence, expected_ok: PixelPoint) {
         let expected = [
             wire_point(TABLEAU_CARD_REGIONS[1].click_point),
-            wire_point(native_level_up_control().click_point),
-            wire_point(NEW_GAME_CONTROL_VARIANTS[0].click_point),
-            wire_point(PLAY_CONTROL_VARIANTS[0].click_point),
+            wire_point(expected_ok),
+            wire_point(TEST_NEW_GAME_CONTROLS[0].click_point),
+            wire_point(TEST_PLAY_CONTROLS[0].click_point),
             wire_point(SHARED_SOLVER_CONTROL.click_point),
         ];
         let actual: Vec<_> = evidence.wire.events.iter().filter_map(|event| {
@@ -3463,7 +3567,49 @@ mod tripeaks_reward_qmp_regressions {
     fn tripeaks_native_level_up_enters_ok_new_game_play_solver_sequence_through_qmp() {
         let evidence = run(Scenario::DirectLevelUp);
         assert_eq!(evidence.wire.reward_captures, 0);
-        assert_level_up_restart(&evidence);
+        assert_level_up_restart(&evidence, PixelPoint::new(943, 770));
+    }
+
+
+    /// A single missed New Game scan takes one fresh capture and records actual work.
+    #[test]
+    #[ignore = "requires local AF_UNIX sockets"]
+    fn tripeaks_new_game_single_recapture_finds_control_and_reports_metrics() {
+        let evidence = run(Scenario::DelayedNewGame);
+        assert_eq!(evidence.wire.unsupported_captures, 1);
+        assert_level_up_restart(&evidence, PixelPoint::new(943, 770));
+        let logs: Vec<_> = evidence.events.iter().filter_map(|event| match event {
+            WorkerEvent::Log(message) => Some(message.as_str()),
+            _ => None,
+        }).collect();
+        assert!(logs.iter().any(|message| message.contains("TriPeaks New Game search 1:")
+            && message.contains("result=(0, 0)")));
+        assert!(logs.iter().any(|message| message.contains("TriPeaks New Game search 2:")
+            && message.contains("result=(815, 840)")));
+        assert!(logs.iter().any(|message| message.contains("TriPeaks New Game search summary: searches=2; recaptures=1; second_grab=true;")
+            && message.contains("scan_total_ms=") && message.contains("wall_ms=")
+            && message.ends_with("outcome=matched.")));
+    }
+
+
+    /// Two absent expected controls stop without clicking and retain the final failed pixels.
+    #[test]
+    #[ignore = "requires local AF_UNIX sockets"]
+    fn tripeaks_missing_new_game_stops_after_one_recapture_and_retains_preview() {
+        let evidence = run(Scenario::MissingNewGame);
+        assert_eq!(evidence.wire.unsupported_captures, 2);
+        assert_eq!(evidence.wire.downs(), 2, "only the final card and its measured OK were clicked");
+        assert_eq!(evidence.wire.downs_at(wire_point(SCORE_SKIP_CONTROL.click_point)), 0);
+        assert_eq!(evidence.wire.downs_at(wire_point(TEST_NEW_GAME_CONTROLS[0].click_point)), 0);
+        assert_eq!(evidence.latest.frame.pixels, evidence.unsupported.pixels);
+        assert!(evidence.events.iter().any(|event| matches!(event,
+            WorkerEvent::State(WorkerState::Uncertain))));
+        assert!(evidence.events.iter().any(|event| matches!(event, WorkerEvent::Log(message)
+            if message.contains("TriPeaks New Game search summary: searches=2; recaptures=1; second_grab=true;")
+                && message.contains("scan_total_ms=") && message.contains("wall_ms=")
+                && message.ends_with("outcome=not-found."))));
+        assert!(!evidence.events.iter().any(|event| matches!(event,
+            WorkerEvent::GameCompleted | WorkerEvent::RunCompleted { .. })));
     }
 
 
@@ -3515,7 +3661,7 @@ mod tripeaks_reward_qmp_regressions {
     fn tripeaks_reward_then_native_level_up_uses_fresh_same_kind_confirmation_through_qmp() {
         let evidence = run(Scenario::RewardThenLevelUp);
         assert_eq!(evidence.wire.reward_captures, 1);
-        assert_level_up_restart(&evidence);
+        assert_level_up_restart(&evidence, PixelPoint::new(943, 770));
     }
 
 
@@ -3549,7 +3695,7 @@ mod tripeaks_reward_qmp_regressions {
             *event == WireEvent::Capture(CaptureKind::LevelUp)).expect("late native Level Up");
         assert_eq!(evidence.wire.events[..first_level].iter().filter(|event|
             matches!(event, WireEvent::Down(_))).count(), 1);
-        assert_level_up_restart(&evidence);
+        assert_level_up_restart(&evidence, PixelPoint::new(943, 770));
     }
 
 
@@ -3561,8 +3707,8 @@ mod tripeaks_reward_qmp_regressions {
         let source = wire_point(TABLEAU_CARD_REGIONS[1].click_point);
         let ok = wire_point(native_level_up_control().click_point);
         let skip = wire_point(SCORE_SKIP_CONTROL.click_point);
-        let expected = [source, ok, skip, wire_point(NEW_GAME_CONTROL_VARIANTS[0].click_point),
-            wire_point(PLAY_CONTROL_VARIANTS[0].click_point), wire_point(SHARED_SOLVER_CONTROL.click_point)];
+        let expected = [source, ok, skip, wire_point(TEST_NEW_GAME_CONTROLS[0].click_point),
+            wire_point(TEST_PLAY_CONTROLS[0].click_point), wire_point(SHARED_SOLVER_CONTROL.click_point)];
         let actual: Vec<_> = evidence.wire.events.iter().filter_map(|event| {
             if let WireEvent::Down(point) = event { Some(*point) } else { None }
         }).collect();
@@ -3593,7 +3739,7 @@ mod tripeaks_reward_qmp_regressions {
     fn tripeaks_level_up_disappearing_into_reward_before_ok_refuses_skip_through_qmp() {
         let evidence = run(Scenario::LevelUpDisappearsBeforeOk);
         assert_eq!(evidence.wire.level_up_captures, 2);
-        assert_eq!(evidence.wire.reward_captures, 3);
+        assert_eq!(evidence.wire.reward_captures, 2);
         assert_eq!(evidence.wire.downs(), 1);
         assert_eq!(evidence.wire.downs_at(wire_point(TABLEAU_CARD_REGIONS[1].click_point)), 1);
         assert_eq!(action_count(&evidence), 1, "only the final card's confirmed win was committed");
@@ -3604,12 +3750,12 @@ mod tripeaks_reward_qmp_regressions {
     }
 
 
-    /// A gold-only stale OK probe cannot repeat the already acknowledged native OK input.
+    /// A bare stale OK caption cannot repeat the already acknowledged native OK input.
     #[test]
     #[ignore = "requires local AF_UNIX sockets"]
     fn tripeaks_bare_gold_stale_ok_after_native_ack_is_not_retried_through_qmp() {
         let evidence = run(Scenario::StaleBareGoldAfterOk);
-        assert_eq!(evidence.wire.bare_gold_captures, 3);
+        assert_eq!(evidence.wire.bare_gold_captures, 2);
         assert_eq!(evidence.wire.downs(), 2);
         assert_eq!(evidence.wire.downs_at(wire_point(TABLEAU_CARD_REGIONS[1].click_point)), 1);
         assert_eq!(evidence.wire.downs_at(wire_point(native_level_up_control().click_point)), 1);
@@ -3653,7 +3799,7 @@ mod tripeaks_reward_qmp_regressions {
         assert_eq!(evidence.wire.events[..first_candidate].iter().filter(|event|
             matches!(event, WireEvent::Down(_))).count(), 1,
             "only the canonical source click preceded fresh terminal evidence");
-        assert_level_up_restart(evidence);
+        assert_level_up_restart(evidence, PixelPoint::new(944, 771));
     }
 
 

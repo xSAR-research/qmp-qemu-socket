@@ -1,5 +1,9 @@
 # Spider Level Up five-black-pixel search
 
+This records the original Spider candidate, confirmed live by Charlie. The
+shared three-control implementation and revised bounds are documented in
+`bounded-terminal-controls.md`.
+
 Candidate: qmp-qemu-socket 2.2.2-candidate.1 with xsar 0.4.2-candidate.1.
 Source bases: qmp-qemu-socket 9b6288388f4c2a3a1571b926fe8db95c26e32fc7 and
 xsar 072cbed6cda31c82289522c384974e2448ffd807.

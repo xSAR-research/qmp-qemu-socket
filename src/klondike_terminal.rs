@@ -26,8 +26,8 @@
 //! No rank-dependent artwork fraction or missing HALO grants Solver input.
 //! Independent completion retains the recorded positive terminal/board proof.
 //! Once the worker has confirmed one game win, the deterministic restart path
-//! checks only the expected OK, New Game or Play button area. Positive gold and
-//! dark printed caption contrast in that local area establish readiness; title,
+//! searches the expected OK, New Game or Play rectangle for five consecutive
+//! exact-black pixels and uses the measured coordinate for its click. Title,
 //! rank, medal, modal frame, fireworks and surrounding artwork do not gate those
 //! clicks. Local button readiness never establishes the initial game win.
 //! The worker owns ordering, fresh capture, cancellation, one-shot delivery and
@@ -41,10 +41,11 @@ use crate::{
     detector::{HaloDetectionError, pixel_rgb},
     geometry::{PixelPoint, PixelRect},
     parameters::{
-        LEVEL_UP_APPEAR_DELAY, LEVEL_UP_CONTROL_VARIANTS, NEW_GAME_CONTROL_VARIANTS,
+        LEVEL_UP_APPEAR_DELAY,
         POST_GAME_MOUSE_HOLD, POST_GAME_STAGE_DELAY, SCORE_SKIP_CONTROL,
         SHARED_SOLVER_CONTROL, SOLVER_MOUSE_HOLD,
     },
+    terminal_controls::{self, Control, profiles::KLONDIKE_CONTROLS},
 };
 
 
@@ -75,15 +76,13 @@ impl TerminalStage {
     }
 
 
-    /// One measured native click; the shifted Klondike Play button is mode-owned.
+    /// Fixed controls only; searched buttons must supply their measured coordinate.
     pub(crate) const fn click_point(self) -> PixelPoint {
 
 
         match self {
             Self::ScoreCounting => SCORE_SKIP_CONTROL.click_point,
-            Self::LevelUp => LEVEL_UP_CONTROL_VARIANTS[0].click_point,
-            Self::NewGame => NEW_GAME_CONTROL_VARIANTS[0].click_point,
-            Self::Play => PixelPoint::new(705, 860),
+            Self::LevelUp | Self::NewGame | Self::Play => PixelPoint::new(0, 0),
             Self::SolverReady => SHARED_SOLVER_CONTROL.click_point,
         }
     }
@@ -1004,117 +1003,42 @@ pub(crate) fn classify_terminal(
 }
 
 
-/// Positive local readiness for one expected control in an already confirmed win.
-/// These counts are not scene classification or independent completion evidence.
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct ExpectedControlEvidence {
-    /// The single stage requested by the deterministic restart controller.
-    stage: TerminalStage,
-    /// Positive warm gold or cream pixels inside the fixed button body region.
-    gold_pixels: u32,
-    /// Number of pixels in that local body region.
-    body_pixels: u32,
-    /// Required gold fraction, expressed per thousand for checked integer comparison.
-    gold_per_mille: u32,
-    /// Dark printed-caption pixels with nearby positive gold contrast.
-    caption_ink_pixels: u32,
-}
-
-
-impl ExpectedControlEvidence {
-
-
-    /// Require the local gold body and material printed lettering together.
-    /// No precise glyph pixels, title, level or decorative artwork are compared.
-    pub(crate) const fn ready(self) -> bool {
-        self.gold_pixels * 1_000 >= self.body_pixels * self.gold_per_mille
-            && self.caption_ink_pixels >= 48
+/// Shared bounded search selected by the already-confirmed restart stage.
+pub(crate) const fn searched_control(stage: TerminalStage) -> Option<Control> {
+    match stage {
+        TerminalStage::LevelUp => Some(Control::Ok),
+        TerminalStage::NewGame => Some(Control::NewGame),
+        TerminalStage::Play => Some(Control::Play),
+        TerminalStage::ScoreCounting | TerminalStage::SolverReady => None,
     }
 }
 
 
-impl fmt::Display for ExpectedControlEvidence {
-
-
-    /// Report only the expected control's local readiness, separate from win proof.
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "expected={}, local gold={}/{} (required {} per mille), caption contrast={} (required 48), ready={}; decorative artwork is not checked",
-            self.stage, self.gold_pixels, self.body_pixels, self.gold_per_mille,
-            self.caption_ink_pixels, self.ready())
-    }
-}
-
-
-/// Warm button gold and its pale upper gradient, without exact RGB signatures.
-/// Blue dialog artwork, black lettering and white/grey flat patches are excluded.
-fn is_control_gold([red, green, blue]: [u8; 3]) -> bool {
-    red >= 140 && green >= 95
-        && u16::from(red) >= u16::from(blue) + 20
-        && u16::from(green) >= u16::from(blue) + 12
-}
-
-
-/// Measure only the expected printed button at its existing native click region.
-/// The local OK window contains the prior small/medal captions and K91 caption;
-/// no search extends beyond that control. New Game and Play body regions retain
-/// sufficient independent horizontal coverage to reject each other's overlap.
-/// The largest body has 24,192 pixels, keeping all count products within u32.
-/// Missing storage or unsupported frame dimensions fail before any measurement.
-pub(crate) fn inspect_expected_control(
+/// Measured native control coordinate, or the no-match sentinel (0,0).
+/// Independent win and fresh-deal recognition retain their existing scene proof.
+pub(crate) fn expected_control_point(
     frame: &CapturedFrame,
     stage: TerminalStage,
-) -> Result<Option<ExpectedControlEvidence>, HaloDetectionError> {
+) -> Result<PixelPoint, HaloDetectionError> {
     super::validate_frame(frame)?;
-
-    let (body, caption, gold_per_mille) = match stage {
-        TerminalStage::LevelUp => (PixelRect::new(848, 715, 224, 108), PixelRect::new(928, 733, 62, 69), 550),
-        TerminalStage::NewGame => (PixelRect::new(642, 824, 288, 55), PixelRect::new(693, 831, 191, 44), 800),
-        TerminalStage::Play => (PixelRect::new(612, 834, 191, 50), PixelRect::new(673, 841, 72, 39), 850),
-        TerminalStage::ScoreCounting | TerminalStage::SolverReady => return Ok(None),
-    };
-    let gold_pixels = super::count_pixels(frame, body, is_control_gold);
-    let mut caption_ink_pixels = 0;
-
-    for y in caption.y..caption.y + caption.height {
-        for x in caption.x..caption.x + caption.width {
-            let printed_ink = pixel_rgb(frame, x, y)
-                .is_some_and(|rgb| rgb.into_iter().all(|channel| channel <= 70));
-
-            if printed_ink
-                && [(4, 0), (-4, 0), (0, 4), (0, -4)].into_iter().any(|(dx, dy)| {
-                    x.checked_add_signed(dx)
-                        .zip(y.checked_add_signed(dy))
-                        .and_then(|(column, row)| pixel_rgb(frame, column, row))
-                        .is_some_and(is_control_gold)
-                })
-            {
-                caption_ink_pixels += 1;
-            }
-        }
+    if let Some(control) = searched_control(stage) {
+        return terminal_controls::control_point(frame, KLONDIKE_CONTROLS.spec(control));
     }
-    Ok(Some(ExpectedControlEvidence {
-        stage,
-        gold_pixels,
-        body_pixels: body.width * body.height,
-        gold_per_mille,
-        caption_ink_pixels,
-    }))
+    Ok(if classify_terminal(frame)? == Some(stage) {
+        stage.click_point()
+    } else {
+        PixelPoint::new(0, 0)
+    })
 }
 
 
-/// Gate the one expected restart control after independent game-win confirmation.
-/// Local readiness is deliberately separate from `classify_terminal`, so a gold
-/// button cannot declare a win. Fresh-deal Solver retains its existing scene proof.
+/// Readiness wrapper for the detector regression fixtures.
+#[cfg(test)]
 pub(crate) fn expected_control_ready(
     frame: &CapturedFrame,
     stage: TerminalStage,
 ) -> Result<bool, HaloDetectionError> {
-
-
-    if let Some(evidence) = inspect_expected_control(frame, stage)? {
-        return Ok(evidence.ready());
-    }
-    Ok(classify_terminal(frame)? == Some(stage))
+    expected_control_point(frame, stage).map(|point| point != PixelPoint::new(0, 0))
 }
 
 
@@ -1122,6 +1046,7 @@ pub(crate) fn expected_control_ready(
 /// A later Level Up/New Game frame may outlive the score panel; local buttons
 /// allow entry without re-proving completed-game artwork. This function is never
 /// called by completion detection, and Play cannot skip earlier restart stages.
+#[cfg(test)]
 pub(crate) fn classify_confirmed_win_entry(
     frame: &CapturedFrame,
 ) -> Result<Option<TerminalStage>, HaloDetectionError> {
@@ -1352,7 +1277,7 @@ mod tests {
             _ => panic!("test helper requires a local terminal button"),
         };
         let mut local = original.clone();
-        local.pixels.fill(0);
+        local.pixels.fill(255);
 
 
         for y in bounds.y..bounds.y + bounds.height {
@@ -1387,7 +1312,7 @@ mod tests {
     }
 
 
-    /// Gold/printed button readiness grants progression only after an existing win.
+    /// A bounded black run grants progression only after an existing win.
     /// Its button alone cannot enter independent completion evidence on a blank scene.
     #[test]
     fn local_expected_controls_never_prove_initial_completion() {
@@ -1406,27 +1331,21 @@ mod tests {
     }
 
 
-    /// An erased caption, dark/white/flat control and absent body refuse readiness.
-    /// Unknown or unchanged windows never authorise the following expected stage.
+    /// Exact-black horizontal runs provide readiness only in the selected rectangle.
     #[test]
-    fn expected_button_readiness_requires_gold_and_material_print_contrast() {
-
-
-        for (number, stage, body, caption) in [
-            (91, TerminalStage::LevelUp, PixelRect::new(848, 750, 224, 108), PixelRect::new(928, 768, 62, 69)),
-            (92, TerminalStage::NewGame, PixelRect::new(642, 824, 288, 55), PixelRect::new(693, 831, 191, 44)),
-            (93, TerminalStage::Play, PixelRect::new(612, 834, 191, 50), PixelRect::new(673, 841, 72, 39)),
-        ] {
-
-
-            for rgb in [[0, 0, 0], [255, 255, 255], [240, 190, 90], [12, 82, 45]] {
-                let mut erased = fixture(number);
-                paint(&mut erased, body, rgb);
-                assert!(!expected_control_ready(&erased, stage).unwrap());
-            }
-            let mut no_print = fixture(number);
-            paint(&mut no_print, caption, [240, 190, 90]);
-            assert!(!expected_control_ready(&no_print, stage).unwrap());
+    fn expected_button_readiness_uses_bounded_five_pixel_runs() {
+        for stage in [TerminalStage::LevelUp, TerminalStage::NewGame, TerminalStage::Play] {
+            let mut frame = fixture(91);
+            frame.pixels.fill(255);
+            let bounds = KLONDIKE_CONTROLS.spec(searched_control(stage).unwrap()).bounds;
+            let (x, y) = (bounds.x + 2, bounds.y + bounds.height - 2);
+            paint(&mut frame, PixelRect::new(x, y, 4, 1), [0, 0, 0]);
+            assert_eq!(expected_control_point(&frame, stage).unwrap(), PixelPoint::new(0, 0));
+            paint(&mut frame, PixelRect::new(x + 4, y, 1, 1), [0, 0, 0]);
+            assert_eq!(expected_control_point(&frame, stage).unwrap(), PixelPoint::new(x as i32, y as i32));
+            assert_eq!(classify_terminal(&frame).unwrap(), None);
+            paint(&mut frame, PixelRect::new(x, y, 5, 1), [1, 0, 0]);
+            assert_eq!(expected_control_point(&frame, stage).unwrap(), PixelPoint::new(0, 0));
         }
         assert!(!expected_control_ready(&fixture(91), TerminalStage::NewGame).unwrap());
         assert!(!expected_control_ready(&fixture(92), TerminalStage::Play).unwrap());
@@ -1491,7 +1410,7 @@ mod tests {
             assert_eq!(evidence.new_game_control[2].matched, 6);
             assert_eq!(matches_artwork(&frame, &discarded_body_point), number == 28);
         }
-        assert_eq!(TerminalStage::NewGame.click_point(), PixelPoint::new(792, 840));
+        assert_eq!(TerminalStage::NewGame.click_point(), PixelPoint::new(0, 0));
     }
 
 
@@ -1591,7 +1510,7 @@ mod tests {
     fn later_level_up_with_fireworks_retains_its_control_signature() {
         let frame = fixture(49);
         assert_eq!(classify_terminal(&frame).unwrap(), Some(TerminalStage::LevelUp));
-        assert_eq!(TerminalStage::LevelUp.click_point(), PixelPoint::new(960, 760));
+        assert_eq!(TerminalStage::LevelUp.click_point(), PixelPoint::new(0, 0));
         let mut changed_level = frame.clone();
         paint(&mut changed_level, PixelRect::new(1_110, 610, 60, 38), [0, 0, 0]);
         assert_eq!(classify_terminal(&changed_level).unwrap(), Some(TerminalStage::LevelUp));
@@ -1610,7 +1529,7 @@ mod tests {
         assert!(has_completed_medal_level_up(&frame));
         assert_eq!(classify_terminal(&frame).unwrap(), Some(TerminalStage::LevelUp));
         assert_eq!(pixel_rgb(&frame, 960, 795), Some([253, 248, 223]));
-        assert_eq!(TerminalStage::LevelUp.click_point(), PixelPoint::new(960, 760));
+        assert_eq!(TerminalStage::LevelUp.click_point(), PixelPoint::new(0, 0));
         assert_eq!(TerminalStage::LevelUp.mouse_hold(), POST_GAME_MOUSE_HOLD);
         assert_eq!(TerminalStage::LevelUp.settle_delay(Duration::ZERO), POST_GAME_STAGE_DELAY);
         let evidence = inspect_terminal_evidence(&frame).unwrap();
@@ -1630,7 +1549,7 @@ mod tests {
         assert!(has_completed_level_up_context(&frame));
         assert_eq!(pixel_rgb(&frame, 960, 795), Some([253, 248, 223]));
         assert_eq!(classify_terminal(&frame).unwrap(), Some(TerminalStage::LevelUp));
-        assert_eq!(TerminalStage::LevelUp.click_point(), PixelPoint::new(960, 760));
+        assert_eq!(TerminalStage::LevelUp.click_point(), PixelPoint::new(0, 0));
         assert_eq!(TerminalStage::LevelUp.mouse_hold(), POST_GAME_MOUSE_HOLD);
         assert_eq!(TerminalStage::LevelUp.settle_delay(Duration::ZERO), POST_GAME_STAGE_DELAY);
         let evidence = inspect_terminal_evidence(&frame).unwrap();
@@ -1890,7 +1809,7 @@ mod tests {
         assert!(matches_artwork(&frame, &LEVEL_UP_BUTTON_BODY));
         assert!(has_completed_level_up_context(&frame));
         assert_eq!(classify_terminal(&frame).unwrap(), Some(TerminalStage::LevelUp));
-        assert_eq!(TerminalStage::LevelUp.click_point(), PixelPoint::new(960, 760));
+        assert_eq!(TerminalStage::LevelUp.click_point(), PixelPoint::new(0, 0));
         let mut changed_level = frame.clone();
         paint(&mut changed_level, PixelRect::new(1_110, 610, 60, 38), [0, 0, 0]);
         assert_eq!(classify_terminal(&changed_level).unwrap(), Some(TerminalStage::LevelUp));
@@ -2317,9 +2236,9 @@ mod tests {
     #[test]
     fn measured_actions_reuse_existing_hold_and_settle_contracts() {
         assert_eq!(TerminalStage::ScoreCounting.click_point(), PixelPoint::new(960, 540));
-        assert_eq!(TerminalStage::LevelUp.click_point(), PixelPoint::new(960, 795));
-        assert_eq!(TerminalStage::NewGame.click_point(), PixelPoint::new(792, 840));
-        assert_eq!(TerminalStage::Play.click_point(), PixelPoint::new(705, 860));
+        assert_eq!(TerminalStage::LevelUp.click_point(), PixelPoint::new(0, 0));
+        assert_eq!(TerminalStage::NewGame.click_point(), PixelPoint::new(0, 0));
+        assert_eq!(TerminalStage::Play.click_point(), PixelPoint::new(0, 0));
         assert_eq!(TerminalStage::SolverReady.click_point(), PixelPoint::new(602, 977));
         assert_eq!(TerminalStage::ScoreCounting.settle_delay(Duration::ZERO), LEVEL_UP_APPEAR_DELAY);
         assert_eq!(TerminalStage::NewGame.settle_delay(Duration::ZERO), POST_GAME_STAGE_DELAY);

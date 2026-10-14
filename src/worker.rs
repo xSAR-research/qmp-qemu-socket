@@ -5,6 +5,7 @@
 //! observations. Game-specific Pyramid results and shared post-game screens
 //! are handled by focused child modules.
 
+mod control_search;
 mod freecell_execution;
 mod initial_recovery;
 mod klondike_execution;
@@ -53,7 +54,7 @@ use crate::parameters::{
     ACTION_CHANGE_CHANNEL_THRESHOLD, BOARD_TRANSITION_REOBSERVE_DELAY, CANCELLABLE_WAIT_SLICE,
     CAPTURE_NAME_ATTEMPTS, CAPTURE_SEQUENCE, MULTI_STEP_INPUT_ENABLED,
     NO_HIGHLIGHT_REOBSERVE_DELAY, NOMINAL_FRAME_HEIGHT, NOMINAL_FRAME_WIDTH,
-    POST_GAME_MAX_OBSERVATION_ROUNDS, POST_GAME_STAGE_DELAY, SHARED_SOLVER_CONTROL,
+    POST_GAME_STAGE_DELAY, SHARED_SOLVER_CONTROL,
     SNAPSHOT_MAX_PNG_BYTES, SOLVER_MOUSE_HOLD, STEP_ONCE_ACTIONS, STEP_ONCE_INPUT_ENABLED,
 };
 
@@ -1458,9 +1459,14 @@ fn reset_completed_series_for_new_run(
 }
 
 
-/// Publish an advisory copy of a post-action frame without repeating its prediction log.
-fn publish_post_action_observation(event_tx: &WorkerEventSink, observation: &FrameObservation) {
-    event_tx.publish_frame(observation.frame.clone(), observation.prediction, false);
+/// Retain a post-game transition frame for inspection until restart is verified.
+///
+/// Capture already publishes diagnostic pixels before analysis. Keep that status
+/// when publishing the analysed observation, so a later stop cannot turn the
+/// newest pending preview into an advisory frame rejected by the uncertain UI.
+/// Verified gameplay resumes the caller's ordinary advisory publication policy.
+fn publish_post_game_observation(event_tx: &WorkerEventSink, observation: &FrameObservation) {
+    event_tx.publish_diagnostic_frame(observation.frame.clone());
 }
 
 
@@ -2339,45 +2345,9 @@ fn execute_guarded_action(
                     match post_game::level_up_overrides_board_progress(
                         board_completion_verified,
                         observation,
+                        crate::terminal_controls::profiles::for_game(scan_state.mode()),
                     ) {
                         Ok(visible) => visible,
-                        Err(error)
-
-
-                            if post_game::is_level_up_ambiguity(&error)
-                                && observation_round < POST_GAME_MAX_OBSERVATION_ROUNDS =>
-                        {
-                            profile.validation_effect += verification_started.elapsed();
-                            send_log(
-                                event_tx,
-                                format!(
-                                    "WAITING: {error}; repeating the completed-board Level Up capture in {} ms without input.",
-                                    BOARD_TRANSITION_REOBSERVE_DELAY.as_millis(),
-                                ),
-                            );
-
-
-                            match cancellable_wait(
-                                BOARD_TRANSITION_REOBSERVE_DELAY,
-                                cancel_requested,
-                            ) {
-                                Ok(waited) => profile.intentional_wait += waited,
-                                Err(waited) => {
-                                    profile.intentional_wait += waited;
-                                    return Err(action_failure(
-                                        action_started,
-                                        profile,
-                                        WorkerState::Ready,
-                                        "STOP was requested during ambiguous Level Up re-observation."
-                                            .to_owned(),
-                                        no_highlight_observation,
-                                        FailureFramePhase::PostAction,
-                                    ));
-                                }
-                            }
-                            observation_round = observation_round.saturating_add(1);
-                            continue;
-                        }
                         Err(error) => {
                             profile.validation_effect += verification_started.elapsed();
                             return Err(action_failure(
@@ -3883,6 +3853,9 @@ fn send_state(event_tx: &WorkerEventSink, state: WorkerState) {
     // Sends a worker state update without failing if its receiver has closed.
     let _ = event_tx.send(WorkerEvent::State(state));
 }
+
+#[cfg(test)]
+mod post_game_preview_tests;
 
 #[cfg(test)]
 mod tests;

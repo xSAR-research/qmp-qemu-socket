@@ -17,7 +17,7 @@ use std::{path::Path, sync::atomic::{AtomicBool, Ordering}, time::{Duration, Ins
 
 use super::{
     FrameObservation, WorkerEvent, WorkerEventSink, WorkerState, capture_screen,
-    connect_and_probe, execute_planned_input, format_action_status,
+    connect_and_probe, control_search::ControlLookup, execute_planned_input, format_action_status,
     format_prediction_target, format_step_plan, milliseconds, send_log,
     send_state, send_status, validate_probe, wait_or_stop,
 };
@@ -35,6 +35,7 @@ use crate::{
     qmp::QmpClient,
     stepper::{StepPlan, plan_step},
     tracker::{PredictedAction, TableauScanState},
+    terminal_controls::{Control, profiles::SPIDER_CONTROLS},
 };
 
 
@@ -480,32 +481,8 @@ fn restart_game(
 }
 
 
-/// Log every Level Up search through the existing on-screen and session-log sink.
-fn search_level_up(
-    frame: &CapturedFrame,
-    attempt: usize,
-    attempts: usize,
-    event_tx: &WorkerEventSink,
-) -> Result<PixelPoint, String> {
-    let bounds = spider_terminal::LEVEL_UP_SEARCH;
-    let result = spider_terminal::level_up_click_point(frame);
-    let description = match &result {
-        Ok(point) => format!("({}, {})", point.x, point.y),
-        Err(error) => format!("error: {error}"),
-    };
-    send_log(event_tx, format!(
-        "Spider Level Up OK search {attempt}/{attempts}: X={}..={}, Y={}..={} inclusive; bottom-to-top rows, left-to-right pixels; {} consecutive RGB(0,0,0); result={description}.",
-        bounds.x, bounds.right() - 1, bounds.y, bounds.bottom() - 1,
-        spider_terminal::LEVEL_UP_BLACK_RUN,
-    ));
-    result.map_err(|error| format!("Spider post-score OK search failed: {error}"))
-}
-
-
-/// Resolve optional Level Up from the fresh OK search and New Game control.
-/// A missing pair receives exactly one input-free recapture and repeat search.
-/// Two ready controls stop without input. Return the measured point with its
-/// stage so the subsequent input uses this same checked frame without rescanning.
+/// Resolve optional OK and New Game from the same fresh frame.
+/// Both candidates share at most one recapture; an ambiguous pair sends no input.
 fn await_post_score_control(
     io: &mut impl SpiderIo,
     latest: &mut Option<FrameObservation>,
@@ -513,38 +490,58 @@ fn await_post_score_control(
     event_tx: &WorkerEventSink,
     cancel_requested: &AtomicBool,
 ) -> Result<(TerminalStage, PixelPoint), String> {
+    let mut ok_lookup = ControlLookup::new("Spider", &SPIDER_CONTROLS, Control::Ok, event_tx);
+    let mut new_game_lookup = ControlLookup::new("Spider", &SPIDER_CONTROLS, Control::NewGame, event_tx);
     for attempt in 1..=2 {
         require_running(cancel_requested)?;
         let frame = &current(latest)?.frame;
-        let ok_point = search_level_up(frame, attempt, 2, event_tx)?;
-        let new_game_point = spider_terminal::expected_control_point(frame, TerminalStage::NewGame)
-            .map_err(|error| format!("Spider post-score New Game readiness failed: {error}"))?;
-
+        let ok_point = ok_lookup.search(frame)?;
+        let new_game_point = new_game_lookup.search(frame)?;
         match (ok_point != PixelPoint::new(0, 0), new_game_point != PixelPoint::new(0, 0)) {
             (true, false) => {
+                ok_lookup.set_outcome("matched");
+                new_game_lookup.set_outcome("optional absent");
                 send_log(event_tx, "Spider post-score branch: local OK ready; optional Level Up selected.".to_owned());
                 return Ok((TerminalStage::LevelUp, ok_point));
             }
             (false, true) => {
+                ok_lookup.set_outcome("optional absent");
+                new_game_lookup.set_outcome("matched");
                 send_log(event_tx, "Spider post-score branch: local New Game ready; no Level Up step required.".to_owned());
                 return Ok((TerminalStage::NewGame, new_game_point));
             }
-            (true, true) => return Err("Spider post-score controls are uncertain: both OK and New Game are ready; no branch input authorised".to_owned()),
+            (true, true) => {
+                ok_lookup.set_outcome("ambiguous");
+                new_game_lookup.set_outcome("ambiguous");
+                return Err("Spider post-score controls are uncertain: both OK and New Game are ready; no branch input authorised".to_owned());
+            }
             (false, false) => {}
         }
-
         if attempt == 2 {
             break;
         }
         send_log(event_tx, "Spider post-score OK/New Game absent: one input-free recapture and repeat search; score skip is not repeated.".to_owned());
-        io.wait(settings.animation_delays().spider_reobserve)?;
-        capture_latest(io, latest, event_tx, cancel_requested)?;
+        if let Err(error) = io.wait(settings.animation_delays().spider_reobserve) {
+            ok_lookup.set_outcome("wait stopped");
+            new_game_lookup.set_outcome("wait stopped");
+            return Err(error);
+        }
+        ok_lookup.note_recapture();
+        new_game_lookup.note_recapture();
+        if let Err(error) = capture_latest(io, latest, event_tx, cancel_requested) {
+            ok_lookup.set_outcome("capture failed or stopped");
+            new_game_lookup.set_outcome("capture failed or stopped");
+            return Err(error);
+        }
     }
+    ok_lookup.set_outcome("not found");
+    new_game_lookup.set_outcome("not found");
     Err("Spider expected post-score OK or New Game absent after one fresh recapture and repeat search; latest failed frame retained for preview; score skip was not retried".to_owned())
 }
 
 
-/// Read only the expected caption/button until ready or the finite allowance ends.
+/// Each expected menu control receives one search and at most one fresh retry.
+/// Score skip retains its existing caption recognition and observation allowance.
 fn await_expected_control(
     io: &mut impl SpiderIo,
     latest: &mut Option<FrameObservation>,
@@ -553,33 +550,35 @@ fn await_expected_control(
     event_tx: &WorkerEventSink,
     cancel_requested: &AtomicBool,
 ) -> Result<PixelPoint, String> {
-
-
-    let retries = if stage == TerminalStage::LevelUp { 1 } else { settings.spider_observation_limit() };
+    let mut lookup = spider_terminal::control(stage)
+        .map(|control| ControlLookup::new("Spider", &SPIDER_CONTROLS, control, event_tx));
+    let retries = if lookup.is_some() { 1 } else { settings.spider_observation_limit() };
     for delayed in 0..=retries {
         require_running(cancel_requested)?;
-
-
-        let point = if stage == TerminalStage::LevelUp {
-            search_level_up(&current(latest)?.frame, delayed + 1,
-                retries + 1, event_tx)?
+        let point = if let Some(lookup) = lookup.as_mut() {
+            lookup.search(&current(latest)?.frame)?
         } else {
             spider_terminal::expected_control_point(&current(latest)?.frame, stage)
                 .map_err(|error| format!("Spider expected {stage} readiness failed: {error}"))?
         };
         if point != PixelPoint::new(0, 0) {
+            if let Some(lookup) = lookup.as_mut() { lookup.set_outcome("matched"); }
             return Ok(point);
         }
-
-
-        if delayed == retries {
-            break;
-        }
+        if delayed == retries { break; }
         send_log(event_tx, format!("Spider terminal input-free observation {}/{}: waiting only for expected {stage}; prior click is not repeated.", delayed + 1, retries));
-        io.wait(settings.animation_delays().spider_reobserve)?;
-        capture_latest(io, latest, event_tx, cancel_requested)?;
+        if let Err(error) = io.wait(settings.animation_delays().spider_reobserve) {
+            if let Some(lookup) = lookup.as_mut() { lookup.set_outcome("wait stopped"); }
+            return Err(error);
+        }
+        if let Some(lookup) = lookup.as_mut() { lookup.note_recapture(); }
+        if let Err(error) = capture_latest(io, latest, event_tx, cancel_requested) {
+            if let Some(lookup) = lookup.as_mut() { lookup.set_outcome("capture failed or stopped"); }
+            return Err(error);
+        }
     }
-    Err(format!("Spider expected {stage} did not become ready within the bounded observation allowance; no terminal input retried"))
+    if let Some(lookup) = lookup.as_mut() { lookup.set_outcome("not found"); }
+    Err(format!("Spider expected {stage} did not become ready within the bounded observation allowance; latest failed frame retained for preview; no terminal input retried"))
 }
 
 
@@ -1193,6 +1192,8 @@ mod tests {
                     };
                     assert_eq!(io.control_points[1], expected, "{branch}");
                 }
+                assert_eq!(io.control_points[io.control_points.len() - 2..],
+                    [PixelPoint::new(863, 862), PixelPoint::new(679, 862)], "{branch}");
                 assert_eq!(io.solver_clicks, usize::from(!solver_already_active), "{branch}");
                 assert_eq!(io.solver_capture_counts, solver_capture_counts, "{branch}");
                 assert_eq!(io.sources.len(), 1, "{branch}");
@@ -1250,13 +1251,24 @@ mod tests {
             TerminalStage::NewGame, TerminalStage::Play]);
         assert_eq!(io.control_points[1], PixelPoint::new(944, 771));
         let searches: Vec<_> = events.iter().filter_map(|event| match event {
-            WorkerEvent::Log(message) if message.starts_with("Spider Level Up OK search") => Some(message),
+            WorkerEvent::Log(message) if message.starts_with("Spider OK search ") && !message.contains("search summary:") => Some(message),
             _ => None,
         }).collect();
         assert_eq!(searches.len(), 2);
-        assert!(searches[0].contains("1/2") && searches[0].contains("result=(0, 0)"));
-        assert!(searches[1].contains("2/2") && searches[1].contains("result=(944, 771)"));
-        assert!(searches.iter().all(|message| message.contains("X=930..=990, Y=700..=850")));
+        assert!(searches[0].contains("search 1:") && searches[0].contains("result=(0, 0)"));
+        assert!(searches[1].contains("search 2:") && searches[1].contains("result=(944, 771)"));
+        let bounds = SPIDER_CONTROLS.spec(Control::Ok).bounds;
+        let logged_bounds = format!("X={}..={}, Y={}..={}",
+            bounds.x, bounds.right() - 1, bounds.y, bounds.bottom() - 1);
+        assert!(searches.iter().all(|message| message.contains(&logged_bounds)));
+        assert!(events.iter().any(|event| matches!(event,
+            WorkerEvent::Log(message) if message.starts_with("Spider OK search summary:")
+                && message.contains("searches=2; recaptures=1; second_grab=true")
+                && message.contains("wall_ms=") && message.ends_with("outcome=matched."))));
+        assert!(events.iter().any(|event| matches!(event,
+            WorkerEvent::Log(message) if message.starts_with("Spider New Game search summary:")
+                && message.contains("searches=2; recaptures=1; second_grab=true")
+                && message.ends_with("outcome=optional absent."))));
     }
 
 
@@ -1292,7 +1304,7 @@ mod tests {
         assert_eq!(preview.prediction, None);
         assert_eq!(preview.frame.pixels, failed.pixels);
         let searches: Vec<_> = receiver.try_iter().filter_map(|notification| match notification.event {
-            WorkerEvent::Log(message) if message.starts_with("Spider Level Up OK search") => Some(message),
+            WorkerEvent::Log(message) if message.starts_with("Spider OK search ") && !message.contains("search summary:") => Some(message),
             _ => None,
         }).collect();
         assert_eq!(searches.len(), 2);
@@ -1352,4 +1364,81 @@ mod tests {
         assert!(require_preview_mode(PredictedAction::NoHighlight).is_ok());
         assert!(require_preview_mode(PredictedAction::CalibrationOnly { mode: GameMode::FreeCell }).is_err());
     }
+
+    /// Every menu control reports one search or one retry, with measured input points.
+    #[test]
+    fn bounded_control_search_metrics_cover_immediate_and_retry_success() {
+        for (number, stage, expected) in [
+            (20, TerminalStage::LevelUp, PixelPoint::new(942, 803)),
+            (17, TerminalStage::NewGame, PixelPoint::new(863, 862)),
+            (18, TerminalStage::Play, PixelPoint::new(679, 862))
+        ] {
+            for delayed in [false, true] {
+                let cancel = AtomicBool::new(false);
+                let frames = if delayed { vec![fixture(15), fixture(number)] } else { vec![fixture(number)] };
+                let mut io = fake(frames, &cancel);
+                let settings = StepRunSettings::new(AnimationSettleDelays::default(), 0);
+                let (sender, receiver) = std::sync::mpsc::channel();
+                let events = WorkerEventSink {
+                    events: sender, latest_frame: super::super::LatestFrameSlot::default(),
+                    capture_context: std::sync::Mutex::new(None),
+                };
+                let mut latest = None;
+                capture_latest(&mut io, &mut latest, &events, &cancel).unwrap();
+                let point = await_expected_control(&mut io, &mut latest, stage, settings, &events, &cancel).unwrap();
+                assert_eq!(point, expected);
+                assert_eq!(io.captures, if delayed { 2 } else { 1 });
+                io.terminal(stage, point).unwrap();
+                assert_eq!(io.control_points, [expected]);
+                let logs: Vec<_> = receiver.try_iter().filter_map(|event| match event.event {
+                    WorkerEvent::Log(message) => Some(message), _ => None,
+                }).collect();
+                let summary = logs.iter().find(|log| log.contains("search summary:")).unwrap();
+                assert!(summary.contains(if delayed {
+                    "searches=2; recaptures=1; second_grab=true"
+                } else {
+                    "searches=1; recaptures=0; second_grab=false"
+                }));
+                assert!(summary.contains("scan_total_ms=") && summary.contains("wall_ms="));
+                assert!(summary.ends_with("outcome=matched."));
+                assert_eq!(logs.iter().filter(|log| log.contains("search summary:")).count(), 1);
+            }
+        }
+    }
+
+
+    /// Each missing menu control stops after the second scan with the newest preview.
+    #[test]
+    fn every_control_second_miss_retains_the_failed_frame_without_input() {
+        for stage in [TerminalStage::LevelUp, TerminalStage::NewGame, TerminalStage::Play] {
+            let cancel = AtomicBool::new(false);
+            let mut failed = fixture(15);
+            failed.pixels[..4].copy_from_slice(&[17, 23, 31, 255]);
+            let mut io = fake(vec![fixture(15), failed.clone()], &cancel);
+            let settings = StepRunSettings::new(AnimationSettleDelays::default(), 0);
+            let (sender, receiver) = std::sync::mpsc::channel();
+            let slot = super::super::LatestFrameSlot::default();
+            let events = WorkerEventSink {
+                events: sender, latest_frame: slot.clone(),
+                capture_context: std::sync::Mutex::new(None),
+            };
+            let mut latest = None;
+            capture_latest(&mut io, &mut latest, &events, &cancel).unwrap();
+            assert!(await_expected_control(&mut io, &mut latest, stage, settings, &events, &cancel)
+                .unwrap_err().contains("latest failed frame retained"));
+            assert_eq!(io.captures, 2);
+            assert!(io.controls.is_empty());
+            assert_eq!(latest.unwrap().frame.pixels, failed.pixels);
+            let preview = slot.take().unwrap();
+            assert!(preview.diagnostic);
+            assert_eq!(preview.frame.pixels, failed.pixels);
+            let logs: Vec<_> = receiver.try_iter().filter_map(|event| match event.event {
+                WorkerEvent::Log(message) => Some(message), _ => None,
+            }).collect();
+            let summary = logs.iter().find(|log| log.contains("search summary:")).unwrap();
+            assert!(summary.contains("searches=2; recaptures=1; second_grab=true"));
+            assert!(summary.ends_with("outcome=not found."));
+        }
+    }
+
 }
