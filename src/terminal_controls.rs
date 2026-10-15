@@ -19,6 +19,9 @@ use crate::{
 /// Game-specific input parameters kept outside the mathematical scanner.
 pub mod profiles;
 
+/// Visual readiness for the optional Level Up acknowledgement.
+pub mod ok_readiness;
+
 use profiles::SearchSpec;
 
 

@@ -2421,10 +2421,11 @@ impl QmpQemuSocketApp {
                     crate::terminal_controls::Control::Play] {
                     let search = controls.spec(control);
                     ui.monospace(format!(
-                        "terminal-{} = search {}; {} exact-black pixels; click at detected point; {TERMINAL_CONTROL_SEARCH_ATTEMPTS} total attempts when absent",
+                        "terminal-{} = search {}; {} exact-black pixels; click at detected point; {TERMINAL_CONTROL_SEARCH_ATTEMPTS} total observations when unresolved",
                         control.label(), format_rect(search.bounds), search.run_length,
                     ));
                 }
+                ui.monospace("terminal-OK readiness = stable button geometry across fresh frames + fully visible caption; one click within the same observation budget");
                 ui.monospace(format!(
                     "pointer-settle = {} ms",
                     POINTER_SETTLE_DELAY.as_millis()

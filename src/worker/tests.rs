@@ -2226,6 +2226,12 @@ mod tripeaks_reward_qmp_regressions {
     const LEVEL_UP_PNG: &[u8] = include_bytes!("../../tests/fixtures/tripeaks-TP02.png");
     /// Original supported Level Up capture with pointer overlap at the later acquisition boundary.
     const LATE_LEVEL_UP_PNG: &[u8] = include_bytes!("../../tests/fixtures/tripeaks-TP03.png");
+    /// Original native entrance frame from the recorded Free Cell GAME WIN sequence.
+    const ENTERING_LEVEL_UP_PNG: &[u8] = include_bytes!("../../tests/fixtures/game-win-readiness/early.png");
+    /// Original native frame whose button is expanded while the fixed caption is fading.
+    const FADING_LEVEL_UP_PNG: &[u8] = include_bytes!("../../tests/fixtures/game-win-readiness/fading.png");
+    /// Original native frame with settled geometry, full caption and the pointer below its ink.
+    const SETTLED_LEVEL_UP_PNG: &[u8] = include_bytes!("../../tests/fixtures/game-win-readiness/settled.png");
     /// Unique temporary socket directories when Cargo runs tests concurrently.
     static NEXT_REWARD_SOCKET: AtomicU64 = AtomicU64::new(1);
 
@@ -2299,6 +2305,12 @@ mod tripeaks_reward_qmp_regressions {
         StopExtendedAcquisition,
         /// Positive nonempty gameplay after twenty-one unknown frames resumes existing Solver recovery.
         ExtendedRedealNoHalo,
+        /// An already-authorised shared GAME WIN entry expands, fades and settles before OK.
+        SharedSettlingLevelUp,
+        /// Three shared-controller captures never present the fixed caption fully.
+        SharedUnsettledLevelUp,
+        /// Unsettled native foreground OK overlaps a synthetic New Game underlay caption.
+        SharedPendingLevelUpWithUnderlay,
     }
 
 
@@ -2312,7 +2324,16 @@ mod tripeaks_reward_qmp_regressions {
             | Scenario::LateLevelUp | Scenario::LevelUpRewardAfterOk | Scenario::LevelUpDisappearsBeforeOk
             | Scenario::StaleBareGoldAfterOk | Scenario::AlternatingTerminalKinds
             | Scenario::CandidateTwentyOne | Scenario::CandidateThirty
-            | Scenario::TransientCandidateThirty | Scenario::MixedCandidateThirty)
+            | Scenario::TransientCandidateThirty | Scenario::MixedCandidateThirty
+            | Scenario::SharedSettlingLevelUp | Scenario::SharedUnsettledLevelUp
+            | Scenario::SharedPendingLevelUpWithUnderlay)
+    }
+
+
+    /// Recorded entrance frames test only shared OK readiness, with GAME WIN already authorised.
+    fn shared_readiness_scenario(scenario: Scenario) -> bool {
+        matches!(scenario, Scenario::SharedSettlingLevelUp | Scenario::SharedUnsettledLevelUp
+            | Scenario::SharedPendingLevelUpWithUnderlay)
     }
 
 
@@ -2345,6 +2366,10 @@ mod tripeaks_reward_qmp_regressions {
         Nonempty,
         /// Independently acquired original native Level Up capture.
         LevelUp,
+        /// Native Level Up entrance geometry before the fixed caption is visible.
+        EnteringLevelUp,
+        /// Expanded native Level Up whose fixed caption is still fading.
+        FadingLevelUp,
         /// Existing calibrated synthetic New Game control frame.
         NewGame,
         /// Existing calibrated synthetic Play control frame.
@@ -2592,6 +2617,8 @@ mod tripeaks_reward_qmp_regressions {
         play_png: Vec<u8>,
         /// Bare OK caption, retaining none of the native Level Up panel evidence.
         bare_gold_png: Vec<u8>,
+        /// In-memory native fading-frame derivative with only a synthetic underlay caption added.
+        pending_level_up_png: Vec<u8>,
     }
 
 
@@ -2619,11 +2646,17 @@ mod tripeaks_reward_qmp_regressions {
         scenario: Scenario, cancel: Arc<AtomicBool>,
     ) -> WireReport {
         let MockPngs { initial_png, recovered_png, unsupported_png, nonempty_png,
-            new_game_png, play_png, bare_gold_png } = pngs;
+            new_game_png, play_png, bare_gold_png, pending_level_up_png } = pngs;
         let mut report = WireReport::default();
         let skip = wire_point(SCORE_SKIP_CONTROL.click_point);
-        let level_up_png = if late_level_up_scenario(scenario) { LATE_LEVEL_UP_PNG } else { LEVEL_UP_PNG };
-        let level_up = if pyramid_menu_scenario(scenario) {
+        let level_up_png = if shared_readiness_scenario(scenario) {
+            SETTLED_LEVEL_UP_PNG
+        } else if late_level_up_scenario(scenario) || pyramid_menu_scenario(scenario) {
+            LATE_LEVEL_UP_PNG
+        } else { LEVEL_UP_PNG };
+        let level_up = if shared_readiness_scenario(scenario) {
+            wire_point(PixelPoint::new(941, 770))
+        } else if pyramid_menu_scenario(scenario) {
             wire_point(PixelPoint::new(944, 771))
         } else if level_up_scenario(scenario) {
             wire_point(native_level_up_control_from(level_up_png).click_point)
@@ -2665,7 +2698,10 @@ mod tripeaks_reward_qmp_regressions {
                     "screendump" => {
                         assert_eq!(request["arguments"]["format"], "png");
                         let (kind, bytes) = if !report.events.iter().any(|event| matches!(event, WireEvent::Capture(_))) {
-                            (CaptureKind::Initial, initial_png.as_slice())
+                            if shared_readiness_scenario(scenario) {
+                                report.level_up_captures += 1;
+                                (CaptureKind::EnteringLevelUp, initial_png.as_slice())
+                            } else { (CaptureKind::Initial, initial_png.as_slice()) }
                         } else if level_up_scenario(scenario) {
                             assert!(!(scenario == Scenario::UncertainLevelUp && error_delivered),
                                 "uncertain OK must stop before any further capture");
@@ -2694,6 +2730,15 @@ mod tripeaks_reward_qmp_regressions {
                                     (CaptureKind::BareGold, bare_gold_png.as_slice())
                                 } else {
                                     (CaptureKind::NewGame, new_game_png.as_slice())
+                                }
+                            } else if shared_readiness_scenario(scenario) {
+                                report.level_up_captures += 1;
+                                if scenario == Scenario::SharedPendingLevelUpWithUnderlay {
+                                    (CaptureKind::FadingLevelUp, pending_level_up_png.as_slice())
+                                } else if report.level_up_captures == 2 || scenario == Scenario::SharedUnsettledLevelUp {
+                                    (CaptureKind::FadingLevelUp, FADING_LEVEL_UP_PNG)
+                                } else {
+                                    (CaptureKind::LevelUp, SETTLED_LEVEL_UP_PNG)
                                 }
                             } else if (scenario == Scenario::WashedOutLevelUp
                                 && report.level_up_captures >= 2 && report.unsupported_captures < 2)
@@ -2949,7 +2994,7 @@ mod tripeaks_reward_qmp_regressions {
             encode_native_png(&dialog_observation(&[native_level_up_control()]).frame)
         } else { Vec::new() };
         let pngs = MockPngs { initial_png, recovered_png, unsupported_png, nonempty_png,
-            new_game_png, play_png, bare_gold_png };
+            new_game_png, play_png, bare_gold_png, pending_level_up_png: Vec::new() };
         let cancel = Arc::new(AtomicBool::new(false));
         let server_cancel = Arc::clone(&cancel);
         let server = thread::spawn(move || serve(listener, pngs, scenario, server_cancel));
@@ -2970,8 +3015,7 @@ mod tripeaks_reward_qmp_regressions {
     }
 
 
-    /// Run only the shared post-game controller with independently captured Pyramid menu frames.
-    /// Synthetic black runs reproduce the logged coordinates, without claiming a native fixture.
+    /// Native settled OK authorises the first click; later synthetic runs isolate menu ordering.
     fn run_pyramid_menu(scenario: Scenario) -> (Result<bool, String>, WireReport, Vec<WorkerEvent>, LatestWorkerFrame) {
         assert!(pyramid_menu_scenario(scenario));
         let directory = SocketDirectory(std::env::temp_dir().join(format!(
@@ -2989,9 +3033,7 @@ mod tripeaks_reward_qmp_regressions {
         let initial = if scenario == Scenario::PyramidOptionalLevelUpWithOldInk {
             next_menu.clone()
         } else {
-            let mut frame = dialog_observation(&[]).frame;
-            paint_black_run(&mut frame, 944, 771, 5);
-            frame
+            decode_png(LATE_LEVEL_UP_PNG).expect("native settled OK before synthetic menu transitions")
         };
         let recovered = initial_recovery_frame(GameMode::Pyramid, true);
         let nonempty = initial_recovery_frame(GameMode::Pyramid, false);
@@ -3005,6 +3047,7 @@ mod tripeaks_reward_qmp_regressions {
             new_game_png: encode_native_png(&next_menu),
             play_png: encode_native_png(&dialog_observation(&TEST_PLAY_CONTROLS).frame),
             bare_gold_png: Vec::new(),
+            pending_level_up_png: Vec::new(),
         };
         let cancel = Arc::new(AtomicBool::new(false));
         let server_cancel = Arc::clone(&cancel);
@@ -3053,7 +3096,7 @@ mod tripeaks_reward_qmp_regressions {
     #[ignore = "requires local AF_UNIX sockets"]
     fn pyramid_missing_new_game_with_old_ok_ink_stops_after_two_recaptures() {
         let (result, wire, events, latest) = run_pyramid_menu(Scenario::PyramidMissingNewGameWithOldInk);
-        assert!(result.unwrap_err().contains("absent in 3 consecutive fresh captures"));
+        assert!(result.unwrap_err().contains("did not become ready in 3 consecutive fresh captures"));
         assert_eq!(wire.unsupported_captures, 3);
         assert_eq!(wire.downs(), 1);
         assert_eq!(wire.downs_at(wire_point(PixelPoint::new(944, 771))), 1);
@@ -3082,6 +3125,166 @@ mod tripeaks_reward_qmp_regressions {
             wire_point(TEST_PLAY_CONTROLS[0].click_point), wire_point(SHARED_SOLVER_CONTROL.click_point)]);
         assert_eq!(wire.downs_at(wire_point(PixelPoint::new(944, 810))), 0);
         assert_eq!(wire.downs_at(wire_point(PixelPoint::new(944, 771))), 0);
+    }
+
+
+    /// Exercise shared OK readiness after GAME WIN entry has independently been authorised.
+    /// The recorded Free Cell pixels test shared caption/geometry policy, not a TriPeaks win proof.
+    fn run_shared_readiness(
+        mode: GameMode,
+        scenario: Scenario,
+    ) -> (Result<bool, String>, WireReport, Vec<WorkerEvent>, LatestWorkerFrame) {
+        assert!(matches!(mode, GameMode::Pyramid | GameMode::TriPeaks));
+        assert!(shared_readiness_scenario(scenario));
+        let directory = SocketDirectory(std::env::temp_dir().join(format!(
+            "shared-ok-readiness-qmp-{}-{}", std::process::id(),
+            NEXT_REWARD_SOCKET.fetch_add(1, Ordering::Relaxed),
+        )));
+        fs::create_dir(&directory.0).expect("unique shared readiness mock directory");
+        let socket = directory.0.join("qmp.sock");
+        let listener = UnixListener::bind(&socket).expect("shared readiness QMP mock socket");
+        listener.set_nonblocking(true).expect("bounded mock accept");
+        let mut scan = TableauScanState::for_mode(mode);
+        let initial = decode_png(ENTERING_LEVEL_UP_PNG).expect("original native entering Level Up");
+        let (initial_observation, _) = analyse_captured_frame(initial, &scan)
+            .expect("shared controller entry classification");
+        assert!(!initial_observation.gameplay_scene);
+        assert_eq!(known_post_game_stage(Some(&initial_observation),
+            crate::terminal_controls::profiles::for_game(mode)), Ok(Some(0)),
+            "already-authorised GAME WIN enters at Level Up rather than score skip");
+        let pending_underlay = scenario == Scenario::SharedPendingLevelUpWithUnderlay;
+        let pngs = MockPngs {
+            initial_png: if pending_underlay {
+                encode_native_png(&readiness_frame_with_underlay(ENTERING_LEVEL_UP_PNG))
+            } else { ENTERING_LEVEL_UP_PNG.to_vec() },
+            recovered_png: encode_native_png(&initial_recovery_frame(mode, true)),
+            unsupported_png: Vec::new(),
+            nonempty_png: encode_native_png(&initial_recovery_frame(mode, false)),
+            new_game_png: encode_native_png(&dialog_observation(&TEST_NEW_GAME_CONTROLS).frame),
+            play_png: encode_native_png(&dialog_observation(&TEST_PLAY_CONTROLS).frame),
+            bare_gold_png: Vec::new(),
+            pending_level_up_png: if pending_underlay {
+                encode_native_png(&readiness_frame_with_underlay(FADING_LEVEL_UP_PNG))
+            } else { Vec::new() },
+        };
+        let cancel = Arc::new(AtomicBool::new(false));
+        let server_cancel = Arc::clone(&cancel);
+        let server = thread::spawn(move || serve(listener, pngs, scenario, server_cancel));
+        let (events, receiver) = mpsc::channel();
+        let sink = WorkerEventSink {
+            events, latest_frame: LatestFrameSlot::default(),
+            capture_context: Mutex::new(Some(vision_context(&socket, mode))),
+        };
+        let (mut qmp, probe) = connect_and_probe(&socket).expect("shared readiness QMP connection");
+        validate_probe(&probe).expect("shared readiness mock input capability");
+        let mut boards = mode.profile().boards_per_game;
+        let result = post_game::run_post_game_restart(&mut qmp, &socket,
+            Some(&initial_observation), &mut scan, &mut boards, &sink, &cancel)
+            .map(|outcome| matches!(outcome, post_game::PostGameOutcome::Restarted(_)));
+        drop(qmp);
+        let wire = server.join().expect("shared readiness mock QMP completion");
+        let events = receiver.try_iter().map(|event| event.event).collect();
+        let latest = sink.latest_frame.take().expect("latest shared readiness frame");
+        (result, wire, events, latest)
+    }
+
+
+    /// Add five synthetic underlay pixels to a decoded copy, preserving each native PNG unchanged.
+    fn readiness_frame_with_underlay(png: &[u8]) -> CapturedFrame {
+        let mut frame = decode_png(png).expect("original native readiness frame");
+        let point = TEST_NEW_GAME_CONTROLS[0].click_point;
+        paint_black_run(&mut frame, point.x, point.y, 5);
+        frame
+    }
+
+
+    /// Entrance and faded-caption captures consume the same three-search budget without input.
+    #[test]
+    #[ignore = "requires local AF_UNIX sockets"]
+    fn shared_native_level_up_waits_for_settled_caption_before_sole_ok_click() {
+        for mode in [GameMode::Pyramid, GameMode::TriPeaks] {
+            let (result, wire, events, latest) = run_shared_readiness(mode, Scenario::SharedSettlingLevelUp);
+            assert_eq!(result, Ok(true), "{mode}");
+            let ok = wire_point(PixelPoint::new(941, 770));
+            let ok_index = wire.events.iter().position(|event| *event == WireEvent::Down(ok))
+                .expect("one measured settled OK input");
+            let pre_input = &wire.events[..ok_index];
+            let captures: Vec<_> = pre_input.iter().filter_map(|event| match event {
+                WireEvent::Capture(kind) => Some(*kind), _ => None,
+            }).collect();
+            assert_eq!(captures, [CaptureKind::EnteringLevelUp, CaptureKind::FadingLevelUp,
+                CaptureKind::LevelUp], "{mode}: exact native entrance order");
+            assert!(!pre_input.iter().any(|event| matches!(event, WireEvent::Down(_))),
+                "{mode}: geometry and caption checks are input-free");
+            assert_eq!(wire.downs_at(ok), 1);
+            assert_eq!(wire.downs_at(wire_point(PixelPoint::new(945, 753))), 0,
+                "the entrance frame cannot supply the click point");
+            assert_eq!(wire.downs_at(wire_point(PixelPoint::new(945, 792))), 0,
+                "the pointer's black outline cannot supply the click point");
+            assert_eq!(wire.downs_at(wire_point(SCORE_SKIP_CONTROL.click_point)), 0);
+            assert_eq!(wire.downs(), 4, "one OK, New Game, Play and Solver");
+            assert_eq!(wire.level_up_captures, 3);
+            let readiness: Vec<_> = events.iter().filter_map(|event| match event {
+                WorkerEvent::Log(message) if message.contains("OK readiness:") => Some(message),
+                _ => None,
+            }).collect();
+            assert_eq!(readiness.len(), 3);
+            assert!(readiness[0].contains("ready=false"));
+            assert!(readiness[1].contains("ready=false"));
+            assert!(readiness[2].contains("caption_present=true")
+                && readiness[2].contains("geometry_stable=true")
+                && readiness[2].contains("ready=true"));
+            assert!(events.iter().any(|event| matches!(event, WorkerEvent::Log(message)
+                if message.contains(&format!("{} OK search summary: searches=3; recaptures=2;", mode.label()))
+                    && message.ends_with("outcome=matched."))));
+            assert_eq!(latest.frame.pixels, initial_recovery_frame(mode, true).pixels);
+        }
+    }
+
+
+    /// An expanded button with a fading caption cannot authorise input or extend the budget.
+    #[test]
+    #[ignore = "requires local AF_UNIX sockets"]
+    fn shared_native_level_up_stops_after_three_unsettled_frames_and_retains_pixels() {
+        for mode in [GameMode::Pyramid, GameMode::TriPeaks] {
+            let (result, wire, events, latest) = run_shared_readiness(mode, Scenario::SharedUnsettledLevelUp);
+            assert!(result.unwrap_err().contains("did not become ready in 3 consecutive fresh captures"));
+            assert_eq!(wire.level_up_captures, 3);
+            assert_eq!(wire.downs(), 0, "{mode}: no OK, centre skip or later control is authorised");
+            assert_eq!(latest.frame.pixels, decode_png(FADING_LEVEL_UP_PNG).unwrap().pixels);
+            assert!(latest.diagnostic);
+            assert_eq!(latest.prediction, None);
+            assert!(events.iter().any(|event| matches!(event, WorkerEvent::Log(message)
+                if message.contains(&format!("{} OK search summary: searches=3; recaptures=2;", mode.label()))
+                    && message.ends_with("outcome=not-found."))));
+        }
+    }
+
+
+    /// Pending foreground geometry prevents an underlay caption bypass and any renewed centre input.
+    #[test]
+    #[ignore = "requires local AF_UNIX sockets"]
+    fn shared_pending_level_up_blocks_new_game_underlay_within_three_captures() {
+        for mode in [GameMode::Pyramid, GameMode::TriPeaks] {
+            let (result, wire, events, latest) = run_shared_readiness(mode,
+                Scenario::SharedPendingLevelUpWithUnderlay);
+            assert!(result.unwrap_err().contains("did not become ready in 3 consecutive fresh captures"));
+            assert_eq!(wire.level_up_captures, 3);
+            assert_eq!(wire.downs(), 0, "{mode}: the foreground must settle before any input");
+            assert_eq!(wire.downs_at(wire_point(TEST_NEW_GAME_CONTROLS[0].click_point)), 0);
+            assert_eq!(wire.downs_at(wire_point(SCORE_SKIP_CONTROL.click_point)), 0);
+            let expected = readiness_frame_with_underlay(FADING_LEVEL_UP_PNG);
+            assert_eq!(crate::terminal_controls::control_point(&expected,
+                crate::terminal_controls::profiles::for_game(mode).spec(Control::NewGame)).unwrap(),
+                TEST_NEW_GAME_CONTROLS[0].click_point, "the underlay caption is actually present");
+            assert_eq!(latest.frame.pixels, expected.pixels);
+            assert!(!events.iter().any(|event| matches!(event, WorkerEvent::Log(message)
+                if message.contains("optional Level Up is skipped")
+                    || message.contains("score-skip centre click attempt"))));
+            assert!(events.iter().any(|event| matches!(event, WorkerEvent::Log(message)
+                if message.contains(&format!("{} OK search summary: searches=3; recaptures=2;", mode.label()))
+                    && message.ends_with("outcome=not-found."))));
+        }
     }
 
 
@@ -3498,7 +3701,7 @@ mod tripeaks_reward_qmp_regressions {
         assert_eq!(evidence.latest.frame.pixels, evidence.unsupported.pixels);
         assert!(!evidence.events.iter().any(|event| matches!(event,
             WorkerEvent::RunCompleted { .. } | WorkerEvent::GameCompleted)));
-        assert!(evidence.events.iter().any(|event| matches!(event, WorkerEvent::Log(message) if message.contains("absent in 3 consecutive fresh captures"))));
+        assert!(evidence.events.iter().any(|event| matches!(event, WorkerEvent::Log(message) if message.contains("did not become ready in 3 consecutive fresh captures"))));
     }
 
 
@@ -3571,7 +3774,15 @@ mod tripeaks_reward_qmp_regressions {
             *event == WireEvent::Down(expected[1])).expect("native OK input");
         assert!(evidence.wire.events[..ok_index].iter().filter(|event|
             **event == WireEvent::Capture(CaptureKind::LevelUp)).count() >= 2,
-            "fresh same-kind native observations precede OK");
+            "independent fresh same-kind win observations precede OK");
+        let readiness: Vec<_> = evidence.events.iter().filter_map(|event| match event {
+            WorkerEvent::Log(message) if message.contains("TriPeaks OK readiness:") => Some(message),
+            _ => None,
+        }).collect();
+        assert!(readiness.len() >= 2, "OK readiness takes fresh observations independently of win proof");
+        let settled = readiness.last().unwrap();
+        assert!(settled.contains("caption_present=true")
+            && settled.contains("geometry_stable=true") && settled.contains("ready=true"));
         assert_eq!(action_count(evidence), 1);
         assert_eq!(evidence.events.iter().filter(|event| matches!(event,
             WorkerEvent::GameCompleted)).count(), 1);
@@ -3589,7 +3800,12 @@ mod tripeaks_reward_qmp_regressions {
     fn tripeaks_native_level_up_enters_ok_new_game_play_solver_sequence_through_qmp() {
         let evidence = run(Scenario::DirectLevelUp);
         assert_eq!(evidence.wire.reward_captures, 0);
+        assert_eq!(evidence.wire.level_up_captures, 4,
+            "two independent win observations plus two fresh settled OK observations");
         assert_level_up_restart(&evidence, PixelPoint::new(943, 770));
+        assert!(evidence.events.iter().any(|event| matches!(event, WorkerEvent::Log(message)
+            if message.contains("TriPeaks OK search summary: searches=2; recaptures=1;")
+                && message.ends_with("outcome=matched."))));
     }
 
 

@@ -736,6 +736,7 @@ fn resume_after_win(
 /// must advance in order. Only the expected local button is checked after a
 /// confirmed win; unrelated artwork is not classified. An absent or unchanged
 /// searched control receives at most two fresh screenshot retries without input replay.
+/// Level Up also needs a fresh, settled OK witness before its single click.
 /// Fresh-deal and post-Solver observations retain the shorter gameplay budget.
 fn await_terminal_stage(
     io: &mut impl KlondikeIo,
@@ -787,6 +788,12 @@ fn await_terminal_stage(
 
         let observed = if let Some(Some(stage)) = expected {
             let point = io.expected_terminal_control(&current.frame, stage, expected_lookup.as_mut())?;
+            let point = if stage == TerminalStage::LevelUp {
+                expected_lookup.as_mut().expect("Level Up owns an OK lookup")
+                    .confirm_ok(&current.frame, point)?
+            } else {
+                point
+            };
             (point != PixelPoint::new(0, 0)).then_some((stage, point))
         } else if previous.is_none() {
             match io.terminal_stage(&current.frame)? {
@@ -798,17 +805,22 @@ fn await_terminal_stage(
                     // A confirmed win can enter directly at OK or New Game. Both
                     // bounded lookups retain their own metrics across both fresh retries.
                     let ok_lookup = entry_ok.get_or_insert_with(|| ControlLookup::new("Klondike", &KLONDIKE_CONTROLS, Control::Ok, event_tx));
-                    let ok = io.expected_terminal_control(&current.frame, TerminalStage::LevelUp, Some(ok_lookup))?;
-                    let new_game = if stage == Some(TerminalStage::LevelUp) && ok != PixelPoint::new(0, 0) {
+                    let raw_ok = io.expected_terminal_control(&current.frame, TerminalStage::LevelUp, Some(ok_lookup))?;
+                    let ok = ok_lookup.confirm_ok(&current.frame, raw_ok)?;
+                    let new_game = if stage == Some(TerminalStage::LevelUp) && raw_ok != PixelPoint::new(0, 0) {
                         PixelPoint::new(0, 0)
                     } else {
                         let lookup = entry_new_game.get_or_insert_with(|| ControlLookup::new("Klondike", &KLONDIKE_CONTROLS, Control::NewGame, event_tx));
                         io.expected_terminal_control(&current.frame, TerminalStage::NewGame, Some(lookup))?
                     };
-                    match (ok != PixelPoint::new(0, 0), new_game != PixelPoint::new(0, 0)) {
+                    match (raw_ok != PixelPoint::new(0, 0), new_game != PixelPoint::new(0, 0)) {
                         (true, false) => {
                             if let Some(lookup) = entry_new_game.as_mut() { lookup.set_outcome("not_required"); }
-                            Some((TerminalStage::LevelUp, ok))
+                            (ok != PixelPoint::new(0, 0)).then_some((TerminalStage::LevelUp, ok))
+                        }
+                        (false, true) if ok_lookup.has_ok_panel() => {
+                            if let Some(lookup) = entry_new_game.as_mut() { lookup.set_outcome("blocked-by-ok-panel"); }
+                            None
                         }
                         (false, true) => {
                             ok_lookup.set_outcome("not_required");

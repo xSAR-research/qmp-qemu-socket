@@ -1,7 +1,7 @@
 # Bounded terminal controls and search metrics
 
-Candidate: qmp-qemu-socket 2.2.2-candidate.6, based on the published checkpoint
-`faf07def83705c01e755601fdade70e5f460af36`. It uses the existing xsar
+Candidate: qmp-qemu-socket 2.2.2-candidate.7, based on the published checkpoint
+`401a35e79615e1bdf44e0515c5dbe50b6fdaa114`. It uses the existing xsar
 helper from `5fa8a1a963a7d0591458a348cabd5c28099970bd` without changing that crate.
 
 ## Search contract
@@ -10,7 +10,9 @@ All five game types use one application adapter for expected OK, New Game and
 Play controls. It calls `xsar::image_matching::find_black_run_bottom_up` with
 a run length of five. Pixels must have RGB exactly `(0,0,0)`; alpha is ignored.
 Rows run bottom-to-top and columns left-to-right. The first qualifying run's
-leftmost full-frame coordinate is the click point. A miss returns `(0,0)`.
+leftmost full-frame coordinate is a candidate point. A miss returns `(0,0)`.
+For OK, visual readiness narrows the final exact-black scan to the measured
+settled glyph band; only that latest validated point may reach input.
 
 The crop is a bounded view over the existing image buffer, not a new allocation.
 Native 1920×1080 geometry and valid storage are required before guest input.
@@ -51,18 +53,20 @@ Congratulations, score, completed-board and fresh-game evidence retain their
 separate roles. The selected point travels with the stage to the input boundary;
 there is no subsequent replacement with a fixed button coordinate.
 
-An absent expected control receives at most two fresh captures and repeat
-searches, for three total attempts. A third consecutive miss stops with the latest captured image available as a diagnostic
+An absent control or unsettled OK receives at most two fresh captures and
+repeat observations, for three total attempts. Readiness confirmation consumes
+that same budget. A third unresolved observation stops with the latest captured image available as a diagnostic
 preview. Optional OK/New Game branches may examine both rectangles on the same
 frame. The shared TriPeaks/Pyramid controller retires an earlier menu stage after its
 click is delivered; black runs in that earlier region cannot authorise another
 click or reset the current missing-control allowance. New Game takes precedence
-at the optional Level Up step unless independent TriPeaks foreground-modal
-context proves that OK must be handled first. Recognised reward/gameplay
+at the optional Level Up step unless a measured foreground OK button or
+independent TriPeaks foreground-modal context requires OK first. A pending OK
+button also blocks a speculative score-skip budget renewal. Recognised reward/gameplay
 recovery remains distinct from missing-control observations. Uncertain QMP input is not
 replayed by the search retry.
 
-`TERMINAL_CONTROL_SEARCH_ATTEMPTS` owns the missing-control budget across all
+`TERMINAL_CONTROL_SEARCH_ATTEMPTS` owns the unresolved-control budget across all
 five game types. It counts the initial frame as attempt one. Recognised reward
 or gameplay recovery remains a separate path with its existing observation and
 input budgets; those transitions can reset the consecutive-miss count in the
@@ -82,7 +86,7 @@ a private temporary file and decodes them. The sibling Windows TCP server and
 the re-exported xSAR TCP client are not connected to this production path.
 
 `--image` adds scoped GAME WIN evidence without requesting extra captures or
-altering those search/wait policies. See [GAME WIN image diagnostics](game-win-images.md)
+changing the recording boundary. See [GAME WIN image diagnostics](game-win-images.md)
 for directory reset, capture/log correlation and the recording boundary.
 
 ## Metrics
@@ -153,9 +157,11 @@ The configured stripes exclude the origin, so `(0,0)` remains an unambiguous mis
 Input boundaries refuse that sentinel. Visit counts are calculated from the
 known traversal and first match, without a second image pass.
 
-The deliberate recognition limit is positional context: any qualifying black
-run inside the selected stripe matches. A cursor or unrelated dark content in
-that stripe can therefore match too. Narrow bounds remove the observed K53
-collision; this is not general word recognition. No new network or filesystem
+Raw exact-black matches remain positional candidates and may include a
+cursor. OK additionally requires stable measured geometry and the invariant
+caption, then confines its selected point to the settled glyph band. This
+rejects the supplied Free Cell pointer-outline point. New Game and Play retain
+their established bounded positional policy. See [Level Up readiness](level-up-readiness.md)
+for calibration, native evidence and limits. No new network or filesystem
 surface is introduced by scanning or timing. Existing capture and log failures
 remain visible through their normal error paths.

@@ -926,7 +926,8 @@ pub const POST_GAME_STAGE_DELAY: Duration = Duration::from_secs(1);
 pub const LEVEL_UP_APPEAR_DELAY: Duration = Duration::from_millis(1_000);
 
 
-/// Total missing-control searches: the initial frame plus at most two fresh retries.
+/// Total unresolved-control observations, including missing or unsettled OK.
+/// The initial frame plus at most two fresh retries supplies readiness evidence.
 /// Recognised reward/gameplay recovery retains its separate existing budgets.
 pub const TERMINAL_CONTROL_SEARCH_ATTEMPTS: usize = 3;
 

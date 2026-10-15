@@ -41,6 +41,10 @@ pub(super) struct ControlLookup<'a> {
     scan_total: Duration,
     /// Latest scan or controller exit state reported by the final summary.
     outcome: &'static str,
+    /// Previous fresh OK geometry; recognition never grants another input attempt.
+    ok_readiness: terminal_controls::ok_readiness::OkReadiness,
+    /// A visible OK button prevents a pending modal from exposing its underlay.
+    ok_panel: bool,
 }
 
 
@@ -56,6 +60,8 @@ impl<'a> ControlLookup<'a> {
             game: game.into(), control, spec: profile.spec(control), events, started: Instant::now(),
             searches: 0, recaptures: 0, pixels: 0, rows: 0,
             scan_total: Duration::ZERO, outcome: "not-searched",
+            ok_readiness: terminal_controls::ok_readiness::OkReadiness::new(),
+            ok_panel: false,
         }
     }
 
@@ -93,6 +99,58 @@ impl<'a> ControlLookup<'a> {
                 Err(format!("{} {} search failed: {error}", self.game, self.control.label()))
             }
         }
+    }
+
+
+    /// Confirm that OK has finished entering before its sole authorised click.
+    ///
+    /// The caller supplies each fresh frame once within its existing search
+    /// budget. Geometry from the preceding frame may seed confirmation while
+    /// the fixed caption is fading; the current frame must show it fully.
+    /// Missing or incomplete evidence returns the normal no-match sentinel.
+    /// Other controls keep their existing coordinate-only readiness policy.
+    pub(super) fn confirm_ok(
+        &mut self,
+        frame: &CapturedFrame,
+        point: PixelPoint,
+    ) -> Result<PixelPoint, String> {
+        if self.control != Control::Ok {
+            return Ok(point);
+        }
+        let started = Instant::now();
+        let observation = self.ok_readiness.observe(frame, point).map_err(|error| {
+            self.outcome = "readiness-error";
+            format!("{} OK readiness failed: {error}", self.game)
+        })?;
+        self.ok_panel = observation.button.is_some();
+        self.outcome = if observation.ready { "found" } else if point == PixelPoint::new(0, 0) {
+            "missing"
+        } else {
+            "awaiting-settled-OK"
+        };
+        send_log(self.events, format!(
+            "{} OK readiness: raw=({}, {}); selected=({}, {}); button={:?}; caption_present={}; caption_y={:?}; geometry_stable={}; glyph_bounds={:?}; ready={}; reason={}; readiness_pixels={}/{}; readiness_ms={:.3}. Confirmation consumes the existing three-search budget; guest input sent=0.",
+            self.game, point.x, point.y, observation.point.x, observation.point.y,
+            observation.button, observation.caption_present, observation.caption_y,
+            observation.geometry_stable, observation.glyph_bounds,
+            observation.ready, observation.reason, observation.pixels_examined,
+            terminal_controls::ok_readiness::MAX_READINESS_PIXEL_COMPARISONS,
+            milliseconds(started.elapsed()),
+        ));
+        Ok(observation.point)
+    }
+
+
+    /// Keep a pending foreground OK ahead of an optional New Game underlay.
+    pub(super) fn has_ok_panel(&self) -> bool {
+        self.control == Control::Ok && self.ok_panel
+    }
+
+
+    /// An intervening gameplay scene ends the preceding modal geometry evidence.
+    pub(super) fn forget_ok_geometry(&mut self) {
+        self.ok_readiness = terminal_controls::ok_readiness::OkReadiness::new();
+        self.ok_panel = false;
     }
 
 

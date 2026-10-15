@@ -1131,12 +1131,15 @@ fn continuous_solve_advances_one_board_terminal_cycle_then_obeys_stop() {
     let solve = PredictedAction::Action(klondike::canonical_action(KlondikeTarget::Solve).unwrap());
     let stop = AtomicBool::new(false);
     let mut states = vec![(solve, true)];
-    states.extend([(PredictedAction::NoHighlight, false); 12]);
+    states.extend([(PredictedAction::NoHighlight, false); 13]);
     states.push((draw(), true));
     let mut io = fake(&states);
     io.completion_candidates = VecDeque::from([false, true, false, false, false, false, true, true]);
     let stages = [TerminalStage::ScoreCounting, TerminalStage::LevelUp, TerminalStage::NewGame, TerminalStage::Play, TerminalStage::SolverReady];
-    io.terminal_stages = stages.into_iter().map(Some).collect();
+    io.frames[9] = native_hint_phase(91);
+    io.frames[10] = native_hint_phase(91);
+    io.terminal_stages = [TerminalStage::ScoreCounting, TerminalStage::LevelUp, TerminalStage::LevelUp,
+        TerminalStage::NewGame, TerminalStage::Play, TerminalStage::SolverReady].into_iter().map(Some).collect();
     io.stop_on_probe = Some(&stop);
     io.probes_before_stop = 6;
     let (result, input_attempted, latest) = exercise(&mut io, solve, 0, &stop);
@@ -1144,7 +1147,7 @@ fn continuous_solve_advances_one_board_terminal_cycle_then_obeys_stop() {
     assert!(input_attempted);
     assert_eq!(io.terminal_inputs, stages);
     assert_eq!(io.trace.iter().filter(|entry| **entry == "input").count(), 1);
-    assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), 14);
+    assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), 15);
     assert_eq!(io.trace.iter().filter(|entry| **entry == "probe").count(), 7);
     assert_eq!(latest.unwrap().prediction, draw());
     assert!(!io.trace.contains(&"solver"));
@@ -1462,7 +1465,7 @@ fn restarted_continuous_game_can_settle_pending_solve_before_its_next_action() {
     let (pending, settled) = pending_solve_pair();
     let solve = settled.prediction;
     let mut frames = vec![observation(solve, true)];
-    frames.extend((0..6).map(|_| observation(PredictedAction::NoHighlight, false)));
+    frames.extend((0..7).map(|_| observation(PredictedAction::NoHighlight, false)));
     frames.extend([
         pending, settled, observation(PredictedAction::NoHighlight, false),
         observation(PredictedAction::NoHighlight, false),
@@ -1471,7 +1474,11 @@ fn restarted_continuous_game_can_settle_pending_solve_before_its_next_action() {
     io.completion_candidates = VecDeque::from([true, true, true, true]);
     let stages = [TerminalStage::ScoreCounting, TerminalStage::LevelUp, TerminalStage::NewGame,
         TerminalStage::Play, TerminalStage::SolverReady];
-    io.terminal_stages = stages.into_iter().chain([TerminalStage::ScoreCounting]).map(Some).collect();
+    io.frames[3] = native_hint_phase(91);
+    io.frames[4] = native_hint_phase(91);
+    io.terminal_stages = [TerminalStage::ScoreCounting, TerminalStage::LevelUp, TerminalStage::LevelUp,
+        TerminalStage::NewGame, TerminalStage::Play, TerminalStage::SolverReady, TerminalStage::ScoreCounting]
+        .into_iter().map(Some).collect();
     io.stop_on_probe = Some(&stop);
     io.probes_before_stop = 7;
     let (result, input_attempted, _) = exercise(&mut io, solve, 0, &stop);
@@ -1499,7 +1506,7 @@ fn native_pro_level_up_restart_cycle_recognises_each_control_once() {
     let approved = initial.prediction;
     assert_eq!(approved, PredictedAction::Action(klondike::canonical_action(KlondikeTarget::Solve).unwrap()));
     let mut io = fake_frames(vec![
-        initial, native(26), native(26), native(67), native(28), native(29), native(30), native(2),
+        initial, native(26), native(26), native(67), native(67), native(28), native(29), native(30), native(2),
     ]);
     let stop = AtomicBool::new(false);
     io.native_terminal_analysis = true;
@@ -1528,7 +1535,7 @@ fn native_grandmaster_buttons_restart_after_confirmed_win_without_theme_matching
     let approved = initial.prediction;
     let mut io = fake_frames(vec![
         initial, native_hint_phase(26), native_hint_phase(26), native_hint_phase(91),
-        native_hint_phase(92), native_hint_phase(93), native_hint_phase(77), native_hint_phase(2),
+        native_hint_phase(91), native_hint_phase(92), native_hint_phase(93), native_hint_phase(77), native_hint_phase(2),
     ]);
     let stop = AtomicBool::new(false);
     io.native_terminal_analysis = true;
@@ -1547,16 +1554,16 @@ fn native_grandmaster_buttons_restart_after_confirmed_win_without_theme_matching
 }
 
 
-/// Two unchanged score panels trigger two fresh OK captures without repeating
-/// score input, then each measured control is clicked once.
+/// An unchanged score panel uses the first observation; two matching OK frames
+/// settle within the remaining budget without repeating score input.
 #[test]
-fn confirmed_win_retries_expected_ok_twice_without_repeating_score_input() {
+fn confirmed_win_confirms_expected_ok_within_three_searches_without_repeating_score_input() {
     use klondike::terminal::TerminalStage;
     let initial = native_hint_phase(25);
     let approved = initial.prediction;
     let mut frames = vec![initial, native_hint_phase(26), native_hint_phase(26)];
-    frames.extend((0..2).map(|_| native_hint_phase(26)));
-    frames.extend([native_hint_phase(91), native_hint_phase(92), native_hint_phase(93),
+    frames.push(native_hint_phase(26));
+    frames.extend([native_hint_phase(91), native_hint_phase(91), native_hint_phase(92), native_hint_phase(93),
         native_hint_phase(77), native_hint_phase(2)]);
     let stop = AtomicBool::new(false);
     let mut io = fake_frames(frames);
@@ -1582,7 +1589,7 @@ fn confirmed_win_unchanged_native_ok_cannot_authorise_next_control() {
     let initial = native_hint_phase(25);
     let approved = initial.prediction;
     let mut frames = vec![initial, native_hint_phase(26), native_hint_phase(26), native_hint_phase(91)];
-    frames.extend((0..3).map(|_| native_hint_phase(91)));
+    frames.extend((0..4).map(|_| native_hint_phase(91)));
     let mut io = fake_frames(frames);
     io.native_terminal_analysis = true;
     let (result, attempted, latest) = exercise(&mut io, approved, 0, &AtomicBool::new(false));
@@ -1602,7 +1609,7 @@ fn confirmed_win_expected_ok_uncertainty_does_not_replay_or_advance() {
     let initial = native_hint_phase(25);
     let approved = initial.prediction;
     let mut io = fake_frames(vec![initial, native_hint_phase(26), native_hint_phase(26),
-        native_hint_phase(91), native_hint_phase(92)]);
+        native_hint_phase(91), native_hint_phase(91), native_hint_phase(92)]);
     io.native_terminal_analysis = true;
     io.fail_terminal_stage = Some(TerminalStage::LevelUp);
     let (result, attempted, latest) = exercise(&mut io, approved, 0, &AtomicBool::new(false));
@@ -1624,7 +1631,7 @@ fn native_master_level_up_restart_cycle_recognises_ok_then_new_game() {
     let approved = initial.prediction;
     let mut io = fake_frames(vec![
         initial, native_hint_phase(26), native_hint_phase(26), native_hint_phase(86),
-        native_hint_phase(28), native_hint_phase(29), native_hint_phase(30), native_hint_phase(2),
+        native_hint_phase(86), native_hint_phase(28), native_hint_phase(29), native_hint_phase(30), native_hint_phase(2),
     ]);
     let stop = AtomicBool::new(false);
     io.native_terminal_analysis = true;
@@ -1669,7 +1676,7 @@ fn native_new_deal_activates_solver_once_then_waits_for_fresh_halo() {
         TerminalStage::NewGame, TerminalStage::Play, TerminalStage::SolverReady]);
     assert_eq!(io.completion_checks, 2);
 
-    assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), 9);
+    assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), 10);
     assert_eq!(io.trace.iter().filter(|entry| **entry == "probe").count(), 7);
     assert!(io.frames.is_empty() && !io.trace.contains(&"solver"));
     assert_eq!(latest.as_ref().unwrap().prediction, next_prediction);
@@ -1836,7 +1843,7 @@ fn native_red_back_no_halo_stops_after_one_bounded_solver_refresh() {
 /// deterministic composition is not Charlie's unsaved live restart sequence.
 /// K77 supplies the newly dealt Solver-off board only after acknowledged Play.
 fn native_restart_to_solver_off_deal() -> (PredictedAction, Vec<FrameObservation>) {
-    let frames: Vec<_> = [25, 26, 26, 67, 28, 29, 77].into_iter().map(native_hint_phase).collect();
+    let frames: Vec<_> = [25, 26, 26, 67, 67, 28, 29, 77].into_iter().map(native_hint_phase).collect();
     let approved = frames[0].prediction;
     assert_eq!(approved, PredictedAction::Action(klondike::canonical_action(KlondikeTarget::Solve).unwrap()));
     assert_eq!(frames.last().unwrap().prediction, PredictedAction::NoHighlight);
@@ -2200,7 +2207,8 @@ fn native_toolbar_clipped_five_card_source_sends_one_step_once_click() {
 }
 
 
-/// Every menu control can become ready on the second or third fresh search.
+/// Menu controls become ready in two or three observations; OK reserves one
+/// observation for its fresh settled witness instead of extending the budget.
 #[test]
 fn bounded_control_retries_report_searches_recaptures_and_wall_time() {
     use klondike::terminal::TerminalStage;
@@ -2212,11 +2220,16 @@ fn bounded_control_retries_report_searches_recaptures_and_wall_time() {
         for attempt in [2usize, 3] {
             let (events, receiver) = std::sync::mpsc::channel();
             let sink = WorkerEventSink { events, latest_frame: super::super::LatestFrameSlot::default(), capture_context: std::sync::Mutex::new(None) };
-            let mut frames: Vec<_> = (2..attempt).map(|_| native_hint_phase(26)).collect();
-            frames.push(native_hint_phase(number));
+            let frames: Vec<_> = if expected == TerminalStage::LevelUp {
+                (1..attempt).map(|_| native_hint_phase(number)).collect()
+            } else {
+                let mut frames: Vec<_> = (2..attempt).map(|_| native_hint_phase(26)).collect();
+                frames.push(native_hint_phase(number));
+                frames
+            };
             let mut io = fake_frames(frames);
             io.native_terminal_analysis = true;
-            let mut latest = Some(native_hint_phase(26));
+            let mut latest = Some(native_hint_phase(if expected == TerminalStage::LevelUp && attempt == 2 { number } else { 26 }));
             let result = await_terminal_stage(&mut io, &mut latest,
                 StepRunSettings::new(AnimationSettleDelays::default(), 0), &sink,
                 &AtomicBool::new(false), Some(previous));
@@ -2238,15 +2251,16 @@ fn bounded_control_retries_report_searches_recaptures_and_wall_time() {
 }
 
 
-/// A confirmed win can first expose its entry OK on the third input-free capture.
+/// A confirmed win can expose entry OK on the second observation and confirm
+/// it on the third input-free observation, using the unchanged three-frame limit.
 #[test]
-fn bounded_control_confirmed_win_entry_can_find_ok_on_third_search() {
+fn bounded_control_confirmed_win_entry_can_confirm_ok_on_third_search() {
     use klondike::terminal::TerminalStage;
     let (events, receiver) = std::sync::mpsc::channel();
     let sink = WorkerEventSink { events, latest_frame: super::super::LatestFrameSlot::default(), capture_context: std::sync::Mutex::new(None) };
     let mut unsupported = observation(PredictedAction::NoHighlight, false);
     unsupported.frame.pixels.fill(255);
-    let mut io = fake_frames(vec![copy_observation(&unsupported), native_hint_phase(91)]);
+    let mut io = fake_frames(vec![native_hint_phase(91), native_hint_phase(91)]);
     io.native_terminal_analysis = true;
     let mut latest = Some(unsupported);
     let result = await_terminal_stage(&mut io, &mut latest,
@@ -2259,6 +2273,114 @@ fn bounded_control_confirmed_win_entry_can_find_ok_on_third_search() {
         WorkerEvent::Log(message) => Some(message), _ => None,
     }).collect();
     assert!(logs.iter().any(|line| line.contains("Klondike OK search summary: searches=3; recaptures=2; second_grab=true;") && line.ends_with("outcome=found.")));
+}
+
+
+/// A candidate first appearing on observation three cannot extend the budget
+/// or authorise a click without its required fresh stable witness.
+#[test]
+fn bounded_control_first_ok_on_third_observation_remains_input_free() {
+    use klondike::terminal::TerminalStage;
+    let mut io = fake_frames(vec![native_hint_phase(26), native_hint_phase(91)]);
+    io.native_terminal_analysis = true;
+    let mut latest = Some(native_hint_phase(26));
+    let result = await_terminal_stage(&mut io, &mut latest,
+        StepRunSettings::new(AnimationSettleDelays::default(), 0), &event_sink(),
+        &AtomicBool::new(false), Some(TerminalStage::ScoreCounting));
+    assert!(result.unwrap_err().contains("terminal advancement exhausted 2"));
+    assert_eq!(io.trace, ["wait", "capture", "wait", "capture"]);
+    assert!(io.frames.is_empty() && io.terminal_inputs.is_empty() && io.inputs.is_empty());
+    assert_eq!(latest.unwrap().frame.pixels, native_hint_phase(91).frame.pixels);
+}
+
+
+/// A controlled native derivative removes only exact-black O-stripe pixels and
+/// inserts a New Game run beneath the visible modal. The panel still prevents
+/// underlay input even while its OK text supplies no bounded match.
+#[test]
+fn bounded_control_visible_ok_panel_blocks_underlay_new_game_without_ok_match() {
+    let mut panel = native_hint_phase(91);
+    for y in 700..=850 {
+        for x in 930..=954 {
+            let offset = y * panel.frame.stride + x * 4;
+            if panel.frame.pixels[offset..offset + 3] == [0, 0, 0] {
+                panel.frame.pixels[offset..offset + 3].copy_from_slice(&[255, 255, 255]);
+            }
+        }
+    }
+    for x in 863..868 {
+        let offset = 862 * panel.frame.stride + x * 4;
+        panel.frame.pixels[offset..offset + 3].copy_from_slice(&[0, 0, 0]);
+    }
+    assert_eq!(crate::terminal_controls::control_point(&panel.frame, KLONDIKE_CONTROLS.ok).unwrap(), PixelPoint::new(0, 0));
+    assert_eq!(crate::terminal_controls::control_point(&panel.frame, KLONDIKE_CONTROLS.new_game).unwrap(), PixelPoint::new(863, 862));
+    let mut io = fake_frames(vec![copy_observation(&panel), copy_observation(&panel)]);
+    io.native_terminal_analysis = true;
+    let pixels = panel.frame.pixels.clone();
+    let mut latest = Some(panel);
+    let result = await_terminal_stage(&mut io, &mut latest,
+        StepRunSettings::new(AnimationSettleDelays::default(), 0), &event_sink(),
+        &AtomicBool::new(false), None);
+    assert!(result.unwrap_err().contains("terminal advancement exhausted 2"));
+    assert_eq!(io.trace, ["wait", "capture", "wait", "capture"]);
+    assert!(io.frames.is_empty() && io.terminal_inputs.is_empty() && io.inputs.is_empty());
+    assert_eq!(latest.unwrap().frame.pixels, pixels);
+}
+
+
+/// Replay the preserved entrance, fading caption and settled caption without
+/// changing original PNG bytes. Independent Klondike win evidence supplies
+/// entry context; the shared OK witness deliberately excludes game/rank artwork.
+/// The first OK click occurs only after all three frames, at the settled glyph.
+/// An unchanged acknowledged result still stops without replaying that click.
+#[test]
+fn bounded_control_native_entrance_waits_for_settled_ok_before_one_click() {
+    use klondike::terminal::TerminalStage;
+    let ready_frame = |bytes: &[u8]| native_observation(crate::capture::decode_png(bytes).unwrap());
+    let early = ready_frame(include_bytes!("../../../tests/fixtures/game-win-readiness/early.png"));
+    let fading = ready_frame(include_bytes!("../../../tests/fixtures/game-win-readiness/fading.png"));
+    let settled = ready_frame(include_bytes!("../../../tests/fixtures/game-win-readiness/settled.png"));
+    let settled_pixels = settled.frame.pixels.clone();
+    let mut io = fake_frames(vec![early, fading, copy_observation(&settled),
+        copy_observation(&settled), copy_observation(&settled), settled]);
+    io.native_terminal_analysis = true;
+    let mut latest = Some(native_hint_phase(26));
+    let mut input_attempted = false;
+    let result = resume_after_win(&mut io, &mut latest,
+        StepRunSettings::new(AnimationSettleDelays::default(), 0), &event_sink(),
+        &AtomicBool::new(false), &mut input_attempted);
+    assert!(result.unwrap_err().contains("terminal advancement exhausted 2"));
+    assert!(input_attempted);
+    assert_eq!(io.terminal_inputs, [TerminalStage::ScoreCounting, TerminalStage::LevelUp]);
+    assert_eq!(io.terminal_points[1], PixelPoint::new(941, 770));
+    let ok_index = io.trace.iter().enumerate().filter(|(_, entry)| **entry == "terminal")
+        .nth(1).unwrap().0;
+    assert_eq!(io.trace[..ok_index].iter().filter(|entry| **entry == "capture").count(), 3);
+    assert_eq!(io.waits[0], Duration::from_millis(1000));
+    assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), 6);
+    assert!(io.frames.is_empty() && io.inputs.is_empty());
+    assert_eq!(latest.unwrap().frame.pixels, settled_pixels);
+}
+
+
+/// STOP while a recognised OK awaits its second fresh witness revokes authority
+/// before a probe, click or additional capture and preserves the pending image.
+#[test]
+fn bounded_control_stop_during_ok_confirmation_never_clicks() {
+    use klondike::terminal::TerminalStage;
+    let stop = AtomicBool::new(false);
+    let mut io = fake_frames(vec![native_hint_phase(91)]);
+    io.native_terminal_analysis = true;
+    io.stop_on_wait = Some(&stop);
+    let mut latest = Some(native_hint_phase(91));
+    let result = await_terminal_stage(&mut io, &mut latest,
+        StepRunSettings::new(AnimationSettleDelays::default(), 0), &event_sink(),
+        &stop, Some(TerminalStage::ScoreCounting));
+    assert!(result.unwrap_err().contains("STOP"));
+    assert_eq!(io.trace, ["wait"]);
+    assert_eq!(io.frames.len(), 1);
+    assert!(io.terminal_inputs.is_empty() && io.inputs.is_empty());
+    assert_eq!(latest.unwrap().frame.pixels, native_hint_phase(91).frame.pixels);
 }
 
 

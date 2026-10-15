@@ -271,37 +271,14 @@ pub(super) fn run_post_game_restart(
                 return Ok(PostGameOutcome::RecoveredGameplay(observation));
             }
 
-            // New Game also covers games that do not award a level. A confirmed
-            // TriPeaks foreground modal must still be dismissed before its underlay.
-            let foreground_level_up = target.stage == PostGameStage::LevelUpOk
-                && scan_state.mode() == crate::game::GameMode::TriPeaks
-                && super::tripeaks_terminal::is_direct_level_up_context(&observation.frame)?;
-            if target.stage == PostGameStage::LevelUpOk && !foreground_level_up
-                && resolve_post_game_target_logged(&observation, POST_GAME_TARGETS[1], false,
-                    &format!("{} alternative", scan_state.mode().label()), event_tx, profile)?.is_some()
-            {
-                if let Some(lookup) = lookup.as_mut() { lookup.set_outcome("advanced-to-New-Game"); }
-                send_log(
-                    event_tx,
-                    "RECOVERED: New Game is visible in a fresh non-gameplay frame; optional Level Up is skipped. Waiting for a second capture to verify New Game before sending input."
-                        .to_owned(),
-                );
-                intentional_wait += wait_or_stop(
-                    POST_GAME_STAGE_DELAY,
-                    cancel_requested,
-                    "STOP was requested while verifying the New Game transition.",
-                ).inspect_err(|_| {
-                    if let Some(lookup) = lookup.as_mut() { lookup.set_outcome("cancelled"); }
-                })?;
-                break None;
-            }
-
 
             let current = if let Some(lookup) = lookup.as_mut() {
                 if observation.gameplay_scene {
+                    lookup.forget_ok_geometry();
                     Ok(None)
                 } else {
-                    let point = lookup.search(&observation.frame)?;
+                    let raw_point = lookup.search(&observation.frame)?;
+                    let point = lookup.confirm_ok(&observation.frame, raw_point)?;
                     if direct_level_up_entry && target.stage == PostGameStage::LevelUpOk
                         && !super::tripeaks_terminal::is_direct_level_up_context(&observation.frame)?
                     {
@@ -322,6 +299,33 @@ pub(super) fn run_post_game_restart(
                 if let Some(lookup) = lookup.as_mut() { lookup.set_outcome("matched"); }
                 break Some(variant);
             }
+
+            // New Game also covers games that do not award a level. A confirmed
+            // TriPeaks foreground modal must still be dismissed before its underlay.
+            let foreground_level_up = target.stage == PostGameStage::LevelUpOk
+                && (lookup.as_ref().is_some_and(ControlLookup::has_ok_panel)
+                    || (scan_state.mode() == crate::game::GameMode::TriPeaks
+                        && super::tripeaks_terminal::is_direct_level_up_context(&observation.frame)?));
+            if target.stage == PostGameStage::LevelUpOk && !foreground_level_up
+                && resolve_post_game_target_logged(&observation, POST_GAME_TARGETS[1], false,
+                    &format!("{} alternative", scan_state.mode().label()), event_tx, profile)?.is_some()
+            {
+                if let Some(lookup) = lookup.as_mut() { lookup.set_outcome("advanced-to-New-Game"); }
+                send_log(
+                    event_tx,
+                    "RECOVERED: New Game is visible in a fresh non-gameplay frame; optional Level Up is skipped. Waiting for a second capture to verify New Game before sending input."
+                        .to_owned(),
+                );
+                intentional_wait += wait_or_stop(
+                    POST_GAME_STAGE_DELAY,
+                    cancel_requested,
+                    "STOP was requested while verifying the New Game transition.",
+                ).inspect_err(|_| {
+                    if let Some(lookup) = lookup.as_mut() { lookup.set_outcome("cancelled"); }
+                })?;
+                break None;
+            }
+
 
             let post_ok_reward = direct_level_up_entry && target.stage == PostGameStage::NewGame
                 && click_attempts[0] > 0 && super::tripeaks_terminal::is_reward_overlay(&observation.frame)?;
@@ -381,7 +385,7 @@ pub(super) fn run_post_game_restart(
             let positive_reward = super::tripeaks_terminal::is_reward_overlay(&observation.frame)?;
             let score_retry = score_skip_retry_is_authorised(
                 target.stage, observation.gameplay_scene, observation_round,
-            ) && !direct_level_up_entry && positive_reward;
+            ) && !direct_level_up_entry && !foreground_level_up && positive_reward;
 
             if let Some(lookup) = lookup.as_mut() {
                 consecutive_control_misses += 1;
@@ -390,7 +394,7 @@ pub(super) fn run_post_game_restart(
                 {
                     lookup.set_outcome("not-found");
                     return Err(format!(
-                        "Post-game {} was absent in {TERMINAL_CONTROL_SEARCH_ATTEMPTS} consecutive fresh captures; the two recaptures were input-free retries. Latest failed frame retained for inspection; no failed frame authorised a control click.",
+                        "Post-game {} did not become ready in {TERMINAL_CONTROL_SEARCH_ATTEMPTS} consecutive fresh captures (missing controls or unsettled OK); the two recaptures were input-free retries. Latest failed frame retained for inspection; no failed frame authorised a control click.",
                         target.label,
                     ));
                 }

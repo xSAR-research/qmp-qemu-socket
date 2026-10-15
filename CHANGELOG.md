@@ -1,5 +1,29 @@
 # Changelog
 
+## v2.2.2-candidate.7 — Settled Level Up readiness
+
+- Require stable measured OK button geometry across consecutive fresh frames
+  and a fully presented fixed “You've Reached” caption on the current frame
+  before the single Level Up click, across all five games.
+- Keep the 1000 ms first post-score wait and three total control observations.
+  Pending animation consumes that existing budget; no nested retry loop or
+  extra input attempt is introduced. A missing black glyph may still supply
+  geometry evidence, but cannot authorise input.
+- Use the unchanged xSAR exact-black scanner within the settled button's glyph
+  band for the final coordinate, excluding the pointer-outline match observed
+  in the supplied Free Cell failure. Preserve separate game-win evidence,
+  fresh probes, STOP checks and forward-only menu input.
+- Prevent a pending foreground OK from exposing New Game underlay ink or
+  renewing the shared controller's score-skip allowance.
+- Add byte-original entrance, fading and settled native captures and controller
+  regressions for third-frame readiness, bounded failure and no OK replay.
+  Log visual readiness separately from the existing black-scan metrics.
+- Include the three candidate.5 diagnostics files omitted from published
+  401a35e; GAME WIN-only image scope, capture transport and dependencies remain.
+- Local syntax/pixel/installer checks are recorded in the delivery package.
+  Rust compilation, all tests, private rustdoc, Clippy, release and live
+  acceptance require the supplied Beast verifier and live GAME WIN runs.
+
 ## v2.2.2-candidate.6 — Strict Clippy verification repair
 
 - Use `inspect_err` for four cancellation paths which update the control-search
