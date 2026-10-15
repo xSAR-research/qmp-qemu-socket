@@ -2425,7 +2425,7 @@ impl QmpQemuSocketApp {
                         control.label(), format_rect(search.bounds), search.run_length,
                     ));
                 }
-                ui.monospace("terminal-OK readiness = stable button geometry across fresh frames + fully visible caption; one click within the same observation budget");
+                ui.monospace("terminal-OK readiness = stable button geometry across fresh frames + current exact-black glyph; caption diagnostic only; one click within the same observation budget");
                 ui.monospace(format!(
                     "pointer-settle = {} ms",
                     POINTER_SETTLE_DELAY.as_millis()

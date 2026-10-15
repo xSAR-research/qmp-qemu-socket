@@ -105,8 +105,9 @@ impl<'a> ControlLookup<'a> {
     /// Confirm that OK has finished entering before its sole authorised click.
     ///
     /// The caller supplies each fresh frame once within its existing search
-    /// budget. Geometry from the preceding frame may seed confirmation while
-    /// the fixed caption is fading; the current frame must show it fully.
+    /// budget. The current frame needs settled geometry agreeing with its
+    /// predecessor and a current exact-black glyph; the fading fixed caption
+    /// is diagnostic only and never vetoes that evidence.
     /// Missing or incomplete evidence returns the normal no-match sentinel.
     /// Other controls keep their existing coordinate-only readiness policy.
     pub(super) fn confirm_ok(
@@ -129,7 +130,7 @@ impl<'a> ControlLookup<'a> {
             "awaiting-settled-OK"
         };
         send_log(self.events, format!(
-            "{} OK readiness: raw=({}, {}); selected=({}, {}); button={:?}; caption_present={}; caption_y={:?}; geometry_stable={}; glyph_bounds={:?}; ready={}; reason={}; readiness_pixels={}/{}; readiness_ms={:.3}. Confirmation consumes the existing three-search budget; guest input sent=0.",
+            "{} OK readiness: raw=({}, {}); selected=({}, {}); button={:?}; caption_present={}; caption_y={:?}; geometry_stable={}; glyph_bounds={:?}; ready={}; reason={}; readiness_pixels={}/{}; readiness_ms={:.3}; caption_gate=false. Confirmation consumes the existing three-search budget; guest input sent=0.",
             self.game, point.x, point.y, observation.point.x, observation.point.y,
             observation.button, observation.caption_present, observation.caption_y,
             observation.geometry_stable, observation.glyph_bounds,

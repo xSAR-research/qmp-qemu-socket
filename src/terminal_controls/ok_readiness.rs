@@ -2,8 +2,9 @@
 //!
 //! A black run can appear while the modal is still entering, and the retained
 //! pointer can itself supply a run. Before input, require consecutive matching
-//! button geometry, the fully presented invariant `You've Reached` caption,
-//! and a current exact-black match inside the button's central caption band.
+//! button geometry at its settled size and a current exact-black match inside
+//! the button's central caption band. The invariant `You've Reached` caption
+//! is measured for diagnostics only; its independent fade does not gate input.
 //! Callers supply fresh captures and retain their existing three-observation
 //! budget. This module neither captures frames nor sends or repeats input.
 
@@ -36,6 +37,7 @@ const CAPTION_LAST_Y: u32 = 380;
 /// Translation in Y covers every retained native Level Up layout. A 90% white
 /// match permits antialiasing differences: the 13 positive native fixtures score
 /// at least 93%, whereas the recorded fading Free Cell caption scores below 8%.
+/// This mask contributes diagnostics only and never authorises or blocks input.
 const CAPTION_ROWS: [[u64; 4]; 24] = [
     [0x0000000000380070, 0x7fc0000000000003, 0x0000000000000000, 0x0038000000000007],
     [0x80000000003c00f0, 0xffc0000000000003, 0x0000000000000003, 0x0038000000000007],
@@ -84,7 +86,7 @@ pub struct OkReadiness {
 /// Evidence from one frame; input is permitted only when `ready` is true.
 #[derive(Clone, Copy, Debug)]
 pub struct OkObservation {
-    /// All geometry, invariant-caption and current-glyph requirements passed.
+    /// Settled consecutive geometry and the current exact-black glyph passed.
     pub ready: bool,
     /// Latest measured central glyph point, or `(0, 0)` while input is withheld.
     pub point: PixelPoint,
@@ -92,9 +94,9 @@ pub struct OkObservation {
     pub reason: &'static str,
     /// Measured body, retained for foreground-modal policy even while entering.
     pub button: Option<PixelRect>,
-    /// The fixed caption is fully presented at the calibrated white threshold.
+    /// Diagnostic only: the fixed caption meets the calibrated white threshold.
     pub caption_present: bool,
-    /// Caption origin when its complete white-stroke and dark-gap mask matches.
+    /// Diagnostic caption origin when its white-stroke and dark-gap mask matches.
     pub caption_y: Option<u32>,
     /// Current body agrees with the immediately preceding observed geometry.
     pub geometry_stable: bool,
@@ -115,6 +117,7 @@ impl OkReadiness {
     /// Missing black glyphs may still provide geometry evidence. Missing body
     /// geometry resets consecutive evidence. A current valid glyph is required
     /// for readiness; a previous coordinate is never retained or replayed.
+    /// The caption measurements remain logged without affecting this decision.
     pub fn observe(
         &mut self,
         frame: &CapturedFrame,
@@ -157,11 +160,10 @@ impl OkReadiness {
             None => "missing-button-body",
             Some(bounds) if !settled_size(bounds) => "entrance-button-size",
             Some(_) if !geometry_stable => "button-geometry-changing",
-            Some(_) if !caption_present => "caption-not-fully-presented",
             Some(_) if glyph_point == PixelPoint::new(0, 0) => "missing-current-caption-glyph",
-            Some(_) => "settled-button-and-caption",
+            Some(_) => "settled-button-and-glyph",
         };
-        let ready = reason == "settled-button-and-caption";
+        let ready = reason == "settled-button-and-glyph";
         Ok(OkObservation {
             ready,
             point: if ready { glyph_point } else { PixelPoint::new(0, 0) },
@@ -235,7 +237,7 @@ fn same_geometry(previous: PixelRect, current: PixelRect) -> bool {
         && previous.height.abs_diff(current.height) <= 1
 }
 
-/// Find the fixed fully bright caption while permitting its measured Y translations.
+/// Measure the diagnostic bright caption while permitting its native Y translations.
 fn find_caption(view: FrameView<'_>, work: &mut u64) -> Option<u32> {
     let total: u32 = CAPTION_ROWS.iter().flatten().map(|bits| bits.count_ones()).sum();
     let allowed_misses = total / 10;
@@ -292,7 +294,7 @@ mod tests {
         search(frame, for_game(game).spec(Control::Ok)).unwrap().point
     }
 
-    /// Entrance geometry and fading text withhold input; the third native frame is ready.
+    /// Entrance geometry and the missing central glyph withhold input until frame three.
     #[test]
     fn recorded_freecell_entrance_fading_and_settled_frames_need_three_observations() {
         let entrance = fixture("game-win-readiness/early.png");
@@ -316,16 +318,75 @@ mod tests {
         }
     }
 
-    /// Stable body alone never authorises a repeated fading-caption observation.
+    /// Stable body with only a pointer run never substitutes for a current central glyph.
     #[test]
-    fn fading_caption_and_retained_pointer_do_not_prove_readiness() {
+    fn retained_pointer_without_a_current_central_glyph_never_proves_readiness() {
         let fading = fixture("game-win-readiness/fading.png");
         let mut readiness = OkReadiness::new();
-        for _ in 0..3 {
+        for attempt in 0..3 {
             let observation = readiness.observe(&fading, raw(&fading, GameMode::FreeCell)).unwrap();
             assert!(!observation.ready);
             assert!(!observation.caption_present);
             assert_eq!(observation.point, PixelPoint::new(0, 0));
+            if attempt > 0 {
+                assert_eq!(observation.reason, "missing-current-caption-glyph");
+            }
+        }
+    }
+
+    /// The exact failed Spider sequence accepts its third frame despite a grey header.
+    #[test]
+    fn recorded_spider_transition_accepts_a_current_black_glyph_with_a_grey_header() {
+        let score = fixture("spider-game-win-20261015/score.png");
+        let entering = fixture("spider-game-win-20261015/entering.png");
+        let near_black = fixture("spider-game-win-20261015/near-black.png");
+        let grey_caption = fixture("spider-game-win-20261015/grey-caption.png");
+        let mut entry = OkReadiness::new();
+        let score_observation = entry.observe(&score, raw(&score, GameMode::Spider)).unwrap();
+        assert_eq!(score_observation.button, None);
+        assert!(!score_observation.ready);
+
+        let mut readiness = OkReadiness::new();
+        let first = readiness.observe(&entering, raw(&entering, GameMode::Spider)).unwrap();
+        assert_eq!(first.reason, "missing-button-body");
+        assert!(!first.ready);
+        let second = readiness.observe(&near_black, raw(&near_black, GameMode::Spider)).unwrap();
+        assert_eq!(raw(&near_black, GameMode::Spider), PixelPoint::new(0, 0));
+        assert_eq!(second.button, Some(PixelRect::new(839, 723, 237, 71)));
+        assert!(!second.ready && !second.geometry_stable);
+        let third = readiness.observe(&grey_caption, raw(&grey_caption, GameMode::Spider)).unwrap();
+        assert_eq!(raw(&grey_caption, GameMode::Spider), PixelPoint::new(943, 770));
+        assert!(third.ready && third.geometry_stable);
+        assert_eq!(third.point, PixelPoint::new(943, 770));
+        assert_eq!(third.reason, "settled-button-and-glyph");
+        assert!(!third.caption_present);
+        assert_eq!(third.caption_y, None);
+        for observation in [score_observation, first, second, third] {
+            assert!(observation.pixels_examined <= MAX_READINESS_PIXEL_COMPARISONS);
+        }
+    }
+
+    /// Native RGB(1,1,1) is still rejected after geometry settles; exact black is required.
+    #[test]
+    fn native_spider_near_black_cannot_replace_the_exact_black_run() {
+        let near_black = fixture("spider-game-win-20261015/near-black.png");
+        let black = fixture("spider-game-win-20261015/grey-caption.png");
+        let near_view = near_black.as_view().unwrap();
+        let black_view = black.as_view().unwrap();
+        for x in 943..948 {
+            assert_eq!(near_view.pixel_rgb(x, 770), Some([1, 1, 1]));
+            assert_eq!(black_view.pixel_rgb(x, 770), Some([0, 0, 0]));
+        }
+        let mut readiness = OkReadiness::new();
+        for attempt in 0..3 {
+            let point = raw(&near_black, GameMode::Spider);
+            assert_eq!(point, PixelPoint::new(0, 0));
+            let observation = readiness.observe(&near_black, point).unwrap();
+            assert!(!observation.ready);
+            if attempt > 0 {
+                assert!(observation.geometry_stable);
+                assert_eq!(observation.reason, "missing-current-caption-glyph");
+            }
         }
     }
 
@@ -412,9 +473,9 @@ mod tests {
         assert!(third.ready && third.geometry_stable);
     }
 
-    /// Uniform brightness cannot substitute for white letters with dark holes and gaps.
+    /// An independently washed-out header remains diagnostic and does not block a valid OK.
     #[test]
-    fn fully_white_caption_patch_is_not_caption_evidence() {
+    fn fully_white_header_is_not_caption_evidence_and_does_not_gate_ok() {
         let mut frame = fixture("freecell-FC10.png");
         for y in 280..405 {
             for x in 835..1087 {
@@ -426,7 +487,9 @@ mod tests {
         let point = raw(&frame, GameMode::FreeCell);
         readiness.observe(&frame, point).unwrap();
         let second = readiness.observe(&frame, point).unwrap();
-        assert!(second.geometry_stable && !second.caption_present && !second.ready);
+        assert!(second.geometry_stable && !second.caption_present && second.ready);
+        assert_eq!(second.point, point);
+        assert_eq!(second.reason, "settled-button-and-glyph");
         assert!(second.pixels_examined <= MAX_READINESS_PIXEL_COMPARISONS);
     }
 

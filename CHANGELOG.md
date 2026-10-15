@@ -1,5 +1,26 @@
 # Changelog
 
+## v2.2.2-candidate.8 — Diagnostic-only Level Up caption
+
+- Remove the fully white fixed-caption veto from shared OK readiness across
+  all five games. Keep caption measurements in diagnostics, explicitly logged
+  with `caption_gate=false`.
+- Continue requiring settled button dimensions, geometry agreeing within one
+  pixel across consecutive fresh observations and a current five-pixel exact
+  RGB(0,0,0) glyph in the central band, with pointer exclusion and rescan.
+- Reproduce the supplied Spider entrance, near-black and grey-caption frames.
+  The near-black RGB(1,1,1) glyph remains a miss; the third frame's stable body
+  and exact-black glyph permit the sole OK click despite its fading caption.
+- Add controller regressions for that third-frame decision, bounded failure,
+  STOP and no replay after acknowledged OK. Preserve independent GAME WIN
+  evidence, the 1000 ms first wait, three total observations and foreground
+  modal precedence over New Game.
+- Preserve GAME WIN-only image recording, capture transport, dependencies and
+  matching xSAR `6765e0a` TCP protocol v2 code. No sibling source is changed.
+- Local static, pixel and package verification is recorded in the delivery
+  package. Rust compilation, tests, strict documentation, Clippy, release and
+  live acceptance remain separate Beast verification gates.
+
 ## v2.2.2-candidate.7 — Settled Level Up readiness
 
 - Require stable measured OK button geometry across consecutive fresh frames

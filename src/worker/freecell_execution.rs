@@ -1523,7 +1523,7 @@ mod tests {
         assert_eq!(latest.unwrap().frame.pixels, ready.pixels);
     }
 
-    /// The recorded entrance and fading caption defer OK until the third fresh frame.
+    /// Recorded entrance geometry and missing exact-black glyphs defer OK until frame three.
     #[test]
     fn captured_entrance_fading_and_settled_ok_use_latest_caption_point() {
         for optional_pair in [false, true] {

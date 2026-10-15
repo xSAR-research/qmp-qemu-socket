@@ -1,8 +1,8 @@
 # Bounded terminal controls and search metrics
 
-Candidate: qmp-qemu-socket 2.2.2-candidate.7, based on the published checkpoint
-`401a35e79615e1bdf44e0515c5dbe50b6fdaa114`. It uses the existing xsar
-helper from `5fa8a1a963a7d0591458a348cabd5c28099970bd` without changing that crate.
+Candidate: qmp-qemu-socket 2.2.2-candidate.8, based on the published checkpoint
+`f892df4051da0aa6c04ad9d1bc7386dd9d7aadcd`. It uses the existing xsar
+helper from `6765e0a89eddf610cbad8cb302db98a31465cdff` without changing that crate.
 
 ## Search contract
 
@@ -84,6 +84,9 @@ independent of the new three-search allowance.
 Capture transport is unchanged. The application still acquires QMP PNGs through
 a private temporary file and decodes them. The sibling Windows TCP server and
 the re-exported xSAR TCP client are not connected to this production path.
+The matching xSAR checkout's TCP protocol v2, validated `u16` stride and
+14-byte header are preserved. The verifier checks that sibling commit and
+runs its focused TCP protocol integration tests before application checks.
 
 `--image` adds scoped GAME WIN evidence without requesting extra captures or
 changing the recording boundary. See [GAME WIN image diagnostics](game-win-images.md)
@@ -158,8 +161,9 @@ Input boundaries refuse that sentinel. Visit counts are calculated from the
 known traversal and first match, without a second image pass.
 
 Raw exact-black matches remain positional candidates and may include a
-cursor. OK additionally requires stable measured geometry and the invariant
-caption, then confines its selected point to the settled glyph band. This
+cursor. OK additionally requires settled measured geometry agreeing across
+consecutive fresh observations and a current exact-black glyph in the central
+band. The fixed caption remains diagnostic only (`caption_gate=false`). This
 rejects the supplied Free Cell pointer-outline point. New Game and Play retain
 their established bounded positional policy. See [Level Up readiness](level-up-readiness.md)
 for calibration, native evidence and limits. No new network or filesystem

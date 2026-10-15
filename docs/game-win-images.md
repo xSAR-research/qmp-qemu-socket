@@ -61,9 +61,11 @@ can add elapsed time; the measured `write` field makes this overhead visible.
 If recording fails, the transition stops with a clear error and keeps earlier
 evidence. No image count limit silently discards captures.
 
-Candidate.7 keeps the 1000 ms first post-score wait and three total control
+Candidate.8 keeps the 1000 ms first post-score wait and three total control
 observations. A pending OK uses that same budget to confirm settled geometry
-and a fully visible fixed caption before its single click. Each readiness log
+and a current exact-black central glyph before its single click. The fixed
+caption remains diagnostic only, logged with `caption_gate=false`; a fading
+caption cannot veto otherwise sufficient button evidence. Each readiness log
 belongs to the captured frame preceding it; no additional capture is requested
 by the visual check. See [Level Up readiness](level-up-readiness.md).
 

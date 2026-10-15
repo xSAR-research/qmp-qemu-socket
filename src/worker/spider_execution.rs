@@ -863,6 +863,13 @@ mod tests {
     }
 
 
+    /// Decode an unchanged capture from the Spider failure recorded on 15 October.
+    fn recorded_game_win(name: &str) -> CapturedFrame {
+        let path = format!("{}/tests/fixtures/spider-game-win-20261015/{name}.png", env!("CARGO_MANIFEST_DIR"));
+        decode_png(&std::fs::read(path).unwrap()).unwrap()
+    }
+
+
     /// A native-sized flat frame supplies no independent win or scene authority.
     /// Exact black pixels alone can satisfy the context-dependent OK run rule.
     fn unknown() -> CapturedFrame {
@@ -1679,7 +1686,7 @@ mod tests {
         assert_eq!(latest.unwrap().frame.pixels, ready.pixels);
     }
 
-    /// The recorded entrance and fading caption defer OK until the third fresh frame.
+    /// Recorded entrance geometry and missing exact-black glyphs defer OK until frame three.
     #[test]
     fn captured_entrance_fading_and_settled_ok_use_latest_caption_point() {
         for optional_pair in [false, true] {
@@ -1758,6 +1765,97 @@ mod tests {
         assert!(io.controls.is_empty() && io.sources.is_empty());
         assert_eq!(io.solver_clicks, 0);
         assert_eq!(latest.unwrap().frame.pixels, foreground.pixels);
+    }
+
+    /// The actual Spider failure now clicks the third-frame glyph despite its grey header.
+    /// A retained modal after that acknowledgement still cannot replay OK.
+    #[test]
+    fn recorded_spider_grey_header_allows_one_third_frame_ok_without_replay() {
+        let score = recorded_game_win("score");
+        let entering = recorded_game_win("entering");
+        let near_black = recorded_game_win("near-black");
+        let grey = recorded_game_win("grey-caption");
+        assert_eq!(spider_terminal::classify_win_entry(&score).unwrap(), Some(TerminalStage::Score),
+            "the native score capture supplies independent Spider GAME WIN entry");
+        assert_eq!(spider_terminal::classify_win_entry(&grey).unwrap(), None,
+            "a generic OK frame cannot independently declare a Spider win");
+        assert_eq!(spider_terminal::expected_control_point(&near_black, TerminalStage::LevelUp).unwrap(),
+            PixelPoint::new(0, 0), "near-black ink cannot substitute for an exact-black run");
+        let cancel = AtomicBool::new(false);
+        let mut io = fake(vec![score, entering, near_black, grey.clone(),
+            grey.clone(), grey.clone(), grey.clone(), fixture(17)], &cancel);
+        let settings = StepRunSettings::new(AnimationSettleDelays::default(), 0)
+            .with_spider_observation_limit(20);
+        let mut latest = None;
+        let (result, events) = run_with_events(&mut io, settings, &mut latest);
+        assert!(result.unwrap_err().contains("New Game"));
+        assert_eq!(io.controls, [TerminalStage::Score, TerminalStage::LevelUp]);
+        assert_eq!(io.control_points, [PixelPoint::new(960, 550), PixelPoint::new(943, 770)]);
+        assert_eq!(io.captures, 7);
+        assert_eq!(io.frames.len(), 1, "a fourth post-OK New Game capture is not permitted");
+        assert!(io.sources.is_empty());
+        assert_eq!(io.solver_clicks, 0);
+        assert_eq!(io.pointer_parks, 0);
+        let ok_index = io.calls.iter().position(|call|
+            *call == IoCall::Terminal(TerminalStage::LevelUp)).unwrap();
+        assert_eq!(io.calls[..ok_index].iter().filter(|call| **call == IoCall::Capture).count(), 4,
+            "the score entry plus three fresh OK observations precede the sole OK click");
+        let readiness: Vec<_> = events.iter().filter_map(|event| match event {
+            WorkerEvent::Log(message) if message.starts_with("Spider OK readiness:") => Some(message),
+            _ => None,
+        }).collect();
+        assert_eq!(readiness.len(), TERMINAL_CONTROL_SEARCH_ATTEMPTS);
+        assert!(readiness[..2].iter().all(|message| message.contains("ready=false")));
+        assert!(readiness[2].contains("caption_present=false")
+            && readiness[2].contains("geometry_stable=true")
+            && readiness[2].contains("selected=(943, 770)")
+            && readiness[2].contains("ready=true")
+            && readiness[2].contains("reason=settled-button-and-glyph"));
+        assert!(events.iter().any(|event| matches!(event, WorkerEvent::Log(message)
+            if message.starts_with("Spider OK search summary: searches=3; recaptures=2;")
+                && message.ends_with("outcome=matched."))));
+        let delays = settings.animation_delays();
+        assert_eq!(io.waits, [LEVEL_UP_APPEAR_DELAY, delays.spider_reobserve,
+            delays.spider_reobserve, POST_GAME_STAGE_DELAY, delays.spider_reobserve,
+            delays.spider_reobserve]);
+        assert_eq!(latest.unwrap().frame.pixels, grey.pixels);
+    }
+
+    /// Diagnostic-only header brightness does not relax three observations or STOP.
+    #[test]
+    fn recorded_spider_missing_glyph_and_stop_preserve_readiness_bounds() {
+        for stop_in_confirmation in [false, true] {
+            let entering = recorded_game_win("entering");
+            let near_black = recorded_game_win("near-black");
+            let grey = recorded_game_win("grey-caption");
+            let cancel = AtomicBool::new(false);
+            let mut io = fake(vec![entering, near_black.clone(), near_black.clone(), grey], &cancel);
+            if stop_in_confirmation { io.fault = Fault::StopOnSecondWait; }
+            let settings = StepRunSettings::new(AnimationSettleDelays::default(), 0);
+            let (sender, _receiver) = std::sync::mpsc::channel();
+            let slot = super::super::LatestFrameSlot::default();
+            let events = WorkerEventSink {
+                events: sender, latest_frame: slot.clone(),
+                capture_context: std::sync::Mutex::new(None),
+            };
+            let mut latest = None;
+            capture_latest(&mut io, &mut latest, &events, &cancel).unwrap();
+            let error = await_post_score_control(&mut io, &mut latest, settings, &events, &cancel)
+                .unwrap_err();
+            if stop_in_confirmation {
+                assert!(error.contains("STOP"));
+                assert_eq!(io.captures, 2);
+                assert_eq!(io.frames.len(), 2);
+            } else {
+                assert!(error.contains("after 3 searches and 2 fresh recaptures"));
+                assert_eq!(io.captures, 3);
+                assert_eq!(io.frames.len(), 1, "a fourth readiness capture is not permitted");
+            }
+            assert!(io.controls.is_empty() && io.sources.is_empty());
+            assert_eq!(io.solver_clicks, 0);
+            assert_eq!(latest.unwrap().frame.pixels, near_black.pixels);
+            assert_eq!(slot.take().unwrap().frame.pixels, near_black.pixels);
+        }
     }
 
 }

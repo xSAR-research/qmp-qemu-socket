@@ -2328,7 +2328,7 @@ fn bounded_control_visible_ok_panel_blocks_underlay_new_game_without_ok_match() 
 }
 
 
-/// Replay the preserved entrance, fading caption and settled caption without
+/// Replay preserved entrance, missing black glyphs and settled-button captures without
 /// changing original PNG bytes. Independent Klondike win evidence supplies
 /// entry context; the shared OK witness deliberately excludes game/rank artwork.
 /// The first OK click occurs only after all three frames, at the settled glyph.

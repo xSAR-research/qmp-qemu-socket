@@ -2232,6 +2232,12 @@ mod tripeaks_reward_qmp_regressions {
     const FADING_LEVEL_UP_PNG: &[u8] = include_bytes!("../../tests/fixtures/game-win-readiness/fading.png");
     /// Original native frame with settled geometry, full caption and the pointer below its ink.
     const SETTLED_LEVEL_UP_PNG: &[u8] = include_bytes!("../../tests/fixtures/game-win-readiness/settled.png");
+    /// Original Spider entrance frame used only after independent shared GAME WIN authority.
+    const SPIDER_ENTERING_LEVEL_UP_PNG: &[u8] = include_bytes!("../../tests/fixtures/spider-game-win-20261015/entering.png");
+    /// Original Spider expanded button whose near-black caption cannot supply an exact-black run.
+    const SPIDER_NEAR_BLACK_LEVEL_UP_PNG: &[u8] = include_bytes!("../../tests/fixtures/spider-game-win-20261015/near-black.png");
+    /// Original Spider current black OK glyph while the independent header caption remains grey.
+    const SPIDER_GREY_CAPTION_LEVEL_UP_PNG: &[u8] = include_bytes!("../../tests/fixtures/spider-game-win-20261015/grey-caption.png");
     /// Unique temporary socket directories when Cargo runs tests concurrently.
     static NEXT_REWARD_SOCKET: AtomicU64 = AtomicU64::new(1);
 
@@ -2307,8 +2313,10 @@ mod tripeaks_reward_qmp_regressions {
         ExtendedRedealNoHalo,
         /// An already-authorised shared GAME WIN entry expands, fades and settles before OK.
         SharedSettlingLevelUp,
-        /// Three shared-controller captures never present the fixed caption fully.
+        /// Three shared-controller captures never supply a current exact-black OK glyph.
         SharedUnsettledLevelUp,
+        /// A stable native button with current black OK glyph advances despite its grey header.
+        SharedGreyCaptionLevelUp,
         /// Unsettled native foreground OK overlaps a synthetic New Game underlay caption.
         SharedPendingLevelUpWithUnderlay,
     }
@@ -2326,14 +2334,14 @@ mod tripeaks_reward_qmp_regressions {
             | Scenario::CandidateTwentyOne | Scenario::CandidateThirty
             | Scenario::TransientCandidateThirty | Scenario::MixedCandidateThirty
             | Scenario::SharedSettlingLevelUp | Scenario::SharedUnsettledLevelUp
-            | Scenario::SharedPendingLevelUpWithUnderlay)
+            | Scenario::SharedGreyCaptionLevelUp | Scenario::SharedPendingLevelUpWithUnderlay)
     }
 
 
     /// Recorded entrance frames test only shared OK readiness, with GAME WIN already authorised.
     fn shared_readiness_scenario(scenario: Scenario) -> bool {
         matches!(scenario, Scenario::SharedSettlingLevelUp | Scenario::SharedUnsettledLevelUp
-            | Scenario::SharedPendingLevelUpWithUnderlay)
+            | Scenario::SharedGreyCaptionLevelUp | Scenario::SharedPendingLevelUpWithUnderlay)
     }
 
 
@@ -2370,6 +2378,10 @@ mod tripeaks_reward_qmp_regressions {
         EnteringLevelUp,
         /// Expanded native Level Up whose fixed caption is still fading.
         FadingLevelUp,
+        /// Expanded native Spider button with no current exact-black OK glyph.
+        NearBlackLevelUp,
+        /// Stable native Spider button with black OK glyph and independently fading header.
+        GreyCaptionLevelUp,
         /// Existing calibrated synthetic New Game control frame.
         NewGame,
         /// Existing calibrated synthetic Play control frame.
@@ -2649,12 +2661,16 @@ mod tripeaks_reward_qmp_regressions {
             new_game_png, play_png, bare_gold_png, pending_level_up_png } = pngs;
         let mut report = WireReport::default();
         let skip = wire_point(SCORE_SKIP_CONTROL.click_point);
-        let level_up_png = if shared_readiness_scenario(scenario) {
+        let level_up_png = if scenario == Scenario::SharedGreyCaptionLevelUp {
+            SPIDER_GREY_CAPTION_LEVEL_UP_PNG
+        } else if shared_readiness_scenario(scenario) {
             SETTLED_LEVEL_UP_PNG
         } else if late_level_up_scenario(scenario) || pyramid_menu_scenario(scenario) {
             LATE_LEVEL_UP_PNG
         } else { LEVEL_UP_PNG };
-        let level_up = if shared_readiness_scenario(scenario) {
+        let level_up = if scenario == Scenario::SharedGreyCaptionLevelUp {
+            wire_point(PixelPoint::new(943, 770))
+        } else if shared_readiness_scenario(scenario) {
             wire_point(PixelPoint::new(941, 770))
         } else if pyramid_menu_scenario(scenario) {
             wire_point(PixelPoint::new(944, 771))
@@ -2733,7 +2749,13 @@ mod tripeaks_reward_qmp_regressions {
                                 }
                             } else if shared_readiness_scenario(scenario) {
                                 report.level_up_captures += 1;
-                                if scenario == Scenario::SharedPendingLevelUpWithUnderlay {
+                                if scenario == Scenario::SharedGreyCaptionLevelUp {
+                                    if report.level_up_captures == 2 {
+                                        (CaptureKind::NearBlackLevelUp, SPIDER_NEAR_BLACK_LEVEL_UP_PNG)
+                                    } else {
+                                        (CaptureKind::GreyCaptionLevelUp, SPIDER_GREY_CAPTION_LEVEL_UP_PNG)
+                                    }
+                                } else if scenario == Scenario::SharedPendingLevelUpWithUnderlay {
                                     (CaptureKind::FadingLevelUp, pending_level_up_png.as_slice())
                                 } else if report.level_up_captures == 2 || scenario == Scenario::SharedUnsettledLevelUp {
                                     (CaptureKind::FadingLevelUp, FADING_LEVEL_UP_PNG)
@@ -3129,7 +3151,8 @@ mod tripeaks_reward_qmp_regressions {
 
 
     /// Exercise shared OK readiness after GAME WIN entry has independently been authorised.
-    /// The recorded Free Cell pixels test shared caption/geometry policy, not a TriPeaks win proof.
+    /// Recorded Free Cell and Spider pixels test shared button/glyph policy only;
+    /// they cannot independently declare a Pyramid or TriPeaks game won.
     fn run_shared_readiness(
         mode: GameMode,
         scenario: Scenario,
@@ -3145,7 +3168,14 @@ mod tripeaks_reward_qmp_regressions {
         let listener = UnixListener::bind(&socket).expect("shared readiness QMP mock socket");
         listener.set_nonblocking(true).expect("bounded mock accept");
         let mut scan = TableauScanState::for_mode(mode);
-        let initial = decode_png(ENTERING_LEVEL_UP_PNG).expect("original native entering Level Up");
+        let entering_png = if scenario == Scenario::SharedGreyCaptionLevelUp {
+            SPIDER_ENTERING_LEVEL_UP_PNG
+        } else { ENTERING_LEVEL_UP_PNG };
+        // This shared-controller integration starts with independently authorised
+        // Level Up stage context. The grey-header scenario then supplies the three
+        // original Spider frames only at fresh screendump boundaries; it is a mixed
+        // fixture, not a chronological Spider win-entry replay.
+        let initial = decode_png(ENTERING_LEVEL_UP_PNG).expect("already-authorised shared Level Up stage seed");
         let (initial_observation, _) = analyse_captured_frame(initial, &scan)
             .expect("shared controller entry classification");
         assert!(!initial_observation.gameplay_scene);
@@ -3156,7 +3186,7 @@ mod tripeaks_reward_qmp_regressions {
         let pngs = MockPngs {
             initial_png: if pending_underlay {
                 encode_native_png(&readiness_frame_with_underlay(ENTERING_LEVEL_UP_PNG))
-            } else { ENTERING_LEVEL_UP_PNG.to_vec() },
+            } else { entering_png.to_vec() },
             recovered_png: encode_native_png(&initial_recovery_frame(mode, true)),
             unsupported_png: Vec::new(),
             nonempty_png: encode_native_png(&initial_recovery_frame(mode, false)),
@@ -3198,10 +3228,10 @@ mod tripeaks_reward_qmp_regressions {
     }
 
 
-    /// Entrance and faded-caption captures consume the same three-search budget without input.
+    /// Entrance and missing-glyph captures consume the same three-search budget without input.
     #[test]
     #[ignore = "requires local AF_UNIX sockets"]
-    fn shared_native_level_up_waits_for_settled_caption_before_sole_ok_click() {
+    fn shared_native_level_up_waits_for_settled_button_and_glyph_before_sole_ok_click() {
         for mode in [GameMode::Pyramid, GameMode::TriPeaks] {
             let (result, wire, events, latest) = run_shared_readiness(mode, Scenario::SharedSettlingLevelUp);
             assert_eq!(result, Ok(true), "{mode}");
@@ -3215,7 +3245,7 @@ mod tripeaks_reward_qmp_regressions {
             assert_eq!(captures, [CaptureKind::EnteringLevelUp, CaptureKind::FadingLevelUp,
                 CaptureKind::LevelUp], "{mode}: exact native entrance order");
             assert!(!pre_input.iter().any(|event| matches!(event, WireEvent::Down(_))),
-                "{mode}: geometry and caption checks are input-free");
+                "{mode}: button geometry and glyph checks are input-free");
             assert_eq!(wire.downs_at(ok), 1);
             assert_eq!(wire.downs_at(wire_point(PixelPoint::new(945, 753))), 0,
                 "the entrance frame cannot supply the click point");
@@ -3242,7 +3272,60 @@ mod tripeaks_reward_qmp_regressions {
     }
 
 
-    /// An expanded button with a fading caption cannot authorise input or extend the budget.
+    /// The native Spider sequence advances on its current OK glyph, before header fading ends.
+    #[test]
+    #[ignore = "requires local AF_UNIX sockets"]
+    fn shared_native_grey_header_does_not_veto_stable_black_ok_glyph() {
+        for mode in [GameMode::Pyramid, GameMode::TriPeaks] {
+            let (result, wire, events, latest) = run_shared_readiness(mode,
+                Scenario::SharedGreyCaptionLevelUp);
+            assert_eq!(result, Ok(true), "{mode}: stable current OK glyph authorises the restart");
+            let ok = wire_point(PixelPoint::new(943, 770));
+            let ok_index = wire.events.iter().position(|event| *event == WireEvent::Down(ok))
+                .expect("one current native OK input");
+            let pre_input = &wire.events[..ok_index];
+            let captures: Vec<_> = pre_input.iter().filter_map(|event| match event {
+                WireEvent::Capture(kind) => Some(*kind), _ => None,
+            }).collect();
+            assert_eq!(captures, [CaptureKind::EnteringLevelUp, CaptureKind::NearBlackLevelUp,
+                CaptureKind::GreyCaptionLevelUp], "{mode}: exactly three original native frames");
+            assert!(!pre_input.iter().any(|event| matches!(event, WireEvent::Down(_))),
+                "{mode}: entrance and near-black frames authorise no input");
+            let downs: Vec<_> = wire.events.iter().filter_map(|event| match event {
+                WireEvent::Down(point) => Some(*point), _ => None,
+            }).collect();
+            assert_eq!(downs, [ok, wire_point(TEST_NEW_GAME_CONTROLS[0].click_point),
+                wire_point(TEST_PLAY_CONTROLS[0].click_point),
+                wire_point(SHARED_SOLVER_CONTROL.click_point)],
+                "{mode}: one measured OK followed by the supported complete restart");
+            assert_eq!(wire.downs_at(ok), 1);
+            assert_eq!(wire.downs_at(wire_point(SCORE_SKIP_CONTROL.click_point)), 0,
+                "shared readiness carries no new score-skip or game-win authority");
+            assert_eq!(wire.level_up_captures, 3);
+            let readiness: Vec<_> = events.iter().filter_map(|event| match event {
+                WorkerEvent::Log(message) if message.contains("OK readiness:") => Some(message),
+                _ => None,
+            }).collect();
+            assert_eq!(readiness.len(), 3, "{mode}: confirmation shares the existing budget");
+            assert!(readiness[0].contains("ready=false"));
+            assert!(readiness[1].contains("geometry_stable=false")
+                && readiness[1].contains("ready=false"));
+            assert!(readiness[2].contains("selected=(943, 770)")
+                && readiness[2].contains("caption_present=false")
+                && readiness[2].contains("geometry_stable=true")
+                && readiness[2].contains("ready=true")
+                && readiness[2].contains("reason=settled-button-and-glyph"),
+                "{mode}: a grey diagnostic header cannot veto settled button/glyph evidence");
+            assert!(events.iter().any(|event| matches!(event, WorkerEvent::Log(message)
+                if message.contains(&format!("{} OK search summary: searches=3; recaptures=2;", mode.label()))
+                    && message.ends_with("outcome=matched."))));
+            assert_eq!(latest.frame.pixels, initial_recovery_frame(mode, true).pixels,
+                "{mode}: restart reaches the fresh actionable Solver frame");
+        }
+    }
+
+
+    /// An expanded button without a current exact-black glyph cannot authorise input or extend the budget.
     #[test]
     #[ignore = "requires local AF_UNIX sockets"]
     fn shared_native_level_up_stops_after_three_unsettled_frames_and_retains_pixels() {
