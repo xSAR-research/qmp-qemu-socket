@@ -1,18 +1,15 @@
 # Architecture and control flow
 
-Current release: **v2.0.10**, retaining delivered v2.0.9 changes over promoted commit
-`cf4e5c696052d248b39c956cab6492099ab44020`. The earlier extraction baseline
-below records when the shared xsar boundary was introduced. Current solving
-methods and game summaries are in [README](../README.md); the reward and
-direct Level Up transitions and acquisition limits are described in
-[release notes](release-v2.0.10.md).
+Current development builds combine **v2.2.2-candidate.8** controls and GAME WIN
+diagnostics with guest TCP capture. Current solving methods and build commands
+are in [README](../README.md); dated release notes retain their original scope.
 
 ## Current boundary
 
-Version 2.0.0 candidate 2 starts from the complete pushed v1.4.0 candidate 4
-snapshot at `78df8f1fc994442a06aa9eaa411414462e169727`. Its xsar dependency
-uses promoted Git commit `1a719b359a51d1e1e3113224193a779c76de82f8`
-without a local override.
+The application uses the sibling `../xsar` checkout, including version-2 TCP
+capture from published commit `6765e0a`. The Windows server at `10b9fa5` uses
+the matching protocol. The earlier shared-QMP extraction began with version
+2.0.0 candidate 2; those historical dependency pins do not select current builds.
 
 `SolvingStrategy` selects the controller independently of `GameMode`.
 Startup waits for a choice. Computer Vision dispatches the existing five
@@ -21,21 +18,22 @@ its frame has no fabricated HALO prediction or route. Worker input requests
 reject this strategy before connecting or sending input.
 
 `ControllerContext` contains socket, game, strategy and generation. The worker
-retains it on event envelopes, latest frames and original-PNG snapshots. The
+retains it on event envelopes, latest frames and retained-PNG snapshots. The
 UI accepts only the current context; switching away and back increments the
 generation and cannot revive stale frames, status or execution events.
 
-The application imports xsar geometry and frame types, PNG decoding and
-predicate scans. Its QMP adapter retains `press_draw_key()` as application
+The application imports xsar geometry and frame types, TCP capture, PNG codecs
+and predicate scans. Its QMP adapter retains `press_draw_key()` as application
 vocabulary over the crate's neutral `press_key("d", hold)` API. Calibration,
 colour predicates, canonical sources and terminal-stage ownership stay local.
 All five CV input/settle policies, including Spider pointer parking, are
 preserved. The extraction is functional rather than a second unused copy.
 
 The crate has no game dependencies. Its default telemetry API has no external
-dependencies; optional features enable Unix QMP, matching and PNG. Temporary
-file acquisition, original-byte saving, cancellation and logs remain in the
-application. Search and card recognition are future independent modules.
+dependencies; optional features enable TCP capture, Unix QMP, matching and PNG.
+Capture selection, retained-byte saving, diagnostic scope, cancellation and logs
+remain in the application. Only the explicit legacy QMP backend uses temporary
+PNG acquisition.
 
 ## Component boundaries
 
@@ -54,8 +52,8 @@ application. Search and card recognition are future independent modules.
 | `spider_terminal.rs` | typed one-board stages, shared local captions and Spider Play position |
 | `pyramid.rs` | Pyramid targets, fixed halo probes, priority and action-effect evidence |
 | `parameters.rs` | fixed geometry, colour values, delays, limits and release label |
-| `capture.rs` | xSAR PNG/RGBA reexports |
-| `snapshot.rs` | collision-safe PNG naming and saving the original captured bytes |
+| `capture.rs` | xSAR TCP client and PNG/RGBA reexports |
+| `snapshot.rs` | collision-safe naming and saving retained PNG bytes |
 | `cards.rs` | calibrated card regions and test-only geometry validation |
 | `detector.rs` | bounded pixel and scene discriminators |
 | `tracker.rs` | profile-driven HALO and row observation |
@@ -74,7 +72,7 @@ application. Search and card recognition are future independent modules.
 ---
 
 `GameMode` selects a static `GameProfile`. QMP, full-frame capture, cancellation,
-logging and exact-byte PNG saving are shared facilities. TriPeaks and Pyramid
+logging and saving exact retained PNG bytes are shared facilities. TriPeaks and Pyramid
 share their guarded gameplay and post-game controller.
 Their target detection and effect rules remain separate: TriPeaks requires one
 unique highlight; Pyramid chooses the first eligible target in its ordered
@@ -149,18 +147,22 @@ when the request returns. STOP is cooperative: a pending request does not
 interrupt an in-flight socket operation, and release handling can complete
 before the worker exits.
 
-Every capture currently follows the same file-backed path: reserve a private
-temporary PNG beside the socket, ask QEMU to write it, read its bytes, decode
-RGBA, and attempt file removal during normal cleanup. Detectors consume the
-decoded frame. Neither the QMP socket nor `CapturedFrame` is a native-framebuffer
-transport. The unused `FrameSource` abstraction and file-reading wrapper were
-removed for 1.1.0; no replacement capture backend was introduced.
+Capture defaults to a fresh TCP connection to `QMP_CAPTURE_ADDR`, normally
+`127.0.0.1:9999`, for each frame. xSAR validates the raw BGRA response and converts
+it to RGBA in memory. Ordinary capture creates no temporary PNG and performs no
+PNG encoding unless `--image` is enabled. QMP probing and input remain separate.
+TCP errors stop capture without falling back to QMP. `QMP_CAPTURE_BACKEND=qmp`
+explicitly selects the preserved legacy screendump/read/decode/cleanup path.
 
-Manual Capture PNG additionally keeps the fresh original PNG bytes and the
-decoded frame in the dialog until Save, Recapture or Cancel. Save writes the
-stored bytes without another capture. Preview scaling never changes the saved
-PNG. File-free automatic capture remains an open requirement; it has not been
-implemented or benchmarked.
+Manual Capture PNG encodes the same TCP frame once and retains the PNG alongside
+the preview until Save, Recapture or Cancel. In legacy mode it retains original
+QMP PNG bytes. Save writes those exact stored bytes without another capture;
+preview scaling never changes them. With `--image`, captures cache the latest
+PNG before recognition, preserving entry evidence for the GAME WIN scope. Only
+that scope writes diagnostic images. TCP filenames use frame-ready elapsed
+time before PNG encoding/writing; legacy filenames retain QMP completion time
+before file reading/decoding. Socket tests establish these local contracts; live
+Windows capture and performance still require validation on the intended guest.
 
 ## Mode availability
 
@@ -311,7 +313,7 @@ promoted to complete-effect proof by this new route.
   frame. On an unverified post-action stop, the latest result frame is shown
   for inspection without an approved prediction; a fresh Capture Frame is
   required before another guarded action. A manual snapshot separately
-  retains its original PNG and decoded frame.
+  retains its PNG bytes and captured frame.
 - The visible log is bounded; the complete private session log remains on
   disk.
 - TriPeaks/Pyramid Multi-Step defaults to continuous (`0`) and is STOP-cancellable.

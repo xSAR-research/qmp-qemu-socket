@@ -1,7 +1,7 @@
 //! Background QMP orchestration, guarded input, capture and UI event delivery.
 //!
-//! Captures use temporary PNG files that are read, decoded and removed during
-//! normal cleanup. Preview frames are coalesced; input is authorised from fresh
+//! Captures use raw guest TCP frames, with explicit legacy QMP PNG acquisition
+//! available. Preview frames are coalesced; input is authorised from fresh
 //! observations. Game-specific Pyramid results and shared post-game screens
 //! are handled by focused child modules.
 
@@ -9,6 +9,8 @@ mod control_search;
 mod freecell_execution;
 #[cfg(test)]
 mod image_recording_tests;
+#[cfg(test)]
+mod tcp_capture_tests;
 mod initial_recovery;
 mod klondike_execution;
 mod post_game;
@@ -17,8 +19,6 @@ mod pyramid_reconnaissance;
 mod spider_execution;
 mod tripeaks_terminal;
 
-// Reserved for future expansion to use the TCP screen capture server.
-#[allow(unused)]
 use std::{
     cell::RefCell,
     fs::{self, OpenOptions},
@@ -34,8 +34,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-// Reserved for future expansion to use the TCP screen capture server.
-#[allow(unused)]
 use crate::{
     capture::{CapturedFrame, PixelFormat, ScreenCaptureClient, decode_png, encode_png},
     detector::detect_game_progress_for_profile,
@@ -467,6 +465,12 @@ fn game_win_images_active() -> bool {
 }
 
 
+/// Whether captures must retain a PNG entry candidate for GAME WIN diagnostics.
+fn game_win_images_enabled() -> bool {
+    WORKER_IMAGE_DIAGNOSTICS.with(|slot| slot.borrow().as_ref().is_some_and(|state| state.enabled))
+}
+
+
 /// End recording at the transition boundary while retaining all on-disk evidence.
 struct GameWinImageScope<'a> {
     /// Sink for a source-timestamped end marker.
@@ -519,7 +523,7 @@ fn begin_game_win_images(event_tx: &WorkerEventSink) -> Result<GameWinImageScope
         Ok((true, entry, outermost))
     })?;
     if outermost {
-        send_log(event_tx, "GAME WIN image recording started: entry PNG plus every new capture until verified next-game readiness or a stopped transition. No additional screendumps are requested for recording.".to_owned());
+        send_log(event_tx, "GAME WIN image recording started: entry PNG plus every new capture until verified next-game readiness or a stopped transition. No additional captures are requested for recording.".to_owned());
     }
     if let Some(entry) = entry {
         log_game_win_image(event_tx, &entry, "entry");
@@ -547,7 +551,7 @@ fn record_game_win_png(png: &[u8], elapsed: Option<Duration>, event_tx: &WorkerE
 /// Correlate the exact filename and acquisition clock with the normal text log.
 fn log_game_win_image(event_tx: &WorkerEventSink, record: &RecordedImage, kind: &str) {
     let elapsed_ms = record.elapsed.as_millis();
-    send_log(event_tx, format!("GAME WIN PNG ({kind}): capture=+{}.{:03}s; image={}; sequence={}; write={:.1} ms. Filename time is QMP completion; log prefix is worker emission time.", elapsed_ms / 1000, elapsed_ms % 1000, record.path.display(), record.sequence, milliseconds(record.write_duration)));
+    send_log(event_tx, format!("GAME WIN PNG ({kind}): capture=+{}.{:03}s; image={}; sequence={}; write={:.1} ms. Filename time is capture completion; log prefix is worker emission time.", elapsed_ms / 1000, elapsed_ms % 1000, record.path.display(), record.sequence, milliseconds(record.write_duration)));
 }
 
 
@@ -1104,16 +1108,17 @@ fn run_capture(
             );
             send_log(
                 event_tx,
-                format!("Read-only QMP capture complete ({dimensions}); input events sent: 0."),
+                format!("Read-only capture complete ({dimensions}); input events sent: 0."),
             );
             send_log(
                 event_tx,
                 format!(
-                    "PROFILE capture: reserve={:.1} ms, screendump={:.1} ms, read={:.1} ms, decode={:.1} ms, detection={:.1} ms.",
+                    "PROFILE capture: reserve={:.1} ms, request={:.1} ms, receive/read={:.1} ms, convert/decode={:.1} ms, png-encode={:.1} ms, detection={:.1} ms.",
                     milliseconds(timing.reserve),
                     milliseconds(timing.screendump),
                     milliseconds(timing.file_read),
                     milliseconds(timing.decode),
+                    milliseconds(timing.png_encode),
                     milliseconds(timing.detection),
                 ),
             );
@@ -1201,9 +1206,12 @@ fn run_prepare_snapshot(
             send_log(
                 event_tx,
                 format!(
-                    "Original QMP PNG prepared for preview ({} bytes); guest input events=0; one screendump={:.1} ms. Saving this capture requires no second screendump.",
+                    "PNG prepared from one capture for preview ({} bytes); guest input events=0; request={:.1} ms, receive/read={:.1} ms, convert/decode={:.1} ms, png-encode={:.1} ms. Saving these bytes requires no second capture.",
                     png_len,
                     milliseconds(timing.screendump),
+                    milliseconds(timing.file_read),
+                    milliseconds(timing.decode),
+                    milliseconds(timing.png_encode),
                 ),
             );
         }
@@ -1618,19 +1626,21 @@ fn wait_or_stop(
 }
 
 
-/// Per-stage wall times and capture count for QMP PNG acquisition and analysis.
+/// Per-stage wall times for TCP capture or explicit legacy QMP acquisition.
 #[derive(Clone, Copy, Debug, Default)]
 struct CaptureTiming {
-    /// Number of fresh QMP screendumps represented.
+    /// Number of fresh frames acquired.
     captures: usize,
     /// Time reserving private temporary capture paths.
     reserve: Duration,
-    /// Time waiting for QMP to write PNG output.
+    /// TCP connection/request time, or waiting for legacy QMP PNG output.
     screendump: Duration,
-    /// Time reading the bounded original PNG bytes.
+    /// Time receiving TCP pixels or reading the bounded legacy PNG.
     file_read: Duration,
-    /// Time decoding PNG into RGBA pixels.
+    /// Time converting BGRA to RGBA or decoding a legacy PNG.
     decode: Duration,
+    /// Optional time encoding the same captured frame for saving or diagnostics.
+    png_encode: Duration,
     /// Time classifying scene, progress and targets.
     detection: Duration,
 }
@@ -1646,6 +1656,7 @@ impl CaptureTiming {
         self.screendump += other.screendump;
         self.file_read += other.file_read;
         self.decode += other.decode;
+        self.png_encode += other.png_encode;
         self.detection += other.detection;
     }
 }
@@ -1707,6 +1718,7 @@ impl RunProfile {
                     screendump: Duration::ZERO,
                     file_read: Duration::ZERO,
                     decode: Duration::ZERO,
+                    png_encode: Duration::ZERO,
                     detection: Duration::ZERO,
                 },
                 validation_effect: Duration::ZERO,
@@ -3225,7 +3237,7 @@ fn log_action_profile(
     send_log(
         event_tx,
         format!(
-            "PROFILE action {progress} ({status}): input-attempted={}, captures={}, reserve={:.1} ms, screendump={:.1} ms, read={:.1} ms, decode={:.1} ms, detection={:.1} ms, validation/effect={:.1} ms, input-wall(inclusive)={:.1} ms, intentional-waits={:.1} ms, total={:.1} ms.",
+            "PROFILE action {progress} ({status}): input-attempted={}, captures={}, reserve={:.1} ms, request={:.1} ms, receive/read={:.1} ms, convert/decode={:.1} ms, png-encode={:.1} ms, detection={:.1} ms, validation/effect={:.1} ms, input-wall(inclusive)={:.1} ms, intentional-waits={:.1} ms, total={:.1} ms.",
 
 
             if profile.input_attempted { "yes" } else { "no" },
@@ -3234,6 +3246,7 @@ fn log_action_profile(
             milliseconds(profile.capture.screendump),
             milliseconds(profile.capture.file_read),
             milliseconds(profile.capture.decode),
+            milliseconds(profile.capture.png_encode),
             milliseconds(profile.capture.detection),
             milliseconds(profile.validation_effect),
             milliseconds(profile.input_wall),
@@ -3264,7 +3277,7 @@ fn log_run_profile(
     send_log(
         event_tx,
         format!(
-            "PROFILE run ({status}): requested={requested}, cycles={}, attempted={}, verified={verified}, continued-from-halo={}, captures={}, connect/probe={:.1} ms, reserve={:.1} ms, screendump={:.1} ms, read={:.1} ms, decode={:.1} ms, detection={:.1} ms, validation/effect={:.1} ms, input-wall(inclusive)={:.1} ms, intentional-waits={:.1} ms, action min/mean/max={:.1}/{:.1}/{:.1} ms, wall={:.1} ms.",
+            "PROFILE run ({status}): requested={requested}, cycles={}, attempted={}, verified={verified}, continued-from-halo={}, captures={}, connect/probe={:.1} ms, reserve={:.1} ms, request={:.1} ms, receive/read={:.1} ms, convert/decode={:.1} ms, png-encode={:.1} ms, detection={:.1} ms, validation/effect={:.1} ms, input-wall(inclusive)={:.1} ms, intentional-waits={:.1} ms, action min/mean/max={:.1}/{:.1}/{:.1} ms, wall={:.1} ms.",
             profile.cycles,
             profile.attempted,
             profile.halo_operations,
@@ -3274,6 +3287,7 @@ fn log_run_profile(
             milliseconds(profile.totals.capture.screendump),
             milliseconds(profile.totals.capture.file_read),
             milliseconds(profile.totals.capture.decode),
+            milliseconds(profile.totals.capture.png_encode),
             milliseconds(profile.totals.capture.detection),
             milliseconds(profile.totals.validation_effect),
             milliseconds(profile.totals.input_wall),
@@ -3434,14 +3448,188 @@ fn publish_and_analyse_captured_frame(
 }
 
 
-/// Capture one decoded frame and timings, discarding the original PNG bytes from memory.
+/// Capture selection remains fixed for the lifetime of a worker thread.
+#[derive(Clone)]
+enum CaptureBackend {
+    /// Guest server address; requests use the shared xSAR version-2 protocol.
+    Tcp(String),
+    /// Explicitly selected file-backed QMP capture; never an automatic fallback.
+    LegacyQmp,
+}
+
+
+thread_local! {
+    /// Read process configuration once; changing a backend requires restarting.
+    static CAPTURE_BACKEND: Result<CaptureBackend, String> = capture_backend_from_environment();
+    /// Each socket fixture selects its own backend without changing process environment.
+    #[cfg(test)]
+    static TEST_CAPTURE_BACKEND: RefCell<Option<CaptureBackend>> = const { RefCell::new(None) };
+}
+
+
+/// Configure the default raw TCP route or explicitly request the preserved QMP route.
+fn capture_backend_from_environment() -> Result<CaptureBackend, String> {
+    let backend = std::env::var("QMP_CAPTURE_BACKEND")
+        .or_else(|error| match error {
+            std::env::VarError::NotPresent => Ok("tcp".to_owned()),
+            other => Err(other),
+        })
+        .map_err(|_| "QMP_CAPTURE_BACKEND must be UTF-8".to_owned())?;
+    match backend.as_str() {
+        "tcp" => {
+            let address = std::env::var("QMP_CAPTURE_ADDR")
+                .or_else(|error| match error {
+                    std::env::VarError::NotPresent => Ok("127.0.0.1:9999".to_owned()),
+                    other => Err(other),
+                })
+                .map_err(|_| "QMP_CAPTURE_ADDR must be UTF-8".to_owned())?;
+            if address.trim().is_empty() {
+                return Err("QMP_CAPTURE_ADDR must name a TCP host and port".to_owned());
+            }
+            Ok(CaptureBackend::Tcp(address))
+        }
+        "qmp" => Ok(CaptureBackend::LegacyQmp),
+        _ => Err("QMP_CAPTURE_BACKEND must be tcp or qmp".to_owned()),
+    }
+}
+
+
+/// Return the worker's configured route, or its local test fixture override.
+fn selected_capture_backend() -> Result<CaptureBackend, String> {
+    #[cfg(test)]
+    if let Some(backend) = TEST_CAPTURE_BACKEND.with(|slot| slot.borrow().clone()) {
+        return Ok(backend);
+    }
+    CAPTURE_BACKEND.with(Clone::clone)
+}
+
+
+/// Restore a fixture's previous thread-local route during normal return or unwind.
+#[cfg(test)]
+struct TestCaptureBackend(Option<CaptureBackend>);
+
+
+#[cfg(test)]
+impl TestCaptureBackend {
+    /// Keep existing QMP regression fixtures on their explicitly mocked transport.
+    fn legacy_qmp() -> Self {
+        Self(TEST_CAPTURE_BACKEND.with(|slot| slot.replace(Some(CaptureBackend::LegacyQmp))))
+    }
+
+    /// Point TCP integration tests at an ephemeral socket owned by that test.
+    fn tcp(address: String) -> Self {
+        Self(TEST_CAPTURE_BACKEND.with(|slot| slot.replace(Some(CaptureBackend::Tcp(address)))))
+    }
+}
+
+
+#[cfg(test)]
+impl Drop for TestCaptureBackend {
+    /// Prevent one test's endpoint from leaking into another test on the same thread.
+    fn drop(&mut self) {
+        TEST_CAPTURE_BACKEND.with(|slot| *slot.borrow_mut() = self.0.take());
+    }
+}
+
+
+/// Request one raw BGRA frame and return the client's in-place-converted RGBA buffer.
+fn capture_screen_via_tcp(address: &str) -> Result<(CapturedFrame, CaptureTiming), String> {
+    // The guest serves one frame per connection. No QMP capture or PNG work occurs.
+    let (tcp_frame, tcp_timing) = ScreenCaptureClient::new(Some(address.to_owned()))
+        .capture_full().map_err(|error| format!("TCP capture failed: {error}"))?;
+    let frame = CapturedFrame {
+        width: tcp_frame.width,
+        height: tcp_frame.height,
+        stride: tcp_frame.stride,
+        format: PixelFormat::Rgba8,
+        pixels: tcp_frame.pixels,
+    };
+    let timing = CaptureTiming {
+        captures: 1,
+        screendump: Duration::from_secs_f64((tcp_timing.connect_ms + tcp_timing.request_ms) / 1000.0),
+        file_read: Duration::from_secs_f64(tcp_timing.pixel_read_ms / 1000.0),
+        decode: Duration::from_secs_f64(tcp_timing.conversion_ms / 1000.0),
+        ..CaptureTiming::default()
+    };
+    Ok((frame, timing))
+}
+
+
+/// Encode exactly the acquired pixels when a caller or enabled recorder needs PNG bytes.
+fn encode_captured_png(frame: &CapturedFrame, timing: &mut CaptureTiming) -> Result<Vec<u8>, String> {
+    let started = Instant::now();
+    let png = encode_png(frame).map_err(|error| format!("PNG encode failed: {error}"))?;
+    timing.png_encode += started.elapsed();
+    if png.is_empty() || png.len() > SNAPSHOT_MAX_PNG_BYTES {
+        return Err("Encoded PNG is outside the snapshot byte limit".to_owned());
+    }
+    Ok(png)
+}
+
+
+/// Correlate active diagnostic frames before optional encoding or file-write delays.
+fn log_tcp_capture_timing(
+    event_tx: &WorkerEventSink,
+    requested_at: Option<Duration>,
+    captured_at: Option<Duration>,
+    timing: CaptureTiming,
+) {
+    if game_win_images_active() {
+        send_log(event_tx, format!(
+            "GAME WIN capture timing: request=+{:.3}s; TCP frame ready=+{:.3}s; request={:.1} ms; receive={:.1} ms; convert={:.1} ms; png-encode={:.1} ms. Capture time precedes PNG encoding and saving.",
+            requested_at.unwrap_or_default().as_secs_f64(),
+            captured_at.unwrap_or_default().as_secs_f64(),
+            milliseconds(timing.screendump), milliseconds(timing.file_read),
+            milliseconds(timing.decode), milliseconds(timing.png_encode),
+        ));
+    }
+}
+
+
+/// Acquire a frame without PNG work unless GAME WIN entry/sequence recording is enabled.
 fn capture_screen(
     qmp: &mut QmpClient,
     socket_path: &Path,
     event_tx: &WorkerEventSink,
 ) -> Result<(CapturedFrame, CaptureTiming), String> {
-    let (frame, _png, timing) = capture_screen_with_png(qmp, socket_path, event_tx)?;
-    Ok((frame, timing))
+    match selected_capture_backend()? {
+        CaptureBackend::LegacyQmp => {
+            let (frame, _png, timing) = capture_screen_with_png_legacy_qmp(qmp, socket_path, event_tx)?;
+            Ok((frame, timing))
+        }
+        CaptureBackend::Tcp(address) => {
+            let requested_at = worker_elapsed();
+            let (frame, mut timing) = capture_screen_via_tcp(&address)?;
+            let captured_at = worker_elapsed();
+            if game_win_images_enabled() {
+                let png = encode_captured_png(&frame, &mut timing)?;
+                record_game_win_png(&png, captured_at, event_tx)?;
+            }
+            log_tcp_capture_timing(event_tx, requested_at, captured_at, timing);
+            Ok((frame, timing))
+        }
+    }
+}
+
+
+/// Acquire once, encoding those same pixels only when PNG bytes are requested.
+fn capture_screen_with_png(
+    qmp: &mut QmpClient,
+    socket_path: &Path,
+    event_tx: &WorkerEventSink,
+) -> Result<(CapturedFrame, Vec<u8>, CaptureTiming), String> {
+    match selected_capture_backend()? {
+        CaptureBackend::LegacyQmp => capture_screen_with_png_legacy_qmp(qmp, socket_path, event_tx),
+        CaptureBackend::Tcp(address) => {
+            let requested_at = worker_elapsed();
+            let (frame, mut timing) = capture_screen_via_tcp(&address)?;
+            let captured_at = worker_elapsed();
+            let png = encode_captured_png(&frame, &mut timing)?;
+            record_game_win_png(&png, captured_at, event_tx)?;
+            log_tcp_capture_timing(event_tx, requested_at, captured_at, timing);
+            Ok((frame, png, timing))
+        }
+    }
 }
 
 
@@ -3450,7 +3638,7 @@ fn capture_screen(
 /// Returns the decoded frame, original bytes and timings for manual preview/save.
 /// The file guard removes the temporary PNG on normal cleanup. Empty/oversized
 /// files, capture failures, I/O failures and decode errors are rejected.
-fn capture_screen_with_png(
+fn capture_screen_with_png_legacy_qmp(
     qmp: &mut QmpClient,
     socket_path: &Path,
     event_tx: &WorkerEventSink,

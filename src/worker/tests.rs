@@ -2934,6 +2934,7 @@ mod tripeaks_reward_qmp_regressions {
 
     /// Run one final-card action through concrete QMP and the shared terminal controller.
     fn run(scenario: Scenario) -> ResultEvidence {
+        let _capture_backend = TestCaptureBackend::legacy_qmp();
         let directory = SocketDirectory(std::env::temp_dir().join(format!(
             "tripeaks-reward-qmp-{}-{}", std::process::id(), NEXT_REWARD_SOCKET.fetch_add(1, Ordering::Relaxed),
         )));
@@ -3039,6 +3040,7 @@ mod tripeaks_reward_qmp_regressions {
 
     /// Native settled OK authorises the first click; later synthetic runs isolate menu ordering.
     fn run_pyramid_menu(scenario: Scenario) -> (Result<bool, String>, WireReport, Vec<WorkerEvent>, LatestWorkerFrame) {
+        let _capture_backend = TestCaptureBackend::legacy_qmp();
         assert!(pyramid_menu_scenario(scenario));
         let directory = SocketDirectory(std::env::temp_dir().join(format!(
             "pyramid-menu-qmp-{}-{}", std::process::id(), NEXT_REWARD_SOCKET.fetch_add(1, Ordering::Relaxed),
@@ -3157,6 +3159,7 @@ mod tripeaks_reward_qmp_regressions {
         mode: GameMode,
         scenario: Scenario,
     ) -> (Result<bool, String>, WireReport, Vec<WorkerEvent>, LatestWorkerFrame) {
+        let _capture_backend = TestCaptureBackend::legacy_qmp();
         assert!(matches!(mode, GameMode::Pyramid | GameMode::TriPeaks));
         assert!(shared_readiness_scenario(scenario));
         let directory = SocketDirectory(std::env::temp_dir().join(format!(

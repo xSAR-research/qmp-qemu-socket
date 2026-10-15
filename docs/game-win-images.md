@@ -15,7 +15,7 @@ symlink or non-directory at the exact image path is refused before opening the U
 ## Recording boundary
 
 Recording begins only when independently confirmed completion hands control to
-the GAME WIN sequence. It saves the original PNG that supplied the entry evidence,
+the GAME WIN sequence. It saves the PNG of the frame that supplied entry evidence,
 then every new capture through score counting, score skip, optional Level Up OK,
 New Game, Play, Solver activation and fresh next-game readiness. Readiness uses
 each game's existing actionable Solver/HALO evidence. The final verification
@@ -27,8 +27,10 @@ A successful return, recovered gameplay, STOP or error closes recording. All
 saved files remain available until the next application start. A later GAME WIN
 sequence appends to the same directory with new serial numbers.
 
-With recording enabled, the worker holds one latest original PNG in memory while
-playing, so the entry evidence can be retained without an extra screen grab.
+With recording enabled, TCP capture encodes each acquired frame once before
+recognition and the worker holds its latest PNG in memory while playing, so entry
+evidence can be retained without an extra screen grab. Explicit legacy QMP mode
+caches the original screendump bytes instead.
 Ordinary captures do not create files in this directory. Disabled recording does
 not keep this additional PNG cache. Preview coalescing cannot drop recorded images.
 
@@ -38,16 +40,19 @@ Example filename: `000113.310_000001.png`.
 
 | Part | Meaning |
 | --- | --- |
-| `000113.310` | Seconds and milliseconds since application startup, at QMP screendump completion |
+| `000113.310` | Seconds and milliseconds since application startup: TCP frame-ready time, or legacy QMP screendump completion |
 | `000001` | Unique recording serial across the whole application session |
-| `.png` | Original full-display QMP PNG bytes, saved with mode 0600 |
+| `.png` | PNG of the full-display capture, saved with mode 0600 |
 
 Each saved image has a `GAME WIN PNG` text-log entry containing its exact path,
 capture elapsed time, serial and measured write duration. The entry image may
 predate recording activation; its filename preserves the original acquisition
-time. Every new capture also logs the QMP request/completion interval, screendump
-duration and file-read duration. QMP acquires the displayed pixels within that
-request/completion interval; the filename does not claim a guest-render timestamp.
+time. Active recording logs the acquisition interval and request/acquire,
+receive/read, convert/decode and PNG-encoding durations. TCP frame-ready time
+includes receipt and RGBA conversion. It is a host observation time, not a
+guest-render timestamp. Explicit legacy QMP mode retains its original timestamp
+at screendump completion, before file reading and decoding. TCP timestamps are
+recorded before PNG encoding and writing.
 
 Worker log prefixes use that same startup clock and are stamped when the worker
 emits each message. Delayed UI polling no longer replaces those timestamps with
@@ -55,9 +60,11 @@ the later time the UI drains its event queue. UI-generated housekeeping messages
 still use their own emission time. The PNG capture time is truncated to milliseconds
 in both its filename and its `capture=+...s` field.
 
-Recording copies existing PNG bytes synchronously before recognition or further
-guest input. It does not re-encode frames or request extra screendumps. Disk writes
-can add elapsed time; the measured `write` field makes this overhead visible.
+Recording writes the retained PNG bytes synchronously before recognition or
+further guest input. TCP PNGs are encoded from the same acquired RGBA frame;
+legacy QMP mode retains original PNG bytes. Entry recording reuses the cached
+PNG, and recording never requests another screen grab. PNG encoding and disk
+writes add elapsed time; separate encoding and `write` timings expose that cost.
 If recording fails, the transition stops with a clear error and keeps earlier
 evidence. No image count limit silently discards captures.
 

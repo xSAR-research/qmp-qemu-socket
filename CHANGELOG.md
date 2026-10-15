@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased — Guest TCP capture integration
+
+- Merge the guest TCP capture path with current controls, bounded readiness and
+  GAME WIN diagnostics. Use version-2 xSAR/server framing with `u16` stride.
+- Default to `QMP_CAPTURE_BACKEND=tcp` and `QMP_CAPTURE_ADDR=127.0.0.1:9999`.
+  Preserve legacy QMP capture with explicit `QMP_CAPTURE_BACKEND=qmp`; TCP errors
+  stop the request without silently switching transports.
+- Keep ordinary TCP capture in memory without PNG encoding when diagnostics are
+  disabled. Encode manual snapshots from the same frame and retain exact bytes
+  for Save. With `--image`, cache the latest PNG for entry evidence and preserve
+  GAME WIN-only writes, acquisition timestamps and stopped/error evidence.
+- Preserve QMP VM/pointer probes, input ownership, STOP, game/strategy context
+  checks and existing control-search limits. Report TCP and PNG-encoding stages
+  separately from detection and diagnostic file writes.
+- Add local socket/recording regressions; live Windows capture, visual behaviour
+  and latency remain to be validated on the intended QEMU guest.
+
 ## v2.2.2-candidate.8 — Diagnostic-only Level Up caption
 
 - Remove the fully white fixed-caption veto from shared OK readiness across

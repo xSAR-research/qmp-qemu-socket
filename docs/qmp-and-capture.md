@@ -6,14 +6,15 @@ constants and maps Draw to the neutral qcode API. Probe, movement, click,
 release ordering and release-only recovery retain their existing semantics.
 
 No QMP request starts before startup strategy selection. Independent Pyramid
-preparation performs only capture/decode/publish and exact-byte PNG preview/save;
+preparation performs only capture/publish and retained-byte PNG preview/save;
 Solver, gameplay and terminal input are rejected at the worker boundary.
 Requests and observations carry strategy/game/socket/generation identity.
 
-The PNG decoder and checked RGBA/ROI/predicate scans come from xsar. QMP still
-writes a temporary PNG; acquisition, cleanup and original-byte snapshot
-ownership remain here. This is not file-free framebuffer capture. CV game
-coordinates, HALO colour conditions and completion policies remain local.
+The TCP client, PNG codec and checked RGBA/ROI/predicate scans come from xsar.
+Capture defaults to the Windows guest TCP server; QMP remains the health/input
+transport. PNG ownership, optional diagnostic recording and the explicit legacy
+QMP temporary-file path remain here. CV game coordinates, HALO colour conditions
+and completion policies remain local.
 
 Transport timeouts remain **per I/O operation**. An endless stream of events
 or a slowly delivered line can exceed the configured duration for an entire
@@ -28,8 +29,9 @@ the user-owned Unix socket and negotiates capabilities. A read-only capture or
 manual snapshot request uses one connection and drops it on return. A guarded
 run retains its connection across actions, captures and post-game transitions,
 then drops it when the run returns. STOP is cooperative; it is checked between
-operations and during cancellable waits, while in-flight QMP work may first
-complete or time out.
+operations and during cancellable waits, while in-flight TCP or QMP work may first
+complete or time out. TCP uses one connection per frame; the Windows server
+closes each connection after its response.
 
 Before every guest input the worker requires:
 
@@ -42,63 +44,58 @@ Before every guest input the worker requires:
 
 ## Capture
 
-QMP `screendump` writes one full-display image to a filename in QEMU's host
-namespace. It does not return image bytes through the QMP socket or accept a
-crop rectangle. The worker:
+`QMP_CAPTURE_BACKEND` defaults to `tcp`; `qmp` explicitly selects the preserved
+legacy implementation. `QMP_CAPTURE_ADDR` defaults to `127.0.0.1:9999`.
+Configuration applies for the application session. A TCP failure stops the
+request without issuing a fallback QMP screendump.
 
-1. reserves a unique mode-0600 file beside the QMP socket;
-2. requests PNG explicitly with an absolute filename;
-3. reads the original PNG bytes and decodes the complete primary display to RGBA;
-4. attempts to remove the temporary file when its guard drops;
-5. performs tight detector checks in memory.
+The TCP server captures the primary Windows display through GDI and returns
+raw top-down BGRA pixels. xSAR validates the version-2 response geometry and
+converts pixels to RGBA in memory. Its 14-byte response header contains width
+(`u32`), height (`u32`), stride (`u16`) and frame number (`u32`), all little-endian.
+A packed row is `width * 4` bytes: 1920 pixels use 7680 bytes; the `u16` limit
+allows a largest four-byte row of 65532 bytes, or 16383 pixels. The controller
+still requires exactly 1920x1080 with a valid four-channel layout; there is no
+scaling, interpolation or coordinate guessing.
 
-Removal is best effort on normal returns, including ordinary error returns;
-the destructor currently ignores removal errors. A process abort or forced
-termination can leave a file behind. This pipeline is file-backed even when
-the socket directory is on a memory filesystem. File-free automatic capture
-is an open requirement, not an implemented or measured property.
+Ordinary TCP capture requests no PNG and creates no temporary file. With
+`--image`, the worker encodes and caches the same captured frame before
+recognition so later GAME WIN entry evidence remains available. Recording
+writes only within the existing GAME WIN scope; no extra screen grab is made.
+See [GAME WIN diagnostics](game-win-images.md).
 
 Gameplay uses one initial planning frame and one result frame per ordinary
 action. Slow score, deal, fireworks and unknown transitions use sparse captures.
-The worker records time spent reserving, capturing, reading, decoding and
-detecting; these timings describe the current pipeline.
+Profiles report request/acquisition, receive/read, convert/decode, optional PNG
+encoding and detection. These are host wall times, not guest-render timestamps.
 
-The decoded frame must be exactly 1920x1080 with a valid four-channel layout.
-No scaling, interpolation or coordinate guessing is permitted.
+**Capture PNG** acquires one fresh read-only frame. TCP mode encodes that same
+frame to PNG; QMP mode retains its original PNG bytes. The worker sends the
+frame and retained bytes to the dialog. Save writes those exact bytes without
+another capture or guest input. Recapture replaces them; Cancel discards them.
+Only the on-screen preview is scaled.
 
-**Capture PNG** requests one separate read-only QMP screendump. The worker
-delivers its original PNG bytes and decoded frame together to the dialog, where
-the user can see the pending image before saving. Save reserves a private
-output file and writes those bytes without another QMP command or guest input.
-Recapture replaces the pending image and bytes; Cancel discards them. Only the
-on-screen preview is scaled. The default socket filename is
-`qmp-qemu-socket.sock`; `QMP_SOCKET_PATH` selects an existing QEMU socket.
+## Host and guest endpoints
 
-## Host path contract
+QEMU creates the control listener at its configured `-qmp unix:` path. The
+application connects to the same existing absolute path, selected through
+`QMP_SOCKET_PATH` or Params; the default is `qmp-qemu-socket.sock` under
+`XDG_RUNTIME_DIR`. The Beast uses `/run/user/1000/qmp-qemu-socket.sock`.
 
-QEMU creates the listener at its configured `-qmp unix:` path. The application
-must connect to that same socket. An absolute socket path is required for the
-current capture flow because it derives the temporary PNG path from the socket
-directory and rejects relative screendump output paths. Launching QEMU or the
-application from `target/release` does not relocate an absolute path.
+For the default TCP endpoint with QEMU user networking, add
+`hostfwd=tcp:127.0.0.1:9999-10.0.2.15:9999` to the existing `-netdev user`
+configuration. Run the matching version-2 screen-grab server in the logged-in
+Windows desktop and allow its port through Windows Firewall. A bridged guest
+can instead be selected with `QMP_CAPTURE_ADDR=<guest-address>:9999`.
 
-The Beast uses `/run/user/1000/qmp-qemu-socket.sock`; its temporary capture
-PNGs consequently use `/run/user/1000`. If another deployment chooses a
-relative QEMU listener filename, resolve its actual location to an absolute
-application path first. QEMU's screendump protocol does not require the socket
-directory: that location is this application's current choice.
-
-The application and QEMU must both be able to access the temporary capture
-directory in their host filesystem namespaces. The normal configuration uses
-the user's runtime directory. The client does not copy files across hosts or
-translate container/chroot paths.
-
-The [official QMP screendump contract](https://www.qemu.org/docs/master/interop/qemu-qmp-ref.html#command-screendump)
-was checked on 2026-09-26: the command accepts a filename and optional display,
-head and format arguments. This application sets `format` to `png` and omits
-display/head, selecting the primary display and head 0. The absolute-path
-restriction and temporary-file lifecycle are application choices documented
-from `qmp.rs` and `worker.rs`.
+Only explicit legacy QMP capture uses a temporary image path. It reserves a
+unique mode-0600 file beside the socket, requests `screendump` with `format=png`,
+reads bounded original bytes, decodes RGBA and attempts removal on normal
+cleanup. QEMU and the application must access that same host directory; paths
+are not translated across containers or hosts. Removal is best effort, so a
+forced termination can leave a PNG. The legacy request omits display/head and
+uses QEMU's primary display/head 0. The [official screendump contract](https://www.qemu.org/docs/master/interop/qemu-qmp-ref.html#command-screendump)
+was checked on 2026-09-26; the socket-adjacent directory is application policy.
 
 ## Absolute pointer conversion
 
@@ -168,7 +165,7 @@ one operation; Multi-Step plans the next operation from the accepted frame.
 
 An ordinary Pyramid result without a halo receives its configured repeat
 pause (default 1000 ms) followed
-by another fresh QMP screendump and scan. A missing halo does not request
+by another fresh capture and scan. A missing halo does not request
 Solver activation; only a positively verified redeal to a new board can
 authorise one Solver activation after repeated settled observations. The
 latest unverified post-action frame is displayed for diagnosis and cannot
@@ -320,8 +317,8 @@ byte-identical. See [Free Cell Gate 1](freecell-gate-1.md).
 
 ## Spider input boundary
 
-Spider reuses QMP capture, typed input, cancellation, session logging and exact
-original-byte PNG saving. A freshly recognised solid DRAW source sends one D
+Spider reuses shared capture, QMP typed input, cancellation, session logging
+and saving of retained PNG bytes. A freshly recognised solid DRAW source sends one D
 press; a canonical PLAY source sends one click for the connected block. Source
 reads/clicks exclude rows Y>=947; clipped outlines use only visible card area.
 Dashed guides, COLLAPSED SUITS and absent stock never authorise input.

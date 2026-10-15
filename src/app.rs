@@ -213,7 +213,7 @@ pub struct QmpQemuSocketApp {
     draw_targets: bool,
     /// Visibility of the editable settings window.
     show_parameters: bool,
-    /// Visibility of the original-PNG review and save dialog.
+    /// Visibility of the captured-PNG review and save dialog.
     show_snapshot_dialog: bool,
     /// Optional user text sanitised when reserving a snapshot filename.
     snapshot_label: String,
@@ -227,9 +227,9 @@ pub struct QmpQemuSocketApp {
     snapshot_label_selection: Option<egui::text::CCursorRange>,
     /// Current capture or save error displayed without discarding retryable bytes.
     snapshot_error: Option<String>,
-    /// Original QMP PNG bytes retained for saving exactly the reviewed capture.
+    /// PNG bytes retained for saving exactly the reviewed capture.
     snapshot_png: Option<Vec<u8>>,
-    /// Decoded pixels paired with the retained original PNG.
+    /// Captured pixels paired with the retained PNG.
     snapshot_frame: Option<CapturedFrame>,
     /// Detector result paired with the snapshot frame.
     snapshot_prediction: Option<PredictedAction>,
@@ -807,7 +807,7 @@ impl QmpQemuSocketApp {
 
 
                     if !self.worker_state.is_busy() {
-                        self.push_log("Latest QMP result frame is displayed for inspection only; capture a fresh frame before another run.");
+                        self.push_log("Latest result frame is displayed for inspection only; capture a fresh frame before another run.");
                     }
                 }
             } else {
@@ -900,7 +900,7 @@ impl QmpQemuSocketApp {
         self.worker_state = WorkerState::Connecting;
         self.current_status = "Screengrab".to_owned();
         self.push_log(format!(
-            "{source}: one read-only {} QMP frame requested; guest input events=0.",
+            "{source}: one read-only {} frame requested; guest input events=0.",
             self.game_mode
         ));
         let capture_context = self.current_preview_context();
@@ -936,7 +936,7 @@ impl QmpQemuSocketApp {
         self.worker_state = WorkerState::Connecting;
         self.current_status = "Capturing snapshot".to_owned();
         self.push_log(format!(
-            "Snapshot capture requested: one fresh read-only {} QMP PNG for review before saving; guest input events=0.",
+            "Snapshot capture requested: one fresh read-only {} capture for PNG review before saving; guest input events=0.",
             self.game_mode
         ));
         let capture_context = self.current_preview_context();
@@ -984,7 +984,7 @@ impl QmpQemuSocketApp {
         match result {
             Ok(path) => {
                 self.push_log(format!(
-                    "Original previewed QMP PNG saved: {} ({} bytes); guest input events=0; additional screendumps=0.",
+                    "Previewed PNG saved: {} ({} bytes); guest input events=0; additional captures=0.",
                     path.display(), png_len,
                 ));
 
@@ -1485,7 +1485,7 @@ impl QmpQemuSocketApp {
 
 
             if bevel_button(ui, "Capture PNG", SETUP_BLUE, false, controls_enabled)
-                .on_hover_text("Capture and preview one fresh original QMP PNG before saving; send no guest input")
+                .on_hover_text("Capture and preview one fresh frame as PNG before saving; send no guest input")
                 .clicked()
             {
                 self.snapshot_label.clear();
@@ -1507,7 +1507,7 @@ impl QmpQemuSocketApp {
                 WorkerState::Uncertain => Color32::from_rgb(255, 150, 70),
                 WorkerState::Error => Color32::LIGHT_RED,
             };
-            ui.colored_label(state_colour, format!("QMP: {}", self.worker_state.label()));
+            ui.colored_label(state_colour, format!("Status: {}", self.worker_state.label()));
 
 
             if self.active_run.is_some() {
@@ -1607,15 +1607,15 @@ impl QmpQemuSocketApp {
     /// Draws the native-scale capture, optional overlays and guest-coordinate inspection.
     ///
     /// Pointer clicks here log coordinates only; overlays never modify captured
-    /// pixels or the original PNG retained by the snapshot dialog.
+    /// pixels or the PNG bytes retained by the snapshot dialog.
     fn preview(&mut self, ui: &mut egui::Ui) {
-        ui.heading(if self.solving_strategy == SolvingStrategy::ShortestPath { "Pyramid capture and reconnaissance preview" } else { "QMP capture and target preview" });
+        ui.heading(if self.solving_strategy == SolvingStrategy::ShortestPath { "Pyramid capture and reconnaissance preview" } else { "Guest capture and target preview" });
 
 
         match self.captured_dimensions {
             Some((width, height)) if self.diagnostic_preview => {
                 ui.colored_label(Color32::from_rgb(255, 174, 79), format!(
-                    "QMP result capture: {width}x{height}. {}", diagnostic_preview_status(self.worker_state)
+                    "Result capture: {width}x{height}. {}", diagnostic_preview_status(self.worker_state)
                 ));
             }
             Some((width, height)) if self.solving_strategy == SolvingStrategy::ShortestPath => {
@@ -1623,7 +1623,7 @@ impl QmpQemuSocketApp {
             }
             Some((width, height)) => {
                 ui.label(format!(
-                    "Last successful primary-display capture, implicit head 0: {width}x{height}. Displayed prediction is advisory."
+                    "Last successful primary-display capture: {width}x{height}. Displayed prediction is advisory."
                 ));
             }
             None => {
@@ -1668,7 +1668,7 @@ impl QmpQemuSocketApp {
                     painter.text(
                         canvas.center(),
                         Align2::CENTER_CENTER,
-                        "No QMP frame captured",
+                        "No guest frame captured",
                         FontId::proportional(20.0),
                         Color32::from_gray(175),
                     );
@@ -1676,7 +1676,7 @@ impl QmpQemuSocketApp {
 
 
                 // Preview-only paint operations. Never modify capture pixels or
-                // snapshot_png: saved evidence retains QEMU's original PNG bytes.
+                // snapshot_png: saved evidence retains the reviewed PNG bytes.
                 if self.draw_targets {
                     let profile = self.game_mode.profile();
 
@@ -1935,7 +1935,7 @@ impl QmpQemuSocketApp {
 
                 if self.solving_strategy == SolvingStrategy::ShortestPath {
                     ui.strong("Pyramid preparation and reconnaissance");
-                    ui.label("Capture Frame obtains fresh raw pixels. Capture PNG previews and saves the exact original PNG.");
+                    ui.label("Capture Frame obtains fresh raw pixels. Capture PNG previews a PNG of that frame and saves the exact retained bytes.");
                     ui.label("The separate reconnaissance controls require an explicit validated native profile and fresh untouched-board confirmation. There is no built-in calibration fallback. They do not enable Single Step or Multiple Steps; search and route calculation are not implemented.");
                     return;
                 }
@@ -2470,7 +2470,7 @@ impl QmpQemuSocketApp {
     }
 
 
-    /// Draws original-PNG review, bounded label editing and save/recapture controls.
+    /// Draws captured-PNG review, bounded label editing and save/recapture controls.
     ///
     /// Clipboard insertion strips control characters and honours the character cap;
     /// closing or cancelling releases the retained snapshot through one cleanup path.
@@ -2484,13 +2484,13 @@ impl QmpQemuSocketApp {
         let mut save = false;
         let mut cancel = false;
         let mut recapture = false;
-        egui::Window::new("Capture QMP PNG")
+        egui::Window::new("Capture PNG")
             .open(&mut open)
             .collapsible(false)
             .resizable(true)
             .default_width(660.0)
             .show(context, |ui| {
-                ui.label("Review this QMP capture; Save writes these exact PNG bytes.");
+                ui.label("Review this capture; Save writes these exact PNG bytes.");
 
 
                 if let Some(texture) = &self.snapshot_texture {
@@ -2503,7 +2503,7 @@ impl QmpQemuSocketApp {
                     ));
                 } else if self.snapshot_capture_pending {
                     ui.spinner();
-                    ui.label("Capturing one fresh frame through QMP…");
+                    ui.label("Capturing one fresh guest frame…");
                 }
 
 
@@ -2694,7 +2694,7 @@ impl QmpQemuSocketApp {
 impl eframe::App for QmpQemuSocketApp {
 
 
-    /// Drains worker events and schedules the next UI update without blocking on QMP I/O.
+    /// Drains worker events and schedules updates without blocking on worker I/O.
     fn logic(&mut self, context: &egui::Context, _frame: &mut eframe::Frame) {
         self.poll_worker(context);
         context.request_repaint_after(std::time::Duration::from_millis(100));

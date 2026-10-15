@@ -1,12 +1,12 @@
 # qmp-qemu-socket
 
-Development **v2.2.0** exports explicit card labels, values 1..13 and suits through xSAR's schema-2 codec.
+Development **v2.2.2-candidate.8** combines settled Level Up controls and GAME WIN diagnostics with guest TCP capture. Pyramid exports explicit card labels, values 1..13 and suits through xSAR's schema-2 codec.
 The preceding **v2.1.0** live Pyramid scan successfully restored the original board and exported its complete deal; the accepted five-game CV behaviour remains unchanged.
-This work currently requires paired local xSAR **0.4.0** validation, pending crate promotion and an exact consumer repin.
+The manifest uses the sibling `../xsar` checkout. Update it to commit `6765e0a` or later for the version-2 TCP capture protocol; the matching Windows server is published at `10b9fa5`.
 
 ## Computer Vision solving
 
-The implemented Computer Vision methodology follows the built-in **Solver** in Microsoft Solitaire & Casual Games. The Rust application captures a Windows 11 guest display through an existing QEMU QMP Unix socket, recognises a supported source **HALO**, and sends the corresponding guarded mouse click or keyboard operation. An egui desktop interface displays the captured frame, selected game, execution controls and diagnostic output.
+The implemented Computer Vision methodology follows the built-in **Solver** in Microsoft Solitaire & Casual Games. The Rust application captures a Windows 11 guest display through the guest TCP screen-grab server, recognises a supported source **HALO**, and sends the corresponding guarded mouse click or keyboard operation through QEMU's QMP Unix socket. An egui desktop interface displays the captured frame, selected game, execution controls and diagnostic output.
 
 The guest supplies the move recommendation; the application supplies visual recognition, input delivery and game-specific transition handling. It does not independently choose moves by reading card identities. The five games provide repeatable environments for exercising capture, image processing and remote control while developing reusable primitives for route-planning experiments.
 
@@ -14,7 +14,7 @@ The guest supplies the move recommendation; the application supplies visual reco
 
 The second methodology is intended to build an independent state model and search for a route using **Dijkstra or A***, rather than follow the guest's Solver. The longer-term goal includes evaluating move costs, deciding when to defer an available move, and replanning when new information reveals an impasse. This work is intended to inform future drone route-planning experiments; no drone controller is implemented here.
 
-Ordinary Pyramid preparation remains **read-only**: capture a board, inspect its calibrated regions and preview or save the original PNG. A separate, explicitly confirmed **Guarded Pyramid reconnaissance → JSON** operation reads the original tableau and ordered DRAW cards, verifies Undo All restoration and publishes a validated complete deal through xSAR. It requires a native calibration profile and grants only bounded D, Undo All and specific confirmation-OK input. It does not enable Solver, ordinary gameplay, shortest-path search or calculated-route execution. See the [reconnaissance contract and acceptance boundary](docs/pyramid-reconnaissance.md); implementation and fixture tests are not live guest acceptance.
+Ordinary Pyramid preparation remains **read-only**: capture a board, inspect its calibrated regions and preview or save a PNG of that capture. A separate, explicitly confirmed **Guarded Pyramid reconnaissance → JSON** operation reads the original tableau and ordered DRAW cards, verifies Undo All restoration and publishes a validated complete deal through xSAR. It requires a native calibration profile and grants only bounded D, Undo All and specific confirmation-OK input. It does not enable Solver, ordinary gameplay, shortest-path search or calculated-route execution. See the [reconnaissance contract and acceptance boundary](docs/pyramid-reconnaissance.md); implementation and fixture tests are not live guest acceptance.
 
 ## Strategy selection and execution
 
@@ -28,8 +28,8 @@ Strategy, game and socket changes clear prior prediction and progress authority.
 | Single Step | Request at most one gameplay action from fresh supported evidence. Solver setup, where allowed, is separate from that gameplay budget. |
 | Multiple Steps | Follow fresh supported targets up to a finite budget, or use **0 = continuous** until STOP or a guarded stop. |
 | Params | Change the existing socket path and bounded, game-specific timings while idle. Timing edits apply to the next run. |
-| STOP | Cancel further input and interrupt cancellable waits. An in-flight QMP operation may complete or time out before the worker returns. |
-| Capture PNG | Capture, inspect, label and save one original PNG without guest input. |
+| STOP | Cancel further input and interrupt cancellable waits. An in-flight TCP or QMP operation may complete or time out before the worker returns. |
+| Capture PNG | Capture, inspect, label and save one PNG without guest input or a second capture. |
 | Start reconnaissance → JSON | Separately confirmed Pyramid acquisition with native recognition, bounded stock advances, verified restoration and no-overwrite output. STOP revokes restoration input too. |
 
 A HALO is source evidence, not proof that a previous move succeeded. TriPeaks and Pyramid retain their own effect, removal and redeal checks. Klondike, Free Cell and Spider follow fresh supported Solver recommendations without comparing source and recipient card pixels; their logs distinguish acknowledged actions from proven effects. Missing HALOs, an exhausted stock pile and QMP acknowledgements alone never establish a win.
@@ -56,19 +56,21 @@ The diagram shows the controller's decision loop. Each game supplies its own rec
 
 ## QMP and display requirements
 
-The application connects to an **existing local QMP Unix socket**. It does not launch QEMU or create its listener. The default filename is `qmp-qemu-socket.sock` under `XDG_RUNTIME_DIR`; use **Params** or `QMP_SOCKET_PATH` to select another existing absolute socket path. The application and QEMU must both be able to access the capture directory in their host filesystem namespaces.
+The application connects to an **existing local QMP Unix socket**. It does not launch QEMU or create its listener. The default filename is `qmp-qemu-socket.sock` under `XDG_RUNTIME_DIR`; use **Params** or `QMP_SOCKET_PATH` to select another existing absolute socket path. QMP remains required for health checks and input even when pixels arrive over TCP.
 
 The current game calibration requires the primary guest display at **1920 × 1080**, with display and text scaling at **100%**. Frames are validated against that layout; detections do not rescale coordinates or guess a different board geometry. Before guest input, the worker checks QMP health, VM running state, a current absolute pointer, STOP and the selected game/strategy context. Uncertain input delivery stops without replaying the operation.
 
-Automatic capture is currently **file-backed**. QEMU's `screendump` writes a temporary PNG beside the socket; the worker reads its original bytes, decodes RGBA8 pixels and attempts to remove the temporary file. Detection then runs on the decoded image in memory. This is not file-free framebuffer capture, and failed cleanup or forced termination can leave a temporary PNG behind.
+Automatic capture defaults to **TCP** at `127.0.0.1:9999`, selected by `QMP_CAPTURE_ADDR`. The Windows server sends raw top-down BGRA pixels; xSAR converts them to the RGBA8 layout used by detectors and previews. Ordinary captures create no temporary PNG and do not encode PNG unless `--image` diagnostics are enabled. The server and xSAR client must both use protocol version 2, with a little-endian `u16` stride. For QEMU user networking, forward `127.0.0.1:9999` on Arch to `10.0.2.15:9999` in Windows, and allow the server through the Windows firewall.
 
-Decoded Computer Vision observations update the application's image control, including delayed HALO observations and post-game transitions. A bounded latest-frame slot replaces older pending images, so the UI shows the newest available observation rather than accumulating a frame queue. Display publication introduces no additional QMP screen grab and does not grant input authority.
+Set `QMP_CAPTURE_BACKEND=qmp` explicitly to retain legacy QMP screendumps. That mode reserves a private temporary PNG beside the socket, reads and decodes its original bytes, and attempts cleanup on return; both QEMU and the application must access that directory. TCP failures stop the request without falling back to QMP. Capture configuration applies for the application session.
 
-The manifest pins xSAR **0.4.0** at Git revision `ab226a65d3bbc2b4914a5cecfb2d3247364c7536`, including the card/deal model, strict schema-1/2 reader, schema-2 writer and no-overwrite filesystem publisher. Game calibration, capture/input authority, reconnaissance and restoration remain application-owned. Ordinary builds use this promoted Git source and require no local xSAR checkout or temporary source override. No registry publication is implied.
+Decoded Computer Vision observations update the application's image control, including delayed HALO observations and post-game transitions. A bounded latest-frame slot replaces older pending images, so the UI shows the newest available observation rather than accumulating a frame queue. Display publication introduces no additional screen grab and does not grant input authority.
+
+The sibling xSAR dependency supplies TCP/QMP transport, the card/deal model, strict schema-1/2 reader, schema-2 writer and no-overwrite filesystem publisher. Game calibration, capture/input authority, reconnaissance and restoration remain application-owned. Keep `qmp-qemu-socket` and `xsar` beside each other when building; no registry publication is implied.
 
 ## Captures and diagnostic records
 
-**Capture PNG** obtains a separate fresh, read-only QMP screenshot. The dialog displays that capture while an optional label is entered. **Save PNG** or Enter writes the retained original PNG bytes without another screen grab; **Recapture** replaces the pending capture, and **Cancel** discards it. Preview scaling and target overlays do not alter the saved image.
+**Capture PNG** obtains a fresh, read-only frame and encodes that same frame to PNG in TCP mode. Legacy QMP mode retains its original PNG. The dialog displays the capture while an optional label is entered. **Save PNG** or Enter writes the exact retained PNG bytes without another screen grab; **Recapture** replaces the pending capture, and **Cancel** discards it. Preview scaling and target overlays do not alter the saved image.
 
 `QMP_SNAPSHOT_DIR` selects the save directory. Otherwise the application uses `$HOME/Pictures/Screenshots`, then `$HOME/Pictures`, when those directories exist, and finally the system temporary directory. Saved files use a local timestamp, a bounded label and exclusive mode-0600 creation.
 
@@ -78,10 +80,9 @@ When a run stops on uncertain evidence, retain its log and an original PNG of th
 
 ## Build and verification
 
-The commands below use the promoted Git dependency recorded in the manifest
-and lockfile. Earlier paired validation used an external local source override;
-that override is unnecessary for normal builds and remains outside promotion
-files. See [development conventions](docs/development.md) and the
+The commands below use the sibling `../xsar` dependency and the committed
+lockfile. Update that sibling checkout before building. Earlier external source
+overrides and Git pins in release records describe historical validation. See [development conventions](docs/development.md) and the
 [v2.2.0 validation record](docs/release-v2.2.0.md). The
 [v2.0.11 notes](docs/release-v2.0.11.md) retain historical RGB-slice evidence.
 
@@ -98,7 +99,9 @@ RUSTDOCFLAGS='-D warnings' cargo doc --locked --no-deps --document-private-items
 cargo clippy --locked --all-targets -- -D warnings
 ```
 
-The integration tests require local Unix socket creation. `--include-ignored`
+Capture regressions cover raw TCP pixels, retained snapshot PNGs, GAME WIN
+recording, explicit legacy capture and rejection of TCP failures without fallback.
+The integration tests require local Unix and loopback TCP socket creation. `--include-ignored`
 runs that explicit host-test group as well as the ordinary suite; restricted
 executors can run the ordinary suite but must report these tests as unverified.
 
@@ -111,8 +114,12 @@ CARGO_TARGET_DIR="$PWD/target" cargo build --locked --release
 3. Launch the validated release.
 
 ```zsh
-./target/release/qmp-qemu-socket
+QMP_CAPTURE_ADDR=127.0.0.1:9999 cargo run --locked --release
 ```
+
+To select the preserved legacy path explicitly, use
+`QMP_CAPTURE_BACKEND=qmp cargo run --locked --release`. Leaving
+`QMP_CAPTURE_BACKEND` unset selects TCP; `QMP_CAPTURE_BACKEND=tcp` is equivalent.
 
 Build and test results do not establish live guest behaviour. Verify the selected game, HALO handling, transitions, image updates and STOP against the intended guest configuration. Formatting is separate from these checks; follow the repository's documented source-spacing policy.
 

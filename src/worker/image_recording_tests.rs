@@ -175,6 +175,7 @@ impl Drop for ServerJoin {
 #[test]
 #[ignore = "requires local AF_UNIX sockets"]
 fn original_qmp_pngs_are_scoped_through_ready_then_ordinary_play_is_unsaved() {
+    let _capture_backend = TestCaptureBackend::legacy_qmp();
     let root = TestDirectory::new();
     let images = root.images();
     let _restore = DiagnosticsRestore::install(images.clone());

@@ -651,12 +651,13 @@ pub(super) fn run_post_game_restart(
     send_log(
         event_tx,
         format!(
-            "PROFILE post-game restart: captures={}, reserve={:.1} ms, screendump={:.1} ms, read={:.1} ms, decode={:.1} ms, detection={:.1} ms, input-wall(inclusive)={:.1} ms, intentional-waits={:.1} ms, total={:.1} ms.",
+            "PROFILE post-game restart: captures={}, reserve={:.1} ms, request={:.1} ms, receive/read={:.1} ms, convert/decode={:.1} ms, png-encode={:.1} ms, detection={:.1} ms, input-wall(inclusive)={:.1} ms, intentional-waits={:.1} ms, total={:.1} ms.",
             capture_timing.captures,
             milliseconds(capture_timing.reserve),
             milliseconds(capture_timing.screendump),
             milliseconds(capture_timing.file_read),
             milliseconds(capture_timing.decode),
+            milliseconds(capture_timing.png_encode),
             milliseconds(capture_timing.detection),
             milliseconds(input_wall),
             milliseconds(intentional_wait),

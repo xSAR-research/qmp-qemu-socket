@@ -189,8 +189,8 @@ impl KlondikeIo for QmpKlondikeIo<'_> {
         self.event_tx.publish_diagnostic_frame(frame.clone());
         let result = classify_captured_result(frame, self.scan_state, self.cancel_requested);
         send_log(self.event_tx, format!(
-            "PROFILE Klondike observation: acquisition and classification={:.1} ms; screendump={:.1} ms, decode={:.1} ms.",
-            milliseconds(started.elapsed()), milliseconds(timing.screendump), milliseconds(timing.decode),
+            "PROFILE Klondike observation: acquisition and classification={:.1} ms; request={:.1} ms, receive/read={:.1} ms, convert/decode={:.1} ms, png-encode={:.1} ms.",
+            milliseconds(started.elapsed()), milliseconds(timing.screendump), milliseconds(timing.file_read), milliseconds(timing.decode), milliseconds(timing.png_encode),
         ));
 
 

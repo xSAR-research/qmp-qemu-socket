@@ -99,8 +99,8 @@ impl FreeCellIo for QmpFreeCellIo<'_> {
         let started = Instant::now();
         let (frame, timing) = capture_screen(self.qmp, self.socket_path, self.event_tx)?;
         send_log(self.event_tx, format!(
-            "PROFILE Free Cell capture: acquisition={:.1} ms; screendump={:.1} ms, decode={:.1} ms.",
-            milliseconds(started.elapsed()), milliseconds(timing.screendump), milliseconds(timing.decode),
+            "PROFILE Free Cell capture: acquisition={:.1} ms; request={:.1} ms, receive/read={:.1} ms, convert/decode={:.1} ms, png-encode={:.1} ms.",
+            milliseconds(started.elapsed()), milliseconds(timing.screendump), milliseconds(timing.file_read), milliseconds(timing.decode), milliseconds(timing.png_encode),
         ));
         Ok(frame)
     }
