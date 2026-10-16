@@ -68,9 +68,15 @@ writes add elapsed time; separate encoding and `write` timings expose that cost.
 If recording fails, the transition stops with a clear error and keeps earlier
 evidence. No image count limit silently discards captures.
 
-Candidate.8 keeps the 1000 ms first post-score wait and three total control
-observations. A pending OK uses that same budget to confirm settled geometry
-and a current exact-black central glyph before its single click. The fixed
+Candidate.10 keeps the 1000 ms first post-score wait and three normal control
+observations. A pending OK confirms settled geometry and a current exact-black
+central glyph before its single click. If the third normal frame is clean but
+still needs geometry agreement, one final 200 ms OK-only capture is permitted.
+That capture is also recorded during GAME WIN; no fifth observation or extra
+input is granted. A settled-size
+body with a current glyph awaiting geometry agreement selects a 200 ms fresh
+confirmation wait; other observations keep normal retry spacing. Saved images
+include those confirmation captures, still only during GAME WIN. The fixed
 caption remains diagnostic only, logged with `caption_gate=false`; a fading
 caption cannot veto otherwise sufficient button evidence. Each readiness log
 belongs to the captured frame preceding it; no additional capture is requested

@@ -2319,6 +2319,26 @@ mod tripeaks_reward_qmp_regressions {
         SharedGreyCaptionLevelUp,
         /// Unsettled native foreground OK overlaps a synthetic New Game underlay caption.
         SharedPendingLevelUpWithUnderlay,
+        /// A current clean glyph gets a fast fresh witness, then later tinted OK cannot replay it.
+        SharedFastOkConfirmation,
+        /// A pending clean OK disappears; the next delay and geometry must lose fast eligibility.
+        SharedAbsentOkConfirmation,
+        /// The fast fresh witness contains tinted lettering and must not authorise input.
+        SharedTintedOkConfirmation,
+        /// A first clean third-frame OK receives its one final clean geometry witness.
+        SharedFinalOkConfirmation,
+        /// The sole final witness has tinted glyphs and cannot obtain a fifth frame.
+        SharedFinalTintedOkConfirmation,
+        /// A still-changing final body cannot renew its consumed confirmation reserve.
+        SharedFinalChangingOkConfirmation,
+        /// STOP is raised after the clean third frame, before the final fresh capture.
+        SharedFinalStoppedOkConfirmation,
+        /// New Game appears in the reserved OK frame, without fourth-frame menu authority.
+        SharedFinalNewGameInsteadOfOk,
+        /// Fresh gameplay in the reserved OK frame cannot renew recovery authority.
+        SharedFinalGameplayInsteadOfOk,
+        /// Acknowledgement uncertainty after the final witness permits no replay or next capture.
+        SharedFinalUncertainOkConfirmation,
     }
 
 
@@ -2334,14 +2354,27 @@ mod tripeaks_reward_qmp_regressions {
             | Scenario::CandidateTwentyOne | Scenario::CandidateThirty
             | Scenario::TransientCandidateThirty | Scenario::MixedCandidateThirty
             | Scenario::SharedSettlingLevelUp | Scenario::SharedUnsettledLevelUp
-            | Scenario::SharedGreyCaptionLevelUp | Scenario::SharedPendingLevelUpWithUnderlay)
+            | Scenario::SharedGreyCaptionLevelUp | Scenario::SharedPendingLevelUpWithUnderlay
+            | Scenario::SharedFastOkConfirmation | Scenario::SharedAbsentOkConfirmation
+            | Scenario::SharedTintedOkConfirmation) || shared_final_confirmation_scenario(scenario)
     }
 
 
     /// Recorded entrance frames test only shared OK readiness, with GAME WIN already authorised.
     fn shared_readiness_scenario(scenario: Scenario) -> bool {
         matches!(scenario, Scenario::SharedSettlingLevelUp | Scenario::SharedUnsettledLevelUp
-            | Scenario::SharedGreyCaptionLevelUp | Scenario::SharedPendingLevelUpWithUnderlay)
+            | Scenario::SharedGreyCaptionLevelUp | Scenario::SharedPendingLevelUpWithUnderlay
+            | Scenario::SharedFastOkConfirmation | Scenario::SharedAbsentOkConfirmation
+            | Scenario::SharedTintedOkConfirmation) || shared_final_confirmation_scenario(scenario)
+    }
+
+
+    /// Only these scenarios spend a clean candidate's conditional fourth OK observation.
+    fn shared_final_confirmation_scenario(scenario: Scenario) -> bool {
+        matches!(scenario, Scenario::SharedFinalOkConfirmation
+            | Scenario::SharedFinalTintedOkConfirmation | Scenario::SharedFinalChangingOkConfirmation
+            | Scenario::SharedFinalStoppedOkConfirmation | Scenario::SharedFinalNewGameInsteadOfOk
+            | Scenario::SharedFinalGameplayInsteadOfOk | Scenario::SharedFinalUncertainOkConfirmation)
     }
 
 
@@ -2418,7 +2451,7 @@ mod tripeaks_reward_qmp_regressions {
         unsupported_captures: usize,
         /// Positive nonempty gameplay observations before the existing Solver recovery.
         nonempty_captures: usize,
-        /// Independently acquired original native Level Up frames.
+        /// Acquisitions in the expected Level Up episode, including its reserved final witness.
         level_up_captures: usize,
         /// Gold-only earlier-control captures that receive no input authority.
         bare_gold_captures: usize,
@@ -2629,7 +2662,9 @@ mod tripeaks_reward_qmp_regressions {
         play_png: Vec<u8>,
         /// Bare OK caption, retaining none of the native Level Up panel evidence.
         bare_gold_png: Vec<u8>,
-        /// In-memory native fading-frame derivative with only a synthetic underlay caption added.
+        /// Native clean capture supplied as a controlled fresh confirmation witness.
+        confirmation_clean_png: Vec<u8>,
+        /// Scenario-specific pending/confirming frame, separate from native on-disk fixture bytes.
         pending_level_up_png: Vec<u8>,
     }
 
@@ -2658,7 +2693,7 @@ mod tripeaks_reward_qmp_regressions {
         scenario: Scenario, cancel: Arc<AtomicBool>,
     ) -> WireReport {
         let MockPngs { initial_png, recovered_png, unsupported_png, nonempty_png,
-            new_game_png, play_png, bare_gold_png, pending_level_up_png } = pngs;
+            new_game_png, play_png, bare_gold_png, confirmation_clean_png, pending_level_up_png } = pngs;
         let mut report = WireReport::default();
         let skip = wire_point(SCORE_SKIP_CONTROL.click_point);
         let level_up_png = if scenario == Scenario::SharedGreyCaptionLevelUp {
@@ -2668,7 +2703,11 @@ mod tripeaks_reward_qmp_regressions {
         } else if late_level_up_scenario(scenario) || pyramid_menu_scenario(scenario) {
             LATE_LEVEL_UP_PNG
         } else { LEVEL_UP_PNG };
-        let level_up = if scenario == Scenario::SharedGreyCaptionLevelUp {
+        let level_up = if matches!(scenario, Scenario::SharedFastOkConfirmation | Scenario::SharedAbsentOkConfirmation)
+            || shared_final_confirmation_scenario(scenario)
+        {
+            wire_point(native_level_up_control_from(&confirmation_clean_png).click_point)
+        } else if scenario == Scenario::SharedGreyCaptionLevelUp {
             wire_point(PixelPoint::new(943, 770))
         } else if shared_readiness_scenario(scenario) {
             wire_point(PixelPoint::new(941, 770))
@@ -2716,10 +2755,12 @@ mod tripeaks_reward_qmp_regressions {
                         let (kind, bytes) = if !report.events.iter().any(|event| matches!(event, WireEvent::Capture(_))) {
                             if shared_readiness_scenario(scenario) {
                                 report.level_up_captures += 1;
-                                (CaptureKind::EnteringLevelUp, initial_png.as_slice())
+                                (if scenario == Scenario::SharedAbsentOkConfirmation {
+                                    CaptureKind::LevelUp
+                                } else { CaptureKind::EnteringLevelUp }, initial_png.as_slice())
                             } else { (CaptureKind::Initial, initial_png.as_slice()) }
                         } else if level_up_scenario(scenario) {
-                            assert!(!(scenario == Scenario::UncertainLevelUp && error_delivered),
+                            assert!(!(matches!(scenario, Scenario::UncertainLevelUp | Scenario::SharedFinalUncertainOkConfirmation) && error_delivered),
                                 "uncertain OK must stop before any further capture");
                             if report.downs_at(wire_point(SHARED_SOLVER_CONTROL.click_point)) > 0 {
                                 (CaptureKind::Recovered, recovered_png.as_slice())
@@ -2729,7 +2770,10 @@ mod tripeaks_reward_qmp_regressions {
                             } else if report.downs_at(new_game) > 0 {
                                 (CaptureKind::Play, play_png.as_slice())
                             } else if report.downs_at(level_up) > 0 {
-                                if scenario == Scenario::PyramidMissingNewGameWithOldInk {
+                                if scenario == Scenario::SharedFastOkConfirmation {
+                                    report.unsupported_captures += 1;
+                                    (CaptureKind::Unsupported, unsupported_png.as_slice())
+                                } else if scenario == Scenario::PyramidMissingNewGameWithOldInk {
                                     report.unsupported_captures += 1;
                                     (CaptureKind::Unsupported, new_game_png.as_slice())
                                 } else if scenario == Scenario::MissingNewGame
@@ -2749,7 +2793,32 @@ mod tripeaks_reward_qmp_regressions {
                                 }
                             } else if shared_readiness_scenario(scenario) {
                                 report.level_up_captures += 1;
-                                if scenario == Scenario::SharedGreyCaptionLevelUp {
+                                if shared_final_confirmation_scenario(scenario) {
+                                    assert!(report.level_up_captures <= 4, "the sole final confirmation cannot grant a fifth OK frame");
+                                    match report.level_up_captures {
+                                        2 => (CaptureKind::EnteringLevelUp, initial_png.as_slice()),
+                                        3 => (CaptureKind::LevelUp, confirmation_clean_png.as_slice()),
+                                        4 => (match scenario {
+                                            Scenario::SharedFinalNewGameInsteadOfOk => CaptureKind::NewGame,
+                                            Scenario::SharedFinalGameplayInsteadOfOk => CaptureKind::Recovered,
+                                            _ => CaptureKind::LevelUp,
+                                        }, pending_level_up_png.as_slice()),
+                                        _ => unreachable!("the initial screenshot was served separately"),
+                                    }
+                                } else if matches!(scenario, Scenario::SharedFastOkConfirmation | Scenario::SharedTintedOkConfirmation) {
+                                    if report.level_up_captures == 2 {
+                                        (CaptureKind::LevelUp, confirmation_clean_png.as_slice())
+                                    } else {
+                                        (CaptureKind::LevelUp, pending_level_up_png.as_slice())
+                                    }
+                                } else if scenario == Scenario::SharedAbsentOkConfirmation {
+                                    assert!(report.level_up_captures <= 4, "the sole returning OK confirmation cannot grant a fifth frame");
+                                    if report.level_up_captures == 2 {
+                                        (CaptureKind::Unsupported, unsupported_png.as_slice())
+                                    } else {
+                                        (CaptureKind::LevelUp, confirmation_clean_png.as_slice())
+                                    }
+                                } else if scenario == Scenario::SharedGreyCaptionLevelUp {
                                     if report.level_up_captures == 2 {
                                         (CaptureKind::NearBlackLevelUp, SPIDER_NEAR_BLACK_LEVEL_UP_PNG)
                                     } else {
@@ -2847,6 +2916,9 @@ mod tripeaks_reward_qmp_regressions {
                         if scenario == Scenario::MixedStageReset && report.level_up_captures == 2 {
                             cancel.store(true, Ordering::Release);
                         }
+                        if scenario == Scenario::SharedFinalStoppedOkConfirmation && report.level_up_captures == 3 {
+                            cancel.store(true, Ordering::Release);
+                        }
                         ack(&mut stream, id);
                     }
                     "input-send-event" => {
@@ -2882,14 +2954,14 @@ mod tripeaks_reward_qmp_regressions {
                             if report.connections > 1 { report.recovery_releases += 1; }
                         }
                         if down && ((scenario == Scenario::UncertainSkip && position == skip)
-                            || (scenario == Scenario::UncertainLevelUp && position == level_up))
+                            || (matches!(scenario, Scenario::UncertainLevelUp | Scenario::SharedFinalUncertainOkConfirmation) && position == level_up))
                         {
                             assert!(pending_skip_error.is_none() && !error_delivered, "skip down was retried");
                             pending_skip_error = Some(id);
                             // xSAR sends UP before collecting DOWN/UP acknowledgements.
                         } else if up && pending_skip_error.is_some() {
                             let down_id = pending_skip_error.take().expect("pending injected down id");
-                            let description = if scenario == Scenario::UncertainLevelUp {
+                            let description = if matches!(scenario, Scenario::UncertainLevelUp | Scenario::SharedFinalUncertainOkConfirmation) {
                                 "injected uncertain Level Up OK"
                             } else { "injected uncertain reward skip" };
                             packet(&mut stream, json!({"error": {"class": "GenericError", "desc": description}, "id": down_id}));
@@ -2904,7 +2976,7 @@ mod tripeaks_reward_qmp_regressions {
                     command => panic!("unexpected production QMP command: {command}"),
                 }
             }
-            if matches!(scenario, Scenario::UncertainSkip | Scenario::UncertainLevelUp)
+            if matches!(scenario, Scenario::UncertainSkip | Scenario::UncertainLevelUp | Scenario::SharedFinalUncertainOkConfirmation)
                 && error_delivered && report.connections == 1
             {
                 continue;
@@ -3017,7 +3089,8 @@ mod tripeaks_reward_qmp_regressions {
             encode_native_png(&dialog_observation(&[native_level_up_control()]).frame)
         } else { Vec::new() };
         let pngs = MockPngs { initial_png, recovered_png, unsupported_png, nonempty_png,
-            new_game_png, play_png, bare_gold_png, pending_level_up_png: Vec::new() };
+            new_game_png, play_png, bare_gold_png, confirmation_clean_png: Vec::new(),
+            pending_level_up_png: Vec::new() };
         let cancel = Arc::new(AtomicBool::new(false));
         let server_cancel = Arc::clone(&cancel);
         let server = thread::spawn(move || serve(listener, pngs, scenario, server_cancel));
@@ -3071,6 +3144,7 @@ mod tripeaks_reward_qmp_regressions {
             new_game_png: encode_native_png(&next_menu),
             play_png: encode_native_png(&dialog_observation(&TEST_PLAY_CONTROLS).frame),
             bare_gold_png: Vec::new(),
+            confirmation_clean_png: Vec::new(),
             pending_level_up_png: Vec::new(),
         };
         let cancel = Arc::new(AtomicBool::new(false));
@@ -3171,7 +3245,15 @@ mod tripeaks_reward_qmp_regressions {
         let listener = UnixListener::bind(&socket).expect("shared readiness QMP mock socket");
         listener.set_nonblocking(true).expect("bounded mock accept");
         let mut scan = TableauScanState::for_mode(mode);
-        let entering_png = if scenario == Scenario::SharedGreyCaptionLevelUp {
+        let fast_confirmation_scenario = matches!(scenario, Scenario::SharedFastOkConfirmation
+            | Scenario::SharedAbsentOkConfirmation | Scenario::SharedTintedOkConfirmation)
+            || shared_final_confirmation_scenario(scenario);
+        let (native_entering, native_clean, native_tinted) = confirmation_pngs(mode);
+        let entering_png = if scenario == Scenario::SharedAbsentOkConfirmation {
+            native_clean
+        } else if fast_confirmation_scenario {
+            native_entering
+        } else if scenario == Scenario::SharedGreyCaptionLevelUp {
             SPIDER_ENTERING_LEVEL_UP_PNG
         } else { ENTERING_LEVEL_UP_PNG };
         // This shared-controller integration starts with independently authorised
@@ -3191,13 +3273,36 @@ mod tripeaks_reward_qmp_regressions {
                 encode_native_png(&readiness_frame_with_underlay(ENTERING_LEVEL_UP_PNG))
             } else { entering_png.to_vec() },
             recovered_png: encode_native_png(&initial_recovery_frame(mode, true)),
-            unsupported_png: Vec::new(),
+            unsupported_png: if scenario == Scenario::SharedAbsentOkConfirmation {
+                encode_native_png(&dialog_observation(&[]).frame)
+            } else if fast_confirmation_scenario { native_tinted.to_vec() } else { Vec::new() },
             nonempty_png: encode_native_png(&initial_recovery_frame(mode, false)),
             new_game_png: encode_native_png(&dialog_observation(&TEST_NEW_GAME_CONTROLS).frame),
             play_png: encode_native_png(&dialog_observation(&TEST_PLAY_CONTROLS).frame),
             bare_gold_png: Vec::new(),
+            confirmation_clean_png: if fast_confirmation_scenario { native_clean.to_vec() } else { Vec::new() },
             pending_level_up_png: if pending_underlay {
                 encode_native_png(&readiness_frame_with_underlay(FADING_LEVEL_UP_PNG))
+            } else if matches!(scenario, Scenario::SharedFastOkConfirmation | Scenario::SharedFinalOkConfirmation
+                | Scenario::SharedFinalStoppedOkConfirmation | Scenario::SharedFinalUncertainOkConfirmation)
+            {
+                // Repeating this original clean capture models a fresh witness
+                // after the requested 200 ms wait, not an actual recorded 200 ms sample.
+                native_clean.to_vec()
+            } else if matches!(scenario, Scenario::SharedTintedOkConfirmation | Scenario::SharedFinalTintedOkConfirmation) {
+                native_tinted.to_vec()
+            } else if scenario == Scenario::SharedFinalChangingOkConfirmation {
+                let mut frame = decode_png(native_clean).expect("native clean before controlled horizontal shift");
+                for row in frame.pixels.chunks_exact_mut(frame.stride) {
+                    let retained = row.len() - 8;
+                    row.copy_within(..retained, 8);
+                    row[..8].fill(255);
+                }
+                encode_native_png(&frame)
+            } else if scenario == Scenario::SharedFinalNewGameInsteadOfOk {
+                encode_native_png(&dialog_observation(&TEST_NEW_GAME_CONTROLS).frame)
+            } else if scenario == Scenario::SharedFinalGameplayInsteadOfOk {
+                encode_native_png(&initial_recovery_frame(mode, true))
             } else { Vec::new() },
         };
         let cancel = Arc::new(AtomicBool::new(false));
@@ -3222,12 +3327,221 @@ mod tripeaks_reward_qmp_regressions {
     }
 
 
+    /// Original native captures from 16 October; no interpolated image is invented.
+    fn confirmation_pngs(mode: GameMode) -> (&'static [u8], &'static [u8], &'static [u8]) {
+        match mode {
+            GameMode::Pyramid => (
+                include_bytes!("../../tests/fixtures/ok-confirmation-20261016/pyramid/entering.png"),
+                include_bytes!("../../tests/fixtures/ok-confirmation-20261016/pyramid/clean.png"),
+                include_bytes!("../../tests/fixtures/ok-confirmation-20261016/pyramid/tinted.png"),
+            ),
+            GameMode::TriPeaks => (
+                include_bytes!("../../tests/fixtures/ok-confirmation-20261016/tripeaks/entering.png"),
+                include_bytes!("../../tests/fixtures/ok-confirmation-20261016/tripeaks/clean.png"),
+                include_bytes!("../../tests/fixtures/ok-confirmation-20261016/tripeaks/tinted.png"),
+            ),
+            _ => panic!("only shared-controller modes supply these captured sequences"),
+        }
+    }
+
+
     /// Add five synthetic underlay pixels to a decoded copy, preserving each native PNG unchanged.
     fn readiness_frame_with_underlay(png: &[u8]) -> CapturedFrame {
         let mut frame = decode_png(png).expect("original native readiness frame");
         let point = TEST_NEW_GAME_CONTROLS[0].click_point;
         paint_black_run(&mut frame, point.x, point.y, 5);
         frame
+    }
+
+
+    /// Repeating the byte-original clean frame models a successful fresh 200 ms
+    /// witness. Later native tint cannot replay an acknowledged OK or extend the
+    /// independently bounded New Game search. This is no live timing prediction.
+    #[test]
+    #[ignore = "requires local AF_UNIX sockets"]
+    fn shared_native_clean_ok_uses_fast_confirmation_then_never_replays_after_tint() {
+        for mode in [GameMode::Pyramid, GameMode::TriPeaks] {
+            let (result, wire, events, latest) = run_shared_readiness(mode,
+                Scenario::SharedFastOkConfirmation);
+            assert!(result.unwrap_err().contains("did not become ready in 3 consecutive fresh captures"));
+            let (_, clean, tinted) = confirmation_pngs(mode);
+            let expected_point = native_level_up_control_from(clean).click_point;
+            let ok = wire_point(expected_point);
+            let ok_index = wire.events.iter().position(|event| *event == WireEvent::Down(ok))
+                .expect("the current confirming native glyph supplies one OK input");
+            let captures: Vec<_> = wire.events[..ok_index].iter().filter_map(|event| match event {
+                WireEvent::Capture(kind) => Some(*kind), _ => None,
+            }).collect();
+            assert_eq!(captures, [CaptureKind::EnteringLevelUp, CaptureKind::LevelUp, CaptureKind::LevelUp]);
+            assert_eq!(wire.downs(), 1, "later tinted OK never authorises replay, score skip or another control");
+            assert_eq!(wire.downs_at(ok), 1);
+            assert_eq!(wire.level_up_captures, 3, "confirmation consumes the existing third observation");
+            assert_eq!(wire.unsupported_captures, 3, "New Game independently stops after three current misses");
+            assert_eq!(latest.frame.pixels, decode_png(tinted).unwrap().pixels);
+            let waits: Vec<_> = events.iter().filter_map(|event| match event {
+                WorkerEvent::Log(message) if message.contains("OK retry wait:") => Some(message),
+                _ => None,
+            }).collect();
+            assert_eq!(waits.len(), 2);
+            assert!(waits[0].contains("chosen_ms=2000; normal_ms=2000; confirmation_pending=false"));
+            assert!(waits[1].contains("chosen_ms=200; normal_ms=2000; confirmation_pending=true"));
+            assert!(events.iter().any(|event| matches!(event, WorkerEvent::Log(message)
+                if message.contains(&format!("{} OK search summary: searches=3; recaptures=2;", mode.label()))
+                    && message.ends_with("outcome=matched."))));
+            assert!(events.iter().any(|event| matches!(event, WorkerEvent::Log(message)
+                if message.contains("New Game retry wait: chosen_ms=2000; normal_ms=2000; confirmation_pending=false"))),
+                "the shortened OK confirmation cannot leak into later controls");
+        }
+    }
+
+
+    /// A genuinely tinted fresh witness still fails closed after the fast wait;
+    /// the previous clean glyph supplies neither input nor a fourth observation.
+    #[test]
+    #[ignore = "requires local AF_UNIX sockets"]
+    fn shared_native_tinted_confirmation_never_uses_the_previous_clean_glyph() {
+        for mode in [GameMode::Pyramid, GameMode::TriPeaks] {
+            let (result, wire, events, latest) = run_shared_readiness(mode,
+                Scenario::SharedTintedOkConfirmation);
+            assert!(result.unwrap_err().contains("did not become ready in 3 consecutive fresh captures"));
+            assert_eq!(wire.level_up_captures, 3);
+            assert_eq!(wire.downs(), 0);
+            assert_eq!(latest.frame.pixels, decode_png(confirmation_pngs(mode).2).unwrap().pixels);
+            let waits: Vec<_> = events.iter().filter_map(|event| match event {
+                WorkerEvent::Log(message) if message.contains("OK retry wait:") => Some(message),
+                _ => None,
+            }).collect();
+            assert_eq!(waits.len(), 2);
+            assert!(waits[1].contains("chosen_ms=200; normal_ms=2000; confirmation_pending=true"));
+            assert!(latest.diagnostic && latest.prediction.is_none());
+        }
+    }
+
+
+    /// Removing the button resets fast timing and preceding geometry. A returning
+    /// clean third candidate reserves only its one final 200 ms confirmation.
+    #[test]
+    #[ignore = "requires local AF_UNIX sockets"]
+    fn shared_absent_ok_revokes_fast_timing_then_allows_one_final_clean_witness() {
+        for mode in [GameMode::Pyramid, GameMode::TriPeaks] {
+            let (result, wire, events, latest) = run_shared_readiness(mode,
+                Scenario::SharedAbsentOkConfirmation);
+            assert_eq!(result, Ok(true));
+            assert_eq!(wire.level_up_captures, 4);
+            assert_eq!(wire.downs(), 4, "one confirmed OK, New Game, Play and Solver");
+            assert_eq!(latest.frame.pixels, initial_recovery_frame(mode, true).pixels);
+            let waits: Vec<_> = events.iter().filter_map(|event| match event {
+                WorkerEvent::Log(message) if message.contains("OK retry wait:") => Some(message),
+                _ => None,
+            }).collect();
+            assert_eq!(waits.len(), 3);
+            assert!(waits[0].contains("chosen_ms=200; normal_ms=2000; confirmation_pending=true"));
+            assert!(waits[1].contains("chosen_ms=2000; normal_ms=2000; confirmation_pending=false"));
+            assert!(waits[2].contains("chosen_ms=200; normal_ms=2000; confirmation_pending=true"));
+        }
+    }
+
+
+    /// Two original entering frames followed by clean third/fourth observations
+    /// model late readiness, not an unrecorded real 200 ms screenshot. Only the
+    /// conditional fourth witness advances the shared controller's sole OK click.
+    #[test]
+    #[ignore = "requires local AF_UNIX sockets"]
+    fn shared_late_clean_ok_reserves_one_final_witness_and_completes_restart() {
+        for mode in [GameMode::Pyramid, GameMode::TriPeaks] {
+            let (result, wire, events, latest) = run_shared_readiness(mode,
+                Scenario::SharedFinalOkConfirmation);
+            assert_eq!(result, Ok(true));
+            let ok = wire_point(native_level_up_control_from(confirmation_pngs(mode).1).click_point);
+            let ok_index = wire.events.iter().position(|event| *event == WireEvent::Down(ok)).unwrap();
+            let captures: Vec<_> = wire.events[..ok_index].iter().filter_map(|event| match event {
+                WireEvent::Capture(kind) => Some(*kind), _ => None,
+            }).collect();
+            assert_eq!(captures, [CaptureKind::EnteringLevelUp, CaptureKind::EnteringLevelUp,
+                CaptureKind::LevelUp, CaptureKind::LevelUp]);
+            assert_eq!(wire.level_up_captures, 4);
+            assert_eq!(wire.downs_at(ok), 1);
+            assert_eq!(wire.downs(), 4, "one OK, New Game, Play and Solver");
+            assert_eq!(wire.downs_at(wire_point(SCORE_SKIP_CONTROL.click_point)), 0);
+            assert_eq!(latest.frame.pixels, initial_recovery_frame(mode, true).pixels);
+            let waits: Vec<_> = events.iter().filter_map(|event| match event {
+                WorkerEvent::Log(message) if message.contains("OK retry wait:") => Some(message), _ => None,
+            }).collect();
+            assert_eq!(waits.len(), 3);
+            assert!(waits[0].contains("chosen_ms=2000; normal_ms=2000; confirmation_pending=false"));
+            assert!(waits[1].contains("chosen_ms=2000; normal_ms=2000; confirmation_pending=false"));
+            assert!(waits[2].contains("chosen_ms=200; normal_ms=2000; confirmation_pending=true"));
+            assert!(events.iter().any(|event| matches!(event, WorkerEvent::Log(message)
+                if message.contains("OK final OK confirmation reserve: granted=true; observations=3;"))));
+            assert!(events.iter().any(|event| matches!(event, WorkerEvent::Log(message)
+                if message.contains(&format!("{} OK search summary: searches=4; recaptures=3;", mode.label()))
+                    && message.ends_with("outcome=matched."))));
+        }
+    }
+
+
+    /// A tinted or still-changing fourth witness receives no fifth observation.
+    /// New Game and actionable gameplay on that reserved frame likewise cannot
+    /// acquire fourth-frame alternative-control or recovery authority.
+    #[test]
+    #[ignore = "requires local AF_UNIX sockets"]
+    fn shared_final_ok_failure_has_no_fifth_capture_or_alternative_input() {
+        for mode in [GameMode::Pyramid, GameMode::TriPeaks] {
+            for scenario in [Scenario::SharedFinalTintedOkConfirmation,
+                Scenario::SharedFinalChangingOkConfirmation, Scenario::SharedFinalNewGameInsteadOfOk,
+                Scenario::SharedFinalGameplayInsteadOfOk]
+            {
+                let (result, wire, events, latest) = run_shared_readiness(mode, scenario);
+                assert!(result.unwrap_err().contains("did not become ready in 4 consecutive fresh captures"));
+                assert_eq!(wire.level_up_captures, 4);
+                assert_eq!(wire.downs(), 0, "reserved OK failure authorises no input of any kind");
+                assert!(latest.diagnostic && latest.prediction.is_none());
+                let waits: Vec<_> = events.iter().filter_map(|event| match event {
+                    WorkerEvent::Log(message) if message.contains("OK retry wait:") => Some(message), _ => None,
+                }).collect();
+                assert_eq!(waits.len(), 3);
+                assert!(waits[2].contains("chosen_ms=200; normal_ms=2000; confirmation_pending=true"));
+                assert!(!events.iter().any(|event| matches!(event, WorkerEvent::Log(message)
+                    if message.contains("optional Level Up is skipped") || message.contains("RECOVERY:"))));
+                if scenario == Scenario::SharedFinalTintedOkConfirmation {
+                    assert_eq!(latest.frame.pixels, decode_png(confirmation_pngs(mode).2).unwrap().pixels);
+                }
+            }
+        }
+    }
+
+
+    /// Cooperative STOP after observation three leaves the reserved clean fourth
+    /// frame unread and retains the pending clean third frame without a click.
+    #[test]
+    #[ignore = "requires local AF_UNIX sockets"]
+    fn shared_stop_before_final_ok_witness_does_not_capture_or_click() {
+        for mode in [GameMode::Pyramid, GameMode::TriPeaks] {
+            let (result, wire, _, latest) = run_shared_readiness(mode,
+                Scenario::SharedFinalStoppedOkConfirmation);
+            assert!(result.unwrap_err().contains("STOP"));
+            assert_eq!(wire.level_up_captures, 3);
+            assert_eq!(wire.downs(), 0);
+            assert_eq!(latest.frame.pixels, decode_png(confirmation_pngs(mode).1).unwrap().pixels);
+            assert!(latest.diagnostic && latest.prediction.is_none());
+        }
+    }
+
+
+    /// A fourth-frame OK with uncertain delivery permits release-only recovery;
+    /// neither an additional capture nor repeated button-down can follow it.
+    #[test]
+    #[ignore = "requires local AF_UNIX sockets"]
+    fn shared_uncertain_final_ok_never_replays_or_captures_a_later_stage() {
+        for mode in [GameMode::Pyramid, GameMode::TriPeaks] {
+            let (result, wire, _, _) = run_shared_readiness(mode,
+                Scenario::SharedFinalUncertainOkConfirmation);
+            assert!(result.unwrap_err().contains("uncertain"));
+            assert_eq!(wire.level_up_captures, 4);
+            assert_eq!(wire.downs(), 1);
+            assert_eq!(wire.connections, 2, "the second connection may only recover button release");
+            assert_eq!(wire.recovery_releases, 1);
+        }
     }
 
 

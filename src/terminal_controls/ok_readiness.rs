@@ -5,8 +5,9 @@
 //! button geometry at its settled size and a current exact-black match inside
 //! the button's central caption band. The invariant `You've Reached` caption
 //! is measured for diagnostics only; its independent fade does not gate input.
-//! Callers supply fresh captures and retain their existing three-observation
-//! budget. This module neither captures frames nor sends or repeats input.
+//! Callers supply fresh captures within their finite normal and conditional
+//! final-confirmation budgets. This module neither captures frames nor sends
+//! or repeats input.
 
 use xsar::image_matching::FrameView;
 
@@ -88,6 +89,9 @@ pub struct OkReadiness {
 pub struct OkObservation {
     /// Settled consecutive geometry and the current exact-black glyph passed.
     pub ready: bool,
+    /// Only fresh geometry agreement remains after a settled-size current glyph.
+    /// This permits a shorter input-free confirmation wait, never a click.
+    pub confirmation_pending: bool,
     /// Latest measured central glyph point, or `(0, 0)` while input is withheld.
     pub point: PixelPoint,
     /// Stable reason for accepting or withholding input in persistent logs.
@@ -164,8 +168,13 @@ impl OkReadiness {
             Some(_) => "settled-button-and-glyph",
         };
         let ready = reason == "settled-button-and-glyph";
+        let confirmation_pending = !ready
+            && !geometry_stable
+            && glyph_point != PixelPoint::new(0, 0)
+            && button.is_some_and(settled_size);
         Ok(OkObservation {
             ready,
+            confirmation_pending,
             point: if ready { glyph_point } else { PixelPoint::new(0, 0) },
             reason,
             button,
@@ -305,12 +314,15 @@ mod tests {
         assert_eq!(first.button, Some(PixelRect::new(848, 709, 219, 65)));
         assert_eq!(first.reason, "entrance-button-size");
         assert!(!first.ready && !first.caption_present && !first.geometry_stable);
+        assert!(!first.confirmation_pending);
         let second = readiness.observe(&fading, raw(&fading, GameMode::FreeCell)).unwrap();
         assert_eq!(second.button, Some(PixelRect::new(839, 723, 237, 71)));
         assert!(!second.ready && !second.caption_present && !second.geometry_stable);
+        assert!(!second.confirmation_pending);
         assert_eq!(raw(&settled, GameMode::FreeCell), PixelPoint::new(945, 792));
         let third = readiness.observe(&settled, raw(&settled, GameMode::FreeCell)).unwrap();
         assert!(third.ready && third.caption_present && third.geometry_stable);
+        assert!(!third.confirmation_pending);
         assert_eq!(third.point, PixelPoint::new(941, 770));
         assert_eq!(third.caption_y, Some(350));
         for observation in [first, second, third] {
@@ -326,6 +338,7 @@ mod tests {
         for attempt in 0..3 {
             let observation = readiness.observe(&fading, raw(&fading, GameMode::FreeCell)).unwrap();
             assert!(!observation.ready);
+            assert!(!observation.confirmation_pending);
             assert!(!observation.caption_present);
             assert_eq!(observation.point, PixelPoint::new(0, 0));
             if attempt > 0 {
@@ -354,9 +367,11 @@ mod tests {
         assert_eq!(raw(&near_black, GameMode::Spider), PixelPoint::new(0, 0));
         assert_eq!(second.button, Some(PixelRect::new(839, 723, 237, 71)));
         assert!(!second.ready && !second.geometry_stable);
+        assert!(!second.confirmation_pending);
         let third = readiness.observe(&grey_caption, raw(&grey_caption, GameMode::Spider)).unwrap();
         assert_eq!(raw(&grey_caption, GameMode::Spider), PixelPoint::new(943, 770));
         assert!(third.ready && third.geometry_stable);
+        assert!(!third.confirmation_pending);
         assert_eq!(third.point, PixelPoint::new(943, 770));
         assert_eq!(third.reason, "settled-button-and-glyph");
         assert!(!third.caption_present);
@@ -383,6 +398,7 @@ mod tests {
             assert_eq!(point, PixelPoint::new(0, 0));
             let observation = readiness.observe(&near_black, point).unwrap();
             assert!(!observation.ready);
+            assert!(!observation.confirmation_pending);
             if attempt > 0 {
                 assert!(observation.geometry_stable);
                 assert_eq!(observation.reason, "missing-current-caption-glyph");
@@ -414,9 +430,11 @@ mod tests {
             let mut readiness = OkReadiness::new();
             let first = readiness.observe(&frame, point).unwrap();
             assert!(!first.ready && first.caption_present, "{name}: {first:?}");
+            assert!(first.confirmation_pending, "{name}: {first:?}");
             // Identical pixels represent a second independent capture of a static modal.
             let second = readiness.observe(&frame, point).unwrap();
             assert!(second.ready, "{name}: {second:?}");
+            assert!(!second.confirmation_pending, "{name}: {second:?}");
             assert_eq!(second.point, point, "{name}");
             assert!(second.pixels_examined <= MAX_READINESS_PIXEL_COMPARISONS);
         }
@@ -440,6 +458,7 @@ mod tests {
             for _ in 0..3 {
                 let observation = readiness.observe(&frame, raw(&frame, game)).unwrap();
                 assert!(!observation.ready, "{name}: {observation:?}");
+                assert!(!observation.confirmation_pending, "{name}: {observation:?}");
                 assert_eq!(observation.button, None, "{name}: {observation:?}");
             }
         }
@@ -467,6 +486,7 @@ mod tests {
         for _ in 0..2 {
             let observation = readiness.observe(&frame, PixelPoint::new(0, 0)).unwrap();
             assert!(!observation.ready);
+            assert!(!observation.confirmation_pending);
             assert_eq!(observation.point, PixelPoint::new(0, 0));
         }
         let third = readiness.observe(&frame, raw(&frame, GameMode::FreeCell)).unwrap();

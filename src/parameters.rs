@@ -926,10 +926,20 @@ pub const POST_GAME_STAGE_DELAY: Duration = Duration::from_secs(1);
 pub const LEVEL_UP_APPEAR_DELAY: Duration = Duration::from_millis(1_000);
 
 
-/// Total unresolved-control observations, including missing or unsettled OK.
+/// Fresh geometry confirmation after a settled-size OK with a current black glyph.
+/// This replaces only that lookup's next retry wait, including its final reserve.
+pub const LEVEL_UP_CONFIRMATION_DELAY: Duration = Duration::from_millis(200);
+
+
+/// Normal unresolved-control observations, including missing or unsettled OK.
 /// The initial frame plus at most two fresh retries supplies readiness evidence.
 /// Recognised reward/gameplay recovery retains its separate existing budgets.
 pub const TERMINAL_CONTROL_SEARCH_ATTEMPTS: usize = 3;
+
+
+/// One final fresh OK confirmation only when the third normal observation is pending.
+/// Missing glyphs, missing bodies, New Game and Play never receive this reserve.
+pub const TERMINAL_OK_FINAL_CONFIRMATIONS: usize = 1;
 
 
 /// Delay between observations of an unresolved board transition.
@@ -1362,7 +1372,9 @@ mod tests {
         assert_eq!(BOARD_REDEAL_SETTLE_DELAY, Duration::from_secs(4));
         assert_eq!(POST_GAME_STAGE_DELAY, Duration::from_secs(1));
         assert_eq!(LEVEL_UP_APPEAR_DELAY, Duration::from_millis(1_000));
+        assert_eq!(LEVEL_UP_CONFIRMATION_DELAY, Duration::from_millis(200));
         assert_eq!(TERMINAL_CONTROL_SEARCH_ATTEMPTS, 3);
+        assert_eq!(TERMINAL_OK_FINAL_CONFIRMATIONS, 1);
         assert_eq!(POST_GAME_MAX_OBSERVATION_ROUNDS, 20);
         assert_eq!(POST_GAME_MAX_CLICK_ATTEMPTS, 3);
         assert_eq!(SCORE_SKIP_MAX_CLICK_ATTEMPTS, 3);

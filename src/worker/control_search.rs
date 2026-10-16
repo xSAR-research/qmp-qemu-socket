@@ -13,6 +13,10 @@ use super::{WorkerEventSink, milliseconds, send_log};
 use crate::{
     capture::CapturedFrame,
     geometry::PixelPoint,
+    parameters::{
+        LEVEL_UP_CONFIRMATION_DELAY, TERMINAL_CONTROL_SEARCH_ATTEMPTS,
+        TERMINAL_OK_FINAL_CONFIRMATIONS,
+    },
     terminal_controls::{self, Control, profiles::{GameControlProfile, SearchSpec}},
 };
 
@@ -45,6 +49,10 @@ pub(super) struct ControlLookup<'a> {
     ok_readiness: terminal_controls::ok_readiness::OkReadiness,
     /// A visible OK button prevents a pending modal from exposing its underlay.
     ok_panel: bool,
+    /// The latest frame needs only fresh geometry agreement before OK input.
+    ok_confirmation_pending: bool,
+    /// One final fresh observation has been reserved; never reset within this lookup.
+    final_ok_confirmation_reserved: bool,
 }
 
 
@@ -62,12 +70,16 @@ impl<'a> ControlLookup<'a> {
             scan_total: Duration::ZERO, outcome: "not-searched",
             ok_readiness: terminal_controls::ok_readiness::OkReadiness::new(),
             ok_panel: false,
+            ok_confirmation_pending: false,
+            final_ok_confirmation_reserved: false,
         }
     }
 
 
     /// Scan and log one already captured frame through the normal worker sink.
     pub(super) fn search(&mut self, frame: &CapturedFrame) -> Result<PixelPoint, String> {
+        self.ok_confirmation_pending = false;
+        self.ok_panel = false;
         self.searches += 1;
         let bounds = self.spec.bounds;
         let right = bounds.width.checked_sub(1).and_then(|offset| bounds.x.checked_add(offset))
@@ -93,6 +105,7 @@ impl<'a> ControlLookup<'a> {
                 Ok(result.point)
             }
             Err(error) => {
+                self.forget_ok_geometry();
                 self.outcome = "error";
                 let message = format!("{prefix}; result=error: {error}; pixels=0; rows=0; scan_ms=0.000.");
                 send_log(self.events, message);
@@ -104,9 +117,9 @@ impl<'a> ControlLookup<'a> {
 
     /// Confirm that OK has finished entering before its sole authorised click.
     ///
-    /// The caller supplies each fresh frame once within its existing search
-    /// budget. The current frame needs settled geometry agreeing with its
-    /// predecessor and a current exact-black glyph; the fading fixed caption
+    /// The caller supplies each fresh frame once within its normal search
+    /// budget or the single final OK reserve. The current frame needs settled
+    /// geometry agreeing with its predecessor and a current exact-black glyph; the fading fixed caption
     /// is diagnostic only and never vetoes that evidence.
     /// Missing or incomplete evidence returns the normal no-match sentinel.
     /// Other controls keep their existing coordinate-only readiness policy.
@@ -115,30 +128,76 @@ impl<'a> ControlLookup<'a> {
         frame: &CapturedFrame,
         point: PixelPoint,
     ) -> Result<PixelPoint, String> {
+        self.ok_confirmation_pending = false;
+        self.ok_panel = false;
         if self.control != Control::Ok {
             return Ok(point);
         }
         let started = Instant::now();
         let observation = self.ok_readiness.observe(frame, point).map_err(|error| {
+            self.forget_ok_geometry();
             self.outcome = "readiness-error";
             format!("{} OK readiness failed: {error}", self.game)
         })?;
         self.ok_panel = observation.button.is_some();
+        self.ok_confirmation_pending = observation.confirmation_pending;
         self.outcome = if observation.ready { "found" } else if point == PixelPoint::new(0, 0) {
             "missing"
         } else {
             "awaiting-settled-OK"
         };
         send_log(self.events, format!(
-            "{} OK readiness: raw=({}, {}); selected=({}, {}); button={:?}; caption_present={}; caption_y={:?}; geometry_stable={}; glyph_bounds={:?}; ready={}; reason={}; readiness_pixels={}/{}; readiness_ms={:.3}; caption_gate=false. Confirmation consumes the existing three-search budget; guest input sent=0.",
+            "{} OK readiness: raw=({}, {}); selected=({}, {}); button={:?}; caption_present={}; caption_y={:?}; geometry_stable={}; glyph_bounds={:?}; ready={}; confirmation_pending={}; reason={}; readiness_pixels={}/{}; readiness_ms={:.3}; caption_gate=false; normal_search_budget={}; final_OK_reserve={}; reserve_consumed={}; guest input sent=0.",
             self.game, point.x, point.y, observation.point.x, observation.point.y,
             observation.button, observation.caption_present, observation.caption_y,
             observation.geometry_stable, observation.glyph_bounds,
-            observation.ready, observation.reason, observation.pixels_examined,
+            observation.ready, observation.confirmation_pending, observation.reason, observation.pixels_examined,
             terminal_controls::ok_readiness::MAX_READINESS_PIXEL_COMPARISONS,
             milliseconds(started.elapsed()),
+            TERMINAL_CONTROL_SEARCH_ATTEMPTS, TERMINAL_OK_FINAL_CONFIRMATIONS,
+            self.final_ok_confirmation_reserved,
         ));
         Ok(observation.point)
+    }
+
+
+    /// Choose and log the next existing retry wait without adding an observation.
+    /// Only a current settled-size OK glyph awaiting fresh geometry gets 200 ms.
+    pub(super) fn retry_delay(&self, normal: Duration) -> Duration {
+        let confirmation = self.control == Control::Ok && self.ok_confirmation_pending;
+        let delay = if confirmation { LEVEL_UP_CONFIRMATION_DELAY } else { normal };
+        let policy = if confirmation { "fresh OK geometry confirmation" } else { "normal retry" };
+        send_log(self.events, format!(
+            "{} {} retry wait: chosen_ms={:.0}; normal_ms={:.0}; confirmation_pending={}; policy={}; normal_search_budget={}; reserve_consumed={}; guest input sent=0.",
+            self.game, self.control.label(), milliseconds(delay), milliseconds(normal), confirmation, policy,
+            TERMINAL_CONTROL_SEARCH_ATTEMPTS, self.final_ok_confirmation_reserved,
+        ));
+        delay
+    }
+
+
+    /// Reserve one final observation when only fresh agreement remains on normal search three.
+    ///
+    /// The caller still owns its cancellable 200 ms wait and fresh capture.
+    /// This method neither changes current readiness nor sends guest input.
+    /// Consuming the reserve survives recaptures, geometry resets and errors.
+    pub(super) fn reserve_final_ok_confirmation(&mut self, observations: usize) -> bool {
+        let granted = self.control == Control::Ok
+            && self.ok_confirmation_pending
+            && observations == TERMINAL_CONTROL_SEARCH_ATTEMPTS
+            && !self.final_ok_confirmation_reserved;
+        if granted {
+            self.final_ok_confirmation_reserved = true;
+        }
+        send_log(self.events, format!(
+            "{} {} final OK confirmation reserve: granted={}; observations={}; normal_budget={}; allowance={}; consumed={}; maximum_observations={}; confirmation_pending={}; guest input sent=0. A granted reserve permits one fresh observation, not an OK click.",
+            self.game, self.control.label(), granted, observations,
+            TERMINAL_CONTROL_SEARCH_ATTEMPTS, TERMINAL_OK_FINAL_CONFIRMATIONS,
+            self.final_ok_confirmation_reserved,
+            TERMINAL_CONTROL_SEARCH_ATTEMPTS + TERMINAL_OK_FINAL_CONFIRMATIONS,
+            self.ok_confirmation_pending,
+        ));
+        granted
     }
 
 
@@ -152,6 +211,7 @@ impl<'a> ControlLookup<'a> {
     pub(super) fn forget_ok_geometry(&mut self) {
         self.ok_readiness = terminal_controls::ok_readiness::OkReadiness::new();
         self.ok_panel = false;
+        self.ok_confirmation_pending = false;
     }
 
 
@@ -161,6 +221,7 @@ impl<'a> ControlLookup<'a> {
     /// Two alternative controls examined on the same fresh frame each record
     /// that frame once; their counts are per lookup, not additive capture totals.
     pub(super) fn note_recapture(&mut self) {
+        self.ok_confirmation_pending = false;
         self.recaptures += 1;
         self.outcome = "recapturing";
     }
@@ -168,6 +229,7 @@ impl<'a> ControlLookup<'a> {
 
     /// Describe caller-owned exits such as cancellation or a capture failure.
     pub(super) fn set_outcome(&mut self, outcome: &'static str) {
+        self.ok_confirmation_pending = false;
         self.outcome = outcome;
     }
 }
@@ -181,10 +243,11 @@ impl Drop for ControlLookup<'_> {
         }
         let wall_time = self.started.elapsed();
         send_log(self.events, format!(
-            "{} {} search summary: searches={}; recaptures={}; second_grab={}; pixels={}; rows={}; scan_total_ms={:.3}; wall_ms={:.3}; outcome={}.",
+            "{} {} search summary: searches={}; recaptures={}; second_grab={}; pixels={}; rows={}; scan_total_ms={:.3}; wall_ms={:.3}; final_OK_reserve_consumed={}; outcome={}.",
             self.game, self.control.label(), self.searches, self.recaptures,
             self.recaptures != 0, self.pixels, self.rows,
-            milliseconds(self.scan_total), milliseconds(wall_time), self.outcome,
+            milliseconds(self.scan_total), milliseconds(wall_time), self.final_ok_confirmation_reserved,
+            self.outcome,
         ));
     }
 }
@@ -196,7 +259,246 @@ mod tests {
 
     use super::*;
     use super::super::{LatestFrameSlot, WorkerEvent};
-    use crate::{capture::{PixelFormat, decode_png}, terminal_controls::profiles::SPIDER_CONTROLS};
+    use crate::{
+        capture::{PixelFormat, decode_png},
+        game::GameMode,
+        terminal_controls::profiles::{SPIDER_CONTROLS, for_game},
+    };
+
+
+    /// All profiles can reserve exactly one fourth observation after native third-frame pending OK.
+    #[test]
+    fn all_game_profiles_reserve_only_one_pending_final_ok_confirmation() {
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let events = WorkerEventSink {
+            events: sender,
+            latest_frame: LatestFrameSlot::default(),
+            capture_context: std::sync::Mutex::new(None),
+        };
+        let entering = decode_png(include_bytes!("../../tests/fixtures/freecell-confirmation-20261016/entering.png")).unwrap();
+        let tinted = decode_png(include_bytes!("../../tests/fixtures/freecell-confirmation-20261016/tinted.png")).unwrap();
+        let clean = decode_png(include_bytes!("../../tests/fixtures/freecell-confirmation-20261016/clean.png")).unwrap();
+        for game in GameMode::AVAILABLE {
+            let mut lookup = ControlLookup::new(format!("{game:?}"), for_game(game), Control::Ok, &events);
+            for frame in [&entering, &tinted, &clean] {
+                let point = lookup.search(frame).unwrap();
+                assert_eq!(lookup.confirm_ok(frame, point).unwrap(), PixelPoint::new(0, 0));
+            }
+            assert!(!lookup.reserve_final_ok_confirmation(1));
+            assert!(!lookup.reserve_final_ok_confirmation(2));
+            assert!(!lookup.reserve_final_ok_confirmation(4));
+            assert!(lookup.reserve_final_ok_confirmation(TERMINAL_CONTROL_SEARCH_ATTEMPTS));
+            assert_eq!(lookup.retry_delay(Duration::from_secs(1)), LEVEL_UP_CONFIRMATION_DELAY);
+            assert!(!lookup.reserve_final_ok_confirmation(TERMINAL_CONTROL_SEARCH_ATTEMPTS));
+            lookup.note_recapture();
+            // Repeated clean pixels model a fresh static capture, not observed live 200 ms timing.
+            let point = lookup.search(&clean).unwrap();
+            assert_eq!(lookup.confirm_ok(&clean, point).unwrap(), PixelPoint::new(942, 770));
+            assert!(!lookup.reserve_final_ok_confirmation(4));
+            assert_eq!(lookup.searches, 4);
+        }
+        let logs: Vec<_> = receiver.try_iter().filter_map(|event| match event.event {
+            WorkerEvent::Log(message) => Some(message),
+            _ => None,
+        }).collect();
+        assert_eq!(logs.iter().filter(|line| line.contains(
+            "final OK confirmation reserve: granted=true; observations=3; normal_budget=3; allowance=1; consumed=true; maximum_observations=4"
+        )).count(), GameMode::AVAILABLE.len());
+    }
+
+
+    /// Missing evidence and controls without OK confirmation never gain a reserve.
+    #[test]
+    fn final_confirmation_reserve_rejects_missing_glyphs_and_non_ok_controls() {
+        let (sender, _receiver) = std::sync::mpsc::channel();
+        let events = WorkerEventSink {
+            events: sender,
+            latest_frame: LatestFrameSlot::default(),
+            capture_context: std::sync::Mutex::new(None),
+        };
+        let cases: &[&[u8]] = &[
+            include_bytes!("../../tests/fixtures/spider-SP15.png"),
+            include_bytes!("../../tests/fixtures/freecell-confirmation-20261016/entering.png"),
+            include_bytes!("../../tests/fixtures/freecell-confirmation-20261016/tinted.png"),
+            include_bytes!("../../tests/fixtures/game-win-readiness/fading.png"),
+            include_bytes!("../../tests/fixtures/spider-game-win-20261015/near-black.png"),
+        ];
+        for bytes in cases {
+            let frame = decode_png(bytes).unwrap();
+            let mut lookup = ControlLookup::new("Free Cell", for_game(GameMode::FreeCell), Control::Ok, &events);
+            for _ in 0..TERMINAL_CONTROL_SEARCH_ATTEMPTS {
+                let point = lookup.search(&frame).unwrap();
+                assert_eq!(lookup.confirm_ok(&frame, point).unwrap(), PixelPoint::new(0, 0));
+            }
+            assert!(!lookup.reserve_final_ok_confirmation(TERMINAL_CONTROL_SEARCH_ATTEMPTS));
+            assert!(!lookup.final_ok_confirmation_reserved);
+        }
+        let clean = decode_png(include_bytes!("../../tests/fixtures/freecell-confirmation-20261016/clean.png")).unwrap();
+        for control in [Control::NewGame, Control::Play] {
+            let mut lookup = ControlLookup::new("Free Cell", for_game(GameMode::FreeCell), control, &events);
+            lookup.confirm_ok(&clean, PixelPoint::new(942, 770)).unwrap();
+            assert!(!lookup.reserve_final_ok_confirmation(TERMINAL_CONTROL_SEARCH_ATTEMPTS));
+            assert!(!lookup.final_ok_confirmation_reserved);
+        }
+        let mut ready = ControlLookup::new("Free Cell", for_game(GameMode::FreeCell), Control::Ok, &events);
+        ready.confirm_ok(&clean, PixelPoint::new(942, 770)).unwrap();
+        assert_eq!(ready.confirm_ok(&clean, PixelPoint::new(942, 770)).unwrap(), PixelPoint::new(942, 770));
+        assert!(!ready.reserve_final_ok_confirmation(TERMINAL_CONTROL_SEARCH_ATTEMPTS));
+    }
+
+
+    /// Recapture, reset and failures cannot restore a consumed final observation.
+    #[test]
+    fn final_confirmation_consumption_survives_all_geometry_and_error_resets() {
+        let (sender, _receiver) = std::sync::mpsc::channel();
+        let events = WorkerEventSink {
+            events: sender,
+            latest_frame: LatestFrameSlot::default(),
+            capture_context: std::sync::Mutex::new(None),
+        };
+        let clean = decode_png(include_bytes!("../../tests/fixtures/freecell-confirmation-20261016/clean.png")).unwrap();
+        let point = PixelPoint::new(942, 770);
+        let mut malformed = clean.clone();
+        malformed.pixels.clear();
+        let mut lookup = ControlLookup::new("Free Cell", for_game(GameMode::FreeCell), Control::Ok, &events);
+        lookup.confirm_ok(&clean, point).unwrap();
+        assert!(lookup.reserve_final_ok_confirmation(TERMINAL_CONTROL_SEARCH_ATTEMPTS));
+        lookup.note_recapture();
+        lookup.forget_ok_geometry();
+        assert!(!lookup.reserve_final_ok_confirmation(TERMINAL_CONTROL_SEARCH_ATTEMPTS));
+        assert_eq!(lookup.confirm_ok(&clean, point).unwrap(), PixelPoint::new(0, 0));
+        assert_eq!(lookup.retry_delay(Duration::from_secs(1)), LEVEL_UP_CONFIRMATION_DELAY);
+        assert!(!lookup.reserve_final_ok_confirmation(TERMINAL_CONTROL_SEARCH_ATTEMPTS));
+
+        assert!(lookup.search(&malformed).is_err());
+        assert_eq!(lookup.confirm_ok(&clean, point).unwrap(), PixelPoint::new(0, 0));
+        assert!(!lookup.reserve_final_ok_confirmation(TERMINAL_CONTROL_SEARCH_ATTEMPTS));
+        assert!(lookup.confirm_ok(&malformed, point).is_err());
+        assert_eq!(lookup.confirm_ok(&clean, point).unwrap(), PixelPoint::new(0, 0));
+        assert!(!lookup.reserve_final_ok_confirmation(TERMINAL_CONTROL_SEARCH_ATTEMPTS));
+        lookup.set_outcome("capture-error");
+        lookup.forget_ok_geometry();
+        assert_eq!(lookup.confirm_ok(&clean, point).unwrap(), PixelPoint::new(0, 0));
+        assert!(!lookup.reserve_final_ok_confirmation(TERMINAL_CONTROL_SEARCH_ATTEMPTS));
+        assert!(!lookup.reserve_final_ok_confirmation(4));
+        assert!(lookup.final_ok_confirmation_reserved);
+
+        let mut next_stage = ControlLookup::new("Free Cell", for_game(GameMode::FreeCell), Control::Ok, &events);
+        next_stage.confirm_ok(&clean, point).unwrap();
+        assert!(next_stage.reserve_final_ok_confirmation(TERMINAL_CONTROL_SEARCH_ATTEMPTS));
+    }
+
+
+    /// Every game's first settled glyph gets 200 ms, while the confirming frame is ready.
+    #[test]
+    fn all_game_ok_lookups_shorten_only_pending_geometry_confirmation() {
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let events = WorkerEventSink {
+            events: sender,
+            latest_frame: LatestFrameSlot::default(),
+            capture_context: std::sync::Mutex::new(None),
+        };
+        let frame = decode_png(include_bytes!("../../tests/fixtures/spider-level-up-505.png")).unwrap();
+        for game in GameMode::AVAILABLE {
+            for normal in [Duration::from_secs(1), Duration::from_secs(2)] {
+                let mut lookup = ControlLookup::new(format!("{game:?}"), for_game(game), Control::Ok, &events);
+                assert_eq!(lookup.retry_delay(normal), normal);
+                let first = lookup.search(&frame).unwrap();
+                assert_eq!(lookup.confirm_ok(&frame, first).unwrap(), PixelPoint::new(0, 0));
+                assert_eq!(lookup.retry_delay(normal), LEVEL_UP_CONFIRMATION_DELAY);
+                lookup.note_recapture();
+                assert_eq!(lookup.retry_delay(normal), normal);
+                let second = lookup.search(&frame).unwrap();
+                assert_eq!(lookup.confirm_ok(&frame, second).unwrap(), second);
+                assert_eq!(lookup.retry_delay(normal), normal);
+            }
+        }
+        let logs: Vec<_> = receiver.try_iter().filter_map(|event| match event.event {
+            WorkerEvent::Log(message) => Some(message),
+            _ => None,
+        }).collect();
+        assert_eq!(logs.iter().filter(|line| line.contains(
+            "chosen_ms=200; normal_ms="
+        )).count(), GameMode::AVAILABLE.len() * 2);
+        assert!(logs.iter().any(|line| line.contains(
+            "confirmation_pending=true; policy=fresh OK geometry confirmation; normal_search_budget=3"
+        )));
+    }
+
+
+    /// Missing, entering, near-black and pointer-only evidence retain the normal wait.
+    #[test]
+    fn incomplete_ok_evidence_and_other_controls_keep_their_existing_delay() {
+        let (sender, _receiver) = std::sync::mpsc::channel();
+        let events = WorkerEventSink {
+            events: sender,
+            latest_frame: LatestFrameSlot::default(),
+            capture_context: std::sync::Mutex::new(None),
+        };
+        let normal = Duration::from_secs(2);
+        let cases: &[&[u8]] = &[
+            include_bytes!("../../tests/fixtures/spider-SP15.png"),
+            include_bytes!("../../tests/fixtures/game-win-readiness/early.png"),
+            include_bytes!("../../tests/fixtures/game-win-readiness/fading.png"),
+            include_bytes!("../../tests/fixtures/spider-game-win-20261015/near-black.png"),
+        ];
+        for bytes in cases {
+            let frame = decode_png(bytes).unwrap();
+            let mut lookup = ControlLookup::new("Spider", &SPIDER_CONTROLS, Control::Ok, &events);
+            for _ in 0..2 {
+                let point = lookup.search(&frame).unwrap();
+                assert_eq!(lookup.confirm_ok(&frame, point).unwrap(), PixelPoint::new(0, 0));
+                assert_eq!(lookup.retry_delay(normal), normal);
+            }
+        }
+        let frame = decode_png(include_bytes!("../../tests/fixtures/spider-level-up-505.png")).unwrap();
+        for control in [Control::NewGame, Control::Play] {
+            let mut lookup = ControlLookup::new("Spider", &SPIDER_CONTROLS, control, &events);
+            assert_eq!(lookup.confirm_ok(&frame, PixelPoint::new(944, 771)).unwrap(), PixelPoint::new(944, 771));
+            assert_eq!(lookup.retry_delay(normal), normal);
+        }
+    }
+
+
+    /// Reset, failed storage and capture/error exits cannot retain a stale short wait.
+    #[test]
+    fn reset_and_error_paths_clear_pending_confirmation_and_geometry() {
+        let (sender, _receiver) = std::sync::mpsc::channel();
+        let events = WorkerEventSink {
+            events: sender,
+            latest_frame: LatestFrameSlot::default(),
+            capture_context: std::sync::Mutex::new(None),
+        };
+        let frame = decode_png(include_bytes!("../../tests/fixtures/spider-level-up-505.png")).unwrap();
+        let point = PixelPoint::new(944, 771);
+        let normal = Duration::from_secs(2);
+        let mut malformed = frame.clone();
+        malformed.pixels.clear();
+        let mut lookup = ControlLookup::new("Spider", &SPIDER_CONTROLS, Control::Ok, &events);
+
+        assert_eq!(lookup.confirm_ok(&frame, point).unwrap(), PixelPoint::new(0, 0));
+        assert_eq!(lookup.retry_delay(normal), LEVEL_UP_CONFIRMATION_DELAY);
+        lookup.forget_ok_geometry();
+        assert_eq!(lookup.retry_delay(normal), normal);
+        assert!(!lookup.has_ok_panel());
+
+        assert_eq!(lookup.confirm_ok(&frame, point).unwrap(), PixelPoint::new(0, 0));
+        assert_eq!(lookup.retry_delay(normal), LEVEL_UP_CONFIRMATION_DELAY);
+        assert!(lookup.search(&malformed).is_err());
+        assert_eq!(lookup.retry_delay(normal), normal);
+        assert!(!lookup.has_ok_panel());
+
+        assert_eq!(lookup.confirm_ok(&frame, point).unwrap(), PixelPoint::new(0, 0));
+        assert_eq!(lookup.retry_delay(normal), LEVEL_UP_CONFIRMATION_DELAY);
+        assert!(lookup.confirm_ok(&malformed, point).is_err());
+        assert_eq!(lookup.retry_delay(normal), normal);
+        assert!(!lookup.has_ok_panel());
+
+        assert_eq!(lookup.confirm_ok(&frame, point).unwrap(), PixelPoint::new(0, 0));
+        assert_eq!(lookup.retry_delay(normal), LEVEL_UP_CONFIRMATION_DELAY);
+        lookup.set_outcome("capture-error");
+        assert_eq!(lookup.retry_delay(normal), normal);
+    }
 
 
     /// Diagnostics preserve work counts across a miss followed by a fresh match.

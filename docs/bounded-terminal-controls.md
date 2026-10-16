@@ -1,7 +1,8 @@
 # Bounded terminal controls and search metrics
 
-Candidate: qmp-qemu-socket 2.2.2-candidate.8, based on the published checkpoint
-`f892df4051da0aa6c04ad9d1bc7386dd9d7aadcd`. It uses the existing xsar
+Candidate: qmp-qemu-socket 2.2.2-candidate.10, installed over the exact candidate.9
+source on TCP-enabled checkpoint `40975060deeb2fa703874c309b6a8ddfc958f095`.
+It uses the existing xsar
 helper from `6765e0a89eddf610cbad8cb302db98a31465cdff` without changing that crate.
 
 ## Search contract
@@ -53,11 +54,18 @@ Congratulations, score, completed-board and fresh-game evidence retain their
 separate roles. The selected point travels with the stage to the input boundary;
 there is no subsequent replacement with a fixed button coordinate.
 
-An absent control or unsettled OK receives at most two fresh captures and
-repeat observations, for three total attempts. Readiness confirmation consumes
-that same budget. A third unresolved observation stops with the latest captured image available as a diagnostic
-preview. Optional OK/New Game branches may examine both rectangles on the same
-frame. The shared TriPeaks/Pyramid controller retires an earlier menu stage after its
+An absent control or unsettled OK receives three normal observations: the
+initial frame and at most two input-free recaptures. If observation three has
+a settled-size OK body and a current exact-black central glyph awaiting only
+geometry agreement, a lookup may consume one final 200 ms OK-only confirmation.
+That fourth frame must independently pass readiness. No fifth observation is
+permitted. Missing, tinted, entering or pointer-only third frames receive no
+reserve. New Game and Play retain three observations. Unresolved searches keep
+the latest frame as a diagnostic preview.
+
+Optional OK/New Game branches may examine both rectangles on the first three
+frames. The reserved fourth frame cannot authorise a different control, score
+skip or Solver recovery. The shared TriPeaks/Pyramid controller retires an earlier menu stage after its
 click is delivered; black runs in that earlier region cannot authorise another
 click or reset the current missing-control allowance. New Game takes precedence
 at the optional Level Up step unless a measured foreground OK button or
@@ -66,8 +74,11 @@ button also blocks a speculative score-skip budget renewal. Recognised reward/ga
 recovery remains distinct from missing-control observations. Uncertain QMP input is not
 replayed by the search retry.
 
-`TERMINAL_CONTROL_SEARCH_ATTEMPTS` owns the unresolved-control budget across all
-five game types. It counts the initial frame as attempt one. Recognised reward
+`TERMINAL_CONTROL_SEARCH_ATTEMPTS` owns the three normal observations across all
+five game types. `TERMINAL_OK_FINAL_CONFIRMATIONS` supplies one conditional
+reserve, consumed by `ControlLookup::reserve_final_ok_confirmation` at normal
+observation three. That reserve belongs to the lookup and cannot be renewed by
+a geometry reset, another search, recapture or outcome change. Recognised reward
 or gameplay recovery remains a separate path with its existing observation and
 input budgets; those transitions can reset the consecutive-miss count in the
 shared TriPeaks/Pyramid controller. Therefore three is a limit on consecutive
@@ -76,17 +87,29 @@ unresolved control frames, not a universal cap on every recovery episode.
 `LEVEL_UP_APPEAR_DELAY` is now 1000 ms after an acknowledged score-skip click,
 reduced from 3000 ms so the first OK search starts before the reported later
 fireworks. Capture and recognition add elapsed time beyond this intentional
-wait. Missing-control spacing remains unchanged: 2000 ms in the shared
-TriPeaks/Pyramid controller, and the existing editable reobserve interval in
-Free Cell, Spider and Klondike. Score, gameplay, Solver and click budgets are
-independent of the new three-search allowance.
+wait. `LEVEL_UP_CONFIRMATION_DELAY` is 200 ms only when the latest frame has a
+settled-size OK body and current exact-black central glyph, awaiting geometry
+agreement with a fresh frame. `ControlLookup::retry_delay` selects that wait
+across all five games and logs `chosen_ms`, `normal_ms` and
+`confirmation_pending`. It never authorises input. The fresh observation must
+still pass all readiness checks. A clean candidate first appearing on normal
+observation three can use the one final confirmation; that scheduling flag
+never supplies click authority from the earlier frame.
 
-Capture transport is unchanged. The application still acquires QMP PNGs through
-a private temporary file and decodes them. The sibling Windows TCP server and
-the re-exported xSAR TCP client are not connected to this production path.
-The matching xSAR checkout's TCP protocol v2, validated `u16` stride and
-14-byte header are preserved. The verifier checks that sibling commit and
-runs its focused TCP protocol integration tests before application checks.
+Other missing-control spacing remains 2000 ms in the shared TriPeaks/Pyramid
+controller, and the existing editable reobserve interval in Free Cell, Spider
+and Klondike. Entering, missing, tinted and pointer-only evidence cannot select
+the short confirmation wait. A new search, consumed recapture, reset or error
+clears that eligibility. Score, gameplay, Solver and click budgets remain
+independent.
+
+Capture transport is unchanged from the TCP-enabled base. Production capture
+defaults to `QMP_CAPTURE_BACKEND=tcp` at `127.0.0.1:9999`; explicit `qmp` retains
+the legacy private-file PNG route. TCP errors stop without silent fallback.
+The matching xSAR client's protocol v2, validated `u16` stride and 14-byte header
+are preserved. The verifier checks that sibling commit and runs its focused TCP
+protocol integration tests before application checks. QMP input and probes are
+unchanged by this candidate.
 
 `--image` adds scoped GAME WIN evidence without requesting extra captures or
 changing the recording boundary. See [GAME WIN image diagnostics](game-win-images.md)

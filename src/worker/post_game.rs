@@ -62,6 +62,8 @@ pub(super) fn run_post_game_restart(
     // Every control uses a deliberate hold. Acknowledged dialog controls are
     // retired from input authority; only the expected stage is considered next.
     // Missing controls receive at most two input-free fresh captures before stopping.
+    // Only a clean settled-size OK first awaiting confirmation on observation
+    // three may reserve one final fresh 200 ms geometry witness.
     let transition_started = Instant::now();
     let mut capture_timing = CaptureTiming::default();
     let mut intentional_wait = Duration::ZERO;
@@ -233,6 +235,7 @@ pub(super) fn run_post_game_restart(
         let mut observation_round = 1usize;
         let mut consecutive_post_ok_reward = 0usize;
         let mut consecutive_control_misses = 0usize;
+        let mut final_ok_confirmation = false;
         let mut lookup = bounded_control(target.stage)
             .map(|control| ControlLookup::new(scan_state.mode().label(), profile, control, event_tx));
 
@@ -254,7 +257,7 @@ pub(super) fn run_post_game_restart(
             publish_post_game_observation(event_tx, &observation);
 
 
-            if observation.gameplay_scene
+            if !final_ok_confirmation && observation.gameplay_scene
                 && matches!(observation.prediction, PredictedAction::Action(_))
             {
                 *completed_boards = 0;
@@ -298,6 +301,16 @@ pub(super) fn run_post_game_restart(
             if let Some(variant) = current? {
                 if let Some(lookup) = lookup.as_mut() { lookup.set_outcome("matched"); }
                 break Some(variant);
+            }
+            // The reserved fourth observation belongs only to current OK
+            // readiness. It cannot grant later-control, reward or gameplay
+            // recovery authority after the normal search budget is exhausted.
+            if final_ok_confirmation {
+                if let Some(lookup) = lookup.as_mut() { lookup.set_outcome("not-found"); }
+                return Err(format!(
+                    "Post-game {} did not become ready in {} consecutive fresh captures; the sole final OK confirmation was not ready. Latest failed frame retained; no fifth observation or alternative control input is authorised.",
+                    target.label, consecutive_control_misses + 1,
+                ));
             }
 
             // New Game also covers games that do not award a level. A confirmed
@@ -392,11 +405,15 @@ pub(super) fn run_post_game_restart(
                 if consecutive_control_misses >= TERMINAL_CONTROL_SEARCH_ATTEMPTS
                     && !(guarded_post_ok_skip || (score_retry && positive_reward))
                 {
-                    lookup.set_outcome("not-found");
-                    return Err(format!(
-                        "Post-game {} did not become ready in {TERMINAL_CONTROL_SEARCH_ATTEMPTS} consecutive fresh captures (missing controls or unsettled OK); the two recaptures were input-free retries. Latest failed frame retained for inspection; no failed frame authorised a control click.",
-                        target.label,
-                    ));
+                    if lookup.reserve_final_ok_confirmation(consecutive_control_misses) {
+                        final_ok_confirmation = true;
+                    } else {
+                        lookup.set_outcome("not-found");
+                        return Err(format!(
+                            "Post-game {} did not become ready in {consecutive_control_misses} consecutive fresh captures (missing controls or unsettled OK); the normal search limit is {TERMINAL_CONTROL_SEARCH_ATTEMPTS}, with one final input-free confirmation only for a clean pending OK on observation three. Latest failed frame retained for inspection; no failed frame authorised a control click.",
+                            target.label,
+                        ));
+                    }
                 }
             }
 
@@ -435,16 +452,18 @@ pub(super) fn run_post_game_restart(
                 continue;
             }
 
+            let retry_delay = lookup.as_ref().map_or(BOARD_TRANSITION_REOBSERVE_DELAY,
+                |lookup| lookup.retry_delay(BOARD_TRANSITION_REOBSERVE_DELAY));
             send_log(
                 event_tx,
                 format!(
                     "WAITING: post-game stage {} was not recognised on observation round {observation_round}; allowing the guest to animate for {} ms before the next capture. Press STOP to end the loop.",
                     target.label,
-                    BOARD_TRANSITION_REOBSERVE_DELAY.as_millis(),
+                    retry_delay.as_millis(),
                 ),
             );
             intentional_wait += wait_or_stop(
-                BOARD_TRANSITION_REOBSERVE_DELAY,
+                retry_delay,
                 cancel_requested,
                 "STOP was requested while waiting for the next post-game screen.",
             ).inspect_err(|_| {

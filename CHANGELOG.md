@@ -1,5 +1,67 @@
 # Changelog
 
+## v2.2.2-candidate.11 — Verification regression repair
+
+- Correct the Klondike reserved-OK regression's expected New Game search count.
+  Its K91 fixture is not classified as Level Up, so the confirmed-win fallback
+  legitimately searches New Game on all three normal observations. Its correct
+  totals are three searches and two recaptures; OK alone gets four and three.
+- Assert the fixture precondition and that all three New Game searches precede
+  the fourth OK search. Retain rejection of fourth-frame Score Counting and
+  New Game, no input, and an unread fifth frame. Include logs on assertion failure.
+- Preserve candidate.10 production behaviour, capture transport, dependencies,
+  timing, recognition and input safeguards. Only the regression and application
+  version change. No gameplay failure investigation is included in this repair.
+- Run the previously failing regression first in the supplied verifier, before
+  the full suite. Candidate.10's reported host run passed 825 tests and failed
+  this assertion; verification stopped before the release build, leaving the
+  previous candidate.9 executable in place.
+
+## v2.2.2-candidate.10 — Bounded transition and late OK recovery
+
+- Recover specifically from a TriPeaks post-action `ClickOffsetMismatch` with
+  at most three delayed fresh captures, without card, Draw or Solver input.
+  Keep the exact canonical-centre check, detector bounds and colour thresholds.
+  Persistent mismatches and unrelated errors still stop; STOP remains active.
+- Retain three normal control observations and add one final 200 ms OK-only
+  confirmation when observation three already has a settled-size body and a
+  current exact-black central glyph awaiting consecutive geometry agreement.
+  The fourth frame must independently qualify. New Game and Play retain three
+  observations; no fifth OK observation or additional click is permitted.
+- Apply that bounded final confirmation consistently across all five game types.
+  Keep the 1000 ms first post-score wait, existing early 200 ms confirmation,
+  independent win evidence, foreground priority and uncertain-input safeguards.
+- Retain the recorded Free Cell third-frame failure and native TriPeaks left
+  tableau/DRAW captures. Add regressions for current-frame success, loss of
+  evidence, persistent geometry rejection, cancellation and no input replay.
+- Preserve TCP/QMP acquisition, matching xSAR, dependencies and GAME WIN-only
+  diagnostic PNG writes. GAME WIN capture costs remain separately logged.
+- This candidate installs over the exact candidate.9 source, with full-file
+  backups and rollback. Local static, pixel and delivery evidence is included;
+  Rust checks and live acceptance require the supplied Beast verifier.
+
+## v2.2.2-candidate.9 — Earlier fresh OK confirmation
+
+- Across all five game types, choose a 200 ms confirmation wait only when the
+  current Level Up button has settled dimensions and a current exact-black
+  central glyph, but still needs consecutive geometry agreement. Other missing,
+  entering, tinted or pointer-only observations retain their normal spacing.
+- Keep the 1000 ms first post-score wait and three total observations. The next
+  frame must independently pass readiness before the sole OK click; the shorter
+  wait creates no extra capture, click budget or replay of acknowledged input.
+- Log the selected and normal retry intervals and confirmation eligibility.
+  Clear eligibility on a new search, recapture consumption, reset or error.
+- Retain native Pyramid and TriPeaks entering, clean and tinted captures. Add
+  shared-policy and controller regressions for conditional waits, fresh points,
+  lost evidence, STOP, bounded failure and no replay. Controlled repeated clean
+  captures test decisions; they are not recorded live 200 ms outcomes.
+- Preserve the integrated TCP capture path, legacy QMP option, GAME WIN-only
+  image recording, independent win evidence, dependencies and matching xSAR.
+  The separate TriPeaks board-transition issue is outside this change.
+- Local syntax, pixel replay and delivery checks are recorded in the package.
+  Rust build, tests, strict documentation, Clippy, release and live acceptance
+  require the supplied Beast verifier and live GAME WIN runs.
+
 ## Unreleased — Guest TCP capture integration
 
 - Merge the guest TCP capture path with current controls, bounded readiness and

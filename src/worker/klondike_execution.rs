@@ -737,6 +737,10 @@ fn resume_after_win(
 /// confirmed win; unrelated artwork is not classified. An absent or unchanged
 /// searched control receives at most two fresh screenshot retries without input replay.
 /// Level Up also needs a fresh, settled OK witness before its single click.
+/// A full-size button with current exact-black glyph receives a 200 ms confirmation
+/// wait; missing or entering OK and every other stage retain their configured delay.
+/// A clean OK pending on the third observation may reserve one final fresh
+/// confirmation; no missing control or later stage receives that extra capture.
 /// Fresh-deal and post-Solver observations retain the shorter gameplay budget.
 fn await_terminal_stage(
     io: &mut impl KlondikeIo,
@@ -756,11 +760,12 @@ fn await_terminal_stage(
     });
 
 
-    let reobservation_limit = match previous {
+    let mut reobservation_limit = match previous {
         None | Some(TerminalStage::ScoreCounting | TerminalStage::LevelUp | TerminalStage::NewGame) => TERMINAL_CONTROL_SEARCH_ATTEMPTS - 1,
         Some(TerminalStage::Play | TerminalStage::SolverReady) => REOBSERVATION_LIMIT,
     };
     let mut delayed_observations = 0usize;
+    let mut final_ok_confirmation = false;
     let mut expected_lookup = expected.flatten().and_then(klondike::terminal::searched_control)
         .map(|control| ControlLookup::new("Klondike", &KLONDIKE_CONTROLS, control, event_tx));
     let mut entry_ok = None;
@@ -786,7 +791,16 @@ fn await_terminal_stage(
         }
 
 
-        let observed = if let Some(Some(stage)) = expected {
+        let observed = if final_ok_confirmation {
+            // This reserved frame may confirm only the pending OK. Classifying
+            // entry Score/New Game or searching a later control would grant a
+            // fourth observation to an unrelated stage.
+            let lookup = expected_lookup.as_mut().or(entry_ok.as_mut())
+                .expect("the final OK confirmation retains its owning lookup");
+            let raw_point = io.expected_terminal_control(&current.frame, TerminalStage::LevelUp, Some(lookup))?;
+            let point = lookup.confirm_ok(&current.frame, raw_point)?;
+            (point != PixelPoint::new(0, 0)).then_some((TerminalStage::LevelUp, point))
+        } else if let Some(Some(stage)) = expected {
             let point = io.expected_terminal_control(&current.frame, stage, expected_lookup.as_mut())?;
             let point = if stage == TerminalStage::LevelUp {
                 expected_lookup.as_mut().expect("Level Up owns an OK lookup")
@@ -851,17 +865,30 @@ fn await_terminal_stage(
 
 
         if delayed_observations >= reobservation_limit {
-            return Err(format!("Klondike terminal advancement exhausted {delayed_observations} delayed read-only captures after {previous:?}; the last control was not retried"));
+            let reserved = expected_lookup.as_mut().or(entry_ok.as_mut())
+                .is_some_and(|lookup| lookup.reserve_final_ok_confirmation(delayed_observations + 1));
+            if reserved {
+                final_ok_confirmation = true;
+                reobservation_limit += 1;
+            } else {
+                return Err(format!("Klondike terminal advancement exhausted {delayed_observations} delayed read-only captures after {previous:?}; the last control was not retried"));
+            }
         }
         delayed_observations += 1;
-        send_log(event_tx, format!("Klondike terminal re-observation {delayed_observations}/{reobservation_limit}: prior={previous:?}, expected={expected:?}, ready={observed:?}; guest input sent=0"));
-        if let Err(error) = io.wait(settings.animation_delays().klondike_reobserve).and_then(|()| require_running(cancel_requested)) {
+        let normal_delay = settings.animation_delays().klondike_reobserve;
+        let retry_delay = expected_lookup.as_ref().or(entry_ok.as_ref())
+            .map_or(normal_delay, |lookup| lookup.retry_delay(normal_delay));
+        send_log(event_tx, format!("Klondike terminal re-observation {delayed_observations}/{reobservation_limit}: prior={previous:?}, expected={expected:?}, ready={observed:?}; wait_ms={}; guest input sent=0", retry_delay.as_millis()));
+        if let Err(error) = io.wait(retry_delay).and_then(|()| require_running(cancel_requested)) {
             for lookup in [&mut expected_lookup, &mut entry_ok, &mut entry_new_game].into_iter().flatten() {
                 lookup.set_outcome("cancelled-or-wait-error");
             }
             return Err(error);
         }
-        for lookup in [&mut expected_lookup, &mut entry_ok, &mut entry_new_game].into_iter().flatten() {
+        for lookup in [&mut expected_lookup, &mut entry_ok].into_iter().flatten() {
+            lookup.note_recapture();
+        }
+        if !final_ok_confirmation && let Some(lookup) = entry_new_game.as_mut() {
             lookup.note_recapture();
         }
         if let Err(error) = capture_latest(io, latest, event_tx) {

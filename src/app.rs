@@ -2420,12 +2420,22 @@ impl QmpQemuSocketApp {
                     crate::terminal_controls::Control::NewGame,
                     crate::terminal_controls::Control::Play] {
                     let search = controls.spec(control);
+                    let budget = if control == crate::terminal_controls::Control::Ok {
+                        format!("{TERMINAL_CONTROL_SEARCH_ATTEMPTS} normal observations + at most {} final fresh OK confirmation",
+                            crate::parameters::TERMINAL_OK_FINAL_CONFIRMATIONS)
+                    } else {
+                        format!("{TERMINAL_CONTROL_SEARCH_ATTEMPTS} total observations when unresolved")
+                    };
                     ui.monospace(format!(
-                        "terminal-{} = search {}; {} exact-black pixels; click at detected point; {TERMINAL_CONTROL_SEARCH_ATTEMPTS} total observations when unresolved",
+                        "terminal-{} = search {}; {} exact-black pixels; click at detected point; {budget}",
                         control.label(), format_rect(search.bounds), search.run_length,
                     ));
                 }
-                ui.monospace("terminal-OK readiness = stable button geometry across fresh frames + current exact-black glyph; caption diagnostic only; one click within the same observation budget");
+                ui.monospace("terminal-OK readiness = stable button geometry across fresh frames + current exact-black glyph; caption diagnostic only; final reserve requires a valid pending OK on normal observation three; one click");
+                ui.monospace(format!(
+                    "terminal-OK confirmation = {} ms only for a settled body with a current exact-black glyph awaiting geometry agreement; otherwise normal reobserve",
+                    crate::parameters::LEVEL_UP_CONFIRMATION_DELAY.as_millis(),
+                ));
                 ui.monospace(format!(
                     "pointer-settle = {} ms",
                     POINTER_SETTLE_DELAY.as_millis()

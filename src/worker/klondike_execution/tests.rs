@@ -2236,6 +2236,11 @@ fn bounded_control_retries_report_searches_recaptures_and_wall_time() {
             assert_eq!(result.unwrap(), Some((expected, point)));
             let expected_trace: Vec<_> = (1..attempt).flat_map(|_| ["wait", "capture"]).collect();
             assert_eq!(io.trace, expected_trace);
+            let mut expected_waits = vec![AnimationSettleDelays::default().klondike_reobserve; attempt - 1];
+            if expected == TerminalStage::LevelUp {
+                *expected_waits.last_mut().unwrap() = Duration::from_millis(200);
+            }
+            assert_eq!(io.waits, expected_waits, "only a current full-size OK glyph shortens confirmation");
             assert!(io.frames.is_empty());
             assert!(io.terminal_inputs.is_empty() && io.inputs.is_empty());
             let logs: Vec<_> = receiver.try_iter().filter_map(|notification| match notification.event {
@@ -2252,7 +2257,7 @@ fn bounded_control_retries_report_searches_recaptures_and_wall_time() {
 
 
 /// A confirmed win can expose entry OK on the second observation and confirm
-/// it on the third input-free observation, using the unchanged three-frame limit.
+/// it on the third input-free observation, within the normal three-frame budget.
 #[test]
 fn bounded_control_confirmed_win_entry_can_confirm_ok_on_third_search() {
     use klondike::terminal::TerminalStage;
@@ -2268,6 +2273,8 @@ fn bounded_control_confirmed_win_entry_can_confirm_ok_on_third_search() {
         &AtomicBool::new(false), None);
     assert_eq!(result.unwrap(), Some((TerminalStage::LevelUp, PixelPoint::new(942, 804))));
     assert_eq!(io.trace, ["wait", "capture", "wait", "capture"]);
+    assert_eq!(io.waits, [AnimationSettleDelays::default().klondike_reobserve,
+        Duration::from_millis(200)]);
     assert!(io.frames.is_empty() && io.terminal_inputs.is_empty() && io.inputs.is_empty());
     let logs: Vec<_> = receiver.try_iter().filter_map(|notification| match notification.event {
         WorkerEvent::Log(message) => Some(message), _ => None,
@@ -2276,21 +2283,263 @@ fn bounded_control_confirmed_win_entry_can_confirm_ok_on_third_search() {
 }
 
 
-/// A candidate first appearing on observation three cannot extend the budget
-/// or authorise a click without its required fresh stable witness.
+/// Removing the current button revokes the fast delay and preceding geometry.
+/// A clean returning candidate on frame three can reserve the sole final witness.
 #[test]
-fn bounded_control_first_ok_on_third_observation_remains_input_free() {
+fn bounded_control_absent_ok_clears_fast_timing_then_reserves_one_final_witness() {
     use klondike::terminal::TerminalStage;
-    let mut io = fake_frames(vec![native_hint_phase(26), native_hint_phase(91)]);
+    let delays = AnimationSettleDelays::default().with_klondike_millis(750, 1_250);
+    let mut io = fake_frames(vec![native_hint_phase(26), native_hint_phase(91), native_hint_phase(91)]);
     io.native_terminal_analysis = true;
-    let mut latest = Some(native_hint_phase(26));
+    let mut latest = Some(native_hint_phase(91));
     let result = await_terminal_stage(&mut io, &mut latest,
-        StepRunSettings::new(AnimationSettleDelays::default(), 0), &event_sink(),
+        StepRunSettings::new(delays, 0), &event_sink(),
         &AtomicBool::new(false), Some(TerminalStage::ScoreCounting));
-    assert!(result.unwrap_err().contains("terminal advancement exhausted 2"));
-    assert_eq!(io.trace, ["wait", "capture", "wait", "capture"]);
-    assert!(io.frames.is_empty() && io.terminal_inputs.is_empty() && io.inputs.is_empty());
+    assert_eq!(result.unwrap(), Some((TerminalStage::LevelUp, PixelPoint::new(942, 804))));
+    assert_eq!(io.waits, [Duration::from_millis(200), delays.klondike_reobserve,
+        Duration::from_millis(200)]);
+    assert_eq!(io.trace, ["wait", "capture", "wait", "capture", "wait", "capture"]);
+    assert!(io.frames.is_empty(), "only the one final fresh confirmation was consumed");
+    assert!(io.terminal_inputs.is_empty() && io.inputs.is_empty());
     assert_eq!(latest.unwrap().frame.pixels, native_hint_phase(91).frame.pixels);
+}
+
+
+/// Controlled derivatives alter only the bounded glyph stripe, leaving the
+/// original fixture untouched. The confirming capture supplies the sole click
+/// coordinate; later tinted lettering cannot replay that acknowledged OK.
+#[test]
+fn bounded_control_fast_confirmation_clicks_only_current_glyph_before_later_tint() {
+    use klondike::terminal::TerminalStage;
+    let first = native_hint_phase(91);
+    let mut tinted_frame = first.frame.clone();
+    for y in 700..=850 {
+        for x in 930..=954 {
+            let offset = y * tinted_frame.stride + x * 4;
+            if tinted_frame.pixels[offset..offset + 3] == [0, 0, 0] {
+                tinted_frame.pixels[offset..offset + 3].copy_from_slice(&[2, 1, 8]);
+            }
+        }
+    }
+    let mut current_frame = tinted_frame.clone();
+    for x in 943..948 {
+        let offset = 804 * current_frame.stride + x * 4;
+        current_frame.pixels[offset..offset + 3].copy_from_slice(&[0, 0, 0]);
+    }
+    let current = native_observation(current_frame);
+    let tinted = native_observation(tinted_frame);
+    assert_eq!(crate::terminal_controls::control_point(&current.frame, KLONDIKE_CONTROLS.ok).unwrap(), PixelPoint::new(943, 804));
+    assert_eq!(crate::terminal_controls::control_point(&tinted.frame, KLONDIKE_CONTROLS.ok).unwrap(), PixelPoint::new(0, 0));
+    let tinted_pixels = tinted.frame.pixels.clone();
+    let mut io = fake_frames(vec![current, copy_observation(&tinted), copy_observation(&tinted), tinted]);
+    io.native_terminal_analysis = true;
+    let mut latest = Some(first);
+    let mut input_attempted = false;
+    let result = resume_after_win(&mut io, &mut latest,
+        StepRunSettings::new(AnimationSettleDelays::default(), 0), &event_sink(),
+        &AtomicBool::new(false), &mut input_attempted);
+    assert!(result.unwrap_err().contains("terminal advancement exhausted 2"));
+    assert!(input_attempted);
+    assert_eq!(io.waits[0], Duration::from_millis(200));
+    assert_eq!(io.terminal_inputs, [TerminalStage::LevelUp]);
+    assert_eq!(io.terminal_points, [PixelPoint::new(943, 804)]);
+    assert_eq!(io.trace.iter().filter(|entry| **entry == "probe").count(), 1);
+    assert!(io.frames.is_empty() && io.inputs.is_empty());
+    assert_eq!(latest.unwrap().frame.pixels, tinted_pixels);
+}
+
+
+/// Both expected OK and independently authorised win entry reserve one final
+/// confirmation for a first clean candidate on observation three. The fourth
+/// current coordinate is returned, never the previous frame's glyph position.
+#[test]
+fn bounded_control_first_clean_ok_on_third_observation_confirms_on_fourth() {
+    use klondike::terminal::TerminalStage;
+    for previous in [Some(TerminalStage::ScoreCounting), None] {
+        let mut unknown = observation(PredictedAction::NoHighlight, false);
+        unknown.frame.pixels.fill(255);
+        let current = final_ok_glyph(Some(PixelPoint::new(943, 804)));
+        let current_pixels = current.frame.pixels.clone();
+        let mut io = fake_frames(vec![copy_observation(&unknown), native_hint_phase(91), current]);
+        io.native_terminal_analysis = true;
+        let mut latest = Some(unknown);
+        let result = await_terminal_stage(&mut io, &mut latest,
+            StepRunSettings::new(AnimationSettleDelays::default(), 0), &event_sink(),
+            &AtomicBool::new(false), previous);
+        assert_eq!(result.unwrap(), Some((TerminalStage::LevelUp, PixelPoint::new(943, 804))));
+        assert_eq!(io.trace, ["wait", "capture", "wait", "capture", "wait", "capture"]);
+        assert_eq!(io.waits, [AnimationSettleDelays::default().klondike_reobserve,
+            AnimationSettleDelays::default().klondike_reobserve, Duration::from_millis(200)]);
+        assert!(io.frames.is_empty() && io.terminal_inputs.is_empty() && io.inputs.is_empty());
+        assert_eq!(latest.unwrap().frame.pixels, current_pixels);
+    }
+}
+
+
+/// Controlled native derivative: tint the O stripe and optionally supply one
+/// exact-black current run without modifying the original K91 PNG or body.
+fn final_ok_glyph(point: Option<PixelPoint>) -> FrameObservation {
+    let mut frame = native_hint_phase(91).frame;
+    for y in 700..=850 {
+        for x in 930..=954 {
+            let offset = y * frame.stride + x * 4;
+            if frame.pixels[offset..offset + 3] == [0, 0, 0] {
+                frame.pixels[offset..offset + 3].copy_from_slice(&[2, 1, 8]);
+            }
+        }
+    }
+    if let Some(point) = point {
+        for x in point.x..point.x + 5 {
+            let offset = point.y as usize * frame.stride + x as usize * 4;
+            frame.pixels[offset..offset + 3].copy_from_slice(&[0, 0, 0]);
+        }
+    }
+    native_observation(frame)
+}
+
+
+/// The sole fourth observation must pass current readiness. Tint or still
+/// changing geometry stops and leaves a fifth clean frame unread in either entry.
+#[test]
+fn bounded_control_final_confirmation_failure_cannot_obtain_a_fifth_frame() {
+    use klondike::terminal::TerminalStage;
+    for previous in [Some(TerminalStage::ScoreCounting), None] {
+        for changing_geometry in [false, true] {
+            let mut unknown = observation(PredictedAction::NoHighlight, false);
+            unknown.frame.pixels.fill(255);
+            let fourth = if changing_geometry {
+                let mut frame = native_hint_phase(91).frame;
+                for row in frame.pixels.chunks_exact_mut(frame.stride) {
+                    let retained = row.len() - 8;
+                    row.copy_within(..retained, 8);
+                    row[..8].fill(255);
+                }
+                native_observation(frame)
+            } else { final_ok_glyph(None) };
+            let fourth_pixels = fourth.frame.pixels.clone();
+            let mut io = fake_frames(vec![copy_observation(&unknown), native_hint_phase(91),
+                fourth, native_hint_phase(91)]);
+            io.native_terminal_analysis = true;
+            let mut latest = Some(unknown);
+            let result = await_terminal_stage(&mut io, &mut latest,
+                StepRunSettings::new(AnimationSettleDelays::default(), 0), &event_sink(),
+                &AtomicBool::new(false), previous);
+            assert!(result.unwrap_err().contains("terminal advancement exhausted 3"));
+            assert_eq!(io.waits.len(), 3);
+            assert_eq!(io.waits[2], Duration::from_millis(200));
+            assert_eq!(io.frames.len(), 1, "a fifth clean frame receives no capture authority");
+            assert!(io.terminal_inputs.is_empty() && io.inputs.is_empty());
+            assert_eq!(latest.unwrap().frame.pixels, fourth_pixels);
+        }
+    }
+}
+
+
+/// STOP during the reserved final wait preserves observation three and does
+/// not count, acquire or click the fourth candidate, for both OK entry paths.
+#[test]
+fn bounded_control_stop_during_final_ok_confirmation_never_acquires_or_clicks() {
+    use klondike::terminal::TerminalStage;
+    for previous in [Some(TerminalStage::ScoreCounting), None] {
+        let stop = AtomicBool::new(false);
+        let mut unknown = observation(PredictedAction::NoHighlight, false);
+        unknown.frame.pixels.fill(255);
+        let mut io = fake_frames(vec![copy_observation(&unknown), native_hint_phase(91), native_hint_phase(91)]);
+        io.native_terminal_analysis = true;
+        io.stop_on_wait = Some(&stop);
+        io.waits_before_stop = 2;
+        let mut latest = Some(unknown);
+        let result = await_terminal_stage(&mut io, &mut latest,
+            StepRunSettings::new(AnimationSettleDelays::default(), 0), &event_sink(), &stop, previous);
+        assert!(result.unwrap_err().contains("STOP"));
+        assert_eq!(io.waits.len(), 3);
+        assert_eq!(io.waits[2], Duration::from_millis(200));
+        assert_eq!(io.trace, ["wait", "capture", "wait", "capture", "wait"]);
+        assert_eq!(io.frames.len(), 1);
+        assert!(io.terminal_inputs.is_empty() && io.inputs.is_empty());
+        assert_eq!(latest.unwrap().frame.pixels, native_hint_phase(91).frame.pixels);
+    }
+}
+
+
+/// A reserved fourth frame cannot replace the pending OK with New Game or score
+/// counting. All three normal frames use the entry fallback, so New Game gets
+/// three searches and two recaptures; only OK may inspect the fourth frame.
+#[test]
+fn bounded_control_reserved_ok_frame_cannot_authorise_another_terminal_stage() {
+    assert_eq!(klondike::terminal::classify_terminal(&native_hint_phase(91).frame).unwrap(), None,
+        "K91 must exercise the entry fallback rather than a classified Level Up");
+    for fourth_number in [26, 92] {
+        let (events, receiver) = std::sync::mpsc::channel();
+        let sink = WorkerEventSink { events, latest_frame: super::super::LatestFrameSlot::default(), capture_context: std::sync::Mutex::new(None) };
+        let mut unknown = observation(PredictedAction::NoHighlight, false);
+        unknown.frame.pixels.fill(255);
+        let mut io = fake_frames(vec![copy_observation(&unknown), native_hint_phase(91),
+            native_hint_phase(fourth_number), native_hint_phase(91)]);
+        io.native_terminal_analysis = true;
+        let mut latest = Some(unknown);
+        let result = await_terminal_stage(&mut io, &mut latest,
+            StepRunSettings::new(AnimationSettleDelays::default(), 0), &sink,
+            &AtomicBool::new(false), None);
+        assert!(result.unwrap_err().contains("terminal advancement exhausted 3"));
+        assert_eq!(io.frames.len(), 1);
+        assert!(io.terminal_inputs.is_empty() && io.inputs.is_empty());
+        let logs: Vec<_> = receiver.try_iter().filter_map(|notification| match notification.event {
+            WorkerEvent::Log(message) => Some(message), _ => None,
+        }).collect();
+        let final_ok_search = logs.iter().position(|line| line.starts_with("Klondike OK search 4:"))
+            .unwrap_or_else(|| panic!("the reserved frame must search OK; logs={logs:#?}"));
+        let new_game_searches: Vec<_> = logs.iter().enumerate()
+            .filter(|(_, line)| line.starts_with("Klondike New Game search ")
+                && !line.starts_with("Klondike New Game search summary:"))
+            .map(|(index, _)| index).collect();
+        assert_eq!(new_game_searches.len(), 3,
+            "New Game may search only the three normal observations; logs={logs:#?}");
+        assert!(new_game_searches.iter().all(|index| *index < final_ok_search),
+            "the reserved fourth frame must never search New Game; logs={logs:#?}");
+        assert!(logs.iter().any(|line| line.contains("Klondike New Game search summary: searches=3; recaptures=2;")),
+            "New Game must retain its three-search, two-recapture budget; logs={logs:#?}");
+        assert!(logs.iter().any(|line| line.contains("Klondike OK search summary: searches=4; recaptures=3;")),
+            "only OK receives the reserved fourth observation; logs={logs:#?}");
+    }
+}
+
+
+/// A successful final witness supplies one current coordinate. Acknowledgement
+/// retires it; uncertain delivery stops before any further capture or replay.
+#[test]
+fn bounded_control_fourth_ok_click_preserves_acknowledged_and_uncertain_input_limits() {
+    use klondike::terminal::TerminalStage;
+    for uncertain in [false, true] {
+        let mut unknown = observation(PredictedAction::NoHighlight, false);
+        unknown.frame.pixels.fill(255);
+        let tinted = final_ok_glyph(None);
+        let mut io = fake_frames(vec![copy_observation(&unknown), native_hint_phase(91),
+            final_ok_glyph(Some(PixelPoint::new(943, 804))),
+            copy_observation(&tinted), copy_observation(&tinted), tinted]);
+        io.native_terminal_analysis = true;
+        io.fail_terminal_stage = uncertain.then_some(TerminalStage::LevelUp);
+        let mut latest = Some(unknown);
+        let mut input_attempted = false;
+        let result = resume_after_win(&mut io, &mut latest,
+            StepRunSettings::new(AnimationSettleDelays::default(), 0), &event_sink(),
+            &AtomicBool::new(false), &mut input_attempted);
+        let error = result.unwrap_err();
+        assert!(input_attempted);
+        assert_eq!(io.terminal_inputs, [TerminalStage::LevelUp]);
+        assert_eq!(io.terminal_points, [PixelPoint::new(943, 804)]);
+        let input_index = io.trace.iter().position(|entry| *entry == "terminal").unwrap();
+        assert_eq!(io.trace[..input_index].iter().filter(|entry| **entry == "capture").count(), 3);
+        assert_eq!(io.waits[2], Duration::from_millis(200));
+        assert!(io.inputs.is_empty());
+        if uncertain {
+            assert!(error.contains("uncertain terminal input"));
+            assert_eq!(io.frames.len(), 3, "uncertain OK permits no subsequent capture");
+        } else {
+            assert!(error.contains("terminal advancement exhausted 2"), "New Game retains three observations");
+            assert!(io.frames.is_empty());
+        }
+    }
 }
 
 
@@ -2378,6 +2627,7 @@ fn bounded_control_stop_during_ok_confirmation_never_clicks() {
         &stop, Some(TerminalStage::ScoreCounting));
     assert!(result.unwrap_err().contains("STOP"));
     assert_eq!(io.trace, ["wait"]);
+    assert_eq!(io.waits, [Duration::from_millis(200)]);
     assert_eq!(io.frames.len(), 1);
     assert!(io.terminal_inputs.is_empty() && io.inputs.is_empty());
     assert_eq!(latest.unwrap().frame.pixels, native_hint_phase(91).frame.pixels);

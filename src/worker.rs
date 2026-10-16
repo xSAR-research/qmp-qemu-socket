@@ -18,6 +18,7 @@ mod pyramid_execution;
 mod pyramid_reconnaissance;
 mod spider_execution;
 mod tripeaks_terminal;
+mod tripeaks_geometry;
 
 use std::{
     cell::RefCell,
@@ -2272,6 +2273,7 @@ fn execute_guarded_action(
     let mut missing_halo_phase = 0u8;
     let mut solver_recovery_clicks = 0usize;
     let mut halo_recovery = TriPeaksHaloRecovery::default();
+    let mut geometry_recovery = tripeaks_geometry::GeometryRecovery::default();
     let mut terminal_confirmation = tripeaks_terminal::TerminalConfirmation::default();
     let mut awaiting_reward_animation = false;
 
@@ -2286,23 +2288,31 @@ fn execute_guarded_action(
         let post_action_scan_state = *scan_state;
 
 
-        let mut after_series = match capture_series(
-            qmp,
-            socket_path,
-            &post_action_scan_state,
-            event_tx,
-            cancel_requested,
-        ) {
+        let after_capture = if post_action_scan_state.mode() == GameMode::TriPeaks {
+            tripeaks_geometry::capture_post_action_series(
+                qmp,
+                &post_action_scan_state,
+                context,
+                &mut profile,
+                &mut geometry_recovery,
+                settings.animation_delays().tripeaks_reobserve,
+            )
+        } else {
+            capture_series(qmp, socket_path, &post_action_scan_state, event_tx, cancel_requested)
+                .map_err(|message| tripeaks_geometry::CaptureFailure { message, observation: None })
+        };
+        let mut after_series = match after_capture {
             Ok(series) => series,
-            Err(error) => {
+            Err(failure) => {
                 return Err(action_failure(
                     action_started,
                     profile,
                     WorkerState::Uncertain,
                     format!(
-                        "Post-action capture failed after input: {error}. Guest input was not retried."
+                        "Post-action capture failed after input: {}. Guest input was not retried.",
+                        failure.message,
                     ),
-                    None,
+                    failure.observation.map(|observation| *observation),
                     FailureFramePhase::PostAction,
                 ));
             }
@@ -3707,75 +3717,12 @@ fn analyse_captured_frame(
     frame: CapturedFrame,
     scan_state: &TableauScanState,
 ) -> Result<(FrameObservation, Duration), String> {
-    // Analyse one immutable frame; this atom has no QMP access and therefore
-    // cannot send input or capture an implicit replacement frame.
     let detection_started = Instant::now();
-    let profile = scan_state.mode().profile();
-
-
-    if scan_state.mode().calibration_only() {
-
-
-        if (frame.width, frame.height) != (profile.frame_width, profile.frame_height) {
-            return Err(format!(
-                "calibration frame must be exactly {}x{}, got {}x{}",
-                profile.frame_width, profile.frame_height, frame.width, frame.height
-            ));
-        }
-
-
-        if !frame.is_layout_valid() {
-            return Err("calibration frame has an invalid pixel layout".to_owned());
-        }
-        let detection = detection_started.elapsed();
-        return Ok((
-            FrameObservation {
-                frame,
-                prediction: PredictedAction::CalibrationOnly {
-                    mode: scan_state.mode(),
-                },
-                observed_rows: None,
-                gameplay_scene: false,
-                game_progress: None,
-            },
-            detection,
-        ));
-    }
-    let gameplay_scene = is_gameplay_scene_for_mode(&frame, scan_state.mode())
-        .map_err(|error| format!("gameplay-scene analysis failed: {error}"))?;
-
-
-    let game_progress = if matches!(scan_state.mode(), GameMode::Klondike | GameMode::FreeCell | GameMode::Spider) {
-        None
-    } else {
-        Some(
-            detect_game_progress_for_profile(&frame, profile)
-                .map_err(|error| format!("Solver progress analysis failed: {error}"))?,
-        )
-    };
-
-
-    let (prediction, observed_rows) = if gameplay_scene {
-        let analysis = analyse_frame_with_state(&frame, scan_state)
-            .map_err(|error| format!("frame analysis failed: {error}"))?;
-        (analysis.prediction, analysis.observed_rows)
-    } else {
-        (PredictedAction::NoHighlight, None)
-    };
+    let classification = tripeaks_geometry::analyse_frame(&frame, scan_state)
+        .map_err(|error| error.message())?;
     let detection = detection_started.elapsed();
-
-    Ok((
-        FrameObservation {
-            frame,
-            prediction,
-            observed_rows,
-            gameplay_scene,
-            game_progress,
-        },
-        detection,
-    ))
+    Ok((classification.into_observation(frame), detection))
 }
-
 
 /// Observations and timings passed to shared action validation.
 struct CaptureSeries {
