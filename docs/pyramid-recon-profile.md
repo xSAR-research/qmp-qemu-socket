@@ -54,7 +54,7 @@ both backdrops remain at 4. The previous uniform 4 was insufficient for those
 actual text-rendering samples. This widens accepted channel ranges, with explicit
 negative/boundary checks; it neither enables generic OK nor resumes a failed run.
 
-The repeated modal refusal is addressed by the current
+The repeated modal refusal is addressed by the retained bundled
 `pyramid-native-1920-classic-blue-v4`, described in the
 [stable-text correction record](pyramid-recon-stable-text-correction.md).
 Only four text masks and the ID change from v3. Each mask retains exact pure-ink
@@ -64,6 +64,44 @@ unchanged. Excluded pixels are unconstrained: this deliberately widens matching
 and requires retained foreground/negative-space tests, not a claim of full OCR.
 All seven modal components, fresh second confirmation and restoration checks
 remain mandatory. The mask rule uses the original modal only, not live failures.
+
+### v6 calibration for the retained Grandmaster frame
+
+The separately named v6 profile extends the accepted local v5 profile; it does
+not replace `tests/fixtures/pyramid-recon/native-profile.json`, which remains
+the historical v4 fixture. The v5 source SHA-256 is
+`b48e0b1a20aec2439422a1b967de1468d5553cc9a12077784356c3b68bcfd3e7`.
+The v6 fixture is `tests/fixtures/pyramid-recon/native-v6/profile.json`, with ID
+`pyramid-native-1920-classic-blue-v6`. The operator copy is
+`/home/charlie/tmp/pyramid-native-1920-classic-blue-v6.json`. The root profile
+schema remains 1; the v4/v5 metadata and historical manifest are preserved.
+
+The original 1920×1080 Grandmaster baseline has SHA-256
+`02b1f0f98c8a4c5b5d57b4075fceb2829d1175d8b80ef2455d94fc81fff1c988`.
+With v5, logical tableau slot 13's Queen rank has best occupancy XOR distance
+28, exceeding 24. Independent diagnostics identify two additional spade
+failures: King of spades at slot 16 has suit distance 10; Jack of spades at
+slot 19 has distance 9, exceeding 8. These are zero-based logical indices.
+
+v6 appends two exact RGB crops from that baseline to both tableau and stock
+reader banks: Queen rank `(1093,331,27,24)` from slot 13, and spade suit
+`(895,462,20,16)` from the already correctly recognised slot 24. That existing
+spade matches v5 at distance 6 of 8; it supplies a native variant rather than
+an inferred identity. Queen variants increase 2 → 3 of the allowed 8; spade
+variants increase 8 → 9 of the allowed 16. Each reader now has 34 rank and
+36 suit variants. Existing variants, v5 chart masks, modal/scene signatures,
+ROIs, 24/8 XOR limits, ±1 alignment and paper/ink/colour checks are unchanged.
+
+The original, labelled identities and crop provenance are retained together in
+[the v6 fixture record](../tests/fixtures/pyramid-recon/native-v6/README.md).
+The frame exposes 29 identities; it proves neither the unseen stock order nor
+a new successful scan/restoration. All eight v6 regressions pass through the
+production Rust parser and recognisers. Both reader banks preserve all 104
+historical observations, including the 16 held-out LEFT observations. The full
+suite passes 858 tests with none failed or ignored; locked check, strict private
+rustdoc, all-target Clippy and native release build also pass. Fresh live scan
+and restoration verification remain separate. A classifier pass does not
+authorise replay of the refused run.
 
 ## Public interface
 
@@ -204,10 +242,10 @@ respectively across that set. These are historical evidence-set measurements,
 not universal guarantees or probabilistic confidence. That historical set lacked
 LEFT ranks 2/4/5/6/9 and LEFT diamonds.
 
-The newly supplied start and exhausted originals add 58 labelled observations,
+The historical start and exhausted originals add 58 labelled observations,
 including **LEFT King of diamonds** and **RIGHT Queen of diamonds**. LEFT diamonds
 are therefore no longer absent from the retained evidence. Actual rasterisation
-variants from the current start frame extend the native bank to 33 rank and 35
+variants from that start frame extend the historical bank to 33 rank and 35
 suit variants without increasing the XOR limits or alignment bound. Any such
 start-frame crop used for calibration,
 including the King-of-diamonds suit, is training evidence, not held out. The

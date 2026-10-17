@@ -1416,7 +1416,7 @@ mod tests {
 
 
     /// Read an unchanged retained original; no filler frame is represented as native.
-    fn native_original(source_id: &str) -> CapturedFrame {
+    pub(super) fn native_original(source_id: &str) -> CapturedFrame {
         let manifest = native_manifest();
         let source = manifest["originals"].as_array().expect("originals").iter()
             .find(|source| source["id"] == source_id).expect("declared native original");
@@ -1429,7 +1429,7 @@ mod tests {
 
 
     /// Independently reviewed actual observations, not identities inferred by the reader.
-    fn native_manifest() -> Value {
+    pub(super) fn native_manifest() -> Value {
         serde_json::from_str(include_str!("../../tests/fixtures/pyramid-recon/manifest.json"))
             .expect("native evidence manifest")
     }
@@ -1463,7 +1463,7 @@ mod tests {
 
 
     /// Label conversion for retained test evidence, independent of classifier output.
-    fn labelled_card(value: &Value) -> Card {
+    pub(super) fn labelled_card(value: &Value) -> Card {
         Card::new(
             Rank::ALL.into_iter().find(|rank| Some(rank.as_str()) == value["rank"].as_str()).expect("labelled rank"),
             Suit::ALL.into_iter().find(|suit| Some(suit.as_str()) == value["suit"].as_str()).expect("labelled suit"),
@@ -1472,7 +1472,7 @@ mod tests {
 
 
     /// Extract unchanged RGB from an original into the exact bounded patch schema.
-    fn native_patch(frame: &CapturedFrame, bounds: PixelRect, source_sha256: &str) -> Value {
+    pub(super) fn native_patch(frame: &CapturedFrame, bounds: PixelRect, source_sha256: &str) -> Value {
         use std::fmt::Write;
 
         let view = frame.as_view().expect("native layout");
@@ -2206,3 +2206,8 @@ mod tests {
         assert!(CardReader::parse(&indistinguishable, 140, 53).is_err());
     }
 }
+
+
+#[cfg(test)]
+#[path = "vision/native_v6_tests.rs"]
+mod native_v6_tests;

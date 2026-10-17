@@ -1,13 +1,17 @@
-//! Exercise the shared worker capture boundary against the real version-2 TCP protocol.
+//! Exercise the shared capture boundary against explicit wire modes on local mock sockets.
 
 use std::{
     io::{BufRead, BufReader, Write},
     net::{TcpListener, TcpStream},
-    os::unix::{fs::DirBuilderExt, net::{UnixListener, UnixStream}},
+    os::unix::{
+        fs::DirBuilderExt,
+        net::{UnixListener, UnixStream},
+    },
     sync::atomic::AtomicU64,
 };
 
 use serde_json::{Value, json};
+use xsar::tcp::protocol::v3;
 use xsar::tcp::protocol::{FrameHeader, REQUEST_BYTES};
 
 use super::*;
@@ -184,9 +188,19 @@ fn tcp_server(replies: Vec<Reply>) -> (String, ServerJoin) {
 
 /// Distinct channels and rows expose red/blue swaps, row inversion and stride mistakes.
 fn coloured_frame() -> CapturedFrame {
-    CapturedFrame { width: 2, height: 2, stride: 8, format: PixelFormat::Rgba8,
-        pixels: vec![251, 3, 17, 255, 9, 127, 203, 255,
-                     41, 222, 5, 255, 199, 16, 83, 255] }
+    let stride = NOMINAL_FRAME_WIDTH as usize * 4;
+    let mut pixels = vec![255; stride * NOMINAL_FRAME_HEIGHT as usize];
+    pixels[..16].copy_from_slice(&[
+        251, 3, 17, 255, 9, 127, 203, 255, 0, 0, 0, 255, 2, 2, 2, 255,
+    ]);
+    pixels[stride..stride + 8].copy_from_slice(&[41, 222, 5, 255, 199, 16, 83, 255]);
+    CapturedFrame {
+        width: NOMINAL_FRAME_WIDTH,
+        height: NOMINAL_FRAME_HEIGHT,
+        stride,
+        format: PixelFormat::Rgba8,
+        pixels,
+    }
 }
 
 /// Compare the application-visible frame contract, including channel order and row layout.
@@ -325,4 +339,333 @@ fn failed_tcp_frame_keeps_entry_evidence_and_next_capture_recovers() {
     drop(qmp);
     assert_eq!(qmp_server.finish(), 1, "TCP failure must not silently fall back to QMP");
     assert_eq!(tcp.finish(), 3);
+}
+
+
+/// Version-3 socket responses retain full native capture semantics in controlled tests.
+enum V3Reply {
+    /// Complete BGR8 response, owned independently from every preceding image.
+    Frame(CapturedFrame),
+    /// Valid header followed by too few payload bytes and a closed connection.
+    Truncated,
+    /// Invalid orientation metadata, with no payload permitted to reach the receiver.
+    WrongOrientation,
+    /// Valid but uncalibrated small full display; the app must reject it before PNG work.
+    NonNative,
+    /// Hold a partially sent payload until the receiving run requests STOP.
+    WaitForStop(Arc<AtomicBool>),
+}
+
+
+/// Emit the public production version-3 codec on explicitly grouped persistent sessions.
+fn v3_server(sessions: Vec<Vec<V3Reply>>) -> (String, ServerJoin) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap().to_string();
+    listener.set_nonblocking(true).unwrap();
+    let server = ServerJoin(Some(thread::spawn(move || {
+        let mut total_requests = 0usize;
+        for (session_index, replies) in sessions.into_iter().enumerate() {
+            let mut stream = accept_tcp(&listener);
+            stream
+                .set_read_timeout(Some(Duration::from_secs(3)))
+                .unwrap();
+            stream
+                .set_write_timeout(Some(Duration::from_secs(3)))
+                .unwrap();
+            let session_id = session_index as u64 + 1;
+            for (request_index, reply) in replies.into_iter().enumerate() {
+                let mut request_bytes = [0; v3::REQUEST_LEN];
+                stream.read_exact(&mut request_bytes).unwrap();
+                let request = v3::Request::from_bytes(request_bytes).unwrap();
+                assert_eq!(request.request_id(), request_index as u64 + 1);
+                assert_eq!(
+                    request.session_id(),
+                    if request_index == 0 { 0 } else { session_id }
+                );
+                assert_eq!(
+                    request.display_generation(),
+                    if request_index == 0 { 0 } else { 7 }
+                );
+                total_requests += 1;
+                let header = v3::ResponseHeader::success(
+                    session_id,
+                    request.request_id(),
+                    total_requests as u64,
+                    7,
+                    NOMINAL_FRAME_WIDTH,
+                    NOMINAL_FRAME_HEIGHT,
+                )
+                .unwrap();
+                match reply {
+                    V3Reply::Frame(frame) => {
+                        for fragment in header.to_bytes().chunks(7) {
+                            stream.write_all(fragment).unwrap();
+                        }
+                        let mut bgr = Vec::with_capacity(frame.pixels.len() / 4 * 3);
+                        for pixel in frame.pixels.as_chunks::<4>().0 {
+                            bgr.extend_from_slice(&[pixel[2], pixel[1], pixel[0]]);
+                        }
+                        stream.write_all(&bgr).unwrap();
+                    }
+                    V3Reply::Truncated => {
+                        stream.write_all(&header.to_bytes()).unwrap();
+                        stream.write_all(&[1, 2]).unwrap();
+                    }
+                    V3Reply::WrongOrientation => {
+                        let mut bytes = header.to_bytes();
+                        bytes[7] = 9;
+                        stream.write_all(&bytes).unwrap();
+                    }
+                    V3Reply::NonNative => {
+                        let small = v3::ResponseHeader::success(
+                            session_id,
+                            request.request_id(),
+                            total_requests as u64,
+                            7,
+                            1,
+                            1,
+                        )
+                        .unwrap();
+                        stream.write_all(&small.to_bytes()).unwrap();
+                        stream.write_all(&[17, 3, 251]).unwrap();
+                    }
+                    V3Reply::WaitForStop(cancel) => {
+                        stream.write_all(&header.to_bytes()).unwrap();
+                        stream.write_all(&[1, 2]).unwrap();
+                        cancel.store(true, Ordering::Release);
+                        let mut byte = [0];
+                        // Closing with unread response bytes can produce either
+                        // EOF or a TCP reset. Both prove the session was discarded;
+                        // a new request byte, timeout or other error remains a failure.
+                        match stream.read(&mut byte) {
+                            Ok(0) => {}
+                            Err(error) if error.kind() == ErrorKind::ConnectionReset => {}
+                            result => panic!(
+                                "cancelled capture must discard its partially received session: {result:?}"
+                            ),
+                        }
+                    }
+                }
+            }
+        }
+        total_requests
+    })));
+    (address, server)
+}
+
+
+/// Routine and manual acquisition share one connection and preserve independently owned frames.
+#[test]
+fn persistent_v3_reuses_connection_for_routine_and_manual_full_capture() {
+    let root = TestDirectory::new();
+    let _diagnostics = DiagnosticsRestore::install(None);
+    let first = coloured_frame();
+    let mut second = coloured_frame();
+    second.pixels[0] = 19;
+    let (address, tcp) = v3_server(vec![vec![
+        V3Reply::Frame(first.clone()),
+        V3Reply::Frame(second.clone()),
+    ]]);
+    let _backend = TestCaptureBackend::tcp_mode(address, CaptureMode::PersistentBgrV3);
+    let (mut qmp, qmp_server) = qmp_pair(&root);
+    let (events, receiver) = sink();
+    let socket = root.0.join("qmp.sock");
+    let (retained, _) = capture_screen(&mut qmp, &socket, &events).unwrap();
+    let (manual, png, _) = capture_screen_with_png(&mut qmp, &socket, &events).unwrap();
+    assert_frame(&retained, &first);
+    assert_frame(&manual, &second);
+    assert_frame(&decode_png(&png).unwrap(), &second);
+    assert_eq!(&manual.pixels[8..16], &[0, 0, 0, 255, 2, 2, 2, 255]);
+    assert_eq!(manual.pixels.len(), 8_294_400);
+    assert!(
+        manual
+            .pixels
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .all(|pixel| pixel[3] == 255)
+    );
+    let logs: Vec<_> = receiver
+        .try_iter()
+        .filter_map(|event| match event.event {
+            WorkerEvent::Log(message) => Some(message),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        logs.iter()
+            .any(|message| message.contains("session=1; request=1; frame=1;")
+                && message.contains("reused=false"))
+    );
+    assert!(
+        logs.iter()
+            .any(|message| message.contains("session=1; request=2; frame=2;")
+                && message.contains("reused=true"))
+    );
+    assert!(
+        logs.iter()
+            .any(|message| message.contains("payload-bytes=6220800"))
+    );
+    drop(qmp);
+    assert_eq!(qmp_server.finish(), 1);
+    assert_eq!(tcp.finish(), 2, "manual PNG adds no acquisition request");
+}
+
+
+/// Changing only the controller generation closes the old session before acquiring fresh evidence.
+#[test]
+fn persistent_v3_context_change_starts_a_new_session() {
+    let root = TestDirectory::new();
+    let _diagnostics = DiagnosticsRestore::install(None);
+    let expected = coloured_frame();
+    let (address, tcp) = v3_server(vec![
+        vec![V3Reply::Frame(expected.clone())],
+        vec![V3Reply::Frame(expected.clone())],
+    ]);
+    let _backend = TestCaptureBackend::tcp_mode(address, CaptureMode::PersistentBgrV3);
+    let (mut qmp, qmp_server) = qmp_pair(&root);
+    let (events, receiver) = sink();
+    let socket = root.0.join("qmp.sock");
+    let mut context = ControllerContext::new(
+        socket.clone(),
+        GameMode::FreeCell,
+        SolvingStrategy::ComputerVision,
+        1,
+    );
+    events.set_capture_context(Some(context.clone()));
+    capture_screen(&mut qmp, &socket, &events).unwrap();
+    context.generation += 1;
+    events.set_capture_context(Some(context));
+    let (fresh, _) = capture_screen(&mut qmp, &socket, &events).unwrap();
+    assert_frame(&fresh, &expected);
+    assert!(receiver.try_iter().any(|event| matches!(event.event,
+        WorkerEvent::Log(message) if message.contains("session=2; request=1; frame=2;")
+            && message.contains("reused=false"))));
+    drop(qmp);
+    assert_eq!(qmp_server.finish(), 1);
+    assert_eq!(tcp.finish(), 2);
+}
+
+
+/// A failed persistent response is never retried; a later explicit capture may reconnect.
+#[test]
+fn persistent_v3_truncation_discards_session_and_later_capture_reconnects() {
+    let root = TestDirectory::new();
+    let _diagnostics = DiagnosticsRestore::install(None);
+    let expected = coloured_frame();
+    let (address, tcp) = v3_server(vec![
+        vec![V3Reply::Frame(expected.clone()), V3Reply::Truncated],
+        vec![V3Reply::Frame(expected.clone())],
+    ]);
+    let _backend = TestCaptureBackend::tcp_mode(address, CaptureMode::PersistentBgrV3);
+    let (mut qmp, qmp_server) = qmp_pair(&root);
+    let (events, receiver) = sink();
+    let socket = root.0.join("qmp.sock");
+    capture_screen(&mut qmp, &socket, &events).unwrap();
+    assert!(
+        capture_screen(&mut qmp, &socket, &events)
+            .unwrap_err()
+            .contains("TCP")
+    );
+    let (fresh, _) = capture_screen(&mut qmp, &socket, &events).unwrap();
+    assert_frame(&fresh, &expected);
+    tcp_capture::reset(Some(&events));
+    assert!(receiver.try_iter().any(|event| matches!(event.event,
+        WorkerEvent::Log(message) if message.contains("lifetime successes=2; failures=1"))));
+    drop(qmp);
+    assert_eq!(
+        qmp_server.finish(),
+        1,
+        "capture reconnection never issues guest input"
+    );
+    assert_eq!(
+        tcp.finish(),
+        3,
+        "one request per explicit capture; no hidden retry"
+    );
+}
+
+
+/// Invalid wire metadata or non-native dimensions fail before PNG, preview or analysis.
+#[test]
+fn v3_invalid_response_never_reaches_png_or_analysis() {
+    for reply in [V3Reply::WrongOrientation, V3Reply::NonNative] {
+        let root = TestDirectory::new();
+        let images = root.images();
+        let _diagnostics = DiagnosticsRestore::install(Some(images.clone()));
+        let (address, tcp) = v3_server(vec![vec![reply]]);
+        let _backend = TestCaptureBackend::tcp_mode(address, CaptureMode::PersistentBgrV3);
+        let (mut qmp, qmp_server) = qmp_pair(&root);
+        let (events, _receiver) = sink();
+        assert!(capture_screen_with_png(&mut qmp, &root.0.join("qmp.sock"), &events).is_err());
+        assert!(events.latest_frame.take().is_none());
+        assert!(png_paths(&images).is_empty());
+        assert!(
+            begin_game_win_images(&events).is_err(),
+            "no partially valid entry PNG may be cached"
+        );
+        drop(qmp);
+        assert_eq!(qmp_server.finish(), 1);
+        assert_eq!(tcp.finish(), 1);
+    }
+}
+
+
+/// STOP interrupts an incomplete payload and cannot poison a later explicit manual capture.
+#[test]
+fn v3_guarded_stop_discards_partial_payload_and_manual_capture_can_reconnect() {
+    let root = TestDirectory::new();
+    let _diagnostics = DiagnosticsRestore::install(None);
+    let cancelled = Arc::new(AtomicBool::new(false));
+    let expected = coloured_frame();
+    let (address, tcp) = v3_server(vec![
+        vec![V3Reply::WaitForStop(Arc::clone(&cancelled))],
+        vec![V3Reply::Frame(expected.clone())],
+    ]);
+    let _backend = TestCaptureBackend::tcp_mode(address, CaptureMode::PersistentBgrV3);
+    let (mut qmp, qmp_server) = qmp_pair(&root);
+    let (events, _receiver) = sink();
+    let socket = root.0.join("qmp.sock");
+    {
+        let _cancel_scope = tcp_capture::CancellationScope::install(Arc::clone(&cancelled));
+        assert!(
+            capture_screen(&mut qmp, &socket, &events)
+                .unwrap_err()
+                .contains("cancelled")
+        );
+    }
+    let (fresh, png, _) = capture_screen_with_png(&mut qmp, &socket, &events).unwrap();
+    assert!(
+        cancelled.load(Ordering::Acquire),
+        "manual capture does not clear the input STOP latch"
+    );
+    assert_frame(&fresh, &expected);
+    assert_frame(&decode_png(&png).unwrap(), &expected);
+    drop(qmp);
+    assert_eq!(qmp_server.finish(), 1);
+    assert_eq!(tcp.finish(), 2);
+}
+
+
+/// The explicit one-shot v3 mode retains BGR8 framing while reconnecting for each capture.
+#[test]
+fn one_shot_v3_opens_distinct_sessions() {
+    let root = TestDirectory::new();
+    let _diagnostics = DiagnosticsRestore::install(None);
+    let expected = coloured_frame();
+    let (address, tcp) = v3_server(vec![
+        vec![V3Reply::Frame(expected.clone())],
+        vec![V3Reply::Frame(expected.clone())],
+    ]);
+    let _backend = TestCaptureBackend::tcp_mode(address, CaptureMode::BgrV3);
+    let (mut qmp, qmp_server) = qmp_pair(&root);
+    let (events, _receiver) = sink();
+    let socket = root.0.join("qmp.sock");
+    for _ in 0..2 {
+        let (actual, _) = capture_screen(&mut qmp, &socket, &events).unwrap();
+        assert_frame(&actual, &expected);
+    }
+    drop(qmp);
+    assert_eq!(qmp_server.finish(), 1);
+    assert_eq!(tcp.finish(), 2);
 }

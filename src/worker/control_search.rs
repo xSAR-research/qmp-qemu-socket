@@ -51,6 +51,8 @@ pub(super) struct ControlLookup<'a> {
     ok_panel: bool,
     /// The latest frame needs only fresh geometry agreement before OK input.
     ok_confirmation_pending: bool,
+    /// The latest body agrees with a preceding settled glyph that is now absent.
+    ok_interrupted_confirmation: bool,
     /// One final fresh observation has been reserved; never reset within this lookup.
     final_ok_confirmation_reserved: bool,
 }
@@ -71,6 +73,7 @@ impl<'a> ControlLookup<'a> {
             ok_readiness: terminal_controls::ok_readiness::OkReadiness::new(),
             ok_panel: false,
             ok_confirmation_pending: false,
+            ok_interrupted_confirmation: false,
             final_ok_confirmation_reserved: false,
         }
     }
@@ -79,6 +82,7 @@ impl<'a> ControlLookup<'a> {
     /// Scan and log one already captured frame through the normal worker sink.
     pub(super) fn search(&mut self, frame: &CapturedFrame) -> Result<PixelPoint, String> {
         self.ok_confirmation_pending = false;
+        self.ok_interrupted_confirmation = false;
         self.ok_panel = false;
         self.searches += 1;
         let bounds = self.spec.bounds;
@@ -129,6 +133,7 @@ impl<'a> ControlLookup<'a> {
         point: PixelPoint,
     ) -> Result<PixelPoint, String> {
         self.ok_confirmation_pending = false;
+        self.ok_interrupted_confirmation = false;
         self.ok_panel = false;
         if self.control != Control::Ok {
             return Ok(point);
@@ -141,17 +146,19 @@ impl<'a> ControlLookup<'a> {
         })?;
         self.ok_panel = observation.button.is_some();
         self.ok_confirmation_pending = observation.confirmation_pending;
+        self.ok_interrupted_confirmation = observation.interrupted_confirmation;
         self.outcome = if observation.ready { "found" } else if point == PixelPoint::new(0, 0) {
             "missing"
         } else {
             "awaiting-settled-OK"
         };
         send_log(self.events, format!(
-            "{} OK readiness: raw=({}, {}); selected=({}, {}); button={:?}; caption_present={}; caption_y={:?}; geometry_stable={}; glyph_bounds={:?}; ready={}; confirmation_pending={}; reason={}; readiness_pixels={}/{}; readiness_ms={:.3}; caption_gate=false; normal_search_budget={}; final_OK_reserve={}; reserve_consumed={}; guest input sent=0.",
+            "{} OK readiness: raw=({}, {}); selected=({}, {}); button={:?}; caption_present={}; caption_y={:?}; geometry_stable={}; glyph_bounds={:?}; ready={}; confirmation_pending={}; interrupted_confirmation={}; reason={}; readiness_pixels={}/{}; readiness_ms={:.3}; caption_gate=false; normal_search_budget={}; final_OK_reserve={}; reserve_consumed={}; guest input sent=0.",
             self.game, point.x, point.y, observation.point.x, observation.point.y,
             observation.button, observation.caption_present, observation.caption_y,
             observation.geometry_stable, observation.glyph_bounds,
-            observation.ready, observation.confirmation_pending, observation.reason, observation.pixels_examined,
+            observation.ready, observation.confirmation_pending, observation.interrupted_confirmation,
+            observation.reason, observation.pixels_examined,
             terminal_controls::ok_readiness::MAX_READINESS_PIXEL_COMPARISONS,
             milliseconds(started.elapsed()),
             TERMINAL_CONTROL_SEARCH_ATTEMPTS, TERMINAL_OK_FINAL_CONFIRMATIONS,
@@ -162,40 +169,56 @@ impl<'a> ControlLookup<'a> {
 
 
     /// Choose and log the next existing retry wait without adding an observation.
-    /// Only a current settled-size OK glyph awaiting fresh geometry gets 200 ms.
+    /// A current settled-size glyph awaiting geometry gets 200 ms. Interrupted
+    /// glyphs keep ordinary spacing until the final observation is actually reserved.
     pub(super) fn retry_delay(&self, normal: Duration) -> Duration {
         let confirmation = self.control == Control::Ok && self.ok_confirmation_pending;
-        let delay = if confirmation { LEVEL_UP_CONFIRMATION_DELAY } else { normal };
-        let policy = if confirmation { "fresh OK geometry confirmation" } else { "normal retry" };
+        let interrupted = self.control == Control::Ok
+            && self.ok_interrupted_confirmation
+            && self.final_ok_confirmation_reserved;
+        let delay = if confirmation || interrupted {
+            LEVEL_UP_CONFIRMATION_DELAY
+        } else {
+            normal
+        };
+        let policy = if confirmation {
+            "fresh OK geometry confirmation"
+        } else if interrupted {
+            "reserved interrupted OK confirmation"
+        } else {
+            "normal retry"
+        };
         send_log(self.events, format!(
-            "{} {} retry wait: chosen_ms={:.0}; normal_ms={:.0}; confirmation_pending={}; policy={}; normal_search_budget={}; reserve_consumed={}; guest input sent=0.",
+            "{} {} retry wait: chosen_ms={:.0}; normal_ms={:.0}; confirmation_pending={}; policy={}; normal_search_budget={}; interrupted_confirmation={}; reserve_consumed={}; guest input sent=0.",
             self.game, self.control.label(), milliseconds(delay), milliseconds(normal), confirmation, policy,
-            TERMINAL_CONTROL_SEARCH_ATTEMPTS, self.final_ok_confirmation_reserved,
+            TERMINAL_CONTROL_SEARCH_ATTEMPTS, self.ok_interrupted_confirmation,
+            self.final_ok_confirmation_reserved,
         ));
         delay
     }
 
 
-    /// Reserve one final observation when only fresh agreement remains on normal search three.
+    /// Reserve one final OK observation for normal or interrupted confirmation on search three.
     ///
     /// The caller still owns its cancellable 200 ms wait and fresh capture.
     /// This method neither changes current readiness nor sends guest input.
     /// Consuming the reserve survives recaptures, geometry resets and errors.
     pub(super) fn reserve_final_ok_confirmation(&mut self, observations: usize) -> bool {
         let granted = self.control == Control::Ok
-            && self.ok_confirmation_pending
+            && (self.ok_confirmation_pending || self.ok_interrupted_confirmation)
             && observations == TERMINAL_CONTROL_SEARCH_ATTEMPTS
             && !self.final_ok_confirmation_reserved;
         if granted {
             self.final_ok_confirmation_reserved = true;
         }
         send_log(self.events, format!(
-            "{} {} final OK confirmation reserve: granted={}; observations={}; normal_budget={}; allowance={}; consumed={}; maximum_observations={}; confirmation_pending={}; guest input sent=0. A granted reserve permits one fresh observation, not an OK click.",
+            "{} {} final OK confirmation reserve: granted={}; observations={}; normal_budget={}; allowance={}; consumed={}; maximum_observations={}; confirmation_pending={}; interrupted_confirmation={}; guest input sent=0. A granted reserve permits one fresh observation, not an OK click.",
             self.game, self.control.label(), granted, observations,
             TERMINAL_CONTROL_SEARCH_ATTEMPTS, TERMINAL_OK_FINAL_CONFIRMATIONS,
             self.final_ok_confirmation_reserved,
             TERMINAL_CONTROL_SEARCH_ATTEMPTS + TERMINAL_OK_FINAL_CONFIRMATIONS,
             self.ok_confirmation_pending,
+            self.ok_interrupted_confirmation,
         ));
         granted
     }
@@ -212,6 +235,7 @@ impl<'a> ControlLookup<'a> {
         self.ok_readiness = terminal_controls::ok_readiness::OkReadiness::new();
         self.ok_panel = false;
         self.ok_confirmation_pending = false;
+        self.ok_interrupted_confirmation = false;
     }
 
 
@@ -222,14 +246,19 @@ impl<'a> ControlLookup<'a> {
     /// that frame once; their counts are per lookup, not additive capture totals.
     pub(super) fn note_recapture(&mut self) {
         self.ok_confirmation_pending = false;
+        self.ok_interrupted_confirmation = false;
         self.recaptures += 1;
         self.outcome = "recapturing";
     }
 
 
-    /// Describe caller-owned exits such as cancellation or a capture failure.
+    /// Describe caller-owned exits and invalidate preceding readiness evidence.
+    /// The current foreground-panel flag remains available to block an underlay;
+    /// the consumed final reserve is never renewed within this lookup.
     pub(super) fn set_outcome(&mut self, outcome: &'static str) {
+        self.ok_readiness = terminal_controls::ok_readiness::OkReadiness::new();
         self.ok_confirmation_pending = false;
+        self.ok_interrupted_confirmation = false;
         self.outcome = outcome;
     }
 }
@@ -264,6 +293,264 @@ mod tests {
         game::GameMode,
         terminal_controls::profiles::{SPIDER_CONTROLS, for_game},
     };
+
+
+    /// Derive a synthetic near-black glyph without changing the native settled body.
+    fn washed_ok(frame: &CapturedFrame) -> CapturedFrame {
+        let mut washed = frame.clone();
+        let bounds = for_game(GameMode::FreeCell).spec(Control::Ok).bounds;
+        for y in bounds.y..bounds.bottom() {
+            for x in bounds.x..bounds.right() {
+                let offset = y as usize * washed.stride + x as usize * 4;
+                if washed.pixels[offset..offset + 3] == [0, 0, 0] {
+                    washed.pixels[offset..offset + 3].fill(2);
+                }
+            }
+        }
+        washed
+    }
+
+
+    /// Exercise the production bounded scanner and readiness helper on one fresh response.
+    fn inspect_ok(lookup: &mut ControlLookup<'_>, frame: &CapturedFrame) -> PixelPoint {
+        let raw = lookup.search(frame).unwrap();
+        lookup.confirm_ok(frame, raw).unwrap()
+    }
+
+
+    /// Every game can reserve a lost-glyph observation but must click only its fresh ink.
+    #[test]
+    fn all_profiles_reserve_interrupted_confirmation_only_on_third_observation() {
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let events = WorkerEventSink {
+            events: sender,
+            latest_frame: LatestFrameSlot::default(),
+            capture_context: std::sync::Mutex::new(None),
+        };
+        let entering = decode_png(include_bytes!(
+            "../../tests/fixtures/freecell-confirmation-20261016/entering.png"
+        ))
+        .unwrap();
+        let clean = decode_png(include_bytes!(
+            "../../tests/fixtures/freecell-confirmation-20261016/clean.png"
+        ))
+        .unwrap();
+        let washed = washed_ok(&clean);
+        let mut fresh = clean.clone();
+        for x in 930..935 {
+            let offset = 770 * fresh.stride + x * 4;
+            fresh.pixels[offset..offset + 3].fill(0);
+        }
+        for game in GameMode::AVAILABLE {
+            let mut lookup =
+                ControlLookup::new(format!("{game:?}"), for_game(game), Control::Ok, &events);
+            for frame in [&entering, &clean, &washed] {
+                assert_eq!(inspect_ok(&mut lookup, frame), PixelPoint::new(0, 0));
+            }
+            assert!(!lookup.ok_confirmation_pending && lookup.ok_interrupted_confirmation);
+            assert!(lookup.has_ok_panel());
+            assert_eq!(
+                lookup.retry_delay(Duration::from_secs(2)),
+                Duration::from_secs(2)
+            );
+            for observations in [1, 2, 4] {
+                assert!(!lookup.reserve_final_ok_confirmation(observations));
+            }
+            assert!(lookup.reserve_final_ok_confirmation(TERMINAL_CONTROL_SEARCH_ATTEMPTS));
+            assert_eq!(
+                lookup.retry_delay(Duration::from_secs(2)),
+                LEVEL_UP_CONFIRMATION_DELAY
+            );
+            assert!(!lookup.reserve_final_ok_confirmation(TERMINAL_CONTROL_SEARCH_ATTEMPTS));
+            lookup.note_recapture();
+            assert!(!lookup.ok_interrupted_confirmation);
+            assert_eq!(
+                lookup.retry_delay(Duration::from_secs(2)),
+                Duration::from_secs(2)
+            );
+            assert_eq!(inspect_ok(&mut lookup, &fresh), PixelPoint::new(930, 770));
+            assert!(!lookup.reserve_final_ok_confirmation(4));
+            assert_eq!(lookup.searches, 4);
+        }
+        let logs: Vec<_> = receiver
+            .try_iter()
+            .filter_map(|event| match event.event {
+                WorkerEvent::Log(message) => Some(message),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(logs.iter().filter(|line| line.contains(
+            "chosen_ms=200; normal_ms=2000; confirmation_pending=false; policy=reserved interrupted OK confirmation"
+        )).count(), GameMode::AVAILABLE.len());
+        assert_eq!(
+            logs.iter()
+                .filter(|line| line
+                    .contains("final OK confirmation reserve: granted=true; observations=3;")
+                    && line.contains("interrupted_confirmation=true"))
+                .count(),
+            GameMode::AVAILABLE.len()
+        );
+    }
+
+
+    /// Interrupted ink before search three keeps the ordinary missing-glyph retry spacing.
+    #[test]
+    fn interrupted_second_observation_does_not_shorten_normal_retry_spacing() {
+        let (sender, _receiver) = std::sync::mpsc::channel();
+        let events = WorkerEventSink {
+            events: sender,
+            latest_frame: LatestFrameSlot::default(),
+            capture_context: std::sync::Mutex::new(None),
+        };
+        let clean = decode_png(include_bytes!(
+            "../../tests/fixtures/freecell-confirmation-20261016/clean.png"
+        ))
+        .unwrap();
+        let washed = washed_ok(&clean);
+        let mut lookup = ControlLookup::new(
+            "Free Cell",
+            for_game(GameMode::FreeCell),
+            Control::Ok,
+            &events,
+        );
+        assert_eq!(inspect_ok(&mut lookup, &clean), PixelPoint::new(0, 0));
+        assert_eq!(
+            lookup.retry_delay(Duration::from_secs(2)),
+            LEVEL_UP_CONFIRMATION_DELAY
+        );
+        lookup.note_recapture();
+        assert_eq!(inspect_ok(&mut lookup, &washed), PixelPoint::new(0, 0));
+        assert!(lookup.ok_interrupted_confirmation);
+        assert!(!lookup.reserve_final_ok_confirmation(2));
+        assert_eq!(
+            lookup.retry_delay(Duration::from_secs(2)),
+            Duration::from_secs(2)
+        );
+        lookup.note_recapture();
+        assert_eq!(inspect_ok(&mut lookup, &washed), PixelPoint::new(0, 0));
+        assert!(!lookup.ok_interrupted_confirmation);
+        assert!(!lookup.reserve_final_ok_confirmation(TERMINAL_CONTROL_SEARCH_ATTEMPTS));
+    }
+
+
+    /// Persistent fourth-frame washout cannot renew the reserve or reuse the old glyph.
+    #[test]
+    fn interrupted_reserve_remains_consumed_when_the_fresh_glyph_is_missing() {
+        let (sender, _receiver) = std::sync::mpsc::channel();
+        let events = WorkerEventSink {
+            events: sender,
+            latest_frame: LatestFrameSlot::default(),
+            capture_context: std::sync::Mutex::new(None),
+        };
+        let entering = decode_png(include_bytes!(
+            "../../tests/fixtures/freecell-confirmation-20261016/entering.png"
+        ))
+        .unwrap();
+        let clean = decode_png(include_bytes!(
+            "../../tests/fixtures/freecell-confirmation-20261016/clean.png"
+        ))
+        .unwrap();
+        let washed = washed_ok(&clean);
+        let mut lookup = ControlLookup::new(
+            "Free Cell",
+            for_game(GameMode::FreeCell),
+            Control::Ok,
+            &events,
+        );
+        for frame in [&entering, &clean, &washed] {
+            assert_eq!(inspect_ok(&mut lookup, frame), PixelPoint::new(0, 0));
+        }
+        assert!(lookup.reserve_final_ok_confirmation(TERMINAL_CONTROL_SEARCH_ATTEMPTS));
+        lookup.note_recapture();
+        assert_eq!(inspect_ok(&mut lookup, &washed), PixelPoint::new(0, 0));
+        assert!(!lookup.ok_interrupted_confirmation);
+        assert!(!lookup.reserve_final_ok_confirmation(4));
+        lookup.forget_ok_geometry();
+        assert_eq!(inspect_ok(&mut lookup, &clean), PixelPoint::new(0, 0));
+        assert!(!lookup.reserve_final_ok_confirmation(TERMINAL_CONTROL_SEARCH_ATTEMPTS));
+        assert!(lookup.final_ok_confirmation_reserved);
+    }
+
+
+    /// Caller outcomes invalidate the predecessor while preserving a current modal barrier.
+    #[test]
+    fn outcome_invalidates_interrupted_history_but_preserves_foreground_panel() {
+        let (sender, _receiver) = std::sync::mpsc::channel();
+        let events = WorkerEventSink {
+            events: sender,
+            latest_frame: LatestFrameSlot::default(),
+            capture_context: std::sync::Mutex::new(None),
+        };
+        let clean = decode_png(include_bytes!(
+            "../../tests/fixtures/freecell-confirmation-20261016/clean.png"
+        ))
+        .unwrap();
+        let washed = washed_ok(&clean);
+        for outcome in [
+            "rejected-context",
+            "reward-transition",
+            "cancelled",
+            "capture-error",
+        ] {
+            let mut lookup = ControlLookup::new(
+                "Free Cell",
+                for_game(GameMode::FreeCell),
+                Control::Ok,
+                &events,
+            );
+            assert_eq!(inspect_ok(&mut lookup, &clean), PixelPoint::new(0, 0));
+            assert!(lookup.has_ok_panel());
+            lookup.set_outcome(outcome);
+            assert!(lookup.has_ok_panel());
+            assert!(!lookup.ok_confirmation_pending && !lookup.ok_interrupted_confirmation);
+            assert_eq!(inspect_ok(&mut lookup, &washed), PixelPoint::new(0, 0));
+            assert!(!lookup.ok_interrupted_confirmation);
+            assert!(!lookup.reserve_final_ok_confirmation(TERMINAL_CONTROL_SEARCH_ATTEMPTS));
+        }
+    }
+
+
+    /// Geometry resets and malformed frames cannot leave lost-glyph reserve eligibility.
+    #[test]
+    fn reset_and_frame_errors_clear_interrupted_confirmation() {
+        let (sender, _receiver) = std::sync::mpsc::channel();
+        let events = WorkerEventSink {
+            events: sender,
+            latest_frame: LatestFrameSlot::default(),
+            capture_context: std::sync::Mutex::new(None),
+        };
+        let clean = decode_png(include_bytes!(
+            "../../tests/fixtures/freecell-confirmation-20261016/clean.png"
+        ))
+        .unwrap();
+        let washed = washed_ok(&clean);
+        let mut malformed = clean.clone();
+        malformed.pixels.clear();
+        for failure in ["reset", "scan", "readiness"] {
+            let mut lookup = ControlLookup::new(
+                "Free Cell",
+                for_game(GameMode::FreeCell),
+                Control::Ok,
+                &events,
+            );
+            assert_eq!(inspect_ok(&mut lookup, &clean), PixelPoint::new(0, 0));
+            assert_eq!(inspect_ok(&mut lookup, &washed), PixelPoint::new(0, 0));
+            assert!(lookup.ok_interrupted_confirmation);
+            match failure {
+                "reset" => lookup.forget_ok_geometry(),
+                "scan" => assert!(lookup.search(&malformed).is_err()),
+                _ => assert!(
+                    lookup
+                        .confirm_ok(&malformed, PixelPoint::new(0, 0))
+                        .is_err()
+                ),
+            }
+            assert!(!lookup.has_ok_panel() && !lookup.ok_interrupted_confirmation);
+            assert!(!lookup.reserve_final_ok_confirmation(TERMINAL_CONTROL_SEARCH_ATTEMPTS));
+            assert_eq!(inspect_ok(&mut lookup, &washed), PixelPoint::new(0, 0));
+            assert!(!lookup.ok_interrupted_confirmation);
+        }
+    }
 
 
     /// All profiles can reserve exactly one fourth observation after native third-frame pending OK.

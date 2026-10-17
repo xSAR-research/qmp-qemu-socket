@@ -147,9 +147,15 @@ when the request returns. STOP is cooperative: a pending request does not
 interrupt an in-flight socket operation, and release handling can complete
 before the worker exits.
 
-Capture defaults to a fresh TCP connection to `QMP_CAPTURE_ADDR`, normally
-`127.0.0.1:9999`, for each frame. xSAR validates the raw BGRA response and converts
-it to RGBA in memory. Ordinary capture creates no temporary PNG and performs no
+Capture defaults to a retained TCP connection to numeric `QMP_CAPTURE_ADDR`,
+normally `127.0.0.1:9999`, using the version-3 BGR8 protocol. The worker owns
+one client for the selected controller context, address and wire mode. Context
+changes, disconnect, shutdown and failures discard it; a failed operation is
+not retried. Each request still acquires a fresh full-screen observation.
+xSAR validates response identities, geometry and lengths before reconstructing
+opaque RGBA in memory. Explicit `QMP_CAPTURE_WIRE=v3` and `v2` retain one-frame
+connections for comparison. See the [combined capture contract](capture-combined-candidate13.md).
+Ordinary capture creates no temporary PNG and performs no
 PNG encoding unless `--image` is enabled. QMP probing and input remain separate.
 TCP errors stop capture without falling back to QMP. `QMP_CAPTURE_BACKEND=qmp`
 explicitly selects the preserved legacy screendump/read/decode/cleanup path.

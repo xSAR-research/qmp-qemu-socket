@@ -2376,6 +2376,68 @@ fn bounded_control_first_clean_ok_on_third_observation_confirms_on_fourth() {
 }
 
 
+/// Both Level Up owners may observe one fourth frame after a clean second glyph
+/// disappears on the same settled body. The response must independently recover
+/// exact black at its current coordinate; persistent washout leaves frame five unread.
+#[test]
+fn bounded_control_interrupted_third_ok_requires_a_current_fourth_glyph() {
+    use klondike::terminal::TerminalStage;
+    for previous in [Some(TerminalStage::ScoreCounting), None] {
+        for fourth_recovers in [false, true] {
+            let mut unknown = observation(PredictedAction::NoHighlight, false);
+            unknown.frame.pixels.fill(255);
+            let expected = PixelPoint::new(943, 804);
+            let fourth = final_ok_glyph(fourth_recovers.then_some(expected));
+            let fourth_pixels = fourth.frame.pixels.clone();
+            let mut io = fake_frames(vec![
+                native_hint_phase(91),
+                final_ok_glyph(None),
+                fourth,
+                native_hint_phase(91),
+            ]);
+            io.native_terminal_analysis = true;
+            let mut latest = Some(unknown);
+            let result = await_terminal_stage(
+                &mut io,
+                &mut latest,
+                StepRunSettings::new(AnimationSettleDelays::default(), 0),
+                &event_sink(),
+                &AtomicBool::new(false),
+                previous,
+            );
+            if fourth_recovers {
+                assert_eq!(result.unwrap(), Some((TerminalStage::LevelUp, expected)));
+            } else {
+                assert!(
+                    result
+                        .unwrap_err()
+                        .contains("terminal advancement exhausted 3")
+                );
+            }
+            assert_eq!(
+                io.waits,
+                [
+                    AnimationSettleDelays::default().klondike_reobserve,
+                    Duration::from_millis(200),
+                    Duration::from_millis(200)
+                ]
+            );
+            assert_eq!(
+                io.trace,
+                ["wait", "capture", "wait", "capture", "wait", "capture"]
+            );
+            assert_eq!(
+                io.frames.len(),
+                1,
+                "interrupted confirmation cannot acquire frame five"
+            );
+            assert!(io.terminal_inputs.is_empty() && io.inputs.is_empty());
+            assert_eq!(latest.unwrap().frame.pixels, fourth_pixels);
+        }
+    }
+}
+
+
 /// Controlled native derivative: tint the O stripe and optionally supply one
 /// exact-black current run without modifying the original K91 PNG or body.
 fn final_ok_glyph(point: Option<PixelPoint>) -> FrameObservation {

@@ -1,8 +1,8 @@
 # qmp-qemu-socket
 
-Development **v2.2.2-candidate.8** combines settled Level Up controls and GAME WIN diagnostics with guest TCP capture. Pyramid exports explicit card labels, values 1..13 and suits through xSAR's schema-2 codec.
+Development **v2.2.2-candidate.14** reconnects before sending a capture request when the retained TCP peer has cleanly closed. It retains candidate.13's bounded persistent BGR8 transport and candidate.12's interrupted OK recovery. Pyramid exports explicit card labels, values 1..13 and suits through xSAR's schema-2 codec.
 The preceding **v2.1.0** live Pyramid scan successfully restored the original board and exported its complete deal; the accepted five-game CV behaviour remains unchanged.
-The manifest uses the sibling `../xsar` checkout. Update it to commit `6765e0a` or later for the version-2 TCP capture protocol; the matching Windows server is published at `10b9fa5`.
+The local development set uses xSAR **0.4.2-candidate.2** from the sibling `../xsar` checkout and Windows screen-grab server **0.1.3**. The reconnect repair changes only the Arch client and remains compatible with version-3 servers 0.1.2 and 0.1.3. These unpromoted source versions require the reviewed source set; the previous published server does not implement version 3. See the [idle EOF repair and verification](docs/capture-idle-eof-candidate14.md) and [combined capture contract](docs/capture-combined-candidate13.md).
 
 ## Computer Vision solving
 
@@ -60,7 +60,7 @@ The application connects to an **existing local QMP Unix socket**. It does not l
 
 The current game calibration requires the primary guest display at **1920 × 1080**, with display and text scaling at **100%**. Frames are validated against that layout; detections do not rescale coordinates or guess a different board geometry. Before guest input, the worker checks QMP health, VM running state, a current absolute pointer, STOP and the selected game/strategy context. Uncertain input delivery stops without replaying the operation.
 
-Automatic capture defaults to **TCP** at `127.0.0.1:9999`, selected by `QMP_CAPTURE_ADDR`. The Windows server sends raw top-down BGRA pixels; xSAR converts them to the RGBA8 layout used by detectors and previews. Ordinary captures create no temporary PNG and do not encode PNG unless `--image` diagnostics are enabled. The server and xSAR client must both use protocol version 2, with a little-endian `u16` stride. For QEMU user networking, forward `127.0.0.1:9999` on Arch to `10.0.2.15:9999` in Windows, and allow the server through the Windows firewall.
+Automatic capture defaults to **TCP** at `127.0.0.1:9999`, selected by `QMP_CAPTURE_ADDR`. Use a numeric IP address and port, with brackets around IPv6 addresses; hostnames are rejected to keep name resolution outside the bounded request. The matching Windows server sends raw top-down BGR8 pixels; xSAR reconstructs the full RGBA8 frame with alpha 255 for detectors and previews. `QMP_CAPTURE_WIRE=v3-persistent` is the default. Explicit `v3` uses one connection per BGR8 frame; `v2` selects the preceding one-frame BGRA protocol for comparison or compatibility. There is no automatic protocol downgrade. Ordinary captures create no temporary PNG and do not encode PNG unless `--image` diagnostics are enabled. Existing QEMU forwarding and firewall configuration remain operator-managed.
 
 Set `QMP_CAPTURE_BACKEND=qmp` explicitly to retain legacy QMP screendumps. That mode reserves a private temporary PNG beside the socket, reads and decodes its original bytes, and attempts cleanup on return; both QEMU and the application must access that directory. TCP failures stop the request without falling back to QMP. Capture configuration applies for the application session.
 

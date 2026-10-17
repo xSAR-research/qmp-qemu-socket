@@ -1,0 +1,144 @@
+{
+  "evidence_schema": "pyramid-native-v6-glyph-extension-v1",
+  "profile_id": "pyramid-native-1920-classic-blue-v6",
+  "profile_file": "profile.json",
+  "profile_sha256": "2d28864f120b4fc47600721a78658fd1880e97473377a90929de8aebe4b775fd",
+  "base_profile_id": "pyramid-native-1920-classic-blue-v5",
+  "base_profile_sha256": "b48e0b1a20aec2439422a1b967de1468d5553cc9a12077784356c3b68bcfd3e7",
+  "source": {
+    "file": "baseline.png",
+    "original_source_file": "/home/charlie/tmp/.pyramid-recon-284640-3/baseline.png",
+    "also_retained_identical": [
+      "/home/charlie/tmp/.pyramid-recon-284640-2/baseline.png",
+      "/home/charlie/tmp/.pyramid-recon-284640-2/latest.png",
+      "/home/charlie/tmp/.pyramid-recon-284640-3/latest.png"
+    ],
+    "sha256": "02b1f0f98c8a4c5b5d57b4075fceb2829d1175d8b80ef2455d94fc81fff1c988",
+    "bytes": 3773648,
+    "dimensions": [
+      1920,
+      1080
+    ],
+    "original_bytes": true,
+    "transformation": "none",
+    "difficulty_visible": "Grandmaster",
+    "solver_visible": "off",
+    "session_log": "/home/charlie/tmp/qmp-qemu-socket-1792222217492.log",
+    "session_log_lines": [
+      58900,
+      58931
+    ],
+    "producer_version": "2.2.2-candidate.13"
+  },
+  "added_variants": [
+    {
+      "component": "ranks",
+      "label": "Q",
+      "source_slot": 13,
+      "source_bounds": [
+        1093,
+        331,
+        27,
+        24
+      ],
+      "source_sha256": "02b1f0f98c8a4c5b5d57b4075fceb2829d1175d8b80ef2455d94fc81fff1c988",
+      "rgb_sha256": "13ee9fb04ccc65b1b4023c38962baac421a18058d9944f22efd56d270fc411fa",
+      "readers": [
+        {
+          "reader": "tableau_reader",
+          "before_variants": 2,
+          "after_variants": 3
+        },
+        {
+          "reader": "stock_reader",
+          "before_variants": 2,
+          "after_variants": 3
+        }
+      ]
+    },
+    {
+      "component": "suits",
+      "label": "spades",
+      "source_slot": 24,
+      "source_bounds": [
+        895,
+        462,
+        20,
+        16
+      ],
+      "source_sha256": "02b1f0f98c8a4c5b5d57b4075fceb2829d1175d8b80ef2455d94fc81fff1c988",
+      "rgb_sha256": "e71c717f2f6aef737eead28abbbdca212e9e89ed98768246f81d9e40f5c05917",
+      "readers": [
+        {
+          "reader": "tableau_reader",
+          "before_variants": 8,
+          "after_variants": 9
+        },
+        {
+          "reader": "stock_reader",
+          "before_variants": 8,
+          "after_variants": 9
+        }
+      ]
+    }
+  ],
+  "unchanged_policy": {
+    "rank_max_distance": 24,
+    "suit_max_distance": 8,
+    "alignment": 1,
+    "colour_and_paper_checks": true,
+    "unique_labels_required": true,
+    "scene_and_dialog_signatures": "identical to base profile"
+  },
+  "tableau_labels_top_to_bottom": [
+    "4H",
+    "JD",
+    "AS",
+    "QC",
+    "7C",
+    "9D",
+    "QD",
+    "3D",
+    "8S",
+    "JH",
+    "3H",
+    "9H",
+    "AD",
+    "QH",
+    "5C",
+    "2H",
+    "KS",
+    "10D",
+    "KD",
+    "JS",
+    "8C",
+    "4S",
+    "4C",
+    "4D",
+    "QS",
+    "6S",
+    "5S",
+    "8H"
+  ],
+  "left_label": "10S",
+  "right": "positive_empty",
+  "label_method": "direct visual rank and suit from original image; no elimination",
+  "training_slots": [
+    13,
+    24
+  ],
+  "held_out_new_tableau_slots": [
+    16,
+    19
+  ],
+  "evidence_boundary": {
+    "native_source_image": true,
+    "derived_template_crops": true,
+    "new_live_scan_completed": false,
+    "stock_inventory_complete": false,
+    "restoration_verified": false,
+    "winning_route_known": false,
+    "recon_input_attempts": 0,
+    "complete_output_published": false
+  }
+}

@@ -1,4 +1,4 @@
-# Level Up OK readiness — candidate.10
+# Level Up OK readiness — candidate.12
 
 The first post-score capture follows the existing 1000 ms intentional wait.
 All five controllers use one borrowed-pixel readiness helper before their
@@ -6,7 +6,9 @@ single OK click. The fading “You've Reached” caption remains **diagnostic
 only**. A 200 ms fresh confirmation wait applies when the current settled-size
 button and exact-black central glyph need only geometry agreement. Candidate.10
 adds one final OK-only confirmation if that evidence first becomes eligible on
-the third normal observation.
+the third normal observation. Candidate.12 also permits that final observation
+when the preceding valid glyph disappears on observation three while its
+settled body retains matching geometry. Click eligibility is unchanged.
 
 ## Required evidence
 
@@ -23,8 +25,13 @@ fixed caption changes diagnostics only. The caption check does not inspect the
 level number, rank, medal or fireworks art.
 
 The initial frame and two input-free recaptures form three normal observations.
-Only a third frame with settled dimensions and a current exact-black central
-glyph awaiting geometry agreement may consume one final fresh confirmation.
+An eligible third frame may consume one final fresh confirmation in either case:
+
+- Its settled-size body and current exact-black glyph need geometry agreement.
+- The immediately preceding frame had a settled-size body and valid central
+  exact-black glyph; the third frame independently measures the same settled
+  body but lacks the current glyph.
+
 The fourth frame must qualify independently; it cannot renew the reserve or
 authorise another control. There is no fifth observation or extra click budget.
 Ordinary New Game and Play keep three observations and their existing coordinate
@@ -43,14 +50,45 @@ normal retry interval. This is the intentional wait before recapture; transport,
 PNG encoding and processing add elapsed time. Earlier confirmation waits consume
 the normal three-observation allowance. At exhaustion,
 `ControlLookup::reserve_final_ok_confirmation(3)` permits one additional OK-only
-frame if the current evidence qualifies. Consuming the reserve is permanent
+frame if the current evidence qualifies. The interrupted-confirmation flag
+alone never shortens an earlier retry: it selects 200 ms only after observation
+three actually consumes the final reserve. Consuming the reserve is permanent
 for that lookup, including across resets and later outcomes.
 
 The next capture is checked from its own pixels. A missing or tinted glyph
 still withholds input, even after a short wait. A new search, consumed
 recapture, explicit reset or error clears the scheduling flag; missing body
-geometry also resets consecutive geometry. Acknowledged or uncertain input
-cannot be replayed by this policy. The 1000 ms first post-score wait remains.
+geometry also resets consecutive geometry. Every successful observation replaces
+the prior glyph-validity flag, so an older valid glyph cannot cross an
+intervening miss. Gameplay, explicit resets, errors and cancellation discard
+predecessor evidence without renewing the reserve. Current foreground-panel
+evidence still blocks underlying New Game while history is discarded.
+Acknowledged or uncertain input cannot be replayed by this policy. The
+1000 ms first post-score wait remains.
+
+## Interrupted Free Cell confirmation
+
+The retained `qmp-qemu-socket-1792127358187.log`, lines 125767–125797,
+corroborates the candidate.11 failure: Score was clicked once; search two
+measured body `(839,723,237,71)` and glyph `(944,771)`; search three retained
+the body and stable geometry but lost the current glyph. No OK input was sent,
+and the final reserve was declined because `confirmation_pending=false`.
+
+The original captures `033526.047_002447.png`, `033527.804_002448.png`,
+`033528.932_002449.png` and `033529.316_002450.png` were unavailable during
+implementation. Their reported pixel change from RGB(0,0,0) to RGB(2,2,2)
+therefore remains operator-supplied evidence. Existing late-geometry fixtures
+below belong to a different episode and are not substitutes for those bytes.
+
+Candidate.12 tests use explicitly controlled derivatives of existing native
+frames: exact-black glyph pixels become RGB(2,2,2) without changing alpha or
+the measured body. They exercise production search/readiness and controller
+paths. A controlled fourth response with a fresh glyph can click only at its
+own point. Persistent washout, missing/moved body, gameplay, malformed capture,
+capture failure and STOP stop without replay, another terminal stage or a fifth
+capture. These tests establish the extra bounded opportunity; they do not
+guarantee the real fourth frame will contain exact black. Original-sequence
+pixel regression and live acceptance remain pending.
 
 ## Recorded Free Cell late confirmation
 
@@ -185,8 +223,9 @@ the confirmation captures and continues through verified next-game readiness.
 ## Code Analysis
 
 All pixel reads use a checked frame view and bounded native coordinates. State
-holds the previous measured rectangle, a scheduling Boolean and a consumed
-reserve Boolean, with no retained click point or additional frame.
+holds the previous measured rectangle, predecessor glyph-validity and scheduling
+flags, and a consumed reserve Boolean, with no retained click point or additional
+frame.
 The central glyph band rejects the pointer match observed in the supplied Free
 Cell sequence. Caption samples remain bounded diagnostics and no longer block
 input. This is calibrated visual readiness, not a query of the guest's enabled

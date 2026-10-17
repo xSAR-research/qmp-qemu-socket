@@ -8,8 +8,9 @@
 //! evidence does. Only continuous runs advance the expected terminal controls.
 //! After score skip, Level Up is optional: inspect local OK and New Game
 //! readiness on each fresh frame and accept exactly one ready control. Both
-//! candidates share three searches. Only a full-size OK with a current central
-//! black glyph still awaiting geometry agreement on the third observation may
+//! candidates share three searches. A full-size OK with a current central
+//! black glyph awaiting geometry agreement, or the same settled body whose
+//! immediately preceding central glyph disappeared on observation three, may
 //! reserve one final fresh OK-only confirmation at 200 ms; a fourth observation
 //! cannot extend the budget again. Missing evidence retains the latest frame.
 //! An inactive Solver board receives an editable start delay and fresh capture
@@ -504,9 +505,13 @@ fn await_post_score_control(
     while attempt < search_limit {
         attempt += 1;
         require_running(cancel_requested)?;
-        let frame = &current(latest)?.frame;
-        let ok_point = ok_lookup.search(frame)?;
-        let new_game_point = if attempt <= TERMINAL_CONTROL_SEARCH_ATTEMPTS {
+        let observation = current(latest)?;
+        let frame = &observation.frame;
+        let ok_point = if observation.gameplay_scene {
+            ok_lookup.forget_ok_geometry();
+            PixelPoint::new(0, 0)
+        } else { ok_lookup.search(frame)? };
+        let new_game_point = if !observation.gameplay_scene && attempt <= TERMINAL_CONTROL_SEARCH_ATTEMPTS {
             new_game_lookup.search(frame)?
         } else {
             PixelPoint::new(0, 0)
@@ -535,7 +540,8 @@ fn await_post_score_control(
                 new_game_lookup.set_outcome("ambiguous");
                 return Err("Spider post-score controls are uncertain: both OK and New Game are ready; no branch input authorised".to_owned());
             }
-            (false, false) => { ok_lookup.confirm_ok(frame, ok_point)?; }
+            (false, false) if !observation.gameplay_scene => { ok_lookup.confirm_ok(frame, ok_point)?; }
+            (false, false) => {}
         }
         if attempt == search_limit {
             if !ok_lookup.reserve_final_ok_confirmation(attempt) {
@@ -568,7 +574,8 @@ fn await_post_score_control(
 
 
 /// Each expected menu control receives three normal observations. Only eligible
-/// OK on the third may reserve one final fresh 200 ms geometry confirmation.
+/// OK on the third may reserve one final fresh 200 ms confirmation after clean
+/// pending geometry or the immediately preceding glyph's interrupted confirmation.
 /// New Game and Play never receive that extra observation or another click.
 /// Score skip retains its existing caption recognition and observation allowance.
 fn await_expected_control(
@@ -587,9 +594,14 @@ fn await_expected_control(
         attempt += 1;
         require_running(cancel_requested)?;
         let point = if let Some(lookup) = lookup.as_mut() {
-            let frame = &current(latest)?.frame;
-            let candidate = lookup.search(frame)?;
-            lookup.confirm_ok(frame, candidate)?
+            let observation = current(latest)?;
+            if observation.gameplay_scene && stage == TerminalStage::LevelUp {
+                lookup.forget_ok_geometry();
+                PixelPoint::new(0, 0)
+            } else {
+                let candidate = lookup.search(&observation.frame)?;
+                lookup.confirm_ok(&observation.frame, candidate)?
+            }
         } else {
             spider_terminal::expected_control_point(&current(latest)?.frame, stage)
                 .map_err(|error| format!("Spider expected {stage} readiness failed: {error}"))?
@@ -1885,6 +1897,92 @@ mod tests {
         }
     }
 
+    /// A controlled native derivative loses its central exact-black glyph on
+    /// observation three. Both owners reserve only one fourth response, which
+    /// must supply its own current glyph; continued RGB(2,2,2) cannot be clicked.
+    #[test]
+    fn interrupted_third_ok_confirmation_checks_one_fresh_fourth_response() {
+        for optional_pair in [false, true] {
+            for fourth_recovers in [false, true] {
+                let ready = level_up_505();
+                let mut washed = ready.clone();
+                let bounds = SPIDER_CONTROLS.spec(Control::Ok).bounds;
+                for y in bounds.y..bounds.bottom() {
+                    for x in bounds.x..bounds.right() {
+                        let offset = y as usize * washed.stride + x as usize * 4;
+                        if washed.pixels[offset..offset + 3] == [0, 0, 0] {
+                            washed.pixels[offset..offset + 3].copy_from_slice(&[2, 2, 2]);
+                        }
+                    }
+                }
+                assert_eq!(
+                    spider_terminal::expected_control_point(&washed, TerminalStage::LevelUp)
+                        .unwrap(),
+                    PixelPoint::new(0, 0)
+                );
+                let mut fourth = washed.clone();
+                let expected = PixelPoint::new(943, 770);
+                if fourth_recovers {
+                    for x in expected.x..expected.x + 5 {
+                        let offset = expected.y as usize * fourth.stride + x as usize * 4;
+                        fourth.pixels[offset..offset + 3].copy_from_slice(&[0, 0, 0]);
+                    }
+                }
+                let cancel = AtomicBool::new(false);
+                let mut io = fake(
+                    vec![
+                        recorded_game_win("entering"),
+                        ready.clone(),
+                        washed,
+                        fourth.clone(),
+                        ready,
+                    ],
+                    &cancel,
+                );
+                let settings = StepRunSettings::new(AnimationSettleDelays::default(), 0);
+                let events = WorkerEventSink {
+                    events: std::sync::mpsc::channel().0,
+                    latest_frame: super::super::LatestFrameSlot::default(),
+                    capture_context: std::sync::Mutex::new(None),
+                };
+                let mut latest = None;
+                capture_latest(&mut io, &mut latest, &events, &cancel).unwrap();
+                let result = if optional_pair {
+                    await_post_score_control(&mut io, &mut latest, settings, &events, &cancel)
+                        .map(|(_, point)| point)
+                } else {
+                    await_expected_control(
+                        &mut io,
+                        &mut latest,
+                        TerminalStage::LevelUp,
+                        settings,
+                        &events,
+                        &cancel,
+                    )
+                };
+                if fourth_recovers {
+                    assert_eq!(result.unwrap(), expected);
+                } else {
+                    assert!(result.unwrap_err().contains("after 4 searches"));
+                }
+                assert_eq!(
+                    io.waits,
+                    [
+                        settings.animation_delays().spider_reobserve,
+                        Duration::from_millis(200),
+                        Duration::from_millis(200)
+                    ]
+                );
+                assert_eq!(io.captures, 4);
+                assert_eq!(io.frames.len(), 1, "the fifth response remains unread");
+                assert!(io.controls.is_empty() && io.sources.is_empty());
+                assert_eq!(io.solver_clicks, 0);
+                assert_eq!(latest.unwrap().frame.pixels, fourth.pixels);
+            }
+        }
+    }
+
+
     /// Fast-confirmation eligibility belongs to the current frame only.
     /// Body loss, missing ink and an out-of-band pointer run restore normal spacing.
     /// A new eligible glyph after body loss on observation three may reserve the final wait.
@@ -2213,5 +2311,4 @@ mod tests {
             assert_eq!(slot.take().unwrap().frame.pixels, near_black.pixels);
         }
     }
-
 }

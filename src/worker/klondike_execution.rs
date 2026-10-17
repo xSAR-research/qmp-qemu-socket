@@ -791,7 +791,14 @@ fn await_terminal_stage(
         }
 
 
-        let observed = if final_ok_confirmation {
+        let observed = if current.gameplay_scene
+            && (previous.is_none() || expected == Some(Some(TerminalStage::LevelUp)))
+        {
+            for lookup in [&mut expected_lookup, &mut entry_ok].into_iter().flatten() {
+                lookup.forget_ok_geometry();
+            }
+            None
+        } else if final_ok_confirmation {
             // This reserved frame may confirm only the pending OK. Classifying
             // entry Score/New Game or searching a later control would grant a
             // fourth observation to an unrelated stage.

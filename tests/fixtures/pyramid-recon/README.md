@@ -56,10 +56,18 @@ an input target. A generic gold button is insufficient.
   It embeds samples and contains no host-specific filesystem paths.
 - `profile-provenance.json`: all 14 scene/control/modal patch derivations,
   measured tolerances, calibration corrections, file hashes and validation scope.
+- `native-v6/baseline.png`, `native-v6/profile.json` and
+  `native-v6/provenance.json`: the original refused Grandmaster frame, the
+  additive v6 runtime profile and its separate extraction/identity record.
+  See [the v6 fixture record](native-v6/README.md). These files do not replace
+  the historical `originals/` inventory or its manifest.
 
-The supplied runtime profile is
+The retained bundled v4 runtime profile is
 `tests/fixtures/pyramid-recon/native-profile.json`, relative to the application
-checkout. Runtime freshness, STOP, selected context, input acknowledgement,
+checkout. The new calibration is separately named
+`tests/fixtures/pyramid-recon/native-v6/profile.json`; the operator's v6 copy is
+`/home/charlie/tmp/pyramid-native-1920-classic-blue-v6.json`. Runtime freshness,
+STOP, selected context, input acknowledgement,
 inventory validation and restoration remain controller responsibilities.
 
 ## Historical initial-looking board
@@ -182,7 +190,7 @@ No native near-identical non-Undo confirmation has been supplied. See the
 [modal correction record](../../../docs/pyramid-recon-modal-correction.md).
 
 The repeated scan still refused ten Cancel/OK pixels exceeding v3 limits by one.
-Current `pyramid-native-1920-classic-blue-v4` instead changes only the four text
+Bundled `pyramid-native-1920-classic-blue-v4` instead changes only the four text
 masks and ID. Its source-only selection retains pure-ink centres OR samples with
 every RGB channel's original 3x3 range at most 16, including a one-pixel halo
 outside the ROI. RGB, ROIs and tolerances remain unchanged. All seven components
@@ -190,6 +198,46 @@ remain required, but excluded samples are unconstrained: this is a documented
 acceptance widening, not full OCR. Fixed rule/count/hash, retained ink, negative
 space and selected-channel boundary tests accompany the change. See the
 [stable-text correction record](../../../docs/pyramid-recon-stable-text-correction.md).
+
+## v6 native glyph variants
+
+The v6 calibration starts from the exact accepted local v5 profile, SHA-256
+`b48e0b1a20aec2439422a1b967de1468d5553cc9a12077784356c3b68bcfd3e7`.
+It retains v5's chart-mask correction and every existing glyph variant, scene,
+modal signature, ROI and threshold. The profile ID becomes
+`pyramid-native-1920-classic-blue-v6`; schema 1 is unchanged. The historical
+v4/v5 metadata remains separate and unchanged.
+
+The original Grandmaster frame is 1920×1080, SHA-256
+`02b1f0f98c8a4c5b5d57b4075fceb2829d1175d8b80ef2455d94fc81fff1c988`.
+The failed v5 observation first refused logical tableau slot 13: its Queen
+rank's best occupancy XOR distance was 28, above the unchanged limit 24.
+Independent diagnostics also found King of spades at slot 16 with suit distance
+10 and Jack of spades at slot 19 with distance 9, above the unchanged limit 8.
+The spade at slot 24 was already correctly recognised at distance 6 of 8 and
+supplies the new suit sample. All slot numbers are zero based.
+
+Two unchanged RGB crops from that frame are appended to **both** readers:
+
+| Component | Native bounds (x,y,width,height) | Source slot | Variants per label |
+| --- | --- | --- | --- |
+| Queen rank | `(1093,331,27,24)` | 13 | Q: 2 → 3, limit 8 |
+| Spade suit | `(895,462,20,16)` | 24 | spades: 8 → 9, limit 16 |
+
+Each reader therefore has 34 rank and 36 suit variants. XOR limits remain
+24/8, alignment remains ±1 pixel and paper/ink/colour checks are unchanged.
+This is additional native rasterisation evidence; no pixel is recoloured,
+rescaled or combined into an unobserved card. Its 29 visible identities are
+calibration evidence, not a stock scan, full 52-card inventory or new
+restoration proof.
+
+All eight v6 regressions pass through the production Rust parser and
+recognisers. Both reader banks preserve all 104 historical observations,
+including the 16 held-out LEFT observations. The full application suite passes
+858 tests with none failed or ignored; locked check, strict private rustdoc,
+all-target Clippy and native release build also pass. Fresh live reconnaissance
+remains unverified. A successful v6 classifier test alone cannot establish
+capture freshness, stock order or original-board restoration.
 
 ## Validation and remaining proof
 

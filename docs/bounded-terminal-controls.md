@@ -58,9 +58,12 @@ An absent control or unsettled OK receives three normal observations: the
 initial frame and at most two input-free recaptures. If observation three has
 a settled-size OK body and a current exact-black central glyph awaiting only
 geometry agreement, a lookup may consume one final 200 ms OK-only confirmation.
-That fourth frame must independently pass readiness. No fifth observation is
-permitted. Missing, tinted, entering or pointer-only third frames receive no
-reserve. New Game and Play retain three observations. Unresolved searches keep
+Candidate.12 also permits the reserve if the immediately preceding settled body
+had a valid central glyph and observation three independently measures the same
+settled geometry but has lost its glyph. That fourth frame must independently
+pass readiness. No fifth observation is permitted. A missing/moved/non-settled
+body, pointer-only predecessor or missing prior valid glyph cannot grant this
+interrupted-confirmation reserve. New Game and Play retain three observations. Unresolved searches keep
 the latest frame as a diagnostic preview.
 
 Optional OK/New Game branches may examine both rectangles on the first three
@@ -89,17 +92,23 @@ reduced from 3000 ms so the first OK search starts before the reported later
 fireworks. Capture and recognition add elapsed time beyond this intentional
 wait. `LEVEL_UP_CONFIRMATION_DELAY` is 200 ms only when the latest frame has a
 settled-size OK body and current exact-black central glyph, awaiting geometry
-agreement with a fresh frame. `ControlLookup::retry_delay` selects that wait
+agreement with a fresh frame, or when the single interrupted-confirmation reserve
+has actually been granted on observation three. `ControlLookup::retry_delay` selects that wait
 across all five games and logs `chosen_ms`, `normal_ms` and
 `confirmation_pending`. It never authorises input. The fresh observation must
 still pass all readiness checks. A clean candidate first appearing on normal
 observation three can use the one final confirmation; that scheduling flag
 never supplies click authority from the earlier frame.
 
+Interruption eligibility grants input-free observation only: `ready` stays false
+and the point stays `(0,0)` while the current glyph is missing. The preceding
+evidence is one geometry and one validity flag, never a stored clickable point.
+
 Other missing-control spacing remains 2000 ms in the shared TriPeaks/Pyramid
 controller, and the existing editable reobserve interval in Free Cell, Spider
-and Klondike. Entering, missing, tinted and pointer-only evidence cannot select
-the short confirmation wait. A new search, consumed recapture, reset or error
+and Klondike. Earlier missing/tinted glyph observations keep normal spacing.
+Entering, missing-body and pointer-only evidence cannot select the short wait.
+A new search, consumed recapture, reset or error
 clears that eligibility. Score, gameplay, Solver and click budgets remain
 independent.
 

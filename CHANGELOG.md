@@ -1,5 +1,54 @@
 # Changelog
 
+## v2.2.2-candidate.14 — Reconnect after observed idle EOF
+
+- Before sending a capture request, discard a retained socket whose peer has
+  cleanly closed. Reset its session evidence and establish one bounded fresh
+  connection, reporting that connection as new. Never replay a request after
+  sending begins; errors and unsolicited bytes still stop the capture.
+- Integrate the repair through the existing sibling xSAR client without an API,
+  wire protocol, dependency or server change. Keep native RGBA pixels, full-frame
+  capture, game policies and input authority unchanged.
+- Add deterministic socket regressions for idle EOF after a successful capture,
+  cancellation, unsolicited idle data and response failure without request replay.
+  Native Windows and live guest acceptance remain separate from host tests.
+
+## v2.2.2-candidate.13 — Combined capture transport
+
+- Use matching xSAR 0.4.2-candidate.2 and server 0.1.2 with explicit version-3
+  full-screen BGR8 requests, validated response identities and opaque native RGBA
+  reconstruction. Pixel payload is 25% smaller; latency remains to be measured.
+- Retain one demand-driven TCP session per worker context. Drop failed sessions
+  without retrying the capture or guest input; clear them on context changes,
+  disconnect and shutdown. Reject non-native frames before analysis or recording.
+- Expose explicit v2, v3 one-frame and v3 persistent comparison modes, separate
+  monotonic stage timings and bounded rolling summaries. Numeric endpoints avoid
+  unbounded DNS; connection cancellation can wait for the five-second connect.
+- Preserve QMP input policy, current OK recovery, full Capture PNG and GAME WIN
+  recording semantics. Windows compilation, native GDI behaviour and live
+  five-game acceptance require the operator's separate verification.
+
+## v2.2.2-candidate.12 — Interrupted OK confirmation
+
+- Reserve the existing fourth, input-free OK observation when a valid second
+  observation loses its exact-black central glyph on the third observation,
+  while its settled body and consecutive geometry remain valid. The final
+  observation waits 200 ms and must provide its own current glyph and matching
+  geometry. Persistent washout still stops safely; recovery is not guaranteed.
+- Preserve three ordinary observations, one irreversible OK-only reserve,
+  exact RGB(0,0,0), current-frame click points, the initial 1000 ms wait and
+  ordinary retry spacing. No fifth observation, extra score skip, alternative
+  fourth-frame menu input or replay of uncertain input is authorised.
+- Clear predecessor eligibility across gameplay, missing or moved bodies,
+  malformed captures, resets and error/cancellation exits. Preserve current
+  foreground OK evidence that blocks underlying New Game controls.
+- Exercise production classifiers with existing native captures and explicitly
+  controlled washout/fourth-response cases across all five controllers. The
+  candidate.11 failure is corroborated by its retained log; its four original
+  PNGs were unavailable, so recorded-sequence pixel verification remains pending.
+- Keep capture transport, xSAR/server sources, dependencies, recording and
+  mouse timings unchanged. Native/live acceptance is a separate Gate 3 check.
+
 ## v2.2.2-candidate.11 — Verification regression repair
 
 - Correct the Klondike reserved-OK regression's expected New Game search count.

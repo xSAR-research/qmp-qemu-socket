@@ -82,6 +82,8 @@ const CAPTION_DARK_PROBES: [(u32, u32); 20] = [
 pub struct OkReadiness {
     /// Geometry from the immediately preceding observation, including fading text.
     previous_button: Option<PixelRect>,
+    /// The preceding fresh body had settled size and a valid exact-black central glyph.
+    previous_settled_glyph: bool,
 }
 
 /// Evidence from one frame; input is permitted only when `ready` is true.
@@ -92,6 +94,9 @@ pub struct OkObservation {
     /// Only fresh geometry agreement remains after a settled-size current glyph.
     /// This permits a shorter input-free confirmation wait, never a click.
     pub confirmation_pending: bool,
+    /// A preceding settled glyph was lost while the current settled body still agrees.
+    /// This may justify one final fresh observation, never current-frame input.
+    pub interrupted_confirmation: bool,
     /// Latest measured central glyph point, or `(0, 0)` while input is withheld.
     pub point: PixelPoint,
     /// Stable reason for accepting or withholding input in persistent logs.
@@ -119,25 +124,30 @@ impl OkReadiness {
     /// Inspect a caller-supplied fresh native capture without copying its pixels.
     ///
     /// Missing black glyphs may still provide geometry evidence. Missing body
-    /// geometry resets consecutive evidence. A current valid glyph is required
+    /// geometry and every error reset consecutive evidence. A current valid glyph is required
     /// for readiness; a previous coordinate is never retained or replayed.
+    /// Only the immediately preceding settled-body/glyph validity is retained
+    /// for interrupted-confirmation scheduling, separately from click readiness.
     /// The caption measurements remain logged without affecting this decision.
     pub fn observe(
         &mut self,
         frame: &CapturedFrame,
         raw_point: PixelPoint,
     ) -> Result<OkObservation, HaloDetectionError> {
+        // Consume predecessor evidence before fallible work so any error leaves
+        // an independent next observation, with no stale geometry or glyph validity.
+        let previous_button = self.previous_button.take();
+        let previous_settled_glyph = std::mem::take(&mut self.previous_settled_glyph);
         let view = frame.as_view().map_err(super::scan_error)?;
         if frame.width != NOMINAL_FRAME_WIDTH || frame.height != NOMINAL_FRAME_HEIGHT {
             return Err(HaloDetectionError::InvalidFrameLayout);
         }
         let mut pixels_examined = 0;
         let button = measure_button(view, &mut pixels_examined);
-        let geometry_stable = match (self.previous_button, button) {
+        let geometry_stable = match (previous_button, button) {
             (Some(previous), Some(current)) => same_geometry(previous, current),
             _ => false,
         };
-        self.previous_button = button;
         let caption_y = if button.is_some() {
             find_caption(view, &mut pixels_examined)
         } else {
@@ -172,9 +182,17 @@ impl OkReadiness {
             && !geometry_stable
             && glyph_point != PixelPoint::new(0, 0)
             && button.is_some_and(settled_size);
+        let interrupted_confirmation = previous_settled_glyph
+            && geometry_stable
+            && button.is_some_and(settled_size)
+            && glyph_point == PixelPoint::new(0, 0);
+        self.previous_button = button;
+        self.previous_settled_glyph =
+            button.is_some_and(settled_size) && glyph_point != PixelPoint::new(0, 0);
         Ok(OkObservation {
             ready,
             confirmation_pending,
+            interrupted_confirmation,
             point: if ready { glyph_point } else { PixelPoint::new(0, 0) },
             reason,
             button,
@@ -301,6 +319,153 @@ mod tests {
     /// Supply the same shared exact-black scanner used by the controller.
     fn raw(frame: &CapturedFrame, game: GameMode) -> PixelPoint {
         search(frame, for_game(game).spec(Control::Ok)).unwrap().point
+    }
+
+
+    /// Derive an explicitly synthetic washout while preserving native body geometry.
+    fn wash_out_ok_glyph(frame: &CapturedFrame) -> CapturedFrame {
+        let mut washed = frame.clone();
+        let bounds = for_game(GameMode::FreeCell).spec(Control::Ok).bounds;
+        for y in bounds.y..bounds.bottom() {
+            for x in bounds.x..bounds.right() {
+                let offset = y as usize * washed.stride + x as usize * 4;
+                if washed.pixels[offset..offset + 3] == [0, 0, 0] {
+                    washed.pixels[offset..offset + 3].fill(2);
+                }
+            }
+        }
+        assert_eq!(raw(&washed, GameMode::FreeCell), PixelPoint::new(0, 0));
+        washed
+    }
+
+
+    /// Lost current ink grants scheduling evidence only, then requires new current ink.
+    #[test]
+    fn interrupted_settled_glyph_needs_a_new_current_glyph_before_input() {
+        let clean = fixture("freecell-confirmation-20261016/clean.png");
+        let washed = wash_out_ok_glyph(&clean);
+        let mut readiness = OkReadiness::new();
+        let first = readiness
+            .observe(&clean, raw(&clean, GameMode::FreeCell))
+            .unwrap();
+        assert!(first.confirmation_pending);
+        assert!(!first.ready && !first.interrupted_confirmation);
+        let second = readiness
+            .observe(&washed, raw(&washed, GameMode::FreeCell))
+            .unwrap();
+        assert!(second.geometry_stable && second.interrupted_confirmation);
+        assert!(!second.ready && !second.confirmation_pending);
+        assert_eq!(second.point, PixelPoint::new(0, 0));
+        assert_eq!(second.reason, "missing-current-caption-glyph");
+        let third = readiness
+            .observe(&clean, raw(&clean, GameMode::FreeCell))
+            .unwrap();
+        assert!(third.ready && third.geometry_stable);
+        assert!(!third.interrupted_confirmation && !third.confirmation_pending);
+        assert_eq!(third.point, raw(&clean, GameMode::FreeCell));
+        for observation in [first, second, third] {
+            assert!(observation.pixels_examined <= MAX_READINESS_PIXEL_COMPARISONS);
+        }
+    }
+
+
+    /// A run of washout cannot keep older glyph validity alive through another frame.
+    #[test]
+    fn interrupted_confirmation_uses_only_the_immediately_preceding_glyph() {
+        let clean = fixture("freecell-confirmation-20261016/clean.png");
+        let washed = wash_out_ok_glyph(&clean);
+        let mut readiness = OkReadiness::new();
+        readiness
+            .observe(&clean, raw(&clean, GameMode::FreeCell))
+            .unwrap();
+        let interrupted = readiness.observe(&washed, PixelPoint::new(0, 0)).unwrap();
+        assert!(interrupted.interrupted_confirmation);
+        let repeated = readiness.observe(&washed, PixelPoint::new(0, 0)).unwrap();
+        assert!(repeated.geometry_stable);
+        assert!(!repeated.ready && !repeated.interrupted_confirmation);
+        assert_eq!(repeated.point, PixelPoint::new(0, 0));
+        let mut independent = OkReadiness::new();
+        for _ in 0..3 {
+            let observation = independent.observe(&washed, PixelPoint::new(0, 0)).unwrap();
+            assert!(!observation.ready && !observation.interrupted_confirmation);
+        }
+    }
+
+
+    /// Missing, moved and entering bodies break the preceding settled-glyph evidence.
+    #[test]
+    fn interrupted_confirmation_rejects_missing_moved_and_nonsettled_bodies() {
+        let clean = fixture("freecell-confirmation-20261016/clean.png");
+        let washed = wash_out_ok_glyph(&clean);
+        let mut moved = washed.clone();
+        let shift = 3 * moved.stride;
+        let retained = moved.pixels.len() - shift;
+        moved.pixels.copy_within(..retained, shift);
+        moved.pixels[..shift].fill(1);
+        for interrupted in [
+            fixture("freecell-FC11.png"),
+            fixture("game-win-readiness/early.png"),
+            moved,
+        ] {
+            let mut readiness = OkReadiness::new();
+            readiness
+                .observe(&clean, raw(&clean, GameMode::FreeCell))
+                .unwrap();
+            let observation = readiness
+                .observe(&interrupted, raw(&interrupted, GameMode::FreeCell))
+                .unwrap();
+            assert!(!observation.ready && !observation.interrupted_confirmation);
+            let after_gap = readiness.observe(&washed, PixelPoint::new(0, 0)).unwrap();
+            assert!(!after_gap.ready && !after_gap.interrupted_confirmation);
+        }
+    }
+
+
+    /// A pointer run and an entering-size glyph cannot seed interrupted confirmation.
+    #[test]
+    fn interrupted_confirmation_requires_a_preceding_settled_central_glyph() {
+        let clean = fixture("freecell-confirmation-20261016/clean.png");
+        let washed = wash_out_ok_glyph(&clean);
+        for predecessor in [
+            fixture("game-win-readiness/fading.png"),
+            fixture("game-win-readiness/early.png"),
+        ] {
+            let mut readiness = OkReadiness::new();
+            let first = readiness
+                .observe(&predecessor, raw(&predecessor, GameMode::FreeCell))
+                .unwrap();
+            assert!(!first.ready && !first.confirmation_pending);
+            let second = readiness.observe(&washed, PixelPoint::new(0, 0)).unwrap();
+            assert!(!second.ready && !second.interrupted_confirmation);
+        }
+    }
+
+
+    /// Direct helper errors clear geometry and preceding glyph validity before reuse.
+    #[test]
+    fn direct_observation_errors_invalidate_all_predecessor_evidence() {
+        let clean = fixture("freecell-confirmation-20261016/clean.png");
+        let washed = wash_out_ok_glyph(&clean);
+        let mut truncated = clean.clone();
+        truncated.pixels.pop();
+        let mut nonnative = clean.clone();
+        nonnative.width -= 1;
+        for invalid in [truncated, nonnative] {
+            let mut readiness = OkReadiness::new();
+            readiness
+                .observe(&clean, raw(&clean, GameMode::FreeCell))
+                .unwrap();
+            assert!(readiness.observe(&invalid, PixelPoint::new(0, 0)).is_err());
+            let after_error = readiness.observe(&washed, PixelPoint::new(0, 0)).unwrap();
+            assert!(!after_error.geometry_stable && !after_error.interrupted_confirmation);
+            assert!(!after_error.ready);
+            assert!(
+                readiness
+                    .observe(&clean, raw(&clean, GameMode::FreeCell))
+                    .unwrap()
+                    .ready
+            );
+        }
     }
 
     /// Entrance geometry and the missing central glyph withhold input until frame three.

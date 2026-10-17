@@ -410,7 +410,7 @@ pub(super) fn run_post_game_restart(
                     } else {
                         lookup.set_outcome("not-found");
                         return Err(format!(
-                            "Post-game {} did not become ready in {consecutive_control_misses} consecutive fresh captures (missing controls or unsettled OK); the normal search limit is {TERMINAL_CONTROL_SEARCH_ATTEMPTS}, with one final input-free confirmation only for a clean pending OK on observation three. Latest failed frame retained for inspection; no failed frame authorised a control click.",
+                            "Post-game {} did not become ready in {consecutive_control_misses} consecutive fresh captures (missing controls or unsettled OK); the normal search limit is {TERMINAL_CONTROL_SEARCH_ATTEMPTS}, with one final input-free confirmation only for eligible pending or interrupted OK evidence on observation three. Latest failed frame retained for inspection; no failed frame authorised a control click.",
                             target.label,
                         ));
                     }

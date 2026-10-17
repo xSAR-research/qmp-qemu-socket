@@ -30,8 +30,8 @@ manual snapshot request uses one connection and drops it on return. A guarded
 run retains its connection across actions, captures and post-game transitions,
 then drops it when the run returns. STOP is cooperative; it is checked between
 operations and during cancellable waits, while in-flight TCP or QMP work may first
-complete or time out. TCP uses one connection per frame; the Windows server
-closes each connection after its response.
+complete or time out. TCP's default persistent mode retains one connection per
+worker context. Explicit one-frame modes close after each response.
 
 Before every guest input the worker requires:
 
@@ -45,18 +45,30 @@ Before every guest input the worker requires:
 ## Capture
 
 `QMP_CAPTURE_BACKEND` defaults to `tcp`; `qmp` explicitly selects the preserved
-legacy implementation. `QMP_CAPTURE_ADDR` defaults to `127.0.0.1:9999`.
+legacy implementation. `QMP_CAPTURE_ADDR` defaults to `127.0.0.1:9999` and
+accepts numeric IP:port endpoints only, including bracketed IPv6.
 Configuration applies for the application session. A TCP failure stops the
 request without issuing a fallback QMP screendump.
 
-The TCP server captures the primary Windows display through GDI and returns
-raw top-down BGRA pixels. xSAR validates the version-2 response geometry and
-converts pixels to RGBA in memory. Its 14-byte response header contains width
-(`u32`), height (`u32`), stride (`u16`) and frame number (`u32`), all little-endian.
-A packed row is `width * 4` bytes: 1920 pixels use 7680 bytes; the `u16` limit
-allows a largest four-byte row of 65532 bytes, or 16383 pixels. The controller
-still requires exactly 1920x1080 with a valid four-channel layout; there is no
-scaling, interpolation or coordinate guessing.
+The TCP server captures the primary Windows display through GDI. The default
+`QMP_CAPTURE_WIRE=v3-persistent` retains a demand-driven connection and returns
+full-screen top-down BGR8. The 32-byte request and 80-byte response explicitly
+identify the session, request, frame, display generation, format, complete
+coverage and exact lengths. xSAR validates these before expanding BGR8 to RGBA8
+with alpha 255. At 1920x1080, BGR8 uses 6,220,800 pixel bytes; the returned host
+frame still has stride 7680 and 8,294,400 bytes. No pixels are scaled or omitted.
+
+Explicit `QMP_CAPTURE_WIRE=v3` opens one connection per BGR8 frame;
+`QMP_CAPTURE_WIRE=v2` retains the earlier five-byte request, 14-byte header and
+BGRA payload for comparison or compatibility. Unknown modes and incompatible
+responses fail; no automatic downgrade, fallback or same-operation retry occurs.
+If a retained peer has cleanly closed before a request starts, xSAR discards
+that socket and its identities, then makes one bounded fresh connection for
+the new request. Unsolicited bytes and socket errors still fail. A peer closing
+after the preflight can still cause a safe failure; sending is never replayed.
+See the [idle EOF repair](capture-idle-eof-candidate14.md).
+See the [combined capture contract](capture-combined-candidate13.md) for limits,
+separate timings, compatibility and operator verification.
 
 Ordinary TCP capture requests no PNG and creates no temporary file. With
 `--image`, the worker encodes and caches the same captured frame before
@@ -84,7 +96,7 @@ application connects to the same existing absolute path, selected through
 
 For the default TCP endpoint with QEMU user networking, add
 `hostfwd=tcp:127.0.0.1:9999-10.0.2.15:9999` to the existing `-netdev user`
-configuration. Run the matching version-2 screen-grab server in the logged-in
+configuration. Run the matching screen-grab server in the logged-in
 Windows desktop and allow its port through Windows Firewall. A bridged guest
 can instead be selected with `QMP_CAPTURE_ADDR=<guest-address>:9999`.
 

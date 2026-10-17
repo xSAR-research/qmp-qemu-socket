@@ -9,16 +9,17 @@ mod control_search;
 mod freecell_execution;
 #[cfg(test)]
 mod image_recording_tests;
-#[cfg(test)]
-mod tcp_capture_tests;
 mod initial_recovery;
 mod klondike_execution;
 mod post_game;
 mod pyramid_execution;
 mod pyramid_reconnaissance;
 mod spider_execution;
-mod tripeaks_terminal;
+mod tcp_capture;
+#[cfg(test)]
+mod tcp_capture_tests;
 mod tripeaks_geometry;
+mod tripeaks_terminal;
 
 use std::{
     cell::RefCell,
@@ -36,7 +37,9 @@ use std::{
 };
 
 use crate::{
-    capture::{CapturedFrame, PixelFormat, ScreenCaptureClient, decode_png, encode_png},
+    capture::{
+        CaptureMode, CapturedFrame, PixelFormat, ScreenCaptureClient, decode_png, encode_png,
+    },
     detector::detect_game_progress_for_profile,
     game::{ActionTarget, GameMode, GameProgress, InputOperation},
     geometry::{PixelRect, pixel_point_to_qmp, pixel_rect_to_qmp},
@@ -579,8 +582,6 @@ pub struct ContextualWorkerEvent {
 
 
 impl WorkerEventSink {
-
-
     /// Queue a small worker event; retain failed delivery in a boxed channel error.
     fn send(&self, event: WorkerEvent) -> Result<(), Box<mpsc::SendError<ContextualWorkerEvent>>> {
         let context = self.capture_context.lock()
@@ -596,6 +597,7 @@ impl WorkerEventSink {
         prediction: PredictedAction,
         log_prediction: bool,
     ) {
+        let scheduled_at = Instant::now();
         let context = self
             .capture_context
             .lock()
@@ -603,11 +605,13 @@ impl WorkerEventSink {
             .clone();
         self.latest_frame
             .publish(frame, Some(prediction), log_prediction, false, context);
+        tcp_capture::log_preview_scheduling(self, scheduled_at.elapsed());
     }
 
 
     /// Publish the last observed pixels without granting action authority to their prediction.
     fn publish_diagnostic_frame(&self, frame: CapturedFrame) {
+        let scheduled_at = Instant::now();
         let context = self
             .capture_context
             .lock()
@@ -616,6 +620,7 @@ impl WorkerEventSink {
         // Preserve the exact last observed pixels, without approving a target.
         self.latest_frame
             .publish(frame, None, false, true, context);
+        tcp_capture::log_preview_scheduling(self, scheduled_at.elapsed());
     }
 
 
@@ -860,6 +865,7 @@ fn run_worker(
     event_tx: WorkerEventSink,
     cancel_requested: Arc<AtomicBool>,
 ) {
+    let _capture_scope = tcp_capture::WorkerCaptureScope::install(&event_tx);
     // Processes bounded commands without retaining QMP between transactions.
     let mut scan_state = TableauScanState::initial();
     let mut scan_context = None;
@@ -893,6 +899,7 @@ fn run_worker(
                 run_prepare_snapshot(&context, &scan_state, request_id, &event_tx);
             }
             WorkerCommand::ExecuteSteps { context, approved_prediction, settings } => {
+                let _capture_cancel = tcp_capture::CancellationScope::install(Arc::clone(&cancel_requested));
                 event_tx.set_capture_context(Some(context.clone()));
 
 
@@ -906,6 +913,7 @@ fn run_worker(
                     &mut completed_boards, &event_tx, &cancel_requested);
             }
             WorkerCommand::Reconnoitre { context, request } => {
+                let _capture_cancel = tcp_capture::CancellationScope::install(Arc::clone(&cancel_requested));
                 event_tx.set_capture_context(Some(context.clone()));
                 pyramid_reconnaissance::run(&context, &request, &event_tx, &cancel_requested);
             }
@@ -921,6 +929,7 @@ fn run_worker(
                 send_status(&event_tx, "Ready".to_owned());
             }
             WorkerCommand::Disconnect(context) => {
+                tcp_capture::reset(Some(&event_tx));
                 let vision = context.strategy == SolvingStrategy::ComputerVision;
                 event_tx.set_capture_context(Some(context));
                 reset_progress_tracking(&mut scan_state, &mut completed_boards);
@@ -3378,8 +3387,8 @@ fn capture_and_analyse(
     send_state(event_tx, WorkerState::Capturing);
     let (observation, timing) = capture_with_client(&mut qmp, socket_path, scan_state, event_tx)?;
 
-    // `qmp` and the capture guard both drop here. No connection or image file is
-    // retained after the event has been constructed.
+    // QMP drops here; the separately owned TCP client may serve later captures
+    // in this controller context without retaining QMP or screenshot files.
     Ok((observation, timing))
 }
 
@@ -3438,6 +3447,7 @@ fn capture_with_client(
     let (frame, mut timing) = capture_screen(qmp, socket_path, event_tx)?;
     let (observation, detection) = publish_and_analyse_captured_frame(frame, scan_state, event_tx)?;
     timing.detection = detection;
+    tcp_capture::log_detection(event_tx, detection);
 
     Ok((observation, timing))
 }
@@ -3461,8 +3471,13 @@ fn publish_and_analyse_captured_frame(
 /// Capture selection remains fixed for the lifetime of a worker thread.
 #[derive(Clone)]
 enum CaptureBackend {
-    /// Guest server address; requests use the shared xSAR version-2 protocol.
-    Tcp(String),
+    /// Guest endpoint and explicit protocol/connection lifetime; no fallback.
+    Tcp {
+        /// Explicit numeric guest-server endpoint.
+        address: String,
+        /// Deliberately selected protocol and connection lifetime.
+        mode: CaptureMode,
+    },
     /// Explicitly selected file-backed QMP capture; never an automatic fallback.
     LegacyQmp,
 }
@@ -3494,9 +3509,18 @@ fn capture_backend_from_environment() -> Result<CaptureBackend, String> {
                 })
                 .map_err(|_| "QMP_CAPTURE_ADDR must be UTF-8".to_owned())?;
             if address.trim().is_empty() {
-                return Err("QMP_CAPTURE_ADDR must name a TCP host and port".to_owned());
+                return Err("QMP_CAPTURE_ADDR must name a numeric IP:port (bracket IPv6 addresses)".to_owned());
             }
-            Ok(CaptureBackend::Tcp(address))
+            address.parse::<std::net::SocketAddr>().map_err(|_| {
+                "QMP_CAPTURE_ADDR must name a numeric IP:port (bracket IPv6 addresses)".to_owned()
+            })?;
+            let wire = std::env::var("QMP_CAPTURE_WIRE")
+                .or_else(|error| match error {
+                    std::env::VarError::NotPresent => Ok("v3-persistent".to_owned()),
+                    other => Err(other),
+                })
+                .map_err(|_| "QMP_CAPTURE_WIRE must be UTF-8".to_owned())?;
+            Ok(CaptureBackend::Tcp { address, mode: tcp_capture::parse_mode(&wire)? })
         }
         "qmp" => Ok(CaptureBackend::LegacyQmp),
         _ => Err("QMP_CAPTURE_BACKEND must be tcp or qmp".to_owned()),
@@ -3523,12 +3547,23 @@ struct TestCaptureBackend(Option<CaptureBackend>);
 impl TestCaptureBackend {
     /// Keep existing QMP regression fixtures on their explicitly mocked transport.
     fn legacy_qmp() -> Self {
+        tcp_capture::reset(None);
         Self(TEST_CAPTURE_BACKEND.with(|slot| slot.replace(Some(CaptureBackend::LegacyQmp))))
     }
 
     /// Point TCP integration tests at an ephemeral socket owned by that test.
     fn tcp(address: String) -> Self {
-        Self(TEST_CAPTURE_BACKEND.with(|slot| slot.replace(Some(CaptureBackend::Tcp(address)))))
+        Self::tcp_mode(address, CaptureMode::LegacyV2)
+    }
+
+
+    /// Exercise one selected wire contract without changing process environment.
+    fn tcp_mode(address: String, mode: CaptureMode) -> Self {
+        tcp_capture::reset(None);
+        Self(
+            TEST_CAPTURE_BACKEND
+                .with(|slot| slot.replace(Some(CaptureBackend::Tcp { address, mode }))),
+        )
     }
 }
 
@@ -3537,31 +3572,9 @@ impl TestCaptureBackend {
 impl Drop for TestCaptureBackend {
     /// Prevent one test's endpoint from leaking into another test on the same thread.
     fn drop(&mut self) {
+        tcp_capture::reset(None);
         TEST_CAPTURE_BACKEND.with(|slot| *slot.borrow_mut() = self.0.take());
     }
-}
-
-
-/// Request one raw BGRA frame and return the client's in-place-converted RGBA buffer.
-fn capture_screen_via_tcp(address: &str) -> Result<(CapturedFrame, CaptureTiming), String> {
-    // The guest serves one frame per connection. No QMP capture or PNG work occurs.
-    let (tcp_frame, tcp_timing) = ScreenCaptureClient::new(Some(address.to_owned()))
-        .capture_full().map_err(|error| format!("TCP capture failed: {error}"))?;
-    let frame = CapturedFrame {
-        width: tcp_frame.width,
-        height: tcp_frame.height,
-        stride: tcp_frame.stride,
-        format: PixelFormat::Rgba8,
-        pixels: tcp_frame.pixels,
-    };
-    let timing = CaptureTiming {
-        captures: 1,
-        screendump: Duration::from_secs_f64((tcp_timing.connect_ms + tcp_timing.request_ms) / 1000.0),
-        file_read: Duration::from_secs_f64(tcp_timing.pixel_read_ms / 1000.0),
-        decode: Duration::from_secs_f64(tcp_timing.conversion_ms / 1000.0),
-        ..CaptureTiming::default()
-    };
-    Ok((frame, timing))
 }
 
 
@@ -3584,6 +3597,14 @@ fn log_tcp_capture_timing(
     captured_at: Option<Duration>,
     timing: CaptureTiming,
 ) {
+    send_log(
+        event_tx,
+        format!(
+            "TCP capture PNG stage: encode={:.3} ms; captured=+{:.3}s; excluded from acquisition-total. Zero means PNG encoding was not requested for this capture.",
+            milliseconds(timing.png_encode),
+            captured_at.unwrap_or_default().as_secs_f64(),
+        ),
+    );
     if game_win_images_active() {
         send_log(event_tx, format!(
             "GAME WIN capture timing: request=+{:.3}s; TCP frame ready=+{:.3}s; request={:.1} ms; receive={:.1} ms; convert={:.1} ms; png-encode={:.1} ms. Capture time precedes PNG encoding and saving.",
@@ -3607,9 +3628,9 @@ fn capture_screen(
             let (frame, _png, timing) = capture_screen_with_png_legacy_qmp(qmp, socket_path, event_tx)?;
             Ok((frame, timing))
         }
-        CaptureBackend::Tcp(address) => {
+        CaptureBackend::Tcp { address, mode } => {
             let requested_at = worker_elapsed();
-            let (frame, mut timing) = capture_screen_via_tcp(&address)?;
+            let (frame, mut timing) = tcp_capture::capture(&address, mode, event_tx)?;
             let captured_at = worker_elapsed();
             if game_win_images_enabled() {
                 let png = encode_captured_png(&frame, &mut timing)?;
@@ -3630,9 +3651,9 @@ fn capture_screen_with_png(
 ) -> Result<(CapturedFrame, Vec<u8>, CaptureTiming), String> {
     match selected_capture_backend()? {
         CaptureBackend::LegacyQmp => capture_screen_with_png_legacy_qmp(qmp, socket_path, event_tx),
-        CaptureBackend::Tcp(address) => {
+        CaptureBackend::Tcp { address, mode } => {
             let requested_at = worker_elapsed();
-            let (frame, mut timing) = capture_screen_via_tcp(&address)?;
+            let (frame, mut timing) = tcp_capture::capture(&address, mode, event_tx)?;
             let captured_at = worker_elapsed();
             let png = encode_captured_png(&frame, &mut timing)?;
             record_game_win_png(&png, captured_at, event_tx)?;

@@ -3395,24 +3395,31 @@ mod tripeaks_reward_qmp_regressions {
     }
 
 
-    /// A genuinely tinted fresh witness still fails closed after the fast wait;
-    /// the previous clean glyph supplies neither input nor a fourth observation.
+    /// Native tint never supplies current click authority. TriPeaks retains its
+    /// settled body and receives one interrupted-confirmation witness; Pyramid's
+    /// tinted capture loses its body and stops after the three normal observations.
     #[test]
     #[ignore = "requires local AF_UNIX sockets"]
     fn shared_native_tinted_confirmation_never_uses_the_previous_clean_glyph() {
         for mode in [GameMode::Pyramid, GameMode::TriPeaks] {
             let (result, wire, events, latest) = run_shared_readiness(mode,
                 Scenario::SharedTintedOkConfirmation);
-            assert!(result.unwrap_err().contains("did not become ready in 3 consecutive fresh captures"));
-            assert_eq!(wire.level_up_captures, 3);
+            let observations = if mode == GameMode::TriPeaks { 4 } else { 3 };
+            assert!(result.unwrap_err().contains(&format!("did not become ready in {observations} consecutive fresh captures")));
+            assert_eq!(wire.level_up_captures, observations);
             assert_eq!(wire.downs(), 0);
             assert_eq!(latest.frame.pixels, decode_png(confirmation_pngs(mode).2).unwrap().pixels);
             let waits: Vec<_> = events.iter().filter_map(|event| match event {
                 WorkerEvent::Log(message) if message.contains("OK retry wait:") => Some(message),
                 _ => None,
             }).collect();
-            assert_eq!(waits.len(), 2);
+            assert_eq!(waits.len(), observations - 1);
             assert!(waits[1].contains("chosen_ms=200; normal_ms=2000; confirmation_pending=true"));
+            if mode == GameMode::TriPeaks {
+                assert!(waits[2].contains("chosen_ms=200; normal_ms=2000; confirmation_pending=false"));
+                assert!(events.iter().any(|event| matches!(event, WorkerEvent::Log(message)
+                    if message.contains("OK final OK confirmation reserve: granted=true; observations=3;"))));
+            }
             assert!(latest.diagnostic && latest.prediction.is_none());
         }
     }
