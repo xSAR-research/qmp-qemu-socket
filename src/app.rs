@@ -2433,7 +2433,7 @@ impl QmpQemuSocketApp {
                 }
                 ui.monospace("terminal-OK readiness = stable button geometry across fresh frames + current exact-black glyph; caption diagnostic only; final reserve requires a valid pending OK on normal observation three; one click");
                 ui.monospace(format!(
-                    "terminal-OK confirmation = {} ms only for a settled body with a current exact-black glyph awaiting geometry agreement; otherwise normal reobserve",
+                    "terminal-OK confirmation = {} ms for a current exact-black glyph awaiting geometry, or a granted final interrupted/late-body reserve; otherwise normal reobserve",
                     crate::parameters::LEVEL_UP_CONFIRMATION_DELAY.as_millis(),
                 ));
                 ui.monospace(format!(

@@ -97,6 +97,9 @@ pub struct OkObservation {
     /// A preceding settled glyph was lost while the current settled body still agrees.
     /// This may justify one final fresh observation, never current-frame input.
     pub interrupted_confirmation: bool,
+    /// A settled-size body first needs geometry agreement while its glyph is absent.
+    /// This may justify the final input-free observation, never a click or earlier fast retry.
+    pub body_confirmation_pending: bool,
     /// Latest measured central glyph point, or `(0, 0)` while input is withheld.
     pub point: PixelPoint,
     /// Stable reason for accepting or withholding input in persistent logs.
@@ -186,6 +189,10 @@ impl OkReadiness {
             && geometry_stable
             && button.is_some_and(settled_size)
             && glyph_point == PixelPoint::new(0, 0);
+        let body_confirmation_pending = !geometry_stable
+            && !previous_button.is_some_and(settled_size)
+            && button.is_some_and(settled_size)
+            && glyph_point == PixelPoint::new(0, 0);
         self.previous_button = button;
         self.previous_settled_glyph =
             button.is_some_and(settled_size) && glyph_point != PixelPoint::new(0, 0);
@@ -193,6 +200,7 @@ impl OkReadiness {
             ready,
             confirmation_pending,
             interrupted_confirmation,
+            body_confirmation_pending,
             point: if ready { glyph_point } else { PixelPoint::new(0, 0) },
             reason,
             button,

@@ -1,4 +1,4 @@
-# Level Up OK readiness — candidate.12
+# Level Up OK readiness — v2.2.100
 
 The first post-score capture follows the existing 1000 ms intentional wait.
 All five controllers use one borrowed-pixel readiness helper before their
@@ -8,7 +8,10 @@ button and exact-black central glyph need only geometry agreement. Candidate.10
 adds one final OK-only confirmation if that evidence first becomes eligible on
 the third normal observation. Candidate.12 also permits that final observation
 when the preceding valid glyph disappears on observation three while its
-settled body retains matching geometry. Click eligibility is unchanged.
+settled body retains matching geometry. Version 2.2.100 retains the additional permission for the
+existing final observation when the first settled-size body appears on normal
+observation three without current exact-black ink and still needs consecutive
+geometry confirmation. Click eligibility is unchanged.
 
 ## Required evidence
 
@@ -31,6 +34,8 @@ An eligible third frame may consume one final fresh confirmation in either case:
 - The immediately preceding frame had a settled-size body and valid central
   exact-black glyph; the third frame independently measures the same settled
   body but lacks the current glyph.
+- Its newly measured settled-size body still needs consecutive geometry
+  confirmation while the current exact-black glyph is absent.
 
 The fourth frame must qualify independently; it cannot renew the reserve or
 authorise another control. There is no fifth observation or extra click budget.
@@ -52,7 +57,9 @@ the normal three-observation allowance. At exhaustion,
 `ControlLookup::reserve_final_ok_confirmation(3)` permits one additional OK-only
 frame if the current evidence qualifies. The interrupted-confirmation flag
 alone never shortens an earlier retry: it selects 200 ms only after observation
-three actually consumes the final reserve. Consuming the reserve is permanent
+three actually consumes the final reserve. The new `body_confirmation_pending`
+flag also selects 200 ms only after the final reserve is consumed; it does not
+shorten ordinary earlier retries. Consuming the reserve is permanent
 for that lookup, including across resets and later outcomes.
 
 The next capture is checked from its own pixels. A missing or tinted glyph
@@ -65,6 +72,66 @@ predecessor evidence without renewing the reserve. Current foreground-panel
 evidence still blocks underlying New Game while history is discarded.
 Acknowledged or uncertain input cannot be replayed by this policy. The
 1000 ms first post-score wait remains.
+
+## Recorded Spider late first body — retained in v2.2.100
+
+The four byte-original captures in `tests/fixtures/spider-late-ok-20261018`
+correlate with session `qmp-qemu-socket-1792258073269.log`:
+
+| Capture | Observation |
+| --- | --- |
+| 5097.701 s / score.png | Independent Score entry, followed by one score-skip click |
+| 5100.096 s / reward.png | Normal observation one: reward panel, no OK body |
+| 5101.836 s / entering.png | Observation two: scaled modal, OK above the native search region |
+| 5103.414 s / near-black.png | Observation three: body (839,723,237,71), no preceding body for agreement; glyph RGB(1,1,1) |
+
+The final frame has no exact-black pixels in X=930–954, Y=700–850.
+At X=944–948, Y=771 all five pixels are RGBA(1,1,1,255). The coordinates
+and measured glyph band are correct; moving the search region cannot repair
+this exact-colour miss. The earlier Free Cell interrupted-glyph recovery cannot
+apply because no preceding settled exact-black candidate was observed.
+
+`body_confirmation_pending` requires a settled-size body, missing current glyph
+and geometry that still needs confirmation. The immediately preceding body
+must be missing or not yet settled-size; movement of an already full-size body
+cannot qualify through this new route. A repeatedly observed stable body
+without ink does not qualify through this new condition. Only normal observation
+three can consume the existing reserve. The helper still returns `(0,0)` until
+a fresh current glyph and consecutive settled geometry both pass.
+
+The next response is checked independently. Controlled fourth responses exercise
+fresh-glyph success, persistent near-black, geometry loss, unrelated menus and
+STOP, with no fifth observation or alternative fourth-frame control input.
+No real fourth capture was supplied, so live recovery remains unverified.
+The general three-plus-one limits and exact-black requirement are unchanged.
+
+## Recorded Spider persistent interrupted washout
+
+The five byte-original captures in
+`tests/fixtures/spider-interrupted-ok-20261018` correlate with session
+`qmp-qemu-socket-1792264703614.log`, whose running executable was candidate.14.
+The sequence supplies Score entry, an entering modal, a clean second OK
+observation and two successive washed observations. Observation two has body
+`(839,723,237,71)` and exact-black point `(944,771)`. Observation three retains
+stable geometry and consumes the interrupted-glyph reserve. Observation four
+still has no exact-black pixel anywhere in X=930–954, Y=700–850, so it cannot
+qualify or renew the reserve. Its five central pixels at X=944–948, Y=771 are
+RGBA(1,1,1,255). All retained images are native 1920×1080 with opaque alpha.
+
+This trace remains a known safe refusal in v2.2.100. The late-first-body route
+does not help a sequence that already measured a clean full-size body and
+consumed the interrupted-glyph reserve. The native controller regression
+requires only Score input, four OK observations, three normal New Game scans,
+no fifth observation and final-frame retention. It does not accept near-black
+ink or infer a rendering/acquisition cause from the images alone.
+
+The Free Cell regression repair separately retains stale-glyph rejection for
+clean → washed → washed. If an intervening gameplay/Score frame clears geometry,
+a newly appearing settled body may legitimately obtain the existing late-body
+fourth observation. Its response must supply current ink and matching geometry;
+tests exercise both missing ink and recovery at a distinct fresh point. This
+is a correction to the old test expectation, not a production policy change.
+Required Cargo verification for these revised tests remains pending.
 
 ## Interrupted Free Cell confirmation
 

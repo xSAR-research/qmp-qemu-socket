@@ -1,5 +1,42 @@
 # Changelog
 
+## v2.2.100 — Numeric migration and late OK verification repair
+
+- Permit the existing fourth, input-free OK observation when normal observation
+  three first measures a settled-size body whose current exact-black glyph is
+  absent and whose geometry still needs confirmation. Use 200 ms only once that
+  final reserve is granted; earlier glyphless observations keep normal spacing.
+- Keep current-frame exact RGB(0,0,0), consecutive settled geometry and fresh
+  coordinates as click requirements. Preserve three normal observations, one
+  irreversible OK-only reserve, no fifth capture, New Game/Play budgets, STOP,
+  foreground priority and uncertain-input safeguards. No coordinate or colour
+  threshold changes are made.
+- Retain the four byte-original Spider captures from session 1792258073269.
+  Add shared five-profile and production Spider regressions for a controlled
+  fourth-frame glyph, persistent washout, missing/moved body, alternative menu
+  rejection and cancellation. A controlled fourth response is not a live result.
+- Correct the Free Cell stale-glyph regression: keep clean-to-washed-to-washed
+  rejection, and separately verify the existing late-body fourth observation
+  after gameplay or Score clears geometry. Require the fourth frame's own
+  distinct glyph coordinate, one reserve only, no input and retained evidence.
+- Retain five byte-original Spider captures from session 1792264703614 and a
+  production-driver regression for persistent interrupted-glyph washout. It
+  records a known safe refusal after four OK observations, not a recovery fix;
+  current exact-black evidence remains mandatory and no fifth frame is allowed.
+- Adopt Charlie's approved application migration checkpoint `2.2.100`, without
+  claiming a historical build count. Independently migrate the sibling xSAR
+  crate to `0.4.100` and align its application lockfile entry. The dependency
+  remains path-only; dependency requirements and registry resolutions do not
+  change. Future ordinary verified revisions increment build automatically;
+  milestone/minor and major transitions require Charlie's direction or approval.
+  The build counter never resets.
+- Preserve application transport, Solving mode, production timing and recognition,
+  input safeguards, GAME WIN recording and Windows server sources. The earlier
+  candidate.15 verifier compiled successfully, then reported 863 passed tests
+  and one obsolete Free Cell assertion failure. These revised sources remain
+  provisional until focused and complete tests, strict docs/Clippy and the
+  release build pass; no Rust toolchain is available in the preparation host.
+
 ## v2.2.2-candidate.14 — Reconnect after observed idle EOF
 
 - Before sending a capture request, discard a retained socket whose peer has

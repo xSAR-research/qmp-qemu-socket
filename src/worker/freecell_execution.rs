@@ -243,7 +243,7 @@ fn drive_run(
     validate_operation_limit(settings.operation_limit())?;
     let delays = settings.animation_delays();
     send_log(event_tx, format!(
-        "Free Cell fresh-HALO execution: game-start delay={} ms, action/automatic-transfer settle={} ms, no-HALO observation={} ms, delayed allowance={}. Inactive Solver receives one start delay and fresh capture before activation. Active no-HALO gameplay receives one delayed input-free observation before one refresh; activation and refresh share one reserve per unresolved context. One source click consumes one action; Solver and terminal clicks do not. No card identity, pixel difference, SUIT input, Draw, Recycle or Solve is used. Continuous 0 may restart one-board games through Score, optional Level Up OK, New Game and Play. After score skip, exactly one ready local OK or New Game control selects the next stage; a missing pair receives three normal observations, and an ambiguous pair stops without input. Only a settled-size OK with a current exact-black central glyph awaiting geometry on observation three may reserve one final fresh 200 ms OK confirmation. New Game and Play remain limited to three observations; no control input is replayed.",
+        "Free Cell fresh-HALO execution: game-start delay={} ms, action/automatic-transfer settle={} ms, no-HALO observation={} ms, delayed allowance={}. Inactive Solver receives one start delay and fresh capture before activation. Active no-HALO gameplay receives one delayed input-free observation before one refresh; activation and refresh share one reserve per unresolved context. One source click consumes one action; Solver and terminal clicks do not. No card identity, pixel difference, SUIT input, Draw, Recycle or Solve is used. Continuous 0 may restart one-board games through Score, optional Level Up OK, New Game and Play. After score skip, exactly one ready local OK or New Game control selects the next stage; a missing pair receives three normal observations, and an ambiguous pair stops without input. On observation three, a settled-size OK awaiting current-glyph geometry confirmation, an interrupted preceding glyph, or a first settled-size body without a current glyph may reserve one final fresh 200 ms OK confirmation. That frame must independently provide exact-black ink and matching settled geometry. New Game and Play remain limited to three observations; no control input is replayed.",
         delays.freecell_game_start.as_millis(), delays.freecell_settle.as_millis(), delays.freecell_reobserve.as_millis(), settings.freecell_observation_limit(),
     ));
     capture_latest(io, latest, event_tx, cancel_requested)?;
@@ -2229,51 +2229,188 @@ mod tests {
     #[test]
     fn interrupted_ok_requires_the_immediate_valid_predecessor() {
         for optional_pair in [false, true] {
-            for previous in [interrupted_ok_fixture(), fixture(2), fixture(9)] {
-                let interrupted = interrupted_ok_fixture();
-                let cancel = AtomicBool::new(false);
-                let mut io = fake(
-                    vec![
-                        final_confirmation_fixture("clean"),
-                        previous,
-                        interrupted.clone(),
-                        final_confirmation_fixture("clean"),
-                    ],
-                    &cancel,
-                );
-                let settings = StepRunSettings::new(AnimationSettleDelays::default(), 0);
-                let (sender, _receiver) = std::sync::mpsc::channel();
-                let events = WorkerEventSink {
-                    events: sender,
-                    latest_frame: super::super::LatestFrameSlot::default(),
-                    capture_context: std::sync::Mutex::new(None),
-                };
-                let mut latest = None;
-                capture_latest(&mut io, &mut latest, &events, &cancel).unwrap();
-                let result = if optional_pair {
-                    await_post_score_control(&mut io, &mut latest, settings, &events, &cancel)
-                        .map(|_| ())
-                } else {
-                    await_expected_control(
-                        &mut io,
-                        &mut latest,
-                        TerminalStage::LevelUp,
-                        settings,
-                        &events,
-                        &cancel,
-                    )
+            let interrupted = interrupted_ok_fixture();
+            let cancel = AtomicBool::new(false);
+            let mut io = fake(
+                vec![
+                    final_confirmation_fixture("clean"),
+                    interrupted.clone(),
+                    interrupted.clone(),
+                    final_confirmation_fixture("clean"),
+                ],
+                &cancel,
+            );
+            let settings = StepRunSettings::new(AnimationSettleDelays::default(), 0);
+            let (sender, receiver) = std::sync::mpsc::channel();
+            let slot = super::super::LatestFrameSlot::default();
+            let events = WorkerEventSink {
+                events: sender,
+                latest_frame: slot.clone(),
+                capture_context: std::sync::Mutex::new(None),
+            };
+            let mut latest = None;
+            capture_latest(&mut io, &mut latest, &events, &cancel).unwrap();
+            let result = if optional_pair {
+                await_post_score_control(&mut io, &mut latest, settings, &events, &cancel)
                     .map(|_| ())
-                };
-                assert!(result.is_err());
-                assert_eq!(io.captures, 3);
-                assert_eq!(
-                    io.frames.len(),
-                    1,
-                    "there is no eligible fourth observation"
-                );
-                assert!(io.controls.is_empty() && io.sources.is_empty());
-                assert_eq!(io.solver_clicks, 0);
-                assert_eq!(latest.unwrap().frame.pixels, interrupted.pixels);
+            } else {
+                await_expected_control(
+                    &mut io,
+                    &mut latest,
+                    TerminalStage::LevelUp,
+                    settings,
+                    &events,
+                    &cancel,
+                )
+                .map(|_| ())
+            };
+            assert!(result.is_err());
+            assert_eq!(io.captures, 3);
+            assert_eq!(io.frames.len(), 1, "there is no eligible fourth observation");
+            assert_eq!(
+                io.waits,
+                [Duration::from_millis(200), settings.animation_delays().freecell_reobserve]
+            );
+            assert!(io.controls.is_empty() && io.control_points.is_empty() && io.sources.is_empty());
+            assert_eq!(io.solver_clicks, 0);
+            assert_eq!(latest.unwrap().frame.pixels, interrupted.pixels);
+            assert_eq!(slot.take().unwrap().frame.pixels, interrupted.pixels);
+            let logs: Vec<_> = receiver
+                .try_iter()
+                .filter_map(|event| match event.event {
+                    WorkerEvent::Log(message) => Some(message),
+                    _ => None,
+                })
+                .collect();
+            let last_readiness = logs.iter().rev()
+                .find(|message| message.starts_with("Free Cell OK readiness:"))
+                .unwrap();
+            assert!(last_readiness.contains("interrupted_confirmation=false;"));
+            assert!(last_readiness.contains("body_confirmation_pending=false;"));
+            assert!(!logs.iter().any(|message| message.contains(
+                "final OK confirmation reserve: granted=true;"
+            )));
+        }
+    }
+
+
+    /// Reset geometry permits one late-body observation, but never reuses an older clean glyph.
+    #[test]
+    fn late_first_ok_after_nonmodal_reset_requires_a_current_fourth_glyph() {
+        for optional_pair in [false, true] {
+            for previous_number in [2, 9] {
+                for fresh_glyph in [false, true] {
+                    let clean = final_confirmation_fixture("clean");
+                    let old_point = freecell_terminal::expected_control_point(
+                        &clean, TerminalStage::LevelUp,
+                    ).unwrap();
+                    let expected = PixelPoint::new(930, old_point.y);
+                    assert_ne!(expected, old_point);
+                    let interrupted = interrupted_ok_fixture();
+                    // This controlled fourth response preserves the native body and
+                    // either lacks ink or supplies a new exact-black coordinate.
+                    let mut fourth = interrupted.clone();
+                    if fresh_glyph {
+                        for x in expected.x..expected.x + 5 {
+                            let offset = expected.y as usize * fourth.stride + x as usize * 4;
+                            fourth.pixels[offset..offset + 3].fill(0);
+                        }
+                    }
+                    assert_eq!(
+                        freecell_terminal::expected_control_point(&fourth, TerminalStage::LevelUp)
+                            .unwrap(),
+                        if fresh_glyph { expected } else { PixelPoint::new(0, 0) }
+                    );
+                    let previous = fixture(previous_number);
+                    assert_eq!(freecell::is_gameplay_scene(&previous).unwrap(), previous_number == 2);
+                    let cancel = AtomicBool::new(false);
+                    let mut io = fake(
+                        vec![clean.clone(), previous, interrupted,
+                            fourth.clone(), clean],
+                        &cancel,
+                    );
+                    let settings = StepRunSettings::new(
+                        AnimationSettleDelays::default().with_freecell_millis(1_000, 2_300),
+                        0,
+                    );
+                    let (sender, receiver) = std::sync::mpsc::channel();
+                    let slot = super::super::LatestFrameSlot::default();
+                    let events = WorkerEventSink {
+                        events: sender,
+                        latest_frame: slot.clone(),
+                        capture_context: std::sync::Mutex::new(None),
+                    };
+                    let mut latest = None;
+                    capture_latest(&mut io, &mut latest, &events, &cancel).unwrap();
+                    let result = if optional_pair {
+                        await_post_score_control(&mut io, &mut latest, settings, &events, &cancel)
+                            .map(|(stage, point)| {
+                                assert_eq!(stage, TerminalStage::LevelUp);
+                                point
+                            })
+                    } else {
+                        await_expected_control(
+                            &mut io, &mut latest, TerminalStage::LevelUp,
+                            settings, &events, &cancel,
+                        )
+                    };
+                    if fresh_glyph {
+                        assert_eq!(result.unwrap(), expected);
+                    } else {
+                        assert!(result.is_err(), "older clean ink cannot replace fourth-frame ink");
+                    }
+                    assert_eq!(io.captures, 4);
+                    assert_eq!(io.frames.len(), 1, "no fifth observation is permitted");
+                    assert_eq!(io.waits, [Duration::from_millis(200),
+                        Duration::from_millis(2_300), Duration::from_millis(200)]);
+                    assert!(io.controls.is_empty() && io.control_points.is_empty()
+                        && io.sources.is_empty());
+                    assert_eq!(io.solver_clicks, 0);
+                    assert_eq!(latest.unwrap().frame.pixels, fourth.pixels);
+                    assert_eq!(slot.take().unwrap().frame.pixels, fourth.pixels);
+                    let logs: Vec<_> = receiver
+                        .try_iter()
+                        .filter_map(|event| match event.event {
+                            WorkerEvent::Log(message) => Some(message),
+                            _ => None,
+                        })
+                        .collect();
+                    let late_body_observations: Vec<_> = logs.iter()
+                        .filter(|message| message.starts_with("Free Cell OK readiness:")
+                            && message.contains("body_confirmation_pending=true;"))
+                        .collect();
+                    assert_eq!(late_body_observations.len(), 1);
+                    assert!(late_body_observations[0].contains("interrupted_confirmation=false;"));
+                    assert!(late_body_observations[0].contains("geometry_stable=false;"));
+                    assert!(late_body_observations[0].contains("ready=false;"));
+                    assert!(late_body_observations[0].contains("selected=(0, 0);"));
+                    let reserves: Vec<_> = logs.iter().enumerate()
+                        .filter(|(_, message)| message.contains(
+                            "final OK confirmation reserve: granted=true;"
+                        ))
+                        .collect();
+                    assert_eq!(reserves.len(), 1);
+                    let (reserve_index, reserve_log) = reserves[0];
+                    assert!(reserve_log.contains("observations=3;"));
+                    assert!(reserve_log.contains("interrupted_confirmation=false;"));
+                    assert!(reserve_log.contains("body_confirmation_pending=true;"));
+                    assert!(logs.iter().any(|message| message.contains(
+                        "policy=reserved late OK body confirmation"
+                    )));
+                    let new_game_searches: Vec<_> = logs.iter().enumerate()
+                        .filter(|(_, message)| message.strip_prefix("Free Cell New Game search ")
+                            .is_some_and(|suffix| suffix.starts_with(|ch: char| ch.is_ascii_digit())))
+                        .collect();
+                    let expected_new_game_searches = if optional_pair {
+                        if previous_number == 2 { 2 } else { 3 }
+                    } else { 0 };
+                    assert_eq!(new_game_searches.len(), expected_new_game_searches);
+                    assert!(new_game_searches.iter().all(|(index, _)| *index < reserve_index),
+                        "the reserved fourth frame must check OK alone");
+                    assert!(!logs.iter().any(|message| message.starts_with(
+                        "Free Cell New Game search 4:"
+                    )));
+                }
             }
         }
     }

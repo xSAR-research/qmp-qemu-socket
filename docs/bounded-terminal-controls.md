@@ -1,9 +1,12 @@
 # Bounded terminal controls and search metrics
 
-Candidate: qmp-qemu-socket 2.2.2-candidate.10, installed over the exact candidate.9
-source on TCP-enabled checkpoint `40975060deeb2fa703874c309b6a8ddfc958f095`.
-It uses the existing xsar
-helper from `6765e0a89eddf610cbad8cb302db98a31465cdff` without changing that crate.
+Revision: qmp-qemu-socket 2.2.100, retaining the candidate.14 base at
+`7ee0558fc8ffc911194199818ab245c991c2f43d`. It retains the existing xSAR
+exact-black helper and integrated persistent BGR transport without changing the
+crate's implementation or server. The matching xSAR source baseline is
+`e0672109f302d7ec02b346076908a05683d26b46`, with the crate's independent
+numeric migration to 0.4.100. Both numeric versions remain provisional until
+the required verification passes.
 
 ## Search contract
 
@@ -63,7 +66,12 @@ had a valid central glyph and observation three independently measures the same
 settled geometry but has lost its glyph. That fourth frame must independently
 pass readiness. No fifth observation is permitted. A missing/moved/non-settled
 body, pointer-only predecessor or missing prior valid glyph cannot grant this
-interrupted-confirmation reserve. New Game and Play retain three observations. Unresolved searches keep
+interrupted-confirmation reserve. Version 2.2.100 also permits the existing reserve
+when the third observation first measures a settled-size body without current
+exact-black ink and still needs geometry confirmation. That condition grants
+a fresh observation only; its current point remains `(0,0)`. Persistently
+glyphless bodies with already matching geometry do not qualify through this
+new condition. New Game and Play retain three observations. Unresolved searches keep
 the latest frame as a diagnostic preview.
 
 Optional OK/New Game branches may examine both rectangles on the first three
@@ -92,7 +100,7 @@ reduced from 3000 ms so the first OK search starts before the reported later
 fireworks. Capture and recognition add elapsed time beyond this intentional
 wait. `LEVEL_UP_CONFIRMATION_DELAY` is 200 ms only when the latest frame has a
 settled-size OK body and current exact-black central glyph, awaiting geometry
-agreement with a fresh frame, or when the single interrupted-confirmation reserve
+agreement with a fresh frame, or when the single interrupted/late-body confirmation reserve
 has actually been granted on observation three. `ControlLookup::retry_delay` selects that wait
 across all five games and logs `chosen_ms`, `normal_ms` and
 `confirmation_pending`. It never authorises input. The fresh observation must
@@ -107,7 +115,9 @@ evidence is one geometry and one validity flag, never a stored clickable point.
 Other missing-control spacing remains 2000 ms in the shared TriPeaks/Pyramid
 controller, and the existing editable reobserve interval in Free Cell, Spider
 and Klondike. Earlier missing/tinted glyph observations keep normal spacing.
-Entering, missing-body and pointer-only evidence cannot select the short wait.
+Entering-size, missing-body and pointer-only predecessor evidence cannot select
+the short wait. A new settled-size body without current ink can select it only
+after observation three actually consumes the existing final reserve.
 A new search, consumed recapture, reset or error
 clears that eligibility. Score, gameplay, Solver and click budgets remain
 independent.
@@ -115,10 +125,12 @@ independent.
 Capture transport is unchanged from the TCP-enabled base. Production capture
 defaults to `QMP_CAPTURE_BACKEND=tcp` at `127.0.0.1:9999`; explicit `qmp` retains
 the legacy private-file PNG route. TCP errors stop without silent fallback.
-The matching xSAR client's protocol v2, validated `u16` stride and 14-byte header
-are preserved. The verifier checks that sibling commit and runs its focused TCP
-protocol integration tests before application checks. QMP input and probes are
-unchanged by this candidate.
+The matching xSAR client's version-3 persistent BGR8 transport and validated
+native RGBA reconstruction are preserved, including the existing explicit
+legacy comparison modes. The application lockfile tracks the sibling crate's
+numeric version; changing that metadata does not alter the wire protocol.
+Verify the coordinated xSAR/app source set with the supplied locked checks.
+QMP input and probes are unchanged by this revision.
 
 `--image` adds scoped GAME WIN evidence without requesting extra captures or
 changing the recording boundary. See [GAME WIN image diagnostics](game-win-images.md)

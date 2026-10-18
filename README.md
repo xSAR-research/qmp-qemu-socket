@@ -1,8 +1,14 @@
 # qmp-qemu-socket
 
-Development **v2.2.2-candidate.14** reconnects before sending a capture request when the retained TCP peer has cleanly closed. It retains candidate.13's bounded persistent BGR8 transport and candidate.12's interrupted OK recovery. Pyramid exports explicit card labels, values 1..13 and suits through xSAR's schema-2 codec.
+Development **v2.2.100** permits the existing fourth, OK-only observation when the first full-size button appears on search three without current exact-black ink. Its fresh response still needs its own exact-black glyph and matching geometry; no fifth observation or input replay is added.
+
+`2.2.100` is Charlie's approved numeric migration checkpoint, not a reconstruction of the candidate build count. xSAR independently migrates to `0.4.100`; the application continues to use its sibling path dependency. These versions remain provisional until their required tests pass. Subsequent ordinary changed revisions advance only the build component; milestone/minor and major transitions require Charlie's direction or approval, and the build counter never resets.
+
+The Free Cell regression now distinguishes stale-glyph rejection from a legitimate late-body fourth observation. The latest recorded Spider sequence remains a known safe refusal: its third and fourth frames contain no exact-black glyph. This version preserves that limitation in a native regression; it does not change the colour threshold or add another observation.
+
+The preceding **v2.2.2-candidate.14** reconnects before sending a capture request when the retained TCP peer has cleanly closed. It retains candidate.13's bounded persistent BGR8 transport and candidate.12's interrupted OK recovery. Pyramid exports explicit card labels, values 1..13 and suits through xSAR's schema-2 codec.
 The preceding **v2.1.0** live Pyramid scan successfully restored the original board and exported its complete deal; the accepted five-game CV behaviour remains unchanged.
-The local development set uses xSAR **0.4.2-candidate.2** from the sibling `../xsar` checkout and Windows screen-grab server **0.1.3**. The reconnect repair changes only the Arch client and remains compatible with version-3 servers 0.1.2 and 0.1.3. These unpromoted source versions require the reviewed source set; the previous published server does not implement version 3. See the [idle EOF repair and verification](docs/capture-idle-eof-candidate14.md) and [combined capture contract](docs/capture-combined-candidate13.md).
+The local development set uses xSAR **0.4.100** from the sibling `../xsar` checkout and Windows screen-grab server **0.1.3**. The reconnect repair changes only the Arch client and remains compatible with version-3 servers 0.1.2 and 0.1.3. These unpromoted source versions require the reviewed source set; the previous published server does not implement version 3. See the [idle EOF repair and verification](docs/capture-idle-eof-candidate14.md) and [combined capture contract](docs/capture-combined-candidate13.md).
 
 ## Computer Vision solving
 
