@@ -1,0 +1,55 @@
+{
+  "evidence_schema": "pyramid-native-v9-king-glyph-v1",
+  "profile_id": "pyramid-native-1920-classic-blue-v9",
+  "profile_sha256": "b6ffea89b108f222f1d1aee80a951e024588b465465200fc7daa612c20e21865",
+  "base_profile": "../native-v8/profile.json",
+  "base_profile_sha256": "0b459aa78701da2f07f6cf911ce6f78f7190b1432b66706f4f0135ed21f48a3e",
+  "only_changes": [
+    "profile_id",
+    "tableau_reader.ranks[label=K].variants[1]",
+    "stock_reader.ranks[label=K].variants[1]"
+  ],
+  "rank_source": {
+    "file": "baseline.png",
+    "sha256": "0b2f53ff00b32233bdbad78659f2c18304972338ae6d5af7a7a1640ece6b1310",
+    "card": "KS",
+    "location_one_based": "3|2",
+    "tableau_index_zero_based": 4,
+    "bounds": [
+      892,
+      224,
+      27,
+      24
+    ],
+    "raw_rgb_sha256": "12967fd5fbe85e756a890160803fdb8b6a7616bb81516e46a7a7ac674a79055f",
+    "transformation": "none; exact row-major RGB crop"
+  },
+  "files": {
+    "baseline.png": {
+      "source": "/home/charlie/tmp/.pyramid-recon-710918-3/baseline.png",
+      "bytes": 3744974,
+      "sha256": "0b2f53ff00b32233bdbad78659f2c18304972338ae6d5af7a7a1640ece6b1310",
+      "transformation": "none"
+    },
+    "INCOMPLETE.json": {
+      "source": "/home/charlie/tmp/.pyramid-recon-710918-3/INCOMPLETE.json",
+      "bytes": 964,
+      "sha256": "bd2aa68a13f60e85d37d391a680c400085218818b9f9bbf3af4b5673213954f2",
+      "transformation": "none"
+    }
+  },
+  "historical_failure": {
+    "rank_distance": 28,
+    "rank_limit": 24,
+    "suit_distance": 2,
+    "suit_limit": 8,
+    "captures": 1,
+    "input_attempts": 0,
+    "publication": "not_attempted"
+  },
+  "limitations": [
+    "original failure frame; no input sent by failed scan",
+    "only 28 tableau and initial DL visible; remaining stock not acquired",
+    "offline regression cannot grant input or prove live full acquisition"
+  ]
+}

@@ -1,0 +1,347 @@
+{
+  "schema_version": 1,
+  "purpose": "Partial literal normal-header calibration; no general digit OCR, game classification or input authority.",
+  "reference": {
+    "repository_path": "tests/fixtures/pyramid-recon/originals/current-start.png",
+    "source_path": "/home/charlie/Pictures/Screenshots/qmp-qemu-socket-PYRAMID-start-no-SOLVER.png",
+    "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35"
+  },
+  "native_dimensions": [
+    1920,
+    1080
+  ],
+  "pixel_policy": {
+    "representation": "row-major RGB8",
+    "full_rectangles": true,
+    "negative_space_retained": true,
+    "mask": null,
+    "alignment_search": false,
+    "resizing": false,
+    "alpha_compared": false,
+    "row_padding_compared": false
+  },
+  "patches": {
+    "header-one.rgb": {
+      "bounds": [
+        1658,
+        46,
+        160,
+        32
+      ],
+      "tolerance": 12,
+      "rgb_bytes": 15360,
+      "sha256": "8d551d804798fc58c85924994d23ad6de3a03026d3ea26a15b83613fd9753077"
+    },
+    "footer-new.rgb": {
+      "bounds": [
+        212,
+        998,
+        58,
+        31
+      ],
+      "tolerance": 10,
+      "rgb_bytes": 5394,
+      "sha256": "5b6e41f625d4ce074222fdc4abfef0bb86d7bcead7758ca95c909cace25b302f"
+    }
+  },
+  "calibration": {
+    "available_normal_ordinals": [
+      1
+    ],
+    "mapped_completed_counts": [
+      0
+    ],
+    "target": 3,
+    "unavailable_normal_ordinals": [
+      2,
+      3
+    ],
+    "partial": true,
+    "threshold_derivation": "Inclusive maximum observed RGB channel difference against exact current-start source across seven labelled native originals: header12, footer10. No extra margin."
+  },
+  "positive_original_count": 7,
+  "positives": [
+    {
+      "source_path": "/home/charlie/Pictures/Screenshots/qmp-qemu-socket-PYRAMID-exhausted-left-DRAW-pile.png",
+      "source_sha256": "b352d1645b15b2cb58d2a7a64e8b25a845ca91c955e3d66861cb76be1d352ef6",
+      "repository_path": "tests/fixtures/pyramid-recon/originals/current-exhausted.png",
+      "aliases": [
+        {
+          "path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/originals/current-exhausted.png",
+          "group": "repository_recon"
+        }
+      ],
+      "native_dimensions": [
+        1920,
+        1080
+      ],
+      "literal_header": "Boards: 1 of 3",
+      "literal_footer": "New",
+      "mapped_result": {
+        "completed": 0,
+        "target": 3
+      },
+      "measured_against_reference": {
+        "header-one.rgb": {
+          "maximum_channel_difference": 0,
+          "maximum_at_native_xy_rgb_channel": [
+            1658,
+            46,
+            0
+          ],
+          "changed_pixels": 0
+        },
+        "footer-new.rgb": {
+          "maximum_channel_difference": 0,
+          "maximum_at_native_xy_rgb_channel": [
+            212,
+            998,
+            0
+          ],
+          "changed_pixels": 0
+        }
+      }
+    },
+    {
+      "source_path": "/home/charlie/Pictures/Screenshots/qmp-qemu-socket-PYRAMID-start-no-SOLVER.png",
+      "source_sha256": "4aff43e30e8dfa3218467fbedd9169b6c224613f97a7aa976722b8d39d24ac35",
+      "repository_path": "tests/fixtures/pyramid-recon/originals/current-start.png",
+      "aliases": [
+        {
+          "path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/originals/current-start.png",
+          "group": "repository_recon"
+        }
+      ],
+      "native_dimensions": [
+        1920,
+        1080
+      ],
+      "literal_header": "Boards: 1 of 3",
+      "literal_footer": "New",
+      "mapped_result": {
+        "completed": 0,
+        "target": 3
+      },
+      "measured_against_reference": {
+        "header-one.rgb": {
+          "maximum_channel_difference": 0,
+          "maximum_at_native_xy_rgb_channel": [
+            1658,
+            46,
+            0
+          ],
+          "changed_pixels": 0
+        },
+        "footer-new.rgb": {
+          "maximum_channel_difference": 0,
+          "maximum_at_native_xy_rgb_channel": [
+            212,
+            998,
+            0
+          ],
+          "changed_pixels": 0
+        }
+      }
+    },
+    {
+      "source_path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/originals/issue1-20.png",
+      "source_sha256": "e8b646f8c02ce841629e7e3da5ed181c5f17e093a004841bdf0060249da51653",
+      "repository_path": "tests/fixtures/pyramid-recon/originals/issue1-20.png",
+      "aliases": [],
+      "native_dimensions": [
+        1920,
+        1080
+      ],
+      "literal_header": "Boards: 1 of 3",
+      "literal_footer": "New",
+      "mapped_result": {
+        "completed": 0,
+        "target": 3
+      },
+      "measured_against_reference": {
+        "header-one.rgb": {
+          "maximum_channel_difference": 8,
+          "maximum_at_native_xy_rgb_channel": [
+            1707,
+            60,
+            0
+          ],
+          "changed_pixels": 866
+        },
+        "footer-new.rgb": {
+          "maximum_channel_difference": 7,
+          "maximum_at_native_xy_rgb_channel": [
+            266,
+            1010,
+            0
+          ],
+          "changed_pixels": 382
+        }
+      }
+    },
+    {
+      "source_path": "/home/charlie/Pictures/Screenshots/qmp-qemu-socket 261011 173851 01-Pyramid-Start.png",
+      "source_sha256": "70bceaad598f3b3cc8d0e9d76d4e6e193eb01666e55f2932700a262fedf7e3ae",
+      "repository_path": "tests/fixtures/pyramid-standard-progress/normal-one-variant.png",
+      "aliases": [],
+      "native_dimensions": [
+        1920,
+        1080
+      ],
+      "literal_header": "Boards: 1 of 3",
+      "literal_footer": "New",
+      "mapped_result": {
+        "completed": 0,
+        "target": 3
+      },
+      "measured_against_reference": {
+        "header-one.rgb": {
+          "maximum_channel_difference": 12,
+          "maximum_at_native_xy_rgb_channel": [
+            1688,
+            68,
+            0
+          ],
+          "changed_pixels": 1223
+        },
+        "footer-new.rgb": {
+          "maximum_channel_difference": 10,
+          "maximum_at_native_xy_rgb_channel": [
+            222,
+            1011,
+            0
+          ],
+          "changed_pixels": 549
+        }
+      }
+    },
+    {
+      "source_path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/originals/gate3-exhausted-refusal.png",
+      "source_sha256": "9c3e3cde56674181f196fc42340927e02ab2a00c1050021e99d5bc09e2ad8c65",
+      "repository_path": "tests/fixtures/pyramid-recon/originals/gate3-exhausted-refusal.png",
+      "aliases": [],
+      "native_dimensions": [
+        1920,
+        1080
+      ],
+      "literal_header": "Boards: 1 of 3",
+      "literal_footer": "New",
+      "mapped_result": {
+        "completed": 0,
+        "target": 3
+      },
+      "measured_against_reference": {
+        "header-one.rgb": {
+          "maximum_channel_difference": 11,
+          "maximum_at_native_xy_rgb_channel": [
+            1707,
+            60,
+            0
+          ],
+          "changed_pixels": 1393
+        },
+        "footer-new.rgb": {
+          "maximum_channel_difference": 10,
+          "maximum_at_native_xy_rgb_channel": [
+            222,
+            1011,
+            0
+          ],
+          "changed_pixels": 536
+        }
+      }
+    },
+    {
+      "source_path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/originals/gate3-start-refusal.png",
+      "source_sha256": "f6043267d22cbf3731df684bb5aefec25a2b6714b80a0c19b1d214f7d8e83baa",
+      "repository_path": "tests/fixtures/pyramid-recon/originals/gate3-start-refusal.png",
+      "aliases": [],
+      "native_dimensions": [
+        1920,
+        1080
+      ],
+      "literal_header": "Boards: 1 of 3",
+      "literal_footer": "New",
+      "mapped_result": {
+        "completed": 0,
+        "target": 3
+      },
+      "measured_against_reference": {
+        "header-one.rgb": {
+          "maximum_channel_difference": 11,
+          "maximum_at_native_xy_rgb_channel": [
+            1707,
+            60,
+            0
+          ],
+          "changed_pixels": 1393
+        },
+        "footer-new.rgb": {
+          "maximum_channel_difference": 10,
+          "maximum_at_native_xy_rgb_channel": [
+            222,
+            1011,
+            0
+          ],
+          "changed_pixels": 536
+        }
+      }
+    },
+    {
+      "source_path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/originals/gate3-undo-baseline.png",
+      "source_sha256": "4148fababc943fb3670ef705b00f1aa612bcaaa7a4523e67d18274617f507e94",
+      "repository_path": "tests/fixtures/pyramid-recon/originals/gate3-undo-baseline.png",
+      "aliases": [],
+      "native_dimensions": [
+        1920,
+        1080
+      ],
+      "literal_header": "Boards: 1 of 3",
+      "literal_footer": "New",
+      "mapped_result": {
+        "completed": 0,
+        "target": 3
+      },
+      "measured_against_reference": {
+        "header-one.rgb": {
+          "maximum_channel_difference": 11,
+          "maximum_at_native_xy_rgb_channel": [
+            1707,
+            60,
+            0
+          ],
+          "changed_pixels": 1393
+        },
+        "footer-new.rgb": {
+          "maximum_channel_difference": 10,
+          "maximum_at_native_xy_rgb_channel": [
+            222,
+            1011,
+            0
+          ],
+          "changed_pixels": 536
+        }
+      }
+    }
+  ],
+  "evidence_boundary": [
+    "All seven sources were visually classified as the literal Boards: 1 of 3 by the parent audit; complete source and RGB crop hashes are retained.",
+    "Only one normal ordinal is calibrated. Synthetic derivatives do not supply missing normal ordinals two or three.",
+    "These measured patches do not authenticate Pyramid, a complete/initial board, a consecutive-frame witness, a terminal, or input authority. The caller retains those requirements.",
+    "Existing centred challenge-count assets, references and tolerance9 are not changed.",
+    "No guest operations, new screenshots, or live acceptance are represented by these fixtures."
+  ],
+  "negative_repository_references": [
+    "tests/fixtures/pyramid-progress/zero-of-three.png",
+    "tests/fixtures/pyramid-recon/native-v13/restored.png",
+    "tests/fixtures/pyramid-recon/native-v13/recon-king.png",
+    "tests/fixtures/pyramid-recon/native-v9/baseline.png",
+    "tests/fixtures/pyramid-recon/native-v11/baseline.png",
+    "tests/fixtures/pyramid-recon/native-v12/ten-failure-baseline.png",
+    "tests/fixtures/pyramid-recon/native-v12/fifth-failure-baseline.png",
+    "tests/fixtures/pyramid-recon/daily-challenge-solver-unavailable/baseline.png",
+    "tests/fixtures/pyramid-progress/negative-aces-complete.png",
+    "tests/fixtures/pyramid-progress/negative-three-of-three.png",
+    "tests/fixtures/ok-confirmation-20261016/pyramid/clean.png"
+  ]
+}

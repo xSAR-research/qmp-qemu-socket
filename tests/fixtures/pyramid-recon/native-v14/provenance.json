@@ -1,0 +1,77 @@
+{
+  "profile_id": "pyramid-native-1920-classic-blue-v14",
+  "parent_profile": "../native-v13/profile.json",
+  "parent_sha256": "507fbe1499cc6359b117022fb2cadb79f0737d4f3f77687bc763992acfc3edd8",
+  "profile_sha256": "2e1c1cc7135dc8f5310396bba52473ba53c6ad4eb4b99b3b0b1631eac57ea9f9",
+  "transformation": "Only profile_id and one appended full20x16RGB diamond variant in each reader differ; whole-profile rollback equals native-v13. Existing schema2 paper_ink_l1_v2, allbounds/geometry/colour/paper/scene/authority unchanged.",
+  "sources": [
+    {
+      "file": "baseline.png",
+      "source": "/home/charlie/tmp/.pyramid-recon-45759-3/baseline.png",
+      "sha256": "7263c1ccc78dd7eed213217bbbd739c9128adb7375fb0465a2263300b856d857",
+      "bytes": 3771011
+    },
+    {
+      "file": "INCOMPLETE.json",
+      "source": "/home/charlie/tmp/.pyramid-recon-45759-3/INCOMPLETE.json",
+      "sha256": "6e86160486800e88dbbb863cf77ec6a02d981c247d147f795465701aeea7ed05",
+      "bytes": 1874
+    }
+  ],
+  "appended_crops": [
+    {
+      "label": "diamonds",
+      "variant_index": 12,
+      "file": "baseline.png",
+      "bounds": [
+        896,
+        354,
+        20,
+        16
+      ],
+      "source_sha256": "7263c1ccc78dd7eed213217bbbd739c9128adb7375fb0465a2263300b856d857",
+      "rgb_sha256": "cb56876b7359a18432c4acd237931090aa341372298b009d8bceaac6d2cfdbed",
+      "rgb_bytes": 960,
+      "alignment_witness": [
+        1,
+        -1
+      ],
+      "note": "Nominal ROI[895,355,20,16] contains one darkfaceartpixel at[910,370]; clean(+1,-1)source is already within allowed onepixel alignment, not a relaxed colourguard."
+    }
+  ],
+  "direct_labels": {
+    "tableau": [
+      "2C",
+      "6H",
+      "5S",
+      "4H",
+      "JH",
+      "JD",
+      "6S",
+      "QD",
+      "4S",
+      "3H",
+      "5D",
+      "10D",
+      "KD",
+      "AS",
+      "10H",
+      "3D",
+      "QH",
+      "9S",
+      "9H",
+      "7C",
+      "10S",
+      "QC",
+      "QS",
+      "9C",
+      "4C",
+      "2H",
+      "8D",
+      "5H"
+    ],
+    "left": "6D",
+    "right": null
+  },
+  "evidence_boundary": "Exposed regression; one retained native capture,zeroinputattempts,noexport. No holdout/generalaccuracy/liveacceptance claim."
+}

@@ -428,17 +428,12 @@ fn native_v6_rejects_cross_label_ambiguity_in_added_glyph_evidence() {
 }
 
 
-/// Supported cards cannot replace missing scene, Solver-OFF or positive-empty evidence.
+/// Supported cards cannot replace missing scene or positive-empty evidence.
 #[test]
 fn native_v6_retains_scene_and_positive_empty_pile_requirements() {
     let vision = vision();
     let original = original();
-    for pattern in vision
-        .board
-        .scene
-        .iter()
-        .chain(std::iter::once(&vision.board.solver_off))
-    {
+    for pattern in &vision.board.scene {
         let mut changed = original.clone();
         fill_region(&mut changed, pattern.bounds, [17, 19, 21]);
         assert!(
@@ -464,4 +459,24 @@ fn native_v6_retains_scene_and_positive_empty_pile_requirements() {
             .expect_err("missing positive-empty RIGHT refuses")
             .starts_with("RIGHT:")
     );
+}
+
+
+/// Solver toolbar pixels do not change supported card identities or scene evidence.
+#[test]
+fn native_v6_accepts_changed_solver_toolbar_without_recalibration() {
+    let vision = vision();
+    let original = original();
+    let expected = vision.observe(&original).expect("supported v6 board");
+    assert!(matches!(expected, ReconScene::Board(_)));
+    for colour in [[0, 0, 0], [255, 255, 255], [128, 128, 128], [255, 210, 0]] {
+        let mut changed = original.clone();
+        fill_region(&mut changed, SOLVER_BOUNDS, colour);
+        assert_eq!(
+            vision
+                .observe(&changed)
+                .expect("toolbar has no scene authority"),
+            expected
+        );
+    }
 }

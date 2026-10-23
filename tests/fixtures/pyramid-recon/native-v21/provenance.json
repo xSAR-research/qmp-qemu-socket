@@ -1,0 +1,152 @@
+{
+  "files": [
+    {
+      "source": "/home/charlie/Documents/Pyramid/Validation/native-challenge-regressions-20261021/retained-123-boards/deal.json",
+      "fixture": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-v21/boards-deal.json",
+      "bytes": 4739,
+      "sha256": "012a5e9dd9e4d76c1474659275c71b3ae024a97cf124c7a0ee5f313916684d35",
+      "case": "boards"
+    },
+    {
+      "source": "/home/charlie/Documents/Pyramid/Validation/native-challenge-regressions-20261021/retained-123-boards/error-state.json",
+      "fixture": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-v21/boards-error-state.json",
+      "bytes": 1968,
+      "sha256": "fbae5402a64652dc7bee48189a31374f15a4fc18f39274006e78a26ccf8255bc",
+      "case": "boards"
+    },
+    {
+      "source": "/home/charlie/Documents/Pyramid/Validation/native-challenge-regressions-20261021/retained-123-boards/error.log",
+      "fixture": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-v21/boards-error.log",
+      "bytes": 2340,
+      "sha256": "a72e1eee2a72e4ee239e9ff64b8bdb25fbb4e0edaf68b4433065ab16045811f2",
+      "case": "boards"
+    },
+    {
+      "source": "/home/charlie/Documents/Pyramid/Validation/native-challenge-regressions-20261021/retained-123-boards/first-unmatched.png",
+      "fixture": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-v21/boards-first-unmatched.png",
+      "bytes": 4320316,
+      "sha256": "739d5f7fae32017497ce7fa94a3b84099d34336aa9e313429513985073ada29a",
+      "case": "boards"
+    },
+    {
+      "source": "/home/charlie/Documents/Pyramid/Validation/native-challenge-regressions-20261021/retained-123-boards/last-observed.png",
+      "fixture": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-v21/boards-last-observed.png",
+      "bytes": 4313253,
+      "sha256": "a5da91cf5a543bc116c9769a984e7a03e19fec0b589577a34d25bc65d741f643",
+      "case": "boards"
+    },
+    {
+      "source": "/home/charlie/Documents/Pyramid/Validation/native-challenge-regressions-20261021/retained-123-score/deal.json",
+      "fixture": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-v21/score-deal.json",
+      "bytes": 4751,
+      "sha256": "deb6c2a93f12d31bf02345b19a79a6a0f6679de6a525b5ac694c4858fab09cf0",
+      "case": "score"
+    },
+    {
+      "source": "/home/charlie/Documents/Pyramid/Validation/native-challenge-regressions-20261021/retained-123-score/error-state.json",
+      "fixture": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-v21/score-error-state.json",
+      "bytes": 1968,
+      "sha256": "c9e4efaca17a156bd6c8094f5b31f2000465c8b775529ac763b58e5eea208115",
+      "case": "score"
+    },
+    {
+      "source": "/home/charlie/Documents/Pyramid/Validation/native-challenge-regressions-20261021/retained-123-score/error.log",
+      "fixture": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-v21/score-error.log",
+      "bytes": 2340,
+      "sha256": "6b3ae721b02a83b626de2c1400fd2106addf2f95b0e9a8d4fb5d7457db5229dc",
+      "case": "score"
+    },
+    {
+      "source": "/home/charlie/Documents/Pyramid/Validation/native-challenge-regressions-20261021/retained-123-score/first-unmatched.png",
+      "fixture": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-v21/score-first-unmatched.png",
+      "bytes": 4300165,
+      "sha256": "ba4a309abf2335726bf8aa24fe9aa87990fdb75aba40f9a1ca549144ea6ad64a",
+      "case": "score"
+    },
+    {
+      "source": "/home/charlie/Documents/Pyramid/Validation/native-challenge-regressions-20261021/retained-123-score/last-observed.png",
+      "fixture": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-v21/score-last-observed.png",
+      "bytes": 4314082,
+      "sha256": "6efb5f2026ced30deff1925247dae01dbbf70cfa34f6ad3b16e5ac15227235b2",
+      "case": "score"
+    },
+    {
+      "source": "/home/charlie/Documents/Pyramid/Validation/native-challenge-regressions-20261021/retained-123-fours/deal.json",
+      "fixture": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-v21/fours-deal.json",
+      "bytes": 4739,
+      "sha256": "44cea6317c6be83a0b61a0cd359d523619c050b6a20f6ad061fad2ad187e24f1",
+      "case": "fours"
+    },
+    {
+      "source": "/home/charlie/Documents/Pyramid/Validation/native-challenge-regressions-20261021/retained-123-fours/error-state.json",
+      "fixture": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-v21/fours-error-state.json",
+      "bytes": 2108,
+      "sha256": "abee8b8cfe9f70371836249e8072208e3d6965dc52cc02c60e785e659987a207",
+      "case": "fours"
+    },
+    {
+      "source": "/home/charlie/Documents/Pyramid/Validation/native-challenge-regressions-20261021/retained-123-fours/error.log",
+      "fixture": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-v21/fours-error.log",
+      "bytes": 2642,
+      "sha256": "82aca77f2ace219492785893fa63427eb466bbe840cc6948875c9c43c527941b",
+      "case": "fours"
+    },
+    {
+      "source": "/home/charlie/Documents/Pyramid/Validation/native-challenge-regressions-20261021/retained-123-fours/first-unmatched.png",
+      "fixture": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-v21/fours-first-unmatched.png",
+      "bytes": 2143444,
+      "sha256": "c94e4ca6314fc080994f2bec4b3431f58cf9af4f485b5555ee23ab2dac70a639",
+      "case": "fours"
+    },
+    {
+      "source": "/home/charlie/Documents/Pyramid/Validation/native-challenge-regressions-20261021/retained-123-fours/last-observed.png",
+      "fixture": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-v21/fours-last-observed.png",
+      "bytes": 1786387,
+      "sha256": "0810accd165964c1b104ac77dc94d2b3a15b910a1c51fbf844c27698b3189112",
+      "case": "fours"
+    },
+    {
+      "source": "/home/charlie/Documents/Pyramid/Validation/native-challenge-regressions-20261021/retained-123-twos/error-state.json",
+      "fixture": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-v21/twos-error-state.json",
+      "bytes": 1499,
+      "sha256": "c46ebafa3b15b6121bfde7efc69f01ae326f70727fe63e34c0b4b5981ca4d081",
+      "case": "twos"
+    },
+    {
+      "source": "/home/charlie/Documents/Pyramid/Validation/native-challenge-regressions-20261021/retained-123-twos/error.log",
+      "fixture": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-v21/twos-error.log",
+      "bytes": 1852,
+      "sha256": "51aea7faf0f93ce86b2eb619577cad79270eeeadd7f2a8aa8f9ed7f38bc4d063",
+      "case": "twos"
+    },
+    {
+      "source": "/home/charlie/Documents/Pyramid/Validation/native-challenge-regressions-20261021/retained-123-twos/last-observed.png",
+      "fixture": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-v21/twos-last-observed.png",
+      "bytes": 3782527,
+      "sha256": "f8088ff990ad5d4dbd12aab38d02ef8f34b684e358eb8d58e0bd58d512bd066e",
+      "case": "twos"
+    },
+    {
+      "source": "/home/charlie/Documents/Pyramid/Validation/native-challenge-regressions-20261021/retained-123-fours-entry/error-state.json",
+      "fixture": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-v21/fours-entry-error-state.json",
+      "bytes": 1499,
+      "sha256": "f9234177ad42f9317244f92d09d112df31b94dac59341313d5d101f3a7d58979",
+      "case": "fours-entry"
+    },
+    {
+      "source": "/home/charlie/Documents/Pyramid/Validation/native-challenge-regressions-20261021/retained-123-fours-entry/error.log",
+      "fixture": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-v21/fours-entry-error.log",
+      "bytes": 1852,
+      "sha256": "32fce6181ebc52c8422af3a3564246bf1cdd49d298490b8cd3aa6f644e04823b",
+      "case": "fours-entry"
+    },
+    {
+      "source": "/home/charlie/Documents/Pyramid/Validation/native-challenge-regressions-20261021/retained-123-fours-entry/last-observed.png",
+      "fixture": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-v21/fours-entry-last-observed.png",
+      "bytes": 3731043,
+      "sha256": "459ae0cd1ecc5c4f9c5f1710cb25440ef46c8311d7105075bb3d0d0f4807e3f5",
+      "case": "fours-entry"
+    }
+  ],
+  "classification": "Exposed native 2.8.123 regressions; no new capture/input; v20 copied unchanged before explicit v21 edits"
+}

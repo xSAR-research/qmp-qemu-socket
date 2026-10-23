@@ -1,0 +1,185 @@
+{
+  "schema_version": 1,
+  "purpose": "Literal Boards cleared 0/3, 1/3 and 2/3 observations only; no standard-game or input authority",
+  "native_dimensions": [
+    1920,
+    1080
+  ],
+  "tolerance_per_channel_inclusive": 9,
+  "tolerance_measurement": {
+    "left_label_maximum_difference_across_zero_one_two": 9,
+    "right_label_maximum_difference_across_zero_one_two": 3,
+    "selected_one_vs_restored_one_maximum_difference_all_three_patches": 0
+  },
+  "direct_observations": [
+    {
+      "label": "Boards cleared 0/3",
+      "source": "/home/charlie/tmp/.pyramid-recon-27073-0/baseline.png",
+      "source_sha256": "4920c6eb6996e7ba33f6a6f795d6786a15e802976098b228cc15bfc0ca2af436",
+      "retained_file": "zero-of-three.png"
+    },
+    {
+      "label": "Boards cleared 1/3",
+      "source": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-v13/restored.png",
+      "source_sha256": "c5eebd228dcb0bfd7ad43ead2e793699c25b1d3af85e1fb25f4bf004ff04481e",
+      "retained_file": "tests/fixtures/pyramid-recon/native-v13/restored.png"
+    },
+    {
+      "label": "Boards cleared 2/3",
+      "source": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-v13/recon-king.png",
+      "source_sha256": "4129c5cfe89c83f396a2c59601927707752447c6ea99541cbd185748a0312856",
+      "retained_file": "tests/fixtures/pyramid-recon/native-v13/recon-king.png"
+    },
+    {
+      "label": "Boards cleared 1/3, partial selected board",
+      "source": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-v13/selected.png",
+      "source_sha256": "af3cbbc3b38a3cf8291bbea9ca45396f20f4c9be7e7dbf034dbdb3196baaf970",
+      "retained_file": "tests/fixtures/pyramid-recon/native-v13/selected.png"
+    },
+    {
+      "label": "Aces cleared 12/12 beneath native Challenge Complete modal; unsupported objective and modal",
+      "source": "/home/charlie/tmp/pyramid-error-1792419532634-27073-8/last-observed.png",
+      "source_sha256": "469a2b03d315efe5a8d3d1be95ab530a9464f47c8c8840fe8906df09b45be6f9",
+      "retained_file": "negative-aces-complete.png",
+      "role": "Full native negative only; no terminal/input authority"
+    },
+    {
+      "label": "Boards cleared 3/3 with native Perfect! overlay; unsupported count and terminal artwork",
+      "source": "/home/charlie/tmp/pyramid-error-1792422791970-45759-0/last-observed.png",
+      "source_sha256": "a1d769953afc50c6dcfedaabdf657ab74612804e59067c6982ef7ecabc95023e",
+      "retained_file": "negative-three-of-three.png",
+      "role": "Full native negative only; no terminal/input authority"
+    },
+    {
+      "label": "Boards cleared 0/2",
+      "source": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/daily-challenge-solver-unavailable/baseline.png",
+      "source_sha256": "bac4632eca0bd9b5b31cc4e3f94bfa7123b5d6e204875f3d56505a2aac7718ac",
+      "retained_file": "tests/fixtures/pyramid-recon/daily-challenge-solver-unavailable/baseline.png",
+      "role": "Existing full native negative; referenced without copying or modifying"
+    },
+    {
+      "label": "Twos cleared 4/12",
+      "source": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-v9/baseline.png",
+      "source_sha256": "0b2f53ff00b32233bdbad78659f2c18304972338ae6d5af7a7a1640ece6b1310",
+      "retained_file": "tests/fixtures/pyramid-recon/native-v9/baseline.png",
+      "role": "Existing full native negative; referenced without copying or modifying"
+    },
+    {
+      "label": "Twos cleared 8/12",
+      "source": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-v11/baseline.png",
+      "source_sha256": "28e1127ea9d4663ebcca61061779093ebc7b571ec0ebde13a4973906b9913409",
+      "retained_file": "tests/fixtures/pyramid-recon/native-v11/baseline.png",
+      "role": "Existing full native negative; referenced without copying or modifying"
+    },
+    {
+      "label": "Score 2,560/4,200",
+      "source": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-v12/ten-failure-baseline.png",
+      "source_sha256": "beb2753ea79180a2d8d872b9089e061859f208d6307de79e621cea8358884126",
+      "retained_file": "tests/fixtures/pyramid-recon/native-v12/ten-failure-baseline.png",
+      "role": "Existing full native negative; referenced without copying or modifying"
+    },
+    {
+      "label": "Score 1,280/3,000",
+      "source": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-v12/fifth-failure-baseline.png",
+      "source_sha256": "81519aaa7ae9f8d47136af0868834368ecf40f49ff1fd546e929ff37dcd2b2c3",
+      "retained_file": "tests/fixtures/pyramid-recon/native-v12/fifth-failure-baseline.png",
+      "role": "Existing full native negative; referenced without copying or modifying"
+    },
+    {
+      "label": "Native Pyramid Level Up modal",
+      "source": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/ok-confirmation-20261016/pyramid/clean.png",
+      "source_sha256": "42a7c3592a274cc1565b0ccbe8e7d3255c6f5a8f23e9d0c306ec315ea3bd4987",
+      "retained_file": "tests/fixtures/ok-confirmation-20261016/pyramid/clean.png",
+      "role": "Existing full native negative; referenced without copying or modifying"
+    }
+  ],
+  "crops": [
+    {
+      "file": "label-left.rgb",
+      "bytes": 8064,
+      "sha256": "45270407b85a3c7bd7de6015afea2166fef87d064cbb26827bcc2d69e532fc4e",
+      "bounds": [
+        839,
+        50,
+        96,
+        28
+      ],
+      "source": "/home/charlie/tmp/.pyramid-recon-27073-0/baseline.png",
+      "source_sha256": "4920c6eb6996e7ba33f6a6f795d6786a15e802976098b228cc15bfc0ca2af436",
+      "format": "row-major RGB8; every pixel retained; no mask, scaling or alignment search"
+    },
+    {
+      "file": "label-right.rgb",
+      "bytes": 6048,
+      "sha256": "e432096329901c4839158af614e209928b33b92cf690cf7d11aae00bb3ed0131",
+      "bounds": [
+        935,
+        50,
+        72,
+        28
+      ],
+      "source": "/home/charlie/tmp/.pyramid-recon-27073-0/baseline.png",
+      "source_sha256": "4920c6eb6996e7ba33f6a6f795d6786a15e802976098b228cc15bfc0ca2af436",
+      "format": "row-major RGB8; every pixel retained; no mask, scaling or alignment search"
+    },
+    {
+      "file": "fraction-zero.rgb",
+      "bytes": 3864,
+      "sha256": "0ab89bc6eed2fceab01897fe2a095b06b519507171b626b4bdd2b6a3af92a627",
+      "bounds": [
+        1044,
+        50,
+        46,
+        28
+      ],
+      "source": "/home/charlie/tmp/.pyramid-recon-27073-0/baseline.png",
+      "source_sha256": "4920c6eb6996e7ba33f6a6f795d6786a15e802976098b228cc15bfc0ca2af436",
+      "format": "row-major RGB8; every pixel retained; no mask, scaling or alignment search"
+    },
+    {
+      "file": "fraction-one.rgb",
+      "bytes": 3864,
+      "sha256": "d0b80eaf498c8bd19c8681fe6e085495b343fdb540e68f85c6d40b9b74238200",
+      "bounds": [
+        1044,
+        50,
+        46,
+        28
+      ],
+      "source": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-v13/restored.png",
+      "source_sha256": "c5eebd228dcb0bfd7ad43ead2e793699c25b1d3af85e1fb25f4bf004ff04481e",
+      "format": "row-major RGB8; every pixel retained; no mask, scaling or alignment search"
+    },
+    {
+      "file": "fraction-two.rgb",
+      "bytes": 3864,
+      "sha256": "1bfa6f3bb21055af11ea977909d20e4f53b3e64249a06ad51cfac50bbaa3f8fb",
+      "bounds": [
+        1044,
+        50,
+        46,
+        28
+      ],
+      "source": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-v13/recon-king.png",
+      "source_sha256": "4129c5cfe89c83f396a2c59601927707752447c6ea99541cbd185748a0312856",
+      "format": "row-major RGB8; every pixel retained; no mask, scaling or alignment search"
+    },
+    {
+      "file": "negative-three-of-three-header.rgb",
+      "bytes": 21084,
+      "sha256": "a632301b443ed71b22c39bd22e80f0333d79e970944f5403838bc9154441b783",
+      "bounds": [
+        839,
+        50,
+        251,
+        28
+      ],
+      "source": "/home/charlie/tmp/pyramid-error-1792422791970-45759-0/last-observed.png",
+      "source_sha256": "a1d769953afc50c6dcfedaabdf657ab74612804e59067c6982ef7ecabc95023e",
+      "direct_label": "Boards cleared 3/3; challenge Perfect! overlay",
+      "format": "row-major RGB8; every pixel retained; no mask, scaling or alignment search",
+      "evidence_boundary": "Header rejection fixture only; no native terminal recognition or control authority"
+    }
+  ],
+  "evidence_boundary": "All labels are directly visible in retained originals. Header counts do not identify StandardThree, a successful route, challenge completion, supported terminal controls or live acceptance. Existing native-v13 sources are referenced without modification."
+}

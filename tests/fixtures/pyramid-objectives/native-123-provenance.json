@@ -1,0 +1,53 @@
+{
+  "derived": [
+    {
+      "source": "/home/charlie/Documents/Pyramid/Validation/native-challenge-regressions-20261021/retained-123-fours/last-observed.png",
+      "fixture": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-objectives/complete-title-left-123.rgb",
+      "bounds": [
+        648,
+        168,
+        64,
+        60
+      ],
+      "bytes": 11520,
+      "sha256": "04136acf917a51d8b4d263c9aee23522e4a1081b9ed8198b144c56b1ebcff396"
+    },
+    {
+      "source": "/home/charlie/Documents/Pyramid/Validation/native-challenge-regressions-20261021/retained-123-fours/last-observed.png",
+      "fixture": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-objectives/complete-continue-123.rgb",
+      "bounds": [
+        804,
+        842,
+        312,
+        78
+      ],
+      "bytes": 73008,
+      "sha256": "1cd72d8c554e3577869e3491a71e52de61fe60dbae7c2b864e47673cec4c3ffe"
+    },
+    {
+      "source": "/home/charlie/Documents/Pyramid/Validation/native-challenge-regressions-20261021/retained-123-twos/last-observed.png",
+      "fixture": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-objectives/label-twos-ten.rgb",
+      "bounds": [
+        814,
+        48,
+        224,
+        32
+      ],
+      "bytes": 21504,
+      "sha256": "de02f16c919a93ee071bb884bd743152d01dfa30504b337ef0b3614928d0f73e"
+    },
+    {
+      "source": "/home/charlie/Documents/Pyramid/Validation/native-challenge-regressions-20261021/retained-123-fours-entry/last-observed.png",
+      "fixture": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-objectives/label-fours-seven.rgb",
+      "bounds": [
+        814,
+        48,
+        224,
+        32
+      ],
+      "bytes": 21504,
+      "sha256": "b36134c5e7e1c683fdcf00095a1a38afd28264417f2be186c8517c3435ccd59e"
+    }
+  ],
+  "classification": "Exposed whole native appearances, unmodified originals retained separately"
+}

@@ -9,9 +9,15 @@
 use std::{
     fs::{self, OpenOptions},
     io::{ErrorKind, Write},
-    os::unix::{ffi::OsStrExt, fs::{DirBuilderExt, OpenOptionsExt}},
+    os::unix::{
+        ffi::OsStrExt,
+        fs::{DirBuilderExt, OpenOptionsExt},
+    },
     path::{Path, PathBuf},
-    sync::{Arc, Mutex, atomic::{AtomicBool, AtomicU64, Ordering}},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, AtomicU64, Ordering},
+    },
     time::Duration,
 };
 
@@ -19,16 +25,21 @@ use xsar::games::pyramid::CompleteDeal;
 use xsar::pyramid_json::{PublicationStatus, PublishError};
 
 use crate::{
+    capture::CapturedFrame,
     game::GameMode,
     parameters::{NOMINAL_FRAME_HEIGHT, NOMINAL_FRAME_WIDTH, SNAPSHOT_MAX_PNG_BYTES},
-    pyramid_recon::{self, ReconInput, ReconIo, ReconProgress, ReconRequest, vision::{ReconScene, ReconVision}},
+    pyramid_diagnostics::{FailureEvidence, PyramidPhase},
+    pyramid_recon::{
+        self, ReconInput, ReconIo, ReconProfileSource, ReconProgress, ReconRequest,
+        vision::{BoardObservation, ReconScene, ReconVision},
+    },
     qmp::QmpClient,
     strategy::{ControllerContext, SolvingStrategy},
 };
 
 use super::{
     WorkerEvent, WorkerEventSink, WorkerState, cancellable_wait, capture_screen_with_png,
-    send_log, send_state, send_status, validate_probe,
+    publish_pyramid_failure, send_log, send_state, send_status, validate_probe,
 };
 
 
@@ -57,6 +68,10 @@ struct ReconControlState {
     active: bool,
     /// Revocation survives selecting the original context again.
     revoked: bool,
+    /// Monotonic identity also invalidates idle acquisition receipts.
+    epoch: u64,
+    /// Exhaustion permanently refuses fresh authority instead of reusing an epoch.
+    epoch_exhausted: bool,
 }
 
 
@@ -69,14 +84,33 @@ pub(super) struct ReconControl {
 
 
 impl ReconControl {
-
-
     /// Record selection immediately, revoking an active scan before queue dispatch.
-    pub(super) fn select(&self, context: &ControllerContext, cancel: &AtomicBool) -> Result<(), String> {
+    pub(super) fn select(
+        &self,
+        context: &ControllerContext,
+        cancel: &AtomicBool,
+    ) -> Result<(), String> {
         let mut state = self.state.lock().map_err(|_| {
             cancel.store(true, Ordering::Release);
             "Reconnaissance request lock is poisoned; STOP remains requested".to_owned()
         })?;
+
+
+        if state.epoch_exhausted {
+            cancel.store(true, Ordering::Release);
+            return Err("Controller epoch exhausted; restart required".to_owned());
+        }
+        if state.requested.as_ref() != Some(context) {
+            match state.epoch.checked_add(1) {
+                Some(epoch) => state.epoch = epoch,
+                None => {
+                    state.epoch_exhausted = true;
+                    state.revoked = true;
+                    cancel.store(true, Ordering::Release);
+                    return Err("Controller epoch exhausted; restart required".to_owned());
+                }
+            }
+        }
 
 
         if state.active && state.requested.as_ref() != Some(context) {
@@ -95,11 +129,21 @@ impl ReconControl {
         cancel: &AtomicBool,
         send: impl FnOnce() -> Result<(), String>,
     ) -> Result<(), String> {
-        let mut state = self.state.lock().map_err(|_| "Reconnaissance request lock is poisoned".to_owned())?;
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| "Reconnaissance request lock is poisoned".to_owned())?;
 
 
+        if state.epoch_exhausted {
+            cancel.store(true, Ordering::Release);
+            return Err("Controller epoch exhausted; restart required".to_owned());
+        }
         if state.active {
-            return Err("Reconnaissance is already queued or running; its STOP cannot be cleared".to_owned());
+            return Err(
+                "Reconnaissance is already queued or running; its STOP cannot be cleared"
+                    .to_owned(),
+            );
         }
 
 
@@ -127,11 +171,20 @@ impl ReconControl {
         cancel: &AtomicBool,
         send: impl FnOnce() -> Result<(), String>,
     ) -> Result<(), String> {
-        let state = self.state.lock().map_err(|_| "Reconnaissance request lock is poisoned".to_owned())?;
+        let state = self
+            .state
+            .lock()
+            .map_err(|_| "Reconnaissance request lock is poisoned".to_owned())?;
 
 
+        if state.epoch_exhausted {
+            cancel.store(true, Ordering::Release);
+            return Err("Controller epoch exhausted; restart required".to_owned());
+        }
         if state.active {
-            return Err("A reconnaissance run still owns STOP; wait for its finished event".to_owned());
+            return Err(
+                "A reconnaissance run still owns STOP; wait for its finished event".to_owned(),
+            );
         }
         cancel.store(false, Ordering::Release);
         let result = send();
@@ -148,6 +201,10 @@ impl ReconControl {
 
         if let Ok(mut state) = state {
             state.revoked = true;
+            match state.epoch.checked_add(1) {
+                Some(epoch) => state.epoch = epoch,
+                None => state.epoch_exhausted = true,
+            }
 
 
             if let Some(context) = context {
@@ -158,12 +215,22 @@ impl ReconControl {
 
 
     /// Fail closed on cancellation, context drift, missing reservation or poisoned state.
-    fn check_active(&self, context: &ControllerContext, cancel: &AtomicBool) -> Result<(), String> {
-        let state = self.state.lock().map_err(|_| "Reconnaissance request lock is poisoned".to_owned())?;
+    pub(super) fn check_active(
+        &self,
+        context: &ControllerContext,
+        cancel: &AtomicBool,
+    ) -> Result<(), String> {
+        let state = self
+            .state
+            .lock()
+            .map_err(|_| "Reconnaissance request lock is poisoned".to_owned())?;
 
 
-        if cancel.load(Ordering::Acquire) || state.revoked {
-            return Err("STOP or changed context revoked reconnaissance; no further input is permitted".to_owned());
+        if cancel.load(Ordering::Acquire) || state.revoked || state.epoch_exhausted {
+            return Err(
+                "STOP or changed context revoked reconnaissance; no further input is permitted"
+                    .to_owned(),
+            );
         }
 
 
@@ -174,10 +241,21 @@ impl ReconControl {
     }
 
 
+    /// Return the current authority epoch; poison never authorises a new receipt.
+    pub(super) fn epoch(&self) -> Result<u64, String> {
+        let state = self
+            .state
+            .lock()
+            .map_err(|_| "Controller authority lock poisoned".to_owned())?;
+        if state.epoch_exhausted {
+            return Err("Controller epoch exhausted; restart required".to_owned());
+        }
+        Ok(state.epoch)
+    }
+
+
     /// Release only after the worker has stopped all reconnaissance operations.
-    fn finish(&self) {
-
-
+    pub(super) fn finish(&self) {
         if let Ok(mut state) = self.state.lock() {
             state.active = false;
         }
@@ -186,17 +264,22 @@ impl ReconControl {
 
 
 /// Require separate Pyramid consent without changing ShortestPath input capability.
-pub(super) fn validate_request(context: &ControllerContext, request: &ReconRequest) -> Result<(), String> {
+pub(super) fn validate_request(
+    context: &ControllerContext,
+    request: &ReconRequest,
+) -> Result<(), String> {
     context.validate()?;
 
 
     if context.strategy != SolvingStrategy::ShortestPath || context.game_mode != GameMode::Pyramid {
-        return Err("Reconnaissance requires Pyramid and the independent ShortestPath selection".to_owned());
+        return Err(
+            "Reconnaissance requires Pyramid and the independent ShortestPath selection".to_owned(),
+        );
     }
 
 
     if !request.initial_board_confirmed {
-        return Err("Confirm an untouched Pyramid board with Solver off before reconnaissance".to_owned());
+        return Err("Confirm an untouched Pyramid board with Solver not engaged (unavailable is allowed) before reconnaissance".to_owned());
     }
     request.validate()?;
     validate_output_spelling(&request.output_path)
@@ -210,24 +293,247 @@ pub(super) fn run(
     events: &WorkerEventSink,
     cancel: &AtomicBool,
 ) {
-    send_state(events, WorkerState::Validating);
-    let result = run_checked(context, request, events, cancel);
+    let result = run_phase(
+        context,
+        request,
+        events,
+        cancel,
+        ReconRunOwner::Manual,
+        None,
+    );
+    let default_method = result.as_ref().ok().and_then(|path| {
+        let method =
+            super::computed_route::acquisition_default(context, path, events, cancel).ok()?;
+        let observed =
+            super::computed_route::acquisition_observed(context, path, events, cancel).ok()?;
+        Some((context.clone(), method, observed))
+    });
     events.latest_frame.reconnaissance.finish();
 
 
     match &result {
         Ok(output) => {
             send_state(events, WorkerState::Ready);
-            send_status(events, "Pyramid reconnaissance complete — restored deal exported".to_owned());
-            send_log(events, format!("Complete restored Pyramid deal published at {output:?}. No search or Solver input was performed."));
+            send_status(
+                events,
+                "Pyramid reconnaissance complete — restored deal exported".to_owned(),
+            );
+            send_log(
+                events,
+                format!(
+                    "Complete restored Pyramid deal published at {output:?}. No search or Solver input was performed."
+                ),
+            );
         }
         Err(error) => {
             send_state(events, WorkerState::Uncertain);
-            send_status(events, "Pyramid reconnaissance stopped — inspect diagnostics".to_owned());
-            send_log(events, format!("Pyramid reconnaissance stopped: {error}. No uncertain input or restoration was retried."));
+            send_status(
+                events,
+                "Pyramid reconnaissance stopped — inspect diagnostics".to_owned(),
+            );
+            send_log(
+                events,
+                format!(
+                    "Pyramid reconnaissance stopped: {error}. No uncertain input or restoration was retried."
+                ),
+            );
         }
     }
-    let _ = events.send(WorkerEvent::ReconnaissanceFinished { result });
+    let _ = events.send(WorkerEvent::ReconnaissanceFinished {
+        result,
+        default_method,
+    });
+}
+
+
+/// Diagnostic identity of the caller that continues to own the reconnaissance reservation.
+enum ReconRunOwner {
+    /// Existing explicit manual acquisition retains its original completion event.
+    Manual,
+    /// A serial automatic session retains authority beyond this phase's return.
+    Automatic {
+        /// Immutable parent-session identity used by failure evidence and UI correlation.
+        run_id: u64,
+        /// Logical board generation whose acquisition failed or completed.
+        board_generation: u64,
+    },
+}
+
+
+/// Additional same-session constraints borrowed from an independently qualified entry witness.
+///
+/// This guard does not grant capture, publication or input authority. Its pure
+/// header predicate is evaluated only on the same already-decoded Board frame;
+/// the existing controller still owns active reservation and restoration proof.
+#[derive(Clone, Copy)]
+pub(super) struct StartingGuard<'a> {
+    /// Original complete tableau and initial piles retained by the session caller.
+    pub(super) position: &'a BoardObservation,
+    /// Caller-owned validation of that frame's retained session/header identity.
+    pub(super) header: &'a dyn Fn(&CapturedFrame) -> Result<(), String>,
+}
+
+
+impl StartingGuard<'_> {
+    /// Require the original tableau and header on every positive Board observation.
+    ///
+    /// Before any D attempt, both initial piles must also match. Later pile changes
+    /// and enabled Undo All are left to the existing stock/restoration controller.
+    /// Positive confirmation dialogs and unknown scenes retain that controller's
+    /// original handling; neither invokes the extra header predicate.
+    fn validate(
+        &self,
+        frame: &CapturedFrame,
+        scene: &ReconScene,
+        draws_attempted: usize,
+    ) -> Result<(), String> {
+        let ReconScene::Board(board) = scene else {
+            return Ok(());
+        };
+        if board.tableau != self.position.tableau {
+            return Err("Reconnaissance starting guard rejected a changed original tableau; no further input authorised".to_owned());
+        }
+        if draws_attempted == 0
+            && (board.left != self.position.left || board.right != self.position.right)
+        {
+            return Err("Reconnaissance starting guard rejected changed initial LEFT/RIGHT piles before D; no input authorised".to_owned());
+        }
+        (self.header)(frame)
+            .map_err(|error| format!("Reconnaissance starting guard header mismatch: {error}"))
+    }
+}
+
+
+/// Complete one owned acquisition phase without finishing its parent session or reservation.
+///
+/// Returns the same published restored-deal path as manual reconnaissance. The
+/// caller owns STOP/context checks between phases and eventual reservation release.
+/// Errors retain the original first-failure diagnostics with parent-session and
+/// board identity; no extra capture, transport operation or retry is introduced.
+pub(super) fn run_owned(
+    context: &ControllerContext,
+    request: &ReconRequest,
+    run_id: u64,
+    board_generation: u64,
+    events: &WorkerEventSink,
+    cancel: &AtomicBool,
+) -> Result<PathBuf, String> {
+    run_phase(
+        context,
+        request,
+        events,
+        cancel,
+        ReconRunOwner::Automatic {
+            run_id,
+            board_generation,
+        },
+        None,
+    )
+}
+
+
+/// Bind an owned acquisition to the caller's qualified same-session starting witness.
+///
+/// Uses the existing captures, reservation, selected profile and restoration
+/// pipeline. Guard failure retains normal first/latest PNG diagnostics and aborts
+/// without retry, restoration cleanup or publication. The borrowed predicate is
+/// validation only; it must not perform input or grant authority.
+///
+/// # Errors
+///
+/// Returns the existing acquisition/transport/publication error or the first
+/// starting-tableau, initial-pile or header mismatch, with normal diagnostics.
+pub(super) fn run_owned_with_starting_guard(
+    context: &ControllerContext,
+    request: &ReconRequest,
+    run_id: u64,
+    board_generation: u64,
+    guard: StartingGuard<'_>,
+    events: &WorkerEventSink,
+    cancel: &AtomicBool,
+) -> Result<PathBuf, String> {
+    run_phase(
+        context,
+        request,
+        events,
+        cancel,
+        ReconRunOwner::Automatic {
+            run_id,
+            board_generation,
+        },
+        Some(guard),
+    )
+}
+
+
+/// Share checked acquisition and first-failure publication without releasing caller authority.
+fn run_phase(
+    context: &ControllerContext,
+    request: &ReconRequest,
+    events: &WorkerEventSink,
+    cancel: &AtomicBool,
+    owner: ReconRunOwner,
+    starting_guard: Option<StartingGuard<'_>>,
+) -> Result<PathBuf, String> {
+    send_state(events, WorkerState::Validating);
+    let mut details = serde_json::json!({
+        "requested_output_debug": format!("{:?}", request.output_path),
+        "requested_deal_id": request.deal_id,
+        "profile_source_debug": format!("{:?}", request.profile),
+        "explicit_recon_request": request.initial_board_confirmed,
+        "no_input_retry": true,
+        "stop_revokes_restoration": true,
+    });
+    let run_id = match owner {
+        ReconRunOwner::Manual => None,
+        ReconRunOwner::Automatic {
+            run_id,
+            board_generation,
+        } => {
+            details["session_run_id"] = serde_json::json!(run_id);
+            details["board_generation"] = serde_json::json!(board_generation);
+            details["automatic_phase"] = serde_json::json!("reconnaissance");
+            Some(run_id)
+        }
+    };
+    let result = run_checked(
+        context,
+        request,
+        events,
+        cancel,
+        &mut details,
+        starting_guard,
+    );
+    if let Err(error) = &result {
+        publish_pyramid_failure(
+            events,
+            FailureEvidence {
+                context,
+                phase: PyramidPhase::Reconnaissance,
+                run_id,
+                error,
+                details,
+                source_document: None,
+                first_frame: None,
+                latest_frame: None,
+            },
+        );
+    }
+    result
+}
+
+
+/// Load exactly the requested strict calibration; a failed file never falls back to bundled data.
+///
+/// This helper performs only the selected profile load and grants no input or
+/// reservation authority. The caller retains request validation and cancellation.
+pub(super) fn load_vision(request: &ReconRequest) -> Result<ReconVision, String> {
+    match &request.profile {
+        ReconProfileSource::BundledNativeV22 => ReconVision::bundled_native_v22(),
+        #[cfg(test)]
+        ReconProfileSource::BundledNativeV17 => ReconVision::bundled_native_v17(),
+        ReconProfileSource::File(path) => ReconVision::load(path),
+    }
 }
 
 
@@ -237,24 +543,53 @@ fn run_checked(
     request: &ReconRequest,
     events: &WorkerEventSink,
     cancel: &AtomicBool,
+    details: &mut serde_json::Value,
+    starting_guard: Option<StartingGuard<'_>>,
 ) -> Result<PathBuf, String> {
     let control = &events.latest_frame.reconnaissance;
     validate_request(context, request)?;
     control.check_active(context, cancel)?;
-    let vision = ReconVision::load(&request.profile_path)?;
+    let vision = load_vision(request)?;
     control.check_active(context, cancel)?;
-    send_log(events, format!(
-        "Pyramid reconnaissance calibration loaded: profile_id={}, path={:?}. Profile identity is provenance, not input authority.",
-        vision.profile_id(), request.profile_path,
-    ));
+    let source = match &request.profile {
+        ReconProfileSource::BundledNativeV22 => {
+            "BundledNativeV22 (embedded in this executable)".to_owned()
+        }
+        #[cfg(test)]
+        ReconProfileSource::BundledNativeV17 => {
+            "BundledNativeV17 (embedded in this executable)".to_owned()
+        }
+        ReconProfileSource::File(path) => format!("File, path={path:?}"),
+    };
+    send_log(
+        events,
+        format!(
+            "Pyramid reconnaissance calibration loaded: profile_id={}, source={source}. Profile identity is provenance, not input authority.",
+            vision.profile_id(),
+        ),
+    );
     let output = resolve_new_output(&request.output_path)?;
     let mut diagnostics = Diagnostics::reserve(&output)?;
-    send_log(events, format!("Private reconnaissance diagnostics: {:?}. Native PNGs are retained without resampling.", diagnostics.directory));
-    diagnostics.write_start(vision.profile_id(), &request.profile_path)?;
+    if let Some(object) = details.as_object_mut() {
+        object.insert(
+            "native_diagnostics_directory_debug".to_owned(),
+            serde_json::json!(format!("{:?}", diagnostics.directory)),
+        );
+        object.insert("native_evidence_note".to_owned(), serde_json::json!("Existing reconnaissance baseline.png, latest.png and INCOMPLETE.json remain in this private directory; no capture is requested for failure reporting"));
+    }
+    send_log(
+        events,
+        format!(
+            "Private reconnaissance diagnostics: {:?}. Native PNGs are retained without resampling.",
+            diagnostics.directory
+        ),
+    );
+    diagnostics.write_start(vision.profile_id(), &request.profile)?;
     let mut ledger = InputLedger::default();
     let mut captures = 0usize;
     let mut publication = None;
     let mut failure_progress = None;
+    let mut receipt_vision = None;
     let result = (|| {
         control.check_active(context, cancel)?;
         send_state(events, WorkerState::Connecting);
@@ -262,32 +597,123 @@ fn run_checked(
             .map_err(|error| format!("Reconnaissance QMP connection failed: {error}"))?;
         control.check_active(context, cancel)?;
         let mut io = QmpReconIo {
-            qmp: &mut qmp, context, control, cancel, events, vision,
-            diagnostics: &mut diagnostics, output: &output,
-            ledger: &mut ledger, captures: &mut captures, publication: &mut publication,
+            qmp: &mut qmp,
+            context,
+            control,
+            cancel,
+            events,
+            vision,
+            diagnostics: &mut diagnostics,
+            output: &output,
+            ledger: &mut ledger,
+            captures: &mut captures,
+            publication: &mut publication,
+            starting_guard,
         };
         io.probe()?;
 
 
         match pyramid_recon::run(&mut io, request) {
-            Ok(deal) => Ok(deal),
+            Ok(deal) => {
+                receipt_vision = Some(io.vision);
+                Ok(deal)
+            }
             Err(failure) => {
                 failure_progress = Some(failure.progress);
                 Err(failure.message)
             }
         }
     })();
-    let evidence = diagnostics.finish(&result, failure_progress.as_ref(), &ledger, captures, publication);
+    // Preserve a failure to decode the already retained final frame until after
+    // diagnostics finish. Never bind the last positive header from an older frame.
+    let receipt_progress = if result.is_ok() {
+        diagnostics.restored_progress()
+    } else {
+        Ok(None)
+    };
+    let receipt_default = if result.is_ok() {
+        diagnostics.restored_default()
+    } else {
+        Ok(crate::pyramid_workflow_model::RouteMethod::FewestActions)
+    };
+    let receipt_observed = if result.is_ok() {
+        diagnostics.restored_observed()
+    } else {
+        Ok(crate::pyramid_workflow_model::ObservedGame::Unknown)
+    };
+    let evidence = diagnostics.finish(
+        &result,
+        failure_progress.as_ref(),
+        &ledger,
+        captures,
+        publication,
+    );
     let publication_label = publication_label(publication);
+    if let Some(object) = details.as_object_mut() {
+        object.insert("captures_attempted".to_owned(), serde_json::json!(captures));
+        object.insert(
+            "draws_attempted".to_owned(),
+            serde_json::json!(ledger.draws_attempted),
+        );
+        object.insert(
+            "draws_acknowledged".to_owned(),
+            serde_json::json!(ledger.draws_acknowledged),
+        );
+        object.insert(
+            "undo_all_attempted".to_owned(),
+            serde_json::json!(ledger.undo_attempted),
+        );
+        object.insert(
+            "undo_all_acknowledged".to_owned(),
+            serde_json::json!(ledger.undo_acknowledged),
+        );
+        object.insert(
+            "confirmation_attempted".to_owned(),
+            serde_json::json!(ledger.confirm_attempted),
+        );
+        object.insert(
+            "confirmation_acknowledged".to_owned(),
+            serde_json::json!(ledger.confirm_acknowledged),
+        );
+        object.insert(
+            "publication_status".to_owned(),
+            serde_json::json!(publication_label),
+        );
+    }
 
 
     match (result, evidence) {
-        (Ok(_), Ok(())) if publication == Some(PublicationStatus::Published) => Ok(output),
-        (Ok(_), Ok(())) => Err(format!("Controller returned without publishing a deal; diagnostics at {:?}", diagnostics.directory)),
-        (Err(error), Ok(())) => Err(format!("{error}; diagnostics at {:?}; complete output publication={publication_label}. Inspect the output before any new operation", diagnostics.directory)),
+        (Ok(deal), Ok(())) if publication == Some(PublicationStatus::Published) => {
+            let vision = receipt_vision.ok_or("Missing successful acquisition calibration")?;
+            super::computed_route::record_acquisition(
+                context,
+                events,
+                cancel,
+                deal,
+                vision,
+                &output,
+                receipt_progress?,
+                receipt_default?,
+                receipt_observed?,
+            )?;
+            Ok(output)
+        }
+        (Ok(_), Ok(())) => Err(format!(
+            "Controller returned without publishing a deal; diagnostics at {:?}",
+            diagnostics.directory
+        )),
+        (Err(error), Ok(())) => Err(format!(
+            "{error}; diagnostics at {:?}; complete output publication={publication_label}. Inspect the output before any new operation",
+            diagnostics.directory
+        )),
         (result, Err(error)) => {
-            let original = result.err().unwrap_or_else(|| "Acquisition and restoration succeeded".to_owned());
-            Err(format!("{original}; diagnostic persistence failed: {error}; directory {:?}; complete output publication={publication_label}. Inspect the output before any new operation", diagnostics.directory))
+            let original = result
+                .err()
+                .unwrap_or_else(|| "Acquisition and restoration succeeded".to_owned());
+            Err(format!(
+                "{original}; diagnostic persistence failed: {error}; directory {:?}; complete output publication={publication_label}. Inspect the output before any new operation",
+                diagnostics.directory
+            ))
         }
     }
 }
@@ -328,17 +754,25 @@ fn deliver_guarded_input(
 
 
     if ledger.delivery_failed {
-        return Err("Earlier reconnaissance input delivery was uncertain; no further input is permitted".to_owned());
+        return Err(
+            "Earlier reconnaissance input delivery was uncertain; no further input is permitted"
+                .to_owned(),
+        );
     }
 
 
     if !std::mem::take(&mut ledger.probed) {
-        return Err("Reconnaissance input requires a new validated VM and pointer probe".to_owned());
+        return Err(
+            "Reconnaissance input requires a new validated VM and pointer probe".to_owned(),
+        );
     }
     let ordered = match input {
         ReconInput::Draw => ledger.undo_attempted == 0 && ledger.confirm_attempted == 0,
-        ReconInput::UndoAll(_) => ledger.draws_acknowledged == 24
-            && ledger.undo_attempted == 0 && ledger.confirm_attempted == 0,
+        ReconInput::UndoAll(_) => {
+            ledger.draws_acknowledged == 24
+                && ledger.undo_attempted == 0
+                && ledger.confirm_attempted == 0
+        }
         ReconInput::Confirm(_) => ledger.undo_acknowledged && ledger.confirm_attempted == 0,
     };
 
@@ -396,6 +830,8 @@ struct QmpReconIo<'a> {
     captures: &'a mut usize,
     /// None means unattempted; errors may still acknowledge or leave publication uncertain.
     publication: &'a mut Option<PublicationStatus>,
+    /// Optional borrowed same-session constraint; this never creates input authority.
+    starting_guard: Option<StartingGuard<'a>>,
 }
 
 
@@ -419,8 +855,29 @@ impl ReconIo for QmpReconIo<'_> {
         }
         *self.captures += 1;
         send_state(self.events, WorkerState::Capturing);
-        let (frame, png, _) = capture_screen_with_png(self.qmp, &self.context.socket_path, self.events)?;
-        let recognition = self.vision.observe(&frame);
+        let (frame, png, _) =
+            capture_screen_with_png(self.qmp, &self.context.socket_path, self.events)?;
+        // Only an already acknowledged OK permits the measured pressed-button
+        // appearance to be recognised as a known stale modal. The pure controller
+        // then waits for restoration; this does not grant another OK attempt.
+        let recognition = if self.ledger.confirm_acknowledged {
+            self.vision.observe_after_confirmation(&frame)
+        } else {
+            self.vision.observe(&frame)
+        };
+        if let Some(guard) = self.starting_guard {
+            // Retain original PNG evidence before any guard can refuse this frame.
+            // The result is held until the same decoded frame reaches the preview.
+            let guarded = (|| {
+                self.diagnostics.record_capture(png)?;
+                self.check_active()?;
+                let scene = recognition?;
+                guard.validate(&frame, &scene, self.ledger.draws_attempted)?;
+                Ok(scene)
+            })();
+            self.events.publish_diagnostic_frame(frame);
+            return guarded;
+        }
         self.events.publish_diagnostic_frame(frame);
         self.diagnostics.record_capture(png)?;
         self.check_active()?;
@@ -432,7 +889,10 @@ impl ReconIo for QmpReconIo<'_> {
     fn probe(&mut self) -> Result<(), String> {
         self.check_active()?;
         self.ledger.probed = false;
-        let probe = self.qmp.probe().map_err(|error| format!("Reconnaissance QMP probe failed: {error}"))?;
+        let probe = self
+            .qmp
+            .probe()
+            .map_err(|error| format!("Reconnaissance QMP probe failed: {error}"))?;
         validate_probe(&probe)?;
         self.check_active()?;
         self.ledger.probed = true;
@@ -444,16 +904,23 @@ impl ReconIo for QmpReconIo<'_> {
     fn input(&mut self, input: ReconInput) -> Result<(), String> {
         let qmp = &mut self.qmp;
         let events = self.events;
-        deliver_guarded_input(self.control, self.context, self.cancel, self.ledger, input, |input| {
-            send_state(events, WorkerState::Acting);
-            let result = match input {
-                ReconInput::Draw => qmp.press_draw_key(),
-                ReconInput::UndoAll(point) | ReconInput::Confirm(point) => {
-                    qmp.click(point, NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT)
-                }
-            };
-            result.map_err(|error| format!("Uncertain reconnaissance input delivery: {error}; operation will not be replayed"))
-        })
+        deliver_guarded_input(
+            self.control,
+            self.context,
+            self.cancel,
+            self.ledger,
+            input,
+            |input| {
+                send_state(events, WorkerState::Acting);
+                let result = match input {
+                    ReconInput::Draw => qmp.press_draw_key(),
+                    ReconInput::UndoAll(point) | ReconInput::Confirm(point) => {
+                        qmp.click(point, NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT)
+                    }
+                };
+                result.map_err(|error| format!("Uncertain reconnaissance input delivery: {error}; operation will not be replayed"))
+            },
+        )
     }
 
 
@@ -462,8 +929,9 @@ impl ReconIo for QmpReconIo<'_> {
         self.check_active()?;
         self.ledger.probed = false;
         send_state(self.events, WorkerState::Verifying);
-        cancellable_wait(duration, self.cancel)
-            .map_err(|_| "STOP during reconnaissance settling; no cleanup input is permitted".to_owned())?;
+        cancellable_wait(duration, self.cancel).map_err(|_| {
+            "STOP during reconnaissance settling; no cleanup input is permitted".to_owned()
+        })?;
         self.check_active()
     }
 
@@ -481,11 +949,16 @@ impl ReconIo for QmpReconIo<'_> {
 
 
         if self.publication.is_some() {
-            return Err("Reconnaissance output was already published; publication is not retried".to_owned());
+            return Err(
+                "Reconnaissance output was already published; publication is not retried"
+                    .to_owned(),
+            );
         }
         self.diagnostics.persist_latest()?;
         self.check_active()?;
-        publish_once(self.publication, || xsar::pyramid_json::write_new(self.output, deal))
+        publish_once(self.publication, || {
+            xsar::pyramid_json::write_new(self.output, deal)
+        })
     }
 }
 
@@ -510,7 +983,10 @@ fn publish_once(
         }
         Err(error) => {
             *publication = Some(error.publication_status());
-            Err(format!("Restored deal publication returned an error: {error}; publication={}. Inspect the destination; no retry or replacement was attempted", publication_label(*publication)))
+            Err(format!(
+                "Restored deal publication returned an error: {error}; publication={}. Inspect the destination; no retry or replacement was attempted",
+                publication_label(*publication)
+            ))
         }
     }
 }
@@ -532,11 +1008,17 @@ fn publication_label(publication: Option<PublicationStatus>) -> &'static str {
 /// Reject raw Unix spellings that the writer refuses, before normalisation or I/O.
 fn validate_output_spelling(output: &Path) -> Result<(), String> {
     let bytes = output.as_os_str().as_bytes();
-    let filename = bytes.rsplit(|byte| *byte == b'/').next().unwrap_or_default();
+    let filename = bytes
+        .rsplit(|byte| *byte == b'/')
+        .next()
+        .unwrap_or_default();
 
 
     if filename.is_empty() || filename == b"." || filename == b".." || bytes.contains(&0) {
-        return Err("Output requires a plain final filename without a trailing slash, dot component or NUL".to_owned());
+        return Err(
+            "Output requires a plain final filename without a trailing slash, dot component or NUL"
+                .to_owned(),
+        );
     }
     Ok(())
 }
@@ -546,11 +1028,17 @@ fn validate_output_spelling(output: &Path) -> Result<(), String> {
 ///
 /// This is a usability preflight, not race-proof publication. The crate writer
 /// enforces no-clobber atomically when the restored deal is eventually published.
-fn resolve_new_output(output: &Path) -> Result<PathBuf, String> {
+pub(super) fn resolve_new_output(output: &Path) -> Result<PathBuf, String> {
     validate_output_spelling(output)?;
-    let filename = output.file_name().ok_or_else(|| "Output requires a file name".to_owned())?;
-    let parent = output.parent().filter(|parent| !parent.as_os_str().is_empty()).unwrap_or_else(|| Path::new("."));
-    let parent = fs::canonicalize(parent).map_err(|error| format!("Output parent cannot be resolved: {error}"))?;
+    let filename = output
+        .file_name()
+        .ok_or_else(|| "Output requires a file name".to_owned())?;
+    let parent = output
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let parent = fs::canonicalize(parent)
+        .map_err(|error| format!("Output parent cannot be resolved: {error}"))?;
 
 
     if !parent.is_dir() {
@@ -587,40 +1075,66 @@ impl Diagnostics {
 
     /// Reserve a mode-0700 directory within a bounded collision budget before guest input.
     fn reserve(output: &Path) -> Result<Self, String> {
-        let parent = output.parent().ok_or_else(|| "Resolved output has no parent".to_owned())?;
+        let parent = output
+            .parent()
+            .ok_or_else(|| "Resolved output has no parent".to_owned())?;
 
 
         for _ in 0..DIRECTORY_ATTEMPTS {
             let sequence = DIAGNOSTIC_SEQUENCE.fetch_add(1, Ordering::Relaxed);
-            let directory = parent.join(format!(".pyramid-recon-{}-{sequence}", std::process::id()));
+            let directory =
+                parent.join(format!(".pyramid-recon-{}-{sequence}", std::process::id()));
 
 
             match fs::DirBuilder::new().mode(0o700).create(&directory) {
-                Ok(()) => return Ok(Self { directory, baseline_written: false, latest_png: None, latest_attempted: false, latest_error: None }),
+                Ok(()) => {
+                    return Ok(Self {
+                        directory,
+                        baseline_written: false,
+                        latest_png: None,
+                        latest_attempted: false,
+                        latest_error: None,
+                    });
+                }
                 Err(error) if error.kind() == ErrorKind::AlreadyExists => continue,
-                Err(error) => return Err(format!("Private diagnostic directory could not be created: {error}")),
+                Err(error) => {
+                    return Err(format!(
+                        "Private diagnostic directory could not be created: {error}"
+                    ));
+                }
             }
         }
         Err("Private diagnostic directory collision budget exhausted".to_owned())
     }
 
 
-    /// Record validated profile provenance before input, with an escaped bounded path.
+    /// Record validated bundled or file provenance before input, escaping any path.
     ///
-    /// The identifier and path have already passed profile and request validation.
+    /// The identifier and optional path have passed profile and request validation.
+    /// Bundled calibration has a null path rather than an invented filesystem source.
     /// This remains an incomplete start marker, not recognition or restoration proof.
-    fn write_start(&self, profile_id: &str, profile_path: &Path) -> Result<(), String> {
-        self.write_json("INCOMPLETE-start.json", &serde_json::json!({
-            "diagnostic_only": true,
-            "status": "INCOMPLETE",
-            "complete": false,
-            "restored": false,
-            "note": "Start marker only; not route input or proof of the final outcome",
-            "profile_id": profile_id,
-            "profile_path_debug": format!("{profile_path:?}"),
-            "captures": 0,
-            "draws_acknowledged": 0,
-        }))
+    fn write_start(&self, profile_id: &str, profile: &ReconProfileSource) -> Result<(), String> {
+        let (source, path) = match profile {
+            ReconProfileSource::BundledNativeV22 => ("bundled_native_v22", None),
+            #[cfg(test)]
+            ReconProfileSource::BundledNativeV17 => ("bundled_native_v17", None),
+            ReconProfileSource::File(path) => ("file", Some(format!("{path:?}"))),
+        };
+        self.write_json(
+            "INCOMPLETE-start.json",
+            &serde_json::json!({
+                "diagnostic_only": true,
+                "status": "INCOMPLETE",
+                "complete": false,
+                "restored": false,
+                "note": "Start marker only; not route input or proof of the final outcome",
+                "profile_id": profile_id,
+                "profile_source": source,
+                "profile_path_debug": path,
+                "captures": 0,
+                "draws_acknowledged": 0,
+            }),
+        )
     }
 
 
@@ -629,20 +1143,73 @@ impl Diagnostics {
 
 
         if png.is_empty() || png.len() > SNAPSHOT_MAX_PNG_BYTES {
-            return Err("Diagnostic original PNG is outside the existing capture size limit".to_owned());
+            return Err(
+                "Diagnostic original PNG is outside the existing capture size limit".to_owned(),
+            );
         }
         self.latest_png = Some(png);
 
 
         if !self.baseline_written {
-            write_private_new(&self.directory.join("baseline.png"), self.latest_png.as_deref().unwrap_or_default())?;
+            write_private_new(
+                &self.directory.join("baseline.png"),
+                self.latest_png.as_deref().unwrap_or_default(),
+            )?;
             self.baseline_written = true;
         }
         Ok(())
     }
 
 
-    /// Write the final-or-failure original once, retaining partial-file failures honestly.
+    /// Read the exact final retained capture before finalisation releases its bounded buffer.
+    ///
+    /// No capture or file read is performed. Missing/invalid pixels refuse a receipt;
+    /// a supported frame without a challenge header is a valid `None` binding.
+    fn restored_progress(
+        &self,
+    ) -> Result<Option<crate::pyramid_progress::ChallengeProgress>, String> {
+        self.latest_png
+            .as_deref()
+            .ok_or_else(|| "Missing restored acquisition frame".to_owned())
+            .and_then(|png| crate::capture::decode_png(png).map_err(|error| error.to_string()))
+            .and_then(|frame| crate::pyramid_progress::observe_challenge(&frame))
+    }
+
+
+    /// Classify this exact retained restored frame for advisory display, without more I/O.
+    fn restored_observed(&self) -> Result<crate::pyramid_workflow_model::ObservedGame, String> {
+        let png = self
+            .latest_png
+            .as_deref()
+            .ok_or("Missing restored acquisition frame")?;
+        let frame = crate::capture::decode_png(png).map_err(|error| error.to_string())?;
+        crate::pyramid_workflow_model::ObservedGame::observe(&frame)
+    }
+
+
+    /// Derive only the Kings exception from this exact restored PNG, without another capture.
+    fn restored_default(&self) -> Result<crate::pyramid_workflow_model::RouteMethod, String> {
+        use crate::pyramid_workflow_model::RouteMethod;
+        let png = self
+            .latest_png
+            .as_deref()
+            .ok_or("Missing restored acquisition frame")?;
+        let frame = crate::capture::decode_png(png).map_err(|error| error.to_string())?;
+        let progress = crate::pyramid_progress::observe_challenge(&frame)?;
+        if progress.is_some_and(|p| p.kind == crate::pyramid_progress::ChallengeKind::Cards)
+            && crate::pyramid_progress::challenge::is_kings_header(&frame)?
+        {
+            Ok(RouteMethod::Fast)
+        } else {
+            Ok(RouteMethod::FewestActions)
+        }
+    }
+
+
+    /// Persist the final original once without consuming pixels needed by receipt binding.
+    ///
+    /// `finish` releases the one bounded buffer. Failed writes retain their original
+    /// error and are never retried at this evidence path.
     fn persist_latest(&mut self) -> Result<(), String> {
 
 
@@ -652,8 +1219,8 @@ impl Diagnostics {
         self.latest_attempted = true;
 
 
-        if let Some(png) = self.latest_png.take()
-            && let Err(error) = write_private_new(&self.directory.join("latest.png"), &png)
+        if let Some(png) = self.latest_png.as_deref()
+            && let Err(error) = write_private_new(&self.directory.join("latest.png"), png)
         {
             self.latest_error = Some(error.clone());
             return Err(error);
@@ -672,15 +1239,25 @@ impl Diagnostics {
         publication: Option<PublicationStatus>,
     ) -> Result<(), String> {
         let image_result = self.persist_latest();
+        self.latest_png = None;
         let tableau: Vec<String> = match result {
             Ok(deal) => deal.tableau().iter().map(ToString::to_string).collect(),
-            Err(_) => progress.and_then(|progress| progress.tableau.as_ref())
-                .into_iter().flatten().take(28).map(ToString::to_string).collect(),
+            Err(_) => progress
+                .and_then(|progress| progress.tableau.as_ref())
+                .into_iter()
+                .flatten()
+                .take(28)
+                .map(ToString::to_string)
+                .collect(),
         };
         let stock: Vec<String> = match result {
             Ok(deal) => deal.stock().iter().map(ToString::to_string).collect(),
-            Err(_) => progress.into_iter().flat_map(|progress| progress.stock.iter())
-                .take(24).map(ToString::to_string).collect(),
+            Err(_) => progress
+                .into_iter()
+                .flat_map(|progress| progress.stock.iter())
+                .take(24)
+                .map(ToString::to_string)
+                .collect(),
         };
         let complete = result.is_ok() && publication == Some(PublicationStatus::Published);
         let published = match publication {
@@ -689,7 +1266,10 @@ impl Diagnostics {
             _ => Some(false),
         };
         let restored = result.is_ok() || progress.is_some_and(|progress| progress.restored);
-        let error = result.as_ref().err().map(|message| message.chars().take(ERROR_CHARACTERS).collect::<String>());
+        let error = result
+            .as_ref()
+            .err()
+            .map(|message| message.chars().take(ERROR_CHARACTERS).collect::<String>());
         let report = serde_json::json!({
             "diagnostic_only": true,
             "status": if complete { "COMPLETE_DIAGNOSTIC" } else { "INCOMPLETE" },
@@ -716,7 +1296,14 @@ impl Diagnostics {
             "latest_png_note": "latest.png, when present, contains the last original capture; inspect persistence errors",
             "authority_note": "Diagnostics are not planning input; acknowledgements do not prove guest effects",
         });
-        let json_result = self.write_json(if complete { "COMPLETE-diagnostics.json" } else { "INCOMPLETE.json" }, &report);
+        let json_result = self.write_json(
+            if complete {
+                "COMPLETE-diagnostics.json"
+            } else {
+                "INCOMPLETE.json"
+            },
+            &report,
+        );
 
 
         match (image_result, json_result) {
@@ -730,7 +1317,8 @@ impl Diagnostics {
 
     /// Write one bounded diagnostic document to a new private file, never to the output path.
     fn write_json(&self, filename: &str, report: &serde_json::Value) -> Result<(), String> {
-        let bytes = serde_json::to_vec_pretty(report).map_err(|error| format!("Diagnostic encoding failed: {error}"))?;
+        let bytes = serde_json::to_vec_pretty(report)
+            .map_err(|error| format!("Diagnostic encoding failed: {error}"))?;
 
 
         if bytes.len() > DIAGNOSTIC_BYTES {
@@ -746,36 +1334,107 @@ impl Diagnostics {
 /// Failed partial diagnostics are intentionally retained; unlike the planning
 /// document, these are explicitly diagnostic files, never accepted route input.
 fn write_private_new(path: &Path, bytes: &[u8]) -> Result<(), String> {
-    let mut file = OpenOptions::new().write(true).create_new(true).mode(0o600).open(path)
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(path)
         .map_err(|error| format!("Diagnostic file creation failed at {path:?}: {error}"))?;
-    file.write_all(bytes).and_then(|()| file.sync_all())
+    file.write_all(bytes)
+        .and_then(|()| file.sync_all())
         .map_err(|error| format!("Diagnostic file persistence failed at {path:?}: {error}"))
 }
+
+
+#[cfg(test)]
+mod starting_guard_tests;
 
 
 #[cfg(test)]
 mod tests {
     //! No live guest input: request queues, cancellation, bounded evidence and mock delivery.
 
-    use std::{cell::Cell, ffi::OsString, os::unix::{ffi::OsStringExt, fs::{PermissionsExt, symlink}}, sync::mpsc};
+    /// Actual restored frames choose Kings only; a missing counter never supplies that advice.
+    #[test]
+    fn kings_default_requires_the_same_restored_card_counter() {
+        use crate::pyramid_workflow_model::RouteMethod;
+        let mut diagnostics = super::Diagnostics {
+            directory: std::path::PathBuf::new(),
+            baseline_written: false,
+            latest_png: None,
+            latest_attempted: false,
+            latest_error: None,
+        };
+        assert!(diagnostics.restored_default().is_err());
+        for png in [
+            include_bytes!("../../tests/fixtures/pyramid-kings-default/kings-one.png").as_slice(),
+            include_bytes!("../../tests/fixtures/pyramid-kings-default/kings-two.png").as_slice(),
+        ] {
+            diagnostics.latest_png = Some(png.to_vec());
+            assert_eq!(diagnostics.restored_default(), Ok(RouteMethod::Fast));
+            let mut frame = crate::capture::decode_png(png).unwrap();
+            for y in 48..80 {
+                for x in 1038..1110 {
+                    let offset = y * frame.stride + x * 4;
+                    frame.pixels[offset..offset + 3].fill(255);
+                }
+            }
+            diagnostics.latest_png = Some(crate::capture::encode_png(&frame).unwrap());
+            assert_eq!(
+                diagnostics.restored_default(),
+                Ok(RouteMethod::FewestActions)
+            );
+        }
+        diagnostics.latest_png = Some(
+            include_bytes!("../../tests/fixtures/pyramid-objectives/fours-four-of-twelve.png")
+                .to_vec(),
+        );
+        assert_eq!(
+            diagnostics.restored_default(),
+            Ok(RouteMethod::FewestActions)
+        );
+    }
 
-    use xsar::games::{cards::{Card, Rank, Suit}, pyramid::{DealMetadata, ProvenanceKind, Restoration}};
+
+    use std::{
+        cell::Cell,
+        ffi::OsString,
+        os::unix::{
+            ffi::OsStringExt,
+            fs::{PermissionsExt, symlink},
+        },
+        sync::mpsc,
+    };
+
+    use xsar::games::{
+        cards::{Card, Rank, Suit},
+        pyramid::{DealMetadata, ProvenanceKind, Restoration},
+    };
 
     use super::*;
-    use crate::{geometry::PixelPoint, parameters::{AnimationSettleDelays, StepRunSettings}, tracker::PredictedAction};
     use crate::worker::{LatestFrameSlot, WorkerCommand, WorkerHandle};
+    use crate::{
+        geometry::PixelPoint,
+        parameters::{AnimationSettleDelays, StepRunSettings},
+        tracker::PredictedAction,
+    };
 
 
     /// Build the only strategy/game combination allowed to request reconnaissance.
     fn context() -> ControllerContext {
-        ControllerContext::new(PathBuf::from("/not-a-live-qmp/recon.sock"), GameMode::Pyramid, SolvingStrategy::ShortestPath, 17)
+        ControllerContext::new(
+            PathBuf::from("/not-a-live-qmp/recon.sock"),
+            GameMode::Pyramid,
+            SolvingStrategy::ShortestPath,
+            17,
+        )
     }
 
 
     /// Valid request fields only; tests never load this fictitious profile as evidence.
     fn request() -> ReconRequest {
         ReconRequest {
-            profile_path: PathBuf::from("/not-a-live-profile/profile.json"),
+            profile: ReconProfileSource::File(PathBuf::from("/not-a-live-profile/profile.json")),
             output_path: PathBuf::from("/not-an-output-parent/deal.json"),
             deal_id: "worker-test".to_owned(),
             initial_board_confirmed: true,
@@ -788,7 +1447,10 @@ mod tests {
         let (command_tx, command_rx) = mpsc::channel();
         let (_, event_rx) = mpsc::channel();
         let handle = WorkerHandle {
-            command_tx, event_rx, latest_frame: LatestFrameSlot::default(), join: None,
+            command_tx,
+            event_rx,
+            latest_frame: LatestFrameSlot::default(),
+            join: None,
             cancel_requested: Arc::new(AtomicBool::new(true)),
         };
         (handle, command_rx)
@@ -801,7 +1463,9 @@ mod tests {
         let context = context();
         let cancel = AtomicBool::new(true);
         control.select(&context, &cancel).unwrap();
-        control.queue_reconnaissance(&context, &cancel, || Ok(())).unwrap();
+        control
+            .queue_reconnaissance(&context, &cancel, || Ok(()))
+            .unwrap();
         (control, context, cancel)
     }
 
@@ -812,7 +1476,10 @@ mod tests {
 
         for _ in 0..DIRECTORY_ATTEMPTS {
             let sequence = DIAGNOSTIC_SEQUENCE.fetch_add(1, Ordering::Relaxed);
-            let directory = std::env::temp_dir().join(format!("pyramid-recon-worker-test-{}-{sequence}", std::process::id()));
+            let directory = std::env::temp_dir().join(format!(
+                "pyramid-recon-worker-test-{}-{sequence}",
+                std::process::id()
+            ));
 
 
             match fs::DirBuilder::new().mode(0o700).create(&directory) {
@@ -827,12 +1494,23 @@ mod tests {
 
     /// Explicitly synthetic complete inventory used only for worker test assertions.
     fn synthetic_deal() -> CompleteDeal {
-        let deck: [Card; 52] = std::array::from_fn(|index| Card::new(Rank::ALL[index % 13], Suit::ALL[index / 13]));
+        let deck: [Card; 52] =
+            std::array::from_fn(|index| Card::new(Rank::ALL[index % 13], Suit::ALL[index / 13]));
         let metadata = DealMetadata::try_new(
-            "worker-diagnostics", ProvenanceKind::SyntheticFixture, Restoration::NotApplicable,
-            "worker-test", "Synthetic test; not native recognition", None,
-        ).unwrap();
-        CompleteDeal::try_new(deck[..28].try_into().unwrap(), deck[28..].try_into().unwrap(), metadata).unwrap()
+            "worker-diagnostics",
+            ProvenanceKind::SyntheticFixture,
+            Restoration::NotApplicable,
+            "worker-test",
+            "Synthetic test; not native recognition",
+            None,
+        )
+        .unwrap();
+        CompleteDeal::try_new(
+            deck[..28].try_into().unwrap(),
+            deck[28..].try_into().unwrap(),
+            metadata,
+        )
+        .unwrap()
     }
 
 
@@ -851,11 +1529,74 @@ mod tests {
             selection.strategy = SolvingStrategy::ComputerVision;
             assert!(handle.reconnoitre(selection, request()).is_err());
         }
-        assert!(handle.execute_steps(context(), PredictedAction::NoHighlight,
-            StepRunSettings::new(AnimationSettleDelays::default(), 1)).is_err());
+        assert!(
+            handle
+                .execute_steps(
+                    context(),
+                    PredictedAction::NoHighlight,
+                    StepRunSettings::new(AnimationSettleDelays::default(), 1)
+                )
+                .is_err()
+        );
         assert!(!SolvingStrategy::ShortestPath.permits_input());
         assert!(handle.cancel_requested.load(Ordering::Acquire));
-        assert!(matches!(commands.try_recv(), Err(mpsc::TryRecvError::Empty)));
+        assert!(matches!(
+            commands.try_recv(),
+            Err(mpsc::TryRecvError::Empty)
+        ));
+    }
+
+
+    /// Selecting bundled calibration never supplies consent or clears STOP by itself.
+    #[test]
+    fn bundled_profile_request_keeps_consent_and_queue_authority_separate() {
+        let (handle, commands) = handle();
+        let mut bundled = request();
+        bundled.profile = ReconProfileSource::BundledNativeV17;
+        bundled.initial_board_confirmed = false;
+        assert!(handle.reconnoitre(context(), bundled.clone()).is_err());
+        assert!(handle.cancel_requested.load(Ordering::Acquire));
+        assert!(matches!(
+            commands.try_recv(),
+            Err(mpsc::TryRecvError::Empty)
+        ));
+        bundled.initial_board_confirmed = true;
+        assert!(validate_request(&context(), &bundled).is_ok());
+        handle.reconnoitre(context(), bundled).unwrap();
+        assert!(
+            matches!(commands.try_recv().unwrap(), WorkerCommand::Reconnoitre { request, .. }
+            if request.profile == ReconProfileSource::BundledNativeV17)
+        );
+        assert!(handle.reconnoitre(context(), request()).is_err());
+        assert!(matches!(
+            commands.try_recv(),
+            Err(mpsc::TryRecvError::Empty)
+        ));
+    }
+
+
+    /// Shared loading honours an explicit older profile and never substitutes bundled calibration on error.
+    #[test]
+    fn shared_profile_load_preserves_requested_source_without_fallback() {
+        let mut requested = request();
+        requested.profile = ReconProfileSource::BundledNativeV17;
+        assert_eq!(
+            load_vision(&requested).unwrap().profile_id(),
+            "pyramid-native-1920-classic-blue-v17"
+        );
+        requested.profile = ReconProfileSource::File(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/pyramid-recon/native-v8/profile.json"),
+        );
+        assert_eq!(
+            load_vision(&requested).unwrap().profile_id(),
+            "pyramid-native-1920-classic-blue-v8"
+        );
+        requested.profile = ReconProfileSource::File(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/pyramid-recon/native-v9/INCOMPLETE.json"),
+        );
+        assert!(load_vision(&requested).is_err());
     }
 
 
@@ -865,9 +1606,14 @@ mod tests {
         let (handle, commands) = handle();
         handle.reconnoitre(context(), request()).unwrap();
         assert!(!handle.cancel_requested.load(Ordering::Acquire));
-        assert!(matches!(commands.try_recv().unwrap(), WorkerCommand::Reconnoitre { context: selected, .. } if selected == context()));
+        assert!(
+            matches!(commands.try_recv().unwrap(), WorkerCommand::Reconnoitre { context: selected, .. } if selected == context())
+        );
         assert!(handle.reconnoitre(context(), request()).is_err());
-        assert!(matches!(commands.try_recv(), Err(mpsc::TryRecvError::Empty)));
+        assert!(matches!(
+            commands.try_recv(),
+            Err(mpsc::TryRecvError::Empty)
+        ));
     }
 
 
@@ -878,15 +1624,34 @@ mod tests {
         handle.reconnoitre(context(), request()).unwrap();
         commands.try_recv().unwrap();
         handle.disconnect(context()).unwrap();
-        assert!(matches!(commands.try_recv().unwrap(), WorkerCommand::Disconnect(_)));
+        assert!(matches!(
+            commands.try_recv().unwrap(),
+            WorkerCommand::Disconnect(_)
+        ));
         assert!(handle.reconnoitre(context(), request()).is_err());
         let mut vision = context();
         vision.strategy = SolvingStrategy::ComputerVision;
-        assert!(handle.execute_steps(vision, PredictedAction::NoHighlight,
-            StepRunSettings::new(AnimationSettleDelays::default(), 1)).is_err());
+        assert!(
+            handle
+                .execute_steps(
+                    vision,
+                    PredictedAction::NoHighlight,
+                    StepRunSettings::new(AnimationSettleDelays::default(), 1)
+                )
+                .is_err()
+        );
         assert!(handle.cancel_requested.load(Ordering::Acquire));
-        assert!(handle.latest_frame.reconnaissance.check_active(&context(), &handle.cancel_requested).is_err());
-        assert!(matches!(commands.try_recv(), Err(mpsc::TryRecvError::Empty)));
+        assert!(
+            handle
+                .latest_frame
+                .reconnaissance
+                .check_active(&context(), &handle.cancel_requested)
+                .is_err()
+        );
+        assert!(matches!(
+            commands.try_recv(),
+            Err(mpsc::TryRecvError::Empty)
+        ));
     }
 
 
@@ -913,7 +1678,13 @@ mod tests {
             assert!(handle.cancel_requested.load(Ordering::Acquire));
             handle.capture_frame(context()).unwrap();
             handle.cancel_requested.store(false, Ordering::Release);
-            assert!(handle.latest_frame.reconnaissance.check_active(&context(), &handle.cancel_requested).is_err());
+            assert!(
+                handle
+                    .latest_frame
+                    .reconnaissance
+                    .check_active(&context(), &handle.cancel_requested)
+                    .is_err()
+            );
         }
     }
 
@@ -926,8 +1697,12 @@ mod tests {
         for snapshot in [false, true] {
             let (handle, _) = handle();
             let control = &handle.latest_frame.reconnaissance;
-            control.select(&context(), &handle.cancel_requested).unwrap();
-            control.queue_reconnaissance(&context(), &handle.cancel_requested, || Ok(())).unwrap();
+            control
+                .select(&context(), &handle.cancel_requested)
+                .unwrap();
+            control
+                .queue_reconnaissance(&context(), &handle.cancel_requested, || Ok(()))
+                .unwrap();
             let mut changed = context();
             changed.generation += 1;
 
@@ -938,7 +1713,11 @@ mod tests {
                 let _ = handle.reset_progress(changed);
             }
             assert!(handle.cancel_requested.load(Ordering::Acquire));
-            assert!(control.check_active(&context(), &handle.cancel_requested).is_err());
+            assert!(
+                control
+                    .check_active(&context(), &handle.cancel_requested)
+                    .is_err()
+            );
         }
     }
 
@@ -950,7 +1729,15 @@ mod tests {
         drop(commands);
         assert!(handle.reconnoitre(context(), request()).is_err());
         assert!(handle.cancel_requested.load(Ordering::Acquire));
-        assert!(!handle.latest_frame.reconnaissance.state.lock().unwrap().active);
+        assert!(
+            !handle
+                .latest_frame
+                .reconnaissance
+                .state
+                .lock()
+                .unwrap()
+                .active
+        );
     }
 
 
@@ -961,7 +1748,9 @@ mod tests {
         control.stop(Some(&context), &cancel);
         control.finish();
         assert!(control.check_active(&context, &cancel).is_err());
-        control.queue_reconnaissance(&context, &cancel, || Ok(())).unwrap();
+        control
+            .queue_reconnaissance(&context, &cancel, || Ok(()))
+            .unwrap();
         assert!(control.check_active(&context, &cancel).is_ok());
     }
 
@@ -973,8 +1762,17 @@ mod tests {
         handle.reconnoitre(context(), request()).unwrap();
         commands.try_recv().unwrap();
         handle.capture_frame(context()).unwrap();
-        assert!(handle.latest_frame.reconnaissance.check_active(&context(), &handle.cancel_requested).is_ok());
-        assert!(matches!(commands.try_recv().unwrap(), WorkerCommand::CaptureFrame { .. }));
+        assert!(
+            handle
+                .latest_frame
+                .reconnaissance
+                .check_active(&context(), &handle.cancel_requested)
+                .is_ok()
+        );
+        assert!(matches!(
+            commands.try_recv().unwrap(),
+            WorkerCommand::CaptureFrame { .. }
+        ));
     }
 
 
@@ -984,11 +1782,34 @@ mod tests {
         let (control, context, cancel) = active_control();
         let delivered = Cell::new(0);
         let mut ledger = InputLedger::default();
-        let delivery = |_: ReconInput| { delivered.set(delivered.get() + 1); Ok(()) };
-        assert!(deliver_guarded_input(&control, &context, &cancel, &mut ledger, ReconInput::Draw, delivery).is_err());
+        let delivery = |_: ReconInput| {
+            delivered.set(delivered.get() + 1);
+            Ok(())
+        };
+        assert!(
+            deliver_guarded_input(
+                &control,
+                &context,
+                &cancel,
+                &mut ledger,
+                ReconInput::Draw,
+                delivery
+            )
+            .is_err()
+        );
         ledger.probed = true;
         control.stop(Some(&context), &cancel);
-        assert!(deliver_guarded_input(&control, &context, &cancel, &mut ledger, ReconInput::Draw, delivery).is_err());
+        assert!(
+            deliver_guarded_input(
+                &control,
+                &context,
+                &cancel,
+                &mut ledger,
+                ReconInput::Draw,
+                delivery
+            )
+            .is_err()
+        );
         assert_eq!(delivered.get(), 0);
         assert_eq!(ledger.draws_attempted, 0);
     }
@@ -998,11 +1819,24 @@ mod tests {
     #[test]
     fn acknowledged_input_is_recorded_before_a_late_stop() {
         let (control, context, cancel) = active_control();
-        let mut ledger = InputLedger { probed: true, ..InputLedger::default() };
-        assert!(deliver_guarded_input(&control, &context, &cancel, &mut ledger, ReconInput::Draw, |_| {
-            control.stop(Some(&context), &cancel);
-            Ok(())
-        }).is_err());
+        let mut ledger = InputLedger {
+            probed: true,
+            ..InputLedger::default()
+        };
+        assert!(
+            deliver_guarded_input(
+                &control,
+                &context,
+                &cancel,
+                &mut ledger,
+                ReconInput::Draw,
+                |_| {
+                    control.stop(Some(&context), &cancel);
+                    Ok(())
+                }
+            )
+            .is_err()
+        );
         assert_eq!(ledger.draws_attempted, 1);
         assert_eq!(ledger.draws_acknowledged, 1);
         assert!(!ledger.probed);
@@ -1014,13 +1848,40 @@ mod tests {
     #[test]
     fn uncertain_draw_is_never_replayed_or_followed_by_restoration() {
         let (control, context, cancel) = active_control();
-        let mut ledger = InputLedger { probed: true, ..InputLedger::default() };
-        assert!(deliver_guarded_input(&control, &context, &cancel, &mut ledger, ReconInput::Draw, |_| Err("uncertain".to_owned())).is_err());
+        let mut ledger = InputLedger {
+            probed: true,
+            ..InputLedger::default()
+        };
+        assert!(
+            deliver_guarded_input(
+                &control,
+                &context,
+                &cancel,
+                &mut ledger,
+                ReconInput::Draw,
+                |_| Err("uncertain".to_owned())
+            )
+            .is_err()
+        );
 
 
-        for operation in [ReconInput::Draw, ReconInput::UndoAll(PixelPoint::new(1320, 978)), ReconInput::Confirm(PixelPoint::new(900, 600))] {
+        for operation in [
+            ReconInput::Draw,
+            ReconInput::UndoAll(PixelPoint::new(1320, 978)),
+            ReconInput::Confirm(PixelPoint::new(900, 600)),
+        ] {
             ledger.probed = true;
-            assert!(deliver_guarded_input(&control, &context, &cancel, &mut ledger, operation, |_| panic!("no retry or cleanup delivery")).is_err());
+            assert!(
+                deliver_guarded_input(
+                    &control,
+                    &context,
+                    &cancel,
+                    &mut ledger,
+                    operation,
+                    |_| panic!("no retry or cleanup delivery")
+                )
+                .is_err()
+            );
         }
         assert_eq!(ledger.draws_attempted, 1);
         assert_eq!(ledger.draws_acknowledged, 0);
@@ -1035,19 +1896,52 @@ mod tests {
         let (control, context, cancel) = active_control();
         let mut ledger = InputLedger::default();
         let delivered = Cell::new(0);
-        let delivery = |_: ReconInput| { delivered.set(delivered.get() + 1); Ok(()) };
+        let delivery = |_: ReconInput| {
+            delivered.set(delivered.get() + 1);
+            Ok(())
+        };
 
 
-        for (operation, maximum) in [(ReconInput::Draw, 24), (ReconInput::UndoAll(PixelPoint::new(1320, 978)), 1), (ReconInput::Confirm(PixelPoint::new(900, 600)), 1)] {
-
-
+        for (operation, maximum) in [
+            (ReconInput::Draw, 24),
+            (ReconInput::UndoAll(PixelPoint::new(1320, 978)), 1),
+            (ReconInput::Confirm(PixelPoint::new(900, 600)), 1),
+        ] {
             for _ in 0..maximum {
                 ledger.probed = true;
-                deliver_guarded_input(&control, &context, &cancel, &mut ledger, operation, delivery).unwrap();
-                assert!(deliver_guarded_input(&control, &context, &cancel, &mut ledger, operation, delivery).is_err());
+                deliver_guarded_input(
+                    &control,
+                    &context,
+                    &cancel,
+                    &mut ledger,
+                    operation,
+                    delivery,
+                )
+                .unwrap();
+                assert!(
+                    deliver_guarded_input(
+                        &control,
+                        &context,
+                        &cancel,
+                        &mut ledger,
+                        operation,
+                        delivery
+                    )
+                    .is_err()
+                );
             }
             ledger.probed = true;
-            assert!(deliver_guarded_input(&control, &context, &cancel, &mut ledger, operation, delivery).is_err());
+            assert!(
+                deliver_guarded_input(
+                    &control,
+                    &context,
+                    &cancel,
+                    &mut ledger,
+                    operation,
+                    delivery
+                )
+                .is_err()
+            );
         }
         assert_eq!(delivered.get(), 26);
         assert_eq!(ledger.draws_acknowledged, 24);
@@ -1069,12 +1963,32 @@ mod tests {
 
             for operation in [undo, confirm] {
                 ledger.probed = true;
-                assert!(deliver_guarded_input(&control, &context, &cancel, &mut ledger, operation, |_| panic!("out-of-order input")).is_err());
+                assert!(
+                    deliver_guarded_input(
+                        &control,
+                        &context,
+                        &cancel,
+                        &mut ledger,
+                        operation,
+                        |_| panic!("out-of-order input")
+                    )
+                    .is_err()
+                );
             }
         }
         ledger.draws_acknowledged = 24;
         ledger.probed = true;
-        assert!(deliver_guarded_input(&control, &context, &cancel, &mut ledger, confirm, |_| panic!("Undo All was not acknowledged")).is_err());
+        assert!(
+            deliver_guarded_input(
+                &control,
+                &context,
+                &cancel,
+                &mut ledger,
+                confirm,
+                |_| panic!("Undo All was not acknowledged")
+            )
+            .is_err()
+        );
         ledger.probed = true;
         deliver_guarded_input(&control, &context, &cancel, &mut ledger, undo, |_| Ok(())).unwrap();
         assert!(ledger.undo_acknowledged);
@@ -1082,16 +1996,44 @@ mod tests {
 
         for operation in [ReconInput::Draw, undo] {
             ledger.probed = true;
-            assert!(deliver_guarded_input(&control, &context, &cancel, &mut ledger, operation, |_| panic!("restoration cannot return to draw or repeat Undo All")).is_err());
+            assert!(
+                deliver_guarded_input(
+                    &control,
+                    &context,
+                    &cancel,
+                    &mut ledger,
+                    operation,
+                    |_| panic!("restoration cannot return to draw or repeat Undo All")
+                )
+                .is_err()
+            );
         }
         ledger.probed = true;
-        deliver_guarded_input(&control, &context, &cancel, &mut ledger, confirm, |_| Ok(())).unwrap();
+        deliver_guarded_input(
+            &control,
+            &context,
+            &cancel,
+            &mut ledger,
+            confirm,
+            |_| Ok(()),
+        )
+        .unwrap();
         assert!(ledger.confirm_acknowledged);
 
 
         for operation in [ReconInput::Draw, undo, confirm] {
             ledger.probed = true;
-            assert!(deliver_guarded_input(&control, &context, &cancel, &mut ledger, operation, |_| panic!("no input after confirmation")).is_err());
+            assert!(
+                deliver_guarded_input(
+                    &control,
+                    &context,
+                    &cancel,
+                    &mut ledger,
+                    operation,
+                    |_| panic!("no input after confirmation")
+                )
+                .is_err()
+            );
         }
     }
 
@@ -1100,16 +2042,36 @@ mod tests {
     #[test]
     fn uncertain_undo_cannot_be_confirmed_or_replayed() {
         let (control, context, cancel) = active_control();
-        let mut ledger = InputLedger { probed: true, draws_attempted: 24, draws_acknowledged: 24, ..InputLedger::default() };
+        let mut ledger = InputLedger {
+            probed: true,
+            draws_attempted: 24,
+            draws_acknowledged: 24,
+            ..InputLedger::default()
+        };
         let undo = ReconInput::UndoAll(PixelPoint::new(1320, 978));
-        assert!(deliver_guarded_input(&control, &context, &cancel, &mut ledger, undo, |_| Err("uncertain Undo All".to_owned())).is_err());
+        assert!(
+            deliver_guarded_input(&control, &context, &cancel, &mut ledger, undo, |_| Err(
+                "uncertain Undo All".to_owned()
+            ))
+            .is_err()
+        );
         assert_eq!(ledger.undo_attempted, 1);
         assert!(!ledger.undo_acknowledged);
 
 
         for operation in [undo, ReconInput::Confirm(PixelPoint::new(900, 600))] {
             ledger.probed = true;
-            assert!(deliver_guarded_input(&control, &context, &cancel, &mut ledger, operation, |_| panic!("no retry after uncertain Undo All")).is_err());
+            assert!(
+                deliver_guarded_input(
+                    &control,
+                    &context,
+                    &cancel,
+                    &mut ledger,
+                    operation,
+                    |_| panic!("no retry after uncertain Undo All")
+                )
+                .is_err()
+            );
         }
         assert_eq!(ledger.confirm_attempted, 0);
     }
@@ -1120,30 +2082,50 @@ mod tests {
     fn publication_errors_preserve_acknowledged_and_uncertain_destinations() {
         let cases = [
             (PublishError::InvalidPath, PublicationStatus::NotPublished),
-            (PublishError::Io {
-                stage: xsar::pyramid_json::PublishStage::LinkDestination,
-                status: PublicationStatus::Uncertain,
-                source: std::io::Error::other("simulated link failure"),
-                cleanup: None,
-            }, PublicationStatus::Uncertain),
-            (PublishError::Published {
-                cleanup: None,
-                directory_sync: Some(std::io::Error::other("simulated directory sync failure")),
-            }, PublicationStatus::Published),
+            (
+                PublishError::Io {
+                    stage: xsar::pyramid_json::PublishStage::LinkDestination,
+                    status: PublicationStatus::Uncertain,
+                    source: std::io::Error::other("simulated link failure"),
+                    cleanup: None,
+                },
+                PublicationStatus::Uncertain,
+            ),
+            (
+                PublishError::Published {
+                    cleanup: None,
+                    directory_sync: Some(std::io::Error::other("simulated directory sync failure")),
+                },
+                PublicationStatus::Published,
+            ),
         ];
 
 
         for (error, expected) in cases {
             let mut publication = None;
             let result = publish_once(&mut publication, || Err(error));
-            assert!(result.unwrap_err().contains(publication_label(Some(expected))));
+            assert!(
+                result
+                    .unwrap_err()
+                    .contains(publication_label(Some(expected)))
+            );
             assert_eq!(publication, Some(expected));
-            assert!(publish_once(&mut publication, || panic!("publication must not be replayed")).is_err());
+            assert!(
+                publish_once(&mut publication, || panic!(
+                    "publication must not be replayed"
+                ))
+                .is_err()
+            );
         }
         let mut publication = None;
         publish_once(&mut publication, || Ok(())).unwrap();
         assert_eq!(publication, Some(PublicationStatus::Published));
-        assert!(publish_once(&mut publication, || panic!("successful publication must not be repeated")).is_err());
+        assert!(
+            publish_once(&mut publication, || panic!(
+                "successful publication must not be repeated"
+            ))
+            .is_err()
+        );
     }
 
 
@@ -1159,20 +2141,41 @@ mod tests {
         stock.reverse();
         let deal = CompleteDeal::try_new(tableau, stock, original.metadata().clone()).unwrap();
         let mut publication = None;
-        publish_once(&mut publication, || xsar::pyramid_json::write_new(&output, &deal)).unwrap();
+        publish_once(&mut publication, || {
+            xsar::pyramid_json::write_new(&output, &deal)
+        })
+        .unwrap();
         assert_eq!(publication, Some(PublicationStatus::Published));
         let original_bytes = fs::read(&output).unwrap();
         let document: serde_json::Value = serde_json::from_slice(&original_bytes).unwrap();
         assert_eq!(document["schema_version"], 2);
         assert_eq!(document["tableau"].as_array().unwrap().len(), 28);
         assert_eq!(document["stock"].as_array().unwrap().len(), 24);
-        assert_eq!(xsar::pyramid_json::read_from(fs::File::open(&output).unwrap()).unwrap(), deal);
-        assert!(publish_once(&mut publication, || panic!("successful schema2 publication must not be repeated")).is_err());
+        assert_eq!(
+            xsar::pyramid_json::read_from(fs::File::open(&output).unwrap()).unwrap(),
+            deal
+        );
+        assert!(
+            publish_once(&mut publication, || panic!(
+                "successful schema2 publication must not be repeated"
+            ))
+            .is_err()
+        );
         assert_eq!(publication, Some(PublicationStatus::Published));
         let mut collision = None;
-        assert!(publish_once(&mut collision, || xsar::pyramid_json::write_new(&output, &deal)).is_err());
+        assert!(
+            publish_once(&mut collision, || xsar::pyramid_json::write_new(
+                &output, &deal
+            ))
+            .is_err()
+        );
         assert_eq!(collision, Some(PublicationStatus::Uncertain));
-        assert!(publish_once(&mut collision, || panic!("refused schema2 publication must not be retried")).is_err());
+        assert!(
+            publish_once(&mut collision, || panic!(
+                "refused schema2 publication must not be retried"
+            ))
+            .is_err()
+        );
         assert_eq!(collision, Some(PublicationStatus::Uncertain));
         assert_eq!(fs::read(&output).unwrap(), original_bytes);
         assert_eq!(fs::read_dir(&directory).unwrap().count(), 1);
@@ -1183,16 +2186,32 @@ mod tests {
     /// Uncertainty is represented as unknown, never as a false claim that no output exists.
     #[test]
     fn diagnostic_publication_status_is_not_collapsed_to_a_boolean() {
-
-
-        for publication in [PublicationStatus::NotPublished, PublicationStatus::Uncertain, PublicationStatus::Published] {
+        for publication in [
+            PublicationStatus::NotPublished,
+            PublicationStatus::Uncertain,
+            PublicationStatus::Published,
+        ] {
             let directory = test_directory();
             let mut diagnostics = Diagnostics::reserve(&directory.join("deal.json")).unwrap();
-            let progress = ReconProgress { restored: true, ..ReconProgress::default() };
-            diagnostics.finish(&Err("publication failed".to_owned()), Some(&progress), &InputLedger::default(), 30, Some(publication)).unwrap();
+            let progress = ReconProgress {
+                restored: true,
+                ..ReconProgress::default()
+            };
+            diagnostics
+                .finish(
+                    &Err("publication failed".to_owned()),
+                    Some(&progress),
+                    &InputLedger::default(),
+                    30,
+                    Some(publication),
+                )
+                .unwrap();
             let bytes = fs::read(diagnostics.directory.join("INCOMPLETE.json")).unwrap();
             let report: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-            assert_eq!(report["publication_status"], publication_label(Some(publication)));
+            assert_eq!(
+                report["publication_status"],
+                publication_label(Some(publication))
+            );
             assert_eq!(report["restored"], true);
             assert_eq!(report["complete"], false);
             let published = match publication {
@@ -1211,7 +2230,10 @@ mod tests {
     fn output_preflight_rejects_every_existing_entry() {
         let directory = test_directory();
         let output = directory.join("new.json");
-        assert_eq!(resolve_new_output(&output).unwrap(), fs::canonicalize(&directory).unwrap().join("new.json"));
+        assert_eq!(
+            resolve_new_output(&output).unwrap(),
+            fs::canonicalize(&directory).unwrap().join("new.json")
+        );
         write_private_new(&output, b"keep").unwrap();
         assert!(resolve_new_output(&output).is_err());
         assert_eq!(fs::read(&output).unwrap(), b"keep");
@@ -1236,9 +2258,13 @@ mod tests {
         symlink(&existing, &link).unwrap();
 
 
-        for base in [&existing, &child, &link, &directory.join("new.json"), &directory.join("missing-parent/new.json")] {
-
-
+        for base in [
+            &existing,
+            &child,
+            &link,
+            &directory.join("new.json"),
+            &directory.join("missing-parent/new.json"),
+        ] {
             for suffix in ["/", "//", "/.", "/..", "\0", "\0.json"] {
                 let mut spelling = base.as_os_str().to_os_string();
                 spelling.push(suffix);
@@ -1248,13 +2274,30 @@ mod tests {
         }
 
 
-        for spelling in ["", ".", "..", "/", "/.", "/..", "missing/.", "missing/..", "missing\0/new.json"] {
-            assert!(resolve_new_output(Path::new(spelling)).unwrap_err().starts_with("Output requires a plain final filename"));
+        for spelling in [
+            "",
+            ".",
+            "..",
+            "/",
+            "/.",
+            "/..",
+            "missing/.",
+            "missing/..",
+            "missing\0/new.json",
+        ] {
+            assert!(
+                resolve_new_output(Path::new(spelling))
+                    .unwrap_err()
+                    .starts_with("Output requires a plain final filename")
+            );
         }
         let non_unicode = directory.join(OsString::from_vec(b"valid-\xff.json".to_vec()));
         assert!(resolve_new_output(&non_unicode).is_ok());
         assert!(!non_unicode.exists());
-        assert_eq!(fs::read(&existing).unwrap(), b"existing bytes remain unchanged");
+        assert_eq!(
+            fs::read(&existing).unwrap(),
+            b"existing bytes remain unchanged"
+        );
         assert!(child.is_dir());
         assert_eq!(fs::read_link(&link).unwrap(), existing);
         assert_eq!(fs::read_dir(&directory).unwrap().count(), 3);
@@ -1271,19 +2314,37 @@ mod tests {
         let error = handle.reconnoitre(context(), invalid.clone()).unwrap_err();
         assert!(error.starts_with("Output requires a plain final filename"));
         assert!(handle.cancel_requested.load(Ordering::Acquire));
-        assert!(matches!(commands.try_recv(), Err(mpsc::TryRecvError::Empty)));
+        assert!(matches!(
+            commands.try_recv(),
+            Err(mpsc::TryRecvError::Empty)
+        ));
 
         let (control, context, cancel) = active_control();
         let (events, receiver) = mpsc::channel();
-        let latest = LatestFrameSlot { reconnaissance: control, ..LatestFrameSlot::default() };
-        let sink = WorkerEventSink { events, latest_frame: latest, capture_context: Mutex::new(Some(context.clone())) };
+        let latest = LatestFrameSlot {
+            reconnaissance: control,
+            ..LatestFrameSlot::default()
+        };
+        let sink = WorkerEventSink {
+            events,
+            latest_frame: latest,
+            capture_context: Mutex::new(Some(context.clone())),
+        };
         run(&context, &invalid, &sink, &cancel);
         let notifications: Vec<_> = receiver.try_iter().collect();
-        assert!(notifications.iter().any(|notification| matches!(&notification.event,
-            WorkerEvent::ReconnaissanceFinished { result: Err(error) }
-                if error.starts_with("Output requires a plain final filename"))));
-        assert!(!notifications.iter().any(|notification| matches!(notification.event,
-            WorkerEvent::State(WorkerState::Connecting | WorkerState::Capturing | WorkerState::Acting))));
+        assert!(
+            notifications
+                .iter()
+                .any(|notification| matches!(&notification.event,
+            WorkerEvent::ReconnaissanceFinished { result: Err(error), .. }
+                if error.starts_with("Output requires a plain final filename")))
+        );
+        assert!(!notifications.iter().any(|notification| matches!(
+            notification.event,
+            WorkerEvent::State(
+                WorkerState::Connecting | WorkerState::Capturing | WorkerState::Acting
+            )
+        )));
         assert!(sink.latest_frame.take().is_none());
     }
 
@@ -1293,25 +2354,65 @@ mod tests {
     fn diagnostics_are_private_bounded_and_preserve_original_bytes() {
         let directory = test_directory();
         let mut diagnostics = Diagnostics::reserve(&directory.join("deal.json")).unwrap();
-        assert_eq!(fs::metadata(&diagnostics.directory).unwrap().permissions().mode() & 0o777, 0o700);
-        diagnostics.write_start("synthetic-worker-test", Path::new("synthetic-profile.json")).unwrap();
+        assert_eq!(
+            fs::metadata(&diagnostics.directory)
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o700
+        );
+        diagnostics
+            .write_start(
+                "synthetic-worker-test",
+                &ReconProfileSource::File(PathBuf::from("synthetic-profile.json")),
+            )
+            .unwrap();
         let first = b"synthetic original byte marker 0".to_vec();
         diagnostics.record_capture(first.clone()).unwrap();
 
 
         for index in 1..180 {
-            diagnostics.record_capture(format!("synthetic original byte marker {index}").into_bytes()).unwrap();
+            diagnostics
+                .record_capture(format!("synthetic original byte marker {index}").into_bytes())
+                .unwrap();
         }
-        diagnostics.finish(&Err("test stop".to_owned()), None, &InputLedger::default(), 180, None).unwrap();
-        assert_eq!(fs::read(diagnostics.directory.join("baseline.png")).unwrap(), first);
-        assert_eq!(fs::read(diagnostics.directory.join("latest.png")).unwrap(), b"synthetic original byte marker 179");
+        diagnostics
+            .finish(
+                &Err("test stop".to_owned()),
+                None,
+                &InputLedger::default(),
+                180,
+                None,
+            )
+            .unwrap();
+        assert_eq!(
+            fs::read(diagnostics.directory.join("baseline.png")).unwrap(),
+            first
+        );
+        assert_eq!(
+            fs::read(diagnostics.directory.join("latest.png")).unwrap(),
+            b"synthetic original byte marker 179"
+        );
         assert!(diagnostics.latest_png.is_none());
-        let files: Vec<_> = fs::read_dir(&diagnostics.directory).unwrap().map(|entry| entry.unwrap().path()).collect();
-        assert_eq!(files.iter().filter(|path| path.extension().is_some_and(|extension| extension == "png")).count(), 2);
+        let files: Vec<_> = fs::read_dir(&diagnostics.directory)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .collect();
+        assert_eq!(
+            files
+                .iter()
+                .filter(|path| path.extension().is_some_and(|extension| extension == "png"))
+                .count(),
+            2
+        );
 
 
         for file in files {
-            assert_eq!(fs::metadata(file).unwrap().permissions().mode() & 0o777, 0o600);
+            assert_eq!(
+                fs::metadata(file).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
         }
         fs::remove_dir_all(directory).unwrap();
     }
@@ -1323,12 +2424,50 @@ mod tests {
         let directory = test_directory();
         let diagnostics = Diagnostics::reserve(&directory.join("deal.json")).unwrap();
         let profile = PathBuf::from(OsString::from_vec(b"profile-\n-\xff.json".to_vec()));
-        diagnostics.write_start("synthetic-worker-test", &profile).unwrap();
+        diagnostics
+            .write_start(
+                "synthetic-worker-test",
+                &ReconProfileSource::File(profile.clone()),
+            )
+            .unwrap();
         let bytes = fs::read(diagnostics.directory.join("INCOMPLETE-start.json")).unwrap();
         let report: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(report["profile_id"], "synthetic-worker-test");
+        assert_eq!(report["profile_source"], "file");
         assert_eq!(report["profile_path_debug"], format!("{profile:?}"));
-        assert!(!report["profile_path_debug"].as_str().unwrap().contains('\n'));
+        assert!(
+            !report["profile_path_debug"]
+                .as_str()
+                .unwrap()
+                .contains('\n')
+        );
+        assert_eq!(report["status"], "INCOMPLETE");
+        assert_eq!(report["complete"], false);
+        assert_eq!(report["restored"], false);
+        assert_eq!(report["captures"], 0);
+        assert_eq!(report["draws_acknowledged"], 0);
+        assert!(xsar::pyramid_json::from_slice(&bytes).is_err());
+        assert!(bytes.len() <= DIAGNOSTIC_BYTES);
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+
+    /// Embedded calibration records its source without inventing a runtime file path.
+    #[test]
+    fn diagnostic_start_records_bundled_profile_without_a_path() {
+        let directory = test_directory();
+        let diagnostics = Diagnostics::reserve(&directory.join("deal.json")).unwrap();
+        diagnostics
+            .write_start(
+                "pyramid-native-1920-classic-blue-v17",
+                &ReconProfileSource::BundledNativeV17,
+            )
+            .unwrap();
+        let bytes = fs::read(diagnostics.directory.join("INCOMPLETE-start.json")).unwrap();
+        let report: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(report["profile_id"], "pyramid-native-1920-classic-blue-v17");
+        assert_eq!(report["profile_source"], "bundled_native_v17");
+        assert!(report["profile_path_debug"].is_null());
         assert_eq!(report["status"], "INCOMPLETE");
         assert_eq!(report["complete"], false);
         assert_eq!(report["restored"], false);
@@ -1347,10 +2486,27 @@ mod tests {
         let mut diagnostics = Diagnostics::reserve(&directory.join("deal.json")).unwrap();
         let deal = synthetic_deal();
         let progress = ReconProgress {
-            tableau: Some(*deal.tableau()), stock: deal.stock()[..3].to_vec(), captures: 8, draws: 3, restored: false,
+            tableau: Some(*deal.tableau()),
+            stock: deal.stock()[..3].to_vec(),
+            captures: 8,
+            draws: 3,
+            restored: false,
         };
-        let ledger = InputLedger { draws_attempted: 3, draws_acknowledged: 2, delivery_failed: true, ..InputLedger::default() };
-        diagnostics.finish(&Err("uncertain D".to_owned()), Some(&progress), &ledger, 8, None).unwrap();
+        let ledger = InputLedger {
+            draws_attempted: 3,
+            draws_acknowledged: 2,
+            delivery_failed: true,
+            ..InputLedger::default()
+        };
+        diagnostics
+            .finish(
+                &Err("uncertain D".to_owned()),
+                Some(&progress),
+                &ledger,
+                8,
+                None,
+            )
+            .unwrap();
         let bytes = fs::read(diagnostics.directory.join("INCOMPLETE.json")).unwrap();
         let report: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(report["status"], "INCOMPLETE");
@@ -1378,8 +2534,13 @@ mod tests {
         assert!(diagnostics.persist_latest().is_err());
         assert!(diagnostics.persist_latest().is_err());
         assert_eq!(fs::read(latest).unwrap(), b"keep-existing");
-        assert!(write_private_new(&diagnostics.directory.join("baseline.png"), b"replace").is_err());
-        assert_eq!(fs::read(diagnostics.directory.join("baseline.png")).unwrap(), b"baseline");
+        assert!(
+            write_private_new(&diagnostics.directory.join("baseline.png"), b"replace").is_err()
+        );
+        assert_eq!(
+            fs::read(diagnostics.directory.join("baseline.png")).unwrap(),
+            b"baseline"
+        );
         fs::remove_dir_all(directory).unwrap();
     }
 
@@ -1392,18 +2553,41 @@ mod tests {
         write_private_new(&profile, b"{}").unwrap();
         let (control, context, cancel) = active_control();
         let (events, receiver) = mpsc::channel();
-        let latest = LatestFrameSlot { reconnaissance: control, ..LatestFrameSlot::default() };
-        let sink = WorkerEventSink { events, latest_frame: latest, capture_context: Mutex::new(Some(context.clone())) };
+        let latest = LatestFrameSlot {
+            reconnaissance: control,
+            ..LatestFrameSlot::default()
+        };
+        let sink = WorkerEventSink {
+            events,
+            latest_frame: latest,
+            capture_context: Mutex::new(Some(context.clone())),
+        };
         let mut request = request();
-        request.profile_path = profile;
+        request.profile = ReconProfileSource::File(profile);
         request.output_path = directory.join("deal.json");
         run(&context, &request, &sink, &cancel);
         let notifications: Vec<_> = receiver.try_iter().collect();
-        assert!(notifications.iter().any(|notification| matches!(&notification.event, WorkerEvent::ReconnaissanceFinished { result: Err(_) })));
-        assert!(!notifications.iter().any(|notification| matches!(notification.event, WorkerEvent::State(WorkerState::Connecting | WorkerState::Capturing | WorkerState::Acting))));
+        assert!(notifications.iter().any(|notification| matches!(
+            &notification.event,
+            WorkerEvent::ReconnaissanceFinished { result: Err(_), .. }
+        )));
+        assert!(!notifications.iter().any(|notification| matches!(
+            notification.event,
+            WorkerEvent::State(
+                WorkerState::Connecting | WorkerState::Capturing | WorkerState::Acting
+            )
+        )));
         assert_eq!(fs::read_dir(&directory).unwrap().count(), 1);
         assert!(sink.latest_frame.take().is_none());
-        assert!(!sink.latest_frame.reconnaissance.state.lock().unwrap().active);
+        assert!(
+            !sink
+                .latest_frame
+                .reconnaissance
+                .state
+                .lock()
+                .unwrap()
+                .active
+        );
         fs::remove_dir_all(directory).unwrap();
     }
 
@@ -1413,11 +2597,79 @@ mod tests {
     fn diagnostic_error_text_has_a_fixed_character_limit() {
         let directory = test_directory();
         let mut diagnostics = Diagnostics::reserve(&directory.join("deal.json")).unwrap();
-        diagnostics.finish(&Err("\u{1f642}".repeat(50_000)), None, &InputLedger::default(), 0, None).unwrap();
+        diagnostics
+            .finish(
+                &Err("\u{1f642}".repeat(50_000)),
+                None,
+                &InputLedger::default(),
+                0,
+                None,
+            )
+            .unwrap();
         let bytes = fs::read(diagnostics.directory.join("INCOMPLETE.json")).unwrap();
         assert!(bytes.len() <= DIAGNOSTIC_BYTES);
         let report: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-        assert_eq!(report["error"].as_str().unwrap().chars().count(), ERROR_CHARACTERS);
+        assert_eq!(
+            report["error"].as_str().unwrap().chars().count(),
+            ERROR_CHARACTERS
+        );
         fs::remove_dir_all(directory).unwrap();
     }
 }
+
+
+#[cfg(test)]
+mod authority_epoch_tests {
+    use super::*;
+
+
+    /// Exhausted STOP cannot be cleared by reserving a new same-context run.
+    #[test]
+    fn saturated_stop_permanently_refuses_fresh_authority() {
+        let control = ReconControl::default();
+        let cancel = AtomicBool::new(false);
+        let context = ControllerContext::new(
+            PathBuf::from("/tmp/epoch-test"),
+            crate::game::GameMode::Pyramid,
+            SolvingStrategy::ShortestPath,
+            1,
+        );
+        control.select(&context, &cancel).unwrap();
+        control.state.lock().unwrap().epoch = u64::MAX;
+        control.stop(Some(&context), &cancel);
+        assert!(control.epoch().is_err());
+        assert!(
+            control
+                .queue_reconnaissance(&context, &cancel, || panic!("must not dispatch"))
+                .is_err()
+        );
+        assert!(
+            control
+                .queue_execution(&cancel, || panic!("must not dispatch"))
+                .is_err()
+        );
+        assert!(cancel.load(Ordering::Acquire));
+    }
+
+
+    /// Context drift at the counter bound latches STOP before returning refusal.
+    #[test]
+    fn saturated_selection_latches_revocation() {
+        let control = ReconControl::default();
+        let cancel = AtomicBool::new(false);
+        control.state.lock().unwrap().epoch = u64::MAX;
+        let context = ControllerContext::new(
+            PathBuf::from("/tmp/epoch-test"),
+            crate::game::GameMode::Pyramid,
+            SolvingStrategy::ShortestPath,
+            1,
+        );
+        assert!(control.select(&context, &cancel).is_err());
+        assert!(cancel.load(Ordering::Acquire));
+        assert!(control.epoch().is_err());
+    }
+}
+
+
+#[cfg(test)]
+mod post_confirmation_tests;

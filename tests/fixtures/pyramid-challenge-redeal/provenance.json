@@ -1,0 +1,108 @@
+{
+  "source_version": "2.9.131",
+  "reports": [
+    "m13464",
+    "m13570"
+  ],
+  "files": [
+    {
+      "path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-challenge-redeal/jacks.png",
+      "bytes": 4140215,
+      "sha256": "3895fbbf6084a8a3cf2e544c6df91e6c6a43b123cfb5081a5f08b334480b67e9",
+      "mode": "0444",
+      "source": "/home/charlie/Documents/Pyramid/Validation/challenge-redeal-20261023/evidence/pyramid-error-1792680610974-595544-2/last-observed.png",
+      "role": "unchanged native original"
+    },
+    {
+      "path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-challenge-redeal/jacks-deal.json",
+      "bytes": 4751,
+      "sha256": "fe21438516974ad46ee36f1de0dec594387404531e4b532b1ffeccf10cb985e5",
+      "mode": "0444",
+      "source": "/home/charlie/Documents/Pyramid/Validation/challenge-redeal-20261023/evidence/pyramid-error-1792680610974-595544-2/deal.json",
+      "role": "unchanged native original"
+    },
+    {
+      "path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-challenge-redeal/jacks-enabled.rgb",
+      "bytes": 9072,
+      "sha256": "d159278d41e3f9f34177ff1ddc2cd7692d83670c8f7f427b15d79fd835ce7e79",
+      "mode": "0444",
+      "source": "/home/charlie/Documents/Pyramid/Validation/challenge-redeal-20261023/evidence/pyramid-error-1792680610974-595544-2/last-observed.png",
+      "role": "complete measured RGB crop",
+      "bounds": [
+        936,
+        792,
+        48,
+        63
+      ],
+      "tolerance": 4
+    },
+    {
+      "path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-challenge-redeal/jacks-one.rgb",
+      "bytes": 10920,
+      "sha256": "4098cb755f295b8fd6eda6dbb41ead33554a8c55930b6735c49a88fad364b73f",
+      "mode": "0444",
+      "source": "/home/charlie/Documents/Pyramid/Validation/challenge-redeal-20261023/evidence/pyramid-error-1792680610974-595544-2/last-observed.png",
+      "role": "complete measured RGB crop",
+      "bounds": [
+        890,
+        874,
+        140,
+        26
+      ],
+      "tolerance": 4
+    },
+    {
+      "path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-challenge-redeal/eights.png",
+      "bytes": 4157696,
+      "sha256": "a4dc7b7ef7f30298e5cb6a2c296cda747ab6216b52e5a5ccb1b347f7c2174cef",
+      "mode": "0444",
+      "source": "/home/charlie/Documents/Pyramid/Validation/challenge-redeal-20261023/evidence-second-failure/pyramid-error-1792683655726-595544-4/last-observed.png",
+      "role": "unchanged native original"
+    },
+    {
+      "path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-challenge-redeal/eights-deal.json",
+      "bytes": 4751,
+      "sha256": "d5b51ef0e35518d81622258905cd53d1b45592d0164491c4f308ff2129bf40fa",
+      "mode": "0444",
+      "source": "/home/charlie/Documents/Pyramid/Validation/challenge-redeal-20261023/evidence-second-failure/pyramid-error-1792683655726-595544-4/deal.json",
+      "role": "unchanged native original"
+    },
+    {
+      "path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-challenge-redeal/eights-enabled.rgb",
+      "bytes": 9072,
+      "sha256": "61328ff3408aa8365567822eedbf2dedcd1ea4433edbf3efd3785188a0a5e10f",
+      "mode": "0444",
+      "source": "/home/charlie/Documents/Pyramid/Validation/challenge-redeal-20261023/evidence-second-failure/pyramid-error-1792683655726-595544-4/last-observed.png",
+      "role": "complete measured RGB crop",
+      "bounds": [
+        936,
+        792,
+        48,
+        63
+      ],
+      "tolerance": 4
+    },
+    {
+      "path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-challenge-redeal/eights-one.rgb",
+      "bytes": 10920,
+      "sha256": "0a48f1c3f71ac4a95780f885f827af0227ff9f628f29bee3bd793b45ed2522b3",
+      "mode": "0444",
+      "source": "/home/charlie/Documents/Pyramid/Validation/challenge-redeal-20261023/evidence-second-failure/pyramid-error-1792683655726-595544-4/last-observed.png",
+      "role": "complete measured RGB crop",
+      "bounds": [
+        890,
+        874,
+        140,
+        26
+      ],
+      "tolerance": 4
+    }
+  ],
+  "synthetic": false,
+  "native_dimensions": [
+    1920,
+    1080
+  ],
+  "limits": "Exact whole patterns at existing tolerance4; no masks or per-pixel mixing.",
+  "live_boundary": "Stills and local adapter replays are not fresh guest acceptance."
+}

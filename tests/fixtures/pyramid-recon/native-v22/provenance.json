@@ -1,0 +1,29 @@
+{
+  "profile_bytes": 1063766,
+  "profile_sha256": "1d5f1d8d6319e9131d6d8bd15d5706e4f4cd06806f03753eb8c5fbbd644c0af7",
+  "original_profile": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-v21/profile.json",
+  "original_profile_sha256": "1a6794c4e8c9ea21b7cb4af32b3858dce9e7a8e279d19f9bf7d08a64587b7e20",
+  "source": "/home/charlie/Documents/Pyramid/Validation/native-challenge-regressions-20261021/retained-123-jd/baseline.png",
+  "source_sha256": "445eaa6bbec37a98370791117111e453c34e8ac73d4d156eb1a587c05bf7da41",
+  "fixture": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-v22/recon-jd.png",
+  "bounds": [
+    594,
+    302,
+    20,
+    16
+  ],
+  "crop_sha256": "c7bfe523193e956b7284971d39f5e48b8b76063ed90975d916668dd3955257d5",
+  "variants_before": 13,
+  "variants_after": 14,
+  "unchanged_matching": {
+    "policy": "paper_ink_l1_v2",
+    "score_scale": 1000000,
+    "rank_max_error_ppm": 220000,
+    "suit_max_error_ppm": 120000,
+    "min_label_gap_ppm": 80000
+  },
+  "profile_id": "pyramid-native-1920-classic-blue-v22",
+  "user_reference": "m10913",
+  "kind": "exposed-native-regression",
+  "fresh_live_acceptance": false
+}

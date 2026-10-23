@@ -1,0 +1,79 @@
+{
+  "files": [
+    {
+      "source": "/home/charlie/Documents/Pyramid/Validation/challenge-completion-20261021/retained-122-failure/deal.json",
+      "fixture": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-v20/deal.json",
+      "sha256": "7352723bb1ddb5b891408c21776c1a0225c4eed2e46c2206580d460a6a5c1e87",
+      "bytes": 4751
+    },
+    {
+      "source": "/home/charlie/Documents/Pyramid/Validation/challenge-completion-20261021/retained-122-failure/error-state.json",
+      "fixture": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-v20/error-state.json",
+      "sha256": "30493249528b750e6dfff127f24a7c024b03229b4f077075e0fe6b4d7fd3811f",
+      "bytes": 1980
+    },
+    {
+      "source": "/home/charlie/Documents/Pyramid/Validation/challenge-completion-20261021/retained-122-failure/error.log",
+      "fixture": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-v20/error.log",
+      "sha256": "9409443042f74cbe6bcccb9f3254922c4c613c856e56e7904bf706931a2dff1b",
+      "bytes": 2352
+    },
+    {
+      "source": "/home/charlie/Documents/Pyramid/Validation/challenge-completion-20261021/retained-122-failure/first-unmatched.png",
+      "fixture": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-v20/first-unmatched.png",
+      "sha256": "86dc91095348cdfb0e3af52595ab9b0f62f43708c86cc41fb3da3a89e8b2093c",
+      "bytes": 4339734
+    },
+    {
+      "source": "/home/charlie/Documents/Pyramid/Validation/challenge-completion-20261021/retained-122-failure/last-observed.png",
+      "fixture": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-v20/last-observed.png",
+      "sha256": "256cf7642191af62c7c6de98ebd187e3dadfe5a21e8c8e38b01517b767e41056",
+      "bytes": 4314402
+    },
+    {
+      "source": "/home/charlie/Documents/Pyramid/Evidence/star-club-completion-20261021/Challenge-Complete.png",
+      "fixture": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-objectives/boards-complete-continue.png",
+      "sha256": "64e2e66f919174cbf265401fe004878963e0a3c8cca84bd98e416ed58b77b201",
+      "bytes": 1786274
+    },
+    {
+      "source": "/home/charlie/Documents/Pyramid/Evidence/star-club-completion-20261021/Challenge-Complete.png",
+      "fixture": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-objectives/complete-continue.rgb",
+      "bounds": [
+        804,
+        842,
+        312,
+        78
+      ],
+      "sha256": "72721ee3b0c5aa74c0920f1debe10518bf5ee96aca38c93d76ef779e46232dbc",
+      "bytes": 73008
+    },
+    {
+      "source": "/home/charlie/Documents/Pyramid/Evidence/star-club-completion-20261021/Challenge-Complete.png",
+      "fixture": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-objectives/complete-boards-two-header.rgb",
+      "bounds": [
+        814,
+        48,
+        296,
+        32
+      ],
+      "sha256": "191d085ae0702b0feef4b80a59d1917be0e1848389c51c762e9fb98bdafda0fe",
+      "bytes": 28416
+    },
+    {
+      "source": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-objectives/fours-complete.png",
+      "fixture": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-objectives/complete-reward-skip.rgb",
+      "bounds": [
+        795,
+        858,
+        330,
+        40
+      ],
+      "sha256": "b451e7165eb93169e1cc30789cff5a31ddf11120a6b1d04a8eaf216af6e1459b",
+      "bytes": 39600
+    }
+  ],
+  "classification": "exposed native regression; not a holdout",
+  "new_capture": false,
+  "image_modification": false
+}

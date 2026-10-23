@@ -17,8 +17,6 @@ pub enum SolvingStrategy {
 
 
 impl SolvingStrategy {
-
-
     /// Strategies displayed at startup and in the idle selector.
     pub const AVAILABLE: [Self; 2] = [Self::ShortestPath, Self::ComputerVision];
 
@@ -28,7 +26,7 @@ impl SolvingStrategy {
 
 
         match self {
-            Self::ShortestPath => "Shortest path route calculation",
+            Self::ShortestPath => "A* Route Solution",
             Self::ComputerVision => "Computer Vision solving",
         }
     }
@@ -36,11 +34,13 @@ impl SolvingStrategy {
 
     /// Explain the selected method before strategy selection.
     pub const fn description(self) -> &'static str {
-
-
         match self {
-            Self::ShortestPath => "Observe the environment, build a route model and calculate a path using Dijkstra or A*. Replan when new information reveals an impasse.",
-            Self::ComputerVision => "Follow the game's built-in Solver highlights using screen captures and QMP input.",
+            Self::ShortestPath => {
+                "Calculate a bounded route for a same-session restored Pyramid deal, then execute one tableau with observed effects. Interrupted execution requires inspection and fresh acquisition."
+            }
+            Self::ComputerVision => {
+                "Follow the game's built-in Solver highlights using screen captures and QMP input."
+            }
         }
     }
 
@@ -76,7 +76,12 @@ impl ControllerContext {
         strategy: SolvingStrategy,
         generation: u64,
     ) -> Self {
-        Self { socket_path, game_mode, strategy, generation }
+        Self {
+            socket_path,
+            game_mode,
+            strategy,
+            generation,
+        }
     }
 
 
@@ -107,9 +112,19 @@ mod tests {
 
 
         for game in GameMode::AVAILABLE {
-            let independent = ControllerContext::new(PathBuf::from("/tmp/qmp.sock"), game, SolvingStrategy::ShortestPath, 1);
+            let independent = ControllerContext::new(
+                PathBuf::from("/tmp/qmp.sock"),
+                game,
+                SolvingStrategy::ShortestPath,
+                1,
+            );
             assert_eq!(independent.validate().is_ok(), game == GameMode::Pyramid);
-            let vision = ControllerContext::new(independent.socket_path, game, SolvingStrategy::ComputerVision, 1);
+            let vision = ControllerContext::new(
+                independent.socket_path,
+                game,
+                SolvingStrategy::ComputerVision,
+                1,
+            );
             assert!(vision.validate().is_ok());
         }
     }

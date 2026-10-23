@@ -1,0 +1,245 @@
+{
+  "profile_id": "pyramid-native-1920-classic-blue-v15",
+  "parent_profile": "../native-v14/profile.json",
+  "parent_sha256": "2e1c1cc7135dc8f5310396bba52473ba53c6ad4eb4b99b3b0b1631eac57ea9f9",
+  "profile_sha256": "c107cec6ab419cdb345447c4dec216b3a3d3f9981c881f2ab38e22b7bf143b49",
+  "transformation": "Only profile_id and the two explicitly opt-in schema-2 fields board.execution_empty_stock and dialog.post_confirm_ok differ. Remove both added fields and restore profile_id: the entire parsed profile equals native-v14. Legacy native-v14 bytes remain untouched.",
+  "sources": [
+    {
+      "file": "stock-empty.png",
+      "source": "/home/charlie/tmp/pyramid-error-1792433618738-65018-2/first-unmatched.png",
+      "sha256": "ed33ce034e10f639815068dfdfdf8ad1ee18a7afe5fc0f1a0ccc011747236c27",
+      "bytes": 4386014,
+      "width": 1920,
+      "height": 1080,
+      "mode": "RGBA"
+    },
+    {
+      "file": "stock-empty-deal.json",
+      "source": "/home/charlie/tmp/pyramid-error-1792433618738-65018-2/deal.json",
+      "sha256": "2315688a1d441d228737ab404e171dcfb212768d6bdd52e63ffdde25c177bcc0",
+      "bytes": 4750
+    },
+    {
+      "file": "post-confirm-3.png",
+      "source": "/home/charlie/tmp/.pyramid-recon-65018-3/latest.png",
+      "sha256": "36a92ae00fcd183930fa6d48f4093fa9b9741d9573e097f305d81befdfeebd74",
+      "bytes": 2212700,
+      "width": 1920,
+      "height": 1080,
+      "mode": "RGBA"
+    },
+    {
+      "file": "post-confirm-4.png",
+      "source": "/home/charlie/tmp/.pyramid-recon-65018-4/latest.png",
+      "sha256": "429c9eb940ff82a3c04d23c96a4bebd44771371a62d0aa7bce6ff7477241a122",
+      "bytes": 2198975,
+      "width": 1920,
+      "height": 1080,
+      "mode": "RGBA"
+    },
+    {
+      "file": "post-confirm-5.png",
+      "source": "/home/charlie/tmp/.pyramid-recon-65018-5/latest.png",
+      "sha256": "863ea334461508a9077ba82b690fec177587c6a2e4b6eee43221a5ed746bb321",
+      "bytes": 2198597,
+      "width": 1920,
+      "height": 1080,
+      "mode": "RGBA"
+    },
+    {
+      "file": "post-confirm-start.png",
+      "source": "/home/charlie/tmp/.pyramid-recon-65018-5/baseline.png",
+      "sha256": "446d6b66a420a67936b1ff41a5be3e9db38af1dded1eac12c139df5f47935c81",
+      "bytes": 3744766,
+      "width": 1920,
+      "height": 1080,
+      "mode": "RGBA"
+    },
+    {
+      "file": "post-confirm-restored.png",
+      "source": "/home/charlie/tmp/.pyramid-recon-65018-6/latest.png",
+      "sha256": "d6cfba0501861ac24a27eae8ff3729ca036d0c238ab5caf27c97ddb513f9fbc5",
+      "bytes": 3744734,
+      "width": 1920,
+      "height": 1080,
+      "mode": "RGBA"
+    }
+  ],
+  "measured_patches": [
+    {
+      "field": "board.execution_empty_stock.scene",
+      "file": "stock-empty.png",
+      "bounds": [
+        938,
+        794,
+        44,
+        56
+      ],
+      "rgb_bytes": 7392,
+      "rgb_sha256": "0212973c84ccd638ce3fc5962353c2a5a3e6e44f7124ae46fcf0529c6779f62d",
+      "mask_bytes": 2464,
+      "selected_pixels": 2464,
+      "mask_sha256": "79b83e7593fb7b1e69ad8cfbce58ad565f8d784294b20cccc248e9fc8aa50172",
+      "tolerance": 4,
+      "source_sha256": "ed33ce034e10f639815068dfdfdf8ad1ee18a7afe5fc0f1a0ccc011747236c27",
+      "contrast_metric": "maximum minus minimum selected floor((R+G+B)/3)",
+      "selected_luminance_min": 34,
+      "selected_luminance_max": 255,
+      "selected_luminance_contrast": 221
+    },
+    {
+      "field": "board.execution_empty_stock.left_empty",
+      "file": "stock-empty.png",
+      "bounds": [
+        767,
+        712,
+        60,
+        60
+      ],
+      "rgb_bytes": 10800,
+      "rgb_sha256": "b0861bd71fb48a697375111d44c40626438a5d312532dcffbe26797979bb26d1",
+      "mask_bytes": 3600,
+      "selected_pixels": 3600,
+      "mask_sha256": "df39bfc1362fd67cf026053d3de51a6194d260a635a7936a9cf55ab8ca1a5445",
+      "tolerance": 4,
+      "source_sha256": "ed33ce034e10f639815068dfdfdf8ad1ee18a7afe5fc0f1a0ccc011747236c27",
+      "contrast_metric": "maximum minus minimum selected floor((R+G+B)/3)",
+      "selected_luminance_min": 32,
+      "selected_luminance_max": 116,
+      "selected_luminance_contrast": 84
+    },
+    {
+      "field": "dialog.post_confirm_ok",
+      "file": "post-confirm-5.png",
+      "bounds": [
+        763,
+        611,
+        65,
+        38
+      ],
+      "rgb_bytes": 7410,
+      "rgb_sha256": "c5e21c165e9a79449ed8a53f0417ba55d2355d59d22e3ff11f49c2d4ece5fde9",
+      "mask_bytes": 2470,
+      "selected_pixels": 1758,
+      "mask_sha256": "09fa5a7a98e32f01220297795cda29839a53adb0e92fbfb5bee8ea7ef2e4eb13",
+      "tolerance": 8,
+      "source_sha256": "863ea334461508a9077ba82b690fec177587c6a2e4b6eee43221a5ed746bb321",
+      "contrast_metric": "maximum minus minimum selected floor((R+G+B)/3)",
+      "selected_luminance_min": 0,
+      "selected_luminance_max": 216,
+      "selected_luminance_contrast": 216
+    }
+  ],
+  "execution_empty_stock": {
+    "central_corridor": [
+      920,
+      678,
+      80,
+      187
+    ],
+    "scene_bounds": [
+      938,
+      794,
+      44,
+      56
+    ],
+    "left_empty_bounds": [
+      767,
+      712,
+      60,
+      60
+    ],
+    "scene_description": "Retained positive REDEAL icon, including its visible one-deal count; full native RGB and negative space are selected.",
+    "left_description": "Retained depleted LEFT pile with its X marker; this is an exact positive card-absence signature, not an inference from failed glyph recognition.",
+    "scene_context": "Score 785/1,700 challenge, Easy, one deal left, K of clubs still visible at fixed 1|1; both stock faces visibly contain no card.",
+    "authority_boundary": "A scene/card-absence witness only. No REDEAL coordinate, click authority, game mode, challenge goal or terminal result is added."
+  },
+  "post_confirm_ok": {
+    "reference_file": "post-confirm-5.png",
+    "bounds_unchanged": true,
+    "selected_mask_unchanged": true,
+    "tolerance_unchanged": true,
+    "selected_pixels": 1758,
+    "total_pixels": 2470,
+    "tolerance": 8,
+    "matches": [
+      {
+        "file": "post-confirm-3.png",
+        "maximum_selected_channel_difference": 4,
+        "selected_channel_differences_above_tolerance": 0,
+        "maximum_unselected_channel_difference": 7,
+        "all_selected_pixels_match": true
+      },
+      {
+        "file": "post-confirm-4.png",
+        "maximum_selected_channel_difference": 4,
+        "selected_channel_differences_above_tolerance": 0,
+        "maximum_unselected_channel_difference": 10,
+        "all_selected_pixels_match": true
+      },
+      {
+        "file": "post-confirm-5.png",
+        "maximum_selected_channel_difference": 0,
+        "selected_channel_differences_above_tolerance": 0,
+        "maximum_unselected_channel_difference": 0,
+        "all_selected_pixels_match": true
+      }
+    ],
+    "description": "Actual retained Undo All modal after acknowledged OK. Complete panel/title/body/cancel/backdrop conditions and controller phase checks remain separate requirements; the added RGB variant is confined to the original OK bounds and original selection mask.",
+    "authority_boundary": "Recognising this retained modal does not authorise another OK, retry, cleanup or publication. Acknowledged input is not observed disappearance."
+  },
+  "post_confirm_sources": [
+    {
+      "source": "/home/charlie/tmp/.pyramid-recon-65018-3/INCOMPLETE.json",
+      "sha256": "995d50d0e3ebbd815fc51d22c021e5bf68d35a9d63563b3f95ba5164af60813f",
+      "bytes": 1881,
+      "error": "Unknown native scene; input authority revoked",
+      "draws_attempted": 24,
+      "draws_acknowledged": 24,
+      "undo_all_attempted": 1,
+      "undo_all_acknowledged": true,
+      "confirm_attempted": 1,
+      "confirm_acknowledged": true,
+      "restored": false,
+      "publication_status": "not_attempted"
+    },
+    {
+      "source": "/home/charlie/tmp/.pyramid-recon-65018-4/INCOMPLETE.json",
+      "sha256": "f49696a195be05f913e81f0e60fd8994759fd504b1c60645196e3e8799b2467c",
+      "bytes": 1881,
+      "error": "Unknown native scene; input authority revoked",
+      "draws_attempted": 24,
+      "draws_acknowledged": 24,
+      "undo_all_attempted": 1,
+      "undo_all_acknowledged": true,
+      "confirm_attempted": 1,
+      "confirm_acknowledged": true,
+      "restored": false,
+      "publication_status": "not_attempted"
+    },
+    {
+      "source": "/home/charlie/tmp/.pyramid-recon-65018-5/INCOMPLETE.json",
+      "sha256": "f49696a195be05f913e81f0e60fd8994759fd504b1c60645196e3e8799b2467c",
+      "bytes": 1881,
+      "error": "Unknown native scene; input authority revoked",
+      "draws_attempted": 24,
+      "draws_acknowledged": 24,
+      "undo_all_attempted": 1,
+      "undo_all_acknowledged": true,
+      "confirm_attempted": 1,
+      "confirm_acknowledged": true,
+      "restored": false,
+      "publication_status": "not_attempted"
+    }
+  ],
+  "paired_board_references": {
+    "starting_file": "post-confirm-start.png",
+    "starting_source_run": 5,
+    "restored_file": "post-confirm-restored.png",
+    "restored_source_run": 6,
+    "evidence_boundary": "Separate retained original observations, reused for exposed scene/visible-position regression. Their pairing is not a successful scan, restored flag, same-run publication or new live receipt."
+  },
+  "evidence_boundary": "Calibration and exposed regressions using existing retained native originals only. No generated/resized/recoloured PNG, prospective/held-out accuracy, newly executed Rust validation, successful guarded acquisition, observed new guest effect or live acceptance is claimed. Original failure packets remain untouched.",
+  "frozen_policy": "Schema remains 2. Entire tableau_reader and stock_reader, graded glyph thresholds, bank variants, geometry, paper/colour/uniqueness requirements, old board/dialog signatures, point coordinates and all tolerances remain native-v14. New measured scene/left samples use tolerance4; post-confirm OK retains tolerance8."
+}

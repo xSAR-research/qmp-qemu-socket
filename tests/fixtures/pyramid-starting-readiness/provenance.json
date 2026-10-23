@@ -1,0 +1,29 @@
+{
+  "user_sources": [
+    "m12781",
+    "m12805"
+  ],
+  "files": [
+    {
+      "source": "/home/charlie/tmp/.pyramid-recon-557656-2/baseline.png",
+      "path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-starting-readiness/dealing.png",
+      "sha256": "3c815a05b4d839971c8329675c74b2198b9d50a447fcd79176283b5c10b9bcce",
+      "bytes": 3763247
+    },
+    {
+      "source": "/home/charlie/tmp/.pyramid-recon-557656-3/baseline.png",
+      "path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-starting-readiness/settled.png",
+      "sha256": "e8f53abdb3e42245386171712389bc5c4929983867caf3d2b0944f736f21a500",
+      "bytes": 3760839
+    },
+    {
+      "source": "/home/charlie/tmp/.pyramid-recon-557656-3/COMPLETE-diagnostics.json",
+      "path": "/home/charlie/Documents/Pyramid/Validation/no-challenge-readiness-20261022/evidence/later-single-board-complete.json",
+      "sha256": "c61c3c0d7d2efa87dedf583094d602efa176c6a1a38c21fc579d3d255fc66a31",
+      "bytes": 1844
+    }
+  ],
+  "role": "Original1920x1080 native frames; synthetic sequences are labelled in tests",
+  "calibration_changed": false,
+  "gesture_or_animation_timing_proved": false
+}

@@ -1,0 +1,96 @@
+{
+  "evidence_schema": "pyramid-native-v8-static-scene-v1",
+  "profile_id": "pyramid-native-1920-classic-blue-v8",
+  "profile_sha256": "0b459aa78701da2f07f6cf911ce6f78f7190b1432b66706f4f0135ed21f48a3e",
+  "base_profile": "../native-v7/profile.json",
+  "base_profile_sha256": "9517ce85382ec0c977e735c79871c1e2f8110b7265343dc1140ac45d506e3e08",
+  "only_changes": [
+    "profile_id",
+    "board.scene[0]",
+    "board.scene[1]"
+  ],
+  "scene_reference": {
+    "file": "../native-v7/baseline.png",
+    "sha256": "f00076f38a2906dc17d1dc5b7c54806b6285f363f936924e5c785785e9173edf"
+  },
+  "files": {
+    "profile.json": {
+      "source": "/home/charlie/tmp/pyramid-selection-diagnosis-q5b9vs7x/profile-v8.proposed.json",
+      "bytes": 793900,
+      "sha256": "0b459aa78701da2f07f6cf911ce6f78f7190b1432b66706f4f0135ed21f48a3e",
+      "transformation": "none"
+    },
+    "selected-9D.png": {
+      "source": "/home/charlie/Pictures/Screenshots/qmp-qemu-socket 261019 055756 action11-selected-9D.png",
+      "bytes": 3752287,
+      "sha256": "2b017883ebc84502838e38922396114ac8363f084144d1ced3078b74a49ff7a7",
+      "transformation": "none"
+    },
+    "deal.json": {
+      "source": "/home/charlie/tmp/pyramid-recon-1792351991833-667842-1.json",
+      "bytes": 4751,
+      "sha256": "b5ea639102822aef9a17b586bc926394725d5fc9f1beb56637207be2e26422b3",
+      "transformation": "none"
+    },
+    "baseline.png": {
+      "source": "/home/charlie/tmp/.pyramid-recon-667842-0/latest.png",
+      "bytes": 3770781,
+      "sha256": "bd0f3ad8de437e1e58ec50fc930839e101623773c7fe000a74c78312dda55ae1",
+      "transformation": "none"
+    }
+  },
+  "selected_position": {
+    "removed_tableau_indices_zero_based": [
+      23,
+      24
+    ],
+    "selected_location_one_based": "6|3",
+    "selected_card": "9D",
+    "left": "4S",
+    "right": "8C",
+    "remaining_tableau": 26
+  },
+  "limitations": [
+    "selected-9D.png is a later operator-provided native capture, not the exact first failed controller frame",
+    "no plan resume or input authority",
+    "full live acquisition/execution of corrected build pending"
+  ],
+  "scene_patches": [
+    {
+      "index": 0,
+      "bounds": [
+        1796,
+        116,
+        109,
+        18
+      ],
+      "selected_pixels": 1962,
+      "contrast": 96,
+      "tolerance": 4
+    },
+    {
+      "index": 1,
+      "bounds": [
+        1796,
+        388,
+        109,
+        20
+      ],
+      "selected_pixels": 2180,
+      "contrast": 93,
+      "tolerance": 4
+    },
+    {
+      "index": 2,
+      "bounds": [
+        931,
+        695,
+        60,
+        50
+      ],
+      "selected_pixels": 3000,
+      "tolerance": 4,
+      "unchanged_from_v7": true
+    }
+  ]
+}

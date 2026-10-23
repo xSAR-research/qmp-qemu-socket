@@ -1,0 +1,80 @@
+{
+  "source_version": "2.9.132",
+  "records": [
+    {
+      "path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-execution-observability/apex.png",
+      "source": "/home/charlie/tmp/pyramid-error-1792697549079-616095-3/first-unmatched.png",
+      "retained_source": "/home/charlie/Documents/Pyramid/Validation/execution-observability-20261023/evidence/pyramid-error-1792697549079-616095-3/first-unmatched.png",
+      "bytes": 4386095,
+      "sha256": "3289a4b2c25627410777831f6023fd879cab86ea3e3455afe31e505fdc76958b",
+      "role": "unchanged native original"
+    },
+    {
+      "path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-execution-observability/apex-deal.json",
+      "source": "/home/charlie/tmp/pyramid-error-1792697549079-616095-3/deal.json",
+      "retained_source": "/home/charlie/Documents/Pyramid/Validation/execution-observability-20261023/evidence/pyramid-error-1792697549079-616095-3/deal.json",
+      "bytes": 4751,
+      "sha256": "c1aa204afe8a551a03c8592a0bb9b59cb20eb590981cb566acf75596066435b1",
+      "role": "unchanged native original"
+    },
+    {
+      "path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-execution-observability/score-final.png",
+      "source": "/home/charlie/tmp/pyramid-error-1792715304004-616095-7/last-observed.png",
+      "retained_source": "/home/charlie/Documents/Pyramid/Validation/execution-observability-20261023/evidence/pyramid-error-1792715304004-616095-7/last-observed.png",
+      "bytes": 4349844,
+      "sha256": "ee6cc9a69cd56f4da81a78ebf8072f09a806fc09d47949c874060f6d8afc9e40",
+      "role": "unchanged native original"
+    },
+    {
+      "path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-execution-observability/score-deal.json",
+      "source": "/home/charlie/tmp/pyramid-error-1792715304004-616095-7/deal.json",
+      "retained_source": "/home/charlie/Documents/Pyramid/Validation/execution-observability-20261023/evidence/pyramid-error-1792715304004-616095-7/deal.json",
+      "bytes": 4739,
+      "sha256": "073b54a03624bdbec956af5a1192d29874540f8fb7326b75212b07014ba3bc2c",
+      "role": "unchanged native original"
+    },
+    {
+      "path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-execution-observability/score-start.png",
+      "source": "/home/charlie/tmp/.pyramid-recon-616095-12/baseline.png",
+      "retained_source": "/home/charlie/Documents/Pyramid/Validation/execution-observability-20261023/evidence/.pyramid-recon-616095-12/baseline.png",
+      "bytes": 3696365,
+      "sha256": "63afba1266ce7596cef48b4d9ffcf01be75cec91c6aee91d850eaec50d9f576d",
+      "role": "unchanged native original"
+    },
+    {
+      "path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-execution-observability/boards-two.png",
+      "source": "/home/charlie/tmp/.pyramid-recon-616095-2/baseline.png",
+      "retained_source": "/home/charlie/Documents/Pyramid/Validation/execution-observability-20261023/evidence/.pyramid-recon-616095-2/baseline.png",
+      "bytes": 3795015,
+      "sha256": "b149f657d23c8521d582bcf7ccdc3351724e89521dc8650b6721532a8badb32a",
+      "role": "unchanged native original"
+    },
+    {
+      "path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-execution-observability/stock-absent.rgb",
+      "source": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-execution-observability/apex.png",
+      "bounds": [
+        931,
+        695,
+        60,
+        50
+      ],
+      "bytes": 9000,
+      "sha256": "8816e57b539b8c7bef1ef74b04964478abfef5a005f4ac1c2511ae3e2a642cdf",
+      "role": "full-mask native RGB crop; tolerance 4; no pixel omissions"
+    },
+    {
+      "path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-execution-observability/deals-zero.rgb",
+      "source": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-execution-observability/apex.png",
+      "bounds": [
+        890,
+        874,
+        140,
+        26
+      ],
+      "bytes": 10920,
+      "sha256": "6e03c25cbd82724ffb1ff6f333565319f3a3fe73817090219f394b60ecaa7571",
+      "role": "full-mask native RGB crop; tolerance 4; no pixel omissions"
+    }
+  ],
+  "boundaries": "Native stills are recognition regressions, not timing, input effect or challenge-win proof. The Boards 2/3 original is a successful NoChallenge acquisition, not an identified failed target-aware entry."
+}

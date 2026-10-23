@@ -1,15 +1,676 @@
 # Pyramid reconnaissance native profile
 
+## Current delivery — 2.9.127, host qualified; blocked pending fresh Beast
+
+App **2.9.127** passed **1330 tests, 0 failed, 0 ignored, 0 filtered** in the complete native include-ignored scope (369.45s command time). Locked all-target/all-feature check, strict private rustdoc, Clippy with warnings denied, native release, scoped formatting and native/protected headless help passed. xSAR **0.8.104** and console **0.8.4** are unchanged; their 18 shared/feature/private-consumer gates are retained by exact input and log hashes (289 shared tests, 80 console tests; feature rows 14/55/25/67/57/99), not rerun.
+
+The host implementation is qualified. The full selected goal is blocked pending fresh v2.9.127 Beast testing after three consecutive checks found no candidate run; all nine acceptance cases remain pending. Select Mode **Continuous** and Stop condition **Continuous — no challenge** for the new target-agnostic loop. It reuses the Single board acquisition/planning machinery without classifying a challenge or checking targets.
+
+Same-board setting changes discard the plan and retain authenticated Recon. Recon is an optional visible rescan in automatic modes too. An initial automatic start may use that exact current acquisition once; changed bytes, STOP or context revoke it. Each subsequent board resets the worker, status and route dropdown to Shortest route. Paired Recon reports actual RIGHT/DR and LEFT/DL together without changing its physical 24 D operations, pacing or capture policy.
+
+Exhaustive Shortest no-win switches automatically to Maximum card matches within the same owned inventory. Interruption never proves no-win. Target-aware Boards no-win bypasses partial matching, including when Maximum was selected. Score/Card target stopping remains separate, with independent completion confirmation and operator-owned Star Club Continue. No-challenge deliberately ignores those targets.
+
+Only the no-challenge loop uses independently replayed empty-tableau completion plus the final whole-action ACK to schedule a cancellable three-second wait and fresh Recon. ACK does not prove a win. Fresh Recon must independently reject an old partial, exhausted, unsupported or unsettled board. Existing Manual/Single and normal/target-aware final-effect semantics are preserved.
+
+Automatic partial/no-card continuations count actual acknowledged RECYCLEs against the replayed state, derive only the legal remaining D operations (at most 74 from untouched stock: 72 DRAW + 2 RECYCLE), verify every effect, and require a positive native enabled REDEAL and allowance before one click. The 1.5-second post-click wait is a configured policy, not a timing measurement from the three stills. A fresh Recon must prove the next board. Planned RECYCLEs, executed RECYCLEs and new-board REDEAL allowance are separate.
+
+The new bundled-only native capability recognises the measured **1 deal left** and **0 deals left** captions. Only the complete enabled one-deal control grants a click. Two-deal and absent-caption variants remain unsupported and stop safely. File/custom profiles cannot opt in through an identifier. Ordinary native-v22 recognition and glyph limits are unchanged. Variable backgrounds and idle CPU remain outside this goal.
+
+[Verification](Verification-2.9.127.md), [fresh Beast brief](Live-Test-2.9.127.md), [selected goal](Pyramid-Current-Goal.md), [testing matrix](Pyramid-Testing-Matrix.md).
+
+## Retained history — earlier state and proposals
+
+The sections below describe dated earlier states. The current delivery above and selected goal supersede older draft-only and blocked-goal statements. Earlier evidence and milestone acceptance remain unchanged.
+
+## Current qualified host candidate — app 2.8.126
+
+App **2.8.126 / native-v22** passed **1318 tests, 0 failed, 0 ignored, 0 filtered** in the complete native include-ignored scope (360.435s command time). Locked all-target/all-feature check, strict private rustdoc, Clippy with warnings denied, native release, scoped formatting of 19 Rust files and native/protected headless help passed. xSAR **0.8.104** and console **0.8.4** are unchanged: 18 shared/feature/private-consumer gates are retained by exact input/log hashes (289 shared tests, 80 console tests; feature rows 14/55/25/67/57/99), not rerun.
+
+The active Card reader identifies the complete top-centre **cleared** word and
+the actual `current/target` counter. `ChallengeKind::Cards` contains no card rank.
+All thirteen possible rank names use this one path; no per-rank runtime label
+bank is required. Boards and Score retain their nine original literal labels,
+their separate units and the unchanged numeric-reader policy.
+
+The shared word uses the full 84×32 measured blue-minus-6 intensity template,
+exact L1/max ratio ≤210000 ppm, one strong-white core in each of seven letters,
+two blank columns at both boundaries, and unchanged tolerance-9 native banner
+borders. Search is horizontal within the existing 224×32 objective band, without
+resizing or rotating. A separate measured Boards word is a veto only; it grants
+no Boards authority and tolerates one damaged core to prevent a corrupted whole
+Boards label from becoming a Card challenge. No card-glyph/profile, scene,
+modal, empty-position, final-effect, numeric tolerance or timing was relaxed.
+
+Counter kind, target, monotonic progress and session context still bind the
+lifetime. An unmet target needs a positively verified board effect and witnessed
+fresh board before automatic new Recon/restoration/planning/execution. A numeric
+target alone cannot finish the challenge. Independent real completion can stop
+remaining actions at the existing guarded action boundary; Star Club Continue
+remains operator-owned. Manual, Single board, normal Continuous/restart/mid-game
+entry, both route objectives and STOP/context/no-uncertain-retry guards remain.
+
+Native Sixes 0/12 and Nines 0/15 now pass the actual paired worker entry adapter.
+Synthetic prefix and missing-letter/boundary/banner/counter cases are explicitly
+host regressions. They do not establish fresh guest acceptance of 126.
+
+**The selected generic Card goal is blocked pending fresh Beast verification
+and remains incomplete.** Fresh 126 Beast
+verification starts with the available Sixes challenge. It must establish real
+unmet-target board continuation and verified target stopping, with preserved
+modes/guards checked at their appropriate evidence layer. The old missing-125-
+trial blocker is historical: actual 125 Single-board Sixes acquisitions and
+planning were observed, but did not prove Continuous completion. Its recorded
+Continuous refusal used the normal-repeat stop choice. Select **Stop at challenge
+target** for this goal. M14 DRAW/REDEAL, variable backgrounds and idle CPU stay
+outside this goal. M01–M09 remain accepted; M10 Awaiting verification, M11 Planned,
+M12 In progress and M13/M14 Planned. No milestone acceptance is inferred here.
+
+[126 verification](Verification-2.8.126.md), [fresh Beast brief](Live-Test-2.8.126.md), [selected goal](Pyramid-Current-Goal.md).
+
+## Retained 125 qualification and historical scope
+
+App **2.8.125 / native-v22** passed **1309 tests, 0 failed, 0 ignored, 0 filtered** in the complete native include-ignored scope (360.816s command time). Locked all-target/all-feature check, strict private rustdoc, Clippy with warnings denied, native release, scoped formatting of 14 Rust files and native/protected headless help passed. Unchanged xSAR **0.8.104** and console **0.8.4** retain 18 hash-verified shared/feature/private-consumer gates: 289/80 tests and feature rows 14/55/25/67/57/99. Those gates were retained, not rerun.
+
+The retained 123 failures include the following cases. Boards reached 3/3
+after 57 actions / 75 acknowledged gestures but the final effect was unconfirmed.
+Score cleared its tableau at 1260/1400 after 60 actions / 80 gestures but could
+not continue. Charlie accepted Fours gameplay and automatic Recon/planning across
+the required boards; its actual 12/12 Challenge Complete/Continue frame was still
+refused after 46 verified actions / 61 gestures. Twos 0/10 refused before Recon. A later Fours 0/7 caption also refused entry.
+A separate Manual/Single-board acquisition refused JD at 4|1: suit shape error
+120414 ppm exceeded the unchanged 120000 ppm cap. Its native frame shows Sixes
+0/12; this card-reader correction does not add Sixes challenge-target support.
+
+Native-v21 adds a final-only challenge proof bound to the original incomplete
+requirement. It requires the same kind/target and monotonic actual progress;
+Boards must advance exactly once. Only a replayed empty tableau after the final
+whole-action acknowledgement may use it. All 28 full 60×4 felt bands, scene/modal
+checks and exact exclusive pile identities remain required; the new bottom-row
+bands are at y + 168. Legacy v20 geometry remains intact. This proves a card
+effect only: an unmet Score target proceeds through the existing witnessed board
+transition, while a reached target still requires independent real completion.
+
+The actual Twos caption and Fours title/Continue appearances are added as finite
+native samples with unchanged tolerances. Fours completion may retire remaining
+card actions through the existing guarded terminal path. Continue stays operator
+owned. A measured full Fours 0/7 word crop is added without raising tolerance 9.
+Native-v22 retains v21's complete profile and appends one exact measured diamond
+appearance to each bank (13 to 14, capacity 16). Rank/suit caps, the 80000 ppm gap,
+paper and exclusive-colour gates remain unchanged. The original JD frame now
+reads all 28 directly labelled tableau cards and LEFT 8C. The new profile also
+passes every one of the 423 prior direct labels independently in both banks.
+No arbitrary named rank labels or alternate themes are introduced.
+
+The two-second ACK-relative final window, 200ms observations, STOP/context/
+fatal-frame checks, capture/input budgets and no-uncertain-retry rule remain.
+App search stays operator controlled, with checked allocation/arithmetic and
+no automatic state/expansion/time/byte cutoff. Manual, Single board, normal
+Continuous/restart/mid-game entry and both route objectives remain required.
+Maximum card matches prefers a full win; verified beneficial partial endpoints
+remain distinct and stop. M14 DRAW/REDEAL remains a later milestone.
+
+**The selected goal is blocked pending fresh Beast verification and remains
+incomplete.** Fresh 125 Beast verification
+is pending for Boards, Score, Twos, Fours, Sevens and preserved modes/guards.
+Charlie's accepted 123 Fours gameplay/transitions are retained as that specific
+evidence; its failed endpoint and the new offline regression pass are not fresh
+125 controller acceptance. M01–M09 remain accepted, M10 Awaiting verification,
+M11 Planned, M12 In progress, M13/M14 Planned. Additional active rank labels,
+variable backgrounds and idle CPU remain separate backlog.
+
+[125 verification](Verification-2.8.125.md), [Beast brief](Live-Test-2.8.125.md) and [current goal](Pyramid-Current-Goal.md).
+
+## Retained 123 and earlier evidence
+
+## Retained qualified host candidate — app 2.8.123
+
+App **2.8.123 / native-v20** passed **1297 tests, 0 failed, 0 ignored, 0 filtered** in the complete native include-ignored scope (339.941s). Locked check, strict private rustdoc, Clippy with warnings denied, native release, scoped formatting of 23 Rust files and native/protected headless help passed. Unchanged xSAR **0.8.104** and console **0.8.4** retain their 18 hash-verified shared/feature/private-consumer gates: 289/80 tests and feature rows 14/55/25/67/57/99. They were retained, not rerun.
+
+The retained 2.8.122 packet delivered 39 actions / acknowledged 57 gestures but verified only 38. The final original shows actual Boards cleared 2/2 and Perfect, before Challenge Complete. The intermediate v19 proof excludes reached targets; its upper absence bands also overlap Perfect in slots 23–25 (687 non-felt pixels). The normal alternative requires a normal caption. The first scene[2] diagnostic belongs to the earlier flying frame, not the complete final diagnosis.
+
+Explicit v20 target-clear calibration requires exactly one increment of the immutable incomplete Boards requirement to the same actual target, independent empty replay and original scene/modal/exact-pile checks. All 28 bands retain 240/240 felt pixels. Existing normal-final geometry uses upper bands for slots 0–20 and y + 164 for slots 21–27. The final original passes all 6,720 pixels; the flying original fails 999 and scene checks. Legacy intermediate/Perfect geometry, glyphs and tolerances stay unchanged.
+
+A verified whole-action effect at a reached count retires card input through a typed pending result; the count does not prove completion. The input-free transition independently witnesses the real terminal before success. Actual Continue and XP skip-instruction crops govern the existing shared XP/optional-LevelUp flow. Star Club Continue is left to the operator, including when it appears after XP. Missing or corrupted Continue is never skip authority. Verified terminal completion can retire a route with actions remaining; ordinary and partial card effects still require exact verification.
+
+The final two-second ACK window, 200ms interval, STOP/context/fatal guards, capture/input budgets and no-uncertain-retry rule remain. App search still omits automatic state/expansion/time/byte cutoffs; checked allocation/arithmetic and operator STOP remain. Manual, Single board, normal Continuous and both route objectives remain in the full regression scope.
+
+**The selected goal is incomplete; automatic continuation is blocked pending fresh Beast verification.** Fresh protected 2.8.123 Beast verification remains pending for Boards, Score, Twos, Fours, Sevens and the unmet-target board transition. Old native PNGs, offline transports and synthetic compositions are not fresh acceptance. M10 remains Awaiting verification; M11 Planned; M12 In progress; M13 and M14 Planned. Additional ranks, partial DRAW/REDEAL, variable backgrounds and idle CPU remain separate backlog.
+
+[123 verification](Verification-2.8.123.md) and [fresh Beast brief](Live-Test-2.8.123.md).
+
+## Retained earlier evidence
+
+## Current native-v19 — bound intermediate Boards clear
+
+App **1280 passed, 0 failed, 0 ignored, 0 filtered** in the complete native include-ignored scope (320.378 seconds). Locked check, strict private rustdoc, Clippy with warnings denied, release, formatting of twelve scoped Rust files and native/protected headless help passed. Unchanged xSAR **0.8.104** and console **0.8.4** retain their qualified 289/80 tests and feature rows 14/55/25/67/57/99; those checks were retained, not rerun.
+
+Native-v19 explicitly enables a final-only intermediate Boards proof. The production observer binds the initial incomplete Boards requirement once. Only after the final whole-action acknowledgement and an independently replayed empty tableau may an exact one-board increment of that same requirement admit the unchanged 28 positive absence bands, scene/modal checks and exact exclusive pile identities. It reports **BoardClear only**. The next full starting board still requires the existing fresh transition checks before new RECON. Completed targets, Score/rank/normal headers, partial endpoints, changed targets and unknown counters cannot use this alternative.
+
+Protected app **2.8.122**, native profile **v19**: `/home/charlie/Documents/Pyramid/Validation/challenge-board-transition-20261021/release/qmp-qemu-socket-2.8.122`; 13461712 bytes, mode 0555; SHA-256 `7ea7b0bf48e747a0f295985222cf99c0585a89135e7c507e2f13a79c386d4e73`. The protected and Cargo-selected native binaries match. Version 122 is the next correction build after qualified 121, with no new milestone/minor or sibling version increment.
+
+Fresh 122 live acceptance is pending. See [verification](Verification-2.8.122.md) and [live brief](Live-Test-2.8.122.md). Search STOP policy, final observation bounds and M14 deferral remain as recorded.
+
+Schema 2 adds optional `board.board_count_final_clear: true`, admitted only alongside the existing final_clear profile. False/implicit/schema-1 capability and all invalid bindings refuse. Removing that flag and restoring profile_id decodes exactly to v18; no old samples, thresholds or frame checks changed.
+
+<!-- qualification120:start -->
+## Retained app 2.8.120 / native-v18 — explicit normal final proof
+
+The three retained protected-118 normal finals expose moving Perfect artwork
+over the previous absence bands and a zero-deals-left cross. Native-v18 opts into
+a separate final-only proof: complete normal header/footer, independent original
+scene anchors, 21 upper-row top felt bands, seven unoccluded bottom-row lower
+felt bands and exact exclusive pile identities. All 240 pixels in every band
+must pass the unchanged felt predicate. Circle/cross samples and all v17 card,
+scene, modal and prior Perfect calibration remain unchanged. The cross requires
+both expected and actual empty piles and grants no REDEAL input.
+
+This alternative runs only for the independently replayed empty tableau at the
+final whole-action ACK boundary. It proves BoardClear only. Ordinary/partial
+recognition, STOP/context, final observation bounds, transition evidence and
+shared GAME WIN/restart authority retain their separate checks.
+
+Schema 2 adds optional `board.normal_final_clear` with complete `left_circle` and
+`left_exhausted` patterns, each fixed at `[767,712,60,60]`, full masks and channel
+tolerance at most four. It requires the original DRAW/LEFT roles. Profiles lacking
+this field acquire no new proof. Runtime rollback uses the strict retained v17
+File profile; a failed File load never falls back. Removing this field and restoring
+the profile ID recovers the entire decoded native-v17 profile.
+
+App **1268 passed, 0 failed, 0 ignored, 0 filtered** in the full native
+include-ignored scope. Locked native check, strict private rustdoc, Clippy with
+warnings denied, release build, nine scoped Rust formatting checks and both
+headless help checks passed. xSAR **0.8.104** and console **0.8.4** are unchanged;
+their qualified 289/80 tests and six feature rows 14/55/25/67/57/99 are retained,
+not rerun. Fresh Beast acceptance remains pending. M01–M09 remain accepted,
+M10 is Awaiting verification and M11 is Planned.
+
+Read [Verification120](Verification-2.8.120.md) and [LiveTest120](Live-Test-2.8.120.md).
+<!-- qualification120:end -->
+
+<!-- qualification118:start -->
+## Retained app 2.7.118 — unchanged native-v17 card calibration
+
+All three measured normal ordinals are available to the normal-series reader in
+the current implementation. Complete header and New-footer patches retain their
+existing bounds/tolerances; no local counter or challenge denominator grants normal
+identity. The card reader, paired 500 ms reconnaissance and final-only Perfect
+proof remain native-v17 with unchanged older calibration/fixture bytes.
+
+Continuous and scored partial-route execution are app policy; partial endpoints
+require ordinary exact-position proof and release control without completion or
+restart authority. Full required host scope and protected release passed: app
+1,218/shared 278/private console 80, zero failed/ignored/filtered, plus six shared
+feature configurations. Native/protected artifacts match. Final documentation/
+preservation audit passed: 12 documents, 309 local links, 40 review paths and unchanged
+exercised inputs. Fresh guest acceptance is pending.
+See [Verification-2.7.118](Verification-2.7.118.md) and
+[Live-Test-2.7.118](Live-Test-2.7.118.md). Older blocks are retained history.
+<!-- qualification118:end -->
+
+<!-- qualification117:start -->
+## Retained app 2.6.117 / native-v17 — host verified
+
+Final-only verification recognises the retained Perfect overlay together with all
+28 completely felt top bands, exact replayed piles and preserved Pyramid scene
+anchors. A positive measured empty-LEFT circle can replace the DRAW anchor only
+for modelled empty LEFT. All three marker patches and the normal-series frame
+guard remain required. The final whole-action ACK gate, two-second window,
+STOP/context checks, ordinary recognition and input budgets are unchanged.
+Perfect proves tableau clear; challenge completion and restart retain separate
+proof requirements. All previous card/profile data roll back exactly to v16.
+
+**All 1,211 tests passed, zero failed/ignored/filtered**, including ignored tests
+with eight test threads. Locked check, strict private docs, Clippy, scoped nightly
+formatting, release, native/protected help and sealed-input preservation passed.
+The protected 117 executable is 12,999,472 bytes, mode 0555, SHA-256
+`c67037c7b61f075db35f4af9539c7257b05c2a915f0f48c173fdf5ce879357d8` at `/home/charlie/tmp/pyramid-final-clear-validation-99xkhzgy/release/qmp-qemu-socket-2.6.117`.
+No guest trial, installation, process replacement or Git promotion was performed.
+Live acceptance remains pending. Final documentation/preservation audit record:
+`/home/charlie/tmp/pyramid-final-clear-validation-99xkhzgy/final-audit.json`.
+Continuous remains disabled: actual normal Boards: 2 of 3 / 3 of 3 references are
+missing. Challenge extension, alternate-theme support and idle-CPU diagnosis remain
+open. See the [verification record](Verification-2.6.117.md).
+<!-- qualification117:end -->
+
+Required host checks, the native release and protected 115 executable have
+passed. The current suite reports **1,199 passed, zero failed/ignored**; sealed
+preservation passed through `runs/0001/audit-resumptions/0001` after the exact
+telemetry refusal `Reviewed operational bytes changed: .trigger-tree/history.jsonl`.
+Original failure evidence remains retained; no Cargo command was repeated.
+Root's final documentation/link/preservation audit passed. Fresh live
+acceptance has not been performed; Continuous remains disabled and the full goal
+remains incomplete. See the [verification record](Verification-2.6.115.md).
+
+## Current source — native-v16, app 2.6.115, host verified
+
+The selected bundled profile is `pyramid-native-1920-classic-blue-v16`,
+902,743 bytes, SHA-256
+`732af82cb2befbb3a420f5ae04ec11dd0b59bd5957a005df17218674bc01244e`.
+It inherits native-v15's two optional schema-2 roles and appends one exact
+27×24 rank sample from gold objective-highlighted 7♣ at fixed `3|3` to both
+reader banks, rank-seven variants 1→2. The native crop `[1093,224,27,24]`
+contains all 648 pixels at tolerance zero, raw RGB SHA-256
+`0183f982e56b55eafd62a6883a22e58152244cc039dcfea9ddc629681ed1da04`.
+No suit samples, thresholds, masks, ROIs or allowed shifts change.
+
+The original `Sevens cleared 0/9` challenge's rank error is 228,868 ppm against
+220,000; clubs already passes at 32,380 ppm. Python exact-policy comparisons
+give old/new 28/29→29/29 current visible identities and 423/423 unchanged
+historical identities, with 21 improved rank-seven witnesses. These are finite
+calibration/exposed-regression observations, not production Rust test results,
+prospective validation, normal-series proof or new live acceptance.
+
+Native-v15 is 893,279 bytes, SHA-256
+`c107cec6ab419cdb345447c4dec216b3a3d3f9981c881f2ab38e22b7bf143b49`.
+Removing v16's two rank appends and restoring its ID reproduces the entire
+parsed v15 profile. All ten v15 assets remain unchanged. Removing v15's two
+optional fields and restoring its ID reproduces the complete v14 profile.
+See [v15 provenance](../tests/fixtures/pyramid-recon/native-v15/README.md),
+[v16 provenance](../tests/fixtures/pyramid-recon/native-v16/README.md) and
+[115 verification](Verification-2.6.115.md). App115 has passed the required host, artifact and sealed preservation checks;
+current run 0001 passed 1,199 tests, zero failed/ignored, locked check, strict
+private docs, Clippy and scoped formatting. Release, protected-artifact and sealed preservation checks passed; the final documentation audit passed.
+
+## Schema-2 optional measured execution and post-confirmation roles
+
+Schema 2 may explicitly declare the following fields. Schema 1 rejects them.
+Absent fields preserve the previous semantics. Explicit null, malformed values,
+unknown fields, invalid geometry/masks/tolerances or insufficient contrast refuse;
+there is no automatic migration, guessed variant or File-profile fallback.
+
+| Field | Exact shape and bounded meaning |
+| --- | --- |
+| `board.execution_empty_stock` | Object with exactly `scene` and `left_empty`, each one absolute RGB patch. One whole execution-only coupled alternative; no independent OR banks. |
+| `dialog.post_confirm_ok` | One absolute RGB patch retaining the original OK bounds, mask, tolerance and click point. It replaces only the OK role in an otherwise complete seven-part post-confirmation modal. |
+
+The execution scene is positive REDEAL artwork at `[938,794,44,56]`, inside
+the native central stock corridor `[920,678,80,187]`, full mask/tolerance four.
+It replaces role `board.scene[2]` only within the complete execution proof and
+must not overlap any other original scene anchor. The alternate LEFT-X patch
+retains `[767,712,60,60]`, its complete mask and tolerance four. Existing
+minimum selected mean-RGB contrast 64 remains: blank old-arrow felt is not a
+positive replacement.
+
+`verify_position` admits the variant only when **both replayed expected piles
+are None**, actual new scene matches, alternate LEFT is positively Empty with
+no matching card, ordinary RIGHT is positively Empty with no matching card,
+every other original scene anchor matches and all remaining/removed tableau
+identities/positive absences pass. The replay model's two pile scans partition
+remaining stock, so both None already means no model stock remains. The retained
+apex-King frame passes its partial position, never a claimed empty-tableau goal.
+The variant does not change ordinary `observe`/board signatures or add REDEAL input.
+
+The post-confirmation OK uses original `[763,611,65,38]`, 1,758 selected pixels
+and tolerance eight. `observe_after_confirmation` accepts either the whole
+ordinary modal or this whole alternate modal with all six other components
+unchanged, preserving board/dialog ambiguity errors. Only the adapter branch
+after `ledger.confirm_acknowledged` calls it. Before the first restoration capture,
+the controller now performs one mandatory cooperative `OBSERVATION_DELAY` of one
+second. Its `UndoConfirmation` result feeds the existing six-observation loop,
+with at most five further one-second known-stale waits. The configured post-OK
+wait bound is six seconds plus capture/recognition time, under the unchanged
+300-second cooperative operation deadline. STOP/context are checked before/after
+waiting and revoke further I/O. No further OK, unknown retry or restoration proof
+is granted. Two consecutive original-board observations remain required before
+publication. Normal `observe` stays strict, and
+`verify_position` vetoes either complete modal appearance.
+
+All earlier profile/parser/glyph bounds, exact ratios, paper/colour/uniqueness,
+STOP/context, input uncertainty and no-overwrite publication contracts remain.
+
+## Retained qualified profile — native-v14 aligned diamond sample
+
+The app-only native-v14 correction appends **one measured full 20×16 RGB
+diamond sample to both reader banks, 12→13**, and selects bundled native-v14.
+The source is fixed `5|3` K♦ from the original failed RECON capture. Its nominal
+shape already fits at 69,137 ppm, but one strong-black face-art pixel makes
+nominal colour nonexclusive; the best eligible old witness is 130,980 ppm,
+above the unchanged 120,000 ppm cap. The measured clean crop uses native
+`[896,354,20,16]`, the existing `(+1,-1)` alignment. This is a bounded calibration
+addition for an exposed case, not a general artwork or colour-policy repair.
+
+Schema 2 `paper_ink_l1_v2`, rank/suit caps 220,000/120,000 ppm, different-label
+gap 80,000 ppm, full masks, nine ±1 shifts, paper support and exclusive colour
+remain unchanged. Native-v13, its templates and explicit custom File behaviour
+are retained. The host-verified 2.6.112 stock-only Undo All/OK pacing correction
+is preserved; no wait, search, input-authority or other-game change is added.
+
+Focused native-v14 production tests passed **7/0/0**, 1,093 filtered;
+compile 13.83 s/tests 80.22 s. These overlap the later full suite.
+Required Cargo commands passed, including **1,100 tests, zero failed/ignored**,
+strict private rustdoc, Clippy, scoped formatting, native release and headless
+help. The protected 2.6.113 copy matches the native artifact and passes help.
+Attempt 0001's final preservation check stopped only on updated automatic
+trigger-tree telemetry after every command passed. Audit-only resumption
+validated the sealed command evidence/frozen inputs and refreshed only the two
+already declared telemetry hashes; no workload or help was repeated. Required
+verification now records `passed-required-checks`. App 2.6.113 earns one correction
+build/no additional minor. The final root documentation/preservation audit passed for nine documents,
+221 local links and 21 review paths; no full test failure occurred. Read-only preflight still found
+protected 2.6.111 running; the operator must preserve evidence and close it
+deliberately before later 2.6.113 launch.
+
+The larger goal remains **ACTIVE and incomplete**. Native Continuous is still
+disabled pending implemented/validated progress, objective, terminal/redeal and
+restart handling. Charlie reports Single board works; that report is separate
+from a new 2.6.113 operator trial. M10 remains Awaiting verification, M11 Planned,
+M12 In progress and M13 Planned. The intermittent idle-CPU report has not recurred
+under SysProf and remains unresolved; this correction contains no CPU fix.
+xSAR 0.6.102, console 0.8.4, indices and protected stable 107–112 remain frozen.
+No guest/GUI/input, installation, process replacement or promotion is performed.
+
+See [verification](Verification-2.6.113.md) and
+[operator brief](Live-Test-2.6.113.md).
+
+Native-v14 profile is 832,593 bytes/SHA-256
+`2e1c1cc7135dc8f5310396bba52473ba53c6ad4eb4b99b3b0b1631eac57ea9f9`;
+the shifted sample raw RGB SHA-256 is
+`cb56876b7359a18432c4acd237931090aa341372298b009d8bceaac6d2cfdbed`.
+The new crop retains all 320 pixels, tolerance zero, and the actual original
+PNG source hash. Its untransformed raw RGB is appended literally to each bank;
+reversing only the appends and profile ID must reproduce complete native-v13.
+The algorithm, full glyph geometry and colour predicates are unchanged. A
+nominal crop addition alone would not repair this frame because its exact
+witness is colour-ineligible. See the
+[fixture provenance](../tests/fixtures/pyramid-recon/native-v14/README.md).
+
+## Retained host profile — native-v13 exact diamond variants, host verified
+
+The approved app-only correction appends measured native 20×16 diamond RGB
+variants to both reader banks and selects bundled native-v13. Schema 2
+`paper_ink_l1_v2`, rank/suit maxima 220,000/120,000 ppm, different-label gap
+80,000 ppm, full ROI, nine ±1 shifts, paper support and exclusive colour remain
+unchanged. No matcher or input-authority change is included. Literal custom
+File profiles retain their selected schema, strict parsing and no fallback.
+
+The priority evidence is the PLAY refusal for covered K♦ at fixed `3|2`, beside
+cyan-highlighted 6♦ at `4|2`, after 27 of 42 route actions and 42 acknowledgements.
+Separate RECON refusals expose K♦ at fixed `5|2` beside lower face artwork and
+7♦ at fixed `3|2`. These original failures remain failures; finite labelled
+regressions do not establish fresh acquisition, restoration or live success.
+
+Manual/Fast and Single board keep their existing timing and search budgets.
+The prior 45- and 42-action routes used **Fast**, with heuristic weight two;
+they do not establish minimum action counts. **Fewest actions** selects exact
+unit-cost A* with weight one, subject to its existing resource bounds. Select
+it before a fresh RECON: changing method invalidates the acquisition receipt.
+Never replay the interrupted route or use an old export as current authority.
+
+**Native Continuous remains unavailable** pending an implemented and validated
+standard-three progress/terminal contract. Retained source headers show 1/3
+(PLAY selected/restored) and 2/3 (RECON king); these sources remain uncalibrated
+and unverified for automatic progress. Positive 0/3, GAME WIN and restart-target
+evidence are still needed. The larger goal is blocked; **M10 Awaiting
+verification; M11 Planned**. xSAR 0.6.102 and console 0.8.4 remain frozen,
+together with prior stable executables.
+
+The exact profile appends **two diamond variants per bank, 10→12**, and is
+827,721 bytes, SHA-256
+`507fbe1499cc6359b117022fb2cadb79f0737d4f3f77687bc763992acfc3edd8`.
+The clean K♦ crop uses the existing upward one-pixel alignment; the other crop
+retains the legitimate neighbouring selection halo. The exposed 7♦ capture
+adds no template. Reversing only the ID and both appends exactly restores v12.
+
+First-attempt focused production verification passed **9 tests, 0 failed/ignored**,
+1,078 filtered, compile 11.70 s/test 60.24 s. It includes 846 retained-v12,
+116 new RECON and 26 partial-PLAY bank decisions: **988 counted decisions**,
+with whole-position checks additionally overlapping those observations. These
+finite exposed regressions do not measure independent general accuracy or prove
+fresh acquisition, restoration or guest success.
+
+Required app host checks passed: **1,087 tests, 0 failed/ignored**, including
+the nine focused tests, plus locked check, strict private rustdoc, Clippy,
+scoped formatting, release and headless help. All Cargo commands exited zero
+in attempt 0001; its final preservation audit stopped on automatic trigger-tree
+read telemetry. Audit-only finalisation 0002 revalidated the retained command
+logs and frozen compiled inputs without repeating Cargo or tests. The final
+documentation/preservation audit passed for 9 documents, 200 local links and 27 review paths. One app correction build/no
+additional minor is earned; xSAR/console and stable 107/108/109/110 stay frozen.
+
+Protected **2.6.111 is ready for an operator trial** at
+`/home/charlie/tmp/pyramid-diamond-v13-validation-ugnvhgv9/release/qmp-qemu-socket-2.6.111`:
+12,733,440 bytes, mode 0555, exact native parity/headless help exit zero, SHA-256
+`32638935cae71f240a6c6e733168dbcd1217bad916af0bd3fa10c26aac97b55b`.
+Read-only preflight at 2026-10-19T14:08:38.312919+00:00 still observed PID 27073
+running protected **2.6.110** with `--image`; images were zero files/bytes at
+that instant only. Preserve evidence before startup clears images, then close
+the old app deliberately before the operator launches 2.6.111. No guest/GUI/
+input/install/promotion or process control is performed by this correction.
+
+See [verification](Verification-2.6.111.md),
+[fixture provenance](../tests/fixtures/pyramid-recon/native-v13/README.md) and
+[operator brief](Live-Test-2.6.111.md).
+
+## Retained host profile — native-v12 schema 2 graded reader
+
+App 2.6.110 selects native-v12, 817,977 bytes/SHA-256
+`f8f1bc8b8a7e28d0ad3433494c47096f5ca5e0b546275912d845adf6afdd0813`; required full host/artifact checks passed; live acceptance remains pending. Focused production
+reader/corpus tests passed as recorded below. No rank/suit RGB crop is appended; native-v11 banks remain
+literal. Frozen policy SHA-256 `5343651cea940c25add3ee79653b2c9c9da257b30d9874143f6b400cf0d81236`.
+
+Native-v12 selects strict schema 2 `paper_ink_l1_v2` with unchanged native-v11
+RGB banks. Each actual/template ROI independently requires nonzero raw-paper
+support of at least area/3 (all RGB channels >=180). Its paper reference `p` is
+the lower median of those pixels' minRGB values, index `(count-1)/2`, 180..255;
+no default reference is allowed. Every ROI pixel contributes
+`floor(255*max(p-minRGB,0)/p)` ink; pixels brighter than paper contribute zero.
+Error remains `sum(abs(actual-template))/sum(max(actual,template))`. Inclusive
+rank 220,000/suit 120,000 ppm maxima and different-label gap 80,000 ppm/scale 1,000,000
+are unchanged. Checked exact ratios decide; floored score ppm is diagnostic
+only. Both absolute quality and separation are required; nearest label alone
+never suffices. Exclusive strong colour and paper are co-located with that
+label's winning one of nine ±1 shifts; rank/suit colours must agree/match suit.
+No RGB sample, deck inference or input authority is added.
+
+Schema 1 keeps its exact previous XOR 24/8 matching and strict keys. Literal
+custom File profiles receive no automatic migration or fallback. Native
+1920×1080 geometry, scene/dialog, positive-empty, complete-inventory,
+restoration, receipt/context/STOP and input-effect contracts remain. Manual/Fast
+and Single board keep their existing workflow/timing/search budgets. **Native
+Continuous remains disabled/unavailable** without positive standard-three target
+and progress evidence; Daily Challenge automation is not added. The resumed
+larger objective is blocked on native standard-three-board evidence; M10 Awaiting verification/M11 Planned.
+
+The initial raw-ink policy used 104 historical+29 ten-failure examples and failed
+its first Rust filter: 8 passed/4 failed/0 ignored. The independently labelled
+fifth K♦ also failed its initial prospective test at 123,012 ppm versus 120,000.
+That exact failed policy and outcome are preserved; the fifth is now
+`exposed_regression_fifth`, with no renewed prospective/untouched claim.
+The revised paper-relative policy was frozen at 2026-10-19T13:02:56.014505+00:00
+using 250 development+29 ten-regression observations; thresholds/gap and RGB
+banks remain unchanged. Corpus totals stay 423 observations/40 sources/14 positions:
+250 development, 29 ten-regression, 115 prior-exposed validation and 29 exposed
+fifth observations. Capture/deal lineage stays whole; daily/v8 share one lineage.
+The 115 validation observations retain prior calibration/regression exposure;
+they are not untouched evidence. Focused graded/native/corpus results passed as recorded below; full checks passed as recorded below. Counts
+are observations, not unique frames, decks or a general accuracy guarantee.
+
+Revised focused Rust/corpus cases passed; full checks passed as recorded below. Fifth K♦ at zero-based slot 9
+has nominal suit colour 3 black; upward 1 px makes colour exclusive but legacy
+shape XOR 10 exceeds 8. Preserve that old refusal and original incomplete zero-
+input diagnostics. A graded winning witness must independently pass paper and
+exclusive colour at its own shift, then rank/suit agreement and suit identity.
+Fixed schema 2 keys/integers are strict; File/schema 1 never falls back or silently
+migrates. [Fixture lineage](../tests/fixtures/pyramid-recon/native-v12/README.md)
+and [verification](Verification-2.6.110.md) retain calibration/exposed/prospective
+roles and actual results when measured. Fresh complete same-session acquisition
+and restoration remain mandatory before route input; no live authority follows
+from corpus labels or a successful parser.
+
+Focused production tests now pass: **14 graded unit tests, 0 failed/ignored**
+(compile 8.26 s,test 0.00 s), and **12 native-v12 tests, 0 failed/ignored**,
+1,066 filtered (compile 0.09 s,test 60.10 s). They verify **846 bank/observation
+decisions** across 423 directly labelled cards, 14 full/partial positions and 40
+scene checks (36 boards/4 modals). These are finite exposed/development/prior-
+exposed validation regressions, not a new prospective result. Initial raw-policy
+8/4 failure and first prospective K♦ refusal remain retained. **Full 1,078/0/0 app tests and required host checks passed in attempt 0002;
+protected stable 110/native parity/help passed. Live acceptance is still pending.**
+
+Full host verification passed **1,078 tests, 0 failed/ignored**, plus required
+check/private docs/Clippy/format/release/help. Actual compiler is
+`1.101.0-nightly (b6eeb93c9 2026-10-18)`. Protected candidate
+`/home/charlie/tmp/pyramid-reader-v12-validation-8jiy32rw/release/qmp-qemu-socket-2.6.110` is 12,722,096 bytes/mode 0555,
+SHA-256 `dcdbda38b1d16e9bd99b2608f01a8a19b3c5f66fc9fde7f6cbece7a2f832058d`, native parity/help 0.
+Read-only preflight at 2026-10-19T13:16:29.450099+00:00 observed no controller
+and images zero files/bytes, instant-only. One correction build/no minor is
+earned; siblings/stable 107/108/109 remain frozen. Root separately validated the
+metadata-only initial-policy pointer correction; executable/profile/corpus/
+scoring inputs are unchanged. Final documentation/preservation audit passed: 9 documents, 177 local links and
+29 review paths, with the exact metadata-pointer exception separately checked.
+No guest acceptance or completed native Continuous/larger goal is claimed.
+
+## Retained host profile — native-v11 exact rank-8 variant
+
+App 2.6.109 selects `pyramid-native-1920-classic-blue-v11`; required host/artifact
+verification passed (full 1,052 tests/zero failed or ignored plus all checks);
+fresh Beast acceptance remains pending. The exact rank-8 sample is
+`[792,171,27,24]`,1,944 untransformed RGB bytes, full 648-pixel mask/tolerance 0,
+SHA-256 `fa288ca41690ca02f9a3fff2ba1e2dc90e8cedf2123865827e219e0ccd5946a5`.
+Both rank banks append one variant 3→4 within cap 8. Profile 817,701 bytes,
+SHA-256 `7269769d0c1373edd431e7606f6cdad3ed1239dc5d70839257b5ca89ed408124`.
+Only ID+those append operations differ from v10; rollback reproduces full v10.
+XOR 24/8, alignment ±1, scene/dialog, paper/ink/colour, geometry/uniqueness and
+positive-empty/input guards are unchanged; v10 and original failure are retained.
+
+Source `/home/charlie/tmp/.pyramid-recon-745174-1/baseline.png`, 3,751,479 bytes,
+SHA-256 `28e1127ea9d4663ebcca61061779093ebc7b571ec0ebde13a4973906b9913409`. Original diagnostics
+retain one capture/zero input attempts/no export, not restoration/complete deal.
+Python review reports 29/29 visible per bank and 104 historical glyphs retained;
+those remain separately attributed review measurements. Actual production
+Rust filter 9/0/0 and full 1,052/0/0 app tests passed; no guest proof is implied. Fresh complete
+same-session acquisition remains mandatory. See [fixture](../tests/fixtures/pyramid-recon/native-v11/README.md)
+and [verification](Verification-2.6.109.md). Current Manual/Single board and
+unavailable Continuous are unchanged; no broader completion claim follows.
+
+## Retained host profile — native-v10 exact highlighted-clubs variant
+
+App 2.6.108 selects `pyramid-native-1920-classic-blue-v10`; required host checks passed (1,043 app
+tests, zero failed/ignored); fresh Beast acceptance remains pending. Charlie approved one exact clubs-suit sample
+from the original failed native acquisition, appended to both tableau and stock
+banks. Only the profile ID and those two append operations differ from v9;
+removing them reproduces the complete immutable v9 profile.
+
+The retained RIGHT 2♣ passes rank at distance 9 but has old best suit XOR 9,
+above the unchanged suit cap 8. The exact new suit sample is zero-distance.
+Rank/suit limits remain 24/8, alignment ±1; full 320-pixel mask and tolerance zero
+preserve native RGB negative space. Existing King/other variants, paper/ink/
+colour, geometry, complete-modal and positive-empty guards are unchanged.
+The new sample is native `[1027,708,20,16]`, 960 untransformed RGB bytes,
+SHA-256 `b04d2a7ad13c0f3a04af1d4020df66c5f97dad7a480321ebf7dc10666c4468b4`.
+The 808,237-byte profile SHA-256 is
+`778b74051a4f12b383c8e79ac951ef332dabf188ce67583e1358cc2b957f5d51`.
+
+Original `/home/charlie/tmp/.pyramid-recon-721903-0` diagnostics retain four
+captures, two acknowledged D operations, 28 tableau identities and two stock
+identities. Restoration/complete/publication are false/not attempted; delivery
+is not uncertain. The latest frame contains LEFT A♠ and RIGHT 2♣. It proves no
+unseen stock, restoration, live receipt or complete route input. Keep the
+original failure unchanged; fresh acquisition is mandatory before execution.
+[Fixture provenance](../tests/fixtures/pyramid-recon/native-v10/README.md) and
+[verification](Verification-2.6.108.md) distinguish exact retained evidence from
+synthetic refusal tests and pending live acceptance.
+
+## Historical correction — 2.5.107, host-verified native-v9 King variant
+
+The retained `/home/charlie/tmp/.pyramid-recon-710918-3` refusal has one native
+capture, zero attempted D/Undo All/confirmation inputs and no published export.
+The K♠ at fixed one-based tableau location `3|2` has best previous rank occupancy
+XOR distance 28, exceeding cap 24. Its suit distance is 2 against cap 8, and all
+other 27 tableau cards plus DL 4♣ pass. This isolates the King rank sample;
+it does not justify guessing an identity or relaxing the classifier.
+
+Native-v9 appends the exact labelled King-rank crop to both tableau and stock
+rank banks and changes the profile ID/default selection. Rank/suit XOR caps
+remain 24/8; alignment remains ±1. Existing variants, scene/modal signatures,
+geometry, masks and paper/ink/colour validation remain intact. Native-v8 and its
+historical fixtures remain immutable. Both bundled and literal custom-file
+profiles continue through the same strict parser.
+
+The new ID is `pyramid-native-1920-classic-blue-v9`. Its 803,364-byte profile
+has SHA-256 `b6ffea89b108f222f1d1aee80a951e024588b465465200fc7daa612c20e21865`.
+The original baseline SHA-256 is
+`0b2f53ff00b32233bdbad78659f2c18304972338ae6d5af7a7a1640ece6b1310`.
+The sample is exact row-major RGB at `[892,224,27,24]`, SHA-256
+`12967fd5fbe85e756a890160803fdb8b6a7616bb81516e46a7a7ac674a79055f`;
+King variants increase one to two in each bank. The
+[v9 fixture record](../tests/fixtures/pyramid-recon/native-v9/README.md)
+retains exact hashes/crop provenance. Nine focused production-reader/negative/
+provenance checks passed and overlap the full 977-test suite, zero failed/ignored.
+Required host checks and stable artifact verification passed; the first test-only
+compile failure remains recorded in
+[Verification-2.5.107.md](Verification-2.5.107.md). Fresh live acquisition and
+restoration remain separate, as described in
+[Live-Test-2.5.107.md](Live-Test-2.5.107.md). No unseen stock inventory or receipt
+is inferred from the retained single board image. The separately approved timing,
+completion, automation-mode and search-statistics work is not part of native-v9.
+
+## Historical correction — 2.5.104, host-verified native-v8
+
+Charlie approved replacing the two score-chart scene crops after the interrupted
+2.5.103 execution. A later native selected-9♦ capture fails v7's `scene[0]`
+K-chart crop at `[1810,132,78,40]`: 222 of 2,355 selected pixels exceed tolerance
+6, with channel maxima 172/133/151. The other checked scene patches pass and the
+selected rank/suit samples are unchanged. This diagnosis does not justify
+loosening glyph thresholds or assigning the failure to selected-card tint.
+The supplied PNG is later operator evidence, not the exact first failed frame.
+
+Native-v8 changes exactly `profile_id`, `board.scene[0]` and `board.scene[1]`
+from immutable v7. The new ID is `pyramid-native-1920-classic-blue-v8`.
+The profile is 793,900 bytes, SHA-256
+`0b459aa78701da2f07f6cf911ce6f78f7190b1432b66706f4f0135ed21f48a3e`.
+
+| Scene index | Native `[x,y,width,height]` | Selected pixels | Reference contrast | Tolerance |
+| --- | --- | ---: | ---: | ---: |
+| 0, upper right-border artwork | `[1796,116,109,18]` | 1,962 | 96 | 4 |
+| 1, lower right-border artwork | `[1796,388,109,20]` | 2,180 | 93 | 4 |
+| 2, unchanged arrow | `[931,695,60,50]` | 3,000 | Unchanged v7 reference | 4 |
+
+Both new patches select their complete rectangles, include positive artwork and
+negative space, and are sampled from the existing v7 baseline. All three remain
+mandatory. The 32-file historical scene corpus has 28 boards and four modals;
+104 labels elsewhere describe card observations, not 104 frames. Adding the
+later selected frame and original restored baseline produces 34 files, 30 boards
+and four modals. Retained pure pixel measurements accept those boards and refuse
+those modals. Thirteen focused production native-v8 regressions passed, zero
+failed/ignored. The complete required rerun passed 942 tests, zero failed/ignored,
+locked check, strict private rustdoc, Clippy, scoped formatting, release and help.
+The first full 941-pass/one-failure attempt is preserved; its obsolete generic-error
+assertion was updated to exact index/bounds without production changes. Neither
+measurements nor passing host checks establish corrected-build live execution.
+
+The default `ReconProfileSource::BundledNativeV8` embeds these exact bytes;
+`ReconProfileSource::File(PathBuf)` retains literal custom loading through the
+same strict parser. Old profiles, glyph samples, caps, geometry, modal signatures,
+positive empty/removed-slot evidence and duplicate/unknown refusal remain intact.
+Only the new profile's two scene anchors and ID differ. Schema 1 still requires
+and validates legacy `board.solver_off`, then discards it without matching pixels.
+Operator consent requires Solver not engaged, foreground Solitaire and no
+interference; a legitimate unavailable Solver is allowed and is never enabled.
+
+Execution errors identify `execution board scene[{index}] mismatch at
+[{x},{y},{width},{height}]`; a complete modal instead reports
+`execution refused: matched complete Undo All dialog`. Indices are zero-based;
+bounds are native origin plus extent. These diagnostics explain refusal without
+changing the supported-scene decision or granting a fallback input path.
+
+The [v8 fixture record](../tests/fixtures/pyramid-recon/native-v8/README.md)
+retains provenance and limitations. See [Verification-2.5.104.md](Verification-2.5.104.md)
+and [Live-Test-2.5.104.md](Live-Test-2.5.104.md) for completed host checks, exact
+artifact identity and pending corrected-build Beast acceptance.
+The prior [2.5.103 record](Verification-2.5.103.md) remains historical evidence
+for Solver-independent recognition and automatic setup, not this correction.
+
 ## Scope and evidence boundary
 
 `src/pyramid_recon/vision.rs` implements a read-only, bounded classifier for an
-explicit native calibration profile. It does not send input, capture frames,
+explicit native calibration profile, selected from bundled bytes or a file. It does not send input, capture frames,
 infer cards by elimination, decide that a deal is restored or publish JSON.
 Those responsibilities belong to the reconnaissance controller and worker.
 
 **Native calibration is an evidence-backed candidate, not live acceptance.** Unit
 tests distinguish synthetic mechanism patterns from the recovered native originals.
-A missing or invalid profile refuses loading. A supported board is returned only
+A missing or invalid custom-file profile refuses loading; bundled bytes use the
+same strict validation. A supported board is returned only
 when all 28 tableau cards and both pile states are classified from actual frame
 pixels. Test success is not native card-reader or live-input acceptance.
 
@@ -103,15 +764,66 @@ rustdoc, all-target Clippy and native release build also pass. Fresh live scan
 and restoration verification remain separate. A classifier pass does not
 authorise replay of the refused run.
 
-## Public interface
+### v7 append-only calibration repair — host verified
+
+Charlie approved the bounded v7 repair on 19 October 2026. The new separately
+named profile is `pyramid-native-1920-classic-blue-v7` in
+`tests/fixtures/pyramid-recon/native-v7/profile.json`. It extends v6 by appending
+one rank-2 variant and one spade variant to **both** reader banks. Historical
+v4/v5/v6 profile bytes and accepted evidence remain distinct.
+
+The byte-original refused baseline is retained as the new fixture's `baseline.png`,
+SHA-256 `f00076f38a2906dc17d1dc5b7c54806b6285f363f936924e5c785785e9173edf`.
+The first attempt captured one frame, attempted no guest input and did not attempt
+output publication. Undo All/restoration was unnecessary for this no-input
+refusal; it must not be described as a failed restoration or retried input.
+
+| Appended component | Original source slot / fixed position | Native RGB bounds (x,y,width,height) | Crop RGB SHA-256 |
+| --- | --- | --- | --- |
+| Rank 2 | zero-based slot 7 / row 4, column 2 | `(792,278,27,24)` | `9250b21fe48cea0bb48b51673a7cbd122557f98a226e2f42202eded67a5cd1f7` |
+| Spade | zero-based slot 25 / row 7, column 5 | `(1096,462,20,16)` | `35415efed2a2501d217db7805338403d028c7d1ae10302ca8830c741f866a350` |
+
+Both sources were already recognised by v6; no held-out failure supplies an
+inferred identity. On the held-out rank-2 slot 6 (row 4, column 1), v6's best XOR
+distance is **28 > 24** and v7's is **19**. On held-out spade slot 23 (row 7,
+column 3), v6's best is **12 > 8** and v7's is **7**. These reported measurements
+are the repair evidence, not fresh live acquisition/restoration acceptance.
+
+Per reader, total variants increase **34 → 35 ranks** and **36 → 37 suits**;
+rank-2 variants **3 → 4 of 8**, spades **9 → 10 of 16**. Every existing variant,
+ROI, mask, rank/suit distance cap **24/8**, alignment **1**, colour/paper check,
+scene signature and dialog signature remains unchanged. No threshold widening,
+pixel rescaling/recolouring or generic recognition fallback is part of this repair.
+
+The prepared v7 profile is 806,442 bytes, SHA-256
+`9517ce85382ec0c977e735c79871c1e2f8110b7265343dc1140ac45d506e3e08`.
+The locked check, 10 focused v7 regressions, all 876 tests including ignored
+tests, strict private docs, Clippy and standalone new-module formatting passed.
+Native release, executable `--help` and final preservation checks passed in
+[Verification-2.4.101.md](Verification-2.4.101.md). The fixture's
+[README](../tests/fixtures/pyramid-recon/native-v7/README.md) separates original
+PNG, crop and profile identities. A fresh live v7 complete acquisition/restoration
+and M09 console/game comparison remain pending Charlie. Final checks found no
+collector process; PID 521945/2.2.100 is historical, with exit time/cause unknown.
+The old collector's per-request profile loading remains compatible with v7;
+no upgrade/restart is required by the profile schema or caps. An operator launch
+is needed because no collector is active; existing GAME WIN images are now
+privately backed up with all hashes checked. The Rust source addition is
+test-only; no production collector logic changed. Record the new process
+identity, selected profile hash and actual
+export producer. A build or profile selection does not establish live acceptance.
+
+## Application-private interface
 
 ```rust
 pub struct ReconVision;
 
 impl ReconVision {
+    pub fn bundled_native_v16() -> Result<Self, String>;
     pub fn load(path: &Path) -> Result<Self, String>;
     pub fn profile_id(&self) -> &str;
     pub fn observe(&self, frame: &CapturedFrame) -> Result<ReconScene, String>;
+    pub fn observe_after_confirmation(&self, frame: &CapturedFrame) -> Result<ReconScene, String>;
 }
 
 pub enum ReconScene {
@@ -133,13 +845,15 @@ pub enum StockFace {
 }
 ```
 
-These are interface declarations, not complete source definitions. `Card` is
+These are interface declarations, not complete source definitions; their source
+visibility is application-private. The post-confirmation method requires the
+caller's existing sole-confirmation ACK ledger and never sends input. `Card` is
 `xsar::games::cards::Card`; frame and geometry types are the application's xSAR
 reexports. Observation types implement `Clone`, `Debug`, `PartialEq` and `Eq`;
 `StockFace` also implements `Copy`. The validated calibration is private and
 cannot be constructed by supplying unchecked templates through this API.
 The retained ASCII `profile_id` is available for worker logging alongside the
-selected path. It is not a digest or authenticated source identity; retained
+bundled/file source and optional selected path. It is not a digest or authenticated source identity; retained
 profile SHA-256 and release evidence provide the separate exact-byte record.
 
 Load one profile before the operation. Each call to `observe` checks dimensions,
@@ -155,7 +869,7 @@ They never silently supply a card, an empty pile or an input target.
 
 ### Undo All readiness
 
-Positive Solver-OFF and scene evidence establish the supported board independently
+Mandatory scene evidence establishes the supported board independently
 of Undo All availability. On an untouched board, disabled or unmatched Undo All
 produces `undo_all: None`; it does not prevent card classification. `Some` is
 returned only when the current frame matches the profile's **enabled** Undo All
@@ -340,7 +1054,7 @@ contrast floor. Do not alter native pixels to manufacture contrast.
 | Field | Required value or shape |
 | --- | --- |
 | `scene` | 3–8 non-overlapping absolute supported-scene patches |
-| `solver_off` | Positive inactive-Solver patch inside `(585,959,35,36)` |
+| `solver_off` | Required legacy pattern inside `(585,959,35,36)`; validated for schema compatibility, discarded and never pixel-matched |
 | `undo_all` | Positive **enabled** Undo All patch inside `(1301,959,38,38)` |
 | `left_empty` | Positive empty-LEFT patch inside `(759,678,139,187)` |
 | `right_empty` | Positive empty-RIGHT patch inside `(1022,678,139,187)` |
@@ -348,7 +1062,7 @@ contrast floor. Do not alter native pixels to manufacture contrast.
 The enabled Undo All patch must geometrically cover `(1320,978)`. Its match is
 not included in the initial board-signature decision. Scene patches must be
 chosen to discriminate the supported Pyramid board and artwork, not changing
-card identities, Solver-on HALOs or generic felt/gold alone. Do not include the
+card identities, Solver appearance or generic felt/gold alone. Do not include the
 enabled Undo All icon inside the mandatory scene patches: the untouched board
 may correctly have it disabled.
 
@@ -466,7 +1180,7 @@ positive-empty exclusivity, duplicate visible identities, optional Undo readines
 complete dialog signatures and contradictory scenes. These are synthetic
 mechanism regressions only. Separate native regressions exercise all 46 labelled
 observations, the exact image-20 28-card tableau plus LEFT Queen of clubs, RIGHT
-empty and disabled Undo All; Solver-ON refusal; enabled Undo distinction;
+empty and disabled Undo All; Solver-independent scene recognition; enabled Undo distinction;
 empty-pile appearance; and erased/mixed-colour glyph negatives. Original PNGs are
 not modified by these tests. Native integration uses the actual supplied modal,
 not a synthetic dialog stub. Separate regressions refuse missing dialog data,
@@ -476,10 +1190,11 @@ Before live use, retain and independently review:
 
 1. Native originals covering every rank and suit label in each component bank,
    with exact original SHA-256, labels, crop settings and extraction provenance.
-2. Untouched Solver-OFF boards; enabled and disabled Undo All; initial RIGHT
+2. Untouched boards with Solver not engaged, including the actual unavailable
+   daily control; enabled and disabled Undo All; initial RIGHT
    empty; actual end-of-stock LEFT empty; and successive LEFT/RIGHT observations.
 3. The complete Undo All confirmation, both control targets and dimmed backdrop.
-   Include unrelated gold/OK dialogs, Solver-on boards, altered artwork,
+   Include unrelated gold/OK dialogs, altered artwork,
    animation, occlusion/cursor interference and missing-card negatives.
 4. Expected 28-slot logical identities and visible pile identities for each
    positive frame. Check exact identities, not only counts or plausible ranks.
@@ -489,7 +1204,7 @@ Before live use, retain and independently review:
 
 ## Code Analysis
 
-The profile file is the configuration trust boundary; capture bytes are the
+Bundled profile bytes or a selected profile file form the configuration trust boundary; capture bytes are the
 observation boundary. Both are checked, but label/provenance truth still requires
 native evidence review. The module uses safe Rust and checked xSAR frame/ROI
 access, with no input transport, unsafe code, image resizing or stateful replay.

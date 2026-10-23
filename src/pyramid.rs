@@ -430,7 +430,7 @@ fn is_white(rgb: [u8; 3]) -> bool {
 
 
 /// Recognise green felt using bounded channels and their relative differences.
-fn is_felt([red, green, blue]: [u8; 3]) -> bool {
+pub(crate) fn is_felt([red, green, blue]: [u8; 3]) -> bool {
     green >= 50
         && red <= 100
         && blue <= 140
@@ -478,7 +478,7 @@ pub fn is_gameplay_scene(frame: &CapturedFrame) -> Result<bool, HaloDetectionErr
 
 /// Positive occupancy, overlap or uncertainty determined from a lower face probe.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum FaceEvidence {
+pub(crate) enum FaceEvidence {
     /// A sufficiently white face probe positively establishes a card.
     Present,
     /// A sufficiently green felt probe positively establishes an empty slot.
@@ -517,7 +517,7 @@ fn face_evidence(
 
 /// Lower-face pixels can be interpreted only after both children are absent.
 /// A top-strip white test would mistake exposed ancestor cards for this card.
-fn tableau_evidence(
+pub(crate) fn tableau_evidence(
     frame: &CapturedFrame,
 ) -> Result<[FaceEvidence; TARGET_COUNT], HaloDetectionError> {
     let mut evidence = [FaceEvidence::Unknown; TARGET_COUNT];
@@ -818,10 +818,22 @@ fn changed_pile_interior(
     // The inset removes border/halo changes. Exclude the clicked cursor region
     // explicitly; pointer movement is not evidence of a delivered game action.
     let bounds = PixelRect::new(
-        pile.bounds.x.checked_add(12).ok_or(HaloDetectionError::BoundsOutsideFrame)?,
-        pile.bounds.y.checked_add(12).ok_or(HaloDetectionError::BoundsOutsideFrame)?,
-        pile.bounds.width.checked_sub(24).ok_or(HaloDetectionError::BoundsOutsideFrame)?,
-        pile.bounds.height.checked_sub(24).ok_or(HaloDetectionError::BoundsOutsideFrame)?,
+        pile.bounds
+            .x
+            .checked_add(12)
+            .ok_or(HaloDetectionError::BoundsOutsideFrame)?,
+        pile.bounds
+            .y
+            .checked_add(12)
+            .ok_or(HaloDetectionError::BoundsOutsideFrame)?,
+        pile.bounds
+            .width
+            .checked_sub(24)
+            .ok_or(HaloDetectionError::BoundsOutsideFrame)?,
+        pile.bounds
+            .height
+            .checked_sub(24)
+            .ok_or(HaloDetectionError::BoundsOutsideFrame)?,
     );
     // The previous verified frame may retain the cursor over either pile.
     // Exclude both old and new possible pile hotspots, not just the new click.
@@ -1493,12 +1505,16 @@ mod tests {
         paint(&mut frame, PixelRect::new(probe.x, probe.y, 1, 1), FELT);
         assert_eq!(predicted_target(&frame, &PyramidBoardState::new()), None);
         paint(&mut frame, probe, GOLD);
-        let PredictedAction::Action(action) =
-            analyse(&frame, &PyramidBoardState::new()).unwrap().prediction
+        let PredictedAction::Action(action) = analyse(&frame, &PyramidBoardState::new())
+            .unwrap()
+            .prediction
         else {
             panic!("The complete Move HALO must select its canonical action");
         };
-        assert_eq!(action.target, ActionTarget::Pyramid(PyramidTargetKind::Move));
+        assert_eq!(
+            action.target,
+            ActionTarget::Pyramid(PyramidTargetKind::Move)
+        );
         assert_eq!(action.operation(), InputOperation::PressDrawKey);
     }
 

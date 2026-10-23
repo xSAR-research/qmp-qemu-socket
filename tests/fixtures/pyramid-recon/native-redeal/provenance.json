@@ -1,0 +1,83 @@
+{
+  "originals": [
+    {
+      "path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-redeal/before.png",
+      "bytes": 3782604,
+      "sha256": "f2d1edea63327df64da72d70ae1647b161c0fcfbdcf14ef80bb6f7566cb30f8f",
+      "source": "/home/charlie/Documents/Pyramid/Evidence/redeal-workflow-20261022/screenshots/qmp-qemu-socket 261022 170601 Showing-number-of-deals.png"
+    },
+    {
+      "path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-redeal/exhausted.png",
+      "bytes": 3793502,
+      "sha256": "a3ea74f4274f7a84ffc860aa9ebe6c0c2200d99226adf8ce1239faa8357c0ce2",
+      "source": "/home/charlie/Documents/Pyramid/Evidence/redeal-workflow-20261022/screenshots/qmp-qemu-socket 261022 170640 Showing-REDEAL-icon.png"
+    },
+    {
+      "path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-redeal/after.png",
+      "bytes": 3784694,
+      "sha256": "b80726c33c0d7506ae344675f1581c463b7710c4607a2342302524c7b33be138",
+      "source": "/home/charlie/Documents/Pyramid/Evidence/redeal-workflow-20261022/screenshots/qmp-qemu-socket 261022 170704 After-REDEAL-showing-0-deals-left.png"
+    }
+  ],
+  "derived": [
+    {
+      "path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-redeal/enabled.rgb",
+      "bytes": 9072,
+      "sha256": "40f1b2abcb56eff072da591b6bfc01f54bb27e38a47a8ae9d72d8a962007e4a3",
+      "source": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-redeal/exhausted.png",
+      "bounds": [
+        936,
+        792,
+        48,
+        63
+      ],
+      "encoding": "row-major full RGB8; all pixels selected",
+      "tolerance": 4
+    },
+    {
+      "path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-redeal/left-x.rgb",
+      "bytes": 10800,
+      "sha256": "b0861bd71fb48a697375111d44c40626438a5d312532dcffbe26797979bb26d1",
+      "source": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-redeal/exhausted.png",
+      "bounds": [
+        767,
+        712,
+        60,
+        60
+      ],
+      "encoding": "row-major full RGB8; all pixels selected",
+      "tolerance": 4
+    },
+    {
+      "path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-redeal/deals-one.rgb",
+      "bytes": 10920,
+      "sha256": "c5cd1461b214299d8131fb70b7f7d811f4690ed9b665282f51a6312475cad3b4",
+      "source": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-redeal/before.png",
+      "bounds": [
+        890,
+        874,
+        140,
+        26
+      ],
+      "encoding": "row-major full RGB8; all pixels selected",
+      "tolerance": 4
+    },
+    {
+      "path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-redeal/deals-zero.rgb",
+      "bytes": 10920,
+      "sha256": "a90d14bd86c952506a47f8a96a1adc494bc2fa5311962966910d3e429a6ca0fb",
+      "source": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-redeal/after.png",
+      "bounds": [
+        890,
+        874,
+        140,
+        26
+      ],
+      "encoding": "row-major full RGB8; all pixels selected",
+      "tolerance": 4
+    }
+  ],
+  "capability": "bundled native constructor only",
+  "timing_proof": false,
+  "guest_click": false
+}

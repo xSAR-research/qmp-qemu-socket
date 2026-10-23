@@ -1,0 +1,617 @@
+{
+  "profile_id": "pyramid-native-1920-classic-blue-v16",
+  "parent_profile": "../native-v15/profile.json",
+  "parent_sha256": "c107cec6ab419cdb345447c4dec216b3a3d3f9981c881f2ab38e22b7bf143b49",
+  "profile_sha256": "732af82cb2befbb3a420f5ae04ec11dd0b59bd5957a005df17218674bc01244e",
+  "transformation": "Only profile_id and one appended measured full27x24RGB rank-seven variant in each reader differ. Rank-seven variants1to2 in both banks. Remove both final entries and restore the ID: entire parsed native-v15 is recovered. All ten native-v15 files remain byte-identical.",
+  "sources": [
+    {
+      "file": "gold-seven.png",
+      "source": "/home/charlie/tmp/.pyramid-recon-65018-11/baseline.png",
+      "sha256": "95d9e45b4c588e87970bc9b4cd909cccc7f63a668652c561ad5f38d0f431f7aa",
+      "bytes": 3812059,
+      "dimensions": [
+        1920,
+        1080
+      ],
+      "mode": "RGBA",
+      "original_bytes": true,
+      "transformation": "none"
+    }
+  ],
+  "appended_crops": [
+    {
+      "label": "7",
+      "variant_index": 1,
+      "file": "gold-seven.png",
+      "bounds": [
+        1093,
+        224,
+        27,
+        24
+      ],
+      "source_sha256": "95d9e45b4c588e87970bc9b4cd909cccc7f63a668652c561ad5f38d0f431f7aa",
+      "rgb_sha256": "0183f982e56b55eafd62a6883a22e58152244cc039dcfea9ddc629681ed1da04",
+      "rgb_bytes": 1944,
+      "mask_pixels": 648,
+      "selected_pixels": 648,
+      "mask": "111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111",
+      "tolerance": 0,
+      "alignment_witness": [
+        0,
+        0
+      ],
+      "original_rank_origin": [
+        1091,
+        218
+      ],
+      "rank_roi": [
+        2,
+        6,
+        27,
+        24
+      ],
+      "direct_visual_identity": "7C",
+      "fixed_position": "3|3",
+      "internal_slot": 5,
+      "paper_pixels": 523,
+      "lower_median_paper_reference": 231,
+      "label_method": "direct visual native rank and suit, no deck inference"
+    }
+  ],
+  "direct_visible_labels": {
+    "tableau_top_to_bottom": [
+      "KH",
+      "10H",
+      "8D",
+      "QS",
+      "3D",
+      "7C",
+      "KD",
+      "10D",
+      "JH",
+      "10S",
+      "3S",
+      "7H",
+      "8S",
+      "4S",
+      "6C",
+      "6S",
+      "6D",
+      "9H",
+      "9S",
+      "QC",
+      "4D",
+      "QH",
+      "7S",
+      "KS",
+      "9C",
+      "QD",
+      "AS",
+      "8H"
+    ],
+    "left": "8C",
+    "right": null,
+    "label_method": "direct visual original-frame labels, independently compared to recognition; not a complete unseen stock"
+  },
+  "observed_objective": {
+    "label": "Sevens cleared",
+    "current": 0,
+    "goal": 9,
+    "gold_highlighted_positions": [
+      "3|3",
+      "5|2",
+      "7|2"
+    ],
+    "interpretation": "Challenge objective highlights identify target-rank cards. They are distinct from the disabled Solver control/progress and supply no standard-game ordinal or Solver authority."
+  },
+  "comparison": {
+    "method": "Independent exact-integer Python reproduction of unchanged production paper_ink_l1_v2; no Rust/Cargo/live execution. Exact fractions decide scores and gaps; ppm floors are display only.",
+    "current_board_summary": {
+      "old_correct": 28,
+      "new_correct": 29,
+      "old_refusals": [
+        5
+      ],
+      "new_refusals": [],
+      "old_wrong": [],
+      "new_wrong": []
+    },
+    "highlighted_sevens": [
+      {
+        "position": "3|3",
+        "internal_slot": 5,
+        "visible_identity": "7C",
+        "old_rank": {
+          "accepted": false,
+          "reason": "refused: absolute shape error",
+          "winner": {
+            "label": "7",
+            "variant": 0,
+            "shift": [
+              0,
+              0
+            ],
+            "numerator": 6845,
+            "denominator": 29908,
+            "error_ppm_floor": 228868,
+            "paper_pixels": 523,
+            "actual_paper_reference": 231,
+            "template_paper_reference": 253,
+            "strong_red_pixels": 0,
+            "strong_black_pixels": 104,
+            "red": false
+          },
+          "competitor": {
+            "label": "2",
+            "variant": 3,
+            "shift": [
+              0,
+              1
+            ],
+            "numerator": 19223,
+            "denominator": 39689,
+            "error_ppm_floor": 484340,
+            "paper_pixels": 525,
+            "actual_paper_reference": 231,
+            "template_paper_reference": 253,
+            "strong_red_pixels": 0,
+            "strong_black_pixels": 104,
+            "red": false
+          },
+          "gap_ppm_floor": 255472,
+          "counts": {
+            "observations": 333,
+            "paper_refusals": 0,
+            "colour_refusals": 0,
+            "zero_mass": 0
+          }
+        },
+        "new_rank": {
+          "accepted": true,
+          "reason": "accepted",
+          "winner": {
+            "label": "7",
+            "variant": 1,
+            "shift": [
+              0,
+              0
+            ],
+            "numerator": 0,
+            "denominator": 26875,
+            "error_ppm_floor": 0,
+            "paper_pixels": 523,
+            "actual_paper_reference": 231,
+            "template_paper_reference": 231,
+            "strong_red_pixels": 0,
+            "strong_black_pixels": 104,
+            "red": false
+          },
+          "competitor": {
+            "label": "2",
+            "variant": 3,
+            "shift": [
+              0,
+              1
+            ],
+            "numerator": 19223,
+            "denominator": 39689,
+            "error_ppm_floor": 484340,
+            "paper_pixels": 525,
+            "actual_paper_reference": 231,
+            "template_paper_reference": 253,
+            "strong_red_pixels": 0,
+            "strong_black_pixels": 104,
+            "red": false
+          },
+          "gap_ppm_floor": 484340,
+          "counts": {
+            "observations": 342,
+            "paper_refusals": 0,
+            "colour_refusals": 0,
+            "zero_mass": 0
+          }
+        },
+        "unchanged_suit": {
+          "accepted": true,
+          "reason": "accepted",
+          "winner": {
+            "label": "clubs",
+            "variant": 9,
+            "shift": [
+              0,
+              0
+            ],
+            "numerator": 901,
+            "denominator": 27825,
+            "error_ppm_floor": 32380,
+            "paper_pixels": 171,
+            "actual_paper_reference": 232,
+            "template_paper_reference": 232,
+            "strong_red_pixels": 0,
+            "strong_black_pixels": 107,
+            "red": false
+          },
+          "competitor": {
+            "label": "spades",
+            "variant": 8,
+            "shift": [
+              0,
+              0
+            ],
+            "numerator": 6082,
+            "denominator": 30446,
+            "error_ppm_floor": 199763,
+            "paper_pixels": 171,
+            "actual_paper_reference": 232,
+            "template_paper_reference": 254,
+            "strong_red_pixels": 0,
+            "strong_black_pixels": 107,
+            "red": false
+          },
+          "gap_ppm_floor": 167382,
+          "counts": {
+            "observations": 369,
+            "paper_refusals": 0,
+            "colour_refusals": 0,
+            "zero_mass": 0
+          }
+        }
+      },
+      {
+        "position": "5|2",
+        "internal_slot": 11,
+        "visible_identity": "7H",
+        "old_rank": {
+          "accepted": true,
+          "reason": "accepted",
+          "winner": {
+            "label": "7",
+            "variant": 0,
+            "shift": [
+              -1,
+              0
+            ],
+            "numerator": 4934,
+            "denominator": 28905,
+            "error_ppm_floor": 170697,
+            "paper_pixels": 517,
+            "actual_paper_reference": 230,
+            "template_paper_reference": 253,
+            "strong_red_pixels": 109,
+            "strong_black_pixels": 0,
+            "red": true
+          },
+          "competitor": {
+            "label": "2",
+            "variant": 2,
+            "shift": [
+              0,
+              0
+            ],
+            "numerator": 19143,
+            "denominator": 39538,
+            "error_ppm_floor": 484167,
+            "paper_pixels": 521,
+            "actual_paper_reference": 230,
+            "template_paper_reference": 251,
+            "strong_red_pixels": 109,
+            "strong_black_pixels": 0,
+            "red": true
+          },
+          "gap_ppm_floor": 313470,
+          "counts": {
+            "observations": 333,
+            "paper_refusals": 0,
+            "colour_refusals": 0,
+            "zero_mass": 0
+          }
+        },
+        "new_rank": {
+          "accepted": true,
+          "reason": "accepted",
+          "winner": {
+            "label": "7",
+            "variant": 0,
+            "shift": [
+              -1,
+              0
+            ],
+            "numerator": 4934,
+            "denominator": 28905,
+            "error_ppm_floor": 170697,
+            "paper_pixels": 517,
+            "actual_paper_reference": 230,
+            "template_paper_reference": 253,
+            "strong_red_pixels": 109,
+            "strong_black_pixels": 0,
+            "red": true
+          },
+          "competitor": {
+            "label": "2",
+            "variant": 2,
+            "shift": [
+              0,
+              0
+            ],
+            "numerator": 19143,
+            "denominator": 39538,
+            "error_ppm_floor": 484167,
+            "paper_pixels": 521,
+            "actual_paper_reference": 230,
+            "template_paper_reference": 251,
+            "strong_red_pixels": 109,
+            "strong_black_pixels": 0,
+            "red": true
+          },
+          "gap_ppm_floor": 313470,
+          "counts": {
+            "observations": 342,
+            "paper_refusals": 0,
+            "colour_refusals": 0,
+            "zero_mass": 0
+          }
+        },
+        "unchanged_suit": {
+          "accepted": true,
+          "reason": "accepted",
+          "winner": {
+            "label": "hearts",
+            "variant": 0,
+            "shift": [
+              -1,
+              0
+            ],
+            "numerator": 3192,
+            "denominator": 36636,
+            "error_ppm_floor": 87127,
+            "paper_pixels": 164,
+            "actual_paper_reference": 230,
+            "template_paper_reference": 250,
+            "strong_red_pixels": 147,
+            "strong_black_pixels": 0,
+            "red": true
+          },
+          "competitor": {
+            "label": "diamonds",
+            "variant": 8,
+            "shift": [
+              0,
+              -1
+            ],
+            "numerator": 14276,
+            "denominator": 35391,
+            "error_ppm_floor": 403379,
+            "paper_pixels": 165,
+            "actual_paper_reference": 231,
+            "template_paper_reference": 251,
+            "strong_red_pixels": 147,
+            "strong_black_pixels": 0,
+            "red": true
+          },
+          "gap_ppm_floor": 316251,
+          "counts": {
+            "observations": 369,
+            "paper_refusals": 0,
+            "colour_refusals": 0,
+            "zero_mass": 0
+          }
+        }
+      },
+      {
+        "position": "7|2",
+        "internal_slot": 22,
+        "visible_identity": "7S",
+        "old_rank": {
+          "accepted": true,
+          "reason": "accepted",
+          "winner": {
+            "label": "7",
+            "variant": 0,
+            "shift": [
+              0,
+              -1
+            ],
+            "numerator": 5781,
+            "denominator": 29350,
+            "error_ppm_floor": 196967,
+            "paper_pixels": 523,
+            "actual_paper_reference": 231,
+            "template_paper_reference": 253,
+            "strong_red_pixels": 0,
+            "strong_black_pixels": 93,
+            "red": false
+          },
+          "competitor": {
+            "label": "2",
+            "variant": 3,
+            "shift": [
+              0,
+              0
+            ],
+            "numerator": 19130,
+            "denominator": 39553,
+            "error_ppm_floor": 483654,
+            "paper_pixels": 525,
+            "actual_paper_reference": 231,
+            "template_paper_reference": 253,
+            "strong_red_pixels": 0,
+            "strong_black_pixels": 93,
+            "red": false
+          },
+          "gap_ppm_floor": 286687,
+          "counts": {
+            "observations": 333,
+            "paper_refusals": 0,
+            "colour_refusals": 0,
+            "zero_mass": 0
+          }
+        },
+        "new_rank": {
+          "accepted": true,
+          "reason": "accepted",
+          "winner": {
+            "label": "7",
+            "variant": 1,
+            "shift": [
+              0,
+              -1
+            ],
+            "numerator": 5008,
+            "denominator": 29353,
+            "error_ppm_floor": 170612,
+            "paper_pixels": 523,
+            "actual_paper_reference": 231,
+            "template_paper_reference": 231,
+            "strong_red_pixels": 0,
+            "strong_black_pixels": 93,
+            "red": false
+          },
+          "competitor": {
+            "label": "2",
+            "variant": 3,
+            "shift": [
+              0,
+              0
+            ],
+            "numerator": 19130,
+            "denominator": 39553,
+            "error_ppm_floor": 483654,
+            "paper_pixels": 525,
+            "actual_paper_reference": 231,
+            "template_paper_reference": 253,
+            "strong_red_pixels": 0,
+            "strong_black_pixels": 93,
+            "red": false
+          },
+          "gap_ppm_floor": 313041,
+          "counts": {
+            "observations": 342,
+            "paper_refusals": 0,
+            "colour_refusals": 0,
+            "zero_mass": 0
+          }
+        },
+        "unchanged_suit": {
+          "accepted": true,
+          "reason": "accepted",
+          "winner": {
+            "label": "spades",
+            "variant": 4,
+            "shift": [
+              0,
+              0
+            ],
+            "numerator": 1069,
+            "denominator": 27462,
+            "error_ppm_floor": 38926,
+            "paper_pixels": 178,
+            "actual_paper_reference": 231,
+            "template_paper_reference": 253,
+            "strong_red_pixels": 0,
+            "strong_black_pixels": 108,
+            "red": false
+          },
+          "competitor": {
+            "label": "clubs",
+            "variant": 2,
+            "shift": [
+              0,
+              0
+            ],
+            "numerator": 5684,
+            "denominator": 30153,
+            "error_ppm_floor": 188505,
+            "paper_pixels": 178,
+            "actual_paper_reference": 231,
+            "template_paper_reference": 253,
+            "strong_red_pixels": 0,
+            "strong_black_pixels": 108,
+            "red": false
+          },
+          "gap_ppm_floor": 149578,
+          "counts": {
+            "observations": 369,
+            "paper_refusals": 0,
+            "colour_refusals": 0,
+            "zero_mass": 0
+          }
+        }
+      }
+    ],
+    "historical_corpus": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-v12/corpus.json",
+    "historical_corpus_sha256": "51db58fbb292d262d43a81ce1c2491b1c99bae7e1c5effe4c26767f696c61eaa",
+    "historical_summary": {
+      "development": {
+        "count": 250,
+        "old_correct": 250,
+        "new_correct": 250,
+        "new_wrong": [],
+        "new_refusals": [],
+        "old_vs_new_identity_changed": []
+      },
+      "development_regression": {
+        "count": 29,
+        "old_correct": 29,
+        "new_correct": 29,
+        "new_wrong": [],
+        "new_refusals": [],
+        "old_vs_new_identity_changed": []
+      },
+      "exposed_regression_fifth": {
+        "count": 29,
+        "old_correct": 29,
+        "new_correct": 29,
+        "new_wrong": [],
+        "new_refusals": [],
+        "old_vs_new_identity_changed": []
+      },
+      "validation_holdout": {
+        "count": 115,
+        "old_correct": 115,
+        "new_correct": 115,
+        "new_wrong": [],
+        "new_refusals": [],
+        "old_vs_new_identity_changed": []
+      }
+    },
+    "historical_labels_total": 423,
+    "historical_rank7_labels": 33,
+    "historical_rank7_improved_witnesses": 21,
+    "historical_non7_winner_or_competitor_changed": 0,
+    "banks": "The two entire reader banks are structurally equal; the same single measured sample is appended in memory to each. One exact evaluation per observation applies to both banks; these are not duplicate independent labels or Rust test counts.",
+    "diagnostic_report": "/home/charlie/tmp/pyramid-gold-seven-audit-pklji4sd/full-comparative-report.json",
+    "diagnostic_report_sha256": "dd877cd144fb14ab2bcdfb80df5f37eb1dc1d43c3d6be30fb003b798f9f8d85c",
+    "diagnostic_report_bytes": 1706105,
+    "cross_checks": {
+      "original_production_7C_fraction_reproduced": true,
+      "previous_dark_theme_all29_winner_competitor_fractions_reproduced": true
+    }
+  },
+  "frozen_policy": {
+    "schema_version": 2,
+    "policy": "paper_ink_l1_v2",
+    "score_scale": 1000000,
+    "rank_max_error_ppm": 220000,
+    "suit_max_error_ppm": 120000,
+    "min_label_gap_ppm": 80000,
+    "alignment": 1,
+    "new_variant_tolerance": 0,
+    "all_full_roi_pixels_selected": true,
+    "description": "All preceding rank variants, all suit banks, caps, geometry, paper/exclusive-colour/uniqueness gates, scene/modal/positive-empty signatures, input/restore/publish policy and native-v15 opt-in execution-empty-stock/post-confirm-OK evidence remain unchanged."
+  },
+  "parent_fixture_hashes": {
+    "README.md": "c54c2ff55dd62d39934b744ce4f8b5ac9be96d151a8c101a3e86eb0c11a2a4c7",
+    "post-confirm-3.png": "36a92ae00fcd183930fa6d48f4093fa9b9741d9573e097f305d81befdfeebd74",
+    "post-confirm-4.png": "429c9eb940ff82a3c04d23c96a4bebd44771371a62d0aa7bce6ff7477241a122",
+    "post-confirm-5.png": "863ea334461508a9077ba82b690fec177587c6a2e4b6eee43221a5ed746bb321",
+    "post-confirm-restored.png": "d6cfba0501861ac24a27eae8ff3729ca036d0c238ab5caf27c97ddb513f9fbc5",
+    "post-confirm-start.png": "446d6b66a420a67936b1ff41a5be3e9db38af1dded1eac12c139df5f47935c81",
+    "profile.json": "c107cec6ab419cdb345447c4dec216b3a3d3f9981c881f2ab38e22b7bf143b49",
+    "provenance.json": "685967a11225233267502cb7a8d538e08c17d764c69f6d9ad4a53a193375b3ad",
+    "stock-empty-deal.json": "2315688a1d441d228737ab404e171dcfb212768d6bdd52e63ffdde25c177bcc0",
+    "stock-empty.png": "ed33ce034e10f639815068dfdfdf8ad1ee18a7afe5fc0f1a0ccc011747236c27"
+  },
+  "risk_boundary": "The single source is exposed calibration. Current7H already passed and continues using the old rank variant;7S already passed and improves. The423 historical positives show no changed identity/refusal, not a general accuracy or negative-case proof. An added seven variant can lower seven as a competing label for another rank; production ambiguity, damaged/blank/paperless/colour/scene rejection regressions remain required. No gold7D evidence or prospective board is supplied.",
+  "evidence_boundary": "Private exact-integer Python diagnostic only; no production Rust/Cargo/formatter execution, newly captured scene, guest input, successful acquisition, restored-board publication, held-out accuracy or new live acceptance. Original failure packets and all ten parent fixtures remain untouched."
+}

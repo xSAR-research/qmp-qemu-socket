@@ -1,0 +1,119 @@
+{
+  "created_utc": "2026-10-22T12:49:06.832992+00:00",
+  "user_sources": [
+    "m13015",
+    "m13046"
+  ],
+  "files": [
+    {
+      "source": "/home/charlie/tmp/pyramid-error-1792672241732-571277-0/deal.json",
+      "path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-stock-recycle/deal.json",
+      "bytes": 4739,
+      "sha256": "280d4ef88fed7c9183f7af3ba28870c1bd75929dace4141383f183d6c063e6c6"
+    },
+    {
+      "source": "/home/charlie/tmp/pyramid-error-1792672241732-571277-0/error-state.json",
+      "path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-stock-recycle/error-state.json",
+      "bytes": 2092,
+      "sha256": "74f317f891ea4b0201178398a3dca881a49ebe331556b3b95997c413e1ec594d"
+    },
+    {
+      "source": "/home/charlie/tmp/pyramid-error-1792672241732-571277-0/error.log",
+      "path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-stock-recycle/error.log",
+      "bytes": 2568,
+      "sha256": "97e0aaf7a017180862deee81e0276f8c883853625fc0c7b3f9b46f1c2925ab13"
+    },
+    {
+      "source": "/home/charlie/tmp/pyramid-error-1792672241732-571277-0/first-unmatched.png",
+      "path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-stock-recycle/first-unmatched.png",
+      "bytes": 4056057,
+      "sha256": "8456db4e630885ab20a9a66ad9deda6710b8a104427c40501152696a790f68fb"
+    },
+    {
+      "source": "/home/charlie/tmp/pyramid-error-1792672241732-571277-0/last-observed.png",
+      "path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-stock-recycle/last-observed.png",
+      "bytes": 4127570,
+      "sha256": "22ba6e6452b3091d38f1acc89dbcaa65e297c93e605a38f90bd0df71706ff30d"
+    },
+    {
+      "source": "/home/charlie/tmp/.pyramid-recon-571277-1/COMPLETE-diagnostics.json",
+      "path": "/home/charlie/Documents/Pyramid/Validation/stock-recycle-boundary-20261022/evidence/recon/COMPLETE-diagnostics.json",
+      "bytes": 1844,
+      "sha256": "495801a95e32917c609f40c327c150e995c9ff1fe7f61c56f4aa02f0196aa3bf"
+    },
+    {
+      "source": "/home/charlie/tmp/.pyramid-recon-571277-1/INCOMPLETE-start.json",
+      "path": "/home/charlie/Documents/Pyramid/Validation/stock-recycle-boundary-20261022/evidence/recon/INCOMPLETE-start.json",
+      "bytes": 347,
+      "sha256": "c64868e7f2be413a0ac181970c94f8de2da187ce2224521ce25a1b9865db633e"
+    },
+    {
+      "source": "/home/charlie/tmp/.pyramid-recon-571277-1/baseline.png",
+      "path": "/home/charlie/Documents/Pyramid/Validation/stock-recycle-boundary-20261022/evidence/recon/baseline.png",
+      "bytes": 3731288,
+      "sha256": "de96bd7c31e897c961358a3b3b0c51f64a06e1389db59dda6d5e9b0aca9f6bb9"
+    },
+    {
+      "source": "/home/charlie/tmp/.pyramid-recon-571277-1/latest.png",
+      "path": "/home/charlie/Documents/Pyramid/Validation/stock-recycle-boundary-20261022/evidence/recon/latest.png",
+      "bytes": 3731288,
+      "sha256": "de96bd7c31e897c961358a3b3b0c51f64a06e1389db59dda6d5e9b0aca9f6bb9"
+    },
+    {
+      "source": "/home/charlie/tmp/qmp-qemu-socket-1792671954727.log",
+      "path": "/home/charlie/Documents/Pyramid/Validation/stock-recycle-boundary-20261022/evidence/controller-log-prefix.txt",
+      "bytes": 340264,
+      "sha256": "76dfef174282ce51f1da08caefeedbf85b8cb70fc030890f66e6e8f0fcd37f83"
+    }
+  ],
+  "derived": [
+    {
+      "source": "/home/charlie/tmp/pyramid-error-1792672241732-571277-0/last-observed.png",
+      "path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-stock-recycle/move-upper.rgb",
+      "bytes": 6240,
+      "sha256": "a0767d51a3c76cbe2baaf06e2ca9ab22aa405e6484ad425cf4eb5b20fa27a2f1",
+      "bounds": [
+        920,
+        678,
+        80,
+        26
+      ],
+      "source_sha256": "22ba6e6452b3091d38f1acc89dbcaa65e297c93e605a38f90bd0df71706ff30d",
+      "tolerance": 4,
+      "full_mask": true
+    },
+    {
+      "source": "/home/charlie/tmp/pyramid-error-1792672241732-571277-0/last-observed.png",
+      "path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-stock-recycle/move-lower.rgb",
+      "bytes": 6240,
+      "sha256": "4322bc3089c5000ffcc0b31c6d0dff4778a38c13530506c17397f6b7f303fb5d",
+      "bounds": [
+        920,
+        704,
+        80,
+        26
+      ],
+      "source_sha256": "22ba6e6452b3091d38f1acc89dbcaa65e297c93e605a38f90bd0df71706ff30d",
+      "tolerance": 4,
+      "full_mask": true
+    },
+    {
+      "source": "/home/charlie/tmp/pyramid-error-1792672241732-571277-0/last-observed.png",
+      "path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-stock-recycle/deals-one.rgb",
+      "bytes": 10920,
+      "sha256": "6b2bec9f48a13d2becc27d86a041689176de8c2fc00e547e26bdd0687437f052",
+      "bounds": [
+        890,
+        874,
+        140,
+        26
+      ],
+      "source_sha256": "22ba6e6452b3091d38f1acc89dbcaa65e297c93e605a38f90bd0df71706ff30d",
+      "tolerance": 4,
+      "full_mask": true
+    }
+  ],
+  "role": "Actual129 partial-board stock failure; log is a finite prefix",
+  "guest_trial": false,
+  "calibration_threshold_changed": false
+}

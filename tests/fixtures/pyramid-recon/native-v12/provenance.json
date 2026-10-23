@@ -1,0 +1,149 @@
+{
+  "evidence_schema": "pyramid-native-reader-corpus-provenance-v1",
+  "original_manifest": {
+    "file": "../manifest.json",
+    "sha256": "ef66f91b6ba2a122c11f2ab06292eed9102b220b0479a1a79c2e616671ca2775",
+    "preserved_observations": 104
+  },
+  "native_v11_template_profile": {
+    "file": "../native-v11/profile.json",
+    "sha256": "7269769d0c1373edd431e7606f6cdad3ed1239dc5d70839257b5ca89ed408124",
+    "new_template_crops_added": false
+  },
+  "frozen_policy": {
+    "file": "frozen-policy.json",
+    "sha256": "5343651cea940c25add3ee79653b2c9c9da257b30d9874143f6b400cf0d81236",
+    "frozen_at": "2026-10-19T13:02:56.014505+00:00"
+  },
+  "ten_failure_labels": {
+    "labels": [
+      "JS",
+      "10C",
+      "3D",
+      "5H",
+      "QH",
+      "10H",
+      "AH",
+      "10S",
+      "4H",
+      "9D",
+      "3C",
+      "QD",
+      "8H",
+      "6D",
+      "2D",
+      "KH",
+      "7D",
+      "AC",
+      "6H",
+      "4D",
+      "7S",
+      "KD",
+      "7H",
+      "QS",
+      "AD",
+      "5S",
+      "8C",
+      "9S",
+      "JH"
+    ],
+    "label_method": "Directly labelled earlier; exact expected arrays copied from exploratory ranking report. Scores are not used to infer labels.",
+    "ranking_report_sha256": "57e67189e5db9717a23aace1ad2019c6d554e05a895f57812ee149f515c7c3dc",
+    "exposure": "Exploratory metrics inspected before freeze; development_regression only."
+  },
+  "fifth_failure_labels": {
+    "tableau": [
+      "2S",
+      "7D",
+      "10H",
+      "4C",
+      "QS",
+      "9D",
+      "JD",
+      "7H",
+      "AS",
+      "KD",
+      "6D",
+      "QD",
+      "2H",
+      "QH",
+      "AC",
+      "KS",
+      "QC",
+      "5S",
+      "9H",
+      "6H",
+      "9S",
+      "10S",
+      "4S",
+      "8C",
+      "2C",
+      "3D",
+      "6C",
+      "10D"
+    ],
+    "left": "JC",
+    "right": "positive_empty",
+    "label_method": "Independent direct visual rank and suit from original baseline; recorded before metric evaluation.",
+    "source_sha256": "81519aaa7ae9f8d47136af0868834368ecf40f49ff1fd546e929ff37dcd2b2c3",
+    "policy_sha256_before_label_or_metric_evaluation": "d6c8a647946ae2898cb27068a88c5314d5f2550f80048fa7976b47312871b3e1",
+    "exposure": "Initial raw-policy prospective evaluation failed at KD; now exposed_regression_fifth. No renewed prospective claim."
+  },
+  "summary": {
+    "sources": 40,
+    "card_observations": 423,
+    "positions": 14,
+    "source_split_counts": {
+      "development": 34,
+      "validation_holdout": 4,
+      "development_regression": 1,
+      "exposed_regression_fifth": 1
+    },
+    "observation_split_counts": {
+      "development": 250,
+      "validation_holdout": 115,
+      "development_regression": 29,
+      "exposed_regression_fifth": 29
+    },
+    "duplicate_source_hashes": {}
+  },
+  "files": {
+    "corpus.json": {
+      "bytes": 311406,
+      "sha256": "51db58fbb292d262d43a81ce1c2491b1c99bae7e1c5effe4c26767f696c61eaa"
+    },
+    "fifth-failure-INCOMPLETE.json": {
+      "bytes": 964,
+      "sha256": "6fd4b2c4943e38d85b80db10272be0b18af3771c521dcf4e49a9afc1994966bc"
+    },
+    "fifth-failure-baseline.png": {
+      "bytes": 3772290,
+      "sha256": "81519aaa7ae9f8d47136af0868834368ecf40f49ff1fd546e929ff37dcd2b2c3"
+    },
+    "frozen-policy.json": {
+      "bytes": 1730,
+      "sha256": "5343651cea940c25add3ee79653b2c9c9da257b30d9874143f6b400cf0d81236"
+    },
+    "ten-failure-INCOMPLETE.json": {
+      "bytes": 964,
+      "sha256": "df18f6ddea90041a6809909627061408f1208c24d80cc6f0f6ed1b225a9ffa21"
+    },
+    "ten-failure-baseline.png": {
+      "bytes": 3794493,
+      "sha256": "beb2753ea79180a2d8d872b9089e061859f208d6307de79e621cea8358884126"
+    },
+    "initial-policy.json": {
+      "bytes": 1194,
+      "sha256": "d6c8a647946ae2898cb27068a88c5314d5f2550f80048fa7976b47312871b3e1"
+    },
+    "initial-policy-results.json": {
+      "bytes": 1060,
+      "sha256": "4a59e01e330cf31d60721468a5d2c192ae5c658e26d62a00b0f22cff0a4dc5ed"
+    }
+  },
+  "initial_policy": {
+    "file": "initial-policy.json",
+    "sha256": "d6c8a647946ae2898cb27068a88c5314d5f2550f80048fa7976b47312871b3e1",
+    "frozen_at": "2026-10-19T06:34:34.025027+00:00"
+  }
+}

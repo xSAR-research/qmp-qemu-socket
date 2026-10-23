@@ -1,5 +1,14 @@
 # Pyramid reconnaissance live-test brief
 
+> Historical operator brief for the dated 2.2.0 delivery. Its versions,
+> dependency/profile selection, manual-field instructions and positive Solver-OFF
+> wording are superseded by the [2.5.103 live brief](Live-Test-2.5.103.md) and
+> [current profile contract](pyramid-recon-profile.md). Current setup uses bundled
+> exact v7, automatic editable evidence names and successful-export handover to
+> Calculate. Consent remains explicit, Solver must not be engaged, and an
+> unavailable control is allowed. Retain the dated evidence below; use the
+> current brief for new live work.
+
 Date: 11 October 2026, Australia/Brisbane.
 Project: qmp-qemu-socket, native GUI application, development 2.2.0.
 Charlie accepted a complete 2.1.0 live scan and restored schema-1 export.

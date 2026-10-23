@@ -1,0 +1,77 @@
+{
+  "originals": [
+    {
+      "bytes": 3812813,
+      "destination": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-card-cleared/sixes.png",
+      "mode": "0444",
+      "sha256": "c7aa74ff9d8d76e4a0546d36f5d2c2ba39855de5f114820b17df0520db5e3cd6",
+      "source": "/home/charlie/tmp/.pyramid-recon-413051-0/baseline.png"
+    },
+    {
+      "bytes": 3766959,
+      "destination": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-card-cleared/nines.png",
+      "mode": "0444",
+      "sha256": "eb61b1aa6dd783400f63ef498d9caa7c881a6e3b4ab52806d88257c11cbf6d43",
+      "source": "/home/charlie/Documents/Pyramid/Validation/challenge-completion-20261021/live/365371-nines-20261022/last-observed.png"
+    }
+  ],
+  "derived": [
+    {
+      "bounds": [
+        912,
+        48,
+        84,
+        32
+      ],
+      "bytes": 2688,
+      "path": "cleared.ink",
+      "sha256": "543b5c4bf59761caa87b2f76cc3511821581210c3e03dc1cdf0afa3d36c8d605",
+      "source": "sixes.png",
+      "transformation": "blue.saturating_sub(6)"
+    },
+    {
+      "bounds": [
+        841,
+        48,
+        80,
+        32
+      ],
+      "bytes": 2560,
+      "path": "boards.ink",
+      "sha256": "4a99f458b5e03154c2f416995a120895be79ee752018f504a88125c6319e7022",
+      "source": "../pyramid-objectives/boards-zero-of-two.png",
+      "transformation": "blue.saturating_sub(6)"
+    },
+    {
+      "bounds": [
+        814,
+        41,
+        292,
+        7
+      ],
+      "bytes": 6132,
+      "path": "banner-top.rgb",
+      "sha256": "45a846d988e0f4d614cecb6047d8e37eda02b295d163e79dfe138fe45538bfb9",
+      "source": "sixes.png",
+      "transformation": "unchanged RGB crop"
+    },
+    {
+      "bounds": [
+        814,
+        80,
+        292,
+        7
+      ],
+      "bytes": 6132,
+      "path": "banner-bottom.rgb",
+      "sha256": "597f753b52cad4ca5c0f65edc0eb0186e85199156cdb04827def12d0d800a680",
+      "source": "sixes.png",
+      "transformation": "unchanged RGB crop"
+    }
+  ],
+  "native_sixes": "Sixes cleared 0/12",
+  "native_nines": "Nines cleared 0/15",
+  "word_limit_ppm": 210000,
+  "max_exposed_word_distance_ppm": 187190,
+  "policy": "Only the shared word is identified. No rank-name template or rank identity is used."
+}

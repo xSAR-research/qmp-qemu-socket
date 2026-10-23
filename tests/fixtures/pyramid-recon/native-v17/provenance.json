@@ -1,0 +1,80 @@
+{
+  "policy": "native_v17_final_clear_v1",
+  "purpose": "Final-only tableau clear, not challenge completion or restart authority",
+  "calibration_sources": [
+    {
+      "file": "final-clear-right-card.png",
+      "original": "/home/charlie/tmp/pyramid-error-1792445254107-108737-0/last-observed.png",
+      "sha256": "3e096880c6955a362d69cb3336a404caabfe94dabb6f90dcc204ba5e7874c4c0"
+    },
+    {
+      "file": "final-clear-empty-stock.png",
+      "original": "/home/charlie/tmp/pyramid-error-1792445392508-108737-1/last-observed.png",
+      "sha256": "7b11c0604a5c907411747c9505ad3420e4b40347b71a5c3a4584836acae69903"
+    },
+    {
+      "file": "final-animation-right-card.png",
+      "original": "/home/charlie/tmp/pyramid-error-1792445254107-108737-0/first-unmatched.png",
+      "sha256": "ff38e16b1d3865aad393cdda7550289fbbc6faccef54483835cbeba4c1962cdb"
+    },
+    {
+      "file": "final-animation-empty-stock.png",
+      "original": "/home/charlie/tmp/pyramid-error-1792445392508-108737-1/first-unmatched.png",
+      "sha256": "5a29ee11c6106464669767e8f0e0cb9bc6c4711d80a34108df9ced22d2d5362e"
+    },
+    {
+      "file": "right-card-deal.json",
+      "original": "/home/charlie/tmp/pyramid-error-1792445254107-108737-0/deal.json",
+      "sha256": "ce745f787fbb5ff8a274f639edd9a72e3690f239e0562d51eb94153e7a8ce516"
+    },
+    {
+      "file": "empty-stock-deal.json",
+      "original": "/home/charlie/tmp/pyramid-error-1792445392508-108737-1/deal.json",
+      "sha256": "943ecdb6e2a3205dc1f19450f6e4a1438ea68c6440ed2a9eb73ab772c58cb594"
+    }
+  ],
+  "marker": {
+    "regions": [
+      [
+        716,
+        468,
+        56,
+        64
+      ],
+      [
+        929,
+        453,
+        48,
+        80
+      ],
+      [
+        1165,
+        468,
+        42,
+        90
+      ]
+    ],
+    "mask_rule": "Select pixels whose every channel differs by at most4 between the two original clear frames; preserve complete source RGB in data. Excludes measured varying glow only.",
+    "minimum_selected_fraction": "4/5",
+    "tolerance": 4,
+    "minimum_contrast": 64
+  },
+  "absence": {
+    "offset": [
+      40,
+      4
+    ],
+    "size": [
+      60,
+      4
+    ],
+    "slots": 28,
+    "required_felt_pixels_per_slot": 240,
+    "felt_policy": "existing pyramid::is_felt, unchanged"
+  },
+  "v16_rollback_semantically_exact": true,
+  "v16_rollback_serialized_exact": true,
+  "old_profile_sha256": "732af82cb2befbb3a420f5ae04ec11dd0b59bd5957a005df17218674bc01244e",
+  "card_reader_changes": false,
+  "evidence_scope": "Two exposed calibration clear frames, corresponding earlier animated negatives and exact deal exports. Finite regression; no general recognition or live acceptance claim."
+}

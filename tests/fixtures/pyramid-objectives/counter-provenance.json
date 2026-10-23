@@ -1,0 +1,1028 @@
+[
+  {
+    "name": "boards-two",
+    "source": "pyramid-objectives/boards-zero-of-two.png",
+    "source_sha256": "71b442da20ff8c91e5ab07fcc464cc510ff080cf9d2a3679fc8d5b929980fc73",
+    "text": "0/2",
+    "kind": "Boards",
+    "label_bounds": [
+      814,
+      48,
+      224,
+      32
+    ],
+    "label_sha256": "7c1a315d0e817a328f57bc19c7ce089ff13d2310a8c93bde825239218496e026",
+    "counter_bounds": [
+      1038,
+      48,
+      72,
+      32
+    ],
+    "glyphs": [
+      {
+        "character": "0",
+        "bounds": [
+          1050,
+          55,
+          11,
+          18
+        ],
+        "sha256": "463bca551925d2f6b7f3a01ab3f5599ad897944d168a88d5783434af4befbfe1"
+      },
+      {
+        "character": "/",
+        "bounds": [
+          1062,
+          56,
+          10,
+          19
+        ],
+        "sha256": "05b20b6910dfbb834a60660a2408fffcea35262238a12b2a4427145a9c954086"
+      },
+      {
+        "character": "2",
+        "bounds": [
+          1073,
+          55,
+          10,
+          17
+        ],
+        "sha256": "1751df030628a82ca511ad58358213118df9d8b3f71da04d2f05f4d7780f75ca"
+      }
+    ]
+  },
+  {
+    "name": "boards-three",
+    "source": "pyramid-progress/zero-of-three.png",
+    "source_sha256": "4920c6eb6996e7ba33f6a6f795d6786a15e802976098b228cc15bfc0ca2af436",
+    "text": "0/3",
+    "kind": "Boards",
+    "label_bounds": [
+      814,
+      48,
+      224,
+      32
+    ],
+    "label_sha256": "9dbb825c8ee697072b1e751d1f7f0fcd688319e30f085ca0b2fd98cd0be48868",
+    "counter_bounds": [
+      1038,
+      48,
+      72,
+      32
+    ],
+    "glyphs": [
+      {
+        "character": "0",
+        "bounds": [
+          1050,
+          55,
+          11,
+          18
+        ],
+        "sha256": "b257d8c2484c6be6c7e48c7f9325a41e2ca27eac2371ffe7ce438ce8cb0decfd"
+      },
+      {
+        "character": "/",
+        "bounds": [
+          1062,
+          56,
+          10,
+          19
+        ],
+        "sha256": "9be581480a29371a6f211abfaf8c8f564e08f0709330663c4803556164567498"
+      },
+      {
+        "character": "3",
+        "bounds": [
+          1073,
+          55,
+          10,
+          18
+        ],
+        "sha256": "4909d1ddb379d222359c026424aafe9ae7c2fdd2cd89468bcb64f2573e815139"
+      }
+    ]
+  },
+  {
+    "name": "boards-one",
+    "source": "pyramid-recon/native-v13/restored.png",
+    "source_sha256": "c5eebd228dcb0bfd7ad43ead2e793699c25b1d3af85e1fb25f4bf004ff04481e",
+    "text": "1/3",
+    "kind": "Boards",
+    "label_bounds": [
+      814,
+      48,
+      224,
+      32
+    ],
+    "label_sha256": "e728866f04668eb570373a9bf85f0221ab0d3b291464b63170dae3829172c557",
+    "counter_bounds": [
+      1038,
+      48,
+      72,
+      32
+    ],
+    "glyphs": [
+      {
+        "character": "1",
+        "bounds": [
+          1051,
+          55,
+          7,
+          17
+        ],
+        "sha256": "178dde17bb78d733af5d2aef8873d9d1b5be1af8f879782b7f77b1ac2e77293e"
+      },
+      {
+        "character": "/",
+        "bounds": [
+          1060,
+          56,
+          10,
+          19
+        ],
+        "sha256": "d7fc49abdaabedfc6f0ac056ea3d9cd91b92cf0c23ef3c8c5c83d654a69964cc"
+      },
+      {
+        "character": "3",
+        "bounds": [
+          1072,
+          55,
+          9,
+          18
+        ],
+        "sha256": "00fd62b0aecfa9fbe6d9fecb4b2c7804a139feda428f2ebe5ec4f5483f2e9ee9"
+      }
+    ]
+  },
+  {
+    "name": "boards-second",
+    "source": "pyramid-recon/native-v13/recon-king.png",
+    "source_sha256": "4129c5cfe89c83f396a2c59601927707752447c6ea99541cbd185748a0312856",
+    "text": "2/3",
+    "kind": "Boards",
+    "label_bounds": [
+      814,
+      48,
+      224,
+      32
+    ],
+    "label_sha256": "e728866f04668eb570373a9bf85f0221ab0d3b291464b63170dae3829172c557",
+    "counter_bounds": [
+      1038,
+      48,
+      72,
+      32
+    ],
+    "glyphs": [
+      {
+        "character": "2",
+        "bounds": [
+          1050,
+          55,
+          10,
+          17
+        ],
+        "sha256": "dbd76473e9f099054fffa320db3d70392ac18b8f45c099580271f83de0a790e8"
+      },
+      {
+        "character": "/",
+        "bounds": [
+          1062,
+          56,
+          10,
+          19
+        ],
+        "sha256": "68c320e1182da9be3e763bbb668eb49fd6982b752a29c4ab8ab405be82e307e8"
+      },
+      {
+        "character": "3",
+        "bounds": [
+          1073,
+          55,
+          10,
+          18
+        ],
+        "sha256": "75d66f0170c3378547312adfd7b9d83b7975eda25a150616d63b154e21276c21"
+      }
+    ]
+  },
+  {
+    "name": "boards-complete",
+    "source": "pyramid-progress/negative-three-of-three.png",
+    "source_sha256": "a1d769953afc50c6dcfedaabdf657ab74612804e59067c6982ef7ecabc95023e",
+    "text": "3/3",
+    "kind": "Boards",
+    "label_bounds": [
+      814,
+      48,
+      224,
+      32
+    ],
+    "label_sha256": "27f206f81e48ea6728296dc4b035e6b62f93f0177a61ca4bffa6ed4b8c081371",
+    "counter_bounds": [
+      1038,
+      48,
+      72,
+      32
+    ],
+    "glyphs": [
+      {
+        "character": "3",
+        "bounds": [
+          1050,
+          55,
+          10,
+          18
+        ],
+        "sha256": "6a43e56c4540cc725c977b52d8b364d91c5f40921a2c5025851423bef1b04a4a"
+      },
+      {
+        "character": "/",
+        "bounds": [
+          1062,
+          56,
+          10,
+          19
+        ],
+        "sha256": "40adbe05000d20efa3cc3bb0588919bf2122280ebda43e1147a5b611052b8a5e"
+      },
+      {
+        "character": "3",
+        "bounds": [
+          1073,
+          55,
+          10,
+          18
+        ],
+        "sha256": "bb0e1ba6b2cb46fb2a3340aa27a14c6a6db296e2e9cf706fca29e94e827f3dd0"
+      }
+    ]
+  },
+  {
+    "name": "twos-four",
+    "source": "pyramid-recon/native-v9/baseline.png",
+    "source_sha256": "0b2f53ff00b32233bdbad78659f2c18304972338ae6d5af7a7a1640ece6b1310",
+    "text": "4/12",
+    "kind": "Twos",
+    "label_bounds": [
+      814,
+      48,
+      224,
+      32
+    ],
+    "label_sha256": "14ee8b71c3336a921a4318dd53aef3a39f3e8600d40c226c47e24a110720d32e",
+    "counter_bounds": [
+      1038,
+      48,
+      72,
+      32
+    ],
+    "glyphs": [
+      {
+        "character": "4",
+        "bounds": [
+          1044,
+          56,
+          13,
+          16
+        ],
+        "sha256": "47603775c5d757b900fca34c3b2a43dfd702a4fa0dd4b83bb77b64697b6d585d"
+      },
+      {
+        "character": "/",
+        "bounds": [
+          1057,
+          56,
+          10,
+          19
+        ],
+        "sha256": "a8a8077fbb4fe8921759903c6474165842cfd40bbe405ccd87ae5af26d62ed11"
+      },
+      {
+        "character": "1",
+        "bounds": [
+          1068,
+          55,
+          6,
+          17
+        ],
+        "sha256": "d6ea0a772bed4c45028fe9808da47caed9e9e61ce3bba6b6c86116ac1020b82a"
+      },
+      {
+        "character": "2",
+        "bounds": [
+          1078,
+          55,
+          10,
+          17
+        ],
+        "sha256": "dec8774745cbead7abade50a89fb7a7f106d688aba381e9fbfc2c1c92678b5ad"
+      }
+    ]
+  },
+  {
+    "name": "twos-eight",
+    "source": "pyramid-recon/native-v11/baseline.png",
+    "source_sha256": "28e1127ea9d4663ebcca61061779093ebc7b571ec0ebde13a4973906b9913409",
+    "text": "8/12",
+    "kind": "Twos",
+    "label_bounds": [
+      814,
+      48,
+      224,
+      32
+    ],
+    "label_sha256": "14ee8b71c3336a921a4318dd53aef3a39f3e8600d40c226c47e24a110720d32e",
+    "counter_bounds": [
+      1038,
+      48,
+      72,
+      32
+    ],
+    "glyphs": [
+      {
+        "character": "8",
+        "bounds": [
+          1045,
+          55,
+          11,
+          18
+        ],
+        "sha256": "fa1ea06c8436326b1bdb6a06985d0e892a2904ed50fb1fce7e3a55c1935f6139"
+      },
+      {
+        "character": "/",
+        "bounds": [
+          1057,
+          56,
+          10,
+          19
+        ],
+        "sha256": "812095b3b5cc4a9ad4316b1a00026f9c3a4c02bbb117a4b586f872feb5787cfa"
+      },
+      {
+        "character": "1",
+        "bounds": [
+          1068,
+          55,
+          6,
+          17
+        ],
+        "sha256": "0c9fb09799aa38e396d4c40e51240852542410c587ac7ef9d9b018afb685806f"
+      },
+      {
+        "character": "2",
+        "bounds": [
+          1078,
+          55,
+          10,
+          17
+        ],
+        "sha256": "cd9f9b8f9e04f9c2ace6ed449b08dfce28abd97fc5a93ece6c6cd290d34e42c8"
+      }
+    ]
+  },
+  {
+    "name": "fours-four",
+    "source": "pyramid-objectives/fours-four-of-twelve.png",
+    "source_sha256": "5aab196cfe65ca3cc71c543bf90c5bbec0a8a3319dc76319f3924fd8a492e7b4",
+    "text": "4/12",
+    "kind": "Fours",
+    "label_bounds": [
+      814,
+      48,
+      224,
+      32
+    ],
+    "label_sha256": "12d99c3cce43f864fbf3b67845e06bd3ce6593ea6fe7e74955241b47eca39267",
+    "counter_bounds": [
+      1038,
+      48,
+      72,
+      32
+    ],
+    "glyphs": [
+      {
+        "character": "4",
+        "bounds": [
+          1044,
+          56,
+          13,
+          16
+        ],
+        "sha256": "c72b730ffe90c09506936bdb3acb1992fbfe511c1605673756abbc50a0b5bb69"
+      },
+      {
+        "character": "/",
+        "bounds": [
+          1057,
+          56,
+          10,
+          19
+        ],
+        "sha256": "6209b736135c4a43bd4d959d47c1d8cf1c732326580597607ad367a8222db7c8"
+      },
+      {
+        "character": "1",
+        "bounds": [
+          1068,
+          55,
+          6,
+          17
+        ],
+        "sha256": "45f715b78b52eb54fb810f536d967c71707326211fee0477830bb1d1adcde56a"
+      },
+      {
+        "character": "2",
+        "bounds": [
+          1078,
+          55,
+          10,
+          17
+        ],
+        "sha256": "680b56df2b9d5bf5609eedc48c0a1faab7ecd629c212fd4db93cf8b0bb6baa8e"
+      }
+    ]
+  },
+  {
+    "name": "sevens-zero",
+    "source": "pyramid-recon/native-v16/gold-seven.png",
+    "source_sha256": "95d9e45b4c588e87970bc9b4cd909cccc7f63a668652c561ad5f38d0f431f7aa",
+    "text": "0/9",
+    "kind": "Sevens",
+    "label_bounds": [
+      814,
+      48,
+      224,
+      32
+    ],
+    "label_sha256": "bf3f9d7a0432fec73a937456030240e14f4e9a140cad4bd16c2fead1247a094e",
+    "counter_bounds": [
+      1038,
+      48,
+      72,
+      32
+    ],
+    "glyphs": [
+      {
+        "character": "0",
+        "bounds": [
+          1049,
+          55,
+          12,
+          18
+        ],
+        "sha256": "b348eb9b07b007b2358910b9c300fc28bfbc05a19f7bfc49e169132722dd043a"
+      },
+      {
+        "character": "/",
+        "bounds": [
+          1062,
+          56,
+          9,
+          19
+        ],
+        "sha256": "bfee299536821d850f4c745816d3eeba65462190f5ecdcf2a8b8ddfff7e53801"
+      },
+      {
+        "character": "9",
+        "bounds": [
+          1073,
+          55,
+          11,
+          18
+        ],
+        "sha256": "1a49503451fe6432dc5fb9806374f8812958ba6735a58c2612773a20fdda0720"
+      }
+    ]
+  },
+  {
+    "name": "score-ten",
+    "source": "pyramid-recon/native-v12/ten-failure-baseline.png",
+    "source_sha256": "beb2753ea79180a2d8d872b9089e061859f208d6307de79e621cea8358884126",
+    "text": "2,560/4,200",
+    "kind": "Score",
+    "label_bounds": [
+      814,
+      48,
+      132,
+      32
+    ],
+    "label_sha256": "262d9b953d0c7c0b28c9f7a800eb81bc534dbeebdf02cc6f351b306396dd6f0c",
+    "counter_bounds": [
+      958,
+      48,
+      142,
+      32
+    ],
+    "glyphs": [
+      {
+        "character": "2",
+        "bounds": [
+          964,
+          55,
+          11,
+          17
+        ],
+        "sha256": "61379c97187b80bee1d783f3214c5fbf96cf5359a91c83f603948dd1b2d8b2ea"
+      },
+      {
+        "character": ",",
+        "bounds": [
+          977,
+          70,
+          4,
+          5
+        ],
+        "sha256": "ce518546914b955d05910b16f1afe26036c5e9063b0bee20880f909dcff639a9"
+      },
+      {
+        "character": "5",
+        "bounds": [
+          984,
+          56,
+          10,
+          17
+        ],
+        "sha256": "da31856d49da3ad35acb669a91864f887d4020ab22f6a071f761ffe9cf95cc75"
+      },
+      {
+        "character": "6",
+        "bounds": [
+          997,
+          55,
+          11,
+          18
+        ],
+        "sha256": "427ded57cea25bba2972dd780c016c28c49f89923038f00d3482cda85f4f8a06"
+      },
+      {
+        "character": "0",
+        "bounds": [
+          1010,
+          55,
+          11,
+          18
+        ],
+        "sha256": "7c881e5716bc8ce384b6d4f46239e90a54ddf1bac8f68e553c35bfba191a9740"
+      },
+      {
+        "character": "/",
+        "bounds": [
+          1022,
+          56,
+          10,
+          19
+        ],
+        "sha256": "930dcbb1323dbfe3dba792cbbff42cbccc23ac5a917b984371b9766f78f4891a"
+      },
+      {
+        "character": "4",
+        "bounds": [
+          1033,
+          56,
+          13,
+          16
+        ],
+        "sha256": "08aeef96cb98649909c615350955f5b579c2202ca24175c63ebc3c7a09e64fd2"
+      },
+      {
+        "character": ",",
+        "bounds": [
+          1047,
+          70,
+          3,
+          5
+        ],
+        "sha256": "16d7448791f492769c980494a33c1fd7f96d28f1f08fb1148a2e09a5fde9d646"
+      },
+      {
+        "character": "2",
+        "bounds": [
+          1053,
+          55,
+          11,
+          17
+        ],
+        "sha256": "0d0a67bf0e344a64862eb0977b553934a2202847452489221d23b634d4f8cd26"
+      },
+      {
+        "character": "0",
+        "bounds": [
+          1066,
+          55,
+          12,
+          18
+        ],
+        "sha256": "fb6156dd40466a8e70ee454b503808f65584f6edc53e0ff82ebbe16292b1beea"
+      },
+      {
+        "character": "0",
+        "bounds": [
+          1080,
+          55,
+          11,
+          18
+        ],
+        "sha256": "68d6edc6da012bbc54f3c84d132717c8d0debe65dfae35b7e6dd44e7b2bc458e"
+      }
+    ]
+  },
+  {
+    "name": "score-fifth",
+    "source": "pyramid-recon/native-v12/fifth-failure-baseline.png",
+    "source_sha256": "81519aaa7ae9f8d47136af0868834368ecf40f49ff1fd546e929ff37dcd2b2c3",
+    "text": "1,280/3,000",
+    "kind": "Score",
+    "label_bounds": [
+      814,
+      48,
+      132,
+      32
+    ],
+    "label_sha256": "31c2f2b3ee130aaa3da08698c7f1f82992f34ff8a021d02691118ec72c239ece",
+    "counter_bounds": [
+      958,
+      48,
+      142,
+      32
+    ],
+    "glyphs": [
+      {
+        "character": "1",
+        "bounds": [
+          969,
+          55,
+          6,
+          17
+        ],
+        "sha256": "31350a9b365bb791a537702113d47c31a801e30926b0708913b9769121ff15d1"
+      },
+      {
+        "character": ",",
+        "bounds": [
+          978,
+          70,
+          3,
+          5
+        ],
+        "sha256": "5d71cb710d02c19d9a5a768e9ce8c604315bfeea9de42263d42289db70048584"
+      },
+      {
+        "character": "2",
+        "bounds": [
+          984,
+          55,
+          11,
+          17
+        ],
+        "sha256": "6da94a4df11067b30c455890d71fe867d32ab1444592a75c1ee4b6dcd605c44d"
+      },
+      {
+        "character": "8",
+        "bounds": [
+          997,
+          55,
+          11,
+          18
+        ],
+        "sha256": "5bacef95594c56a94582a4b65dea4117bb8995fb9124c28b72b81cf4de195f26"
+      },
+      {
+        "character": "0",
+        "bounds": [
+          1011,
+          55,
+          11,
+          18
+        ],
+        "sha256": "0a9d96151720fe0ab25cda6bcf3032df0a6fb50f204991fec57ea1c5de6f99f4"
+      },
+      {
+        "character": "/",
+        "bounds": [
+          1023,
+          56,
+          10,
+          19
+        ],
+        "sha256": "195383393954169fd9110fd7a0b40d6c420a4e012f97b65ae111cd8731462825"
+      },
+      {
+        "character": "3",
+        "bounds": [
+          1034,
+          55,
+          10,
+          18
+        ],
+        "sha256": "6d9bb0594b685f6572aa29c479b0d2e30a97dbcd538049e8fda7a4c2a77405a8"
+      },
+      {
+        "character": ",",
+        "bounds": [
+          1047,
+          70,
+          3,
+          5
+        ],
+        "sha256": "505476dd53b91e9fd608bcf61e9d3908af17b0e1012fd93a3ba4f7eae84107a5"
+      },
+      {
+        "character": "0",
+        "bounds": [
+          1053,
+          55,
+          11,
+          18
+        ],
+        "sha256": "f120eae81cdfe28ea2bfcfc69b55e5362a3c28af2e4005335f77807cf10702ef"
+      },
+      {
+        "character": "0",
+        "bounds": [
+          1066,
+          55,
+          12,
+          18
+        ],
+        "sha256": "c6c40af4fa461a036f5bb7c5f89b9485a79517dc3be2653b3950702b77bd9034"
+      },
+      {
+        "character": "0",
+        "bounds": [
+          1080,
+          55,
+          11,
+          18
+        ],
+        "sha256": "e3677a6d5e604daf3bcc7fbe89160748cebc3a0dc45f4ed6fbf88054e4aa672f"
+      }
+    ]
+  },
+  {
+    "name": "score-final-right",
+    "source": "pyramid-recon/native-v17/final-clear-right-card.png",
+    "source_sha256": "3e096880c6955a362d69cb3336a404caabfe94dabb6f90dcc204ba5e7874c4c0",
+    "text": "1,280/2,900",
+    "kind": "Score",
+    "label_bounds": [
+      814,
+      48,
+      132,
+      32
+    ],
+    "label_sha256": "4ec6dd644fa81a5c0643d3b9c29d2dbd5f83f7e2003270a4fc0c5080ea4cdd73",
+    "counter_bounds": [
+      958,
+      48,
+      142,
+      32
+    ],
+    "glyphs": [
+      {
+        "character": "1",
+        "bounds": [
+          968,
+          55,
+          7,
+          17
+        ],
+        "sha256": "35f5926c8ebf60d500ec5907e1a5260492d4e2e7fc7b75055179f97eed485b23"
+      },
+      {
+        "character": ",",
+        "bounds": [
+          978,
+          70,
+          3,
+          5
+        ],
+        "sha256": "7deeff0da38a9dd052143aed0297f65bb7306f94635aad5cc063f3cb664b1c4b"
+      },
+      {
+        "character": "2",
+        "bounds": [
+          984,
+          55,
+          10,
+          17
+        ],
+        "sha256": "ce0e00399149a264760c16309767e21512bec14887eb14d16995a348fc02b922"
+      },
+      {
+        "character": "8",
+        "bounds": [
+          997,
+          55,
+          11,
+          18
+        ],
+        "sha256": "37421a75ad53b51b9544bff9f9c049f4b706d00252eef2667570d15c75a89220"
+      },
+      {
+        "character": "0",
+        "bounds": [
+          1011,
+          55,
+          11,
+          18
+        ],
+        "sha256": "f87449d25400e8e339a4d00a27035dcddcb9e56cd15fdfe35ffbc9d7b41b3f74"
+      },
+      {
+        "character": "/",
+        "bounds": [
+          1023,
+          56,
+          10,
+          19
+        ],
+        "sha256": "59f14848adb0e2a7120659e3fcfbb36decee3f7cad13742e8b7c3fea37ab262e"
+      },
+      {
+        "character": "2",
+        "bounds": [
+          1034,
+          55,
+          10,
+          17
+        ],
+        "sha256": "2242e5b7a7799fff864089cc447dc74f0febbe2124ca4bb2b7a9af05bbf0f8ed"
+      },
+      {
+        "character": ",",
+        "bounds": [
+          1047,
+          70,
+          3,
+          5
+        ],
+        "sha256": "cd0cef08eb58b5fdd49659200780aa882cc3aa6e3bb28afd9dda68aa34013156"
+      },
+      {
+        "character": "9",
+        "bounds": [
+          1053,
+          55,
+          11,
+          18
+        ],
+        "sha256": "217549be13fd02beee4ddfeafe6b9b9b08afca686dfe20d29a3e7f5005fc4bdc"
+      },
+      {
+        "character": "0",
+        "bounds": [
+          1066,
+          55,
+          12,
+          18
+        ],
+        "sha256": "b071c812a4ed727a1af38f5d649648fee985bf307756f0f3758a731082d28382"
+      },
+      {
+        "character": "0",
+        "bounds": [
+          1080,
+          55,
+          11,
+          18
+        ],
+        "sha256": "ed2c9b03a946a66db4b7e617376b42d7b2cedfa56e2a1a21b02416154af6d41f"
+      }
+    ]
+  },
+  {
+    "name": "score-final-empty",
+    "source": "pyramid-recon/native-v17/final-clear-empty-stock.png",
+    "source_sha256": "7b11c0604a5c907411747c9505ad3420e4b40347b71a5c3a4584836acae69903",
+    "text": "2,570/2,900",
+    "kind": "Score",
+    "label_bounds": [
+      814,
+      48,
+      132,
+      32
+    ],
+    "label_sha256": "26030c2268a6b9dc1157e22891fc698fc8040aa1470b4ebbc38f279401ebda57",
+    "counter_bounds": [
+      958,
+      48,
+      142,
+      32
+    ],
+    "glyphs": [
+      {
+        "character": "2",
+        "bounds": [
+          965,
+          55,
+          11,
+          17
+        ],
+        "sha256": "130acb3b0486360545a811678ecf2c4cf18c9628dded2fc0c3884da6ce65d9e6"
+      },
+      {
+        "character": ",",
+        "bounds": [
+          978,
+          70,
+          3,
+          5
+        ],
+        "sha256": "35c92bc5a56fe1565e2e368cc3730c94e783d83d2247100a4361c018e2117233"
+      },
+      {
+        "character": "5",
+        "bounds": [
+          985,
+          56,
+          10,
+          17
+        ],
+        "sha256": "ff06b9469f61981afcac5f757824f43be4ebeabe84132d260b72d0fd87760b91"
+      },
+      {
+        "character": "7",
+        "bounds": [
+          998,
+          56,
+          11,
+          16
+        ],
+        "sha256": "8956c27eb5856e1f9a54589a827993c946b929fd3d789b6c51b3b483d0e371f8"
+      },
+      {
+        "character": "0",
+        "bounds": [
+          1011,
+          55,
+          11,
+          18
+        ],
+        "sha256": "f87449d25400e8e339a4d00a27035dcddcb9e56cd15fdfe35ffbc9d7b41b3f74"
+      },
+      {
+        "character": "/",
+        "bounds": [
+          1023,
+          56,
+          10,
+          19
+        ],
+        "sha256": "59f14848adb0e2a7120659e3fcfbb36decee3f7cad13742e8b7c3fea37ab262e"
+      },
+      {
+        "character": "2",
+        "bounds": [
+          1034,
+          55,
+          10,
+          17
+        ],
+        "sha256": "fea10a211fe95dac1ecbb69a02e24edda5782651ba2b08b9683ba11077877763"
+      },
+      {
+        "character": ",",
+        "bounds": [
+          1047,
+          70,
+          3,
+          5
+        ],
+        "sha256": "0243a33e40ac0043469ea36111dc9691b5fede2137f76185783a7673678adbd2"
+      },
+      {
+        "character": "9",
+        "bounds": [
+          1053,
+          55,
+          11,
+          18
+        ],
+        "sha256": "d97d0c1066ee531f13df7642214ac4bf3fe1e2ad6bd41653c561596ecf2c6fdc"
+      },
+      {
+        "character": "0",
+        "bounds": [
+          1066,
+          55,
+          12,
+          18
+        ],
+        "sha256": "cff09ea2fa71cc0f8f704e85dc205cfe09a8fda0f20e804d4c2dba07f5fa1e74"
+      },
+      {
+        "character": "0",
+        "bounds": [
+          1080,
+          55,
+          11,
+          18
+        ],
+        "sha256": "ed2c9b03a946a66db4b7e617376b42d7b2cedfa56e2a1a21b02416154af6d41f"
+      }
+    ]
+  }
+]

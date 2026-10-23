@@ -1,0 +1,82 @@
+{
+  "profile_id": "pyramid-native-1920-classic-blue-v13",
+  "parent_profile": "../native-v12/profile.json",
+  "parent_sha256": "f8f1bc8b8a7e28d0ad3433494c47096f5ca5e0b546275912d845adf6afdd0813",
+  "profile_sha256": "507fbe1499cc6359b117022fb2cadb79f0737d4f3f77687bc763992acfc3edd8",
+  "transformation": "Only profile_id and two appended full-RGB diamond variants in each reader differ; whole-profile rollback equals parent. All matching-policy, ROI, mask, thresholds, colour, scene, modal and authority rules unchanged.",
+  "sources": [
+    {
+      "file": "selected.png",
+      "source": "/home/charlie/tmp/pyramid-error-1792417065229-27073-1/first-unmatched.png",
+      "sha256": "af3cbbc3b38a3cf8291bbea9ca45396f20f4c9be7e7dbf034dbdb3196baaf970",
+      "bytes": 4052565
+    },
+    {
+      "file": "restored.png",
+      "source": "/home/charlie/tmp/.pyramid-recon-27073-1/baseline.png",
+      "sha256": "c5eebd228dcb0bfd7ad43ead2e793699c25b1d3af85e1fb25f4bf004ff04481e",
+      "bytes": 3694444
+    },
+    {
+      "file": "deal.json",
+      "source": "/home/charlie/tmp/pyramid-error-1792417065229-27073-1/deal.json",
+      "sha256": "068d27acda9401a4203dff7a4867d6ccfdcf1b76481d70df1bdeee99ffdec9f9",
+      "bytes": 4750
+    },
+    {
+      "file": "error-state.json",
+      "source": "/home/charlie/tmp/pyramid-error-1792417065229-27073-1/error-state.json",
+      "sha256": "9eab79a193b9fcd5ac461f6bfdb5a6ebf94a0e94878aa372afa0ec9b7a60f852",
+      "bytes": 4183
+    },
+    {
+      "file": "recon-king.png",
+      "source": "/home/charlie/tmp/.pyramid-recon-27073-2/baseline.png",
+      "sha256": "4129c5cfe89c83f396a2c59601927707752447c6ea99541cbd185748a0312856",
+      "bytes": 3756144
+    },
+    {
+      "file": "recon-king-INCOMPLETE.json",
+      "source": "/home/charlie/tmp/.pyramid-recon-27073-2/INCOMPLETE.json",
+      "sha256": "e068fe469120414130219faf412b65170c0c963fff47f04624c30d4b8b19b369",
+      "bytes": 1872
+    },
+    {
+      "file": "recon-seven.png",
+      "source": "/home/charlie/tmp/.pyramid-recon-27073-4/baseline.png",
+      "sha256": "12dd83cf991f7cce41e790acd90d287cb44babcd318b480a24377b3819f6018b",
+      "bytes": 3774242
+    },
+    {
+      "file": "recon-seven-INCOMPLETE.json",
+      "source": "/home/charlie/tmp/.pyramid-recon-27073-4/INCOMPLETE.json",
+      "sha256": "e46b3e76140d5a4fce5f9e19ec1c288102570e4b5690a0b3556435de5a48504a",
+      "bytes": 1867
+    },
+    {
+      "sample_from": "recon-king.png",
+      "roi": [
+        695,
+        354,
+        20,
+        16
+      ],
+      "raw_rgb_sha256": "7f352960d746d92e1967593971db867c0608b1bbb47c90ff9f3ac9ac76cd16f8",
+      "raw_rgb_bytes": 960,
+      "purpose": "Measured clean-red original crop at existing dy=-1 alignment; excludes adjacent face-art while retaining complete 20x16 ROI."
+    },
+    {
+      "sample_from": "selected.png",
+      "roi": [
+        895,
+        248,
+        20,
+        16
+      ],
+      "raw_rgb_sha256": "0a3b92079aa687173ca5e0293117f87b6db22622681f0e610e84a347c940c5d2",
+      "raw_rgb_bytes": 960,
+      "purpose": "Measured complete diamond ROI including legitimate neighbouring selection halo; no excluded pixels."
+    }
+  ],
+  "evaluation_boundary": "Both RECON reports are one-capture zero-input failures. PLAY image is the retained first unmatched frame; restoration belongs to the earlier same-deal acquisition. No resumed route authority is created. Seven frame is an exposed regression, not a prospective holdout."
+}

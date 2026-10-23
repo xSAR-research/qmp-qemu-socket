@@ -1,0 +1,144 @@
+{
+  "evidence_schema": "pyramid-native-v7-glyph-extension-v1",
+  "profile_id": "pyramid-native-1920-classic-blue-v7",
+  "profile_file": "profile.json",
+  "profile_sha256": "9517ce85382ec0c977e735c79871c1e2f8110b7265343dc1140ac45d506e3e08",
+  "base_profile_id": "pyramid-native-1920-classic-blue-v6",
+  "base_profile_sha256": "2d28864f120b4fc47600721a78658fd1880e97473377a90929de8aebe4b775fd",
+  "source": {
+    "file": "baseline.png",
+    "diagnostic_file": "INCOMPLETE.json",
+    "sha256": "f00076f38a2906dc17d1dc5b7c54806b6285f363f936924e5c785785e9173edf",
+    "bytes": 3781366,
+    "dimensions": [
+      1920,
+      1080
+    ],
+    "original_bytes": true,
+    "transformation": "none",
+    "difficulty_visible": "Grandmaster",
+    "solver_visible": "off",
+    "producer_version": "2.2.100",
+    "run_id": "pyramid-recon-521945-1",
+    "captures_attempted": 1,
+    "draws_attempted": 0,
+    "undo_all_attempted": 0,
+    "confirm_attempted": 0,
+    "publication_status": "not_attempted"
+  },
+  "added_variants": [
+    {
+      "component": "ranks",
+      "label": "2",
+      "source_slot_zero_based": 7,
+      "source_location_one_based": "4|2",
+      "source_bounds": [
+        792,
+        278,
+        27,
+        24
+      ],
+      "rgb_sha256": "9250b21fe48cea0bb48b51673a7cbd122557f98a226e2f42202eded67a5cd1f7",
+      "source_recognised_by_v6": true,
+      "readers": [
+        {
+          "reader": "tableau_reader",
+          "before_variants": 3,
+          "after_variants": 4
+        },
+        {
+          "reader": "stock_reader",
+          "before_variants": 3,
+          "after_variants": 4
+        }
+      ]
+    },
+    {
+      "component": "suits",
+      "label": "spades",
+      "source_slot_zero_based": 25,
+      "source_location_one_based": "7|5",
+      "source_bounds": [
+        1096,
+        462,
+        20,
+        16
+      ],
+      "rgb_sha256": "35415efed2a2501d217db7805338403d028c7d1ae10302ca8830c741f866a350",
+      "source_recognised_by_v6": true,
+      "readers": [
+        {
+          "reader": "tableau_reader",
+          "before_variants": 9,
+          "after_variants": 10
+        },
+        {
+          "reader": "stock_reader",
+          "before_variants": 9,
+          "after_variants": 10
+        }
+      ]
+    }
+  ],
+  "held_out_refusals": [
+    {
+      "slot_zero_based": 6,
+      "location_one_based": "4|1",
+      "card": "2C",
+      "component": "rank",
+      "v6_best_xor": 28,
+      "limit": 24,
+      "v7_best_xor": 19
+    },
+    {
+      "slot_zero_based": 23,
+      "location_one_based": "7|3",
+      "card": "5S",
+      "component": "suit",
+      "v6_best_xor": 12,
+      "limit": 8,
+      "v7_best_xor": 7
+    }
+  ],
+  "unchanged_policy": {
+    "rank_max_distance": 24,
+    "suit_max_distance": 8,
+    "alignment": 1,
+    "colour_and_paper_checks": true,
+    "unique_labels_required": true,
+    "scene_and_dialog_signatures": "identical to base profile"
+  },
+  "tableau_labels_top_to_bottom": [
+    "9C",
+    "KC",
+    "JS",
+    "7C",
+    "8C",
+    "4D",
+    "2C",
+    "2S",
+    "QD",
+    "6S",
+    "AH",
+    "KH",
+    "AD",
+    "9S",
+    "6D",
+    "2H",
+    "8D",
+    "7H",
+    "QS",
+    "JD",
+    "7S",
+    "QH",
+    "7D",
+    "5S",
+    "6C",
+    "3S",
+    "AS",
+    "QC"
+  ],
+  "left_label": "4S",
+  "right": "positive_empty",
+  "evidence_boundary": "29 visible identities only; unseen stock, live acquisition, restoration and publication are not established by this fixture"
+}

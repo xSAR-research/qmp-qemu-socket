@@ -1,0 +1,47 @@
+{
+  "profile_id": "pyramid-native-1920-classic-blue-v10",
+  "change": "Append one exact native highlighted-clubs suit variant to both banks; every other field equals v9 after rollback.",
+  "approval": "Charlie approved this bounded calibration correction in m03729.",
+  "source": {
+    "profile.json": {
+      "original_path": "/home/charlie/tmp/pyramid-improvements-2k8a917g/clubs-review/proposed-native-v10.json",
+      "bytes": 808237,
+      "sha256": "778b74051a4f12b383c8e79ac951ef332dabf188ce67583e1358cc2b957f5d51"
+    },
+    "baseline.png": {
+      "original_path": "/home/charlie/tmp/.pyramid-recon-721903-0/baseline.png",
+      "bytes": 3744756,
+      "sha256": "ef3a0fd6a4fcbffd935ad6f5d14c2679d96d1aad53740ecd12ca21eb77e7aa21"
+    },
+    "latest.png": {
+      "original_path": "/home/charlie/tmp/.pyramid-recon-721903-0/latest.png",
+      "bytes": 3704810,
+      "sha256": "a6827e24bea61323a315fb3cd0c0e9458c60b0ccd4849ba9efdead6b0b0c8407"
+    },
+    "INCOMPLETE.json": {
+      "original_path": "/home/charlie/tmp/.pyramid-recon-721903-0/INCOMPLETE.json",
+      "bytes": 1579,
+      "sha256": "a11b7989357ae4e6cab683da17ad66f487473b881aef0c62341d4071e5e60d87"
+    }
+  },
+  "crop": {
+    "native_bounds": [
+      1027,
+      708,
+      20,
+      16
+    ],
+    "rgb_bytes": 960,
+    "rgb_sha256": "b04d2a7ad13c0f3a04af1d4020df66c5f97dad7a480321ebf7dc10666c4468b4",
+    "pixel_transformation": "none; unchanged native RGB channels",
+    "mask_selected": 320,
+    "tolerance": 0
+  },
+  "policy": {
+    "rank_max_distance": 24,
+    "suit_max_distance": 8,
+    "alignment": 1
+  },
+  "evidence_boundary": "Four captures and two acknowledged D operations; latest frame supplies 30 visible identities only. No complete stock, restoration, export or live acceptance follows.",
+  "rollback_entire_profile_equals_v9": true
+}

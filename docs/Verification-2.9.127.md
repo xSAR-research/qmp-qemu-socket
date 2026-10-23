@@ -1,0 +1,25 @@
+# Verification — 2.9.127
+
+App **2.9.127** passed **1330 tests, 0 failed, 0 ignored, 0 filtered** in the complete native include-ignored scope (369.45s command time). Locked all-target/all-feature check, strict private rustdoc, Clippy with warnings denied, native release, scoped formatting and native/protected headless help passed. xSAR **0.8.104** and console **0.8.4** are unchanged; their 18 shared/feature/private-consumer gates are retained by exact input and log hashes (289 shared tests, 80 console tests; feature rows 14/55/25/67/57/99), not rerun.
+
+The host implementation is qualified. The full selected goal is blocked pending fresh v2.9.127 Beast testing after three consecutive checks found no candidate run; all nine acceptance cases remain pending. Select Mode **Continuous** and Stop condition **Continuous — no challenge** for the new target-agnostic loop. It reuses the Single board acquisition/planning machinery without classifying a challenge or checking targets.
+
+Same-board setting changes discard the plan and retain authenticated Recon. Recon is an optional visible rescan in automatic modes too. An initial automatic start may use that exact current acquisition once; changed bytes, STOP or context revoke it. Each subsequent board resets the worker, status and route dropdown to Shortest route. Paired Recon reports actual RIGHT/DR and LEFT/DL together without changing its physical 24 D operations, pacing or capture policy.
+
+Exhaustive Shortest no-win switches automatically to Maximum card matches within the same owned inventory. Interruption never proves no-win. Target-aware Boards no-win bypasses partial matching, including when Maximum was selected. Score/Card target stopping remains separate, with independent completion confirmation and operator-owned Star Club Continue. No-challenge deliberately ignores those targets.
+
+Only the no-challenge loop uses independently replayed empty-tableau completion plus the final whole-action ACK to schedule a cancellable three-second wait and fresh Recon. ACK does not prove a win. Fresh Recon must independently reject an old partial, exhausted, unsupported or unsettled board. Existing Manual/Single and normal/target-aware final-effect semantics are preserved.
+
+Automatic partial/no-card continuations count actual acknowledged RECYCLEs against the replayed state, derive only the legal remaining D operations (at most 74 from untouched stock: 72 DRAW + 2 RECYCLE), verify every effect, and require a positive native enabled REDEAL and allowance before one click. The 1.5-second post-click wait is a configured policy, not a timing measurement from the three stills. A fresh Recon must prove the next board. Planned RECYCLEs, executed RECYCLEs and new-board REDEAL allowance are separate.
+
+The new bundled-only native capability recognises the measured **1 deal left** and **0 deals left** captions. Only the complete enabled one-deal control grants a click. Two-deal and absent-caption variants remain unsupported and stop safely. File/custom profiles cannot opt in through an identifier. Ordinary native-v22 recognition and glyph limits are unchanged. Variable backgrounds and idle CPU remain outside this goal.
+
+## Qualification provenance
+
+The first strict attempt stopped at Clippy on an unused test wrapper, collapsible conditional and two unnecessary lint expectations. Original logs were preserved. The first full test run completed with 1329 passed, one failed, zero ignored and zero filtered: an obsolete UI assertion rejected the newly required per-board Shortest reset. Its correction retains stale-context, stale-run, older-board and delayed-fallback protections. The next full attempt was interrupted with SIGINT, without a test summary, so that five new method boundaries could receive the required two blank lines before final qualification. It is retained as interrupted, not passed or a test assertion failure. The successful full run above is the qualification result. Focused tests also exposed a missing post-phase STOP check and a synthetic suit-label helper error, both corrected.
+
+[Exact commands, UTC, compiler inputs and log hashes](</home/charlie/Documents/Pyramid/Validation/no-challenge-redeal-20261022/qualification.json>) · [Protected artifact](</home/charlie/Documents/Pyramid/Validation/no-challenge-redeal-20261022/protected-artifact.json>) · [Final preservation audit](</home/charlie/Documents/Pyramid/Validation/no-challenge-redeal-20261022/final-audit.json>).
+
+## Code Analysis
+
+Private receipt ownership and exact bytes/context/epoch checks prevent saved JSON from granting input. No dependencies or unsafe Rust were added. Fallible allocations and checked arithmetic remain; search has operator STOP and no automatic cutoff. Residual stock work is finite and separately bounded, with actual recycle accounting, exact positions and post-probe cancellation checks. Final ACK schedules fresh observation and never proves guest success. Unknown or uncertain effects stop without replay or cleanup. Native zero/one caption coverage and unmeasured timing remain practical limits until fresh Beast acceptance.

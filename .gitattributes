@@ -1,0 +1,2 @@
+# Raw RGB calibration fixtures must retain their pixel bytes and binary diffs.
+tests/fixtures/**/*.rgb binary

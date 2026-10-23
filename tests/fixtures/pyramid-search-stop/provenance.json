@@ -1,0 +1,29 @@
+{
+  "files": [
+    {
+      "source": "/home/charlie/Pictures/Screenshots/qmp-qemu-socket 261021 163040 Claim-no-route.png",
+      "retained": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-search-stop/last-move.png",
+      "sha256": "d5f591ea666adffe3568aebac8c37be9b53c97e95bec295f388d730e5977284a",
+      "size": 4287055
+    },
+    {
+      "source": "/home/charlie/tmp/pyramid-error-1792564071825-299022-0/deal.json",
+      "retained": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-search-stop/deal.json",
+      "sha256": "ca81c07cc09990714a5d1192cbfd9eb017987498ebb6be5fb59e92084338c559",
+      "size": 4751
+    },
+    {
+      "source": "/home/charlie/tmp/pyramid-error-1792564071825-299022-0/error-state.json",
+      "retained": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-search-stop/planning-state-limit.json",
+      "sha256": "16bcb8369782c6f6acf82a05d23b3d931b7bd81b372bc2add47b200267aeaba8",
+      "size": 2033
+    },
+    {
+      "source": "/home/charlie/tmp/pyramid-error-1792564071825-299022-0/error.log",
+      "retained": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-search-stop/planning-state-limit.log",
+      "sha256": "e15bbe62d6603da6d021f3695d5fd8f63b88be5fc22a5b33739e9c35cb516e1b",
+      "size": 2384
+    }
+  ],
+  "evidence": "Native operator counterexample and failed 2.8.120 planning; not live acceptance of the correction."
+}

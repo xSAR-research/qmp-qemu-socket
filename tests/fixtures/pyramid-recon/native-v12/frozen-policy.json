@@ -1,0 +1,22 @@
+{
+  "frozen_at": "2026-10-19T13:02:56.014505+00:00",
+  "policy": "paper_ink_l1_v2",
+  "score_scale": 1000000,
+  "rank_max_score": 220000,
+  "suit_max_score": 120000,
+  "minimum_label_gap": 80000,
+  "distance": "sum(abs(a-b))/sum(max(a,b)); per ROI lower-median reference p from minRGB of raw-paper pixels(all RGB>=180); strength=floor(255*max(p-minRGB,0)/p)",
+  "bounds": "max area4096; ratio crossproducts in u64;9fixed alignments; allpixels included",
+  "guards": "paper>=area/3; exclusivelyred>=8,black==0 ORblack>=8,red==0; same winning alignment; rank/suitcolouragree and suitconsistent",
+  "freeze_boundary": "Paper reference selected and tested only on250 development plus29 ten-regression observations. Quality220000/120000 and margin80000 unchanged. Fifth initial-policy prospective refusal is preserved; fifth is exposed regression for this revision.115 previously exposed validation observations remain separate. No new RGB templates.",
+  "unknown": "nearest absolute score abovebound; no eligible shape/colour/paper or zero mass",
+  "ambiguity": "closest different label gap below80000 inclusivebound; no nearest-label-only acceptance",
+  "profile_version": 2,
+  "legacy": "schema1 parser/matcher exactexistingsemantics; schema2 onlygradedfactorisedreader withstrictmatchingfield; identityRGBreaderonlyschema1",
+  "paper_reference": "Actual and template require at least area/3 raw-paper pixels and a nonzero count; lower median index(count-1)/2, reference180..255; no default reference. All ROI pixels still participate.",
+  "initial_policy": {
+    "file": "initial-policy.json",
+    "sha256": "d6c8a647946ae2898cb27068a88c5314d5f2550f80048fa7976b47312871b3e1",
+    "result_file": "initial-policy-results.json"
+  }
+}

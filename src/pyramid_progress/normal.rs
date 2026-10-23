@@ -1,0 +1,151 @@
+//! Exact native normal-series header calibration, separate from challenge counts.
+//!
+//! Complete original `Boards: 1/2/3 of 3` artwork and its `New` footer are calibrated.
+//! There is no OCR, inferred replacement glyph, resize or alignment fallback.
+//! Supported Pyramid/card
+//! scenes, freshness, mode policy and input authority remain caller-owned.
+
+use super::{BoardCount, HeaderPatch, matches_patch_with_tolerance};
+use crate::{
+    capture::CapturedFrame,
+    geometry::PixelRect,
+    parameters::{NOMINAL_FRAME_HEIGHT, NOMINAL_FRAME_WIDTH},
+};
+use xsar::image_matching::FrameView;
+
+
+#[cfg(test)]
+mod tests;
+
+
+/// Inclusive maximum channel difference of the complete header across seven native originals.
+const HEADER_TOLERANCE: u8 = 12;
+
+
+/// Inclusive maximum channel difference of the complete footer across the same seven originals.
+const FOOTER_TOLERANCE: u8 = 10;
+
+
+/// Exact full 160×32 RGB patch; words, both ordinal digits and all background pixels remain.
+const HEADER_ONE_RGB: &[u8; 15_360] =
+    include_bytes!("../../tests/fixtures/pyramid-standard-progress/header-one.rgb");
+
+
+/// Complete original ordinal-two header, including words, digits and negative space.
+const HEADER_TWO_RGB: &[u8; 15_360] =
+    include_bytes!("../../tests/fixtures/pyramid-standard-series/header-2.rgb");
+
+
+/// Complete original ordinal-three header; no digit substitution is used.
+const HEADER_THREE_RGB: &[u8; 15_360] =
+    include_bytes!("../../tests/fixtures/pyramid-standard-series/header-3.rgb");
+
+
+/// Exact full 58×31 RGB footer patch, including all negative space around `New`.
+const FOOTER_NEW_RGB: &[u8; 5_394] =
+    include_bytes!("../../tests/fixtures/pyramid-standard-progress/footer-new.rgb");
+
+
+/// Complete footer measured in the retained Grandmaster frame refused by release 2.7.118.
+///
+/// Three pixels exceed the original sample's tolerance by one channel unit.
+/// This independent native appearance preserves every pixel and the existing bound.
+const FOOTER_NEW_GRANDMASTER_RGB: &[u8; 5_394] =
+    include_bytes!("../../tests/fixtures/pyramid-objectives/footer-new-grandmaster.rgb");
+
+
+/// Actual current ordinals one, two and three map to zero, one and two completed boards.
+///
+/// Each label has an independently retained native source; the target stays three.
+const NORMAL_HEADERS: [(BoardCount, HeaderPatch); 3] = [
+    (
+        BoardCount {
+            completed: 0,
+            target: 3,
+        },
+        HeaderPatch {
+            bounds: PixelRect::new(1_658, 46, 160, 32),
+            rgb: HEADER_ONE_RGB,
+        },
+    ),
+    (
+        BoardCount {
+            completed: 1,
+            target: 3,
+        },
+        HeaderPatch {
+            bounds: PixelRect::new(1_658, 46, 160, 32),
+            rgb: HEADER_TWO_RGB,
+        },
+    ),
+    (
+        BoardCount {
+            completed: 2,
+            target: 3,
+        },
+        HeaderPatch {
+            bounds: PixelRect::new(1_658, 46, 160, 32),
+            rgb: HEADER_THREE_RGB,
+        },
+    ),
+];
+
+
+/// Positive measured `New` text is required along with the complete normal ordinal header.
+const NEW_FOOTER: HeaderPatch = HeaderPatch {
+    bounds: PixelRect::new(212, 998, 58, 31),
+    rgb: FOOTER_NEW_RGB,
+};
+
+
+/// The same whole native footer in its separately measured Grandmaster appearance.
+const GRANDMASTER_NEW_FOOTER: HeaderPatch = HeaderPatch {
+    bounds: PixelRect::new(212, 998, 58, 31),
+    rgb: FOOTER_NEW_GRANDMASTER_RGB,
+};
+
+
+/// Observe only calibrated complete native header/footer artwork without allocating on success.
+///
+/// Valid unsupported geometry or artwork returns `None`. Invalid frame layout
+/// or bundled patch metadata returns an error before interpretation. This
+/// observation neither identifies Pyramid nor grants input or terminal authority.
+///
+/// # Errors
+///
+/// Returns an error for invalid frame layout or invalid bundled patch metadata.
+pub(super) fn observe(frame: &CapturedFrame) -> Result<Option<BoardCount>, String> {
+    let view = frame
+        .as_view()
+        .map_err(|error| format!("Pyramid normal board-count frame layout is invalid: {error}"))?;
+    if (view.width(), view.height()) != (NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT) {
+        return Ok(None);
+    }
+    if !matches_patch_with_tolerance(view, NEW_FOOTER, FOOTER_TOLERANCE)?
+        && !matches_patch_with_tolerance(view, GRANDMASTER_NEW_FOOTER, FOOTER_TOLERANCE)?
+    {
+        return Ok(None);
+    }
+    match_header(view, &NORMAL_HEADERS)
+}
+
+
+/// Return a unique full-header match; overlapping labels remain unsupported.
+///
+/// The explicit table is finite and borrowed. Rejecting multiple matches also
+/// prevents a future duplicated or ambiguous template from choosing an ordinal.
+fn match_header(
+    view: FrameView<'_>,
+    headers: &[(BoardCount, HeaderPatch)],
+) -> Result<Option<BoardCount>, String> {
+    let mut matched = None;
+    for &(count, patch) in headers {
+        if matches_patch_with_tolerance(view, patch, HEADER_TOLERANCE)? {
+            if matched.is_some() {
+                return Ok(None);
+            }
+            matched = Some(count);
+        }
+    }
+    Ok(matched)
+}

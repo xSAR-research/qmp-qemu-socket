@@ -1,0 +1,32 @@
+{
+  "policy": "ink_l1_v1",
+  "frozen_policy_sha256": "d6c8a647946ae2898cb27068a88c5314d5f2550f80048fa7976b47312871b3e1",
+  "result": "rejected development candidate; never released",
+  "focused_tests": {
+    "passed": 8,
+    "failed": 4,
+    "ignored": 0
+  },
+  "original_test_log_sha256": "1b437c87c758b8d9e0d04737ec529b04e0245a22763110df3abff9f373b69d67",
+  "fifth_initial_prospective_result": {
+    "location": "4|4",
+    "expected": "KD",
+    "rank": "accepted K",
+    "suit": "unknown",
+    "diamond_error_numerator": 3010,
+    "diamond_error_denominator": 24469,
+    "diamond_error_ppm_diagnostic": 123012,
+    "suit_limit_ppm": 120000,
+    "eligible_shift": [
+      0,
+      -1
+    ]
+  },
+  "development_first_refusal": {
+    "observation": "native-v9-baseline-slot-3",
+    "expected": "2H",
+    "rank_error_ppm_diagnostic": 268860,
+    "suit_error_ppm_diagnostic": 144337
+  },
+  "boundary": "Corpus assertions stop at first mismatch; no completed846-decision accuracy claim for the initial policy. Subsequent fifth evaluation is exposed regression."
+}

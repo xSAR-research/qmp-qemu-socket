@@ -1,0 +1,35 @@
+{
+  "files": [
+    {
+      "source": "/home/charlie/Documents/Pyramid/Evidence/redeal-workflow-20261022/objects/3f17bfd04c949d44802ecca025f57320b7b303f7bc45695d5b382cffea32e8d9.png",
+      "path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-kings-default/kings-one.png",
+      "sha256": "3f17bfd04c949d44802ecca025f57320b7b303f7bc45695d5b382cffea32e8d9",
+      "bytes": 3791005
+    },
+    {
+      "source": "/home/charlie/Documents/Pyramid/Evidence/redeal-workflow-20261022/objects/7f8e0924a9ab2f76615a3f4fab2293cca17ed69cd3adc8242525b19db616c14b.png",
+      "path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-kings-default/kings-two.png",
+      "sha256": "7f8e0924a9ab2f76615a3f4fab2293cca17ed69cd3adc8242525b19db616c14b",
+      "bytes": 3738654
+    }
+  ],
+  "derived": {
+    "path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-kings-default/kings-label.rgb",
+    "source": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-kings-default/kings-one.png",
+    "source_sha256": "3f17bfd04c949d44802ecca025f57320b7b303f7bc45695d5b382cffea32e8d9",
+    "bounds": [
+      814,
+      48,
+      224,
+      32
+    ],
+    "sha256": "b00576111ab80a184520b15316c2db3abbf99fad053c193676012766751d6b3b",
+    "bytes": 21504,
+    "tolerance": 9
+  },
+  "role": "Advisory Kings-only search default; generic Card progress and objectives unchanged",
+  "original_recon_sources": [
+    "/home/charlie/tmp/.pyramid-recon-36343-1/baseline.png",
+    "/home/charlie/tmp/.pyramid-recon-36343-2/baseline.png"
+  ]
+}

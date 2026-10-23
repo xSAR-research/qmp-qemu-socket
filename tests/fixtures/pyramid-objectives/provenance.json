@@ -1,0 +1,44 @@
+[
+  {
+    "source": "/home/charlie/Pictures/Screenshots/Card challenge.png",
+    "retained": "fours-four-of-twelve.png",
+    "sha256": "5aab196cfe65ca3cc71c543bf90c5bbec0a8a3319dc76319f3924fd8a492e7b4",
+    "bytes": 3744836
+  },
+  {
+    "source": "/home/charlie/Pictures/Screenshots/Board Challenge.png",
+    "retained": "boards-zero-of-two.png",
+    "sha256": "71b442da20ff8c91e5ab07fcc464cc510ff080cf9d2a3679fc8d5b929980fc73",
+    "bytes": 3754654
+  },
+  {
+    "source": "/home/charlie/Pictures/Screenshots/Normal game play.png",
+    "retained": "normal-one.png",
+    "sha256": "734b9807f576915af3e7008000c7973531f7155afdb0decff6d076a1a8cb0f6e",
+    "bytes": 3780606
+  },
+  {
+    "source": "/home/charlie/Pictures/Screenshots/Pyramid with SOLVER selected.png",
+    "retained": "solver-layout.png",
+    "sha256": "147936900a4267d99a1c1673a83615ffbf341a43368dd4df09d095811796d3a2",
+    "bytes": 3547921
+  },
+  {
+    "source": "/home/charlie/tmp/pyramid-error-1792552463305-238386-6/last-observed.png",
+    "retained": "normal-grandmaster-refused.png",
+    "sha256": "6584efe9cd24be23a7b3e2e8d158c93b4107b50bb877358e3aef5b043d085d46",
+    "bytes": 3812872
+  },
+  {
+    "derived": "footer-new-grandmaster.rgb",
+    "source": "normal-grandmaster-refused.png",
+    "bounds": [
+      212,
+      998,
+      58,
+      31
+    ],
+    "sha256": "e877321a0785b780fd0f0b632ad13435c5d202e55db268518f843123bc10a100",
+    "bytes": 5394
+  }
+]

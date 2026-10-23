@@ -1,0 +1,18 @@
+{
+  "source_native_path": "/home/charlie/tmp/.pyramid-recon-745174-1/baseline.png",
+  "source_native_sha256": "28e1127ea9d4663ebcca61061779093ebc7b571ec0ebde13a4973906b9913409",
+  "source_report_path": "/home/charlie/tmp/.pyramid-recon-745174-1/INCOMPLETE.json",
+  "source_report_sha256": "00c4a4bd005acc640c6559bb5783abbc0b017cd46bd917d37c74cf8dfe824634",
+  "profile_sha256": "7269769d0c1373edd431e7606f6cdad3ed1239dc5d70839257b5ca89ed408124",
+  "rank_crop": [
+    792,
+    171,
+    27,
+    24
+  ],
+  "rank_rgb_sha256": "fa288ca41690ca02f9a3fff2ba1e2dc90e8cedf2123865827e219e0ccd5946a5",
+  "changes": "profile_id plus exact rank8 variant appended in both reader banks; original RGB unmodified",
+  "capture_boundary": "one original capture, zero input attempts; no complete inventory/restoration/publication",
+  "operator_screenshot_path": "/home/charlie/Pictures/Screenshots/3rd-fail-pyramid.png",
+  "operator_screenshot_sha256": "10593fdd6bd2d75892507bcb8f25f91160c4e798e55de7268bb936cc3beb110e"
+}

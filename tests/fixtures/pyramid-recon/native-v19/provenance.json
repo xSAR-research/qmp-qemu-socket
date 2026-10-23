@@ -1,0 +1,47 @@
+{
+  "calibration_base": {
+    "path": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/native-v18/profile.json",
+    "sha256": "6995cf4c499746f741d6ee9bef26a18ae59f571658fbd6abfce32e90ceed39a5"
+  },
+  "evidence_class": "Exposed calibration/regression; originals preserved, not a fresh live trial",
+  "files": [
+    {
+      "bytes": 4751,
+      "fixture": "tests/fixtures/pyramid-recon/native-v19/deal.json",
+      "retained": "/home/charlie/Documents/Pyramid/Validation/challenge-board-transition-20261021/retained-121-failure/deal.json",
+      "sha256": "e40cb8f3805640e2ef93853a74b22f721e972da93924a8c515e57facd2d13d32",
+      "source": "/home/charlie/tmp/pyramid-error-1792577350851-312881-0/deal.json"
+    },
+    {
+      "bytes": 1968,
+      "fixture": "tests/fixtures/pyramid-recon/native-v19/error-state.json",
+      "retained": "/home/charlie/Documents/Pyramid/Validation/challenge-board-transition-20261021/retained-121-failure/error-state.json",
+      "sha256": "96f93da2ab6f601deb4aeab3c4cd40f23573be061525f9995d9800a61439fadf",
+      "source": "/home/charlie/tmp/pyramid-error-1792577350851-312881-0/error-state.json"
+    },
+    {
+      "bytes": 2340,
+      "fixture": "tests/fixtures/pyramid-recon/native-v19/error.log",
+      "retained": "/home/charlie/Documents/Pyramid/Validation/challenge-board-transition-20261021/retained-121-failure/error.log",
+      "sha256": "ebbc32ab893e86f56d2b37500239305100800e8516f7b692ea3fb3d7363c90ef",
+      "source": "/home/charlie/tmp/pyramid-error-1792577350851-312881-0/error.log"
+    },
+    {
+      "bytes": 4296102,
+      "fixture": "tests/fixtures/pyramid-recon/native-v19/first-unmatched.png",
+      "retained": "/home/charlie/Documents/Pyramid/Validation/challenge-board-transition-20261021/retained-121-failure/first-unmatched.png",
+      "sha256": "e211d63af939abb3be5e9e0e4027cc1887e448df23bfb8a1d9f66b2432335988",
+      "source": "/home/charlie/tmp/pyramid-error-1792577350851-312881-0/first-unmatched.png"
+    },
+    {
+      "bytes": 4311558,
+      "fixture": "tests/fixtures/pyramid-recon/native-v19/last-observed.png",
+      "retained": "/home/charlie/Documents/Pyramid/Validation/challenge-board-transition-20261021/retained-121-failure/last-observed.png",
+      "sha256": "be22ffae00d3876914292663bc44f1db7e5f03b4514213fadeb5cd739130043e",
+      "source": "/home/charlie/tmp/pyramid-error-1792577350851-312881-0/last-observed.png"
+    }
+  ],
+  "operator_report": "Board challenge, Continuous, Shortest route, Stop at challenge target; board one solved, board two later ready. No agent guest input.",
+  "origin": "Native 2.8.121 failure packet; no extra capture",
+  "recorded_utc": "2026-10-21T10:17:37.992452+00:00"
+}

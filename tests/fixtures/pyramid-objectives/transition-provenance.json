@@ -1,0 +1,104 @@
+[
+  {
+    "source": "/home/charlie/tmp/pyramid-error-1792549938786-238386-0/first-unmatched.png",
+    "retained": "fours-four-flying.png",
+    "sha256": "23df43c074e8d2d37217f16c00a2543147df2f6ce198630a7f34e790ca3f6a2c",
+    "bytes": 4339970
+  },
+  {
+    "source": "/home/charlie/tmp/pyramid-error-1792549938786-238386-0/last-observed.png",
+    "retained": "fours-four-next-dealing.png",
+    "sha256": "6fa0b82877384f9a33eb7b15a3d49374b0b8b1eab62e1103fe53e02164beec71",
+    "bytes": 4214696
+  },
+  {
+    "source": "/home/charlie/tmp/pyramid-error-1792550296861-238386-2/first-unmatched.png",
+    "retained": "fours-eight-flying.png",
+    "sha256": "7af1d535250df8e3156d3f19d323082b2e41444e23b4f4ccd629473e3784bed9",
+    "bytes": 4338464
+  },
+  {
+    "source": "/home/charlie/tmp/pyramid-error-1792550296861-238386-2/last-observed.png",
+    "retained": "fours-eight-next-dealing.png",
+    "sha256": "2660ef3a4ea2777e4f8357aff720d85a4e2b1b734838344b39615da57a5b40b3",
+    "bytes": 4093018
+  },
+  {
+    "source": "/home/charlie/tmp/pyramid-error-1792550466081-238386-3/first-unmatched.png",
+    "retained": "fours-complete-animating.png",
+    "sha256": "a697bddda2191e6ca0f842d0826e38138637dc895d5a5ad4f6cae47ccbefec1d",
+    "bytes": 2203445
+  },
+  {
+    "source": "/home/charlie/tmp/pyramid-error-1792550466081-238386-3/last-observed.png",
+    "retained": "fours-complete.png",
+    "sha256": "46649962884dbed87341fc97368545815ea9ad82991ffb967c7a54928b1181e7",
+    "bytes": 1824176
+  },
+  {
+    "source": "/home/charlie/tmp/pyramid-error-1792550908952-238386-5/last-observed.png",
+    "retained": "boards-one-of-two-perfect.png",
+    "sha256": "6c46236d8bf5e60c42e26d57fafc08582c6d6750d10f9c073c8b6182494e4e8e",
+    "bytes": 4303338
+  },
+  {
+    "derived": "complete-title-left.rgb",
+    "source": "fours-complete.png",
+    "bounds": [
+      648,
+      168,
+      64,
+      60
+    ],
+    "sha256": "f996d14548ce08be5a366fa2cb6f675b41bc033e46e991e50395671e2d923cfe",
+    "bytes": 11520
+  },
+  {
+    "derived": "complete-title-right.rgb",
+    "source": "fours-complete.png",
+    "bounds": [
+      1000,
+      168,
+      64,
+      60
+    ],
+    "sha256": "93e9860af9bc97aaddbf9916caf3e0532fa349b3382c0a3f7743a7e27a84c54c",
+    "bytes": 11520
+  },
+  {
+    "derived": "complete-scaffold.rgb",
+    "source": "fours-complete.png",
+    "bounds": [
+      1387,
+      891,
+      26,
+      60
+    ],
+    "sha256": "e9f088263a950753b1b51f85289d510dd6a4131d96a9803fc8ed56cb8bd637f7",
+    "bytes": 4680
+  },
+  {
+    "derived": "complete-fours-header.rgb",
+    "source": "fours-complete.png",
+    "bounds": [
+      814,
+      48,
+      296,
+      32
+    ],
+    "sha256": "953103b86f9580fe61bd75b0f217aab98acf1cf1ff6e9d9dd1f4e284f7beaffe",
+    "bytes": 28416
+  },
+  {
+    "derived": "complete-aces-header.rgb",
+    "source": "../pyramid-progress/negative-aces-complete.png",
+    "bounds": [
+      814,
+      48,
+      296,
+      32
+    ],
+    "sha256": "4a67a19219f80ab10d6a8748703d9c9181dadc2cc88474e332d94f95a747f528",
+    "bytes": 28416
+  }
+]

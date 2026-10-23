@@ -1,0 +1,74 @@
+{
+  "purpose": "Native normal final-clear regressions; no new guest trial",
+  "originals": [
+    {
+      "source": "/home/charlie/tmp/pyramid-error-1792555906604-238386-7/first-unmatched.png",
+      "retained": "tests/fixtures/pyramid-recon/native-v18/normal-one-flying.png",
+      "sha256": "ea38ad88a28927a79db3dee07715c35f856c787f03375b98303ac1eca797ee04"
+    },
+    {
+      "source": "/home/charlie/tmp/pyramid-error-1792555906604-238386-7/last-observed.png",
+      "retained": "tests/fixtures/pyramid-recon/native-v18/normal-one-perfect.png",
+      "sha256": "841be30e405a296b57f47c2f9e8fc7cd2e366409e743625e271bed0a670191ee"
+    },
+    {
+      "source": "/home/charlie/tmp/pyramid-error-1792555906604-238386-7/deal.json",
+      "retained": "tests/fixtures/pyramid-recon/native-v18/normal-one-deal.json",
+      "sha256": "c3de5e53400b4c42e06de8b221f8c6366f46d4127604e1caa29edb09a8715625"
+    },
+    {
+      "source": "/home/charlie/tmp/pyramid-error-1792555906604-238386-7/error-state.json",
+      "retained": "tests/fixtures/pyramid-recon/native-v18/normal-one-failure.json",
+      "sha256": "85d12f29d4c37a117446be795ad79b22f0de167b09e89514ce765d7158f2d4eb"
+    },
+    {
+      "source": "/home/charlie/tmp/pyramid-error-1792556066273-238386-8/first-unmatched.png",
+      "retained": "tests/fixtures/pyramid-recon/native-v18/normal-two-flying.png",
+      "sha256": "1eea28e659eb84f727da169cb402ea917f380ca24dcdcaf2004396c34f5f91ff"
+    },
+    {
+      "source": "/home/charlie/tmp/pyramid-error-1792556066273-238386-8/last-observed.png",
+      "retained": "tests/fixtures/pyramid-recon/native-v18/normal-two-perfect.png",
+      "sha256": "bdbddf21947e34369bbb33b55ddbd8334a5a71e0fc7a00e3d95f2a5424e570b2"
+    },
+    {
+      "source": "/home/charlie/tmp/pyramid-error-1792556066273-238386-8/deal.json",
+      "retained": "tests/fixtures/pyramid-recon/native-v18/normal-two-deal.json",
+      "sha256": "edd1b73f4eb6f9305b42c34c307eb51f24fc4137569d1c360831e4c8d2bccb3f"
+    },
+    {
+      "source": "/home/charlie/tmp/pyramid-error-1792556066273-238386-8/error-state.json",
+      "retained": "tests/fixtures/pyramid-recon/native-v18/normal-two-failure.json",
+      "sha256": "62468f7b03d6029a0e5ee75c108df3945ba10735b42fd2e9f5698be0eb9b828c"
+    },
+    {
+      "source": "/home/charlie/tmp/pyramid-error-1792558028868-238386-9/first-unmatched.png",
+      "retained": "tests/fixtures/pyramid-recon/native-v18/normal-three-flying.png",
+      "sha256": "be8d65452a40d5c64a377b8054ec94b773f3e62f170b580a465d7833c5b7efd4"
+    },
+    {
+      "source": "/home/charlie/tmp/pyramid-error-1792558028868-238386-9/last-observed.png",
+      "retained": "tests/fixtures/pyramid-recon/native-v18/normal-three-perfect.png",
+      "sha256": "4d84fefae4a65a3b3f552ff2a77b43c8a25174436cafaf0d5e588f803e8c0d61"
+    },
+    {
+      "source": "/home/charlie/tmp/pyramid-error-1792558028868-238386-9/deal.json",
+      "retained": "tests/fixtures/pyramid-recon/native-v18/normal-three-deal.json",
+      "sha256": "d3938da5ec9760a722d9d7762cbf97fd7acca16c108eec5aad71c0cb6e5ae537"
+    },
+    {
+      "source": "/home/charlie/tmp/pyramid-error-1792558028868-238386-9/error-state.json",
+      "retained": "tests/fixtures/pyramid-recon/native-v18/normal-three-failure.json",
+      "sha256": "3e48d0661bcf329002c98c2f49cdae6fa893f93ee26659ccdad985a84f233957"
+    }
+  ],
+  "derived": [
+    {
+      "source": "tests/fixtures/pyramid-recon/native-v17/profile.json",
+      "source_sha256": "86c9c88464092b1b380b423bc083db956f1f721520f313064266cbd68e8de0f0",
+      "derived": "tests/fixtures/pyramid-recon/native-v18/profile.json",
+      "sha256": "6995cf4c499746f741d6ee9bef26a18ae59f571658fbd6abfce32e90ceed39a5",
+      "change": "Profile identity and explicit normal-final capability only; all v17 card/scene/pile/modal/Perfect calibration values retained"
+    }
+  ]
+}

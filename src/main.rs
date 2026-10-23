@@ -14,7 +14,11 @@ mod image_diagnostics;
 mod klondike;
 mod parameters;
 mod pyramid;
+mod pyramid_diagnostics;
+mod pyramid_progress;
 mod pyramid_recon;
+mod pyramid_search_policy;
+mod pyramid_workflow_model;
 mod qmp;
 mod session_log;
 mod snapshot;
@@ -36,20 +40,22 @@ use parameters::{APP_NAME, INITIAL_WINDOW_HEIGHT, INITIAL_WINDOW_WIDTH, RELEASE_
 ///
 /// Returns the platform error if eframe cannot create or run the native window.
 fn main() -> eframe::Result {
-    let options = image_diagnostics::parse_args(std::env::args_os().skip(1))
-        .unwrap_or_else(|error| {
+    let options =
+        image_diagnostics::parse_args(std::env::args_os().skip(1)).unwrap_or_else(|error| {
             eprintln!("{APP_NAME}: {error}\nUsage: qmp-qemu-socket [--image]");
             std::process::exit(2);
         });
     let images = match options {
         image_diagnostics::StartupOptions::Run { images } => images,
         image_diagnostics::StartupOptions::Help => {
-            println!("Usage: qmp-qemu-socket [--image]\n\n--image  Save GAME WIN sequence PNGs in /home/charlie/tmp/images.\n         Ordinary gameplay captures are not saved.\n\nEach application start removes that directory; --image recreates it.\n--help   Show this help without starting the application.");
+            println!(
+                "Usage: qmp-qemu-socket [--image]\n\n--image  Save GAME WIN sequence PNGs in /home/charlie/tmp/images.\n         Successful ordinary gameplay captures are not saved; Pyramid failures may retain existing evidence in private error packets.\n\nEach application start removes that directory; --image recreates it.\n--help   Show this help without starting the application."
+            );
             return Ok(());
         }
     };
-    let diagnostics = image_diagnostics::ImageDiagnostics::prepare(images)
-        .unwrap_or_else(|error| {
+    let diagnostics =
+        image_diagnostics::ImageDiagnostics::prepare(images).unwrap_or_else(|error| {
             eprintln!("{APP_NAME}: cannot reset /home/charlie/tmp/images: {error}");
             std::process::exit(1);
         });
@@ -66,6 +72,11 @@ fn main() -> eframe::Result {
     eframe::run_native(
         &window_title,
         native_options,
-        Box::new(move |creation_context| Ok(Box::new(QmpQemuSocketApp::new(creation_context, diagnostics)))),
+        Box::new(move |creation_context| {
+            Ok(Box::new(QmpQemuSocketApp::new(
+                creation_context,
+                diagnostics,
+            )))
+        }),
     )
 }

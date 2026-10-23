@@ -1,5 +1,16 @@
 # Pyramid reconnaissance to JSON
 
+> Historical implementation record. The version, dependency, profile, manual
+> setup and positive Solver-OFF descriptions below record the dated 2.2.0
+> delivery; they do not describe current 2.5.103 operation. Use the
+> [current profile contract](pyramid-recon-profile.md),
+> [2.5.103 verification](Verification-2.5.103.md) and
+> [current live brief](Live-Test-2.5.103.md). Current operation bundles exact v7
+> calibration, supplies editable evidence names and hands a successful export
+> to Calculate automatically. Legacy `solver_off` data is validated and discarded;
+> explicit foreground/no-interference/Solver-not-engaged consent remains required,
+> and an unavailable Solver is allowed. The dated evidence below is preserved.
+
 Implementation scope authorised by Charlie on 11 October 2026. This operation
 is separate from ordinary read-only Pyramid preparation and all five existing
 Computer Vision controllers. Console intake is deferred; no search is included.
