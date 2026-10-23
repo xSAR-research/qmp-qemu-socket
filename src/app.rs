@@ -3328,7 +3328,7 @@ impl eframe::App for QmpQemuSocketApp {
     /// Drains worker events and schedules updates without blocking on worker I/O.
     fn logic(&mut self, context: &egui::Context, _frame: &mut eframe::Frame) {
         self.poll_worker(context);
-        context.request_repaint_after(std::time::Duration::from_millis(100));
+        context.request_repaint_after(crate::parameters::UI_REPAINT_INTERVAL);
     }
 
 

@@ -15,6 +15,11 @@ use std::{
     time::{Duration, Instant},
 };
 
+use crate::parameters::{
+    PYRAMID_DRAW_SETTLE_DELAY as DRAW_DELAY, PYRAMID_RECON_DEADLINE as MAX_DURATION,
+    PYRAMID_REOBSERVE_DELAY as OBSERVATION_DELAY,
+};
+
 use xsar::games::{
     cards::Card,
     pyramid::{CompleteDeal, DealMetadata, ProvenanceKind, Restoration},
@@ -34,18 +39,6 @@ const MAX_DRAWS: usize = 24;
 
 /// Bounded fresh observations after an acknowledged operation or D pair, never replays.
 const MAX_OBSERVATIONS: usize = 6;
-
-
-/// Cooperative operation deadline; individual blocking I/O may finish after it.
-const MAX_DURATION: Duration = Duration::from_secs(300);
-
-
-/// Initial-board interval, post-confirmation settle and known-stale observation retry delay.
-const OBSERVATION_DELAY: Duration = Duration::from_secs(1);
-
-
-/// Approved post-release D pacing and stock endpoint re-observation interval.
-const DRAW_DELAY: Duration = Duration::from_millis(500);
 
 
 /// Explicit calibration selection, independent of consent and live input authority.

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.9.134 — timing constants, 23 October 2026
+
+- Centralise Recon, planned-route, stock-drain, final-confirmation, handoff, partial-REDEAL, repaint and reporting timings in `src/parameters.rs`. Alias shared xSAR QMP defaults and reuse animation defaults where purpose and value match. Add the [timing catalogue](docs/Timing-Constants.md).
+- Preserve every timing value, fresh-effect proof and STOP/context rule. No tuning, new dependencies or unsafe code.
+- Required host checks passed 1359 tests, with zero failures, ignored tests or filtered tests. No major/minor version change, installation or publication; native Windows/Beast acceptance remains separate.
+
 ## 2.9.133 — publication summary, 23 October 2026
 
 - Deliver the accumulated native Pyramid workflow: restored 28-card tableau and

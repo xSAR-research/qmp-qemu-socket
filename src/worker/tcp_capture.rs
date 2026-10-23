@@ -13,10 +13,6 @@ use super::*;
 const SAMPLE_LIMIT: usize = 256;
 
 
-/// Summaries use monotonic elapsed time and also flush on disconnect/shutdown.
-const SUMMARY_INTERVAL: Duration = Duration::from_secs(60);
-
-
 /// One retained client, exclusively borrowed by the serial worker during acquisition.
 struct CachedClient {
     /// Configured endpoint; no protocol fallback changes this address.
@@ -81,7 +77,7 @@ impl Statistics {
         if self.successes == 0 && self.failures == 0 {
             return None;
         }
-        if !force && self.last_summary.elapsed() < SUMMARY_INTERVAL {
+        if !force && self.last_summary.elapsed() < crate::parameters::TCP_CAPTURE_SUMMARY_INTERVAL {
             return None;
         }
         self.last_summary = Instant::now();

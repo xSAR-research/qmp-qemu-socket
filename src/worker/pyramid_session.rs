@@ -31,8 +31,12 @@ use computed_route::BoardCompletion;
 use std::{
     path::PathBuf,
     sync::atomic::AtomicBool,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{SystemTime, UNIX_EPOCH},
 };
+
+
+#[cfg(test)]
+use std::time::Duration;
 
 
 mod challenge;
@@ -44,10 +48,6 @@ const BOARDS_PER_GAME: u8 = 3;
 
 /// Fresh input-free observations permitted for an automatic board transition.
 const TRANSITION_OBSERVATIONS: usize = 6;
-
-
-/// Preserve the existing cooperative transition settling interval.
-const TRANSITION_DELAY: Duration = Duration::from_secs(1);
 
 
 /// Positive entry facts, independent of a UI counter or previous run's log.
@@ -539,7 +539,7 @@ impl Native<'_> {
     /// Wait cooperatively without releasing or re-reserving the parent run.
     fn wait(&self) -> Result<(), String> {
         self.check()?;
-        cancellable_wait(TRANSITION_DELAY, self.cancel)
+        cancellable_wait(crate::parameters::PYRAMID_REOBSERVE_DELAY, self.cancel)
             .map_err(|_| "STOP during automatic transition; no cleanup input".to_owned())?;
         self.check()
     }

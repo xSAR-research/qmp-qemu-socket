@@ -1,6 +1,12 @@
 # qmp-qemu-socket
 
-## Current delivery — 2.9.133, host qualified; fresh Beast verification pending
+## Current timing refactor — 2.9.134, host qualified
+
+App **2.9.134**, xSAR **0.8.105**, console **0.8.5** and capture server **0.1.4** centralise fixed timings in their respective `src/parameters.rs` files. Every timing value and existing gameplay/input proof rule is preserved. Required host checks passed: application **1359**, xSAR **289**, console **80**, server **19** tests, with no failed, ignored or filtered tests. Windows GDI and fresh Beast acceptance remain separate.
+
+[Timing catalogue](docs/Timing-Constants.md) · [Verification](docs/Verification-2.9.134.md). Existing M10/NoChallenge acceptance and open M11/M14 status are unchanged. No executable was installed or launched.
+
+## Retained delivery — 2.9.133, host qualified; fresh Beast verification pending
 
 App **2.9.133** passed **1359 tests, 0 failed, 0 ignored, 0 filtered** in the full native include-ignored suite (404.801s command time). Locked all-target/all-feature check, strict private rustdoc, Clippy, release, scoped formatting and native/protected help passed. xSAR **0.8.104** and console **0.8.4** are unchanged; 18 shared/feature/private-consumer gates are retained by exact input/log hashes (289 shared, 80 console; feature rows14/55/25/67/57/99).
 

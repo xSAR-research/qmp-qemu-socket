@@ -684,18 +684,8 @@ pub const SOLVER_CONTROL_VARIANTS: [PostGameControlVariant; 1] = [PostGameContro
 // a halo before using its already-audited click point.
 /// Ordered Level Up, New Game, Play and Solver control definitions.
 pub const POST_GAME_TARGETS: [PostGameTarget; 4] = [
-    PostGameTarget::new(
-        PostGameStage::LevelUpOk,
-        "Level Up OK",
-        &[],
-        false,
-    ),
-    PostGameTarget::new(
-        PostGameStage::NewGame,
-        "New Game",
-        &[],
-        false,
-    ),
+    PostGameTarget::new(PostGameStage::LevelUpOk, "Level Up OK", &[], false),
+    PostGameTarget::new(PostGameStage::NewGame, "New Game", &[], false),
     PostGameTarget::new(PostGameStage::Play, "Play", &[], false),
     PostGameTarget::new(
         PostGameStage::Solver,
@@ -962,11 +952,11 @@ pub const SCORE_SKIP_MAX_CLICK_ATTEMPTS: usize = 3;
 
 
 /// Pause after absolute pointer movement before a gameplay mouse press.
-pub const POINTER_SETTLE_DELAY: Duration = Duration::from_millis(100);
+pub const POINTER_SETTLE_DELAY: Duration = xsar::parameters::POINTER_SETTLE_DELAY;
 
 
 /// Ordinary gameplay mouse-button hold duration.
-pub const MOUSE_HOLD: Duration = Duration::from_millis(50);
+pub const MOUSE_HOLD: Duration = xsar::parameters::MOUSE_HOLD;
 
 
 // Post-game controls proved susceptible to a normal 50 ms click. A deliberate
@@ -980,15 +970,101 @@ pub const SOLVER_MOUSE_HOLD: Duration = Duration::from_millis(500);
 
 
 /// Draw-key hold duration between QMP key-down and key-up.
-pub const KEY_HOLD: Duration = Duration::from_millis(20);
+pub const KEY_HOLD: Duration = xsar::parameters::KEY_HOLD;
 
 
 /// Read/write timeout for ordinary QMP protocol traffic.
-pub const QMP_IO_TIMEOUT: Duration = Duration::from_millis(750);
+pub const QMP_IO_TIMEOUT: Duration = xsar::parameters::QMP_IO_TIMEOUT;
 
 
 /// Extended QMP timeout for PNG screen dump generation.
-pub const QMP_SCREENDUMP_TIMEOUT: Duration = Duration::from_secs(5);
+pub const QMP_SCREENDUMP_TIMEOUT: Duration = xsar::parameters::QMP_SCREENDUMP_TIMEOUT;
+
+
+// Timing policies below preserve the previous compiled values. They are not
+// measured minimums, and changing a delay cannot replace fresh effect evidence.
+// Fixed route timings share the corresponding Pyramid default intent, but do
+// not read mutable UI settings during an authenticated execution.
+
+/// Idle UI refresh interval for consuming worker progress and preview updates.
+///
+/// Preserve the existing responsiveness/idle-work trade-off; this is not a guest wait.
+pub const UI_REPAINT_INTERVAL: Duration = Duration::from_millis(100);
+
+
+/// Cooperative full-Recon deadline, including restoration and observation waits.
+///
+/// This is a safety ceiling, not a delay added to each operation; blocking I/O
+/// retains its separate transport timeout and may finish after the deadline.
+pub const PYRAMID_RECON_DEADLINE: Duration = Duration::from_secs(300);
+
+
+/// Fixed settle after a Pyramid stock D release, shared by Recon and stock drain.
+///
+/// Preserve the paired-Recon pacing and drain policy; acknowledgement alone never
+/// proves the new stock position. Ordinary planned MOVE actions use their own wait.
+pub const PYRAMID_DRAW_SETTLE_DELAY: Duration = Duration::from_millis(500);
+
+
+/// Compiled ordinary route MOVE/RECYCLE settle, sharing the Pyramid UI default.
+///
+/// This uses the default value, not the operator's mutable settings snapshot.
+pub const PYRAMID_MOVE_SETTLE_DELAY: Duration = Duration::from_millis(PYRAMID_MOVE_SETTLE_DELAY_MS);
+
+
+/// Compiled route MATCH/KING settle, sharing the Pyramid card-animation default.
+///
+/// Final actions use the shorter bounded final-observation interval instead.
+pub const PYRAMID_CARD_SETTLE_DELAY: Duration = Duration::from_millis(PYRAMID_CARD_SETTLE_DELAY_MS);
+
+
+/// Interval between Pyramid position proofs, stale observations and transition probes.
+///
+/// Shared by Recon, ordinary route verification and session entry/transition.
+/// It also preserves the post-confirmation settle; final-action checks differ.
+pub const PYRAMID_REOBSERVE_DELAY: Duration = Duration::from_millis(PYRAMID_REOBSERVE_DELAY_MS);
+
+
+/// Observation-only final confirmation budget measured from the last complete ACK.
+///
+/// Expiry withholds success; it never authorises retransmission of an input.
+pub const PYRAMID_FINAL_CONFIRMATION_WINDOW: Duration = Duration::from_secs(2);
+
+
+/// Final-action settle and subsequent observation interval within the final budget.
+///
+/// Preserve short cancellable observations instead of ordinary card-animation waits.
+pub const PYRAMID_FINAL_OBSERVATION_DELAY: Duration = Duration::from_millis(200);
+
+
+/// Cooperative route deadline covering initial proof, gestures, waits and transport.
+///
+/// This execution safety ceiling is independent of operator-controlled search.
+pub const PYRAMID_EXECUTION_DEADLINE: Duration = Duration::from_secs(1200);
+
+
+/// NoChallenge pause after the final clear-action ACK before fresh Recon.
+///
+/// This is the existing three-second policy, not proof that dealing has finished;
+/// fresh starting-board recognition must independently establish readiness.
+pub const PYRAMID_CLEAR_HANDOFF_DELAY: Duration = Duration::from_secs(3);
+
+
+/// Pause after a guarded partial-board REDEAL ACK before fresh Recon.
+///
+/// Preserve the existing 1.5-second policy, separately from the normal board's
+/// four-second redeal default; readiness is still checked from fresh pixels.
+pub const PYRAMID_REDEAL_SETTLE_DELAY: Duration = Duration::from_millis(1500);
+
+
+/// Minimum spacing between intermediate search log rows; final statistics always log.
+///
+/// This bounds reporting overhead and never sleeps or limits the search itself.
+pub const SEARCH_LOG_INTERVAL: Duration = Duration::from_secs(1);
+
+
+/// Aggregate TCP capture telemetry interval; frame requests retain their own cadence.
+pub const TCP_CAPTURE_SUMMARY_INTERVAL: Duration = Duration::from_secs(60);
 
 
 /// Per-action durations copied into an immutable execution settings snapshot.
@@ -1429,9 +1505,15 @@ mod tests {
         let edited = defaults.with_tripeaks_reobserve_millis(1_250);
         let active = StepRunSettings::new(edited, 0);
         let next = edited.with_tripeaks_reobserve_millis(u64::MAX);
-        assert_eq!(active.animation_delays().tripeaks_reobserve, Duration::from_millis(1_250));
+        assert_eq!(
+            active.animation_delays().tripeaks_reobserve,
+            Duration::from_millis(1_250)
+        );
         assert_eq!(next.tripeaks_reobserve, Duration::from_millis(5_000));
-        assert_eq!(edited.with_tripeaks_reobserve_millis(0).tripeaks_reobserve, Duration::ZERO);
+        assert_eq!(
+            edited.with_tripeaks_reobserve_millis(0).tripeaks_reobserve,
+            Duration::ZERO
+        );
         assert_eq!(next.draw, defaults.draw);
         assert_eq!(next.tableau, defaults.tableau);
         assert_eq!(next.pyramid_reobserve, defaults.pyramid_reobserve);
@@ -1495,10 +1577,19 @@ mod tests {
         );
         assert_eq!(changed.klondike_settle, Duration::ZERO);
         assert_eq!(changed.klondike_reobserve, Duration::from_millis(5_000));
-        assert_eq!(active_run.animation_delays().klondike_solve, Duration::from_millis(2_000));
+        assert_eq!(
+            active_run.animation_delays().klondike_solve,
+            Duration::from_millis(2_000)
+        );
         assert_eq!(changed.klondike_solve, next_run.klondike_solve);
-        assert_eq!(next_run.with_klondike_solve_millis(u64::MAX).klondike_solve, Duration::from_millis(5_000));
-        assert_eq!(next_run.with_klondike_solve_millis(0).klondike_solve, Duration::ZERO);
+        assert_eq!(
+            next_run.with_klondike_solve_millis(u64::MAX).klondike_solve,
+            Duration::from_millis(5_000)
+        );
+        assert_eq!(
+            next_run.with_klondike_solve_millis(0).klondike_solve,
+            Duration::ZERO
+        );
         assert_eq!(changed.draw, next_run.draw);
         assert_eq!(changed.tableau, next_run.tableau);
         assert_eq!(changed.board_redeal, next_run.board_redeal);
@@ -1529,24 +1620,46 @@ mod tests {
             AnimationSettleDelays::from_millis(123, 987, 2_345).freecell_game_start,
             defaults.freecell_game_start,
         );
-        let edited = defaults.with_freecell_millis(1_250, 850)
+        let edited = defaults
+            .with_freecell_millis(1_250, 850)
             .with_freecell_game_start_millis(1_750);
         let active = StepRunSettings::new(edited, FREECELL_DEFAULT_MULTI_STEP_ACTIONS);
         let next = edited.with_freecell_millis(0, u64::MAX);
-        assert_eq!(active.animation_delays().freecell_settle, Duration::from_millis(1_250));
-        assert_eq!(active.animation_delays().freecell_reobserve, Duration::from_millis(850));
-        assert_eq!(active.animation_delays().freecell_game_start, Duration::from_millis(1_750));
+        assert_eq!(
+            active.animation_delays().freecell_settle,
+            Duration::from_millis(1_250)
+        );
+        assert_eq!(
+            active.animation_delays().freecell_reobserve,
+            Duration::from_millis(850)
+        );
+        assert_eq!(
+            active.animation_delays().freecell_game_start,
+            Duration::from_millis(1_750)
+        );
         assert_eq!(next.freecell_game_start, edited.freecell_game_start);
         let next_game_start = next.with_freecell_game_start_millis(u64::MAX);
-        assert_eq!(next_game_start.freecell_game_start, Duration::from_millis(5_000));
+        assert_eq!(
+            next_game_start.freecell_game_start,
+            Duration::from_millis(5_000)
+        );
         let next_game_start = next_game_start.with_freecell_game_start_millis(0);
         assert_eq!(next_game_start.freecell_game_start, Duration::ZERO);
         assert_eq!(next_game_start.with_freecell_game_start_millis(1_750), next);
-        assert_eq!(active.animation_delays().freecell_game_start, Duration::from_millis(1_750));
+        assert_eq!(
+            active.animation_delays().freecell_game_start,
+            Duration::from_millis(1_750)
+        );
         assert_eq!(next.freecell_settle, Duration::ZERO);
         assert_eq!(next.freecell_reobserve, Duration::from_millis(5_000));
-        assert_eq!(next.with_freecell_millis(u64::MAX, 0).freecell_settle, Duration::from_millis(5_000));
-        assert_eq!(next.with_freecell_millis(u64::MAX, 0).freecell_reobserve, Duration::ZERO);
+        assert_eq!(
+            next.with_freecell_millis(u64::MAX, 0).freecell_settle,
+            Duration::from_millis(5_000)
+        );
+        assert_eq!(
+            next.with_freecell_millis(u64::MAX, 0).freecell_reobserve,
+            Duration::ZERO
+        );
         assert_eq!(next.draw, defaults.draw);
         assert_eq!(next.tableau, defaults.tableau);
         assert_eq!(next.tripeaks_reobserve, defaults.tripeaks_reobserve);
@@ -1560,9 +1673,24 @@ mod tests {
         assert!(active.is_unbounded());
         assert_eq!(active.bounded_operation_limit(), None);
         assert_eq!(active.freecell_observation_limit(), 20);
-        assert_eq!(active.with_freecell_observation_limit(0).freecell_observation_limit(), 1);
-        assert_eq!(active.with_freecell_observation_limit(usize::MAX).freecell_observation_limit(), 100);
-        assert_eq!(active.with_freecell_observation_limit(7).freecell_observation_limit(), 7);
+        assert_eq!(
+            active
+                .with_freecell_observation_limit(0)
+                .freecell_observation_limit(),
+            1
+        );
+        assert_eq!(
+            active
+                .with_freecell_observation_limit(usize::MAX)
+                .freecell_observation_limit(),
+            100
+        );
+        assert_eq!(
+            active
+                .with_freecell_observation_limit(7)
+                .freecell_observation_limit(),
+            7
+        );
     }
 
 
@@ -1604,7 +1732,10 @@ mod tests {
         assert_eq!(POST_GAME_TARGETS[3].stage, PostGameStage::Solver);
 
         for target in &POST_GAME_TARGETS[..3] {
-            assert!(target.control_variants.is_empty(), "dialog coordinates must come from a fresh bounded search");
+            assert!(
+                target.control_variants.is_empty(),
+                "dialog coordinates must come from a fresh bounded search"
+            );
         }
         assert_eq!(
             POST_GAME_TARGETS[3].control_variants[0].click_point,
@@ -1638,10 +1769,11 @@ mod tests {
 
         for mode in crate::game::GameMode::AVAILABLE {
             let profile = crate::terminal_controls::profiles::for_game(mode);
-            for control in [crate::terminal_controls::Control::Ok,
+            for control in [
+                crate::terminal_controls::Control::Ok,
                 crate::terminal_controls::Control::NewGame,
-                crate::terminal_controls::Control::Play]
-            {
+                crate::terminal_controls::Control::Play,
+            ] {
                 let spec = profile.spec(control);
                 assert_rect_fits_frame(spec.bounds);
                 assert!(spec.run_length > 0 && spec.run_length <= spec.bounds.width);
@@ -1704,7 +1836,9 @@ mod tests {
         assert_eq!(GAMEPLAY_FELT_REQUIRED_FRACTION_PER_MILLE, 800);
 
 
-        const { assert!(GAMEPLAY_FELT_REQUIRED_FRACTION_PER_MILLE <= 1_000); }
+        const {
+            assert!(GAMEPLAY_FELT_REQUIRED_FRACTION_PER_MILLE <= 1_000);
+        }
     }
 
 
@@ -1960,16 +2094,30 @@ mod tests {
         assert_eq!(defaults.spider_draw_settle, Duration::from_millis(2_000));
         assert_eq!(defaults.spider_reobserve, Duration::from_millis(1_000));
         assert_eq!(defaults.spider_game_start, Duration::from_millis(3_000));
-        let edited = defaults.with_spider_millis(950, 2_250, 850)
+        let edited = defaults
+            .with_spider_millis(950, 2_250, 850)
             .with_spider_game_start_millis(3_500);
         let frozen = StepRunSettings::new(edited, SPIDER_DEFAULT_MULTI_STEP_ACTIONS);
-        let next = edited.with_spider_millis(0, u64::MAX, u64::MAX)
+        let next = edited
+            .with_spider_millis(0, u64::MAX, u64::MAX)
             .with_spider_game_start_millis(u64::MAX);
         assert!(frozen.is_unbounded());
-        assert_eq!(frozen.animation_delays().spider_settle, Duration::from_millis(950));
-        assert_eq!(frozen.animation_delays().spider_draw_settle, Duration::from_millis(2_250));
-        assert_eq!(frozen.animation_delays().spider_reobserve, Duration::from_millis(850));
-        assert_eq!(frozen.animation_delays().spider_game_start, Duration::from_millis(3_500));
+        assert_eq!(
+            frozen.animation_delays().spider_settle,
+            Duration::from_millis(950)
+        );
+        assert_eq!(
+            frozen.animation_delays().spider_draw_settle,
+            Duration::from_millis(2_250)
+        );
+        assert_eq!(
+            frozen.animation_delays().spider_reobserve,
+            Duration::from_millis(850)
+        );
+        assert_eq!(
+            frozen.animation_delays().spider_game_start,
+            Duration::from_millis(3_500)
+        );
         assert_eq!(next.spider_settle, Duration::ZERO);
         assert_eq!(next.spider_draw_settle, Duration::from_millis(5_000));
         assert_eq!(next.spider_reobserve, Duration::from_millis(5_000));
@@ -1980,10 +2128,28 @@ mod tests {
         assert_eq!(edited.pyramid_move, defaults.pyramid_move);
         assert_eq!(edited.draw, defaults.draw);
         assert_eq!(frozen.spider_observation_limit(), 20);
-        assert_eq!(frozen.with_spider_observation_limit(0).spider_observation_limit(), 1);
-        assert_eq!(frozen.with_spider_observation_limit(usize::MAX).spider_observation_limit(), 40);
-        assert_eq!(frozen.with_spider_observation_limit(7).spider_observation_limit(), 7);
-        assert_eq!(frozen.freecell_observation_limit(), FREECELL_DEFAULT_OBSERVATION_LIMIT);
+        assert_eq!(
+            frozen
+                .with_spider_observation_limit(0)
+                .spider_observation_limit(),
+            1
+        );
+        assert_eq!(
+            frozen
+                .with_spider_observation_limit(usize::MAX)
+                .spider_observation_limit(),
+            40
+        );
+        assert_eq!(
+            frozen
+                .with_spider_observation_limit(7)
+                .spider_observation_limit(),
+            7
+        );
+        assert_eq!(
+            frozen.freecell_observation_limit(),
+            FREECELL_DEFAULT_OBSERVATION_LIMIT
+        );
     }
 
 }

@@ -14,6 +14,12 @@
     )
 )]
 
+use crate::parameters::{
+    PYRAMID_EXECUTION_DEADLINE as EXECUTION_DEADLINE,
+    PYRAMID_FINAL_CONFIRMATION_WINDOW as FINAL_CONFIRMATION_WINDOW,
+    PYRAMID_FINAL_OBSERVATION_DELAY as FINAL_OBSERVATION_DELAY,
+};
+
 use super::{
     QmpClient, WorkerEvent, WorkerEventSink, WorkerState, cancellable_wait, capture_screen,
     publish_pyramid_failure, send_log, send_state, send_status, validate_probe,
@@ -75,18 +81,6 @@ const ORDINARY_OBSERVATIONS: usize = 6;
 
 /// Fresh observation-only final transition allowance.
 const FINAL_OBSERVATIONS: usize = 20;
-
-
-/// Observation-only confirmation time, measured from the final complete transport ACK.
-const FINAL_CONFIRMATION_WINDOW: Duration = Duration::from_secs(2);
-
-
-/// Final settling and repeat observations share this short cooperative interval.
-const FINAL_OBSERVATION_DELAY: Duration = Duration::from_millis(200);
-
-
-/// One cooperative deadline including initial observations, waits and transport.
-const EXECUTION_DEADLINE: Duration = Duration::from_secs(1200);
 
 
 /// Bound all phases, including native guard captures outside the shared sequencer.
@@ -755,7 +749,7 @@ pub(super) fn calculate_owned_with_policy(
                 // At most one intermediate row per second plus the engine's final row.
                 if snapshot.finished
                     || snapshot.stats.elapsed.saturating_sub(last_logged)
-                        >= search_log::PROGRESS_INTERVAL
+                        >= crate::parameters::SEARCH_LOG_INTERVAL
                 {
                     send_log(events, search_log::statistics(method, snapshot));
                     last_logged = snapshot.stats.elapsed;
@@ -1331,18 +1325,16 @@ fn drive(plan: &Prepared, io: &mut impl RouteIo) -> Result<DriveReport, String> 
             settle_delay: if index + 1 == plan.trace.len() {
                 FINAL_OBSERVATION_DELAY
             } else {
-                Duration::from_millis(
-                    if matches!(step.action, RecordedAction::Move | RecordedAction::Recycle) {
-                        1000
-                    } else {
-                        2000
-                    },
-                )
+                if matches!(step.action, RecordedAction::Move | RecordedAction::Recycle) {
+                    crate::parameters::PYRAMID_MOVE_SETTLE_DELAY
+                } else {
+                    crate::parameters::PYRAMID_CARD_SETTLE_DELAY
+                }
             },
             reobserve_delay: if index + 1 == plan.trace.len() {
                 FINAL_OBSERVATION_DELAY
             } else {
-                Duration::from_secs(1)
+                crate::parameters::PYRAMID_REOBSERVE_DELAY
             },
         });
     }
@@ -1372,7 +1364,7 @@ fn drive(plan: &Prepared, io: &mut impl RouteIo) -> Result<DriveReport, String> 
             if !io.observe(initial, false)? {
                 return Err("Original board mismatch before any input".to_owned());
             }
-            io.wait(Duration::from_secs(1))?;
+            io.wait(crate::parameters::PYRAMID_REOBSERVE_DELAY)?;
         }
         let mut phase_observations = 0usize;
         let mut observed_action = None;
@@ -1521,7 +1513,7 @@ fn drive(plan: &Prepared, io: &mut impl RouteIo) -> Result<DriveReport, String> 
                         sequence.abort();
                         if state.is_goal() && io.handoff_after_final_ack() {
                             io.check()?;
-                            io.wait(Duration::from_secs(3))?;
+                            io.wait(crate::parameters::PYRAMID_CLEAR_HANDOFF_DELAY)?;
                             io.check()?;
                             return Ok(DriveReport {
                                 completion: BoardCompletion::AwaitingFreshBoard,

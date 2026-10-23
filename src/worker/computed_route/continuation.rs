@@ -185,7 +185,6 @@ pub(super) fn drain_and_redeal(
     state: SearchState,
 ) -> Result<super::DriveReport, String> {
     use super::{BoardCompletion, DriveReport, InputOperation, RouteIo};
-    use std::time::Duration;
     let drain = StockDrain::new(&io.plan.acquisition.deal, state, io.executed_recycles)?;
     super::send_log(
         io.events,
@@ -204,7 +203,7 @@ pub(super) fn drain_and_redeal(
         if step.operation == StockAdvance::Recycle {
             io.recycle_acknowledged()?;
         }
-        io.wait(Duration::from_millis(500))?;
+        io.wait(crate::parameters::PYRAMID_DRAW_SETTLE_DELAY)?;
         if let Some(report) = observe_stock(io, step.after)? {
             return Ok(report);
         }
@@ -252,7 +251,7 @@ pub(super) fn drain_and_redeal(
         .ok_or("Gesture counter overflow")?;
     io.counts.last_acknowledged_at = Some(io.elapsed());
     io.check()?;
-    io.wait(Duration::from_millis(1500))?;
+    io.wait(crate::parameters::PYRAMID_REDEAL_SETTLE_DELAY)?;
     Ok(DriveReport {
         completion: BoardCompletion::StockRedealt,
         message: format!(

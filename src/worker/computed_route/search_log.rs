@@ -7,10 +7,6 @@ use crate::{
 use xsar::search::{SearchLimits, SearchProgress};
 
 
-/// Minimum elapsed search time between ordinary log rows; the final row is always retained.
-pub(super) const PROGRESS_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
-
-
 /// Describe the actual current calculation without conflating header facts and stop policy.
 pub(super) fn parameters(
     method: RouteMethod,
