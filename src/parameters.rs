@@ -24,24 +24,16 @@ pub const INITIAL_WINDOW_WIDTH: f32 = 1120.0;
 pub const INITIAL_WINDOW_HEIGHT: f32 = 820.0;
 
 
-// A fixed-height log: 40 more logical points is approximately 2.5 monospace
-// lines at the current UI font. Window growth remains available to the image.
-/// Expanded diagnostic output height in egui logical points.
-pub const OUTPUT_PANEL_HEIGHT: f32 = 285.0;
+/// Initial width and height of read-only log/failure windows, in logical points.
+pub const DETAILS_WINDOW_DEFAULT_SIZE_POINTS: [f32; 2] = [960.0, 640.0];
 
 
-// Reserve space below the preview for the collapsed log and EXIT control.
-// A horizontal scrollbar can consume part of the scroll area's outer height.
-/// Logical points reserved below the preview for collapsed output and Exit.
-pub const PREVIEW_FOOTER_RESERVE_POINTS: f32 = 96.0;
+/// Minimum resizable log/failure window extent, in logical points.
+pub const DETAILS_WINDOW_MIN_SIZE_POINTS: [f32; 2] = [300.0, 160.0];
 
 
-/// Logical points reserved for the preview horizontal scrollbar.
-pub const PREVIEW_SCROLLBAR_ALLOWANCE_POINTS: f32 = 24.0;
-
-
-/// Minimum preview viewport height in egui logical points.
-pub const MIN_PREVIEW_VIEWPORT_HEIGHT_POINTS: f32 = 260.0;
+/// Logical points reserved for the shared View log, Failure details and Exit footer.
+pub const PREVIEW_FOOTER_RESERVE_POINTS: f32 = 80.0;
 
 
 /// Maximum diagnostic lines retained in the rendered output buffer.
@@ -1006,21 +998,39 @@ pub const PYRAMID_RECON_DEADLINE: Duration = Duration::from_secs(300);
 pub const PYRAMID_DRAW_SETTLE_DELAY: Duration = Duration::from_millis(500);
 
 
-/// Compiled ordinary route MOVE/RECYCLE settle, sharing the Pyramid UI default.
+/// Computed-route MOVE-to-capture wait, without waiting for a Solver HALO.
+///
+/// This 250 ms candidate is below the requested 300 ms bound; live animation
+/// reliability still requires measured acceptance. Computer Vision keeps its
+/// separate 1,000 ms Move/Recycle setting, and failed effects are never replayed.
+pub const COMPUTED_ROUTE_MOVE_SETTLE_DELAY: Duration = Duration::from_millis(250);
+
+
+/// Read-only retry interval when a computed-action boundary frame is not ready.
+///
+/// No fixed MATCH/KING animation wait is imposed. Ordinary effects use the separate
+/// ACK-based window below, without repeating any input or changing CV timing.
+pub const COMPUTED_ROUTE_REOBSERVE_DELAY: Duration = Duration::from_millis(50);
+
+
+/// Ordinary computed-effect observation window from the whole action's last ACK.
+///
+/// Restores the former two-second card-animation allowance as an adaptive window,
+/// not a fixed sleep. Settles count inside it. No capture starts at/after expiry;
+/// one already in flight may finish, subject to STOP/context checks. Final-action
+/// confirmation and Computer Vision retain their independent policies.
+pub const COMPUTED_ROUTE_EFFECT_WINDOW: Duration = Duration::from_secs(2);
+
+
+/// Compiled route RECYCLE settle, preserving the Pyramid UI default.
 ///
 /// This uses the default value, not the operator's mutable settings snapshot.
 pub const PYRAMID_MOVE_SETTLE_DELAY: Duration = Duration::from_millis(PYRAMID_MOVE_SETTLE_DELAY_MS);
 
 
-/// Compiled route MATCH/KING settle, sharing the Pyramid card-animation default.
-///
-/// Final actions use the shorter bounded final-observation interval instead.
-pub const PYRAMID_CARD_SETTLE_DELAY: Duration = Duration::from_millis(PYRAMID_CARD_SETTLE_DELAY_MS);
-
-
 /// Interval between Pyramid position proofs, stale observations and transition probes.
 ///
-/// Shared by Recon, ordinary route verification and session entry/transition.
+/// Shared by Recon and session entry/transition; computed actions use their own retries.
 /// It also preserves the post-confirmation settle; final-action checks differ.
 pub const PYRAMID_REOBSERVE_DELAY: Duration = Duration::from_millis(PYRAMID_REOBSERVE_DELAY_MS);
 

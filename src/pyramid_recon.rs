@@ -44,7 +44,10 @@ const MAX_OBSERVATIONS: usize = 6;
 /// Explicit calibration selection, independent of consent and live input authority.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ReconProfileSource {
+    /// Native-v23 Classic card readers with colour-independent A* scene/occupancy roles.
+    BundledNativeV23,
     /// Native-v22 challenge-clear and measured diamond calibration embedded in this executable.
+    #[cfg(test)]
     BundledNativeV22,
     /// Retained native-v17 regression selection; runtime rollback uses its strict File profile.
     #[cfg(test)]
@@ -86,6 +89,8 @@ impl ReconRequest {
 
 
         let invalid_profile = match &self.profile {
+            ReconProfileSource::BundledNativeV23 => false,
+            #[cfg(test)]
             ReconProfileSource::BundledNativeV22 => false,
             #[cfg(test)]
             ReconProfileSource::BundledNativeV17 => false,
@@ -125,6 +130,12 @@ pub enum ReconInput {
 pub trait ReconIo {
     /// Refuse STOP or any socket/game/strategy/generation change.
     fn check_active(&self) -> Result<(), String>;
+    /// Suspend only at an explicit stable boundary; return intentional paused time.
+    /// Default adapters do not pause; cancellation and freshness remain caller-owned.
+    fn pause_checkpoint(&mut self) -> Result<Duration, String> {
+        self.check_active()?;
+        Ok(Duration::ZERO)
+    }
     /// Capture, publish advisory pixels and classify one new native frame.
     fn observe(&mut self) -> Result<ReconScene, String>;
     /// Freshly validate VM running state and current absolute pointer.
@@ -174,6 +185,7 @@ pub fn run(
     let mut runner = Runner {
         io,
         started: Instant::now(),
+        paused: Duration::ZERO,
         progress: ReconProgress::default(),
     };
     let result = request.validate().and_then(|()| runner.acquire(request));
@@ -192,6 +204,8 @@ struct Runner<'adapter, Adapter> {
     io: &'adapter mut Adapter,
     /// Deadline origin, covering all phases after request validation begins.
     started: Instant,
+    /// Intentional safe-boundary suspension excluded from this runner deadline.
+    paused: Duration,
     /// Original arrangement and accumulated identities, never live card positions.
     progress: ReconProgress,
 }
@@ -205,10 +219,28 @@ impl<Adapter: ReconIo> Runner<'_, Adapter> {
         self.io.check_active()?;
 
 
-        if self.started.elapsed() >= MAX_DURATION {
+        if self.started.elapsed().saturating_sub(self.paused) >= MAX_DURATION {
             return Err("Reconnaissance reached its 300-second cooperative deadline".to_owned());
         }
         Ok(())
+    }
+
+
+    /// Resume only against the same recognised arrangement, with fresh enabled controls.
+    fn pause_before(
+        &mut self,
+        current: &BoardObservation,
+    ) -> Result<Option<BoardObservation>, String> {
+        let paused = self.io.pause_checkpoint()?;
+        self.paused = self.paused.saturating_add(paused);
+        if paused.is_zero() {
+            return Ok(None);
+        }
+        let fresh = board(self.capture()?)?;
+        if !same_arrangement(current, &fresh) {
+            return Err("Recon position changed while paused; no further input".to_owned());
+        }
+        Ok(Some(fresh))
     }
 
 
@@ -311,6 +343,8 @@ impl<Adapter: ReconIo> Runner<'_, Adapter> {
         current: &BoardObservation,
         paired: bool,
     ) -> Result<BoardObservation, String> {
+        let resumed = self.pause_before(current)?;
+        let current = resumed.as_ref().map_or(current, |fresh| fresh);
         let previous = card_in_left(current)?;
         self.perform(ReconInput::Draw)?;
 
@@ -432,6 +466,9 @@ impl<Adapter: ReconIo> Runner<'_, Adapter> {
 
         if current.left != StockFace::Empty || self.progress.stock.len() != MAX_DRAWS {
             return Err("Reconnaissance ended without complete inventory and two positive empty-LEFT observations".to_owned());
+        }
+        if let Some(fresh) = self.pause_before(&current)? {
+            current = fresh;
         }
         let undo_all = current
             .undo_all
@@ -689,6 +726,12 @@ mod tests {
         inputs: Vec<ReconInput>,
         /// Number of freshly requested pre-input probes.
         probes: usize,
+        /// Intentional suspension returned at each safe boundary; exhausted means zero.
+        pause_durations: VecDeque<Duration>,
+        /// Input count and remaining scene count at each actual runner checkpoint.
+        pause_checkpoints: Vec<(usize, usize)>,
+        /// Remaining fresh scene count immediately before each input attempt.
+        input_remaining_scenes: Vec<usize>,
         /// Authority-check count before each fresh post-Undo-All, pre-OK capture request.
         confirmation_capture_checks: Vec<usize>,
         /// Pre-OK waits paired with the number of preceding modal capture requests.
@@ -725,6 +768,9 @@ mod tests {
                 scenes: scenes.into(),
                 inputs: Vec::new(),
                 probes: 0,
+                pause_durations: VecDeque::new(),
+                pause_checkpoints: Vec::new(),
+                input_remaining_scenes: Vec::new(),
                 confirmation_capture_checks: Vec::new(),
                 confirmation_waits: Vec::new(),
                 restoration_capture_checks: Vec::new(),
@@ -758,6 +804,15 @@ mod tests {
         }
 
 
+        /// Record a real runner boundary and return its scripted intentional suspension.
+        fn pause_checkpoint(&mut self) -> Result<Duration, String> {
+            self.check_active()?;
+            self.pause_checkpoints
+                .push((self.inputs.len(), self.scenes.len()));
+            Ok(self.pause_durations.pop_front().unwrap_or(Duration::ZERO))
+        }
+
+
         /// Consume precisely one scripted observation, never reuse stale evidence.
         fn observe(&mut self) -> Result<ReconScene, String> {
 
@@ -786,6 +841,7 @@ mod tests {
         /// Record delivery and optionally report its outcome as uncertain.
         fn input(&mut self, operation: ReconInput) -> Result<(), String> {
             self.check_active()?;
+            self.input_remaining_scenes.push(self.scenes.len());
             self.inputs.push(operation);
 
 
@@ -839,6 +895,105 @@ mod tests {
             }
             self.published += 1;
             Ok(())
+        }
+    }
+
+
+    /// Actual runner checkpoints surround whole stock steps and Undo All only.
+    #[test]
+    fn pauses_capture_before_input_and_keep_recon_transactions_whole() {
+        let mut scenes = happy_scenes();
+        scenes.insert(2, ReconScene::Board(initial()));
+        let fresh_undo = PixelPoint::new(1_321, 978);
+        let mut resumed = empty();
+        resumed.undo_all = Some(fresh_undo);
+        let modal = scenes
+            .iter()
+            .position(|scene| matches!(scene, ReconScene::UndoConfirmation { .. }))
+            .unwrap();
+        scenes.insert(modal, ReconScene::Board(resumed));
+        let mut adapter = FakeIo::new(scenes);
+        adapter.pause_durations = VecDeque::from([Duration::ZERO; 14]);
+        adapter.pause_durations[0] = Duration::from_secs(1);
+        adapter.pause_durations[13] = Duration::from_secs(1);
+
+
+        run(&mut adapter, &request()).unwrap();
+        assert_eq!(
+            adapter
+                .pause_checkpoints
+                .iter()
+                .map(|(inputs, _)| *inputs)
+                .collect::<Vec<_>>(),
+            vec![0, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 24]
+        );
+        // Each actual resume consumes a fresh board before its next guest input.
+        for boundary in [0, 13] {
+            let (input_index, remaining) = adapter.pause_checkpoints[boundary];
+            assert_eq!(adapter.input_remaining_scenes[input_index], remaining - 1);
+        }
+        assert_eq!(&adapter.inputs[..24], &[ReconInput::Draw; 24]);
+        assert_eq!(adapter.inputs[24], ReconInput::UndoAll(fresh_undo));
+        assert_eq!(adapter.inputs.len(), 26);
+        assert_eq!(adapter.published, 1);
+        assert!(adapter.scenes.is_empty());
+    }
+
+
+    /// Resume excludes intentional suspension while refusing any changed arrangement.
+    #[test]
+    fn stock_resume_revalidates_arrangement_and_excludes_pause_from_deadline() {
+        for changed in [false, true] {
+            let current = initial();
+            let mut resumed = initial();
+            if changed {
+                resumed.left = StockFace::Card(deck()[29]);
+            }
+            let next = observation(StockFace::Card(deck()[29]), StockFace::Card(deck()[28]));
+            let mut adapter =
+                FakeIo::new(vec![ReconScene::Board(resumed), ReconScene::Board(next)]);
+            adapter.pause_durations.push_back(MAX_DURATION);
+            // Simulate elapsed wall time without sleeping or weakening active().
+            let started = Instant::now()
+                .checked_sub(MAX_DURATION + Duration::from_secs(1))
+                .unwrap();
+            let mut runner = Runner {
+                io: &mut adapter,
+                started,
+                paused: Duration::ZERO,
+                progress: ReconProgress {
+                    tableau: Some(current.tableau),
+                    stock: vec![deck()[28]],
+                    ..ReconProgress::default()
+                },
+            };
+
+
+            let result = runner.advance_stock(&current, &current, false);
+            assert_eq!(runner.paused, MAX_DURATION);
+            assert_eq!(runner.io.pause_checkpoints.len(), 1);
+            if changed {
+                assert_eq!(
+                    result.unwrap_err(),
+                    "Recon position changed while paused; no further input"
+                );
+                assert_eq!(runner.progress.captures, 1);
+                assert_eq!(runner.progress.draws, 0);
+                assert!(runner.io.inputs.is_empty());
+                assert_eq!(runner.io.probes, 0);
+                assert_eq!(runner.io.published, 0);
+            } else {
+                assert_eq!(result.unwrap().left, StockFace::Card(deck()[29]));
+                assert_eq!(runner.progress.captures, 2);
+                assert_eq!(runner.io.inputs, vec![ReconInput::Draw]);
+                assert!(runner.active().is_ok());
+                // Restoring the elapsed pause makes the existing deadline fail again.
+                runner.paused = Duration::ZERO;
+                assert_eq!(
+                    runner.active().unwrap_err(),
+                    "Reconnaissance reached its 300-second cooperative deadline"
+                );
+            }
         }
     }
 
@@ -1548,6 +1703,7 @@ mod tests {
         let mut runner = Runner {
             io: &mut adapter,
             started: Instant::now(),
+            paused: Duration::ZERO,
             progress: ReconProgress {
                 captures: MAX_CAPTURES,
                 draws: MAX_DRAWS,

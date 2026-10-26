@@ -47,7 +47,7 @@ const BOARDS_PER_GAME: u8 = 3;
 
 
 /// Fresh input-free observations permitted for an automatic board transition.
-const TRANSITION_OBSERVATIONS: usize = 6;
+pub(super) const TRANSITION_OBSERVATIONS: usize = 6;
 
 
 /// Positive entry facts, independent of a UI counter or previous run's log.
@@ -77,6 +77,8 @@ enum Entry {
 enum NativeTerminal {
     /// Existing specific Pyramid Level Up over its recognised reward layout.
     LevelUp,
+    /// Positive normal Congratulations/counting stage after actual bound third completion.
+    NormalReward,
     /// Expected New Game control after actual bound normal third-board completion.
     NewGame,
 }
@@ -229,6 +231,33 @@ fn observed_progress(frame: &CapturedFrame) -> Result<Option<BoardCount>, String
 }
 
 
+/// Validate normal-series evidence on the same source or acknowledged-effect frame.
+///
+/// Unknown post-ACK pixels withhold effect commitment within the existing budget.
+/// Sources remain positive-only. A positive other ordinal is fatal even when an
+/// occluded footer prevents the complete source witness. No capture or input occurs.
+pub(super) fn guard_normal_progress(
+    frame: &CapturedFrame,
+    phase: computed_route::FrameGuardPhase,
+    expected: BoardCount,
+) -> Result<computed_route::FrameGuardOutcome, String> {
+    let actual = observed_progress(frame)?;
+    if actual == Some(expected) {
+        return Ok(computed_route::FrameGuardOutcome::Ready);
+    }
+    let header = crate::pyramid_progress::observe_normal_header(frame)?;
+    if actual.is_none()
+        && header.is_none_or(|value| value == expected)
+        && phase == computed_route::FrameGuardPhase::Effect
+    {
+        return Ok(computed_route::FrameGuardOutcome::Pending);
+    }
+    Err(format!(
+        "Execution series header changed or became unknown: expected {expected:?}, observed {actual:?}, ordinal {header:?}; no further input authorised"
+    ))
+}
+
+
 /// Phase boundary used by the serial controller and deterministic headless tests.
 trait Pipeline {
     /// Return the highest actual counter observed during the last execution, if supported.
@@ -334,6 +363,20 @@ fn drive(mode: WorkflowMode, io: &mut impl Pipeline) -> Result<String, String> {
             return Ok(format!(
                 "Partial route complete — {removed}/28 tableau cards removed, {remaining} remain; exact endpoint verified. Automatic session stopped; no next-board or restart input."
             ));
+        }
+        if completion == BoardCompletion::AwaitingFreshBoard
+            && (mode != WorkflowMode::Continuous
+                || progress.is_none_or(|progress| {
+                    progress
+                        .completed
+                        .checked_add(1)
+                        .is_none_or(|next| next >= BOARDS_PER_GAME)
+                }))
+        {
+            return Err(
+                "A final ACK cannot prove the third-board completion or authorise restart input"
+                    .to_owned(),
+            );
         }
         if mode == WorkflowMode::SingleBoard {
             return Ok(format!(
@@ -451,6 +494,10 @@ struct Native<'a> {
     challenge_starting: Option<ChallengeWitness>,
     /// Actual bound challenge requirement for the current acquired board.
     challenge_progress: Option<ChallengeProgress>,
+    /// Original ordered tableau retained after a qualified acquisition witness is consumed.
+    original_tableau: Option<[xsar::games::cards::Card; 28]>,
+    /// A clear/ACK handoff needs a distinct tableau; REDEAL preserves its separate policy.
+    distinct_start: bool,
     /// Actual last-board completion, distinct from a planned goal or delivered gesture.
     restart_entry: Option<post_game::PyramidRestartEntry>,
     /// Whether a phase helper already persisted this failure.
@@ -471,6 +518,9 @@ impl Native<'_> {
         observed: crate::pyramid_workflow_model::ObservedGame,
         source: &str,
     ) {
+        let observed = self
+            .challenge_progress
+            .map_or(observed, |progress| self.challenge_observed(progress));
         self.observed_game = observed;
         let message = format!(
             "Observed {}: {}; selected mode={}; stop condition={}",
@@ -491,6 +541,22 @@ impl Native<'_> {
                 observed_game: observed,
                 message,
             }));
+    }
+
+
+    /// Advance only the numeric fact while retaining the session's qualified Kings identity.
+    fn challenge_observed(
+        &self,
+        progress: ChallengeProgress,
+    ) -> crate::pyramid_workflow_model::ObservedGame {
+        use crate::pyramid_workflow_model::ObservedGame;
+        ObservedGame::Challenge {
+            progress,
+            kings: matches!(
+                self.observed_game,
+                ObservedGame::Challenge { kings: true, .. }
+            ),
+        }
     }
 
 
@@ -527,10 +593,12 @@ impl Native<'_> {
         self.latest = Some(frame.clone());
         self.events.publish_diagnostic_frame(frame.clone());
         self.check()?;
-        let observed =
-            crate::pyramid_workflow_model::ObservedGame::observe(&frame).unwrap_or_default();
-        if observed != self.observed_game {
-            self.publish_observed(observed, "entry/transition header (advisory)");
+        if self.challenge_progress.is_none() {
+            let observed =
+                crate::pyramid_workflow_model::ObservedGame::observe(&frame).unwrap_or_default();
+            if observed != self.observed_game {
+                self.publish_observed(observed, "entry/transition header (advisory)");
+            }
         }
         Ok(frame)
     }
@@ -570,11 +638,30 @@ impl Native<'_> {
         if post_game::recognised_pyramid_terminal(frame)? {
             return Ok(NativeObservation::Terminal(NativeTerminal::LevelUp));
         }
-        if self.restart_entry.is_some() && post_game::expected_pyramid_new_game(frame)? {
-            return Ok(NativeObservation::Terminal(NativeTerminal::NewGame));
+        if self.restart_entry.is_some() {
+            if post_game::normal_reward::observe(frame)? {
+                return Ok(NativeObservation::Terminal(NativeTerminal::NormalReward));
+            }
+            let coloured_gameplay = self
+                .vision
+                .as_ref()
+                .map_or(Ok(false), |vision| vision.native_gameplay_veto(frame))?;
+            if !coloured_gameplay && post_game::expected_pyramid_new_game(frame)? {
+                return Ok(NativeObservation::Terminal(NativeTerminal::NewGame));
+            }
         }
         match self.starting_board(frame) {
             Some(position) => {
+                if let Some(bound) = self.challenge_progress {
+                    return Ok(
+                        match crate::pyramid_progress::observe_bound_challenge_progress(
+                            frame, bound,
+                        )? {
+                            Some(progress) => NativeObservation::Challenge { position, progress },
+                            None => NativeObservation::Unknown,
+                        },
+                    );
+                }
                 let normal = observed_progress(frame)?;
                 if normal.is_none()
                     && let Some(progress) = crate::pyramid_progress::observe_challenge(frame)?
@@ -741,6 +828,7 @@ impl Pipeline for Native<'_> {
     }
 
 
+    /// Return an actual completion receipt through an input-free operator handoff.
     fn finish_challenge(
         &mut self,
         proof: ChallengeCompletion,
@@ -748,33 +836,14 @@ impl Pipeline for Native<'_> {
         self.check()?;
         let frame = self
             .latest
-            .clone()
-            .ok_or("Missing bound challenge completion frame")?;
-        let mut scan = TableauScanState::for_mode(GameMode::Pyramid);
-        let (initial, _) = analyse_captured_frame(frame, &scan)?;
-        let mut qmp =
-            QmpClient::connect(&self.context.socket_path).map_err(|error| error.to_string())?;
-        post_game::finish_pyramid_challenge(
-            &mut qmp,
-            self.context,
-            &initial,
-            proof,
-            &mut scan,
-            self.events,
-            self.cancel,
-            &mut self.latest,
-        )?;
-        self.check()?;
-        let frame = self
-            .latest
             .as_ref()
-            .ok_or("Missing challenge endpoint frame")?;
-        match crate::pyramid_progress::observe_bound_challenge_complete(frame, proof.progress())? {
-            Some(actual) if actual.progress().follows(proof.progress()) => Ok(actual),
-            Some(_) => Err("Challenge endpoint requirement changed; no further input".to_owned()),
-            None => Ok(proof),
-        }
+            .ok_or("Missing bound challenge completion frame")?;
+        post_game::finish_pyramid_challenge(self.context, frame, proof, self.events, self.cancel)?;
+        self.check()?;
+        Ok(proof)
     }
+
+
     fn check(&self) -> Result<(), String> {
         self.events
             .latest_frame
@@ -784,9 +853,35 @@ impl Pipeline for Native<'_> {
 
 
     fn phase(&mut self, generation: u64, phase: SessionPhase) {
+        // A complete previous phase is a safe boundary. Actual Challenge Complete
+        // remains an immediate input-free handoff, never a suspended reward path.
+        let pause_phase = match phase {
+            SessionPhase::Planning => Some(super::pyramid_pause::Phase::Search),
+            SessionPhase::Reconnaissance | SessionPhase::Entry => {
+                Some(super::pyramid_pause::Phase::Recon)
+            }
+            SessionPhase::Execution | SessionPhase::Restart => {
+                Some(super::pyramid_pause::Phase::Gameplay)
+            }
+            SessionPhase::Transition | SessionPhase::Completion => None,
+        };
+        if let Some(pause_phase) = pause_phase
+            && let Err(error) = self
+                .events
+                .latest_frame
+                .pause
+                .checkpoint(pause_phase, || self.check())
+        {
+            self.cancel
+                .store(true, std::sync::atomic::Ordering::Release);
+            send_log(self.events, error.message);
+            return;
+        }
         if generation > 1 && generation > self.generation {
             self.method = crate::pyramid_workflow_model::RouteMethod::FewestActions;
-            self.observed_game = crate::pyramid_workflow_model::ObservedGame::Unknown;
+            if self.challenge_progress.is_none() {
+                self.observed_game = crate::pyramid_workflow_model::ObservedGame::Unknown;
+            }
         }
         self.generation = generation;
         self.phase = phase;
@@ -861,6 +956,20 @@ impl Pipeline for Native<'_> {
 
 
     fn acquire(&mut self, generation: u64) -> Result<(), String> {
+        self.original_tableau = if self.request.mode == WorkflowMode::Continuous {
+            match self.request.stop_condition {
+                StopCondition::ChallengeTarget => Some(self.challenge_starting.as_ref().ok_or(
+                    "Challenge acquisition lacks its original tableau witness; no input authorised",
+                )?.position.tableau),
+                StopCondition::RepeatNormalGames => Some(self.starting.as_ref().ok_or(
+                    "Continuous acquisition has no qualified current starting-board witness; no input authorised",
+                )?.position.tableau),
+                StopCondition::NoChallenge => None,
+            }
+        } else {
+            None
+        };
+        self.distinct_start = false;
         if generation == 1
             && let Some(path) = self.reuse_acquisition.take()
         {
@@ -927,21 +1036,19 @@ impl Pipeline for Native<'_> {
                 pyramid_reconnaissance::StartingGuard {
                     position: &position,
                     header: &header,
+                    challenge: None,
                 },
                 self.events,
                 self.cancel,
             )
         } else if let Some(witness) = challenge_witness {
-            let header = |frame: &CapturedFrame| {
-                let actual = crate::pyramid_progress::observe_challenge(frame)?;
-                if actual == Some(witness.progress) {
-                    Ok(())
-                } else {
-                    Err(format!(
-                        "Reconnaissance challenge requirement changed or became unknown: expected {:?}, observed {actual:?}; no further input authorised",
-                        witness.progress
-                    ))
-                }
+            let header = |_: &CapturedFrame| Ok(());
+            let locked = pyramid_reconnaissance::LockedChallenge {
+                progress: witness.progress,
+                kings: matches!(
+                    self.observed_game,
+                    crate::pyramid_workflow_model::ObservedGame::Challenge { kings: true, .. }
+                ),
             };
             pyramid_reconnaissance::run_owned_with_starting_guard(
                 self.context,
@@ -951,6 +1058,7 @@ impl Pipeline for Native<'_> {
                 pyramid_reconnaissance::StartingGuard {
                     position: &witness.position,
                     header: &header,
+                    challenge: Some(locked),
                 },
                 self.events,
                 self.cancel,
@@ -970,6 +1078,7 @@ impl Pipeline for Native<'_> {
             let guard = pyramid_reconnaissance::StartingGuard {
                 position: &witness.position,
                 header: &header,
+                challenge: None,
             };
             pyramid_reconnaissance::run_owned_with_starting_guard(
                 self.context,
@@ -1036,29 +1145,15 @@ impl Pipeline for Native<'_> {
         let result = if self.request.mode == WorkflowMode::Continuous
             && self.request.stop_condition == StopCondition::ChallengeTarget
         {
-            let previous = std::cell::Cell::new(self.challenge_progress.ok_or(
+            self.challenge_progress.ok_or(
                 "Continuous challenge execution lacks its bound requirement; no input authorised",
-            )?);
-            let header = |frame: &CapturedFrame| {
-                let actual = crate::pyramid_progress::observe_challenge(frame)?;
-                if let Some(current) = actual
-                    && current.follows(previous.get())
-                {
-                    previous.set(current);
-                    Ok(())
-                } else {
-                    Err(format!(
-                        "Execution challenge requirement changed, regressed or became unknown: expected {:?}, observed {actual:?}; no further input authorised",
-                        previous.get()
-                    ))
-                }
-            };
+            )?;
             computed_route::execute_session(
                 self.context,
                 self.request.run_id,
                 generation,
                 computed_route::ExecutionPolicy::Continuous,
-                Some(&header),
+                None,
                 self.events,
                 self.cancel,
             )
@@ -1078,16 +1173,8 @@ impl Pipeline for Native<'_> {
             let progress = self.series.ok_or(
                 "Continuous execution has no qualified current series witness; no input authorised",
             )?;
-            let header = |frame: &CapturedFrame| {
-                let actual = observed_progress(frame)?;
-                if actual == Some(progress) {
-                    Ok(())
-                } else {
-                    Err(format!(
-                        "Execution series header changed or became unknown: expected {progress:?}, observed {actual:?}; no further input authorised",
-                    ))
-                }
-            };
+            let header =
+                |frame: &CapturedFrame, phase| guard_normal_progress(frame, phase, progress);
             computed_route::execute_owned_with_frame_guard(
                 self.context,
                 self.request.run_id,
@@ -1095,6 +1182,7 @@ impl Pipeline for Native<'_> {
                 true,
                 generation,
                 &header,
+                computed_route::ExecutionPolicy::NormalSeries(progress),
                 self.events,
                 self.cancel,
             )
@@ -1126,6 +1214,14 @@ impl Pipeline for Native<'_> {
                 report.completion,
             )?);
         }
+        self.distinct_start = (self.challenge_progress.is_some() || self.series.is_some())
+            && matches!(
+                report.completion,
+                BoardCompletion::BoardClear
+                    | BoardCompletion::NextBoardReady
+                    | BoardCompletion::GameComplete
+                    | BoardCompletion::AwaitingFreshBoard
+            );
         self.failure_saved = report.completion == BoardCompletion::DeliveredUnconfirmed;
         self.latest = report.latest_frame;
         self.vision = Some(report.vision);
@@ -1149,13 +1245,58 @@ impl Pipeline for Native<'_> {
             if let Some(entry) = paired_entry(&previous, &current)
                 && !matches!(entry, Entry::Board { progress: None, .. })
             {
-                self.starting = starting_witness(entry, &current);
-                self.challenge_starting = challenge_witness(entry, &current);
-                if let Some(witness) = &self.challenge_starting {
+                let next_challenge = challenge_witness(entry, &current);
+                if let Some(witness) = &next_challenge
+                    && let Some(previous) = self.challenge_progress
+                    && !witness.progress.follows(previous)
+                {
+                    return Err(format!(
+                        "Challenge progress changed or regressed at the fresh board boundary: expected {previous:?}, observed {:?}; binding retained and no input authorised",
+                        witness.progress
+                    ));
+                }
+                let next_starting = starting_witness(entry, &current);
+                if let Some(witness) = &next_starting
+                    && let Some(previous) = self.series
+                    && (witness.progress.completed < previous.completed
+                        || previous
+                            .completed
+                            .checked_add(1)
+                            .is_none_or(|next| witness.progress.completed > next))
+                {
+                    return Err("Normal progress changed outside its one-board boundary; no input authorised".to_owned());
+                }
+                if self.distinct_start {
+                    let original = self.original_tableau.as_ref().ok_or(
+                        "Clear transition lost its original tableau identity; no input authorised",
+                    )?;
+                    let position = next_challenge
+                        .as_ref()
+                        .map(|witness| &witness.position)
+                        .or_else(|| next_starting.as_ref().map(|witness| &witness.position));
+                    if position.is_some_and(|position| position.tableau == *original) {
+                        previous = current;
+                        continue;
+                    }
+                    if let Some(witness) = &next_starting
+                        && let Some(previous) = self.series
+                        && previous.completed.checked_add(1) != Some(witness.progress.completed)
+                    {
+                        return Err("A distinct normal board lacks the required one-board counter advance; no input authorised".to_owned());
+                    }
+                }
+                if let Some(witness) = &next_challenge {
                     self.challenge_progress = Some(witness.progress);
                     self.series = None;
                     self.restart_entry = None;
+                    self.publish_observed(
+                        self.challenge_observed(witness.progress),
+                        "qualified next-board counter (advisory)",
+                    );
                 }
+                self.distinct_start = false;
+                self.starting = next_starting;
+                self.challenge_starting = next_challenge;
                 if let Some(witness) = &self.starting {
                     self.series = Some(witness.progress);
                     self.restart_entry = None;
@@ -1258,6 +1399,8 @@ pub(super) fn run(
         series: None,
         challenge_starting: None,
         challenge_progress: None,
+        original_tableau: None,
+        distinct_start: false,
         restart_entry: None,
         failure_saved: false,
         method: request.method,

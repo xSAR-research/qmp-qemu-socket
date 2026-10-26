@@ -1,4 +1,4 @@
-//! Final ordinary-position proof for an explicitly partial removal route.
+//! Exact final-position proof for an explicitly partial removal route.
 //!
 //! Only the exact independently replayed non-clear position permits a partial
 //! result, which releases control without restart authority. A separately bound
@@ -11,7 +11,7 @@ use super::*;
 /// Observe a partial endpoint after the whole last action ACK, without further input.
 ///
 /// Reuses the existing ACK-relative two-second window, 200 ms observation spacing
-/// and independent capture cap. STOP/context, clock and ordinary position guards
+/// and independent capture cap. STOP/context, clock and exact position guards
 /// remain fatal. A missing proof yields uncertainty, never a repeat operation.
 pub(super) fn confirm_partial_action(
     state: SearchState,
@@ -64,7 +64,7 @@ pub(super) fn confirm_partial_action(
             continue;
         }
         observations += 1;
-        let observation = io.observe_effect(state, false)?;
+        let observation = io.observe_partial(state)?;
         io.check()?;
         let verified = match observation {
             EffectObservation::Position(verified) => verified,

@@ -1,6 +1,139 @@
 # Pyramid reconnaissance native profile
 
-## Current delivery — 2.9.127, host qualified; blocked pending fresh Beast
+## Current correction — 2.9.149 / xSAR 0.9.0
+
+The bounded Wild West aged-paper correction is host qualified: 1483 application
+tests, 753 sealed inputs and all six required gates passed. Fresh Beast behaviour
+and Charlie's acceptance remain pending.
+
+The original bright-paper path is retained. When it is insufficient, measured aged
+material and a complete Western glyph family support the two retained entry frames.
+Stock keeps the inclusive 45% presence threshold over its full 139×187 footprint.
+Unreadable occupied stock remains Unknown. Aged material above the existing 5%
+allowance also vetoes ordinary/final-band absence; it grants no presence or input
+authority by itself.
+
+The two actual frames provide 58 visible identities, with 25 exact rank-by-colour
+exemplars and 33 whole-card held-outs. No black Ten was available; black Nine, red
+Jack and red Queen have calibration-only same-rank/colour evidence. All 423 Classic
+and 87 cream/Retro observations remain covered. Quality/ambiguity limits, complete
+scene/modal proof, STOP/context, fresh probes and no uncertain replay remain intact.
+The separate Boards/Perfect final-proof case remains deferred.
+
+See [verification](Verification-2.9.149.md) and the
+[fresh live-test brief](Live-Test-2.9.149.md). Earlier release sections are
+retained evidence and do not establish 149 guest acceptance.
+
+## Retained correction — 2.9.148 / xSAR 0.9.0; host qualified
+
+The game and solution heading starts at the top left, with wrapping options below
+it and the fixed activity badge alongside on the right. Action controls, status
+and preview retain the full panel width. The displayed execution label is
+**SOLVING**; face size, centred bold text, border, colours and halo timing remain.
+
+This presentation revision preserves 147 gameplay and search ownership. Recognition
+resolution for the saved wood/aged-paper entry failure is held for further testing;
+its exact-reader diagnosis is recorded in the verification brief. No recognition,
+worker, dependency or timing policy changes are included.
+
+Host result: 1478 full tests, zero failures/ignored/filtered, 747 sealed inputs and all six required gates passed. Fresh Beast/Charlie acceptance remains pending.
+The 19 matrix cases and 14 milestone states remain unchanged. See
+[148 verification](Verification-2.9.148.md) and [148 manual checks](Live-Test-2.9.148.md).
+
+## Retained 2.9.147 candidate: bound completion and challenge identity
+
+App 147 retains the native-v23 complete-corner identity and 45%/RGB180 pile policy.
+It adds the receipt-bound normal GAME WIN reward/counting continuation through the
+existing paired Native transition and shared reward/optional LevelUp/New Game/Play
+controller, including reward remaining visible after OK. A* next-board readiness
+requires a fresh matching complete-board pair and then Recon without Solver/HALO.
+Actual Pyramid SOLVER keeps its existing Solver/HALO readiness. A reward label,
+generic OK, HALO absence or a prior completion cannot mint fresh action authority.
+
+Challenge kind, target and Kings policy are identified at START/RECON and stay bound
+until START/RECON replaces them or STOP/RESET retires them. Action frames do not
+reclassify challenge labels. Safe-boundary progress uses only the bound numeric
+reader with monotonic numerator/same denominator; unreadable data grants no new
+authority and a bound terminal contradiction is fatal. Queued retired updates cannot
+rebind the challenge. Existing exact-position, terminal, input and freshness guards
+remain required; this does not broaden card-artwork support.
+
+The operator's explicit Shortest-to-Maximum switch reuses the same authenticated
+deal/receipt/bytes without capture or Recon. It changes no card/profile calibration
+and proves no Shortest no-win result. A source audit found completed-RECON handoffs
+already direct; the mandatory 1000 ms acknowledged-OK settle and both restoration
+frames stay inside Recon. No new timings or fresh guest acceptance are claimed.
+147 passed all six host gates (1476 full tests, 747 sealed inputs); see [verification](Verification-2.9.147.md)
+and [manual checks](Live-Test-2.9.147.md). Retained 146 evidence follows.
+
+## Retained 2.9.146 candidate: native-v23 complete corner identity
+
+Host qualification passed (1449 tests and 743 sealed inputs); fresh Beast/Charlie
+acceptance remains pending. The named
+private policy is `native_corner_ink_v1`; see [146 verification](Verification-2.9.146.md).
+Only the bundled native-v23 constructor enables it. A serialized profile, custom
+JSON identifier or earlier constructor cannot opt in. Frozen/custom comparison
+policies and their retained evidence are unchanged.
+
+At each calibrated native origin the reader checks a 31×49 RGB corner beginning
+at card-relative `(3,4)`. It estimates local paper and extracts seed-supported ink,
+keeping complete bounded components and every qualifying rank/suit separator.
+The exclusive suit-component bottom is 51: measured Retro DL antialias ink reaches
+row50, while a retained King illustration fragment reaches row51. Components
+crossing the bound are rejected whole, without clipping or enlarging a glyph to fit.
+This remains a calibrated reader for supported white/cream cards and complete
+known font families; undefined board backgrounds do not imply arbitrary fonts,
+black-card designs or occluded labels are supported.
+
+Classic and Retro are complete coherent font families. A candidate rank and suit
+must qualify within the same family and printed ink colour. Rank error must be
+≤220000 ppm with ≥80000 ppm separation from a different rank. Suit error must be
+≤200000 ppm with ≥40000 ppm separation from a same-colour competing suit. All
+competitors are scored before the Retro geometry guard. Matching permits only
+native translations in half-pixel steps from −1 to +1 pixel, with no scaling.
+Different valid family/separator identities are ambiguous and refuse. Missing or
+unsupported ink does not fall back to the legacy cropped reader or deck inference.
+
+The measured core corpus contains 510 directly labelled visible observations:
+87 on three unchanged real boards (all 28 tableau slots plus DL through actual
+`observe`) and 423 Classic observations, each checked through both native banks.
+Retro uses 13 labelled exemplar cards, one per rank; their suit variants cover
+all four suits. The remaining 16 whole cards are held out from that template set.
+There is no independent Retro holdout for 8, 10 or J, each represented only once.
+All retained sources were exposed during development; these are regression and
+same-source held-out observations, not prospective unseen-board acceptance.
+Retro DR has no visually established identity or inferred hidden contents.
+
+Negative checks cover missing/conflicting ink, clipped suit stems and Queen tail,
+a missing `1` from `10`, intact donor rank/suit replacements, external background
+replacement, body-art exclusion, invalid bounds, competing labels and custom-profile
+non-enablement. The 11 focused foreground tests and occupied-RIGHT temporal adapter
+pass; the final full suite passed all 1449 tests with 743 sealed inputs. Unsupported or ambiguous identity
+continues to withhold input alongside scene/modal, stock, exact-position and
+STOP/context checks. The 145 stock emptiness rule remains 45% RGB180 paper coverage.
+
+## Retained combined 2.9.137 native-v23 appearance roles
+
+At the 2.9.137 revision, native-v23 added private, calibrated appearance roles
+to the then-unchanged native-v22 card banks. The current 146 candidate replaces
+that native-v23 identity path as described above. Only `bundled_native_v23` enables
+the native-v23 roles;
+custom JSON, its profile ID and older constructors cannot opt in. Older delivery
+and strict-colour statements below retain their historical/custom-profile scope.
+
+Pure `image_evidence` supplies checked paper coverage, surface continuity and complete
+binary shapes. The Pyramid adapter keeps original geometry and identity separate:
+90% white coverage can prove a face; possible paper or disrupted clearance remains
+Unknown. Low white alone does not prove absence. Positive legend/control marks,
+negative space, exclusive piles, modal veto and exact replay remain required.
+
+The genuine Xbox intact image, actual Classic Boards header and actual Twos exhausted
+control are distinct originals. Hue recolours and successor/occlusion frames are
+labelled synthetic. Near-white artwork, broad smooth occlusion and unobserved Xbox
+states are not universal-theme evidence. See [combined verification](Verification-2.9.137.md).
+Computer Vision and HALO detection/timing are unchanged.
+
+## Retained delivery — 2.9.127, host qualified; fresh Beast was pending
 
 App **2.9.127** passed **1330 tests, 0 failed, 0 ignored, 0 filtered** in the complete native include-ignored scope (369.45s command time). Locked all-target/all-feature check, strict private rustdoc, Clippy with warnings denied, native release, scoped formatting and native/protected headless help passed. xSAR **0.8.104** and console **0.8.4** are unchanged; their 18 shared/feature/private-consumer gates are retained by exact input and log hashes (289 shared tests, 80 console tests; feature rows 14/55/25/67/57/99), not rerun.
 

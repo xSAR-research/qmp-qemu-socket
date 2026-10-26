@@ -1,6 +1,287 @@
 # qmp-qemu-socket
 
-## Current timing refactor — 2.9.134, host qualified
+2.9.153 is host qualified under Charlie's explicit approval m11412: 1522 tests passed, zero failed/ignored/filtered, 782 sealed inputs and six gates passed. Only the two own-package version fields then changed; aligned locked native check, release and help passed. The other 780 compiler inputs and all 52 xSAR inputs remain identical. xSAR 0.9.0 / 296 tests / 3 Miri remain cached. Protected executable: /home/charlie/Documents/Pyramid/Validation/pyramid-normal-entry-20261026/native/qmp-qemu-socket-2.9.153; SHA-256 8f7297cae0cec014fbaec6f116b867d5460ddca1a5bf88c148761b0010833cbc. Fresh 153 guest acceptance remains separate. No agent GUI launch, START, guest input, installation or publication occurred.
+
+The automatic NEW GAME and manual START failures shared a complete normal-header appearance refusal. Two pixels differed by 13 against the existing per-channel limit of 12; the complete New footer passed. Fresh TCP captures and complete card observations were verified. The correction retains an additional complete 160 by 32 ordinal-one RGB appearance and every pixel/channel check at the original limits. Coherent appearances for the same count share one identity; conflicting counts still refuse. The 151 bounded Pending/Ready pair, strict normal footer, exclusive piles, fresh entry and fresh guarded Recon remain unchanged. No timing, control, threshold, crop, glyph, dependency, API, concurrency or xSAR policy changes are introduced.
+
+[Verification](docs/Verification-2.9.153.md), [priority live brief](docs/Live-Test-2.9.153.md), retained [full 25-case checklist](docs/Acceptance-Tests-2.9.151.md). All 13 standing outcomes, original 19 case rows and master schedule tables remain retained. Track A stays closed with open fixes; no new guest pass or further version authority is inferred.
+
+## Retained 2.9.152 delivery context
+
+The following statements are dated evidence; the current receipt above governs this delivery.
+
+2.9.152 is host qualified under the explicit 2.9.152 goal (m10915/m10916):1518 tests, zero failed/ignored/filtered, 775 sealed inputs and six gates passed. Only the two own-package version fields then changed; aligned locked native check, release and help passed. xSAR0.9.0/all 52 inputs are unchanged;296 tests /3 Miri remain cached. Protected binary SHA-256: `09de4002975c37d64f367f58a168b8eb05e80a8a490c3372462db2df9475bd50`. Fresh152 guest acceptance is pending. No agent GUI launch, guest input, installation or publication occurred.
+
+The retained normal third-board clear was refused because moving Perfect glow crossed the lower absence band at 7|5. Bundled colour-independent normal recognition retains the original complete layout first, then may prove one coherent layout of all 28 existing upper bands. The alternative also vetoes card material in every original band and full clearance, preserving the three retained flying-card refusals. Replayed empty tableau, complete normal header/footer, scene/modal/DRAW roles, exact exclusive piles, final-action phase, whole-action ACK boundary, STOP/context and the same two-second window remain required. No per-slot mixing, threshold/crop/bank changes or ACK-only restart is admitted.
+
+See [verification](docs/Verification-2.9.152.md), [live brief](docs/Live-Test-2.9.152.md) and [full 25-case checklist](docs/Acceptance-Tests-2.9.151.md). The151 post-Play readiness and fresh guarded Recon are unchanged.
+
+## Retained151 delivery context
+
+2.9.151 is host qualified under the explicit151 goal (m10618/m10619/m10655): 1512 tests, zero failed/ignored/filtered,773 sealed inputs and six gates passed. Only the two own-package version fields then changed; aligned locked native check, release and help passed. xSAR0.9.0/all 52 inputs are unchanged;296 tests / 3 Miri remain cached. Protected binary SHA-256: `3fb544a8a56f98395c89c974c189e33c8e8bdb4c02f52535c1eebc1fa8dd8ab6`. Fresh151 guest acceptance is pending. No agent GUI launch or guest input occurred.
+
+After GAME WIN / Play, supported dealing can remain Pending within the existing six-observation bound and stage interval. Pending clears pair history. Only two consecutive complete equal28-card tableaus, exclusive initial DL, positively empty DR and the complete normal-one header/footer permit the existing fresh entry and fresh guarded Recon. Every subsequent observation is newly captured; the caller may supply its latest actual first capture. The bundled pending-only surface branch keeps every static scene role and legend positive while the stock control is still absent. It cannot produce Ready or input authority. Recognition caps, full Ready scene, contradictions, malformed/unsupported evidence, STOP/context and no retired-click replay remain strict.
+
+See [verification](docs/Verification-2.9.151.md), [live brief](docs/Live-Test-2.9.151.md) and [complete acceptance checklist](docs/Acceptance-Tests-2.9.151.md).
+
+## Retained150 delivery context
+
+The following delivery note predates Charlie’s later150 guest trials. Prior Track A/Track B acceptance remains in force.
+
+Code fixes and Track B are **accepted in 2.9.150** (m10399).
+[Host qualification](docs/Verification-Track-B-150.md) passed 1504 tests and 770
+sealed inputs; the approved version alignment passed locked check, native release
+and help. Track A stays accepted with open fixes. The protected 150 executable
+has not been launched; [fresh guest checks](docs/Live-Test-Track-B-150.md) remain separate.
+
+## Retained correction — 2.9.149 / xSAR 0.9.0
+
+The bounded Wild West aged-paper correction is host qualified: 1483 application
+tests, 753 sealed inputs and all six required gates passed. Charlie has accepted
+Track A with open fixes. The [acceptance record](docs/Track-A-Acceptance-2.9.149.md)
+and [FIX list](docs/milestones.md#7-fix-list--carried-forward-from-accepted-track-a)
+record the decision, retained evidence and remaining failures.
+
+The original bright-paper path is retained. When it is insufficient, measured aged
+material and a complete Western glyph family support the two retained entry frames.
+Stock keeps the inclusive 45% presence threshold over its full 139×187 footprint.
+Unreadable occupied stock remains Unknown. Aged material above the existing 5%
+allowance also vetoes ordinary/final-band absence; it grants no presence or input
+authority by itself.
+
+The two actual frames provide 58 visible identities, with 25 exact rank-by-colour
+exemplars and 33 whole-card held-outs. No black Ten was available; black Nine, red
+Jack and red Queen have calibration-only same-rank/colour evidence. All 423 Classic
+and 87 cream/Retro observations remain covered. Quality/ambiguity limits, complete
+scene/modal proof, STOP/context, fresh probes and no uncertain replay remain intact.
+Boards/Perfect was deferred in 149; its accepted 150 correction is in the current verification record.
+
+See [verification](docs/Verification-2.9.149.md) and the
+[fresh live-test brief](docs/Live-Test-2.9.149.md). Earlier release sections are
+retained evidence; their earlier pending labels describe those snapshots. Current
+Track A acceptance is recorded above, separately from individual test results.
+
+## Retained correction — 2.9.148 / xSAR 0.9.0; host qualified
+
+The game and solution heading starts at the top left, with wrapping options below
+it and the fixed activity badge alongside on the right. Action controls, status
+and preview retain the full panel width. The displayed execution label is
+**SOLVING**; face size, centred bold text, border, colours and halo timing remain.
+
+This presentation revision preserves 147 gameplay and search ownership. Recognition
+resolution for the saved wood/aged-paper entry failure is held for further testing;
+its exact-reader diagnosis is recorded in the verification brief. No recognition,
+worker, dependency or timing policy changes are included.
+
+Host result: 1478 full tests, zero failures/ignored/filtered, 747 sealed inputs and all six required gates passed. Fresh Beast/Charlie acceptance remains pending.
+The 19 matrix cases and 14 milestone states remain unchanged. See
+[148 verification](docs/Verification-2.9.148.md) and [148 manual checks](docs/Live-Test-2.9.148.md).
+
+## Retained correction — 2.9.147 / xSAR 0.9.0; host qualified
+
+This app-only candidate completes the normal Pyramid GAME WIN reward/counting
+handoff through the existing paired Native transition and shared reward → optional
+LevelUp OK → New Game → Play controller. Entry remains bound to this run's normal
+completion receipt; a reward screen or decorative OK alone grants no input.
+Reward/counting may remain visible after OK. The same bounded controller continues
+observing that stage without replaying an uncertain or already acknowledged action.
+A* requires a fresh matching complete-board pair before the next RECON, without
+activating the guest Solver or requiring HALOs. Actual Pyramid SOLVER retains its
+Solver/HALO readiness checks. STOP/context, fresh probes and existing budgets remain.
+
+START or RECON identifies and binds challenge kind, target and Kings policy for the
+run. Action frames never classify those labels again. At a safe boundary the bound
+numeric reader may update progress only with a monotonic numerator and the same
+denominator; unreadable values grant no new authority, and a positive contradiction
+at a bound terminal remains fatal. START/RECON replace the binding; STOP/RESET retire
+it and queued updates, so late events cannot restore obsolete challenge authority.
+
+During an actual Shortest calculation, **Switch to Maximum card matches** requests
+a cooperative replacement using the same authenticated RECON deal and bytes, with
+no new capture or Recon. A concurrent result from the retired Shortest invocation
+is discarded. This explicit operator choice does not prove that Shortest found no
+win; the existing automatic exhaustive-no-win fallback remains a separate path.
+Manual still prepares a plan only; automatic modes retain their original execution
+lifecycle. A paused request remains paused until CONTINUE. STOP/context and stale
+request checks take precedence. Maximum retains its existing uncapped weighted
+search and has no fixed completion-time guarantee.
+
+The source audit found no artificial wait after completed RECON in manual RECON
+or automatic START acquisition → planning → execution. No timing edit is required.
+The mandatory 1000 ms UndoAll/OK settle occurs inside Recon, before its two actual
+restoration frames, and remains unchanged. Real receipt/publication, search, probes
+and capture work must not be described as an intentional post-RECON delay.
+
+All six 147 host gates passed: 1476 full tests, 747 sealed inputs and native release/help. The protected executable is `/home/charlie/Documents/Pyramid/Validation/pyramid-normal-win-20261025/native/qmp-qemu-socket-2.9.147` (SHA-256 `5d8d6617370898d924a47f26fe5c0caee055e0906e6e5a66d16bfac7cafc4eb9`). Running-process provenance is recorded separately in verification when launched. xSAR remains 0.9.0; fresh Beast/Charlie acceptance and the 19 matrix/14 milestone states remain unchanged.
+
+See [147 verification](docs/Verification-2.9.147.md) and
+[147 manual checks](docs/Live-Test-2.9.147.md). Retained 146 evidence follows.
+
+## Retained correction — 2.9.146 / xSAR 0.9.0; host qualified
+
+This app-only candidate reads complete native rank/suit ink on supported white or
+cream cards across undefined board backgrounds, and adds a fixed activity badge.
+Bundled native-v23 privately selects `native_corner_ink_v1`: paper-relative seeded
+components, complete coherent Classic/Retro families, native half-pixel translation
+within ±1 pixel and no scaling or legacy fallback. Custom JSON and frozen readers
+retain their existing policy.
+
+The focused evidence is 11 passing foreground-reader tests, all 87 directly labelled
+visible cards on three retained boards (including DL), and 423 Classic observations.
+The Retro family uses 13 exemplar cards with 16 whole-card held-outs; 8, 10 and J
+have no independent Retro holdout. These are saved-image checks, not fresh guest
+acceptance or a claim of support for every font, occlusion or card design.
+
+The activity face stays 240×80 logical points, with a 3-point white border and
+centred embedded DejaVu Sans Bold at 26 points. WAITING and ERROR remain static;
+RECON, ROUTE and SOLVE use a 1.6-second halo with 25 ms repaint requests. An
+independent inert UI review passed 20 cases. The badge grants no input authority.
+
+Full host qualification passed: **1449 full tests**, zero failed/ignored/filtered,
+**743 sealed inputs**, all six required gates and native release/help. No 146 controller has been installed, launched
+or used for guest input, and no push has occurred. Fresh Beast/Charlie acceptance
+remains pending. The 145 stock rule (45% coverage, RGB floor 180), temporal REDEAL,
+STOP/context and legal-position guards remain; automatic board-to-RECON handoff is
+still a separate open item. No matrix or milestone acceptance is added.
+
+See [146 verification](docs/Verification-2.9.146.md) and
+[146 manual checks](docs/Live-Test-2.9.146.md). Retained 145 qualification follows.
+
+## Retained correction — 2.9.145 / xSAR 0.9.0
+
+Host qualification passed: **1436 full application tests**, zero failed/ignored/filtered,
+**731 sealed inputs**, all six required gates and native release/help. Fresh guest
+behaviour and Charlie acceptance remain separate and pending.
+
+DL and DR use the inverse of card-paper presence across each full 139×187 footprint.
+Pixels with all RGB channels at least 180 count as light paper: at least 45% means
+nonempty; less means empty. This includes cream paper and selected white cards,
+without requiring a matching or smooth table background. A Card result still needs
+one uniquely recognised rank and suit; high-paper unreadable faces remain Unknown.
+Black-card themes are outside the requested support.
+
+The bounded retained survey has 38 labelled card observations and 21 labelled empty
+observations, including repeated captures. The minimum card has 53.410534% light
+paper (selected K♥); the labelled empty samples have 0%. The 45% cutoff retains an
+8.41 percentage point margin. Exact boundary tests cover both piles and invalid
+rectangles; real cream Q♥ and selected K♥ preserve their identities.
+
+This revision is confined to stock emptiness. The football tableau rank-appearance
+refusals and automatic cleared-board-to-RECON handoff remain open. The temporal
+REDEAL correction and all input, STOP/context and legal-position checks are retained.
+No timing, glyph threshold, dependency or public API changes are included.
+
+See [145 verification](docs/Verification-2.9.145.md) and
+[145 manual checks](docs/Live-Test-2.9.145.md). No milestone acceptance is added.
+
+## Retained 2.9.144
+
+144 passed 1434 full tests with 729 sealed inputs. Its occupied-RIGHT temporal REDEAL correction, protected artifact and launch remain recorded in [144 verification](docs/Verification-2.9.144.md).
+
+## Retained 2.9.143 / xSAR 0.9.0; host qualified
+
+143 passed 1432 full application tests, zero failed/ignored/filtered, all six gates and native help, with 726 sealed inputs. Its bounded mixed-legend correction and protected launch remain recorded in [143 verification](docs/Verification-2.9.143.md). The new run 9 stock-position refusal is preserved separately; no milestone acceptance is added by this correction.
+
+## Retained 2.9.139 / xSAR 0.9.0; host qualification
+
+Host qualification passed: **1420 application tests**, **296 xSAR tests** and **710 sealed inputs**. Fresh Beast and Charlie acceptance remain pending.
+This revision adds cooperative PAUSE/CONTINUE across A* RECON, SEARCH and GAMEPLAY,
+retained popup geometry, Continuous / Shortest route / Challenge defaults and idle RESET.
+Xbox empty-stock evidence checks the complete stock footprint for possible card paper;
+tableau continuity and independent control-layout evidence remain separate.
+REDEAL availability comes from this execution's verified pre-input region and its
+substantive later appearance, with exact position, legal stock, probe and STOP guards.
+No icon, numeral or caption template grants that click. An unreadable challenge header
+may receive bounded read-only effect retries; source evidence remains positive-only.
+Computer Vision/HALO timing and input-free actual Challenge Complete handoff are preserved.
+See [139 verification](docs/Verification-2.9.139.md) and [139 manual checks](docs/Live-Test-2.9.139.md).
+No new milestone or live outcome is accepted by this delivery.
+
+## Retained 2.9.138 correction; host qualified, fresh acceptance pending
+
+The additional empty-circle endpoint correction follows host-qualified 2.9.137.
+The retained 2.9.136 run delivered 43 partial actions / 66 gestures but confirmed
+only 42 actions. Both stock piles are empty; the enabled REDEAL widget displays 1.
+Exact cards, exclusive positive empty piles, static/modal evidence and the complete
+widget with its own count now prove this layout. Known zero still vetoes the click.
+No signature, tolerance, capture cadence, Computer Vision timing or input guard changes.
+A fresh acquisition and route are required after operator UNDO ALL.
+
+2.9.138 passed **1404 full tests**, zero failed/ignored/filtered, all six required
+gates and native help, with **698 sealed inputs**. Native executable SHA-256:
+`b90ea73cf1e3c9acccdec9af67ec0c4a5210e88e25befcc3f53dca6db2279b64`. Fresh Beast and Charlie acceptance remain pending.
+See [verification](docs/Verification-2.9.138.md) and
+[manual checks](docs/Live-Test-2.9.138.md). No milestone acceptance is added.
+
+
+## Current controls and observation
+
+RECON, Start continuous, View Log and STOP share one control row; EXIT is at the right.
+View Log opens live resizable Detailed output with selection and full-session copy.
+The complete preview fits width and height; original pixels and native coordinate
+mapping remain unchanged. Each new accepted failure opens frozen resizable details,
+retained and reopenable after STOP with packet/persistence and session-log outcomes.
+
+EXIT, native X, SIGINT and SIGTERM stop admission and finish worker teardown before
+closing. Existing in-flight work/release recovery may delay exit. SIGKILL cannot be
+caught. Bundled native-v23 A* roles separate paper/shape evidence from card identity
+and input. Tableau unknown/occluded evidence remains Unknown or Blocked. For stock,
+supported material below 45% is Empty; unreadable occupied faces remain Unknown. CV/HALO remains unchanged.
+
+## Retained combined 2.9.137 — host qualified, fresh acceptance pending
+
+Combined host qualification passed: **1401 tests, zero failed/ignored/filtered**,
+all six required gates and native `--help`, with **695 sealed application/xSAR
+inputs**. The full test command took 393.724 s; native release took 15.368 s.
+The newly protected executable has SHA-256
+`d7554f9ad3143f51dfca8b4ad524feca8c8fea1d154528e662f770dfc0ff804b`.
+Fresh Beast evidence and Charlie's acceptance remain pending.
+
+The combined unreleased application retains the ACK-relative two-second effect
+window and adds exact exhausted-stock winning-route verification, a fitted preview,
+retained failure and live-log windows, one-row controls, cooperative shutdown and
+bundled native-v23 A* image roles. The earlier timing-only 2.9.137 artifact passed
+1376 tests; that evidence does not qualify these changed sources.
+
+The operator's 2.9.136 log retains three automatic REDEAL → fresh restored Recon →
+Shortest handoffs and 307 measured MOVEs averaging 420.362 ms end to end. Those
+observations remain separate from combined-build and milestone acceptance. The
+published application remains 2.9.134; sibling versions and accepted cases are unchanged.
+
+See [combined verification](docs/Verification-2.9.137.md), the
+[current goal](docs/Pyramid-Short-Term-Goal.md) and
+[fresh test brief](docs/Live-Test-2.9.137.md). A new protected artifact and actual
+running-process identity are required before the fresh trial; an older executable
+with the same version string is insufficient.
+
+## Retained 2.9.136 correction — host qualified before the live trial
+
+Computed routing now shares each verified effect frame with the next whole
+action. MATCH uses one checked source for its two ordered clicks; each gesture
+still checks STOP/context and freshly probes VM/pointer capability. A positive
+bound Challenge Complete frame retires input before expected-card validation.
+The first source and final/partial/REDEAL/new-board boundaries retain their checks.
+
+Computed MATCH/KING no longer impose a fixed two-second settle: they observe
+immediately, with bounded 50 ms read-only retries if the position is not ready.
+MOVE remains 250 ms. Computer Vision's HALO timing and RECYCLE/Recon/final delays
+are preserved. REDEAL uses the already measured complete enabled widget and its
+own count one; an unknown redundant lower-caption raster no longer blocks it.
+Known zero remains a veto. No signatures, tolerances or theme support changed.
+
+Only the application correction advances. See [verification](docs/Verification-2.9.136.md),
+[live test](docs/Live-Test-2.9.136.md) and the [active goal](docs/Pyramid-Short-Term-Goal.md).
+Host qualification, fresh process provenance and live acceptance remain distinct.
+
+## Retained 2.9.135 correction — host qualified; live REDEAL refusal recorded
+
+The reported Maximum card matches endpoint now uses the existing exact stock-boundary verifier before automatic continuation. The retained six-card Score frame can therefore reach the bounded stock drain; REDEAL still requires verified exhaustion, its measured enabled control, fresh VM/pointer probes and STOP checks. Standard one-board proof is preserved. The existing next-board reset to Shortest route has a new native-adapter regression test.
+
+Computed-route MOVE, including residual stock draining, now requests **250 ms** before its effect capture, with monotonic configured/elapsed wait logging. Computer Vision Move/Recycle remains **1,000 ms** for the next Solver HALO; planned RECYCLE remains 1,000 ms, stock-drain RECYCLE and Recon D remain 500 ms, and card/final timing is unchanged. The 250 ms value is a candidate awaiting fresh live reliability measurement.
+
+Only the application patch changes; xSAR **0.8.105**, console **0.8.5** and server **0.1.4** remain unchanged. The forward version policy is `major.minor.patch`: corrections increment patch, the next approved minor milestone starts at patch `0`, and no published version is renumbered. All required host gates passed, including **1364 tests, 0 failed and 0 ignored**; [verification](docs/Verification-2.9.135.md) and the [active short-term goal](docs/Pyramid-Short-Term-Goal.md) distinguish qualification from live acceptance.
+
+## Retained timing refactor — 2.9.134, host qualified
 
 App **2.9.134**, xSAR **0.8.105**, console **0.8.5** and capture server **0.1.4** centralise fixed timings in their respective `src/parameters.rs` files. Every timing value and existing gameplay/input proof rule is preserved. Required host checks passed: application **1359**, xSAR **289**, console **80**, server **19** tests, with no failed, ignored or filtered tests. Windows GDI and fresh Beast acceptance remain separate.
 
@@ -95,6 +376,11 @@ Only **Continuous + Continuous — no challenge + board generation greater than 
 The successful pair is passed to the existing Recon starting guard. Recon still independently requires its own two fresh matching starting observations before the first D, then unchanged paired scanning, restoration, no-overwrite publication and private receipt binding. No glyph sample, threshold, native-v22 profile or timing of the existing three-second/1.5-second handoffs changed. First-board/manual/Single acquisition and target-aware/normal-series transition semantics are preserved.
 
 Shortest route still has no application time, state, expansion or byte cutoff. Exhaustive no-win alone triggers automatic same-inventory Maximum fallback; interruption cannot do so. The displayed final Weighted statistics describe that fallback pass, not the earlier Exact pass or cumulative planning time. The operator's repeated 33-action plan proved maximum removal13/28, used19 DRAW and1 RECYCLE, and stopped at an exact partial endpoint in Single board mode. New-board REDEAL allowance and in-board RECYCLEs remain separate; Single board does not automatically REDEAL.
+
+For 147, ordinary interruption still cannot authorise the automatic fallback.
+The explicit **Switch to Maximum card matches** action is a separate operator
+request to replace the active objective on the same authenticated RECON. It proves
+no Shortest no-win result and preserves the original Manual/automatic lifecycle.
 
 Recon feedback now follows Charlie’s m12898 clarification: DL: card details | DR: card details, with DL first. This supersedes the earlier DR-first presentation clause only; paired physical D and logical stock order remain unchanged.
 
@@ -847,12 +1133,13 @@ Pyramid + Shortest Path plans independently from the guest Solver. The complete
 xSAR deal owns card identities; independent explicit-pile replay must verify a
 route before a private, single-use execution plan is retained.
 
-**Manual / Maximum card matches** is the startup selection. Manual retains three
-explicit steps: **1. Recon** reads all 52 identities and proves restoration;
-**2. Plan route** consumes the current-session receipt and makes no guest input;
-**3. Solve board** authorises the prepared route once. **Single board** owns those
-phases in one worker session and then stops. Mode, route-objective or stop-condition
-changes revoke old preparation; active preferences cannot change.
+Startup selects **Continuous / Shortest route / Challenge**. **RESET** restores
+those three selections when all worker/session owners are idle, including after STOP.
+It retires prepared plans and pending planning receipts while retaining valid inventory,
+STOP, progress, logs and diagnostics; it never starts work or clears cancellation.
+The authenticated Kings advisory remains separate. Manual mode retains **1. Recon**,
+**2. Plan route** and **3. Solve board**; Single board owns those phases and then stops.
+Mode, route-objective or Objective changes revoke preparation; active preferences cannot change.
 
 The route objective has two choices:
 
@@ -870,33 +1157,38 @@ The route objective has two choices:
   Exhaustive maximum and bounded best found are reported separately. Independent
   replay and exact endpoint recognition are required, then partial play stops.
 
-**Continuous** has a separate stop condition:
+**Continuous** has a separate **Objective**:
 
 - **Repeat normal games** reads the actual normal ordinal, including entry at board
   two or three. It requires guarded progression through three boards, the existing
   GAME WIN handling, Solver-free NewGame and fresh normal board-one acquisition.
-- **Stop at challenge target** binds the actual Score, Boards or measured card-rank
+- **Challenge** binds the actual Score, Boards or measured card-rank
   objective and target. Progress is observed in its own units and must not regress,
-  including between boards. A positively confirmed challenge-completion event
-  retires the remaining route after the whole action is acknowledged. The shared
-  GAME WIN XP skip and optional Level Up OK run with their existing timing, then
-  control stops before NewGame, Play or Solver.
+  including between boards. A bound actual Challenge Complete is checked before
+  expected cards and immediately retires further input, at either reward counting
+  or Continue. XP, Level Up, Continue and starting another game are operator-owned.
+  A verified partial route may drain only its remaining legal stock passes. A
+  substantive change in the native REDEAL region against this execution's verified
+  pre-input baseline, exact fresh position and capability/STOP checks permits one
+  region-centre click before fresh next-board acquisition. Icon, count and lower
+  caption templates grant no click authority. The Repeat normal games policy is unchanged.
 
 Supported active rank labels currently have native evidence for Twos, Fours and
 Sevens. Unknown ranks/artwork refuse input. Normal ordinals, centred challenge
 counts and the guest Solver banner are separate observations. If the common
 completion event is bound to a known challenge but its final numeric header is
 unread, the report preserves the last actual count rather than inventing one.
-A partial endpoint is not challenge success. DRAW-until-REDEAL continuation is a
-later milestone and is not performed.
+A partial endpoint is not challenge success. Automatic policies may continue
+from an exactly verified endpoint through legal stock passes and a temporally
+proved REDEAL appearance; the next board requires fresh Recon and planning.
 
 Keep Solitaire in the foreground and leave the guest untouched while work runs.
 Keep its Solver disengaged; legitimate unavailability is allowed. STOP/context
 changes revoke later input, including restoration and restart. Uncertain input
 is never replayed. Fresh acquisition and planning are required after a failure.
 
-The bundled profile is native-v18, retaining v17 card calibration and adding explicit
-normal final-clear evidence. Custom File profiles
+The bundled profile is native-v23, retaining v22 card banks with private
+colour-independent A* appearance roles. Custom File profiles
 retain their literal declared semantics. Automatic evidence names do not reserve
 a path; private atomic no-overwrite publication is authoritative. Successful
 Manual Recon hands its exact path to Plan, and failed planning consumes the receipt.
@@ -1122,3 +1414,21 @@ TriPeaks uses the shared calibrated three-board progress, redeal and post-game f
 [Approved DL-first presentation clarification](</home/charlie/Documents/Pyramid/Validation/no-challenge-readiness-20261022/goal-supplement.md>) supersedes the immutable goal’s earlier DR-first display clause; all control and acceptance requirements remain.
 
 [Retained DL-first clarification](</home/charlie/Documents/Pyramid/Validation/no-challenge-readiness-20261022/goal-supplement.md>) preserves DL: card details | DR: card details and honest single/exhaustion feedback.
+
+## Current A* controls and popup windows
+
+**START**, **RECON**, cyan **LOG** and orange **ANALYSIS** share the row with
+**PAUSE/CONTINUE**, **RESET**, **STOP** and far-right **EXIT**. ANALYSIS is subdued
+until retained failure details exist. PARAMS, LOG and ANALYSIS have contrasting
+white-outlined titlebars with collapse, maximise/restore and close controls. These
+are in-application windows; maximising fills the application workspace. Closing a
+window retains its data, and LOG continues receiving output while hidden.
+
+PAUSE is acknowledged only at a safe RECON, SEARCH or GAMEPLAY checkpoint;
+**Pausing** means the request is pending. CONTINUE resumes the same retained work.
+Search retains its frontier and excludes intentional suspension from active timing,
+including cancellation statistics. Gameplay reacquires source evidence after a real
+pause; MATCH pairs and input/effect/restoration transactions finish before parking.
+STOP, changed context and EXIT revoke continuation and wake parked work. No pause
+or exit promises immediate interruption of blocking I/O. Actual Challenge Complete
+releases input immediately; it does not wait for a pause acknowledgement.

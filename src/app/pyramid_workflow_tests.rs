@@ -17,9 +17,73 @@ use std::{
 static EVIDENCE_DIRECTORY_SERIAL: AtomicU64 = AtomicU64::new(0);
 
 
-/// Observed facts share exact run/context/generation filters and cannot survive a new board.
+/// Startup and forced RESET use the same three defaults without keeping stale search receipts.
 #[test]
-fn execution_observability_ui_rejects_stale_mode_reports_and_resets_current_facts() {
+fn qol_defaults_and_reset_retire_planning_even_when_selections_already_match() {
+    let selected = context();
+    for already_default in [false, true] {
+        let mut workflow = PyramidWorkflow::default();
+        assert_eq!(WorkflowMode::default(), WorkflowMode::Continuous);
+        assert_eq!(StopCondition::default(), StopCondition::ChallengeTarget);
+        assert_eq!(StopCondition::ChallengeTarget.label(), "Challenge");
+        assert_eq!(workflow.method(), RouteMethod::FewestActions);
+        if !already_default {
+            workflow
+                .select_preferences(
+                    WorkflowMode::Manual,
+                    RouteMethod::Fast,
+                    StopCondition::RepeatNormalGames,
+                    selected.generation,
+                    true,
+                )
+                .unwrap();
+        }
+        workflow.begin_planning(&selected, 42);
+        let late = planning_update(&selected, 42, 0, workflow.method(), true);
+        workflow.reset_preferences();
+        assert_eq!(workflow.mode(), WorkflowMode::Continuous);
+        assert_eq!(workflow.method(), RouteMethod::FewestActions);
+        assert!(workflow.planning_progress().is_none());
+        assert!(!workflow.receive_planning(late, &selected));
+        assert_eq!(
+            workflow
+                .select_preferences(
+                    WorkflowMode::Continuous,
+                    RouteMethod::FewestActions,
+                    StopCondition::ChallengeTarget,
+                    selected.generation,
+                    true
+                )
+                .unwrap(),
+            None
+        );
+    }
+}
+
+
+/// RESET retires an explicit route choice so the next authenticated Kings default still applies.
+#[test]
+fn qol_reset_preserves_authenticated_kings_default() {
+    let selected = context();
+    let mut workflow = PyramidWorkflow::default();
+    workflow
+        .select_preferences(
+            WorkflowMode::Manual,
+            RouteMethod::FewestActions,
+            StopCondition::ChallengeTarget,
+            selected.generation,
+            true,
+        )
+        .unwrap();
+    workflow.reset_preferences();
+    workflow.apply_acquisition_default(Some(RouteMethod::Fast));
+    assert_eq!(workflow.method(), RouteMethod::Fast);
+}
+
+
+/// Bound challenges survive board changes; stale run/context/generation reports cannot replace them.
+#[test]
+fn execution_observability_ui_rejects_stale_reports_and_retains_bound_challenge() {
     use crate::pyramid_workflow_model::ObservedGame;
     let context = context();
     let observed = ObservedGame::Challenge {
@@ -59,11 +123,11 @@ fn execution_observability_ui_rejects_stale_mode_reports_and_resets_current_fact
         Some(ActiveRun::PyramidSession),
         Some(7)
     ));
-    assert_eq!(workflow.observed_game(), ObservedGame::Unknown);
+    assert_eq!(workflow.observed_game(), observed);
     let mut stale = planning_update(&context, 7, 1, RouteMethod::Fast, true);
     stale.observed_game = observed;
     assert!(!workflow.receive_planning(stale, &context));
-    assert_eq!(workflow.observed_game(), ObservedGame::Unknown);
+    assert_eq!(workflow.observed_game(), observed);
     let mut changed = context.clone();
     changed.generation += 1;
     workflow.bind(&changed);
@@ -319,7 +383,7 @@ fn recon_press_arms_only_one_context_bound_request() {
     assert!(request.initial_board_confirmed);
     assert!(matches!(
         request.profile,
-        ReconProfileSource::BundledNativeV22
+        ReconProfileSource::BundledNativeV23
     ));
     assert!(recon.confirmed_context.is_none());
     assert!(recon.take_request(&context).is_err());
@@ -1381,4 +1445,217 @@ fn continuous_start_retains_idle_and_active_request_gates() {
         true,
         &active
     ));
+}
+
+
+/// Ordered, coalesced and acquisition advisory paths share one challenge identity until interruption.
+#[test]
+fn observed_challenge_latch_rejects_reclassification_and_late_interrupted_events() {
+    use crate::pyramid_progress::{BoardCount, ChallengeKind, ChallengeProgress};
+    use crate::pyramid_workflow_model::ObservedGame;
+    let selected = context();
+    let owner = Some(ActiveRun::PyramidSession);
+    let bound = ChallengeProgress::new(ChallengeKind::Cards, 2, 10).unwrap();
+    let locked = ObservedGame::Challenge {
+        progress: bound,
+        kings: true,
+    };
+    let mut workflow = PyramidWorkflow::default();
+    workflow.begin_session(&selected, 7, serde_json::json!({}));
+    workflow.apply_observed(locked);
+    for observed in [
+        ObservedGame::Unknown,
+        ObservedGame::Normal(BoardCount {
+            completed: 0,
+            target: 3,
+        }),
+        ObservedGame::Challenge {
+            progress: ChallengeProgress::new(ChallengeKind::Boards, 2, 3).unwrap(),
+            kings: false,
+        },
+        ObservedGame::Challenge {
+            progress: ChallengeProgress::new(ChallengeKind::Cards, 2, 9).unwrap(),
+            kings: false,
+        },
+        ObservedGame::Challenge {
+            progress: ChallengeProgress::new(ChallengeKind::Cards, 1, 10).unwrap(),
+            kings: false,
+        },
+    ] {
+        let mut ordered = session_update(&selected, 7, 1, SessionPhase::Planning);
+        ordered.observed_game = observed;
+        assert!(workflow.receive_session_progress(&ordered, &selected, owner, Some(7)));
+        let mut coalesced = planning_update(&selected, 7, 1, ordered.effective_method, false);
+        coalesced.observed_game = observed;
+        assert!(workflow.receive_planning(coalesced, &selected));
+        workflow.apply_observed(observed);
+        assert_eq!(workflow.observed_game(), locked);
+    }
+    let advanced = ChallengeProgress::new(ChallengeKind::Cards, 3, 10).unwrap();
+    workflow.apply_observed(ObservedGame::Challenge {
+        progress: advanced,
+        kings: false,
+    });
+    assert_eq!(
+        workflow.observed_game(),
+        ObservedGame::Challenge {
+            progress: advanced,
+            kings: true
+        }
+    );
+
+    workflow.retire_observed();
+    let mut late = session_update(&selected, 7, 2, SessionPhase::Planning);
+    late.observed_game = locked;
+    assert!(
+        workflow.receive_session_progress(&late, &selected, owner, Some(7)),
+        "STOP keeps its owner until settlement"
+    );
+    let mut coalesced = planning_update(&selected, 7, 2, late.effective_method, false);
+    coalesced.observed_game = locked;
+    assert!(workflow.receive_planning(coalesced, &selected));
+    workflow.apply_observed(locked);
+    assert_eq!(workflow.observed_game(), ObservedGame::Unknown);
+
+    workflow.begin_session(&selected, 8, serde_json::json!({}));
+    assert!(!workflow.receive_session_progress(&late, &selected, owner, Some(8)));
+    workflow.apply_observed(locked);
+    assert_eq!(
+        workflow.observed_game(),
+        locked,
+        "explicit START opens a new lifetime"
+    );
+    workflow.reset_preferences();
+    let mut reset_late = session_update(&selected, 8, 1, SessionPhase::Planning);
+    reset_late.observed_game = locked;
+    assert!(workflow.receive_session_progress(&reset_late, &selected, owner, Some(8)));
+    workflow.apply_observed(locked);
+    assert_eq!(workflow.observed_game(), ObservedGame::Unknown);
+    workflow.begin(
+        &selected,
+        PyramidPhase::Reconnaissance,
+        serde_json::json!({}),
+    );
+    workflow.apply_observed(locked);
+    assert_eq!(
+        workflow.observed_game(),
+        locked,
+        "explicit RECON opens a new lifetime"
+    );
+}
+
+
+/// Construct an actual-owner-shaped advisory snapshot without granting worker authority.
+fn search_owner(
+    context: &ControllerContext,
+    run_id: u64,
+    board_generation: u64,
+) -> crate::worker::pyramid_search_control::Snapshot {
+    crate::worker::pyramid_search_control::Snapshot {
+        token: 71,
+        context: context.clone(),
+        run_id,
+        board_generation,
+        method: RouteMethod::FewestActions,
+        maximum_requested: false,
+    }
+}
+
+
+/// Only an active, matching manual Shortest invocation enables the control.
+#[test]
+fn maximum_switch_availability_requires_actual_matching_manual_owner() {
+    let selected = context();
+    let mut workflow = PyramidWorkflow::default();
+    workflow.begin(&selected, PyramidPhase::Planning, serde_json::json!({}));
+    workflow.begin_planning(&selected, 42);
+    let search = search_owner(&selected, 42, 0);
+    let owner = Some(ActiveRun::ComputedRoute);
+    assert!(workflow.maximum_switch_available(&search, &selected, owner, Some(42), false));
+    assert!(!workflow.maximum_switch_available(&search, &selected, owner, Some(42), true));
+    assert!(!workflow.maximum_switch_available(&search, &selected, None, Some(42), false));
+    assert!(!workflow.maximum_switch_available(&search, &selected, owner, Some(43), false));
+    let mut changed = search.clone();
+    changed.context.generation += 1;
+    assert!(!workflow.maximum_switch_available(&changed, &selected, owner, Some(42), false));
+    changed = search.clone();
+    changed.board_generation = 1;
+    assert!(!workflow.maximum_switch_available(&changed, &selected, owner, Some(42), false));
+    changed = search.clone();
+    changed.method = RouteMethod::Fast;
+    assert!(!workflow.maximum_switch_available(&changed, &selected, owner, Some(42), false));
+    changed = search.clone();
+    changed.maximum_requested = true;
+    assert!(!workflow.maximum_switch_available(&changed, &selected, owner, Some(42), false));
+    workflow.mark_maximum_requested(&search);
+    assert!(workflow.maximum_pending());
+    assert!(!workflow.maximum_switch_available(&search, &selected, owner, Some(42), false));
+    assert_eq!(workflow.method(), RouteMethod::Fast);
+    assert!(!workflow.receive_planning(
+        planning_update(&selected, 42, 0, RouteMethod::FewestActions, true),
+        &selected
+    ));
+    assert!(workflow.maximum_pending());
+    assert!(workflow.receive_planning(
+        planning_update(&selected, 42, 0, RouteMethod::Fast, false),
+        &selected
+    ));
+    assert!(!workflow.maximum_pending());
+    assert_eq!(workflow.method(), RouteMethod::Fast);
+}
+
+
+/// An accepted automatic switch rejects old phase/statistics rows without changing lifetime.
+#[test]
+fn maximum_pending_fences_delayed_exact_events_and_retires_on_new_board() {
+    let selected = context();
+    let mut workflow = PyramidWorkflow::default();
+    workflow.begin_session(&selected, 42, serde_json::json!({}));
+    let owner = Some(ActiveRun::PyramidSession);
+    let mut exact = session_update(&selected, 42, 3, SessionPhase::Planning);
+    exact.effective_method = RouteMethod::FewestActions;
+    assert!(workflow.receive_session_progress(&exact, &selected, owner, Some(42)));
+    let search = search_owner(&selected, 42, 3);
+    assert!(workflow.maximum_switch_available(&search, &selected, owner, Some(42), false));
+    let mut next = search.clone();
+    next.board_generation += 1;
+    assert!(!workflow.maximum_switch_available(&next, &selected, owner, Some(42), false));
+    workflow.mark_maximum_requested(&search);
+    assert!(workflow.maximum_pending());
+    assert_eq!(workflow.mode(), WorkflowMode::Continuous);
+    assert!(!workflow.receive_session_progress(&exact, &selected, owner, Some(42)));
+    assert!(!workflow.receive_planning(
+        planning_update(&selected, 42, 3, RouteMethod::FewestActions, true),
+        &selected
+    ));
+    assert!(workflow.maximum_pending());
+    exact.board_generation = 4;
+    exact.phase = SessionPhase::Reconnaissance;
+    assert!(workflow.receive_session_progress(&exact, &selected, owner, Some(42)));
+    assert!(!workflow.maximum_pending());
+    assert_eq!(workflow.method(), RouteMethod::FewestActions);
+}
+
+
+/// Completion, STOP and context/new-step changes clear the transient pending indicator.
+#[test]
+fn maximum_pending_is_cleared_on_each_display_retirement() {
+    let selected = context();
+    for retirement in 0..4 {
+        let mut workflow = PyramidWorkflow::default();
+        workflow.begin(&selected, PyramidPhase::Planning, serde_json::json!({}));
+        workflow.begin_planning(&selected, 42);
+        workflow.mark_maximum_requested(&search_owner(&selected, 42, 0));
+        match retirement {
+            0 => workflow.finish_search(),
+            1 => workflow.retire_observed(),
+            2 => {
+                let mut changed = selected.clone();
+                changed.generation += 1;
+                workflow.bind(&changed);
+            }
+            _ => workflow.begin(&selected, PyramidPhase::Execution, serde_json::json!({})),
+        }
+        assert!(!workflow.maximum_pending());
+    }
 }

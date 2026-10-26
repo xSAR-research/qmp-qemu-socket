@@ -11,6 +11,127 @@ use crate::pyramid_workflow_model::{
 };
 
 
+/// Reserve a complete label and selected combo before the wrapping row places it.
+///
+/// Widths are logical screen points from the current Body/Button fonts and
+/// spacing. The combo calculation follows egui 0.36.2's selected-value sizing;
+/// callers use Extend so the measured text and rendered text have the same bounds.
+/// Preallocation lets the parent wrap before painting any part of the pair.
+fn pyramid_option_pair<R>(
+    ui: &mut egui::Ui,
+    label: &str,
+    selected_text: &str,
+    enabled: bool,
+    add_combo: impl FnOnce(&mut egui::Ui) -> R,
+) -> egui::InnerResponse<R> {
+    let label_galley = egui::WidgetText::from(label).into_galley(
+        ui,
+        Some(egui::TextWrapMode::Extend),
+        f32::INFINITY,
+        egui::TextStyle::Body,
+    );
+    let selected_galley = egui::WidgetText::from(selected_text).into_galley(
+        ui,
+        Some(egui::TextWrapMode::Extend),
+        f32::INFINITY,
+        egui::TextStyle::Button,
+    );
+    let spacing = ui.spacing();
+    let combo_width = spacing.combo_width.max(
+        selected_galley.size().x
+            + spacing.icon_spacing
+            + spacing.icon_width
+            + 2.0 * spacing.button_padding.x,
+    );
+    let width = (label_galley.size().x + spacing.item_spacing.x + combo_width).ceil();
+    let height = spacing
+        .interact_size
+        .y
+        .max(label_galley.size().y)
+        .max(selected_galley.size().y + 2.0 * spacing.button_padding.y)
+        .ceil();
+    ui.allocate_ui_with_layout(
+        egui::vec2(width, height),
+        egui::Layout::left_to_right(egui::Align::Center),
+        |ui| {
+            if !enabled {
+                ui.disable();
+            }
+            ui.label(label);
+            add_combo(ui)
+        },
+    )
+}
+
+
+/// Render the production option widgets as complete pairs within a wrapping row.
+///
+/// Changes update only the caller's selection values and explicit-method flag.
+/// The application retains preference invalidation and worker-request ownership.
+pub(super) fn pyramid_options_row(
+    ui: &mut egui::Ui,
+    idle: bool,
+    mode: &mut WorkflowMode,
+    route_goal: &mut RouteGoal,
+    stop_condition: &mut StopCondition,
+    method_explicit: &mut bool,
+) {
+    ui.add_enabled_ui(idle, |ui| {
+        ui.horizontal_wrapped(|ui| {
+            pyramid_option_pair(ui, "Mode", mode.label(), true, |ui| {
+                egui::ComboBox::from_id_salt("pyramid-workflow-mode")
+                    .selected_text(mode.label())
+                    .wrap_mode(egui::TextWrapMode::Extend)
+                    .show_ui(ui, |ui| {
+                        for option in [
+                            WorkflowMode::Manual,
+                            WorkflowMode::SingleBoard,
+                            WorkflowMode::Continuous,
+                        ] {
+                            ui.selectable_value(mode, option, option.label());
+                        }
+                    });
+            });
+            pyramid_option_pair(ui, "Route objective", route_goal.label(), true, |ui| {
+                egui::ComboBox::from_id_salt("pyramid-route-method")
+                    .selected_text(route_goal.label())
+                    .wrap_mode(egui::TextWrapMode::Extend)
+                    .show_ui(ui, |ui| {
+                        for option in [RouteGoal::ShortestRoute, RouteGoal::MaximumCardMatches] {
+                            if ui
+                                .selectable_value(route_goal, option, option.label())
+                                .clicked()
+                            {
+                                *method_explicit = true;
+                            }
+                        }
+                    });
+            });
+            pyramid_option_pair(
+                ui,
+                "Objective",
+                stop_condition.label(),
+                *mode == WorkflowMode::Continuous,
+                |ui| {
+                    egui::ComboBox::from_id_salt("pyramid-stop-condition")
+                        .selected_text(stop_condition.label())
+                        .wrap_mode(egui::TextWrapMode::Extend)
+                        .show_ui(ui, |ui| {
+                            for option in [
+                                StopCondition::RepeatNormalGames,
+                                StopCondition::ChallengeTarget,
+                                StopCondition::NoChallenge,
+                            ] {
+                                ui.selectable_value(stop_condition, option, option.label());
+                            }
+                        });
+                },
+            );
+        });
+    });
+}
+
+
 /// Advisory identity of the worker-owned automatic session, never an input permit.
 #[derive(Clone, Copy, Debug)]
 struct SessionDisplay {
@@ -66,12 +187,27 @@ pub(super) struct PyramidWorkflow {
     planning_identity: Option<PlanningIdentity>,
     /// Most recent matching search snapshot, without an accumulating UI queue.
     planning: Option<PlanningProgress>,
+    /// Accepted objective replacement; fences delayed Shortest rows until actual Maximum progress.
+    maximum_pending: Option<crate::worker::pyramid_search_control::Snapshot>,
     /// Current context/board's advisory measured header, never the selected stopping policy.
     observed_game: ObservedGame,
+    /// STOP or RESET retires advisory updates until an explicit START or RECON.
+    observed_retired: bool,
 }
 
 
 impl PyramidWorkflow {
+    /// Return only the current context's typed phase for activity presentation.
+    /// Retained statistics and diagnostics do not create active ownership.
+    pub(super) fn activity_phase(&self, context: &ControllerContext) -> Option<PyramidPhase> {
+        if self.context.as_ref() == Some(context) {
+            self.phase
+        } else {
+            None
+        }
+    }
+
+
     /// Clear advisory state when the controller identity changes.
     pub(super) fn bind(&mut self, context: &ControllerContext) {
         if self.context.as_ref() != Some(context) {
@@ -110,15 +246,44 @@ impl PyramidWorkflow {
         self.session = None;
         self.planning_identity = None;
         self.planning = None;
+        self.maximum_pending = None;
         if phase == PyramidPhase::Reconnaissance {
             self.observed_game = ObservedGame::Unknown;
+            self.observed_retired = false;
         }
     }
 
 
-    /// Accept only advisory facts after the caller has authenticated the matching acquisition.
+    /// Accept authenticated advisory facts without replacing a qualified challenge identity.
+    ///
+    /// Once bound, kind, target and Kings identity last until an explicit interrupt.
+    /// A later matching observation may advance only its numeric counter. Retired
+    /// STOP/RESET state rejects even otherwise current ordered or coalesced events.
     pub(super) fn apply_observed(&mut self, observed: ObservedGame) {
-        self.observed_game = observed;
+        if self.observed_retired {
+            return;
+        }
+        if let ObservedGame::Challenge {
+            progress: previous,
+            kings,
+        } = self.observed_game
+        {
+            if let ObservedGame::Challenge { progress, .. } = observed
+                && progress.follows(previous)
+            {
+                self.observed_game = ObservedGame::Challenge { progress, kings };
+            }
+        } else {
+            self.observed_game = observed;
+        }
+    }
+
+
+    /// Clear and retire the advisory lock while preserving active ownership until settlement.
+    pub(super) fn retire_observed(&mut self) {
+        self.observed_game = ObservedGame::Unknown;
+        self.observed_retired = true;
+        self.maximum_pending = None;
     }
 
 
@@ -153,6 +318,75 @@ impl PyramidWorkflow {
     }
 
 
+    /// Check actual search ownership against the visible run, board and controller.
+    /// Advisory statistics alone never enable replacement or preserve stale ownership.
+    pub(super) fn maximum_switch_available(
+        &self,
+        search: &crate::worker::pyramid_search_control::Snapshot,
+        context: &ControllerContext,
+        owner: Option<ActiveRun>,
+        active_run_id: Option<u64>,
+        stopped: bool,
+    ) -> bool {
+        let identity = PlanningIdentity {
+            run_id: search.run_id,
+            board_generation: search.board_generation,
+            method: RouteMethod::FewestActions,
+        };
+        !stopped
+            && !self.observed_retired
+            && self.maximum_pending.is_none()
+            && !search.maximum_requested
+            && search.method == RouteMethod::FewestActions
+            && self.method == RouteMethod::FewestActions
+            && self.context.as_ref() == Some(context)
+            && search.context == *context
+            && self.phase == Some(PyramidPhase::Planning)
+            && active_run_id == Some(search.run_id)
+            && self.planning_identity == Some(identity)
+            && match owner {
+                Some(ActiveRun::ComputedRoute) => {
+                    self.session.is_none() && search.board_generation == 0
+                }
+                Some(ActiveRun::PyramidSession) => self.session.is_some_and(|session| {
+                    session.run_id == search.run_id
+                        && session.board_generation == search.board_generation
+                        && session.phase == SessionPhase::Planning
+                }),
+                _ => false,
+            }
+    }
+
+
+    /// Mirror an already accepted worker request and fence the retiring Shortest display.
+    pub(super) fn mark_maximum_requested(
+        &mut self,
+        search: &crate::worker::pyramid_search_control::Snapshot,
+    ) {
+        self.maximum_pending = Some(search.clone());
+        self.method = RouteMethod::Fast;
+        self.method_explicit = true;
+        self.planning_identity = Some(PlanningIdentity {
+            run_id: search.run_id,
+            board_generation: search.board_generation,
+            method: RouteMethod::Fast,
+        });
+        self.planning = None;
+    }
+
+
+    /// Report accepted replacement while its actual Maximum snapshot has not arrived.
+    pub(super) fn maximum_pending(&self) -> bool {
+        self.maximum_pending.is_some()
+    }
+
+
+    /// Clear transient replacement presentation after an accepted current completion.
+    pub(super) fn finish_search(&mut self) {
+        self.maximum_pending = None;
+    }
+
+
     /// Change idle preferences without changing the current board's controller identity.
     ///
     /// Returns the unchanged generation for a real idle change. Plans are retired
@@ -166,6 +400,19 @@ impl PyramidWorkflow {
         idle: bool,
     ) -> Result<Option<u64>, &'static str> {
         self.select_preferences(mode, method, self.stop_condition, generation, idle)
+    }
+
+
+    /// Restore only the three default selections and retire every planning identity.
+    /// The caller must hold the input-free idle RESET admission; STOP is untouched.
+    pub(super) fn reset_preferences(&mut self) {
+        self.retire_observed();
+        self.mode = WorkflowMode::Continuous;
+        self.method = RouteMethod::FewestActions;
+        self.stop_condition = StopCondition::ChallengeTarget;
+        self.method_explicit = false;
+        self.planning_identity = None;
+        self.planning = None;
     }
 
 
@@ -209,6 +456,7 @@ impl PyramidWorkflow {
     /// Bind manual search snapshots before queueing that exact input-free calculation.
     pub(super) fn begin_planning(&mut self, context: &ControllerContext, run_id: u64) {
         self.bind(context);
+        self.maximum_pending = None;
         self.planning_identity = Some(PlanningIdentity {
             run_id,
             board_generation: 0,
@@ -255,7 +503,7 @@ impl PyramidWorkflow {
         }) else {
             return false;
         };
-        // One board can move only from Exact to its automatic Maximum fallback.
+        // One board can move only from Exact to automatic or operator-requested Maximum.
         // A delayed ordered Exact phase must not overwrite newer coalesced stats.
         if progress.board_generation == session.board_generation
             && self.method == RouteMethod::Fast
@@ -272,11 +520,12 @@ impl PyramidWorkflow {
             }
             self.planning_identity = None;
             self.planning = None;
+            self.maximum_pending = None;
         }
         session.board_generation = progress.board_generation;
         session.phase = progress.phase;
         self.method = progress.effective_method;
-        self.observed_game = progress.observed_game;
+        self.apply_observed(progress.observed_game);
         self.phase = Some(session_diagnostic_phase(progress.phase));
         if progress.phase == SessionPhase::Planning {
             let identity = PlanningIdentity {
@@ -341,6 +590,7 @@ impl PyramidWorkflow {
                 if progress.board_generation > 1 {
                     self.method_explicit = false;
                 }
+                self.maximum_pending = None;
                 session.board_generation = progress.board_generation;
                 session.phase = SessionPhase::Planning;
                 self.phase = Some(PyramidPhase::Planning);
@@ -359,8 +609,16 @@ impl PyramidWorkflow {
             }
             self.method = progress.method;
         }
+        if self.maximum_pending.as_ref().is_some_and(|pending| {
+            pending.context == progress.context
+                && pending.run_id == progress.run_id
+                && pending.board_generation == progress.board_generation
+                && progress.method == RouteMethod::Fast
+        }) {
+            self.maximum_pending = None;
+        }
         self.planning_identity = Some(identity);
-        self.observed_game = progress.observed_game;
+        self.apply_observed(progress.observed_game);
         self.planning = Some(progress);
         true
     }
@@ -631,6 +889,7 @@ pub(super) fn complete_session(
         Clone::clone,
     ));
     workflow.session = None;
+    workflow.finish_search();
     *owner = None;
     if *state != WorkerState::Detached {
         *state = if completion.result.is_err() || stopped {
@@ -677,13 +936,16 @@ impl QmpQemuSocketApp {
     pub(super) fn pyramid_failure_details(&self) -> serde_json::Value {
         let context = self.current_preview_context();
         serde_json::json!({
+            "application_version": env!("CARGO_PKG_VERSION"),
+            "stop_condition": self.pyramid_workflow.stop_condition.label(),
+            "captured_dimensions": self.captured_dimensions,
             "socket": context.socket_path,
             "game": context.game_mode.label(),
             "strategy": context.strategy.label(),
             "generation": context.generation,
             "workflow_mode": self.pyramid_workflow.mode().label(),
             "route_method": self.pyramid_workflow.method.label(),
-            "profile_source": if self.reconnaissance_form.use_bundled_profile { "bundled_native_v17" } else { "custom_file" },
+            "profile_source": if self.reconnaissance_form.use_bundled_profile { "bundled_native_v23" } else { "custom_file" },
             "custom_profile_path": self.reconnaissance_form.profile_path,
             "next_evidence_json": self.reconnaissance_form.output_path,
             "next_deal_id": self.reconnaissance_form.deal_id,
@@ -731,6 +993,7 @@ impl QmpQemuSocketApp {
             directory: None,
             persistence_error,
         });
+        self.retain_pyramid_failure(true);
         self.push_log(error.clone());
         if ui_failure_id.is_none() {
             return;
@@ -741,6 +1004,7 @@ impl QmpQemuSocketApp {
             && let Some(diagnostic) = self.pyramid_workflow.diagnostic.as_mut()
         {
             diagnostic.persistence_error = Some(persistence_error);
+            self.retain_pyramid_failure(false);
         }
     }
 
@@ -918,20 +1182,145 @@ impl QmpQemuSocketApp {
     }
 
 
-    /// Show mode-specific explicit actions, concise progress, STOP and the preview.
-    pub(super) fn pyramid_workflow_screen(&mut self, ui: &mut egui::Ui) {
-        let context = self.current_preview_context();
-        self.pyramid_workflow.bind(&context);
-        let idle = reconnaissance_controls_enabled(
-            &context,
-            self.strategy_choice_pending,
-            self.active_run,
-            self.worker_state,
-            self.stop_requested,
-            self.show_snapshot_dialog,
-            self.snapshot_capture_pending,
-        );
+    /// Keep logical actions in one row; narrow windows scroll only the left controls.
+    /// STOP and EXIT remain visible at the right and never wait on worker I/O.
+    fn pyramid_control_row(&mut self, ui: &mut egui::Ui, context: &ControllerContext, idle: bool) {
         ui.horizontal(|ui| {
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                if bevel_button(ui, "EXIT", STATE_RED, false, true).clicked() { self.request_exit(); }
+                let stop_enabled = (self.active_run.is_some() || self.worker_state.is_busy())
+                    && !self.stop_requested;
+                if bevel_button(ui, "STOP", STATE_RED, false, stop_enabled).clicked() {
+                    self.stop_requested = true;
+                    self.pyramid_workflow.retire_observed();
+                    self.reconnaissance_form.confirmed_context = None;
+                    self.computed_route_form.revoke_acquisition();
+                    self.current_status = "Stopping…".to_owned();
+                    if let Err(error) = self.worker.disconnect(self.current_preview_context()) {
+                        self.worker_state = WorkerState::Error;
+                        self.current_status = "Stop request failed".to_owned();
+                        let phase = self
+                            .pyramid_workflow
+                            .phase
+                            .unwrap_or(PyramidPhase::Reconnaissance);
+                        self.pyramid_ui_failure(phase, format!("STOP dispatch failed: {error}"));
+                    }
+                }
+                if bevel_button(ui, "RESET", SETUP_BLUE, false, self.pyramid_reset_enabled(context)).clicked() {
+                    self.reset_pyramid_preferences();
+                }
+                let pause = self.worker.pause_state();
+                let label = match pause {
+                    Some(state) if state.requested || state.acknowledged => "CONTINUE",
+                    _ => "PAUSE",
+                };
+                if bevel_button(ui, label, SETUP_BLUE, false, pause.is_some() && !self.stop_requested).clicked()
+                    && let Some(state) = pause {
+                    let request = !(state.requested || state.acknowledged);
+                    if let Err(error) = self.worker.request_pause(state.epoch, request) { self.push_log(error); }
+                }
+                if let Some(state) = pause {
+                    if state.acknowledged { ui.label(format!("{} paused", state.phase.label())); }
+                    else if state.requested { ui.label("Pausing…"); }
+                }
+                ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
+                    egui::ScrollArea::horizontal().id_salt("pyramid-action-row")
+                        .auto_shrink([false, true]).show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                if self.pyramid_workflow.mode == WorkflowMode::Manual {
+                                    let gates = step_gates(context, idle, &self.computed_route_form);
+                                    for (label, phase, enabled) in [
+                                        ("1. RECON", PyramidPhase::Reconnaissance, gates.recon),
+                                        ("2. Plan route", PyramidPhase::Planning, gates.plan),
+                                        ("3. Solve board", PyramidPhase::Execution, gates.solve),
+                                    ] {
+                                        if bevel_button(ui, label, SETUP_BLUE, false, enabled).clicked() { self.press_pyramid_step(phase); }
+                                    }
+                                } else {
+                                    if bevel_button(ui, "START", ACTION_GREEN, false,
+                                        session_start_enabled(self.pyramid_workflow.mode, idle, &self.computed_route_form)).clicked() {
+                                        self.press_pyramid_session();
+                                    }
+                                    if bevel_button(ui, "RECON", SETUP_BLUE, false, idle)
+                                        .on_hover_text("Optional guarded acquisition; replaces current inventory").clicked() {
+                                        self.press_pyramid_step(PyramidPhase::Reconnaissance);
+                                    }
+                                }
+                                let search = self.worker.pyramid_search_state();
+                                let switch_enabled = search.as_ref().is_some_and(|search| {
+                                    self.pyramid_workflow.maximum_switch_available(search, context,
+                                        self.active_run, self.computed_route_form.active_run_id, self.stop_requested)
+                                });
+                                if switch_enabled
+                                    && bevel_button(ui, "Switch to Maximum card matches", SETUP_BLUE, false, true)
+                                    .on_hover_text("Retire this Shortest search and reuse the same RECON. PAUSE remains in force; Manual only prepares a plan.")
+                                    .clicked()
+                                    && let Some(search) = search
+                                {
+                                    match self.worker.request_pyramid_maximum(&search) {
+                                        Ok(()) => {
+                                            self.pyramid_workflow.mark_maximum_requested(&search);
+                                            self.current_status = "Switching to Maximum card matches…".to_owned();
+                                            self.push_log("Requested Maximum card matches for the current search; reusing the same authenticated RECON.");
+                                        }
+                                        Err(error) => self.push_log(format!("Maximum request refused: {error}")),
+                                    }
+                                }
+                                if self.pyramid_workflow.maximum_pending() {
+                                    ui.label("Switching to Maximum card matches…");
+                                }
+                                if bevel_button(ui, "LOG", egui::Color32::from_rgb(0, 170, 195), false, true).clicked() { self.show_output = true; }
+                                if bevel_button(ui, "ANALYSIS", egui::Color32::from_rgb(225, 100, 0), false, self.failure_window.available()).clicked() {
+                                    self.failure_window.reopen();
+                                }
+                            });
+                        });
+                });
+            });
+        });
+    }
+
+
+    /// RESET is input-free and remains available after STOP only when all owners are idle.
+    fn pyramid_reset_enabled(&self, context: &ControllerContext) -> bool {
+        context.game_mode == GameMode::Pyramid
+            && context.strategy == SolvingStrategy::ShortestPath
+            && !self.strategy_choice_pending
+            && !self.exiting
+            && !self.show_snapshot_dialog
+            && !self.snapshot_capture_pending
+            && self.active_run.is_none()
+            && !self.worker_state.is_busy()
+            && self.pyramid_workflow.session.is_none()
+            && self.computed_route_form.active_run_id.is_none()
+    }
+
+
+    /// Restore defaults without clearing STOP, inventory, logs, diagnostics or game progress.
+    fn reset_pyramid_preferences(&mut self) {
+        let context = self.current_preview_context();
+        if !self.pyramid_reset_enabled(&context) {
+            return;
+        }
+        self.pyramid_workflow.reset_preferences();
+        self.computed_route_form.revoke_plan();
+        self.computed_route_form.report = None;
+        self.reconnaissance_form.confirmed_context = None;
+        if let Err(error) = self.worker.discard_pyramid_plan() {
+            self.pyramid_ui_failure(PyramidPhase::Planning, error);
+        } else {
+            self.current_status =
+                "Pyramid defaults restored; current inventory retained".to_owned();
+        }
+    }
+
+
+    /// Show idle-gated strategy and mode selections within the left header column.
+    ///
+    /// Selection changes retain their existing invalidation and worker requests;
+    /// operational controls and the preview remain outside this constrained width.
+    fn pyramid_selection_header(&mut self, ui: &mut egui::Ui, idle: bool) {
+        ui.horizontal_wrapped(|ui| {
             ui.heading("Pyramid");
             let mut selected = self.solving_strategy;
             ui.add_enabled_ui(idle, |ui| {
@@ -946,25 +1335,7 @@ impl QmpQemuSocketApp {
             if selected != self.solving_strategy {
                 self.select_strategy(selected);
             }
-            {
-                let stop_enabled = (self.active_run.is_some() || self.worker_state.is_busy())
-                    && !self.stop_requested;
-                if bevel_button(ui, "STOP", STATE_RED, false, stop_enabled).clicked() {
-                    self.stop_requested = true;
-                    self.reconnaissance_form.confirmed_context = None;
-                    self.computed_route_form.revoke_acquisition();
-                    self.current_status = "Stopping…".to_owned();
-                    if let Err(error) = self.worker.disconnect(self.current_preview_context()) {
-                        self.worker_state = WorkerState::Error;
-                        self.current_status = "Stop request failed".to_owned();
-                        let phase = self
-                            .pyramid_workflow
-                            .phase
-                            .unwrap_or(PyramidPhase::Reconnaissance);
-                        self.pyramid_ui_failure(phase, format!("STOP dispatch failed: {error}"));
-                    }
-                }
-            }
+
         });
         if !self.uses_pyramid_workflow() {
             return;
@@ -972,60 +1343,15 @@ impl QmpQemuSocketApp {
         let mut mode = self.pyramid_workflow.mode;
         let mut route_goal = self.pyramid_workflow.route_goal();
         let mut stop_condition = self.pyramid_workflow.stop_condition;
-        ui.add_enabled_ui(idle, |ui| {
-            ui.horizontal_wrapped(|ui| {
-                ui.label("Mode");
-                egui::ComboBox::from_id_salt("pyramid-workflow-mode")
-                    .selected_text(mode.label())
-                    .show_ui(ui, |ui| {
-                        for option in [
-                            WorkflowMode::Manual,
-                            WorkflowMode::SingleBoard,
-                            WorkflowMode::Continuous,
-                        ] {
-                            ui.selectable_value(&mut mode, option, option.label());
-                        }
-                    });
-                ui.label("Route objective");
-                egui::ComboBox::from_id_salt("pyramid-route-method")
-                    .selected_text(route_goal.label())
-                    .show_ui(ui, |ui| {
-                        for option in [RouteGoal::ShortestRoute, RouteGoal::MaximumCardMatches] {
-                            if ui
-                                .selectable_value(&mut route_goal, option, option.label())
-                                .clicked()
-                            {
-                                self.pyramid_workflow.method_explicit = true;
-                            }
-                        }
-                    });
-                ui.add_enabled_ui(mode == WorkflowMode::Continuous, |ui| {
-                    ui.label("Stop condition");
-                    egui::ComboBox::from_id_salt("pyramid-stop-condition")
-                        .selected_text(stop_condition.label())
-                        .show_ui(ui, |ui| {
-                            for option in [
-                                StopCondition::RepeatNormalGames,
-                                StopCondition::ChallengeTarget,
-                                StopCondition::NoChallenge,
-                            ] {
-                                ui.selectable_value(&mut stop_condition, option, option.label());
-                            }
-                        });
-                });
-            });
-        });
-        self.select_pyramid_options(mode, route_goal.method(), stop_condition);
-        let context = self.current_preview_context();
-        let idle = reconnaissance_controls_enabled(
-            &context,
-            self.strategy_choice_pending,
-            self.active_run,
-            self.worker_state,
-            self.stop_requested,
-            self.show_snapshot_dialog,
-            self.snapshot_capture_pending,
+        pyramid_options_row(
+            ui,
+            idle,
+            &mut mode,
+            &mut route_goal,
+            &mut stop_condition,
+            &mut self.pyramid_workflow.method_explicit,
         );
+        self.select_pyramid_options(mode, route_goal.method(), stop_condition);
         ui.small(self.pyramid_workflow.mode.description());
         ui.label(format!(
             "Observed: {}",
@@ -1040,57 +1366,42 @@ impl QmpQemuSocketApp {
         if self.pyramid_workflow.mode == WorkflowMode::Continuous {
             ui.small(self.pyramid_workflow.stop_condition.description());
         }
+    }
+
+
+    /// Show mode-specific explicit actions, concise progress, STOP and the preview.
+    pub(super) fn pyramid_workflow_screen(&mut self, ui: &mut egui::Ui) {
+        let context = self.current_preview_context();
+        self.pyramid_workflow.bind(&context);
+        let idle = reconnaissance_controls_enabled(
+            &context,
+            self.strategy_choice_pending,
+            self.active_run,
+            self.worker_state,
+            self.stop_requested,
+            self.show_snapshot_dialog,
+            self.snapshot_capture_pending,
+        );
+        activity_status::header(self, ui, |app, ui| {
+            app.pyramid_selection_header(ui, idle);
+        });
+        if !self.uses_pyramid_workflow() {
+            return;
+        }
+        let context = self.current_preview_context();
+        let idle = reconnaissance_controls_enabled(
+            &context,
+            self.strategy_choice_pending,
+            self.active_run,
+            self.worker_state,
+            self.stop_requested,
+            self.show_snapshot_dialog,
+            self.snapshot_capture_pending,
+        );
         ui.label("Start acquisition on an untouched supported Pyramid board. Keep Solitaire in the foreground and leave the guest untouched while work runs. Keep the guest Solver disengaged; an unavailable Solver is allowed.");
+        self.pyramid_control_row(ui, &context, idle);
         if self.pyramid_workflow.mode == WorkflowMode::Manual {
-            let gates = step_gates(&context, idle, &self.computed_route_form);
-            ui.horizontal_wrapped(|ui| {
-                if bevel_button(ui, "1. Recon", SETUP_BLUE, false, gates.recon)
-                    .on_hover_text("Read all 52 cards and restore the untouched board; this uses guarded guest input").clicked() {
-                    self.press_pyramid_step(PyramidPhase::Reconnaissance);
-                }
-                if bevel_button(ui, "2. Plan route", SETUP_BLUE, false, gates.plan)
-                    .on_hover_text("Calculate and independently replay a route without guest input").clicked() {
-                    self.press_pyramid_step(PyramidPhase::Planning);
-                }
-                if bevel_button(ui, "3. Solve board", ACTION_GREEN, false, gates.solve)
-                    .on_hover_text("Execute the current prepared route once; this press authorises that route only").clicked() {
-                    self.press_pyramid_step(PyramidPhase::Execution);
-                }
-            });
-            ui.small("Recon reads 52 cards and restores the board. Plan route sends no guest input. Solve board executes once; it never starts automatically in Manual mode.");
-        } else {
-            if bevel_button(ui, "Recon (optional rescan)", SETUP_BLUE, false, idle)
-                .on_hover_text("Replace the current board inventory with a fresh guarded Recon; changing planning options does not require this")
-                .clicked()
-            {
-                self.press_pyramid_step(PyramidPhase::Reconnaissance);
-            }
-            let (label, description) = match self.pyramid_workflow.mode {
-                WorkflowMode::SingleBoard => (
-                    "Start single board",
-                    "Authorise acquisition, planning and execution of this board once, then stop",
-                ),
-                WorkflowMode::Continuous => (
-                    "Start continuous",
-                    "Follow the selected stop condition, with guarded stock continuation when supported",
-                ),
-                WorkflowMode::Manual => ("Start", "Select an automatic mode first"),
-            };
-            if bevel_button(
-                ui,
-                label,
-                ACTION_GREEN,
-                false,
-                session_start_enabled(self.pyramid_workflow.mode, idle, &self.computed_route_form),
-            )
-            .on_hover_text(description)
-            .clicked()
-            {
-                self.press_pyramid_session();
-            }
-            if self.pyramid_workflow.mode == WorkflowMode::Continuous {
-                ui.small("No challenge repeats boards without interpreting targets. The other stop conditions require their recognised objective. STOP or uncertainty releases control.");
-            }
+            ui.small("Recon reads 52 cards and restores the board. Plan route sends no guest input. Solve board executes once.");
         }
         let phase = self
             .pyramid_workflow
@@ -1098,7 +1409,12 @@ impl QmpQemuSocketApp {
             .map(|session| session.phase.label())
             .or_else(|| self.pyramid_workflow.phase.map(phase_label))
             .unwrap_or("Ready");
-        ui.label(format!("{phase} · {}", self.current_status));
+        let status = if self.worker_state == WorkerState::Error && self.failure_window.available() {
+            "Stopped — inspect Failure details."
+        } else {
+            &self.current_status
+        };
+        ui.label(format!("{phase} · {status}"));
         if let Some(progress) = self.pyramid_workflow.planning_progress() {
             ui.label(format!(
                 "{} · {:.2}s · {} positions examined · {} candidate moves · {} histories retained{}",
@@ -1115,7 +1431,9 @@ impl QmpQemuSocketApp {
             ))
             .on_hover_text(progress.method.description());
         }
-        if let Some(report) = &self.computed_route_form.report {
+        if self.worker_state != WorkerState::Error
+            && let Some(report) = &self.computed_route_form.report
+        {
             ui.label(report.as_str());
         }
         if self.pyramid_workflow.details_visible(&context) {
@@ -1123,44 +1441,25 @@ impl QmpQemuSocketApp {
         }
         ui.separator();
         self.preview(ui);
-        self.output(ui);
     }
 
 
-    /// Display the actual failure, saved-packet outcome and bounded custom overrides.
+    /// Offer bounded idle-only overrides; complete read-only details live in their own window.
     fn pyramid_error_details(&mut self, ui: &mut egui::Ui) {
-        egui::Frame::group(ui.style()).show(ui, |ui| {
-            ui.heading("Pyramid failure details");
-            if let Some(diagnostic) = &self.pyramid_workflow.diagnostic {
-                ui.colored_label(Color32::LIGHT_RED, &diagnostic.error);
-            }
-            egui::ScrollArea::vertical().id_salt("pyramid-failure-details")
-                .max_height(260.0).auto_shrink([false, false]).show(ui, |ui| {
-                    if let Some(diagnostic) = &self.pyramid_workflow.diagnostic {
-                        ui.label(format!("Step: {}; request: {:?}", phase_label(diagnostic.phase), diagnostic.run_id));
-                        match &diagnostic.directory {
-                            Some(directory) => { ui.label(format!("Saved failure packet: {}", directory.display())); }
-                            None => { ui.label("Saved failure packet: unavailable or persistence pending."); }
-                        }
-                        if let Some(error) = &diagnostic.persistence_error {
-                            ui.colored_label(Color32::YELLOW, format!("Diagnostic persistence failed: {error}"));
-                        }
-                    }
-                    match &self.session_log {
-                        Some(log) => { ui.label(format!("Session log: {}", log.path().display())); }
-                        None => { ui.label("Session log: unavailable; the visible output retains the current tail."); }
-                    }
-                    if let Some(details) = &self.pyramid_workflow.request_details {
-                        ui.label("Fields at the requested step:");
-                        match serde_json::to_string_pretty(details) {
-                            Ok(details) => { ui.monospace(details); }
-                            Err(error) => { ui.label(format!("Could not format request fields: {error}")); }
-                        }
-                    }
-                    ui.label("Inspect the guest before another Recon. Failed or stopped routes cannot resume.");
-                    self.pyramid_error_overrides(ui);
-                });
-        });
+        ui.collapsing("Failure overrides", |ui| self.pyramid_error_overrides(ui));
+    }
+
+
+    /// Retain the accepted failure outside workflow state, freezing its original request fields.
+    pub(super) fn retain_pyramid_failure(&mut self, new_failure: bool) {
+        if let Some(diagnostic) = &self.pyramid_workflow.diagnostic {
+            let fields = self
+                .pyramid_workflow
+                .request_details
+                .clone()
+                .unwrap_or_else(|| self.pyramid_failure_details());
+            self.failure_window.receive(diagnostic, fields, new_failure);
+        }
     }
 
 

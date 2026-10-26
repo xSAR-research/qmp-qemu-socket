@@ -1320,3 +1320,81 @@ fn different_native_terminal_kinds_never_form_a_confirmed_pair() {
         assert!(starting_witness(standard_terminal(), &terminal).is_none());
     }
 }
+
+
+/// An unproved final ACK opens only the existing transition, with actual kind-specific progress.
+#[test]
+fn native_150_challenge_ack_handoff_preserves_counter_rules_and_stop() {
+    use crate::pyramid_progress::ChallengeKind::{Boards, Cards, Score};
+    for (kind, current, target, next, allowed) in [
+        (Boards, 0, 3, 1, true),
+        (Boards, 0, 3, 0, false),
+        (Boards, 0, 3, 2, false),
+        (Cards, 4, 12, 4, true),
+        (Cards, 4, 12, 8, true),
+        (Cards, 4, 12, 3, false),
+        (Score, 1000, 1900, 1000, true),
+        (Score, 1000, 1900, 1200, true),
+        (Score, 1000, 1900, 999, false),
+    ] {
+        let mut io = Fake::new(
+            challenge_entry(kind, current, target),
+            [BoardCompletion::AwaitingFreshBoard],
+        );
+        io.transitions
+            .push_back(challenge_entry(kind, next, target));
+        io.stop_on_phase = Some((2, SessionPhase::Reconnaissance));
+        assert!(challenge::drive(&mut io).is_err());
+        assert!(io.calls.contains(&Call::Transition));
+        assert_eq!(
+            io.calls
+                .contains(&Call::Phase(2, SessionPhase::Reconnaissance)),
+            allowed
+        );
+        assert!(!io.calls.contains(&Call::Restart));
+    }
+    let mut io = Fake::new(
+        challenge_entry(Boards, 0, 3),
+        [BoardCompletion::AwaitingFreshBoard],
+    );
+    io.stop_on_phase = Some((1, SessionPhase::Transition));
+    assert!(challenge::drive(&mut io).is_err());
+    assert!(!io.calls.contains(&Call::Transition));
+}
+
+
+
+/// Normal ACK handoff requires exactly the next count; ACKs alone never open third-board restart.
+#[test]
+fn native_150_normal_ack_handoff_requires_count_and_never_restarts_third() {
+    for (next, allowed) in [(1, true), (0, false), (2, false)] {
+        let mut io = Fake::new(standard_board(0), [BoardCompletion::AwaitingFreshBoard]);
+        io.transitions.push_back(standard_board(next));
+        io.stop_on_phase = Some((2, SessionPhase::Reconnaissance));
+        assert!(drive(WorkflowMode::Continuous, &mut io).is_err());
+        assert_eq!(
+            io.calls
+                .contains(&Call::Phase(2, SessionPhase::Reconnaissance)),
+            allowed
+        );
+        assert!(!io.calls.contains(&Call::Restart));
+    }
+    for (mode, start) in [
+        (WorkflowMode::Continuous, standard_board(2)),
+        (WorkflowMode::SingleBoard, unknown_board()),
+    ] {
+        let mut io = Fake::new(start, [BoardCompletion::AwaitingFreshBoard]);
+        io.transitions.push_back(standard_terminal());
+        assert!(
+            drive(mode, &mut io)
+                .unwrap_err()
+                .contains("third-board completion")
+        );
+        assert!(!io.calls.contains(&Call::Transition));
+        assert!(!io.calls.contains(&Call::Restart));
+    }
+    let mut io = Fake::new(standard_board(0), [BoardCompletion::AwaitingFreshBoard]);
+    io.stop_on_phase = Some((1, SessionPhase::Transition));
+    assert!(drive(WorkflowMode::Continuous, &mut io).is_err());
+    assert!(!io.calls.contains(&Call::Transition));
+}

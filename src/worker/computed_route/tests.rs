@@ -252,6 +252,8 @@ struct ObservedModel {
 struct FakeIo<'a> {
     /// Explicit test-only no-challenge policy.
     ack_handoff: bool,
+    /// Test-only input-free challenge handoff after the unchanged final window.
+    challenge_handoff: bool,
     /// Deterministic cancellation at the new three-second wait.
     stop_handoff_wait: bool,
     /// Inject a genuine terminal proof after this independently completed whole action.
@@ -280,6 +282,10 @@ struct FakeIo<'a> {
     counts: Counts,
     /// One monotonic virtual run clock, advanced only by waits.
     elapsed: Duration,
+    /// Requested waits paired with the number of completely acknowledged actions.
+    waits: Vec<(usize, Duration)>,
+    /// Actual driver pause boundaries paired with acknowledged gesture counts.
+    pause_boundaries: Vec<(usize, usize)>,
     /// Immediate synthetic STOP latch.
     stopped: bool,
     /// Set STOP immediately after this acknowledged gesture count.
@@ -292,6 +298,8 @@ struct FakeIo<'a> {
     wrong_state_delivery: Option<usize>,
     /// Fail this fresh capability guard before transport is attempted.
     failed_probe_delivery: Option<usize>,
+    /// Inject a positive completion before this next logical action is dispatched.
+    source_challenge_after: Option<usize>,
     /// Reject every observation before any input.
     wrong_origin: bool,
     /// Keep the observed model unchanged despite acknowledged transport.
@@ -300,6 +308,16 @@ struct FakeIo<'a> {
     final_observations: Vec<(Duration, usize)>,
     /// Suppress this many final visual matches without changing delivered input.
     final_misses: usize,
+    /// Suppress a selected ordinary action's visual matches without repeating input.
+    ordinary_misses: Option<(usize, usize)>,
+    /// Ordinary capture starts retain whole-action index, run time and ACK count.
+    ordinary_observations: Vec<(usize, Duration, usize)>,
+    /// Synthetic acquisition time for an ordinary effect frame.
+    ordinary_capture_delay: Duration,
+    /// Inject STOP while an ordinary effect capture is in flight.
+    stop_during_ordinary_observation: bool,
+    /// Revoke context while an ordinary effect capture is in flight.
+    revoke_during_ordinary_observation: bool,
     /// Simulate time spent processing after the last ACK was already recorded.
     final_ack_postprocessing: Duration,
     /// Time consumed by one final capture that started before the deadline.
@@ -320,6 +338,7 @@ impl<'a> FakeIo<'a> {
     fn new(plan: &'a Prepared) -> Self {
         Self {
             ack_handoff: false,
+            challenge_handoff: false,
             stop_handoff_wait: false,
             challenge_after: None,
             pending_after: None,
@@ -344,10 +363,18 @@ impl<'a> FakeIo<'a> {
             ackless_success_attempt: None,
             wrong_state_delivery: None,
             failed_probe_delivery: None,
+            source_challenge_after: None,
             wrong_origin: false,
             freeze_effects: false,
             final_observations: Vec::new(),
+            waits: Vec::new(),
+            pause_boundaries: Vec::new(),
             final_misses: 0,
+            ordinary_misses: None,
+            ordinary_observations: Vec::new(),
+            ordinary_capture_delay: Duration::ZERO,
+            stop_during_ordinary_observation: false,
+            revoke_during_ordinary_observation: false,
             final_ack_postprocessing: Duration::ZERO,
             final_capture_delay: Duration::ZERO,
             stop_during_final_observation: false,
@@ -388,10 +415,34 @@ impl<'a> FakeIo<'a> {
 
 
 impl RouteIo for FakeIo<'_> {
+    /// Record safe source boundaries without introducing an effect-phase pause.
+    fn pause_checkpoint(&mut self) -> Result<bool, String> {
+        self.check()?;
+        self.pause_boundaries
+            .push((self.action, self.counts.acknowledged));
+        assert_eq!(self.partial_gestures, 0, "no pause between MATCH gestures");
+        Ok(false)
+    }
+
+
     /// Enable only the opt-in handoff scenario.
     fn handoff_after_final_ack(&self) -> bool {
         self.ack_handoff
     }
+
+    fn read_only_board_transition(&self) -> bool {
+        self.challenge_handoff
+    }
+
+    /// Retire input from a source terminal before the next action is ever dispatched.
+    fn observe_source(&mut self, state: SearchState) -> Result<EffectObservation, String> {
+        self.check()?;
+        if self.source_challenge_after == Some(self.action) {
+            return Ok(EffectObservation::Challenge(challenges::proof()));
+        }
+        self.observe(state, false).map(EffectObservation::Position)
+    }
+
 
     /// Inject terminal evidence only through the controller's whole-action effect seam.
     fn observe_effect(
@@ -405,7 +456,26 @@ impl RouteIo for FakeIo<'_> {
             self.stopped |= self.stop_during_challenge;
             return Ok(EffectObservation::Challenge(challenges::proof()));
         }
-        let matched = self.observe(state, final_effect)?;
+        let ordinary =
+            !final_effect && self.counts.acknowledged > 0 && self.action < self.plan.trace.len();
+        if ordinary {
+            self.ordinary_observations
+                .push((self.action, self.elapsed, self.counts.acknowledged));
+            self.elapsed += self.ordinary_capture_delay;
+        }
+        let mut matched = self.observe(state, final_effect)?;
+        if ordinary {
+            self.stopped |= self.stop_during_ordinary_observation;
+            self.revoked_context |= self.revoke_during_ordinary_observation;
+        }
+        if ordinary
+            && let Some((action, remaining)) = &mut self.ordinary_misses
+            && *action == self.action
+            && *remaining > 0
+        {
+            *remaining -= 1;
+            matched = false;
+        }
         if matched
             && let Some((action, progress)) = self.pending_after
             && action == self.action
@@ -512,6 +582,7 @@ impl RouteIo for FakeIo<'_> {
     /// Advance a monotonic deterministic clock without sleeping.
     fn wait(&mut self, delay: Duration) -> Result<(), String> {
         self.check()?;
+        self.waits.push((self.action, delay));
         if self.stop_handoff_wait
             && self.action == self.plan.trace.len()
             && delay == Duration::from_secs(3)
@@ -545,6 +616,177 @@ impl RouteIo for FakeIo<'_> {
         assert_eq!(self.partial_gestures, 0);
         self.committed.push((index, total));
     }
+}
+
+
+/// A synthetic animation lasting beyond six reads completes through the actual driver.
+/// Input still occurs exactly once per independently replayed operation.
+#[test]
+fn ordinary_effect_window_allows_more_than_six_frames_without_repeating_input() {
+    let plan = accepted_plan();
+    let mut io = FakeIo::new(&plan);
+    io.ordinary_misses = Some((1, 7));
+    io.ordinary_capture_delay = Duration::from_millis(100);
+    drive(&plan, &mut io).expect("eighth ordinary frame verifies the unchanged route");
+    let starts: Vec<_> = io
+        .ordinary_observations
+        .iter()
+        .filter(|(action, _, _)| *action == 1)
+        .collect();
+    assert_eq!(starts.len(), 8);
+    assert_eq!(starts.last().unwrap().1, Duration::from_millis(1050));
+    assert_eq!(
+        io.delivered,
+        plan.trace
+            .iter()
+            .flat_map(|step| oracle_operations(step.action))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(io.counts.attempted, io.counts.acknowledged);
+    assert_eq!(io.committed.len(), plan.trace.len());
+}
+
+
+/// A permanent mismatch uses the ACK-based window even when captures cost no time.
+/// Expiry sends no next action and cannot be bypassed by a smaller count cap.
+#[test]
+fn ordinary_effect_window_expires_without_replay_or_next_action() {
+    let plan = accepted_plan();
+    let mut io = FakeIo::new(&plan);
+    io.freeze_effects = true;
+    let error = drive(&plan, &mut io).expect_err("unchanged visual state must expire");
+    assert!(error.contains("Ordinary effect observation window expired"));
+    assert_eq!(io.elapsed, Duration::from_secs(2));
+    assert_eq!(io.ordinary_observations.len(), 40);
+    assert!(
+        io.ordinary_observations
+            .iter()
+            .all(|(_, start, _)| *start < io.elapsed)
+    );
+    assert_eq!(io.delivered, oracle_operations(plan.trace[0].action));
+    assert_eq!(io.counts.attempted, io.counts.acknowledged);
+    assert!(io.committed.is_empty());
+}
+
+
+/// A positive frame begun inside the window may finish outside it, as for final proof.
+/// No later capture is started merely to extend an unresolved window.
+#[test]
+fn ordinary_effect_window_accepts_a_positive_inflight_frame() {
+    let plan = accepted_plan();
+    let mut io = FakeIo::new(&plan);
+    io.ordinary_misses = Some((1, 6));
+    io.ordinary_capture_delay = Duration::from_millis(250);
+    drive(&plan, &mut io).expect("seventh frame started before expiry");
+    let starts: Vec<_> = io
+        .ordinary_observations
+        .iter()
+        .filter(|(action, _, _)| *action == 1)
+        .collect();
+    assert_eq!(starts.len(), 7);
+    assert_eq!(starts.last().unwrap().1, Duration::from_millis(1800));
+    assert!(starts.last().unwrap().1 + io.ordinary_capture_delay > Duration::from_secs(2));
+}
+
+
+/// STOP or context loss during an ordinary capture prevents commit and further input.
+#[test]
+fn ordinary_effect_window_rechecks_revocation_after_capture() {
+    let plan = accepted_plan();
+    for context_loss in [false, true] {
+        let mut io = FakeIo::new(&plan);
+        io.ordinary_capture_delay = Duration::from_millis(100);
+        io.stop_during_ordinary_observation = !context_loss;
+        io.revoke_during_ordinary_observation = context_loss;
+        let error = drive(&plan, &mut io).expect_err("capture cannot outlive its authority");
+        assert!(error.contains("logical actions verified=0"));
+        assert!(error.contains(if context_loss {
+            "context revoked"
+        } else {
+            "STOP latched"
+        }));
+        assert_eq!(io.ordinary_observations.len(), 1);
+        assert_eq!(io.delivered, oracle_operations(plan.trace[0].action));
+        assert!(io.committed.is_empty());
+    }
+}
+
+
+/// MOVE and RECYCLE settles consume their own ACK-based window rather than resetting it.
+#[test]
+fn ordinary_effect_window_includes_settle_and_resets_for_each_action() {
+    let plan = accepted_plan();
+    for (action, settle, reads) in [
+        (RecordedAction::Move, Duration::from_millis(250), 35),
+        (RecordedAction::Recycle, Duration::from_secs(1), 20),
+    ] {
+        let index = plan
+            .trace
+            .iter()
+            .position(|step| step.action == action)
+            .unwrap();
+        let mut io = FakeIo::new(&plan);
+        io.ordinary_misses = Some((index + 1, usize::MAX));
+        let error = drive(&plan, &mut io).expect_err("selected effect stays unresolved");
+        assert!(error.contains("Ordinary effect observation window expired"));
+        let acknowledged_at = io.counts.last_acknowledged_at.unwrap();
+        let starts: Vec<_> = io
+            .ordinary_observations
+            .iter()
+            .filter(|(action, _, _)| *action == index + 1)
+            .collect();
+        assert_eq!(starts.len(), reads);
+        assert_eq!(starts[0].1 - acknowledged_at, settle);
+        assert_eq!(io.elapsed - acknowledged_at, Duration::from_secs(2));
+        assert_eq!(io.committed.len(), index);
+        assert_eq!(
+            io.delivered,
+            plan.trace[..=index]
+                .iter()
+                .flat_map(|step| oracle_operations(step.action))
+                .collect::<Vec<_>>()
+        );
+    }
+}
+
+
+/// Real route sequencing shortens MOVE while preserving RECYCLE and CV defaults.
+#[test]
+fn route_move_captures_within_300ms_without_shortening_recycle_or_cv() {
+    let plan = accepted_plan();
+    let mut io = FakeIo::new(&plan);
+    drive(&plan, &mut io).expect("accepted route completes with independent effects");
+    let mut moves = 0;
+    let mut recycles = 0;
+    for (index, step) in plan.trace.iter().enumerate().take(plan.trace.len() - 1) {
+        let wait = io
+            .waits
+            .iter()
+            .find(|(done, _)| *done == index + 1)
+            .unwrap()
+            .1;
+        match step.action {
+            RecordedAction::Move => {
+                moves += 1;
+                assert_eq!(wait, Duration::from_millis(250));
+                assert!(wait < Duration::from_millis(300));
+            }
+            RecordedAction::Recycle => {
+                recycles += 1;
+                assert_eq!(wait, Duration::from_millis(1_000));
+            }
+            _ => assert_eq!(wait, Duration::ZERO),
+        }
+    }
+    assert!(
+        moves > 0 && recycles > 0,
+        "the oracle exercises both stock operations"
+    );
+    assert_eq!(
+        crate::parameters::AnimationSettleDelays::default().pyramid_move,
+        Duration::from_millis(1_000),
+        "Computer Vision still waits for the next Solver HALO",
+    );
 }
 
 
@@ -674,6 +916,30 @@ fn partial_final_confirmation_is_bounded_and_revocable_without_replay() {
 }
 
 
+/// Actual driver checkpoints precede whole actions and never interrupt a MATCH pair or effect.
+#[test]
+fn pause_boundaries_cover_each_whole_action_without_midpair_checkpoint() {
+    let plan = accepted_plan();
+    let mut io = FakeIo::new(&plan);
+    let report = drive(&plan, &mut io).unwrap();
+    assert!(matches!(report.completion, BoardCompletion::BoardClear));
+    assert_eq!(io.committed.len(), plan.trace.len());
+    let mut acknowledged = 0;
+    let expected: Vec<_> = plan
+        .trace
+        .iter()
+        .enumerate()
+        .map(|(index, step)| {
+            let boundary = (index, acknowledged);
+            acknowledged += oracle_operations(step.action).len();
+            boundary
+        })
+        .collect();
+    assert_eq!(io.pause_boundaries, expected);
+    assert_eq!(io.counts.acknowledged, acknowledged);
+}
+
+
 /// A wrong claimed removal count is refused before any observation or input.
 #[test]
 fn partial_route_objective_must_match_independently_replayed_removals() {
@@ -797,16 +1063,14 @@ fn acknowledged_pair_without_effect_never_commits_or_repeats_input() {
     let mut io = FakeIo::new(&plan);
     let original = io.actual.clone();
     io.freeze_effects = true;
-    assert!(drive(&plan, &mut io).is_err());
+    let error = drive(&plan, &mut io).expect_err("unobserved effect expires without replay");
+    assert!(error.contains("Ordinary effect observation window expired"));
     assert_eq!(io.counts.attempted, 2);
     assert_eq!(io.counts.acknowledged, 2);
     assert_eq!(io.delivered.len(), 2);
     assert_eq!(io.actual, original);
     assert!(io.committed.is_empty());
-    assert!(
-        io.observations.len() <= 12,
-        "effect capture retries remain bounded"
-    );
+    assert_eq!(io.elapsed, Duration::from_secs(2));
 }
 
 
@@ -816,11 +1080,8 @@ fn wrong_origin_refuses_before_any_transport_attempt() {
     let plan = accepted_plan();
     let mut io = FakeIo::new(&plan);
     io.wrong_origin = true;
-    assert!(
-        drive(&plan, &mut io)
-            .expect_err("wrong origin")
-            .contains("Original board mismatch")
-    );
+    let error = drive(&plan, &mut io).expect_err("wrong origin");
+    assert!(error.contains("Precondition"), "{error}");
     assert_eq!(io.counts.attempted, 0);
     assert_eq!(io.counts.acknowledged, 0);
     assert!(io.delivered.is_empty());
@@ -1160,12 +1421,13 @@ fn capture_budget_covers_phase_worst_cases_and_rejects_invalid_counts() {
     for actions in 1..=MAX_ROUTE_ACTIONS {
         for gestures in actions..=MAX_ROUTE_GESTURES {
             let allowance = capture_allowance(actions, gestures).unwrap();
-            assert!(allowance >= 2 + gestures + 6 * actions + 6 * (actions - 1) + 20);
+            assert!(allowance >= 2 + gestures + 6 * actions + 41 * (actions - 1) + 20);
             assert!(allowance >= 2 + 6 * (gestures + actions) + 20);
         }
     }
     assert!(capture_allowance(0, 0).is_err());
     assert!(capture_allowance(usize::MAX, usize::MAX).is_err());
+    assert_eq!(ordinary_effect_observation_limit().unwrap(), 41);
 }
 
 
@@ -1473,4 +1735,346 @@ fn owned_execution_failure_does_not_finish_or_release_the_existing_reservation()
         !rx.try_iter()
             .any(|envelope| matches!(envelope.event, WorkerEvent::ComputedRouteFinished { .. }))
     );
+}
+
+
+/// A source completion reports only prior actions and never clicks the current one.
+#[test]
+fn source_challenge_terminal_counts_prior_actions_without_dispatching_next() {
+    for completed in [0, 1] {
+        let plan = accepted_plan();
+        let mut io = FakeIo::new(&plan);
+        io.source_challenge_after = Some(completed);
+        let report = drive(&plan, &mut io).unwrap();
+        assert!(matches!(
+            report.completion,
+            BoardCompletion::ChallengeTargetVerified(_)
+        ));
+        assert_eq!(io.action, completed);
+        let gestures: usize = plan
+            .trace
+            .iter()
+            .take(completed)
+            .map(|step| operations(step.action).unwrap().len())
+            .sum();
+        assert_eq!(
+            (
+                io.counts.attempted,
+                io.counts.acknowledged,
+                io.delivered.len()
+            ),
+            (gestures, gestures, gestures)
+        );
+        assert!(
+            io.committed
+                .iter()
+                .all(|(actions, _)| *actions <= completed)
+        );
+        assert!(
+            report
+                .message
+                .contains(&format!("{completed}/{}", plan.trace.len())),
+            "{}",
+            report.message
+        );
+    }
+}
+
+
+/// Keep a failed assertion from leaving the fixture's detached calculation parked.
+#[cfg(not(miri))]
+struct SwitchSearchCleanup {
+    /// Same cancellation latch observed by the production planner.
+    cancel: std::sync::Arc<AtomicBool>,
+    /// Shared pause/search gates; no guest transport exists in this fixture.
+    latest: super::super::LatestFrameSlot,
+}
+
+
+#[cfg(not(miri))]
+impl Drop for SwitchSearchCleanup {
+    /// Release only local test work after either success or assertion unwinding.
+    fn drop(&mut self) {
+        self.cancel
+            .store(true, std::sync::atomic::Ordering::Release);
+        self.latest.pause.abort();
+        self.latest.search_control.abort();
+    }
+}
+
+
+/// Wait for an observable fixture condition with a deadline; no fixed delay grants success.
+#[cfg(not(miri))]
+fn wait_for_switch_condition(condition: impl Fn() -> bool) {
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    while !condition() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "production switch condition timed out"
+        );
+        std::thread::sleep(Duration::from_millis(1));
+    }
+}
+
+
+/// Run the production receipt/calculation/search path with real pause and switch gates.
+/// The first actual engine is interrupted at its checkpoint; the replacement must
+/// retain exact acquisition identity, remain paused and independently replay before
+/// publication. No QMP socket, capture or synthetic search result is supplied.
+#[cfg(not(miri))]
+fn production_switch_case(board_generation: u64, stop_after_request: bool) {
+    use std::sync::{Arc, Mutex, mpsc};
+    let plan = accepted_plan();
+    let context = plan.acquisition.context.clone();
+    let original = plan.acquisition.deal.clone();
+    let bytes = plan.acquisition.bytes.clone();
+    let cancel = Arc::new(AtomicBool::new(false));
+    let (tx, rx) = mpsc::channel();
+    let events = WorkerEventSink {
+        events: tx,
+        latest_frame: super::super::LatestFrameSlot::default(),
+        capture_context: Mutex::new(Some(context.clone())),
+    };
+    let latest = events.latest_frame.clone();
+    latest.reconnaissance.select(&context, &cancel).unwrap();
+    latest
+        .reconnaissance
+        .queue_reconnaissance(&context, &cancel, || Ok(()))
+        .unwrap();
+    record_acquisition(
+        &context,
+        &events,
+        &cancel,
+        plan.acquisition.deal,
+        plan.acquisition.vision,
+        &fixture_path("pyramid-recon-20261019-v7-01.json"),
+        None,
+        RouteMethod::FewestActions,
+        crate::pyramid_workflow_model::ObservedGame::Unknown,
+    )
+    .unwrap();
+    let acquisition_epoch = latest.reconnaissance.epoch().unwrap();
+    let _pause_work = latest
+        .pause
+        .begin(super::super::pyramid_pause::Phase::Search)
+        .unwrap();
+    let pause_epoch = latest.pause.snapshot().unwrap().epoch;
+    latest.pause.request(pause_epoch, true).unwrap();
+    let _cleanup = SwitchSearchCleanup {
+        cancel: Arc::clone(&cancel),
+        latest: latest.clone(),
+    };
+    let directory = std::env::temp_dir().join(format!(
+        "route-switch-{}-{}-{board_generation}-{stop_after_request}",
+        std::process::id(),
+        std::thread::current().name().unwrap_or("test")
+    ));
+    std::fs::create_dir(&directory).unwrap();
+    let path = directory.join("unchanged-inventory");
+    std::fs::write(&path, &bytes).unwrap();
+    let worker_path = path.clone();
+    let worker_context = context.clone();
+    let worker_cancel = Arc::clone(&cancel);
+    let worker = std::thread::spawn(move || {
+        calculate_owned_with_policy(
+            &worker_context,
+            941,
+            &worker_path,
+            RouteMethod::FewestActions,
+            board_generation,
+            &events,
+            &worker_cancel,
+            false,
+        )
+    });
+    wait_for_switch_condition(|| {
+        latest
+            .pause
+            .snapshot()
+            .is_some_and(|pause| pause.acknowledged)
+    });
+    let shortest = latest
+        .search_control
+        .snapshot()
+        .expect("actual Shortest invocation");
+    assert_eq!(shortest.context, context);
+    assert_eq!(shortest.run_id, 941);
+    assert_eq!(shortest.board_generation, board_generation);
+    assert_eq!(shortest.method, RouteMethod::FewestActions);
+    assert!(latest.computed_route.lock().unwrap().prepared.is_none());
+    latest
+        .reconnaissance
+        .check_active(&context, &cancel)
+        .unwrap();
+    latest
+        .search_control
+        .request_maximum(&shortest, &cancel)
+        .unwrap();
+    if stop_after_request {
+        latest.reconnaissance.stop(Some(&context), &cancel);
+        latest.pause.abort();
+        latest.search_control.abort();
+        assert!(worker.join().unwrap().is_err());
+        assert!(cancel.load(std::sync::atomic::Ordering::Acquire));
+        assert!(latest.computed_route.lock().unwrap().prepared.is_none());
+        assert!(latest.search_control.snapshot().is_none());
+    } else {
+        wait_for_switch_condition(|| {
+            latest
+                .search_control
+                .snapshot()
+                .is_some_and(|search| search.method == RouteMethod::Fast)
+                && latest
+                    .pause
+                    .snapshot()
+                    .is_some_and(|pause| pause.acknowledged)
+        });
+        let maximum = latest.search_control.snapshot().unwrap();
+        assert!(maximum.token > shortest.token);
+        assert_eq!(maximum.context, context);
+        assert_eq!(maximum.run_id, shortest.run_id);
+        assert_eq!(maximum.board_generation, shortest.board_generation);
+        let paused = latest.pause.snapshot().unwrap();
+        assert_eq!(paused.epoch, pause_epoch);
+        assert!(paused.requested && paused.acknowledged);
+        assert!(!cancel.load(std::sync::atomic::Ordering::Acquire));
+        assert_eq!(latest.reconnaissance.epoch().unwrap(), acquisition_epoch);
+        assert!(
+            latest.computed_route.lock().unwrap().prepared.is_none(),
+            "interrupted Shortest must not publish a route before Maximum resumes"
+        );
+        assert!(
+            latest
+                .search_control
+                .request_maximum(&shortest, &cancel)
+                .is_err()
+        );
+        assert_eq!(
+            latest
+                .planning_progress
+                .lock()
+                .unwrap()
+                .as_ref()
+                .unwrap()
+                .method,
+            RouteMethod::Fast
+        );
+        latest.pause.request(pause_epoch, false).unwrap();
+        let report = worker
+            .join()
+            .unwrap()
+            .expect("real Maximum search and independent replay");
+        assert_eq!(report.method, RouteMethod::Fast);
+        assert!(report.card_route);
+        assert!(!cancel.load(std::sync::atomic::Ordering::Acquire));
+        assert!(
+            latest
+                .reconnaissance
+                .check_active(&context, &cancel)
+                .is_ok()
+        );
+        assert!(latest.search_control.snapshot().is_none());
+        let store = latest.computed_route.lock().unwrap();
+        let prepared = store
+            .prepared
+            .as_ref()
+            .expect("only independently replayed Maximum route");
+        assert_eq!(prepared.id, 941);
+        assert_eq!(prepared.acquisition.context, context);
+        assert_eq!(prepared.acquisition.epoch, acquisition_epoch);
+        assert_eq!(prepared.acquisition.bytes, bytes);
+        assert_eq!(prepared.acquisition.deal, original);
+        let actions: Vec<_> = prepared.trace.iter().map(|step| step.action).collect();
+        assert_eq!(
+            prepared.trace,
+            replay::replay(&original, &actions, true).unwrap()
+        );
+        assert_eq!(prepared.objective, RouteObjective::Clear);
+        let progress = latest.planning_progress.lock().unwrap();
+        let progress = progress.as_ref().unwrap();
+        assert_eq!(progress.method, RouteMethod::Fast);
+        assert_eq!(progress.board_generation, board_generation);
+        assert!(progress.finished && progress.stats.expanded > 0);
+        drop(store);
+        let logs: Vec<_> = rx
+            .try_iter()
+            .filter_map(|event| match event.event {
+                WorkerEvent::Log(message) => Some(message),
+                _ => None,
+            })
+            .collect();
+        assert!(
+            logs.iter()
+                .any(|line| line.contains("Operator requested Maximum card matches"))
+        );
+    }
+    std::fs::remove_file(path).unwrap();
+    std::fs::remove_dir(directory).unwrap();
+}
+
+
+/// Manual and automatic owners share the same real calculation switch without reacquisition.
+#[cfg(not(miri))]
+#[test]
+fn production_calculation_switch_reuses_exact_receipt_and_publishes_only_maximum() {
+    production_switch_case(0, false);
+    production_switch_case(7, false);
+}
+
+
+/// STOP after acceptance prevents a replacement route and never gets cleared by the switch.
+#[cfg(not(miri))]
+#[test]
+fn production_calculation_stop_wins_over_pending_maximum() {
+    production_switch_case(7, true);
+}
+
+
+/// A bound challenge can observe a next board after expiry without committing the missing effect.
+#[test]
+fn native_150_challenge_final_ack_handoff_keeps_two_second_window_and_no_replay() {
+    let plan = accepted_plan();
+    let mut io = FakeIo::new(&plan);
+    io.challenge_handoff = true;
+    io.final_misses = usize::MAX;
+    let result = drive(&plan, &mut io).unwrap();
+    let ack = io.counts.last_acknowledged_at.unwrap();
+    assert_eq!(result.completion, BoardCompletion::AwaitingFreshBoard);
+    assert!(result.message.contains("remains unproved"));
+    assert_eq!(io.elapsed, ack + FINAL_CONFIRMATION_WINDOW);
+    assert_eq!(io.final_observations.len(), 9);
+    assert_eq!(io.delivered.len(), 73);
+    assert_eq!((io.counts.attempted, io.counts.acknowledged), (73, 73));
+    assert_eq!(io.committed.len(), 48);
+    assert!(
+        !io.waits
+            .iter()
+            .any(|(_, delay)| *delay == crate::parameters::PYRAMID_CLEAR_HANDOFF_DELAY)
+    );
+}
+
+
+/// STOP, context revocation and an uncertain final gesture cannot become read-only success.
+#[test]
+fn native_150_challenge_handoff_cannot_bypass_delivery_or_revocation() {
+    let plan = accepted_plan();
+    for fault in 0..4 {
+        let mut io = FakeIo::new(&plan);
+        io.challenge_handoff = true;
+        io.final_misses = usize::MAX;
+        match fault {
+            0 => io.uncertain_attempt = Some(73),
+            1 => io.stop_after_ack = Some(73),
+            2 => io.stop_during_final_observation = true,
+            3 => io.revoke_during_final_observation = true,
+            _ => unreachable!(),
+        }
+        assert!(drive(&plan, &mut io).is_err());
+        assert!(io.delivered.len() <= 73);
+        assert!(io.committed.len() <= 48);
+    }
+    let mut io = FakeIo::new(&plan);
+    io.challenge_handoff = true;
+    assert!(confirm_final_action(SearchState::initial(), &mut io, 0, 0, Duration::ZERO).is_err());
+    assert!(io.delivered.is_empty() && io.final_observations.is_empty());
 }

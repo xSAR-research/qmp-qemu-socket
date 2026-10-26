@@ -1,5 +1,19 @@
 # QMP and capture design
 
+## Current computed-route boundary
+
+The combined 2.9.137 A* owner uses fresh authenticated gameplay observations;
+older delivery-specific statements below do not describe its current admission.
+One checked boundary frame can prove a prior whole action and the next source;
+MATCH has no capture between its two ordered clicks. Each gesture retains fresh
+VM/pointer probes, STOP/context checks, separate ACKs and no uncertain replay.
+Bound actual Challenge Complete relinquishes input. Bundled native-v23 appearance
+roles preserve exact identities and native coordinates; CV/HALO is unchanged.
+
+App shutdown retires gameplay and waits for existing transport release recovery;
+it adds no cleanup clicks or forced transport close. See
+[combined verification](Verification-2.9.137.md) for qualification/acceptance status.
+
 Version 2.0.0 candidate 2 imports the reusable transport from xsar's optional
 Unix `qmp` feature. Its application adapter selects the existing timing
 constants and maps Draw to the neutral qcode API. Probe, movement, click,

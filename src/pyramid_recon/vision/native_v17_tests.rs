@@ -240,3 +240,79 @@ fn v17_rollback_retains_all_v16_card_scene_and_parser_inputs_exactly() {
     .unwrap();
     assert_eq!(value, previous);
 }
+
+
+/// Final absence bands compose with the exact native LEFT-X without ordinary occupancy.
+#[test]
+fn native_150_perfect_exhausted_left_composes_final_bands() {
+    let frame = crate::capture::decode_png(include_bytes!(
+        "../../../tests/fixtures/pyramid-boards-perfect-150/last-observed.png"
+    ))
+    .unwrap();
+    let right = Some(Card::new(Rank::King, Suit::Diamonds));
+    let initial = crate::pyramid_progress::ChallengeProgress::new(
+        crate::pyramid_progress::ChallengeKind::Boards,
+        1,
+        3,
+    )
+    .unwrap();
+    for reader in [
+        ReconVision::bundled_native_v22().unwrap(),
+        ReconVision::bundled_native_v23().unwrap(),
+    ] {
+        assert!(
+            reader
+                .verify_position(&frame, &[None; 28], None, right)
+                .is_err()
+        );
+        assert!(
+            reader
+                .verify_final_clear(&frame, &[None; 28], None, right)
+                .is_err(),
+            "this Perfect lettering is not a new legacy marker calibration"
+        );
+        reader
+            .verify_board_count_final_clear(&frame, &[None; 28], None, right, initial)
+            .unwrap();
+        assert!(
+            reader
+                .verify_board_count_final_clear(&frame, &[None; 28], None, None, initial)
+                .is_err()
+        );
+        assert!(
+            reader
+                .verify_board_count_final_clear(
+                    &frame,
+                    &[None; 28],
+                    Some(Card::new(Rank::Ace, Suit::Spades)),
+                    right,
+                    initial
+                )
+                .is_err()
+        );
+        for (index, (x, y)) in TABLEAU_ORIGINS.iter().copied().enumerate() {
+            let mut expected = [None; 28];
+            expected[index] = right;
+            assert!(
+                reader
+                    .verify_board_count_final_clear(&frame, &expected, None, right, initial)
+                    .is_err()
+            );
+            let mut damaged = frame.clone();
+            paint(&mut damaged, PixelRect::new(x + 40, y + 4, 60, 4), [255; 3]);
+            assert!(
+                reader
+                    .verify_board_count_final_clear(&damaged, &[None; 28], None, right, initial)
+                    .is_err(),
+                "damaged complete band {index}"
+            );
+        }
+        let mut damaged = frame.clone();
+        paint(&mut damaged, PixelRect::new(767, 712, 60, 60), [255; 3]);
+        assert!(
+            reader
+                .verify_board_count_final_clear(&damaged, &[None; 28], None, right, initial)
+                .is_err()
+        );
+    }
+}

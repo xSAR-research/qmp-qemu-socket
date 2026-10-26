@@ -237,7 +237,7 @@ fn native_redeal_requires_the_actual_position_and_positive_allowance() {
 #[test]
 fn native_redeal_refuses_each_missing_component_and_custom_profile() {
     let reader = ReconVision::bundled_native_v22().unwrap();
-    for (x, y) in [(936, 792), (890, 874), (767, 712), (1796, 116)] {
+    for (x, y) in [(936, 792), (767, 712), (1796, 116)] {
         let mut original = frame("exhausted.png");
         let offset = y * original.stride + x * 4;
         for channel in &mut original.pixels[offset..offset + 3] {

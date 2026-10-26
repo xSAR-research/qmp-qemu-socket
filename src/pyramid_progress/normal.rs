@@ -31,6 +31,14 @@ const HEADER_ONE_RGB: &[u8; 15_360] =
     include_bytes!("../../tests/fixtures/pyramid-standard-progress/header-one.rgb");
 
 
+/// Complete ordinal-one appearance from the retained 2.9.152 post-NewGame refusal.
+///
+/// All 5120 pixels retain the original per-channel tolerance of 12. This is one
+/// independently measured complete appearance, without per-pixel exceptions.
+const HEADER_ONE_NEW_GAME_RGB: &[u8; 15_360] =
+    include_bytes!("../../tests/fixtures/pyramid-normal-entry-153/header-one-new-game.rgb");
+
+
 /// Complete original ordinal-two header, including words, digits and negative space.
 const HEADER_TWO_RGB: &[u8; 15_360] =
     include_bytes!("../../tests/fixtures/pyramid-standard-series/header-2.rgb");
@@ -91,6 +99,27 @@ const NORMAL_HEADERS: [(BoardCount, HeaderPatch); 3] = [
 ];
 
 
+/// Complete measured appearances, grouped by their literal ordinal identity.
+///
+/// The three original source patches stay independently retained. Two coherent
+/// appearances for ordinal one still denote one count, never two board changes.
+const NORMAL_APPEARANCES: [(BoardCount, HeaderPatch); 4] = [
+    NORMAL_HEADERS[0],
+    NORMAL_HEADERS[1],
+    NORMAL_HEADERS[2],
+    (
+        BoardCount {
+            completed: 0,
+            target: 3,
+        },
+        HeaderPatch {
+            bounds: PixelRect::new(1_658, 46, 160, 32),
+            rgb: HEADER_ONE_NEW_GAME_RGB,
+        },
+    ),
+];
+
+
 /// Positive measured `New` text is required along with the complete normal ordinal header.
 const NEW_FOOTER: HeaderPatch = HeaderPatch {
     bounds: PixelRect::new(212, 998, 58, 31),
@@ -126,14 +155,33 @@ pub(super) fn observe(frame: &CapturedFrame) -> Result<Option<BoardCount>, Strin
     {
         return Ok(None);
     }
-    match_header(view, &NORMAL_HEADERS)
+    match_header(view, &NORMAL_APPEARANCES)
 }
 
 
-/// Return a unique full-header match; overlapping labels remain unsupported.
+/// Read only a complete normal ordinal for contradiction checks in an already bound run.
 ///
-/// The explicit table is finite and borrowed. Rejecting multiple matches also
-/// prevents a future duplicated or ambiguous template from choosing an ordinal.
+/// This omits the New footer and cannot establish normal-game identity, source
+/// authority or completion. Unsupported native artwork returns `None`.
+///
+/// # Errors
+///
+/// Returns an error for malformed pixels or bundled header metadata.
+pub(super) fn observe_header(frame: &CapturedFrame) -> Result<Option<BoardCount>, String> {
+    let view = frame
+        .as_view()
+        .map_err(|error| format!("Pyramid normal header frame layout is invalid: {error}"))?;
+    if (view.width(), view.height()) != (NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT) {
+        return Ok(None);
+    }
+    match_header(view, &NORMAL_APPEARANCES)
+}
+
+
+/// Return a unique ordinal from complete appearances; different ordinals refuse.
+///
+/// Same-ordinal complete appearances share one semantic identity. A second
+/// different ordinal remains ambiguous and never chooses the nearest label.
 fn match_header(
     view: FrameView<'_>,
     headers: &[(BoardCount, HeaderPatch)],
@@ -141,7 +189,7 @@ fn match_header(
     let mut matched = None;
     for &(count, patch) in headers {
         if matches_patch_with_tolerance(view, patch, HEADER_TOLERANCE)? {
-            if matched.is_some() {
+            if matched.is_some_and(|previous| previous != count) {
                 return Ok(None);
             }
             matched = Some(count);

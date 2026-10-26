@@ -41,6 +41,10 @@ fn challenge_position(name: &str) -> ([Option<Card>; 28], Card) {
             ],
             "4S",
         ),
+        "score" => (
+            &[(0, "AS"), (2, "5S"), (5, "10S"), (9, "3H"), (14, "QD")],
+            "8H",
+        ),
         _ => panic!("named actual fixture"),
     };
     let mut tableau = [None; 28];
@@ -54,7 +58,7 @@ fn challenge_position(name: &str) -> ([Option<Card>; 28], Card) {
 /// Both real failures require added whole variants and prove the exact same-frame position.
 #[test]
 fn actual_challenge_redeal_variants_prove_both_reported_positions() {
-    for name in ["jacks", "eights"] {
+    for name in ["jacks", "eights", "score"] {
         let frame = challenge_frame(name);
         let (tableau, right) = challenge_position(name);
         let mut reader = ReconVision::bundled_native_v22().unwrap();
@@ -63,12 +67,21 @@ fn actual_challenge_redeal_variants_prove_both_reported_positions() {
                 .verify_position(&frame, &tableau, None, Some(right))
                 .is_err()
         );
-        assert_eq!(reader.remaining_native_redeals(&frame).unwrap(), Some(1));
+        assert_eq!(
+            reader.remaining_native_redeals(&frame).unwrap(),
+            if name == "score" { None } else { Some(1) }
+        );
         assert_eq!(
             reader
                 .verify_native_redeal_position(&frame, &tableau, Some(right))
                 .unwrap(),
             PixelPoint::new(960, 825)
+        );
+        assert_eq!(
+            reader
+                .verify_native_stock_continuation(&frame, &tableau, None, Some(right))
+                .unwrap(),
+            Some(PixelPoint::new(960, 825))
         );
         let native = reader.native_redeal.as_mut().unwrap();
         native.enabled[1] = native.enabled[0].clone();
@@ -88,11 +101,11 @@ fn actual_challenge_redeal_variants_prove_both_reported_positions() {
 /// Every added variant retains all position/static/X/control and custom-profile refusals.
 #[test]
 fn actual_challenge_redeal_variants_refuse_missing_or_wrong_evidence() {
-    for name in ["jacks", "eights"] {
+    for name in ["jacks", "eights", "score"] {
         let frame = challenge_frame(name);
         let (tableau, right) = challenge_position(name);
         let reader = ReconVision::bundled_native_v22().unwrap();
-        for (x, y) in [(936, 792), (890, 874), (767, 712), (1796, 116), (1796, 388)] {
+        for (x, y) in [(936, 792), (767, 712), (1796, 116), (1796, 388), (958, 845)] {
             let mut changed = challenge_frame(name);
             let offset = y * changed.stride + x * 4;
             for channel in &mut changed.pixels[offset..offset + 3] {
@@ -165,4 +178,38 @@ fn challenge_redeal_matching_requires_one_complete_variant() {
         }
     }
     assert!(!matches_any(&candidates, view).unwrap());
+}
+
+
+/// An unknown redundant caption does not revoke exact enabled widget/count proof.
+#[test]
+fn unknown_caption_preserves_widget_authority_but_unknown_widget_never_uses_caption() {
+    for name in ["jacks", "eights", "score"] {
+        let reader = ReconVision::bundled_native_v22().unwrap();
+        let (tableau, right) = challenge_position(name);
+        let mut frame = challenge_frame(name);
+        // Labelled synthetic caption corruption, outside the complete widget ROI.
+        let offset = 874 * frame.stride + 890 * 4;
+        frame.pixels[offset..offset + 3].fill(255);
+        assert_eq!(reader.remaining_native_redeals(&frame).unwrap(), None);
+        assert_eq!(
+            reader
+                .verify_native_redeal_position(&frame, &tableau, Some(right))
+                .unwrap(),
+            PixelPoint::new(960, 825)
+        );
+        // Labelled synthetic erased numeral; the separate lower caption grants nothing.
+        let mut frame = challenge_frame(name);
+        for y in 844..855 {
+            for x in 936..984 {
+                let offset = y * frame.stride + x * 4;
+                frame.pixels[offset..offset + 3].fill(0);
+            }
+        }
+        assert!(
+            reader
+                .verify_native_redeal_position(&frame, &tableau, Some(right))
+                .is_err()
+        );
+    }
 }

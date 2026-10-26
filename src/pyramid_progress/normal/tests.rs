@@ -465,3 +465,73 @@ fn unmeasured_card_pixels_do_not_supply_scene_or_deck_authority() {
     change_channel(&mut frame, 960, 600, 0, 100);
     assert_eq!(observe_normal(&frame), Ok(zero_completed()));
 }
+
+
+/// Both retained actual failures supply complete card evidence and the same literal normal count.
+#[test]
+fn native_153_reported_entry_frames_have_complete_shared_identity() {
+    use crate::pyramid_recon::vision::{ReconScene, ReconVision, StartingReadiness};
+    let reader = ReconVision::bundled_native_v23().unwrap();
+    let images: [&[u8]; 2] = [
+        include_bytes!("../../../tests/fixtures/pyramid-normal-entry-153/automatic-entry.png"),
+        include_bytes!("../../../tests/fixtures/pyramid-normal-entry-153/manual-entry.png"),
+    ];
+    for bytes in images {
+        let frame = native(bytes);
+        assert_eq!(observe_normal(&frame).unwrap(), zero_completed());
+        assert_eq!(observe_header(&frame).unwrap(), zero_completed());
+        let ReconScene::Board(board) = reader.observe(&frame).unwrap() else {
+            panic!("complete actual board")
+        };
+        assert_eq!(board.tableau.len(), 28);
+        assert!(matches!(
+            reader.starting_readiness(&frame).unwrap(),
+            StartingReadiness::Ready(_)
+        ));
+    }
+}
+
+
+/// Complete appearances may share one count, while contradictory counts and missing patches refuse.
+#[test]
+fn native_153_header_appearance_keeps_identity_and_footer_guards() {
+    let original = native(include_bytes!(
+        "../../../tests/fixtures/pyramid-normal-entry-153/automatic-entry.png"
+    ));
+    let patch = NORMAL_APPEARANCES[3].1;
+    let count = BoardCount {
+        completed: 0,
+        target: 3,
+    };
+    assert_eq!(
+        match_header(
+            original.as_view().unwrap(),
+            &[(count, patch), (count, patch)]
+        )
+        .unwrap(),
+        Some(count)
+    );
+    assert_eq!(
+        match_header(
+            original.as_view().unwrap(),
+            &[
+                (count, patch),
+                (
+                    BoardCount {
+                        completed: 1,
+                        target: 3
+                    },
+                    patch
+                )
+            ]
+        )
+        .unwrap(),
+        None
+    );
+    let mut footer = original.clone();
+    erase_patch(&mut footer, NEW_FOOTER);
+    assert_eq!(observe_normal(&footer).unwrap(), None);
+    let mut header = original;
+    erase_patch(&mut header, NORMAL_HEADERS[0].1);
+    assert_eq!(observe_normal(&header).unwrap(), None);
+}

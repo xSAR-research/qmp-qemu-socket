@@ -165,7 +165,7 @@ impl ReconVision {
             self.board.board_count_final_clear,
             "no board-count final-clear calibration",
         )?;
-        let current = crate::pyramid_progress::observe_challenge(frame)?;
+        let current = crate::pyramid_progress::observe_bound_challenge_progress(frame, initial)?;
         require(
             initial.kind == ChallengeKind::Boards
                 && !initial.target_reached()
@@ -207,7 +207,7 @@ impl ReconVision {
             self.board.board_count_target_clear,
             "no board-count target-clear calibration",
         )?;
-        let current = crate::pyramid_progress::observe_challenge(frame)?;
+        let current = crate::pyramid_progress::observe_bound_challenge_progress(frame, initial)?;
         require(
             initial.kind == ChallengeKind::Boards
                 && !initial.target_reached()
@@ -248,7 +248,7 @@ impl ReconVision {
             self.board.challenge_final_clear,
             "no bound challenge final-clear calibration",
         )?;
-        let current = crate::pyramid_progress::observe_challenge(frame)?;
+        let current = crate::pyramid_progress::observe_bound_challenge_progress(frame, initial)?;
         require(
             !initial.target_reached()
                 && current.is_some_and(|current| {
@@ -312,22 +312,32 @@ impl ReconVision {
             .as_ref()
             .ok_or("no final-clear calibration")?;
         require(
-            !self.dialog.matches(view, true)?,
+            !self.dialog_matches(view, true)?,
             "final-clear refused complete Undo All dialog",
         )?;
         if proof == FinalPositionProof::PerfectMarkers {
             require(
-                matches_all(&calibration.marker, view)?,
+                calibration
+                    .marker
+                    .iter()
+                    .try_fold(true, |matched, pattern| {
+                        Ok::<_, String>(matched && self.native_marker(view, pattern)?)
+                    })?,
                 "final-clear marker mismatch",
             )?;
         }
-        let circle = left.is_none() && calibration.left_empty.matches(view, (0, 0))?;
-        for pattern in &self.board.scene {
-            if circle && pattern.bounds == DRAW_SCENE {
+        let circle = left.is_none()
+            && self.native_stock_layout(view, LEFT_BOUNDS, &calibration.left_empty)?;
+        // A positive exhausted LEFT-X composes with the final bands below. Ordinary
+        // tableau occupancy can be obscured by Perfect and is not a second final
+        // proof. Exact RIGHT, scene/modal and every selected absence band still apply.
+        let exhausted = left.is_none() && self.native_exhausted_left(view)?;
+        for (index, pattern) in self.board.scene.iter().enumerate() {
+            if (circle || exhausted) && pattern.bounds == DRAW_SCENE {
                 continue;
             }
             require(
-                pattern.matches(view, (0, 0))?,
+                self.native_scene_anchor(view, index, pattern)?,
                 "final-clear scene anchor mismatch",
             )?;
         }
@@ -342,16 +352,10 @@ impl ReconVision {
             let band = PixelRect::new(x + TOP_BAND.0, y + offset, TOP_BAND.2, TOP_BAND.3);
             view.checked_bounds(band)
                 .map_err(|_| "final-clear band outside frame".to_owned())?;
-            for row in band.y..band.y + band.height {
-                for column in band.x..band.x + band.width {
-                    let pixel = view
-                        .pixel_rgb(column, row)
-                        .ok_or("missing final-clear band pixel")?;
-                    if !crate::pyramid::is_felt(pixel) {
-                        return Err(format!("final-clear slot {index} lacks complete felt band"));
-                    }
-                }
-            }
+            require(
+                self.native_absence_band(view, band)?,
+                &format!("final-clear slot {index} lacks complete absence band"),
+            )?;
         }
         let face = |card: Option<Card>| card.map_or(StockFace::Empty, StockFace::Card);
         let left_empty = if circle {
@@ -360,7 +364,7 @@ impl ReconVision {
             &self.board.left_empty
         };
         require(
-            self.stock_face(view, LEFT_BOUNDS, left_empty)? == face(left),
+            exhausted || self.stock_face(view, LEFT_BOUNDS, left_empty)? == face(left),
             "final-clear LEFT mismatch",
         )?;
         require(

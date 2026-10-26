@@ -44,10 +44,14 @@ use std::{
 };
 
 
+mod cadence;
 mod partial;
 
 
 mod continuation;
+
+
+mod redeal_appearance;
 mod search_log;
 
 
@@ -75,7 +79,7 @@ const MAX_ROUTE_ACTIONS: usize = 102;
 const MAX_ROUTE_GESTURES: usize = 126;
 
 
-/// Fresh observations allowed for an ordinary precondition or effect phase.
+/// Fresh observations allowed for a source precondition; effects have their own window.
 const ORDINARY_OBSERVATIONS: usize = 6;
 
 
@@ -83,11 +87,42 @@ const ORDINARY_OBSERVATIONS: usize = 6;
 const FINAL_OBSERVATIONS: usize = 20;
 
 
+/// Derive a finite effect cap that cannot shorten the configured observation window.
+///
+/// The ceiling of window/retry plus one covers an immediate read and every retry,
+/// even with zero capture latency. Reject zero intervals/windows and overflow.
+fn ordinary_effect_observation_limit() -> Result<usize, String> {
+    let window = crate::parameters::COMPUTED_ROUTE_EFFECT_WINDOW.as_nanos();
+    let interval = crate::parameters::COMPUTED_ROUTE_REOBSERVE_DELAY.as_nanos();
+    window
+        .checked_sub(1)
+        .and_then(|n| n.checked_div(interval))
+        .and_then(|n| n.checked_add(2))
+        .and_then(|n| usize::try_from(n).ok())
+        .ok_or("Invalid ordinary effect observation budget".to_owned())
+}
+
+
+/// Return time left for a new ordinary-effect capture or read-only retry.
+///
+/// Both times are elapsed from the same run origin. Expiry or a backwards clock
+/// withholds further observation; it never permits another input attempt.
+fn ordinary_effect_remaining(acknowledged_at: Duration, now: Duration) -> Result<Duration, String> {
+    let elapsed = now
+        .checked_sub(acknowledged_at)
+        .ok_or("Ordinary effect clock precedes its acknowledgement")?;
+    crate::parameters::COMPUTED_ROUTE_EFFECT_WINDOW
+        .checked_sub(elapsed)
+        .filter(|remaining| !remaining.is_zero())
+        .ok_or("Ordinary effect observation window expired; input is not repeated".to_owned())
+}
+
+
 /// Bound all phases, including native guard captures outside the shared sequencer.
 ///
 /// Preserve the approved conservative allowance and cover the exact worst case:
-/// two initial captures, G guards, 6*A preconditions, 6*(A-1) ordinary effects,
-/// and 20 final effects. Checked arithmetic rejects malformed internal plans.
+/// two external captures, G guards, 6*A preconditions, the derived ordinary-effect
+/// cap for each of A-1 actions, and 20 final effects. Arithmetic is checked.
 fn capture_allowance(actions: usize, gestures: usize) -> Result<usize, String> {
     if actions == 0 || actions > MAX_ROUTE_ACTIONS || gestures > MAX_ROUTE_GESTURES {
         return Err("Route count outside finite Pyramid bounds".to_owned());
@@ -96,10 +131,14 @@ fn capture_allowance(actions: usize, gestures: usize) -> Result<usize, String> {
         .checked_add(actions)
         .and_then(|n| n.checked_mul(ORDINARY_OBSERVATIONS))
         .and_then(|n| n.checked_add(2 + FINAL_OBSERVATIONS));
+    let effect_limit = ordinary_effect_observation_limit()?;
+    let effects = actions
+        .checked_sub(1)
+        .and_then(|n| n.checked_mul(effect_limit));
     let phases = actions
-        .checked_mul(2)
-        .and_then(|n| n.checked_sub(1))
-        .and_then(|n| n.checked_mul(ORDINARY_OBSERVATIONS))
+        .checked_mul(ORDINARY_OBSERVATIONS)
+        .zip(effects)
+        .and_then(|(preconditions, effects)| preconditions.checked_add(effects))
         .and_then(|n| n.checked_add(gestures))
         .and_then(|n| n.checked_add(2 + FINAL_OBSERVATIONS));
     approved
@@ -614,7 +653,9 @@ pub(super) struct PlanningReport {
 
 /// Search and fall back while retaining one authenticated acquisition throughout.
 ///
-/// Only complete search exhaustion may select fallback or Boards stock draining.
+/// Complete exhaustion alone selects automatic fallback or Boards stock draining.
+/// An explicit operator request may replace an active Shortest engine with Maximum;
+/// it proves nothing about solvability and retains this same authenticated receipt.
 /// The explicit no-challenge policy suppresses header interpretation; no caller
 /// can clone the acquisition or recover it after execution starts.
 #[expect(
@@ -658,6 +699,8 @@ pub(super) fn calculate_owned_with_policy(
             .take()
             .or_else(|| store.prepared.take().map(|plan| plan.acquisition))
             .ok_or("No same-session restored acquisition; acquire the board first")?;
+        // Keep the receipt privately owned while search or its checkpoint can block.
+        drop(store);
         check_acquisition(&acquisition, context, events, cancel)?;
         source_document = Some(acquisition.bytes.clone());
         record_detail(
@@ -683,6 +726,15 @@ pub(super) fn calculate_owned_with_policy(
             );
         }
         let (actions, stats, objective, guarantee) = loop {
+            check_acquisition(&acquisition, context, events, cancel)?;
+            let search_work = events.latest_frame.search_control.begin(
+                context,
+                run_id,
+                board_generation,
+                method,
+                cancel,
+            )?;
+            let local_cancel = AtomicBool::new(false);
             let route_goal = method.route_goal();
             send_log(
                 events,
@@ -770,14 +822,47 @@ pub(super) fn calculate_owned_with_policy(
                     finished: snapshot.finished,
                 });
             };
-            let outcome = search::solve_best_effort_with_cost(
+            let checkpoint = || match events.latest_frame.pause.checkpoint_interruptible(
+                super::pyramid_pause::Phase::Search,
+                || check_acquisition(&acquisition, context, events, cancel),
+                || search_work.maximum_requested(),
+            ) {
+                Ok(super::pyramid_pause::Checkpoint::Ready(paused)) => paused,
+                Ok(super::pyramid_pause::Checkpoint::Interrupted(paused)) => {
+                    local_cancel.store(true, std::sync::atomic::Ordering::Release);
+                    paused
+                }
+                Err(error) => {
+                    // Real cancellation/context failures retain existing STOP semantics.
+                    cancel.store(true, std::sync::atomic::Ordering::Release);
+                    local_cancel.store(true, std::sync::atomic::Ordering::Release);
+                    error.paused
+                }
+            };
+            let outcome = search::solve_best_effort_with_cost_and_control(
                 &acquisition.deal,
                 limits,
-                cancel,
+                &local_cancel,
                 options,
                 cost,
                 Some(&mut progress),
+                Some(&checkpoint),
             );
+            checkpoint();
+            check_acquisition(&acquisition, context, events, cancel)?;
+            // This mutex handshake closes acceptance before any old actions reach replay.
+            let replace = search_work.finish()?;
+            check_acquisition(&acquisition, context, events, cancel)?;
+            if replace {
+                method = RouteMethod::Fast;
+                record_detail(
+                    &mut details,
+                    "operator_requested_maximum",
+                    serde_json::json!(true),
+                );
+                send_log(events, "Operator requested Maximum card matches: retiring Shortest search and reusing this authenticated RECON; no no-win proof claimed.".to_owned());
+                continue;
+            }
             let prepared = match outcome {
                 BestEffortOutcome::Solved {
                     actions,
@@ -961,6 +1046,15 @@ pub(super) fn calculate_owned_with_policy(
             .filter(|step| step.action == RecordedAction::Recycle)
             .count();
         let profile = acquisition.vision.profile_id().to_owned();
+        let mut store = events
+            .latest_frame
+            .computed_route
+            .lock()
+            .map_err(|_| "Route receipt lock poisoned")?;
+        check_acquisition(&acquisition, context, events, cancel)?;
+        if store.acquisition.is_some() || store.prepared.is_some() {
+            return Err("Another receipt replaced the search owner; no route published".to_owned());
+        }
         store.prepared = Some(Prepared {
             id: run_id,
             acquisition,
@@ -1087,6 +1181,13 @@ trait RouteIo {
         false
     }
 
+    /// Only a bound automatic session may continue with input-free fresh-board observations.
+    /// The caller must already have delivered every gesture of a replayed full clear.
+    fn read_only_board_transition(&self) -> bool {
+        false
+    }
+
+
     /// Count an acknowledged RECYCLE separately from the proposed route.
     fn recycle_acknowledged(&mut self) -> Result<(), String> {
         Ok(())
@@ -1094,6 +1195,11 @@ trait RouteIo {
 
     /// Reject revoked execution before any new operation.
     fn check(&self) -> Result<(), String>;
+    /// Suspend at a source boundary only; true requires a fresh source after resume.
+    fn pause_checkpoint(&mut self) -> Result<bool, String> {
+        self.check()?;
+        Ok(false)
+    }
     /// Obtain fresh evidence for the complete expected visible state.
     fn observe(&mut self, state: SearchState, final_effect: bool) -> Result<bool, String>;
     /// Classify only after the complete logical action has acknowledged every gesture.
@@ -1107,6 +1213,15 @@ trait RouteIo {
     }
 
 
+    /// Verify a replayed partial endpoint after every final-action gesture ACK.
+    ///
+    /// Native I/O also recognises the existing measured stock-boundary layouts;
+    /// exact position evidence grants neither REDEAL nor next-board authority.
+    fn observe_partial(&mut self, state: SearchState) -> Result<EffectObservation, String> {
+        self.observe_effect(state, false)
+    }
+
+
     /// Observe only after the final ACK; positive results require independent pixels.
     fn observe_final(&mut self, state: SearchState) -> Result<Option<BoardCompletion>, String> {
         self.observe(state, true)
@@ -1114,7 +1229,23 @@ trait RouteIo {
     }
 
 
-    /// Deliver once after fresh observation and a fresh running/absolute probe.
+    /// Reuse an immediately preceding effect frame or classify a fresh source.
+    fn observe_source(&mut self, state: SearchState) -> Result<EffectObservation, String> {
+        self.observe(state, false).map(EffectObservation::Position)
+    }
+
+
+    /// Consume checked source evidence for this whole logical action.
+    fn begin_action(
+        &mut self,
+        _state: SearchState,
+        _operations: &[InputOperation],
+    ) -> Result<(), String> {
+        self.check()
+    }
+
+
+    /// Deliver once under a whole-action permit and a fresh running/absolute probe.
     fn deliver(&mut self, operation: InputOperation, state: SearchState) -> Result<(), String>;
     /// Wait cooperatively without resetting the monotonic overall deadline.
     fn wait(&mut self, delay: Duration) -> Result<(), String>;
@@ -1215,6 +1346,18 @@ fn confirm_final_action(
         }
         previous = now;
         if now >= deadline {
+            let counts = io.counts();
+            if io.read_only_board_transition()
+                && counts.attempted == gestures
+                && counts.acknowledged == gestures
+            {
+                return Ok(DriveReport {
+                    completion: BoardCompletion::AwaitingFreshBoard,
+                    message: format!(
+                        "All {actions} full-clear route actions delivered; {gestures} gestures acknowledged; final effect remains unproved. Entering bounded read-only board transition; no card, REDEAL or terminal input authorised."
+                    ),
+                });
+            }
             return Ok(DriveReport {
                 message: format!(
                     "All {actions} route actions delivered; {gestures} gestures acknowledged; final board outcome unconfirmed after the two-second acknowledgement window. Inspect and reacquire before continuing; no further card input or retry."
@@ -1325,16 +1468,16 @@ fn drive(plan: &Prepared, io: &mut impl RouteIo) -> Result<DriveReport, String> 
             settle_delay: if index + 1 == plan.trace.len() {
                 FINAL_OBSERVATION_DELAY
             } else {
-                if matches!(step.action, RecordedAction::Move | RecordedAction::Recycle) {
-                    crate::parameters::PYRAMID_MOVE_SETTLE_DELAY
-                } else {
-                    crate::parameters::PYRAMID_CARD_SETTLE_DELAY
+                match step.action {
+                    RecordedAction::Move => crate::parameters::COMPUTED_ROUTE_MOVE_SETTLE_DELAY,
+                    RecordedAction::Recycle => crate::parameters::PYRAMID_MOVE_SETTLE_DELAY,
+                    _ => Duration::ZERO,
                 }
             },
             reobserve_delay: if index + 1 == plan.trace.len() {
                 FINAL_OBSERVATION_DELAY
             } else {
-                crate::parameters::PYRAMID_REOBSERVE_DELAY
+                crate::parameters::COMPUTED_ROUTE_REOBSERVE_DELAY
             },
         });
     }
@@ -1342,6 +1485,7 @@ fn drive(plan: &Prepared, io: &mut impl RouteIo) -> Result<DriveReport, String> 
         return Err("Route gesture count exceeds Pyramid bound".to_owned());
     }
     let captures = capture_allowance(plan.trace.len(), gestures)?;
+    let ordinary_effect_limit = ordinary_effect_observation_limit()?;
     let epoch = plan.id;
     let mut sequence = Sequencer::new(
         epoch,
@@ -1351,23 +1495,16 @@ fn drive(plan: &Prepared, io: &mut impl RouteIo) -> Result<DriveReport, String> 
             max_gestures: gestures,
             max_captures: captures,
             max_precondition_observations: ORDINARY_OBSERVATIONS,
-            max_effect_observations: FINAL_OBSERVATIONS,
+            max_effect_observations: ordinary_effect_limit.max(FINAL_OBSERVATIONS),
             max_duration: EXECUTION_DEADLINE,
         },
         Duration::ZERO,
     )
     .map_err(|e| e.to_string())?;
     let result = (|| {
-        let initial = SearchState::initial();
-        for _ in 0..2 {
-            io.check()?;
-            if !io.observe(initial, false)? {
-                return Err("Original board mismatch before any input".to_owned());
-            }
-            io.wait(crate::parameters::PYRAMID_REOBSERVE_DELAY)?;
-        }
         let mut phase_observations = 0usize;
         let mut observed_action = None;
+        let mut effect_acknowledged_at = None;
         loop {
             io.check()?;
             let request = sequence
@@ -1379,9 +1516,23 @@ fn drive(plan: &Prepared, io: &mut impl RouteIo) -> Result<DriveReport, String> 
                     action_index,
                     phase,
                 } => {
+                    if phase == ObservationPhase::Precondition {
+                        io.pause_checkpoint()?;
+                    }
                     if observed_action != Some((action_index, phase)) {
                         phase_observations = 0;
                         observed_action = Some((action_index, phase));
+                        effect_acknowledged_at = if phase == ObservationPhase::Effect
+                            && action_index + 1 < plan.trace.len()
+                        {
+                            Some(
+                                io.counts()
+                                    .last_acknowledged_at
+                                    .ok_or("Missing ordinary-action acknowledgement clock")?,
+                            )
+                        } else {
+                            None
+                        };
                     }
                     phase_observations += 1;
                     let is_effect = phase == ObservationPhase::Effect;
@@ -1395,6 +1546,8 @@ fn drive(plan: &Prepared, io: &mut impl RouteIo) -> Result<DriveReport, String> 
                     if phase_observations
                         > if final_effect {
                             FINAL_OBSERVATIONS
+                        } else if is_effect {
+                            ordinary_effect_limit
                         } else {
                             ORDINARY_OBSERVATIONS
                         }
@@ -1404,21 +1557,29 @@ fn drive(plan: &Prepared, io: &mut impl RouteIo) -> Result<DriveReport, String> 
                             "Bounded route observation exhausted; input is not repeated".to_owned()
                         );
                     }
+                    if let Some(acknowledged_at) = effect_acknowledged_at {
+                        ordinary_effect_remaining(acknowledged_at, io.elapsed()).map_err(
+                            |error| {
+                                format!("Action {}/{}: {error}", action_index + 1, plan.trace.len())
+                            },
+                        )?;
+                    }
                     let observation = if is_effect {
                         io.observe_effect(state, final_effect)?
                     } else {
-                        EffectObservation::Position(io.observe(state, false)?)
+                        io.observe_source(state)?
                     };
                     io.check()?;
+                    let completed = action_index + usize::from(is_effect);
                     let verified = match observation {
                         EffectObservation::Position(verified) => verified,
                         EffectObservation::ChallengePending(progress) => {
                             sequence.abort();
-                            io.progress(action_index + 1, plan.trace.len());
+                            io.progress(completed, plan.trace.len());
                             io.check()?;
                             return challenge_pending_report(
                                 progress,
-                                action_index + 1,
+                                completed,
                                 plan.trace.len(),
                                 io.counts().acknowledged,
                             );
@@ -1427,7 +1588,7 @@ fn drive(plan: &Prepared, io: &mut impl RouteIo) -> Result<DriveReport, String> 
                             sequence.abort();
                             return Ok(challenge_report(
                                 proof,
-                                action_index + 1,
+                                completed,
                                 plan.trace.len(),
                                 io.counts().acknowledged,
                             ));
@@ -1468,6 +1629,14 @@ fn drive(plan: &Prepared, io: &mut impl RouteIo) -> Result<DriveReport, String> 
                     operation,
                 } => {
                     let state = *states.get(action_index).ok_or("Missing pre-input state")?;
+                    if gesture_index == 0 {
+                        let action = plan
+                            .trace
+                            .get(action_index)
+                            .ok_or("Missing input action")?
+                            .action;
+                        io.begin_action(state, &operations(action)?)?;
+                    }
                     let before = io.counts();
                     let delivery = io.deliver(operation, state);
                     let after = io.counts();
@@ -1540,7 +1709,20 @@ fn drive(plan: &Prepared, io: &mut impl RouteIo) -> Result<DriveReport, String> 
                     }
                 }
                 Request::Wait { ticket, until } => {
-                    io.wait(until.saturating_sub(io.elapsed()))?;
+                    let requested = until.saturating_sub(io.elapsed());
+                    let delay = if let Some(acknowledged_at) = effect_acknowledged_at {
+                        requested.min(ordinary_effect_remaining(acknowledged_at, io.elapsed())?)
+                    } else {
+                        requested
+                    };
+                    io.wait(delay)?;
+                    if delay < requested {
+                        sequence.abort();
+                        return Err(
+                            "Ordinary effect observation window expired; input is not repeated"
+                                .to_owned(),
+                        );
+                    }
                     sequence
                         .waited(ticket, &epoch, io.elapsed())
                         .map_err(|e| e.to_string())?;
@@ -1571,8 +1753,30 @@ fn drive(plan: &Prepared, io: &mut impl RouteIo) -> Result<DriveReport, String> 
 }
 
 
-/// Borrowed, validation-only series predicate; performs no capture, input or authority mutation.
-type FrameGuard<'a> = dyn Fn(&CapturedFrame) -> Result<(), String> + 'a;
+/// Why an already captured gameplay frame is being validated.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum FrameGuardPhase {
+    /// Fresh evidence must authorise the next whole logical action.
+    Source,
+    /// A whole acknowledged action awaits observed effect within its existing deadline.
+    Effect,
+}
+
+
+/// Same-frame witness result; an unreadable effect never grants source authority.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum FrameGuardOutcome {
+    /// Positive witness matches the run's immutable identity.
+    Ready,
+    /// An acknowledged action still awaits its witness within the existing deadline.
+    Pending,
+}
+
+
+/// Borrowed validation predicate; pending is admitted only at an effect boundary.
+/// Neither outcome grants capture, input, replay or an extended observation budget.
+type FrameGuard<'a> =
+    dyn Fn(&CapturedFrame, FrameGuardPhase) -> Result<FrameGuardOutcome, String> + 'a;
 
 
 /// Concrete finite worker I/O, holding exclusive run authority and loaded calibration.
@@ -1580,10 +1784,20 @@ type FrameGuard<'a> = dyn Fn(&CapturedFrame) -> Result<(), String> + 'a;
 pub(super) enum ExecutionPolicy {
     /// Preserve explicit one-board controls and ordinary final confirmation.
     Standard,
+    /// Qualified normal-series progress permits read-only handoff on its first two boards.
+    NormalSeries(crate::pyramid_progress::BoardCount),
     /// Continue partial boards under their actual requirement and existing final proof.
     Continuous,
     /// Ignore challenge targets and schedule fresh Recon after a goal-route final ACK.
     NoChallenge,
+}
+
+
+impl ExecutionPolicy {
+    /// Only existing challenge and target-agnostic sessions may drain partial-route stock.
+    fn continues_stock(self) -> bool {
+        matches!(self, Self::Continuous | Self::NoChallenge)
+    }
 }
 
 
@@ -1609,6 +1823,8 @@ struct NativeIo<'a> {
     frame_guard: Option<&'a FrameGuard<'a>>,
     /// One monotonic execution origin, including initial captures and connection.
     started: Instant,
+    /// Intentional source-boundary suspension excluded from execution/effect clocks.
+    paused: Duration,
     /// Every capture, including guard captures, consumes the same total allowance.
     captures: usize,
     /// Exact route-derived maximum captures.
@@ -1631,45 +1847,32 @@ struct NativeIo<'a> {
     challenge_confirmation: Option<ChallengeCompletion>,
     /// Exact position result from the latest successful observation; grants no input authority.
     position_matches: bool,
+    /// Pre-input region retained for this execution, never carried to a new board.
+    redeal_before: Option<redeal_appearance::Before>,
+    /// Latest matched source, consumed once by a whole logical action.
+    source_proof: Option<cadence::SourceProof>,
+    /// Ordered operations remaining in the current logical action.
+    action_permit: Option<cadence::ActionPermit>,
 }
 
 
-impl RouteIo for NativeIo<'_> {
-    /// The opt-in no-challenge loop alone schedules acquisition from delivery.
-    fn handoff_after_final_ack(&self) -> bool {
-        self.policy == ExecutionPolicy::NoChallenge
-    }
-
-
-    /// Checked actual accounting includes route and residual stock operations.
-    fn recycle_acknowledged(&mut self) -> Result<(), String> {
-        self.executed_recycles = self
-            .executed_recycles
-            .checked_add(1)
-            .filter(|count| *count <= xsar::games::pyramid::planning::MAX_RECYCLES)
-            .ok_or("Acknowledged RECYCLE count exceeds supported two-recycle rules")?;
-        Ok(())
-    }
-
-
-    /// Enforce monotonic origin/context/STOP and the one overall deadline.
-    fn check(&self) -> Result<(), String> {
-        check_acquisition(
-            &self.plan.acquisition,
-            self.context,
-            self.events,
-            self.cancel,
-        )?;
-        if self.started.elapsed() >= EXECUTION_DEADLINE {
-            return Err("Execution deadline expired; no further input".to_owned());
-        }
-        Ok(())
-    }
-
-
+impl NativeIo<'_> {
     /// Classify fresh native pixels; ordinary frames remain memory-only diagnostics.
-    fn observe(&mut self, state: SearchState, final_effect: bool) -> Result<bool, String> {
+    fn observe_checked(
+        &mut self,
+        state: SearchState,
+        final_effect: bool,
+        allow_pending_header: bool,
+    ) -> Result<bool, String> {
         self.position_matches = false;
+        self.source_proof = None;
+        self.challenge_confirmation = None;
+        if self.action_permit.is_some() {
+            self.action_permit = None;
+            return Err(
+                "Observation interrupted an unfinished action; no further input".to_owned(),
+            );
+        }
         self.check()?;
         if self.captures >= self.capture_limit {
             return Err("Route capture allowance exhausted".to_owned());
@@ -1679,13 +1882,38 @@ impl RouteIo for NativeIo<'_> {
         let (frame, _) = capture_screen(&mut self.qmp, &self.context.socket_path, self.events)?;
         // One bounded native copy preserves the last observation even after UI consumption.
         self.latest_frame = Some(frame.clone());
+        // A bound completion retires input before hidden cards can be misclassified.
+        if let Some(bound) = self.challenge
+            && let Some(proof) =
+                crate::pyramid_progress::observe_bound_challenge_complete(&frame, bound)?
+        {
+            if !proof.progress().follows(bound) {
+                return Err("Challenge Complete requirement differs from the bound challenge; no further input".to_owned());
+            }
+            self.challenge = Some(proof.progress());
+            self.challenge_confirmation = Some(proof);
+            self.events.publish_diagnostic_frame(frame);
+            self.check()?;
+            return Ok(false);
+        }
         let (tableau, left, right) = expected(&self.plan.acquisition.deal, state)?;
-        let observed = if self.stock_continuation {
+        // A winning trace can exhaust LEFT before its last match and subsequent King.
+        // This proves only the exact position; the optional REDEAL point is discarded.
+        let winning_stock_boundary = matches!(self.plan.objective, RouteObjective::Clear)
+            && !final_effect
+            && !state.is_goal()
+            && left.is_none();
+        let observed = if self.stock_continuation || winning_stock_boundary {
+            let appeared = self
+                .redeal_before
+                .as_ref()
+                .map(|before| before.appeared(&frame))
+                .transpose()?
+                .unwrap_or(false);
             self.plan
                 .acquisition
                 .vision
-                .verify_native_stock_continuation(&frame, &tableau, left, right)
-                .map(|_| ())
+                .verify_temporal_stock_position(&frame, &tableau, left, right, appeared)
         } else {
             self.plan
                 .acquisition
@@ -1740,13 +1968,19 @@ impl RouteIo for NativeIo<'_> {
         // A header refusal is fatal, rather than an unmatched position that could
         // be reclassified as a new board or terminal after the final gesture.
         let guarded = if observed.is_ok() {
-            self.frame_guard.map_or(Ok(()), |guard| {
-                guard(&frame).map_err(|error| {
-                    format!("Computed-route frame guard rejected current gameplay: {error}")
+            self.frame_guard
+                .map_or(Ok(FrameGuardOutcome::Ready), |guard| {
+                    let phase = if allow_pending_header {
+                        FrameGuardPhase::Effect
+                    } else {
+                        FrameGuardPhase::Source
+                    };
+                    guard(&frame, phase).map_err(|error| {
+                        format!("Computed-route frame guard rejected current gameplay: {error}")
+                    })
                 })
-            })
         } else {
-            Ok(())
+            Ok(FrameGuardOutcome::Ready)
         };
         if let Some(reason) = observed.as_ref().err().or_else(|| guarded.as_ref().err())
             && self.first_mismatch.is_none()
@@ -1757,40 +1991,166 @@ impl RouteIo for NativeIo<'_> {
             );
             self.first_mismatch = Some((reason.clone(), frame.clone()));
         }
-        let matched = observed.is_ok();
-        if matched && self.policy != ExecutionPolicy::NoChallenge {
+        let mut matched = observed.is_ok();
+        // A qualified acquisition owns the challenge for this gameplay lifetime.
+        // Flying cards must not reclassify it or introduce extra effect captures.
+        // Unbound initial entry still rejects a newly appeared challenge.
+        if matched
+            && self.policy != ExecutionPolicy::NoChallenge
+            && self.challenge.is_none()
+            && state == SearchState::initial()
+            && self.counts.attempted == 0
+        {
             let actual = crate::pyramid_progress::observe_challenge(&frame)?;
-            if state == SearchState::initial()
-                && self.counts.attempted == 0
-                && actual != self.plan.acquisition.challenge_progress
-            {
+            if actual != self.plan.acquisition.challenge_progress {
                 return Err("Fresh challenge requirement differs from the restored Recon binding; no input authorised".to_owned());
-            }
-            match (self.challenge, actual) {
-                (Some(previous), Some(current)) if current.follows(previous) => {
-                    self.challenge = Some(current)
-                }
-                (Some(previous), actual) => {
-                    return Err(format!(
-                        "Challenge objective changed, regressed or disappeared: expected {previous:?}, observed {actual:?}; no further input"
-                    ));
-                }
-                (None, Some(current)) if state == SearchState::initial() => {
-                    self.challenge = Some(current);
-                    self.challenge_initial = Some(current);
-                }
-                _ => {}
             }
         }
         // Final transition classification is restricted to observe_final below.
         self.events.publish_diagnostic_frame(frame);
         self.check()?;
-        guarded?;
+        match guarded? {
+            FrameGuardOutcome::Ready => {}
+            FrameGuardOutcome::Pending if allow_pending_header => {
+                matched = false;
+                send_log(self.events, "Computed-route effect pending: same-frame series witness unreadable; no input authorised".to_owned());
+            }
+            FrameGuardOutcome::Pending => {
+                return Err("Source frame guard is pending; no input authorised".to_owned());
+            }
+        }
+        // Only the positively matched whole-board endpoint may advance the bound
+        // counter. Gameplay frames never reclassify the challenge's label/target.
+        if matched
+            && final_effect
+            && state.is_goal()
+            && let Some(previous) = self.challenge
+        {
+            let actual = crate::pyramid_progress::observe_bound_challenge_progress(
+                self.latest_frame
+                    .as_ref()
+                    .ok_or("Missing final native observation")?,
+                previous,
+            )?;
+            self.check()?;
+            match actual {
+                Some(current) if current.follows(previous) => self.challenge = Some(current),
+                None if allow_pending_header => {
+                    matched = false;
+                    send_log(self.events, "Computed-route final effect pending: bound challenge counter unreadable; no input authorised".to_owned());
+                }
+                actual => {
+                    return Err(format!(
+                        "Challenge objective changed, regressed or disappeared: expected {previous:?}, observed {actual:?}; no further input"
+                    ));
+                }
+            }
+        }
         self.position_matches = matched;
-        Ok(matched
+        let ready = matched
             && !self
                 .challenge
-                .is_some_and(ChallengeProgress::target_reached))
+                .is_some_and(ChallengeProgress::target_reached);
+        if ready {
+            if self.redeal_before.is_none() && self.counts.attempted == 0 {
+                self.redeal_before = Some(redeal_appearance::Before::capture(
+                    self.latest_frame
+                        .as_ref()
+                        .ok_or("Missing REDEAL pre-input frame")?,
+                )?);
+            }
+            self.source_proof = Some(cadence::SourceProof::new(self, state));
+        }
+        Ok(ready)
+    }
+
+}
+
+
+impl RouteIo for NativeIo<'_> {
+    /// Revoke cached pre-pause pixels before reacquiring the next whole-action source.
+    fn pause_checkpoint(&mut self) -> Result<bool, String> {
+        let result = self.events.latest_frame.pause.checkpoint(
+            super::pyramid_pause::Phase::Gameplay,
+            || {
+                check_acquisition(
+                    &self.plan.acquisition,
+                    self.context,
+                    self.events,
+                    self.cancel,
+                )
+            },
+        );
+        let paused = match result {
+            Ok(paused) => paused,
+            Err(error) => {
+                self.paused = self.paused.saturating_add(error.paused);
+                return Err(error.message);
+            }
+        };
+        self.paused = self.paused.saturating_add(paused);
+        if paused.is_zero() {
+            return Ok(false);
+        }
+        self.source_proof = None;
+        self.action_permit = None;
+        self.check()?;
+        Ok(true)
+    }
+
+
+    /// The opt-in no-challenge loop alone schedules acquisition from delivery.
+    fn handoff_after_final_ack(&self) -> bool {
+        self.policy == ExecutionPolicy::NoChallenge
+    }
+
+
+    /// Incomplete bound sessions may observe a board; the normal third clear remains strict.
+    fn read_only_board_transition(&self) -> bool {
+        match self.policy {
+            ExecutionPolicy::Continuous => self
+                .challenge
+                .is_some_and(|progress| !progress.target_reached()),
+            ExecutionPolicy::NormalSeries(progress) => {
+                progress.target == 3
+                    && progress.completed < 2
+                    && self.frame_guard.is_some()
+                    && self.challenge.is_none()
+            }
+            ExecutionPolicy::Standard | ExecutionPolicy::NoChallenge => false,
+        }
+    }
+
+
+    /// Checked actual accounting includes route and residual stock operations.
+    fn recycle_acknowledged(&mut self) -> Result<(), String> {
+        self.executed_recycles = self
+            .executed_recycles
+            .checked_add(1)
+            .filter(|count| *count <= xsar::games::pyramid::planning::MAX_RECYCLES)
+            .ok_or("Acknowledged RECYCLE count exceeds supported two-recycle rules")?;
+        Ok(())
+    }
+
+
+    /// Enforce monotonic origin/context/STOP and the one overall deadline.
+    fn check(&self) -> Result<(), String> {
+        check_acquisition(
+            &self.plan.acquisition,
+            self.context,
+            self.events,
+            self.cancel,
+        )?;
+        if self.elapsed() >= EXECUTION_DEADLINE {
+            return Err("Execution deadline expired; no further input".to_owned());
+        }
+        Ok(())
+    }
+
+
+    /// Source observations still require a positively readable bound requirement.
+    fn observe(&mut self, state: SearchState, final_effect: bool) -> Result<bool, String> {
+        self.observe_checked(state, final_effect, false)
     }
 
 
@@ -1800,33 +2160,41 @@ impl RouteIo for NativeIo<'_> {
         state: SearchState,
         final_effect: bool,
     ) -> Result<EffectObservation, String> {
-        let matched = self.observe(state, final_effect)?;
-        let terminal = match (self.challenge, self.latest_frame.as_ref()) {
-            (Some(bound), Some(frame)) => {
-                crate::pyramid_progress::observe_bound_challenge_complete(frame, bound)?
-            }
-            _ => None,
-        };
+        let matched = self.observe_checked(state, final_effect, true)?;
         self.check()?;
-        if let (Some(bound), Some(proof)) = (self.challenge, terminal) {
-            if !proof.progress().follows(bound) {
-                return Err("Challenge Complete requirement differs from the bound challenge; no further input".to_owned());
-            }
-            let confirmed = self.challenge_confirmation == Some(proof);
-            self.challenge_confirmation = Some(proof);
-            if confirmed {
-                self.challenge = Some(proof.progress());
-                return Ok(EffectObservation::Challenge(proof));
-            }
-            return Ok(EffectObservation::Position(false));
+        if let Some(proof) = self.challenge_confirmation {
+            return Ok(EffectObservation::Challenge(proof));
         }
-        self.challenge_confirmation = None;
         if self.position_matches
             && let Some(progress) = self.challenge.filter(|progress| progress.target_reached())
         {
             return Ok(EffectObservation::ChallengePending(progress));
         }
         Ok(EffectObservation::Position(matched))
+    }
+
+
+    /// Prove the exact partial endpoint, including measured empty-stock controls.
+    ///
+    /// The alternative recogniser retains all card, scene and modal checks. Its
+    /// scope ends with this observation, including errors, and it grants no input.
+    fn observe_partial(&mut self, state: SearchState) -> Result<EffectObservation, String> {
+        if !self.policy.continues_stock() {
+            return self.observe_effect(state, false);
+        }
+        if state.is_goal()
+            || !matches!(self.plan.objective, RouteObjective::Removal { removed, .. }
+                if removed > 0 && state.tableau_remaining() + u32::from(removed) == TABLEAU_LEN as u32)
+        {
+            return Err(
+                "Partial observation differs from the replayed removal endpoint".to_owned(),
+            );
+        }
+        let previous = self.stock_continuation;
+        self.stock_continuation = true;
+        let result = self.observe_effect(state, false);
+        self.stock_continuation = previous;
+        result
     }
 
 
@@ -1853,16 +2221,80 @@ impl RouteIo for NativeIo<'_> {
     }
 
 
-    /// Consume a fresh scene/probe and one attempt immediately before transport I/O.
-    fn deliver(&mut self, operation: InputOperation, state: SearchState) -> Result<(), String> {
+    /// Share one freshly checked boundary frame with the immediately following action.
+    fn observe_source(&mut self, state: SearchState) -> Result<EffectObservation, String> {
         self.check()?;
-        if !self.observe(state, false)? {
-            return Err("Fresh pre-gesture position mismatch; no further input".to_owned());
+        if self
+            .source_proof
+            .is_some_and(|proof| proof.matches(self, state))
+        {
+            send_log(
+                self.events,
+                format!(
+                    "Computed-route source reused: capture={}, acknowledged={}",
+                    self.captures, self.counts.acknowledged
+                ),
+            );
+            return Ok(EffectObservation::Position(true));
+        }
+        let matched = self.observe(state, false)?;
+        self.check()?;
+        if let Some(proof) = self.challenge_confirmation {
+            return Ok(EffectObservation::Challenge(proof));
+        }
+        if self.position_matches
+            && let Some(progress) = self.challenge.filter(|progress| progress.target_reached())
+        {
+            return Ok(EffectObservation::ChallengePending(progress));
+        }
+        Ok(EffectObservation::Position(matched))
+    }
+
+
+    /// Consume one exact source proof; it cannot authorise a different logical action.
+    fn begin_action(
+        &mut self,
+        state: SearchState,
+        operations: &[InputOperation],
+    ) -> Result<(), String> {
+        self.check()?;
+        if self.action_permit.is_some() {
+            self.action_permit = None;
+            self.source_proof = None;
+            return Err("Previous logical action is unfinished; no further input".to_owned());
+        }
+        let proof = self
+            .source_proof
+            .take()
+            .ok_or("Missing checked action source; no input authorised")?;
+        if !proof.matches(self, state) {
+            return Err("Stale or different action source; no input authorised".to_owned());
+        }
+        self.action_permit = Some(cadence::ActionPermit::new(proof, operations)?);
+        Ok(())
+    }
+
+
+    /// Consume the next permitted gesture, preserving fresh probes and STOP between clicks.
+    fn deliver(&mut self, operation: InputOperation, state: SearchState) -> Result<(), String> {
+        let permit = self
+            .action_permit
+            .take()
+            .ok_or("Missing whole-action permit; no input authorised")?;
+        self.check()?;
+        if !permit.matches(self, state, operation) {
+            return Err(
+                "Input differs from the remaining action permit; no input authorised".to_owned(),
+            );
         }
         let probe = self.qmp.probe().map_err(|e| e.to_string())?;
         validate_probe(&probe)?;
         self.check()?;
-        self.counts.attempted += 1;
+        self.counts.attempted = self
+            .counts
+            .attempted
+            .checked_add(1)
+            .ok_or("Gesture counter overflow")?;
         send_state(self.events, WorkerState::Acting);
         let result = match operation {
             InputOperation::Click(point) => self.qmp.click(point, 1920, 1080),
@@ -1871,24 +2303,42 @@ impl RouteIo for NativeIo<'_> {
         result.map_err(|e| {
             format!("Uncertain route delivery: {e}; inspect and reacquire, no retry")
         })?;
-        self.counts.acknowledged += 1;
+        self.counts.acknowledged = self
+            .counts
+            .acknowledged
+            .checked_add(1)
+            .ok_or("Gesture counter overflow")?;
         self.counts.last_acknowledged_at = Some(self.elapsed());
+        self.action_permit = permit.acknowledged();
         Ok(())
     }
 
 
-    /// Existing sliced wait preserves STOP and deadline checks on return.
+    /// Measure the sliced wait while preserving STOP and deadline checks on return.
     fn wait(&mut self, delay: Duration) -> Result<(), String> {
+        self.source_proof = None;
+        self.action_permit = None;
         self.check()?;
-        cancellable_wait(delay, self.cancel)
-            .map_err(|_| "STOP during route wait; no cleanup input".to_owned())?;
-        self.check()
+        let started = Instant::now();
+        let result = cancellable_wait(delay, self.cancel)
+            .map_err(|_| "STOP during route wait; no cleanup input".to_owned())
+            .and_then(|_| self.check());
+        send_log(
+            self.events,
+            format!(
+                "Computed-route wait: configured={:.3} ms, elapsed={:.3} ms, completed={}",
+                delay.as_secs_f64() * 1_000.0,
+                started.elapsed().as_secs_f64() * 1_000.0,
+                result.is_ok(),
+            ),
+        );
+        result
     }
 
 
     /// Return elapsed time from the unchanged origin.
     fn elapsed(&self) -> Duration {
-        self.started.elapsed()
+        self.started.elapsed().saturating_sub(self.paused)
     }
 
 
@@ -1974,7 +2424,9 @@ pub(super) fn execute_owned(
 /// fatal and retains normal first/latest diagnostics. Unmatched specific terminal
 /// and fresh-board frames remain available to the existing final classifier;
 /// their hidden or changed gameplay headers are not checked by this predicate.
-/// No additional capture, wait, input or retry is introduced.
+/// Source/effect phase is explicit: a challenge guard may defer an unreadable
+/// effect header to the existing confirmation window, but cannot permit input.
+/// No additional capture, wait, input or retry budget is introduced.
 ///
 /// # Errors
 /// Returns the existing execution error or a predicate refusal. STOP/context
@@ -1990,7 +2442,8 @@ pub(super) fn execute_owned_with_frame_guard(
     plan_id: u64,
     confirmed: bool,
     board_generation: u64,
-    frame_guard: &dyn Fn(&CapturedFrame) -> Result<(), String>,
+    frame_guard: &FrameGuard<'_>,
+    policy: ExecutionPolicy,
     events: &WorkerEventSink,
     cancel: &AtomicBool,
 ) -> Result<ExecutionReport, String> {
@@ -2001,7 +2454,7 @@ pub(super) fn execute_owned_with_frame_guard(
         confirmed,
         board_generation,
         Some(frame_guard),
-        ExecutionPolicy::Standard,
+        policy,
         events,
         cancel,
     )
@@ -2069,6 +2522,7 @@ fn execute_owned_guarded(
         "no_resume": true,
         "no_cleanup_input": true,
         "final_confirmation_window_seconds": FINAL_CONFIRMATION_WINDOW.as_secs_f64(),
+        "ordinary_effect_window_seconds": crate::parameters::COMPUTED_ROUTE_EFFECT_WINDOW.as_secs_f64(),
     });
     let result = (|| {
         let mut store = events
@@ -2116,17 +2570,14 @@ fn execute_owned_guarded(
             cancel,
             frame_guard,
             started,
+            paused: Duration::ZERO,
             captures: 0,
             capture_limit: (if plan.objective == RouteObjective::Drain {
                 0
             } else {
                 capture_allowance(plan.trace.len(), gestures)?
             })
-            .checked_add(if policy == ExecutionPolicy::Standard {
-                0
-            } else {
-                1200
-            })
+            .checked_add(if policy.continues_stock() { 1200 } else { 0 })
             .ok_or("Continuation capture allowance overflow")?,
             counts,
             first_mismatch: None,
@@ -2145,6 +2596,9 @@ fn execute_owned_guarded(
             },
             challenge_confirmation: None,
             position_matches: false,
+            source_proof: None,
+            action_permit: None,
+            redeal_before: None,
         };
         let planned_recycles = plan
             .trace
@@ -2156,14 +2610,14 @@ fn execute_owned_guarded(
             format!("Route planned RECYCLE operations: {planned_recycles}"),
         );
         let result = if plan.objective == RouteObjective::Drain {
-            if policy == ExecutionPolicy::Standard {
+            if !policy.continues_stock() {
                 Err("Exhaustive no-win stock continuation requires an automatic session; no card input sent".to_owned())
             } else {
                 continuation::drain_and_redeal(&mut io, SearchState::initial())
             }
         } else {
             drive(&plan, &mut io).and_then(|report| {
-                if policy != ExecutionPolicy::Standard
+                if policy.continues_stock()
                     && matches!(
                         report.completion,
                         BoardCompletion::PartialPositionVerified { .. }

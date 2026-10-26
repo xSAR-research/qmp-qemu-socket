@@ -102,6 +102,7 @@ fn starting_guard_binds_tableau_and_initial_piles_but_not_undo_enablement() {
     let guard = StartingGuard {
         position: &original,
         header: &require_zero_header,
+        challenge: None,
     };
     assert!(
         guard
@@ -162,6 +163,7 @@ fn starting_guard_leaves_dialog_and_unknown_handling_to_the_existing_core() {
     let guard = StartingGuard {
         position: &original,
         header: &header,
+        challenge: None,
     };
     assert!(guard.validate(&frame, &ReconScene::Unknown, 0).is_ok());
     assert!(
@@ -418,6 +420,7 @@ fn run_episode(frames: Vec<Vec<u8>>, operation: Operation, stop_after_draw: bool
     let guard = StartingGuard {
         position: &original,
         header: &require_zero_header,
+        challenge: None,
     };
     let result = match operation {
         Operation::Guarded => {
@@ -664,4 +667,79 @@ fn unbound_owned_path_preserves_existing_header_indifference_and_stop() {
     );
     assert_eq!(episode.incomplete["draws_attempted"], 1);
     assert_eq!(episode.wire.probes, 2);
+}
+
+
+/// Locked metadata survives an unreadable restored label while original position checks still apply.
+#[test]
+fn locked_recon_metadata_preserves_requirement_kings_and_tableau_guard() {
+    use crate::pyramid_progress::{ChallengeKind, ChallengeProgress};
+    use crate::pyramid_workflow_model::{ObservedGame, RouteMethod};
+    let directory = TestDirectory(std::env::temp_dir().join(format!(
+        "pyramid-locked-metadata-{}-{}",
+        std::process::id(),
+        NEXT_SOCKET.fetch_add(1, Ordering::Relaxed),
+    )));
+    fs::DirBuilder::new()
+        .mode(0o700)
+        .create(&directory.0)
+        .unwrap();
+    let mut diagnostics = Diagnostics::reserve(&directory.0.join("deal.json")).unwrap();
+    let original = position(&native(ZERO));
+    let mut obscured = native(ZERO);
+    // Synthetic black objective label leaves every original card/pile pixel intact.
+    for y in 48..80 {
+        for x in 814..1_038 {
+            let offset = y * obscured.stride + x * 4;
+            obscured.pixels[offset..offset + 3].fill(0);
+        }
+    }
+    assert_eq!(
+        pyramid_progress::observe_challenge(&obscured).unwrap(),
+        None
+    );
+    diagnostics.latest_png = Some(encode_png(&obscured).unwrap());
+    for kings in [false, true] {
+        let progress = ChallengeProgress::new(ChallengeKind::Cards, 2, 10).unwrap();
+        let locked = LockedChallenge { progress, kings };
+        let header = |_: &CapturedFrame| Ok(());
+        let guard = StartingGuard {
+            position: &original,
+            header: &header,
+            challenge: Some(locked),
+        };
+        guard
+            .validate(&obscured, &ReconScene::Board(position(&obscured)), 0)
+            .unwrap();
+        assert!(
+            guard
+                .validate(
+                    &native(OTHER),
+                    &ReconScene::Board(position(&native(OTHER))),
+                    0
+                )
+                .is_err()
+        );
+        let (actual, default, observed) = diagnostics.restored_metadata(guard.challenge).unwrap();
+        assert_eq!(actual, Some(progress));
+        assert_eq!(
+            default,
+            if kings {
+                RouteMethod::Fast
+            } else {
+                RouteMethod::FewestActions
+            }
+        );
+        assert_eq!(observed, ObservedGame::Challenge { progress, kings });
+    }
+    diagnostics.latest_png = Some(vec![0]);
+    let progress = ChallengeProgress::new(ChallengeKind::Boards, 0, 3).unwrap();
+    assert!(
+        diagnostics
+            .restored_metadata(Some(LockedChallenge {
+                progress,
+                kings: false
+            }))
+            .is_err()
+    );
 }

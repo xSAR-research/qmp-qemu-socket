@@ -1,5 +1,128 @@
 # Architecture and control flow
 
+## Current correction — 2.9.149 / xSAR 0.9.0
+
+The bounded Wild West aged-paper correction is host qualified: 1483 application
+tests, 753 sealed inputs and all six required gates passed. Fresh Beast behaviour
+and Charlie's acceptance remain pending.
+
+The original bright-paper path is retained. When it is insufficient, measured aged
+material and a complete Western glyph family support the two retained entry frames.
+Stock keeps the inclusive 45% presence threshold over its full 139×187 footprint.
+Unreadable occupied stock remains Unknown. Aged material above the existing 5%
+allowance also vetoes ordinary/final-band absence; it grants no presence or input
+authority by itself.
+
+The two actual frames provide 58 visible identities, with 25 exact rank-by-colour
+exemplars and 33 whole-card held-outs. No black Ten was available; black Nine, red
+Jack and red Queen have calibration-only same-rank/colour evidence. All 423 Classic
+and 87 cream/Retro observations remain covered. Quality/ambiguity limits, complete
+scene/modal proof, STOP/context, fresh probes and no uncertain replay remain intact.
+The separate Boards/Perfect final-proof case remains deferred.
+
+See [verification](Verification-2.9.149.md) and the
+[fresh live-test brief](Live-Test-2.9.149.md). Earlier release sections are
+retained evidence and do not establish 149 guest acceptance.
+
+## Retained correction — 2.9.148 / xSAR 0.9.0; host qualified
+
+The game and solution heading starts at the top left, with wrapping options below
+it and the fixed activity badge alongside on the right. Action controls, status
+and preview retain the full panel width. The displayed execution label is
+**SOLVING**; face size, centred bold text, border, colours and halo timing remain.
+
+This presentation revision preserves 147 gameplay and search ownership. Recognition
+resolution for the saved wood/aged-paper entry failure is held for further testing;
+its exact-reader diagnosis is recorded in the verification brief. No recognition,
+worker, dependency or timing policy changes are included.
+
+Host result: 1478 full tests, zero failures/ignored/filtered, 747 sealed inputs and all six required gates passed. Fresh Beast/Charlie acceptance remains pending.
+The 19 matrix cases and 14 milestone states remain unchanged. See
+[148 verification](Verification-2.9.148.md) and [148 manual checks](Live-Test-2.9.148.md).
+
+## Retained 2.9.147 candidate ownership
+
+The application owns normal-completion receipts, challenge binding, input and UI
+policy. xSAR 0.9.0 remains unchanged. The existing paired Native transition passes
+only receipt-bound normal Pyramid GAME WIN evidence to the shared post-game
+controller in `worker::post_game`. That controller owns reward/counting, optional
+LevelUp OK, New Game and Play, including reward still visible after OK. A reward
+screen alone cannot authorise entry; existing observation/input budgets and
+uncertain-input non-replay remain. STOP/context and fresh VM/pointer probes still
+gate each operation. A* exits through a fresh matching complete-board pair and then
+Recon without Solver/HALO; actual Pyramid SOLVER retains its Solver/HALO readiness.
+
+`pyramid_progress` owns bound challenge-number reading; the acquisition/session
+owner binds identified kind, target and Kings policy. Action-frame vision does not
+reclassify those labels. Only safe boundaries may update bound numeric progress,
+requiring monotonic numerator/same denominator. Positive bound terminal
+contradiction remains fatal. START/RECON replace the run binding; STOP/RESET retire
+it and queued updates. UI events cannot resurrect a retired request's authority.
+
+The actual Shortest invocation owns its cooperative objective-switch request.
+**Switch to Maximum card matches** is enabled only for matching context, run,
+board and invocation. Acceptance retires the Shortest engine and discards any
+concurrent old result, then replans from the same authenticated receipt/deal/bytes
+without capture or Recon. The request carries no no-win proof. Automatic exhaustive-
+no-win fallback remains distinct. Manual prepares a plan only; automatic modes
+retain their original lifecycle. A paused invocation stays paused until CONTINUE;
+STOP/context revocation wins and a late request after search closure is rejected.
+The existing uncapped Maximum weighted search has no fixed completion-time promise.
+
+Manual RECON returns directly after validated acquisition; automatic START directly
+acquires, plans and executes according to its mode. The source audit found no
+artificial post-completion sleep, so no timing edit is required. The mandatory
+1000 ms UndoAll/OK settle and two original-board restoration frames remain within
+Recon. Native-v23 identity, stock-paper and temporal REDEAL policies remain intact.
+147 passed all six host gates (1476 full tests, 747 sealed inputs). Artifact/source identity is recorded in verification; fresh guest acceptance remains pending. See [verification](Verification-2.9.147.md) and
+[manual checks](Live-Test-2.9.147.md). Retained 146 ownership/evidence follows.
+
+## Retained 2.9.146 candidate ownership
+
+The app owns the private native-v23 identity capability, rendering and all input
+policy. `pyramid_recon::vision::foreground_card` reads checked native corner pixels
+using local paper and seeded components, then compares complete coherent Classic
+and Retro families under `native_corner_ink_v1`. Rank/suit candidates share a font
+family and ink colour; ambiguous families/separators refuse. Native translation is
+bounded to ±1 pixel in half-pixel steps, with no scaling or legacy fallback.
+Custom/frozen policies retain their existing constructors and behaviour. xSAR 0.9.0
+continues to own checked raster access, transport, cards and planning; it is unchanged.
+
+`app::activity_status::badge` owns a fixed 240×80 logical-point face with reserved
+halo space, 3-point white border and centred bundled licensed bold font. The app
+projects worker state onto WAITING, RECON, ROUTE, SOLVE or ERROR. Only the three
+active states request 25 ms repaint and a 1.6-second halo; WAITING and ERROR are
+static. Rendering neither controls the worker nor grants guest input authority.
+
+The full 146 host gate passed (1449 tests and 743 seals). Eleven focused foreground tests, the temporal
+RIGHT adapter and independent inert visual review (20 cases) pass. Saved-image
+recognition and renderer checks remain separate from fresh Beast acceptance.
+The 145 stock threshold, whole-action permits, STOP/context, fresh probes,
+exact-position verification and uncertain-input non-replay remain required.
+The automatic cleared-board-to-RECON handoff remains open. See
+[146 verification](Verification-2.9.146.md) and [manual checks](Live-Test-2.9.146.md).
+
+## Retained combined 2.9.137 ownership
+
+The application owns input authority and the whole-action source/permit chain;
+xSAR retains checked raster access, transport, cards and planning. App-private
+`image_evidence` separates pure appearance observations from Pyramid identity,
+rules, mutable position and input. Bundled native-v23 selects calibrated A* roles;
+custom JSON and CV/HALO owners retain their existing semantics. This boundary
+prepares reuse; no future hidden-card or UNDO exploration engine is implemented.
+
+The preview fits its actual image canvas to both logical dimensions and uses that
+same rectangle for overlays/native mapping. Failure presentation owns a frozen
+snapshot independently of workflow resets; late packet results update that record.
+Detailed output lives in a separate live window and retains the full disk log.
+
+EXIT/native close/SIGINT/SIGTERM latch a monotonic app/worker shutdown request,
+refuse new gameplay, retire queued work and poll the join without blocking egui.
+The worker finishes existing transaction/release-only recovery. Signal handlers
+only set the atomic request; UI polling is cooperative, not instantaneous.
+SIGKILL cannot be handled. See [current verification](Verification-2.9.137.md);
+older delivery summaries below do not qualify the combined candidate.
+
 Current development builds combine **v2.2.2-candidate.8** controls and GAME WIN
 diagnostics with guest TCP capture. Current solving methods and build commands
 are in [README](../README.md); dated release notes retain their original scope.

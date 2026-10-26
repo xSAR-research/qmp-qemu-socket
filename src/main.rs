@@ -11,6 +11,7 @@ mod freecell_terminal;
 mod game;
 mod geometry;
 mod image_diagnostics;
+mod image_evidence;
 mod klondike;
 mod parameters;
 mod pyramid;
@@ -21,6 +22,7 @@ mod pyramid_search_policy;
 mod pyramid_workflow_model;
 mod qmp;
 mod session_log;
+mod shutdown;
 mod snapshot;
 mod spider;
 mod spider_terminal;
@@ -76,6 +78,7 @@ fn main() -> eframe::Result {
             Ok(Box::new(QmpQemuSocketApp::new(
                 creation_context,
                 diagnostics,
+                shutdown::ShutdownRequest::install()?,
             )))
         }),
     )

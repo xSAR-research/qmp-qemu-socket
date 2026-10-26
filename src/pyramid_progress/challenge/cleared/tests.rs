@@ -161,3 +161,108 @@ fn shared_cleared_template_preserves_the_exact_native_blue_intensities() {
         .collect();
     assert_eq!(CLEARED.ink, expected);
 }
+
+
+/// The actual Xbox Fours words/counter survive only the background-blended corner exclusion.
+#[test]
+fn native_141_xbox_header_keeps_words_counter_and_noncorner_border_positive() {
+    let frame = native(include_bytes!(
+        "../../../../tests/fixtures/pyramid-native-141/xbox-fours-entry.png"
+    ));
+    let expected = super::super::ChallengeProgress::new(ChallengeKind::Cards, 0, 9);
+    assert_eq!(super::super::observe(&frame), Ok(expected));
+    for bounds in [
+        PixelRect::new(900, 41, 1, 1),
+        PixelRect::new(900, 86, 1, 1),
+        PixelRect::new(915, 48, 84, 32),
+        PixelRect::new(1038, 48, 72, 32),
+    ] {
+        let mut bad = frame.clone();
+        paint(&mut bad, bounds, [0; 3]);
+        assert_eq!(super::super::observe(&bad), Ok(None), "{bounds:?}");
+    }
+}
+
+
+/// The retained background case must read its whole Boards-cleared requirement.
+#[test]
+fn native_150_entry_background_boards_cleared() {
+    let frame = crate::capture::decode_png(include_bytes!(
+        "../../../../tests/fixtures/pyramid-entry-150/background-boards.png"
+    ))
+    .unwrap();
+    let view = frame.as_view().unwrap();
+    assert!(banner_matches(view).unwrap(), "actual native banner");
+    assert!(
+        origin(view, &COMPLETE_BOARDS).flatten().is_some(),
+        "all six Boards letter cores and whole word"
+    );
+    assert!(
+        origin(view, &CLEARED).flatten().is_some(),
+        "all seven cleared letter cores and whole word"
+    );
+    assert!(
+        observe_boards(view).unwrap(),
+        "whole ordered words and their negative space"
+    );
+    assert_eq!(
+        crate::pyramid_progress::observe_challenge(&frame).unwrap(),
+        crate::pyramid_progress::ChallengeProgress::new(
+            crate::pyramid_progress::ChallengeKind::Boards,
+            0,
+            2
+        )
+    );
+}
+
+
+/// New/Grandmaster alone cannot invent a missing standard three-board ordinal.
+#[test]
+fn native_150_entry_missing_normal_ordinal_remains_unknown() {
+    for bytes in [
+        include_bytes!("../../../../tests/fixtures/pyramid-entry-150/normal-no-counter-4.png")
+            .as_slice(),
+        include_bytes!("../../../../tests/fixtures/pyramid-entry-150/normal-no-counter-5.png")
+            .as_slice(),
+    ] {
+        let frame = crate::capture::decode_png(bytes).unwrap();
+        assert_eq!(crate::pyramid_progress::observe_normal(&frame), Ok(None));
+        assert_eq!(crate::pyramid_progress::observe_challenge(&frame), Ok(None));
+    }
+}
+
+
+/// Genuine weak letter fringes do not turn red-only corruption in true background into ink.
+#[test]
+fn native_150_entry_background_keeps_negative_space_and_complete_words() {
+    let source = native(include_bytes!(
+        "../../../../tests/fixtures/pyramid-entry-150/background-boards.png"
+    ));
+    for x in [814, 945] {
+        let mut corrupted = source.clone();
+        let mut rgb = corrupted.as_view().unwrap().pixel_rgb(x, 48).unwrap();
+        rgb[0] = rgb[0].saturating_add(40);
+        paint(&mut corrupted, PixelRect::new(x, 48, 1, 1), rgb);
+        assert!(!observe_boards(corrupted.as_view().unwrap()).unwrap());
+        assert_eq!(
+            crate::pyramid_progress::observe_challenge(&corrupted),
+            Ok(None)
+        );
+    }
+    for (word, x) in [(&COMPLETE_BOARDS, 841), (&CLEARED, 922)] {
+        for &(dx, dy) in word.anchors {
+            let mut missing = source.clone();
+            paint(
+                &mut missing,
+                PixelRect::new(x + dx - 3, SEARCH.y + dy - 3, 7, 7),
+                [161, 102, 6],
+            );
+            assert!(
+                !observe_boards(missing.as_view().unwrap()).unwrap(),
+                "missing complete letter at {},{}",
+                x + dx,
+                SEARCH.y + dy
+            );
+        }
+    }
+}

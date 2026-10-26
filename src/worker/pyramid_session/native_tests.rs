@@ -229,6 +229,7 @@ impl Fixture {
             phase: SessionPhase::Entry,
             generation: 0,
             vision: Some(match self.request.reconnaissance.profile {
+                ReconProfileSource::BundledNativeV23 => ReconVision::bundled_native_v23().unwrap(),
                 ReconProfileSource::BundledNativeV22 => {
                     ReconVision::bundled_native_v22().expect("production native v22")
                 }
@@ -240,6 +241,8 @@ impl Fixture {
             series: None,
             challenge_starting: None,
             challenge_progress: None,
+            original_tableau: None,
+            distinct_start: false,
             restart_entry: None,
             failure_saved: false,
             method: self.request.method,
@@ -247,6 +250,27 @@ impl Fixture {
             observed_game: crate::pyramid_workflow_model::ObservedGame::Unknown,
         }
     }
+}
+
+
+/// A Maximum fallback is discarded before a new board and in its published UI state.
+#[test]
+fn new_board_resets_maximum_fallback_to_shortest_before_reconnaissance() {
+    let fixture = Fixture::new();
+    let mut adapter = fixture.adapter();
+    adapter.phase(1, SessionPhase::Execution);
+    assert_eq!(adapter.method, RouteMethod::Fast);
+    adapter.phase(2, SessionPhase::Reconnaissance);
+    assert_eq!(adapter.method, RouteMethod::FewestActions);
+    assert!(fixture._receiver.try_iter().any(|event| matches!(
+        event.event,
+        WorkerEvent::PyramidSessionProgress(SessionProgress {
+            board_generation: 2,
+            phase: SessionPhase::Reconnaissance,
+            effective_method: RouteMethod::FewestActions,
+            ..
+        })
+    )));
 }
 
 
@@ -259,10 +283,16 @@ enum Operation {
     NoChallengeAcquire,
     /// Retain an actually bound requirement across an input-free transition.
     BoundTransition(ChallengeProgress),
+    /// Inject only the already retired clear/ACK handoff; real paired captures must prove a distinct board.
+    ClearTransition(ChallengeProgress),
+    /// Inject an original normal board and retired ACK handoff; all next-board evidence stays native.
+    NormalClearTransition,
     /// Capture the production entry's pair of fresh frames.
     Entry,
     /// Capture a genuine generic Card entry with the current native calibration.
     CardEntry,
+    /// Capture an actual colour-independent native-v23 challenge entry.
+    ColourEntry,
     /// Start a new target-agnostic session after the previous reservation retired.
     NoChallengeEntry,
     /// Start a new single-board session, independently of the old preview.
@@ -445,6 +475,9 @@ fn run(operation: Operation, frames: Vec<Vec<u8>>, revocation: Revocation) -> Ep
         fixture.request.mode = WorkflowMode::Continuous;
         fixture.request.stop_condition = StopCondition::NoChallenge;
     }
+    if matches!(operation, Operation::ColourEntry) {
+        fixture.request.reconnaissance.profile = ReconProfileSource::BundledNativeV23;
+    }
     let explicit_start = matches!(
         operation,
         Operation::NoChallengeEntry | Operation::SingleBoardEntry
@@ -496,11 +529,47 @@ fn run(operation: Operation, frames: Vec<Vec<u8>>, revocation: Revocation) -> Ep
             progress: None,
             standard_three: false,
         }),
-        Operation::BoundTransition(bound) => {
+        Operation::BoundTransition(bound) | Operation::ClearTransition(bound) => {
             adapter.challenge_progress = Some(bound);
-            adapter.transition()
+            if matches!(operation, Operation::ClearTransition(_)) {
+                adapter.original_tableau =
+                    Some(adapter.starting_board(&native(ZERO)).unwrap().tableau);
+                adapter.distinct_start = true;
+            }
+            let result = adapter.transition();
+            if result.is_err() {
+                assert_eq!(
+                    adapter.challenge_progress,
+                    Some(bound),
+                    "A refused fresh-board pair must retain its original challenge binding"
+                );
+            }
+            result
         }
-        Operation::Entry | Operation::CardEntry => adapter.observed_entry(),
+        Operation::NormalClearTransition => {
+            let original = adapter.starting_board(&native(NORMAL_SERIES[0])).unwrap();
+            adapter.original_tableau = Some(original.tableau);
+            adapter.distinct_start = true;
+            adapter.series = Some(BoardCount {
+                completed: 0,
+                target: 3,
+            });
+            let result = adapter.transition();
+            if result.is_err() {
+                assert_eq!(
+                    adapter.series,
+                    Some(BoardCount {
+                        completed: 0,
+                        target: 3
+                    })
+                );
+            }
+            assert!(adapter.restart_entry.is_none());
+            result
+        }
+        Operation::Entry | Operation::CardEntry | Operation::ColourEntry => {
+            adapter.observed_entry()
+        }
         Operation::NoChallengeEntry | Operation::SingleBoardEntry => {
             adapter.entry(fixture.request.mode)
         }
@@ -801,6 +870,69 @@ fn native_observed_entry_uses_two_real_captures_without_standard_identity() {
 }
 
 
+/// The retained Classic entry is a bound untouched Boards challenge, with no acquisition input.
+#[test]
+#[ignore = "requires local AF_UNIX sockets"]
+fn native_classic_boards_zero_entry_recognises_all_cards_and_complete_requirement() {
+    let bytes = include_bytes!("../../../tests/fixtures/pyramid-objectives/classic-green-zero.png");
+    let episode = run(
+        Operation::Entry,
+        vec![bytes.to_vec(), bytes.to_vec()],
+        Revocation::None,
+    );
+    assert_eq!(
+        episode.result.unwrap(),
+        Entry::Challenge(
+            ChallengeProgress::new(crate::pyramid_progress::ChallengeKind::Boards, 0, 3).unwrap()
+        )
+    );
+    assert_eq!(episode.wire.captures, 2);
+    assert_eq!(episode.wire.remaining, 0);
+    assert!(episode.retained_frame && episode.owns_context && !episode.cancelled);
+}
+
+
+/// A coloured gameplay surface vetoes overlapping New Game ink even with a restart permit.
+/// The five black pixels are a labelled synthetic caption derivative of the actual Xbox image.
+#[test]
+fn native_colour_gameplay_veto_precedes_restart_caption_without_guest_io() {
+    let fixture = Fixture::new();
+    let mut frame = native(include_bytes!(
+        "../../../tests/fixtures/pyramid-colour-independence/xbox-original.png"
+    ));
+    for x in 812..817 {
+        let offset = 833 * frame.stride + x * 4;
+        frame.pixels[offset..offset + 3].fill(0);
+    }
+    assert_eq!(crate::pyramid::is_gameplay_scene(&frame), Ok(false));
+    assert_eq!(post_game::expected_pyramid_new_game(&frame), Ok(true));
+    let reader = crate::pyramid_recon::vision::ReconVision::bundled_native_v23().unwrap();
+    assert!(reader.native_gameplay_veto(&frame).unwrap());
+    let mut adapter = fixture.adapter();
+    adapter.vision = Some(reader);
+    adapter.restart_entry = Some(
+        post_game::PyramidRestartEntry::verified_third_completion(
+            BoardCount {
+                completed: 2,
+                target: 3,
+            },
+            BoardCompletion::BoardClear,
+        )
+        .unwrap(),
+    );
+    let actual = adapter.observe(&frame).unwrap();
+    assert!(
+        matches!(
+            actual,
+            NativeObservation::Board { .. } | NativeObservation::Challenge { .. }
+        ),
+        "{actual:?}"
+    );
+    assert!(!fixture.context.socket_path.exists());
+    assert!(!fixture.request.reconnaissance.output_path.exists());
+}
+
+
 /// Distinct original full boards cannot be paired merely because each has a recognised header.
 #[test]
 #[ignore = "requires local AF_UNIX sockets"]
@@ -888,6 +1020,80 @@ fn native_transition_waits_for_matching_consecutive_real_board_headers() {
     assert!(standard_progress(entry).is_err());
     assert_eq!(episode.wire.captures, 3);
     assert_eq!(episode.wire.remaining, 0);
+    assert!(episode.retained_frame && episode.owns_context && !episode.cancelled);
+}
+
+
+/// An untouched native 1/3 pair contradicts the supplied 0/1 binding and cannot replace it.
+#[test]
+#[ignore = "requires local AF_UNIX sockets"]
+fn native_bound_transition_refuses_changed_denominator_without_replacing_binding() {
+    let bound =
+        ChallengeProgress::new(crate::pyramid_progress::ChallengeKind::Boards, 0, 1).unwrap();
+    let actual =
+        ChallengeProgress::new(crate::pyramid_progress::ChallengeKind::Boards, 1, 3).unwrap();
+    assert_eq!(
+        crate::pyramid_progress::observe_bound_challenge_progress(&native(ONE), bound),
+        Ok(Some(actual))
+    );
+    let episode = run(
+        Operation::BoundTransition(bound),
+        vec![ONE.to_vec(), ONE.to_vec()],
+        Revocation::None,
+    );
+    assert!(
+        episode
+            .result
+            .expect_err("The actual 1/3 counter must contradict the bound 0/1 target")
+            .contains("Challenge progress changed or regressed at the fresh board boundary")
+    );
+    assert_eq!(episode.wire.captures, 2);
+    assert_eq!(episode.wire.remaining, 0);
+    assert_eq!(
+        episode.wire.commands,
+        vec![
+            "qmp_capabilities".to_owned(),
+            "screendump".to_owned(),
+            "screendump".to_owned(),
+        ]
+    );
+    assert!(episode.retained_frame && episode.owns_context && !episode.cancelled);
+}
+
+
+/// An untouched native 0/3 pair regresses the supplied 1/3 binding and cannot replace it.
+#[test]
+#[ignore = "requires local AF_UNIX sockets"]
+fn native_bound_transition_refuses_regressed_numerator_without_replacing_binding() {
+    let bound =
+        ChallengeProgress::new(crate::pyramid_progress::ChallengeKind::Boards, 1, 3).unwrap();
+    let actual =
+        ChallengeProgress::new(crate::pyramid_progress::ChallengeKind::Boards, 0, 3).unwrap();
+    assert_eq!(
+        crate::pyramid_progress::observe_bound_challenge_progress(&native(ZERO), bound),
+        Ok(Some(actual))
+    );
+    let episode = run(
+        Operation::BoundTransition(bound),
+        vec![ZERO.to_vec(), ZERO.to_vec()],
+        Revocation::None,
+    );
+    assert!(
+        episode
+            .result
+            .expect_err("The actual 0/3 counter must regress the bound 1/3 count")
+            .contains("Challenge progress changed or regressed at the fresh board boundary")
+    );
+    assert_eq!(episode.wire.captures, 2);
+    assert_eq!(episode.wire.remaining, 0);
+    assert_eq!(
+        episode.wire.commands,
+        vec![
+            "qmp_capabilities".to_owned(),
+            "screendump".to_owned(),
+            "screendump".to_owned(),
+        ]
+    );
     assert!(episode.retained_frame && episode.owns_context && !episode.cancelled);
 }
 
@@ -1178,6 +1384,8 @@ enum RestartEntry {
     ColdLevelUp,
     /// Actual transition pair consumes stage facts under a test-supplied actual-clear permit.
     WitnessedNewGame,
+    /// Actual reward pair under the same actual-third-clear test capability.
+    WitnessedNormalReward,
 }
 
 
@@ -1188,6 +1396,8 @@ enum RestartBoundary {
     None,
     /// Revoke after the first fresh controller probe, before any button press.
     FirstProbe(Revocation),
+    /// Revoke at a numbered later controller probe, before its input.
+    LaterProbe(usize, Revocation),
     /// Revoke before ACKing the first capture in the fresh post-restart entry pair.
     FreshEntryCapture(Revocation),
 }
@@ -1308,9 +1518,15 @@ fn serve_restart_connection(
                 );
                 let mut report = wire.lock().unwrap();
                 report.probes += 1;
-                let first_probe = report.probes == 1;
+                let probe_number = report.probes;
+                let first_probe = probe_number == 1;
                 drop(report);
                 if first_probe && let RestartBoundary::FirstProbe(revocation) = boundary {
+                    revoke_restart(revocation, &control, &context, &cancel);
+                }
+                if let RestartBoundary::LaterProbe(number, revocation) = boundary
+                    && number == probe_number
+                {
                     revoke_restart(revocation, &control, &context, &cancel);
                 }
                 json!([{"name": "Private absolute restart tablet", "index": 0, "current": true, "absolute": true}])
@@ -1445,10 +1661,19 @@ fn restart_episode(
     let initial_png = match entry {
         RestartEntry::ColdLevelUp => TERMINAL.to_vec(),
         RestartEntry::WitnessedNewGame => encode_png(&menu).unwrap(),
+        RestartEntry::WitnessedNormalReward => NORMAL_REWARD_147.to_vec(),
     };
     let mut controller = match entry {
         RestartEntry::ColdLevelUp => vec![TERMINAL.to_vec(), TERMINAL.to_vec()],
         RestartEntry::WitnessedNewGame => Vec::new(),
+        RestartEntry::WitnessedNormalReward => vec![
+            NORMAL_REWARD_147.to_vec(),
+            NORMAL_REWARD_147.to_vec(),
+            TERMINAL.to_vec(),
+            TERMINAL.to_vec(),
+            NORMAL_REWARD_147.to_vec(),
+            NORMAL_REWARD_147.to_vec(),
+        ],
     };
     controller.extend([
         encode_png(&menu).unwrap(),
@@ -1488,7 +1713,7 @@ fn restart_episode(
     let mut adapter = fixture.adapter();
     let initial = match entry {
         RestartEntry::ColdLevelUp => adapter.entry(WorkflowMode::Continuous),
-        RestartEntry::WitnessedNewGame => {
+        RestartEntry::WitnessedNewGame | RestartEntry::WitnessedNormalReward => {
             let progress = BoardCount {
                 completed: 2,
                 target: 3,
@@ -1584,6 +1809,9 @@ fn assert_normal_restart(episode: RestartEpisode, entry: RestartEntry) {
     let (controls, captures): (&[Control], [usize; 3]) = match entry {
         RestartEntry::ColdLevelUp => (&[Control::Ok, Control::NewGame, Control::Play], [2, 6, 2]),
         RestartEntry::WitnessedNewGame => (&[Control::NewGame, Control::Play], [2, 4, 2]),
+        RestartEntry::WitnessedNormalReward => {
+            unreachable!("reward flow has separate point assertions")
+        }
     };
     let expected_points: Vec<_> = controls
         .iter()
@@ -1704,5 +1932,352 @@ fn native_restart_checks_real_stop_and_context_before_fresh_pair_completion() {
         assert!(episode.permit_consumed && episode.cancelled && !episode.owns_context);
         assert!(episode.starting.is_none() && episode.series.is_none());
         assert_eq!(episode.latest.unwrap().pixels, native(NORMAL_ONE).pixels);
+    }
+}
+
+
+/// The native session finaliser releases a genuine counting terminal without a socket or acquisition.
+#[test]
+fn native_challenge_counting_handoff_needs_no_qmp_or_next_acquisition() {
+    let fixture = Fixture::new();
+    let frame = native(include_bytes!(
+        "../../../tests/fixtures/pyramid-objectives/fours-complete.png"
+    ));
+    let bound =
+        ChallengeProgress::new(crate::pyramid_progress::ChallengeKind::Cards, 4, 12).unwrap();
+    let proof = crate::pyramid_progress::observe_bound_challenge_complete(&frame, bound)
+        .unwrap()
+        .unwrap();
+    assert!(
+        !proof.operator_continue(),
+        "the actual source is the counting stage"
+    );
+    let mut io = fixture.adapter();
+    io.latest = Some(frame);
+    io.challenge_progress = Some(bound);
+    assert_eq!(io.finish_challenge(proof).unwrap(), proof);
+    assert!(
+        !fixture.context.socket_path.exists(),
+        "the input-free finaliser never connects"
+    );
+    assert!(!fixture.request.reconnaissance.output_path.exists());
+    assert!(io.output.is_none() && io.starting.is_none() && io.restart_entry.is_none());
+}
+
+
+/// Two actual mixed-legend Score captures use production entry without guest input.
+#[test]
+#[ignore = "requires local AF_UNIX sockets"]
+fn native_143_mixed_legend_entry_pairs_actual_score_and_preserves_revocation() {
+    let bytes = include_bytes!("../../../tests/fixtures/pyramid-mixed-legend-143/score-entry.png");
+    let episode = run(
+        Operation::ColourEntry,
+        vec![bytes.to_vec(), bytes.to_vec()],
+        Revocation::None,
+    );
+    assert_eq!(
+        episode.result.unwrap(),
+        Entry::Challenge(
+            ChallengeProgress::new(crate::pyramid_progress::ChallengeKind::Score, 775, 2200)
+                .unwrap()
+        )
+    );
+    assert_eq!(episode.wire.captures, 2);
+    assert_eq!(episode.wire.remaining, 0);
+    assert!(episode.retained_frame && episode.owns_context && !episode.cancelled);
+    for revocation in [Revocation::Stop, Revocation::ContextRoundTrip] {
+        let episode = run(
+            Operation::ColourEntry,
+            vec![bytes.to_vec(), bytes.to_vec()],
+            revocation,
+        );
+        assert!(
+            episode
+                .result
+                .expect_err("revoked first actual entry capture")
+                .contains("STOP or changed context revoked")
+        );
+        assert_eq!(episode.wire.captures, 1);
+        assert_eq!(episode.wire.remaining, 1);
+        assert!(episode.retained_frame && episode.cancelled && !episode.owns_context);
+    }
+}
+
+
+/// A normal reward is a terminal stage only under an actual third-clear receipt.
+#[test]
+fn native_147_normal_reward_requires_actual_third_clear_receipt() {
+    let fixture = Fixture::new();
+    let mut adapter = fixture.adapter();
+    let frame = native(include_bytes!(
+        "../../../tests/fixtures/pyramid-normal-reward-147/normal-reward.png"
+    ));
+    assert_eq!(adapter.observe(&frame).unwrap(), NativeObservation::Unknown);
+    adapter.restart_entry = Some(
+        post_game::PyramidRestartEntry::verified_third_completion(
+            BoardCount {
+                completed: 2,
+                target: 3,
+            },
+            BoardCompletion::BoardClear,
+        )
+        .unwrap(),
+    );
+    assert!(matches!(
+        adapter.observe(&frame).unwrap(),
+        NativeObservation::Terminal(_)
+    ));
+}
+
+
+/// Unchanged reward-only incident PNG, not a synthetic terminal control image.
+const NORMAL_REWARD_147: &[u8] =
+    include_bytes!("../../../tests/fixtures/pyramid-normal-reward-147/normal-reward.png");
+
+
+/// Production Native transition, witnessed shared stages and independent fresh entry stay connected.
+#[test]
+#[ignore = "requires local AF_UNIX sockets"]
+fn native_147_normal_reward_full_restart_retains_fresh_board_without_solver() {
+    let episode = restart_episode(
+        RestartEntry::WitnessedNormalReward,
+        NORMAL_ONE,
+        RestartBoundary::None,
+    );
+    let progress = BoardCount {
+        completed: 0,
+        target: 3,
+    };
+    assert_eq!(restarted_progress(episode.result.unwrap()), Ok(progress));
+    assert_eq!(episode.series, Some(progress));
+    let expected = Fixture::new()
+        .adapter()
+        .starting_board(&native(NORMAL_ONE))
+        .unwrap();
+    assert_eq!(episode.starting, Some(expected));
+    assert_eq!(episode.latest.unwrap().pixels, native(NORMAL_ONE).pixels);
+    assert!(episode.permit_consumed && episode.owns_context && !episode.cancelled);
+    assert_eq!(episode.wire.connections, 3);
+    assert_eq!(episode.wire.captures, [2, 10, 2]);
+    assert_eq!(episode.wire.probes, 5);
+    assert_eq!(episode.wire.ups, 5);
+    assert_eq!(episode.wire.remaining, 0);
+    let skip = restart_wire_point(crate::parameters::SCORE_SKIP_CONTROL.click_point);
+    let ok = restart_wire_point(
+        control_point(&native(TERMINAL), PYRAMID_CONTROLS.spec(Control::Ok)).unwrap(),
+    );
+    let new_game = restart_wire_point(
+        control_point(
+            &synthetic_restart_menu(Control::NewGame),
+            PYRAMID_CONTROLS.spec(Control::NewGame),
+        )
+        .unwrap(),
+    );
+    let play = restart_wire_point(
+        control_point(
+            &synthetic_restart_menu(Control::Play),
+            PYRAMID_CONTROLS.spec(Control::Play),
+        )
+        .unwrap(),
+    );
+    assert_eq!(episode.wire.downs, vec![skip, ok, skip, new_game, play]);
+    assert!(!episode.wire.downs.contains(&restart_wire_point(
+        crate::parameters::SHARED_SOLVER_CONTROL.click_point
+    )));
+    for (connection, command) in &episode.wire.commands {
+        if *connection != 1 {
+            assert!(matches!(
+                command.as_str(),
+                "qmp_capabilities" | "screendump"
+            ));
+        }
+    }
+}
+
+
+/// STOP or changed context after acknowledged OK prevents the next reward skip.
+#[test]
+#[ignore = "requires local AF_UNIX sockets"]
+fn native_147_post_ok_probe_revocation_sends_no_reward_press() {
+    for revocation in [Revocation::Stop, Revocation::ContextRoundTrip] {
+        let episode = restart_episode(
+            RestartEntry::WitnessedNormalReward,
+            NORMAL_ONE,
+            RestartBoundary::LaterProbe(3, revocation),
+        );
+        assert!(episode.result.is_err());
+        assert_eq!(episode.wire.connections, 2);
+        assert_eq!(episode.wire.captures, [2, 6, 0]);
+        assert_eq!(episode.wire.probes, 3);
+        assert_eq!(episode.wire.downs.len(), 2);
+        assert_eq!(episode.wire.ups, 2);
+        assert!(episode.starting.is_none());
+    }
+}
+
+
+/// Actual native paired captures must distinguish the next tableau from the consumed original.
+/// The private clear/ACK handoff is injected; this is not the missing original route trace.
+#[test]
+fn native_150_clear_transition_requires_distinct_original_tableau() {
+    let bound =
+        ChallengeProgress::new(crate::pyramid_progress::ChallengeKind::Boards, 0, 3).unwrap();
+    let mut changed = native(ONE);
+    let original = native(ZERO);
+    // Two genuine board images with one explicitly composed counter/header, not a recorded transition.
+    let header = zero_board_with_one_header();
+    for y in 20..100 {
+        let start = y * changed.stride + 784 * 4;
+        let end = y * changed.stride + 1122 * 4;
+        changed.pixels[start..end].copy_from_slice(&header.pixels[start..end]);
+    }
+    let vision = ReconVision::bundled_native_v17().unwrap();
+    let ReconScene::Board(first) = vision.observe(&original).unwrap() else {
+        panic!("original board")
+    };
+    let ReconScene::Board(next) = vision.observe(&changed).unwrap() else {
+        panic!("composed next board")
+    };
+    assert_ne!(first.tableau, next.tableau);
+    let next_png = encode_png(&changed).unwrap();
+    let accepted = run(
+        Operation::ClearTransition(bound),
+        vec![next_png.clone(), next_png.clone()],
+        Revocation::None,
+    );
+    assert_eq!(
+        accepted.result,
+        Ok(Entry::Challenge(
+            ChallengeProgress::new(crate::pyramid_progress::ChallengeKind::Boards, 1, 3).unwrap()
+        ))
+    );
+    assert_eq!(accepted.wire.captures, 2);
+    let same = encode_png(&header).unwrap();
+    let rejected = run(
+        Operation::ClearTransition(bound),
+        vec![same.clone(); 6],
+        Revocation::None,
+    );
+    assert!(rejected.result.unwrap_err().contains("transition budget"));
+    assert_eq!(rejected.wire.captures, 6);
+    let delayed = run(
+        Operation::ClearTransition(bound),
+        vec![same.clone(), same, next_png.clone(), next_png.clone()],
+        Revocation::None,
+    );
+    assert!(matches!(delayed.result, Ok(Entry::Challenge(_))));
+    assert_eq!(delayed.wire.captures, 4);
+    for revocation in [Revocation::Stop, Revocation::ContextRoundTrip] {
+        let refused = run(
+            Operation::ClearTransition(bound),
+            vec![next_png.clone(), next_png.clone()],
+            revocation,
+        );
+        assert!(refused.result.is_err());
+        assert_eq!(refused.wire.captures, 1);
+    }
+    let redeal = run(
+        Operation::BoundTransition(bound),
+        vec![ZERO.to_vec(), ZERO.to_vec()],
+        Revocation::None,
+    );
+    assert_eq!(redeal.result, Ok(Entry::Challenge(bound)));
+    assert_eq!(redeal.wire.captures, 2);
+}
+
+
+
+/// Retired normal ACKs observe distinct equal frames without input, restart receipts or a third clear.
+#[test]
+fn native_150_normal_clear_handoff_waits_for_distinct_pair() {
+    let old = NORMAL_SERIES[0].to_vec();
+    let next = NORMAL_SERIES[1].to_vec();
+    let accepted = run(
+        Operation::NormalClearTransition,
+        vec![old.clone(), old.clone(), next.clone(), next.clone()],
+        Revocation::None,
+    );
+    assert_eq!(
+        accepted.result,
+        Ok(Entry::Board {
+            progress: Some(BoardCount {
+                completed: 1,
+                target: 3
+            }),
+            standard_three: true
+        })
+    );
+    assert_eq!(accepted.wire.captures, 4);
+    let stale = run(
+        Operation::NormalClearTransition,
+        vec![old; 6],
+        Revocation::None,
+    );
+    assert!(stale.result.unwrap_err().contains("transition budget"));
+    assert_eq!(stale.wire.captures, 6);
+    let skipped = run(
+        Operation::NormalClearTransition,
+        vec![NORMAL_SERIES[2].to_vec(); 2],
+        Revocation::None,
+    );
+    assert!(skipped.result.is_err());
+    for revocation in [Revocation::Stop, Revocation::ContextRoundTrip] {
+        let stopped = run(
+            Operation::NormalClearTransition,
+            vec![next.clone(), next.clone()],
+            revocation,
+        );
+        assert!(stopped.result.is_err());
+        assert_eq!(stopped.wire.captures, 1);
+    }
+}
+
+
+/// Actual saved frames establish a fresh v23 normal entry; STOP and context revocation stay input-free.
+#[test]
+fn native_153_manual_entry_binds_actual_pair_and_preserves_revocation() {
+    let frames = vec![
+        include_bytes!("../../../tests/fixtures/pyramid-normal-entry-153/automatic-entry.png")
+            .to_vec(),
+        include_bytes!("../../../tests/fixtures/pyramid-normal-entry-153/manual-entry.png")
+            .to_vec(),
+    ];
+    let episode = run(Operation::ColourEntry, frames.clone(), Revocation::None);
+    let expected = BoardCount {
+        completed: 0,
+        target: 3,
+    };
+    assert_eq!(
+        standard_progress(episode.result.expect("actual fresh normal pair")),
+        Ok(expected)
+    );
+    assert_eq!(episode.starting, Some(expected));
+    assert_eq!(episode.series, Some(expected));
+    assert_eq!(episode.wire.captures, 2);
+    assert_eq!(episode.wire.remaining, 0);
+    assert!(
+        episode
+            .wire
+            .commands
+            .iter()
+            .all(|command| matches!(command.as_str(), "qmp_capabilities" | "screendump"))
+    );
+    for revocation in [Revocation::Stop, Revocation::ContextRoundTrip] {
+        let stopped = run(Operation::ColourEntry, frames.clone(), revocation);
+        assert!(
+            stopped
+                .result
+                .expect_err("fresh capture revocation")
+                .contains("STOP or changed context revoked")
+        );
+        assert_eq!(stopped.wire.captures, 1);
+        assert_eq!(stopped.wire.remaining, 1);
+        assert!(
+            stopped
+                .wire
+                .commands
+                .iter()
+                .all(|command| matches!(command.as_str(), "qmp_capabilities" | "screendump"))
+        );
     }
 }

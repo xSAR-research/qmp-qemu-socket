@@ -104,5 +104,26 @@
     1080
   ],
   "limits": "Exact whole patterns at existing tolerance4; no masks or per-pixel mixing.",
-  "live_boundary": "Stills and local adapter replays are not fresh guest acceptance."
+  "live_boundary": "Stills and local adapter replays are not fresh guest acceptance.",
+  "score_135": {
+    "source_version": "2.9.135",
+    "packet": "pyramid-error-1792775704323-843736-0",
+    "actual_frame_sha256": "fb27cb8eda17a68d0054d04963364d618bc70522f4c229362a8cd2b3fa1d3e43",
+    "actual_deal_sha256": "04c606dedd533ae301e479f3613017d21babface178f3564a56b294f90642ebd",
+    "position": {
+      "tableau": {
+        "0": "AS",
+        "2": "5S",
+        "5": "10S",
+        "9": "3H",
+        "14": "QD"
+      },
+      "left": null,
+      "right": "8H"
+    },
+    "source": "retained original; no screenshot or signature regeneration",
+    "caption": "literal one-deal visible but old lower-caption RGB unrecognised",
+    "authority": "complete existing enabled widget contains count one; zero caption veto retained",
+    "live_boundary": "regression pixels are not fresh REDEAL or next-board acceptance"
+  }
 }

@@ -113,14 +113,35 @@ pub(super) fn observe(frame: &CapturedFrame) -> Result<Option<ChallengeProgress>
     let Some(kind) = identify_label(view)? else {
         return Ok(None);
     };
+    Ok(read_counter(view, kind))
+}
+
+
+/// Read the actual numeric fraction without identifying or replacing a bound objective.
+///
+/// Invalid storage returns an error; unsupported native dimensions or glyphs return `None`.
+pub(super) fn observe_bound(
+    frame: &CapturedFrame,
+    bound: ChallengeProgress,
+) -> Result<Option<ChallengeProgress>, String> {
+    let view = frame
+        .as_view()
+        .map_err(|error| format!("Pyramid challenge frame layout is invalid: {error}"))?;
+    if (view.width(), view.height()) != (NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT) {
+        return Ok(None);
+    }
+    Ok(read_counter(view, bound.kind))
+}
+
+
+/// Decode the known kind's calibrated fraction, preserving its actual denominator.
+fn read_counter(view: FrameView<'_>, kind: ChallengeKind) -> Option<ChallengeProgress> {
     let bounds = match kind {
         ChallengeKind::Score => PixelRect::new(958, 48, 142, 32),
         ChallengeKind::Boards | ChallengeKind::Cards => PixelRect::new(1_038, 48, 72, 32),
     };
-    let Some(tokens) = digits::read(view, bounds) else {
-        return Ok(None);
-    };
-    Ok(decimal::parse(kind, tokens.as_slice()))
+    let tokens = digits::read(view, bounds)?;
+    decimal::parse(kind, tokens.as_slice())
 }
 
 
@@ -154,6 +175,12 @@ fn identify_label(view: FrameView<'_>) -> Result<Option<ChallengeKind>, String> 
     }
     match selected {
         Some(kind) => Ok(Some(kind)),
-        None => cleared::observe(view).map(|matched| matched.then_some(ChallengeKind::Cards)),
+        None => {
+            if cleared::observe_boards(view)? {
+                Ok(Some(ChallengeKind::Boards))
+            } else {
+                cleared::observe(view).map(|matched| matched.then_some(ChallengeKind::Cards))
+            }
+        }
     }
 }

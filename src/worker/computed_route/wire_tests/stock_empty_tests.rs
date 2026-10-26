@@ -121,7 +121,7 @@ fn synthetic_apex_absent(stock: &[u8]) -> Vec<u8> {
 /// Search/rules and the independent explicit-pile replay must agree; the partial
 /// state is reached only through legal original-deal actions, never a raw state
 /// constructor or a public execution-resumption surface.
-fn solved_tail(deal: &CompleteDeal) -> (Box<[ReplayStep]>, SearchState, SearchState) {
+pub(super) fn solved_tail(deal: &CompleteDeal) -> (Box<[ReplayStep]>, SearchState, SearchState) {
     let outcome = search::solve(
         deal,
         pyramid_search_policy::limits(),
@@ -256,12 +256,7 @@ fn run_stock_empty_tail(
         trace,
     };
     // Prepare the synthetic PNG before the peer starts its bounded QMP handshake.
-    let frames = vec![
-        stock.to_vec(),
-        stock.to_vec(),
-        stock.to_vec(),
-        synthetic_apex_absent(stock),
-    ];
+    let frames = vec![stock.to_vec(), stock.to_vec(), synthetic_apex_absent(stock)];
     let listener = UnixListener::bind(&context.socket_path).expect("private empty-stock socket");
     listener
         .set_nonblocking(true)
@@ -289,6 +284,7 @@ fn run_stock_empty_tail(
         cancel: &cancel,
         frame_guard: None,
         started: Instant::now(),
+        paused: Duration::ZERO,
         captures: 0,
         capture_limit: capture_allowance(plan.trace.len(), gestures)
             .expect("finite route allowance"),
@@ -301,11 +297,16 @@ fn run_stock_empty_tail(
         challenge_initial: challenge,
         challenge_confirmation: None,
         position_matches: false,
+        source_proof: None,
+        action_permit: None,
+        redeal_before: None,
     };
     assert!(
         io.observe(before, false)
             .expect("penultimate effect recognised")
     );
+    io.begin_action(before, &[final_operation])
+        .expect("exact checked whole King action");
     io.deliver(final_operation, before)
         .expect("fresh guard and sole King click");
     assert_eq!((io.counts.attempted, io.counts.acknowledged), (1, 1));
@@ -321,7 +322,7 @@ fn run_stock_empty_tail(
     );
     assert_eq!(
         (io.counts.attempted, io.counts.acknowledged, io.captures),
-        (1, 1, 4)
+        (1, 1, 3)
     );
     drop(io);
     let wire = server.join().expect("empty-stock local peer completion");
@@ -345,7 +346,7 @@ fn run_stock_empty_tail(
             .iter()
             .filter(|name| name.as_str() == "screendump")
             .count(),
-        4
+        3
     );
     assert_eq!(
         wire.commands

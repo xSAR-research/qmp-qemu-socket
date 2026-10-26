@@ -1,0 +1,658 @@
+{
+  "schema": 1,
+  "truth": "manuallyreadvisiblelabels;nohiddenstockinferred",
+  "boards": [
+    {
+      "id": "old",
+      "fixture": "old.png",
+      "source": "/home/charlie/Documents/Pyramid/Validation/background-entry-147-20261025/failure-packet/last-observed.png",
+      "sha256": "8821041a9107db20808e5d9b6d03e645f357d69fc987cab42f02f684d69c32fa",
+      "cards": [
+        {
+          "location": "1|1",
+          "tableau_index": 0,
+          "origin": [
+            890,
+            112
+          ],
+          "card": "6D",
+          "rank": "6",
+          "suit": "diamonds"
+        },
+        {
+          "location": "2|1",
+          "tableau_index": 1,
+          "origin": [
+            790,
+            165
+          ],
+          "card": "6S",
+          "rank": "6",
+          "suit": "spades"
+        },
+        {
+          "location": "2|2",
+          "tableau_index": 2,
+          "origin": [
+            990,
+            165
+          ],
+          "card": "4S",
+          "rank": "4",
+          "suit": "spades"
+        },
+        {
+          "location": "3|1",
+          "tableau_index": 3,
+          "origin": [
+            690,
+            218
+          ],
+          "card": "2D",
+          "rank": "2",
+          "suit": "diamonds"
+        },
+        {
+          "location": "3|2",
+          "tableau_index": 4,
+          "origin": [
+            890,
+            218
+          ],
+          "card": "AD",
+          "rank": "A",
+          "suit": "diamonds"
+        },
+        {
+          "location": "3|3",
+          "tableau_index": 5,
+          "origin": [
+            1091,
+            218
+          ],
+          "card": "7C",
+          "rank": "7",
+          "suit": "clubs"
+        },
+        {
+          "location": "4|1",
+          "tableau_index": 6,
+          "origin": [
+            589,
+            272
+          ],
+          "card": "10D",
+          "rank": "10",
+          "suit": "diamonds"
+        },
+        {
+          "location": "4|2",
+          "tableau_index": 7,
+          "origin": [
+            790,
+            272
+          ],
+          "card": "5D",
+          "rank": "5",
+          "suit": "diamonds"
+        },
+        {
+          "location": "4|3",
+          "tableau_index": 8,
+          "origin": [
+            990,
+            272
+          ],
+          "card": "KD",
+          "rank": "K",
+          "suit": "diamonds"
+        },
+        {
+          "location": "4|4",
+          "tableau_index": 9,
+          "origin": [
+            1191,
+            272
+          ],
+          "card": "AS",
+          "rank": "A",
+          "suit": "spades"
+        },
+        {
+          "location": "5|1",
+          "tableau_index": 10,
+          "origin": [
+            489,
+            325
+          ],
+          "card": "5H",
+          "rank": "5",
+          "suit": "hearts"
+        },
+        {
+          "location": "5|2",
+          "tableau_index": 11,
+          "origin": [
+            690,
+            325
+          ],
+          "card": "2C",
+          "rank": "2",
+          "suit": "clubs"
+        },
+        {
+          "location": "5|3",
+          "tableau_index": 12,
+          "origin": [
+            890,
+            325
+          ],
+          "card": "AC",
+          "rank": "A",
+          "suit": "clubs"
+        },
+        {
+          "location": "5|4",
+          "tableau_index": 13,
+          "origin": [
+            1091,
+            325
+          ],
+          "card": "QS",
+          "rank": "Q",
+          "suit": "spades"
+        },
+        {
+          "location": "5|5",
+          "tableau_index": 14,
+          "origin": [
+            1291,
+            325
+          ],
+          "card": "3C",
+          "rank": "3",
+          "suit": "clubs"
+        },
+        {
+          "location": "6|1",
+          "tableau_index": 15,
+          "origin": [
+            389,
+            378
+          ],
+          "card": "KH",
+          "rank": "K",
+          "suit": "hearts"
+        },
+        {
+          "location": "6|2",
+          "tableau_index": 16,
+          "origin": [
+            589,
+            378
+          ],
+          "card": "KC",
+          "rank": "K",
+          "suit": "clubs"
+        },
+        {
+          "location": "6|3",
+          "tableau_index": 17,
+          "origin": [
+            790,
+            378
+          ],
+          "card": "8H",
+          "rank": "8",
+          "suit": "hearts"
+        },
+        {
+          "location": "6|4",
+          "tableau_index": 18,
+          "origin": [
+            990,
+            378
+          ],
+          "card": "5C",
+          "rank": "5",
+          "suit": "clubs"
+        },
+        {
+          "location": "6|5",
+          "tableau_index": 19,
+          "origin": [
+            1191,
+            378
+          ],
+          "card": "3H",
+          "rank": "3",
+          "suit": "hearts"
+        },
+        {
+          "location": "6|6",
+          "tableau_index": 20,
+          "origin": [
+            1392,
+            378
+          ],
+          "card": "7H",
+          "rank": "7",
+          "suit": "hearts"
+        },
+        {
+          "location": "7|1",
+          "tableau_index": 21,
+          "origin": [
+            288,
+            432
+          ],
+          "card": "4H",
+          "rank": "4",
+          "suit": "hearts"
+        },
+        {
+          "location": "7|2",
+          "tableau_index": 22,
+          "origin": [
+            489,
+            432
+          ],
+          "card": "2S",
+          "rank": "2",
+          "suit": "spades"
+        },
+        {
+          "location": "7|3",
+          "tableau_index": 23,
+          "origin": [
+            690,
+            432
+          ],
+          "card": "9S",
+          "rank": "9",
+          "suit": "spades"
+        },
+        {
+          "location": "7|4",
+          "tableau_index": 24,
+          "origin": [
+            890,
+            432
+          ],
+          "card": "9D",
+          "rank": "9",
+          "suit": "diamonds"
+        },
+        {
+          "location": "7|5",
+          "tableau_index": 25,
+          "origin": [
+            1091,
+            432
+          ],
+          "card": "JD",
+          "rank": "J",
+          "suit": "diamonds"
+        },
+        {
+          "location": "7|6",
+          "tableau_index": 26,
+          "origin": [
+            1291,
+            432
+          ],
+          "card": "QC",
+          "rank": "Q",
+          "suit": "clubs"
+        },
+        {
+          "location": "7|7",
+          "tableau_index": 27,
+          "origin": [
+            1492,
+            432
+          ],
+          "card": "AH",
+          "rank": "A",
+          "suit": "hearts"
+        },
+        {
+          "location": "DL",
+          "origin": [
+            759,
+            678
+          ],
+          "card": "JS",
+          "rank": "J",
+          "suit": "spades"
+        }
+      ]
+    },
+    {
+      "id": "new",
+      "fixture": "new.png",
+      "source": "/home/charlie/Documents/Pyramid/Validation/wild-west-entry-148-20261025/failure-packet/last-observed.png",
+      "sha256": "1601ea642fa54dcd2c343cec05f1ee951e8d5893f27f808be5b3f6fc7134db3e",
+      "cards": [
+        {
+          "location": "1|1",
+          "tableau_index": 0,
+          "origin": [
+            890,
+            112
+          ],
+          "card": "5S",
+          "rank": "5",
+          "suit": "spades"
+        },
+        {
+          "location": "2|1",
+          "tableau_index": 1,
+          "origin": [
+            790,
+            165
+          ],
+          "card": "5H",
+          "rank": "5",
+          "suit": "hearts"
+        },
+        {
+          "location": "2|2",
+          "tableau_index": 2,
+          "origin": [
+            990,
+            165
+          ],
+          "card": "3D",
+          "rank": "3",
+          "suit": "diamonds"
+        },
+        {
+          "location": "3|1",
+          "tableau_index": 3,
+          "origin": [
+            690,
+            218
+          ],
+          "card": "JS",
+          "rank": "J",
+          "suit": "spades"
+        },
+        {
+          "location": "3|2",
+          "tableau_index": 4,
+          "origin": [
+            890,
+            218
+          ],
+          "card": "2S",
+          "rank": "2",
+          "suit": "spades"
+        },
+        {
+          "location": "3|3",
+          "tableau_index": 5,
+          "origin": [
+            1091,
+            218
+          ],
+          "card": "8D",
+          "rank": "8",
+          "suit": "diamonds"
+        },
+        {
+          "location": "4|1",
+          "tableau_index": 6,
+          "origin": [
+            589,
+            272
+          ],
+          "card": "9H",
+          "rank": "9",
+          "suit": "hearts"
+        },
+        {
+          "location": "4|2",
+          "tableau_index": 7,
+          "origin": [
+            790,
+            272
+          ],
+          "card": "10D",
+          "rank": "10",
+          "suit": "diamonds"
+        },
+        {
+          "location": "4|3",
+          "tableau_index": 8,
+          "origin": [
+            990,
+            272
+          ],
+          "card": "8S",
+          "rank": "8",
+          "suit": "spades"
+        },
+        {
+          "location": "4|4",
+          "tableau_index": 9,
+          "origin": [
+            1191,
+            272
+          ],
+          "card": "4S",
+          "rank": "4",
+          "suit": "spades"
+        },
+        {
+          "location": "5|1",
+          "tableau_index": 10,
+          "origin": [
+            489,
+            325
+          ],
+          "card": "KS",
+          "rank": "K",
+          "suit": "spades"
+        },
+        {
+          "location": "5|2",
+          "tableau_index": 11,
+          "origin": [
+            690,
+            325
+          ],
+          "card": "QC",
+          "rank": "Q",
+          "suit": "clubs"
+        },
+        {
+          "location": "5|3",
+          "tableau_index": 12,
+          "origin": [
+            890,
+            325
+          ],
+          "card": "3C",
+          "rank": "3",
+          "suit": "clubs"
+        },
+        {
+          "location": "5|4",
+          "tableau_index": 13,
+          "origin": [
+            1091,
+            325
+          ],
+          "card": "KD",
+          "rank": "K",
+          "suit": "diamonds"
+        },
+        {
+          "location": "5|5",
+          "tableau_index": 14,
+          "origin": [
+            1291,
+            325
+          ],
+          "card": "7S",
+          "rank": "7",
+          "suit": "spades"
+        },
+        {
+          "location": "6|1",
+          "tableau_index": 15,
+          "origin": [
+            389,
+            378
+          ],
+          "card": "2H",
+          "rank": "2",
+          "suit": "hearts"
+        },
+        {
+          "location": "6|2",
+          "tableau_index": 16,
+          "origin": [
+            589,
+            378
+          ],
+          "card": "3S",
+          "rank": "3",
+          "suit": "spades"
+        },
+        {
+          "location": "6|3",
+          "tableau_index": 17,
+          "origin": [
+            790,
+            378
+          ],
+          "card": "AH",
+          "rank": "A",
+          "suit": "hearts"
+        },
+        {
+          "location": "6|4",
+          "tableau_index": 18,
+          "origin": [
+            990,
+            378
+          ],
+          "card": "8C",
+          "rank": "8",
+          "suit": "clubs"
+        },
+        {
+          "location": "6|5",
+          "tableau_index": 19,
+          "origin": [
+            1191,
+            378
+          ],
+          "card": "4C",
+          "rank": "4",
+          "suit": "clubs"
+        },
+        {
+          "location": "6|6",
+          "tableau_index": 20,
+          "origin": [
+            1392,
+            378
+          ],
+          "card": "6D",
+          "rank": "6",
+          "suit": "diamonds"
+        },
+        {
+          "location": "7|1",
+          "tableau_index": 21,
+          "origin": [
+            288,
+            432
+          ],
+          "card": "4D",
+          "rank": "4",
+          "suit": "diamonds"
+        },
+        {
+          "location": "7|2",
+          "tableau_index": 22,
+          "origin": [
+            489,
+            432
+          ],
+          "card": "AD",
+          "rank": "A",
+          "suit": "diamonds"
+        },
+        {
+          "location": "7|3",
+          "tableau_index": 23,
+          "origin": [
+            690,
+            432
+          ],
+          "card": "QD",
+          "rank": "Q",
+          "suit": "diamonds"
+        },
+        {
+          "location": "7|4",
+          "tableau_index": 24,
+          "origin": [
+            890,
+            432
+          ],
+          "card": "KC",
+          "rank": "K",
+          "suit": "clubs"
+        },
+        {
+          "location": "7|5",
+          "tableau_index": 25,
+          "origin": [
+            1091,
+            432
+          ],
+          "card": "6C",
+          "rank": "6",
+          "suit": "clubs"
+        },
+        {
+          "location": "7|6",
+          "tableau_index": 26,
+          "origin": [
+            1291,
+            432
+          ],
+          "card": "7H",
+          "rank": "7",
+          "suit": "hearts"
+        },
+        {
+          "location": "7|7",
+          "tableau_index": 27,
+          "origin": [
+            1492,
+            432
+          ],
+          "card": "7D",
+          "rank": "7",
+          "suit": "diamonds"
+        },
+        {
+          "location": "DL",
+          "origin": [
+            759,
+            678
+          ],
+          "card": "QS",
+          "rank": "Q",
+          "suit": "spades"
+        }
+      ]
+    }
+  ]
+}

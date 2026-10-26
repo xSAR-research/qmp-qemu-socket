@@ -111,7 +111,10 @@ fn pyramid_terminal_requires_title_underlay_panels_chart_and_ok() {
         );
     }
     assert_eq!(recognised_pyramid_terminal(&menu(Control::Ok)), Ok(false));
-    assert_eq!(recognised_pyramid_terminal(&native(FULL_START)), Ok(false));
+    assert_eq!(
+        recognised_pyramid_terminal(&normal_start(FULL_START)),
+        Ok(false)
+    );
     assert_eq!(
         recognised_pyramid_terminal(&native(include_bytes!(
             "../../../tests/fixtures/tripeaks-TP02.png"
@@ -138,7 +141,7 @@ fn pyramid_terminal_excludes_solver_progress_and_dynamic_level_artwork() {
 #[test]
 fn independent_start_requires_all_28_identities_initial_dl_and_positive_empty_dr() {
     let vision = ReconVision::bundled_native_v11().expect("production v11");
-    let original = native(FULL_START);
+    let original = normal_start(FULL_START);
     let board = independent_pyramid_start(&vision, &original)
         .unwrap()
         .expect("native full start");
@@ -176,6 +179,8 @@ struct WireReport {
     probes: usize,
     /// Native-mapped positions of actual left-button presses.
     downs: Vec<(i64, i64)>,
+    /// Release events observed after both certain and uncertain presses.
+    ups: usize,
 }
 
 
@@ -206,6 +211,8 @@ fn serve(
     mut captures: VecDeque<Vec<u8>>,
     cancel: Arc<AtomicBool>,
     stop_probe: Option<usize>,
+    uncertain_down: Option<usize>,
+    mut on_capture: impl FnMut(usize),
 ) -> WireReport {
     let (mut stream, _) = listener.accept().expect("local QMP accept");
     stream
@@ -225,6 +232,7 @@ fn serve(
         }
         let request: Value = serde_json::from_str(&line).expect("production QMP JSON");
         let id = request["id"].as_u64().expect("production numeric QMP id");
+        let mut reject = false;
         let response = match request["execute"].as_str().expect("production execute") {
             "qmp_capabilities" => json!({}),
             "query-status" => json!({"running": true, "status": "running"}),
@@ -248,6 +256,7 @@ fn serve(
                 )
                 .expect("local capture pixels");
                 report.captures += 1;
+                on_capture(report.captures);
                 json!({})
             }
             "input-send-event" => {
@@ -265,6 +274,9 @@ fn serve(
                             assert_eq!(event["data"]["button"], "left");
                             if event["data"]["down"] == true {
                                 report.downs.push(position);
+                                reject = uncertain_down == Some(report.downs.len());
+                            } else {
+                                report.ups += 1;
                             }
                         }
                         other => panic!("unexpected restart event {other}"),
@@ -274,7 +286,23 @@ fn serve(
             }
             other => panic!("unexpected QMP operation {other}"),
         };
-        packet(&mut stream, json!({"return": response, "id": id}));
+        let response = if reject {
+            json!({"error": {"class": "GenericError", "desc": "Injected uncertain delivered DOWN"}, "id": id})
+        } else {
+            json!({"return": response, "id": id})
+        };
+        if uncertain_down.is_some() && report.ups > 0 {
+            // Production release-only recovery does not consume this ACK and may
+            // close immediately. Preserve the observed UP even if its ACK races EOF.
+            if serde_json::to_writer(&mut stream, &response).is_err()
+                || stream.write_all(b"\n").is_err()
+                || stream.flush().is_err()
+            {
+                break;
+            }
+        } else {
+            packet(&mut stream, response);
+        }
     }
     report
 }
@@ -323,10 +351,16 @@ enum TestRestartEntry {
     Challenge(ChallengeCompletion),
     /// Preserve existing Solver/HALO behaviour.
     ComputerVision,
+    /// Same shared SOLVER readiness with a test-supplied actual normal completion capability.
+    ComputerVisionNormal,
+    /// Actual witnessed policy with one delivered DOWN error, never a press retry.
+    WitnessedUncertain,
     /// Preserve the existing specific-terminal/full-board admission rule.
     Independent,
     /// Exercise the new actual-third-completion admission into the same controller.
     Witnessed(PyramidRestartEntry),
+    /// Current native-v23 recognition for the retained post-Play dealing regression.
+    WitnessedNative(PyramidRestartEntry),
 }
 
 
@@ -338,6 +372,28 @@ fn run_with_entry(
     mode: GameMode,
     cancel_before: bool,
     stop_probe: Option<usize>,
+) -> Episode {
+    run_with_entry_revocation(
+        initial,
+        frames,
+        entry,
+        mode,
+        cancel_before,
+        stop_probe,
+        None,
+    )
+}
+
+
+/// Inject STOP or an actual context round-trip after one specific pending-readiness capture.
+fn run_with_entry_revocation(
+    initial: CapturedFrame,
+    frames: Vec<CapturedFrame>,
+    entry: TestRestartEntry,
+    mode: GameMode,
+    cancel_before: bool,
+    stop_probe: Option<usize>,
+    revoke_capture: Option<(usize, bool)>,
 ) -> Episode {
     let _capture_backend = TestCaptureBackend::legacy_qmp();
     let directory = SocketDirectory(std::env::temp_dir().join(format!(
@@ -354,7 +410,7 @@ fn run_with_entry(
         .collect();
     let cancel = Arc::new(AtomicBool::new(cancel_before));
     let server_cancel = Arc::clone(&cancel);
-    let server = thread::spawn(move || serve(listener, frames, server_cancel, stop_probe));
+    let uncertain_down = matches!(entry, TestRestartEntry::WitnessedUncertain).then_some(1);
     let (events, _receiver) = mpsc::channel();
     let sink = WorkerEventSink {
         events,
@@ -362,7 +418,10 @@ fn run_with_entry(
         capture_context: Mutex::new(Some(ControllerContext::new(
             socket.clone(),
             mode,
-            if matches!(entry, TestRestartEntry::ComputerVision) {
+            if matches!(
+                entry,
+                TestRestartEntry::ComputerVision | TestRestartEntry::ComputerVisionNormal
+            ) {
                 SolvingStrategy::ComputerVision
             } else {
                 SolvingStrategy::ShortestPath
@@ -373,13 +432,19 @@ fn run_with_entry(
     let mut scan = TableauScanState::for_mode(mode);
     let (initial, _) =
         analyse_captured_frame(initial, &scan).expect("initial native classification");
-    let mut qmp = QmpClient::connect(&socket).expect("actual local QMP handshake");
     let mut completed_boards = GameMode::Pyramid.profile().boards_per_game;
-    let vision = ReconVision::bundled_native_v11().expect("production v11");
+    let vision = if matches!(entry, TestRestartEntry::WitnessedNative(_)) {
+        ReconVision::bundled_native_v23().expect("production v23")
+    } else {
+        ReconVision::bundled_native_v11().expect("production v11")
+    };
     let mut latest_frame = Some(initial.frame.clone());
     let completion_context =
         ControllerContext::new(socket.clone(), mode, SolvingStrategy::ShortestPath, 1);
-    if matches!(entry, TestRestartEntry::Challenge(_)) {
+    if matches!(
+        entry,
+        TestRestartEntry::Challenge(_) | TestRestartEntry::WitnessedNative(_)
+    ) {
         sink.latest_frame
             .reconnaissance
             .select(&completion_context, &cancel)
@@ -390,18 +455,38 @@ fn run_with_entry(
             .unwrap();
         cancel.store(cancel_before, Ordering::Release);
     }
-    let result = match entry {
-        TestRestartEntry::Challenge(proof) => finish_pyramid_challenge(
-            &mut qmp,
-            &completion_context,
-            &initial,
-            proof,
-            &mut scan,
-            &sink,
-            &cancel,
-            &mut latest_frame,
+    let revoke_control = sink.latest_frame.reconnaissance.clone();
+    let revoke_context =
+        ControllerContext::new(socket.clone(), mode, SolvingStrategy::ComputerVision, 2);
+    let server = thread::spawn(move || {
+        let capture_cancel = Arc::clone(&server_cancel);
+        serve(
+            listener,
+            frames,
+            server_cancel,
+            stop_probe,
+            uncertain_down,
+            move |number| {
+                if let Some((capture, context_change)) = revoke_capture
+                    && number == capture
+                {
+                    if context_change {
+                        revoke_control
+                            .select(&revoke_context, &capture_cancel)
+                            .unwrap();
+                    } else {
+                        capture_cancel.store(true, Ordering::Release);
+                    }
+                }
+            },
         )
-        .map(|()| PostGameOutcome::Completed),
+    });
+    let mut qmp = QmpClient::connect(&socket).expect("actual local QMP handshake");
+    let result = match entry {
+        TestRestartEntry::Challenge(proof) => {
+            finish_pyramid_challenge(&completion_context, &initial.frame, proof, &sink, &cancel)
+                .map(|()| PostGameOutcome::Completed)
+        }
         TestRestartEntry::Independent => run_independent_pyramid_restart_retaining_frame(
             &mut qmp,
             &socket,
@@ -413,20 +498,38 @@ fn run_with_entry(
             &vision,
             &mut latest_frame,
         ),
-        TestRestartEntry::ComputerVision => run_post_game_restart(
-            &mut qmp,
-            &socket,
-            Some(&initial),
-            &mut scan,
-            &mut completed_boards,
-            &sink,
-            &cancel,
-        ),
-        TestRestartEntry::Witnessed(entry) => run_witnessed_pyramid_restart_retaining_frame(
+        TestRestartEntry::ComputerVision | TestRestartEntry::ComputerVisionNormal => {
+            run_post_game_restart(
+                &mut qmp,
+                &socket,
+                Some(&initial),
+                &mut scan,
+                &mut completed_boards,
+                &sink,
+                &cancel,
+                matches!(entry, TestRestartEntry::ComputerVisionNormal)
+                    .then_some(NormalPyramidCompletion::independent(third_clear_entry())),
+            )
+        }
+        TestRestartEntry::Witnessed(entry) | TestRestartEntry::WitnessedNative(entry) => {
+            run_witnessed_pyramid_restart_retaining_frame(
+                &mut qmp,
+                &socket,
+                &initial,
+                entry,
+                &mut scan,
+                &mut completed_boards,
+                &sink,
+                &cancel,
+                &vision,
+                &mut latest_frame,
+            )
+        }
+        TestRestartEntry::WitnessedUncertain => run_witnessed_pyramid_restart_retaining_frame(
             &mut qmp,
             &socket,
             &initial,
-            entry,
+            third_clear_entry(),
             &mut scan,
             &mut completed_boards,
             &sink,
@@ -512,10 +615,10 @@ fn target_completion_star_club_controller_releases_before_operator_continue() {
 }
 
 
-/// Existing XP skip and optional OK precede a later Continue; the operator button is never clicked.
+/// Hypothetical optional reward-tail frames stay unread after actual completion.
 #[test]
 #[ignore = "requires local AF_UNIX sockets"]
-fn target_completion_continue_after_counting_preserves_shared_optional_level_up() {
+fn target_completion_counting_releases_before_optional_reward_tail() {
     for level_up in [false, true] {
         let (counting, proof) = challenge_reward();
         let complete = target_completion_fours_continue();
@@ -524,6 +627,7 @@ fn target_completion_continue_after_counting_preserves_shared_optional_level_up(
             frames.extend([native(LEVEL_UP), native(LEVEL_UP)]);
         }
         frames.push(complete.clone());
+        let expected = counting.pixels.clone();
         let episode = run_with_entry(
             counting,
             frames,
@@ -533,18 +637,9 @@ fn target_completion_continue_after_counting_preserves_shared_optional_level_up(
             None,
         );
         assert_eq!(episode.result, Ok(false), "optional Level Up = {level_up}");
-        assert_eq!(episode.wire.downs.len(), if level_up { 2 } else { 1 });
-        assert_eq!(
-            episode.wire.downs[0],
-            wire_point(SCORE_SKIP_CONTROL.click_point)
-        );
-        assert!(
-            !episode
-                .wire
-                .downs
-                .contains(&wire_point(PixelPoint::new(960, 881)))
-        );
-        assert_eq!(episode.latest_frame.unwrap().pixels, complete.pixels);
+        assert!(episode.wire.downs.is_empty());
+        assert_eq!((episode.wire.probes, episode.wire.captures), (0, 0));
+        assert_eq!(episode.latest_frame.unwrap().pixels, expected);
     }
 }
 
@@ -552,7 +647,7 @@ fn target_completion_continue_after_counting_preserves_shared_optional_level_up(
 /// Unknown control pixels are not an invitation to click the challenge or retry a reward.
 #[test]
 #[ignore = "requires local AF_UNIX sockets"]
-fn target_completion_unknown_continue_withholds_score_skip() {
+fn target_completion_unknown_continue_releases_without_retry_or_score_skip() {
     let mut frame = native(include_bytes!(
         "../../../tests/fixtures/pyramid-objectives/boards-complete-continue.png"
     ));
@@ -571,7 +666,8 @@ fn target_completion_unknown_continue_withholds_score_skip() {
         false,
         None,
     );
-    assert!(episode.result.is_err());
+    assert_eq!(episode.result, Ok(false));
+    assert_eq!((episode.wire.probes, episode.wire.captures), (0, 0));
     assert!(episode.wire.downs.is_empty());
 }
 
@@ -587,83 +683,45 @@ fn challenge_reward() -> (CapturedFrame, ChallengeCompletion) {
 }
 
 
-/// The real common event uses shared XP skip/OK controls and stops at a fresh NewGame match.
+/// Counting and Continue terminals release immediately without captures, probes or controls.
 #[test]
 #[ignore = "requires local AF_UNIX sockets"]
-fn challenge_rewards_reuse_skip_and_ok_without_new_game_play_or_solver() {
-    let (frame, proof) = challenge_reward();
-    let episode = run_with_entry(
-        frame.clone(),
-        vec![
+fn challenge_complete_counting_and_continue_release_without_reward_input() {
+    let counting = challenge_reward().0;
+    let continuing = native(include_bytes!(
+        "../../../tests/fixtures/pyramid-objectives/boards-complete-continue.png"
+    ));
+    for frame in [counting, continuing] {
+        let proof = crate::pyramid_progress::observe_challenge_complete(&frame)
+            .unwrap()
+            .unwrap();
+        let episode = run_with_entry(
             frame.clone(),
-            frame,
-            native(LEVEL_UP),
-            native(LEVEL_UP),
-            menu(Control::NewGame),
-        ],
-        TestRestartEntry::Challenge(proof),
-        GameMode::Pyramid,
-        false,
-        None,
-    );
-    assert_eq!(episode.result, Ok(false));
-    assert_eq!(episode.wire.downs.len(), 2);
-    assert_eq!(
-        episode.wire.downs[0],
-        wire_point(SCORE_SKIP_CONTROL.click_point)
-    );
-    assert_eq!(episode.wire.probes, 2);
-    assert_eq!(episode.wire.captures, 5);
-    assert_eq!(
-        episode.latest_frame.unwrap().pixels,
-        menu(Control::NewGame).pixels
-    );
-    assert_eq!(
-        episode.completed_boards,
-        GameMode::Pyramid.profile().boards_per_game
-    );
+            vec![],
+            TestRestartEntry::Challenge(proof),
+            GameMode::Pyramid,
+            false,
+            None,
+        );
+        assert_eq!(episode.result, Ok(false));
+        assert!(episode.wire.downs.is_empty());
+        assert_eq!((episode.wire.probes, episode.wire.captures), (0, 0));
+        assert_eq!(episode.latest_frame.unwrap().pixels, frame.pixels);
+        assert_eq!(
+            episode.completed_boards,
+            GameMode::Pyramid.profile().boards_per_game
+        );
+    }
 }
 
 
-/// Optional Level Up is skipped only by observed NewGame, which itself receives no input.
+/// STOP and a receipt for different pixels both refuse without any transport operation.
 #[test]
 #[ignore = "requires local AF_UNIX sockets"]
-fn challenge_rewards_without_level_up_release_after_only_score_skip() {
-    let (frame, proof) = challenge_reward();
-    let episode = run_with_entry(
-        frame.clone(),
-        vec![
-            frame.clone(),
-            frame,
-            menu(Control::NewGame),
-            menu(Control::NewGame),
-            menu(Control::NewGame),
-        ],
-        TestRestartEntry::Challenge(proof),
-        GameMode::Pyramid,
-        false,
-        None,
-    );
-    assert_eq!(episode.result, Ok(false));
-    assert_eq!(
-        episode.wire.downs,
-        vec![wire_point(SCORE_SKIP_CONTROL.click_point)]
-    );
-    assert_eq!(episode.wire.probes, 1);
-    assert_eq!(
-        episode.latest_frame.unwrap().pixels,
-        menu(Control::NewGame).pixels
-    );
-}
-
-
-/// STOP before reward entry or after a fresh OK probe prevents every later control.
-#[test]
-#[ignore = "requires local AF_UNIX sockets"]
-fn challenge_rewards_stop_precedes_receipt_and_fresh_ok_input() {
+fn challenge_complete_handoff_preserves_stop_and_bound_frame_refusal() {
     let (frame, proof) = challenge_reward();
     let stopped = run_with_entry(
-        frame.clone(),
+        frame,
         vec![],
         TestRestartEntry::Challenge(proof),
         GameMode::Pyramid,
@@ -671,22 +729,24 @@ fn challenge_rewards_stop_precedes_receipt_and_fresh_ok_input() {
         None,
     );
     assert!(stopped.result.unwrap_err().contains("STOP"));
-    assert_eq!(stopped.wire.captures, 0);
+    assert_eq!((stopped.wire.captures, stopped.wire.probes), (0, 0));
     assert!(stopped.wire.downs.is_empty());
-    let stopped = run_with_entry(
-        frame.clone(),
-        vec![frame.clone(), frame, native(LEVEL_UP), native(LEVEL_UP)],
+    let different = run_with_entry(
+        normal_start(FULL_START),
+        vec![],
         TestRestartEntry::Challenge(proof),
         GameMode::Pyramid,
         false,
-        Some(2),
+        None,
     );
-    assert!(stopped.result.unwrap_err().contains("STOP"));
-    assert_eq!(stopped.wire.probes, 2);
-    assert_eq!(
-        stopped.wire.downs,
-        vec![wire_point(SCORE_SKIP_CONTROL.click_point)]
+    assert!(
+        different
+            .result
+            .unwrap_err()
+            .contains("bound actual terminal receipt")
     );
+    assert_eq!((different.wire.captures, different.wire.probes), (0, 0));
+    assert!(different.wire.downs.is_empty());
 }
 
 
@@ -695,7 +755,7 @@ fn challenge_rewards_stop_precedes_receipt_and_fresh_ok_input() {
 #[ignore = "requires local AF_UNIX sockets"]
 fn independent_restart_stops_after_play_and_two_full_fresh_starts() {
     let mut frames = restart_frames();
-    frames.extend([native(FULL_START), native(FULL_START)]);
+    frames.extend([normal_start(FULL_START), normal_start(FULL_START)]);
     let episode = run(native(LEVEL_UP), frames, true, false, None);
     assert_eq!(episode.result, Ok(true));
     assert_eq!(episode.completed_boards, 0);
@@ -713,8 +773,8 @@ fn independent_restart_stops_after_play_and_two_full_fresh_starts() {
 #[ignore = "requires local AF_UNIX sockets"]
 fn independent_early_full_board_recovery_never_activates_solver() {
     let episode = run(
-        native(FULL_START),
-        vec![native(FULL_START)],
+        normal_start(FULL_START),
+        vec![normal_start(FULL_START)],
         true,
         false,
         None,
@@ -732,8 +792,8 @@ fn independent_early_full_board_recovery_never_activates_solver() {
 #[ignore = "requires local AF_UNIX sockets"]
 fn independent_full_start_confirmation_rejects_changed_identity() {
     let episode = run(
-        native(FULL_START),
-        vec![native(OTHER_START)],
+        normal_start(FULL_START),
+        vec![normal_start(OTHER_START)],
         true,
         false,
         None,
@@ -785,12 +845,7 @@ fn independent_unknown_after_play_refuses_without_solver_or_extra_capture() {
     let mut frames = restart_frames();
     frames.push(blank());
     let episode = run(native(LEVEL_UP), frames, true, false, None);
-    assert!(
-        episode
-            .result
-            .unwrap_err()
-            .contains("fully recognised 28-card")
-    );
+    assert!(episode.result.unwrap_err().contains("supported board"));
     assert_eq!(episode.wire.captures, 5);
     let latest = episode
         .latest_frame
@@ -809,7 +864,7 @@ fn independent_unknown_after_play_refuses_without_solver_or_extra_capture() {
 #[test]
 #[ignore = "requires local AF_UNIX sockets"]
 fn default_restart_preserves_solver_and_halo_behaviour() {
-    let mut halo = native(FULL_START);
+    let mut halo = normal_start(FULL_START);
     paint(
         &mut halo,
         crate::pyramid::halo_probe(crate::pyramid::PYRAMID_TARGETS[0]),
@@ -820,7 +875,7 @@ fn default_restart_preserves_solver_and_halo_behaviour() {
             .expect("existing Pyramid HALO classifier");
     assert!(matches!(observation.prediction, PredictedAction::Action(_)));
     let mut frames = restart_frames();
-    frames.extend([native(FULL_START), halo]);
+    frames.extend([normal_start(FULL_START), halo]);
     let episode = run(native(LEVEL_UP), frames, false, false, None);
     assert_eq!(episode.result, Ok(true));
     assert_eq!(episode.wire.downs.len(), 4);
@@ -886,7 +941,7 @@ fn third_clear_entry() -> PyramidRestartEntry {
 ///
 /// This deliberate derivative tests the gameplay veto; it is not a retained win.
 fn empty_gameplay_with_new_game_ink() -> CapturedFrame {
-    let mut frame = native(FULL_START);
+    let mut frame = normal_start(FULL_START);
     for slot in crate::pyramid::PYRAMID_TARGETS {
         if slot.kind.is_card() {
             paint(&mut frame, slot.bounds, [30, 95, 65]);
@@ -972,7 +1027,7 @@ fn witnessed_restart_requires_actual_last_board_completion() {
 fn expected_new_game_vetoes_full_and_empty_gameplay_without_cloning() {
     let empty = empty_gameplay_with_new_game_ink();
     assert_eq!(crate::pyramid::board_is_empty(&empty), Ok(true));
-    let mut full = native(FULL_START);
+    let mut full = normal_start(FULL_START);
     let bounds = profiles::PYRAMID_CONTROLS.new_game.bounds;
     paint(
         &mut full,
@@ -1040,8 +1095,8 @@ fn witnessed_new_game_reuses_only_forward_stages_and_two_fresh_full_starts() {
         vec![
             menu(Control::NewGame),
             play,
-            native(FULL_START),
-            native(FULL_START),
+            normal_start(FULL_START),
+            normal_start(FULL_START),
         ],
         TestRestartEntry::Witnessed(third_clear_entry()),
         GameMode::Pyramid,
@@ -1079,7 +1134,7 @@ fn witnessed_specific_terminal_keeps_existing_ok_new_game_play_controller() {
     )
     .expect("controlled paired specific terminal outcome");
     let mut frames = restart_frames();
-    frames.extend([native(FULL_START), native(FULL_START)]);
+    frames.extend([normal_start(FULL_START), normal_start(FULL_START)]);
     let episode = run_with_entry(
         native(LEVEL_UP),
         frames,
@@ -1116,7 +1171,7 @@ fn witnessed_admission_preserves_old_wrapper_and_refuses_unsafe_current_scenes()
     assert!(old.wire.downs.is_empty());
     for (frame, mode, cancelled) in [
         (empty_gameplay_with_new_game_ink(), GameMode::Pyramid, false),
-        (native(FULL_START), GameMode::Pyramid, false),
+        (normal_start(FULL_START), GameMode::Pyramid, false),
         (blank(), GameMode::Pyramid, false),
         (menu(Control::Play), GameMode::Pyramid, false),
         (menu(Control::NewGame), GameMode::TriPeaks, false),
@@ -1192,4 +1247,659 @@ fn witnessed_restart_missing_play_never_replays_or_skips_score() {
         GameMode::Pyramid.profile().boards_per_game
     );
     assert_eq!(episode.latest_frame.unwrap().pixels, blank().pixels);
+}
+
+
+/// The actual reward PNG has neither Level Up nor New Game; menus are scripted derivatives.
+fn normal_147_reward() -> CapturedFrame {
+    native(include_bytes!(
+        "../../../tests/fixtures/pyramid-normal-reward-147/normal-reward.png"
+    ))
+}
+
+
+/// Native normal title/header/skip proof refuses damage, wrong ordinal and other scenes.
+#[test]
+fn normal_147_reward_requires_all_positive_roles() {
+    let reward = normal_147_reward();
+    assert!(normal_reward::observe(&reward).unwrap());
+    assert!(!recognised_pyramid_terminal(&reward).unwrap());
+    assert!(!expected_pyramid_new_game(&reward).unwrap());
+    for bounds in [
+        PixelRect::new(708, 200, 508, 68),
+        PixelRect::new(798, 838, 332, 36),
+        PixelRect::new(1_658, 46, 160, 32),
+        PixelRect::new(1_816, 169, 68, 2),
+        PixelRect::new(507, 400, 3, 20),
+        PixelRect::new(630, 330, 16, 20),
+    ] {
+        let mut damaged = reward.clone();
+        paint(&mut damaged, bounds, [255; 3]);
+        assert!(
+            !normal_reward::observe(&damaged).unwrap(),
+            "missing role {bounds:?}"
+        );
+    }
+    for donor in [
+        include_bytes!("../../../tests/fixtures/pyramid-standard-progress/header-one.rgb")
+            .as_slice(),
+        include_bytes!("../../../tests/fixtures/pyramid-standard-series/header-2.rgb").as_slice(),
+    ] {
+        let mut wrong = reward.clone();
+        for y in 0..32 {
+            for x in 0..160 {
+                let source = (y * 160 + x) * 3;
+                let rgb = if donor[source..source + 3].iter().all(|&v| v >= 240) {
+                    [44, 52, 78]
+                } else if donor[source..source + 3].iter().all(|&v| v <= 160) {
+                    [15, 30, 50]
+                } else {
+                    [30, 43, 64]
+                };
+                paint(
+                    &mut wrong,
+                    PixelRect::new(1_658 + x as u32, 46 + y as u32, 1, 1),
+                    rgb,
+                );
+            }
+        }
+        assert!(!normal_reward::observe(&wrong).unwrap());
+    }
+    for frame in [
+        native(LEVEL_UP),
+        normal_start(FULL_START),
+        menu(Control::NewGame),
+        blank(),
+        native(include_bytes!(
+            "../../../tests/fixtures/pyramid-objectives/boards-complete-continue.png"
+        )),
+        native(include_bytes!("../../../tests/fixtures/tripeaks-TP01.png")),
+    ] {
+        assert!(!normal_reward::observe(&frame).unwrap());
+    }
+    let mut invalid = reward;
+    invalid.pixels.pop();
+    assert!(normal_reward::observe(&invalid).is_err());
+}
+
+
+/// Normal reward before and after acknowledged OK uses two skips, then forward-only controls.
+#[test]
+#[ignore = "requires local AF_UNIX sockets"]
+fn normal_147_witnessed_reward_before_and_after_ok_reaches_fresh_board() {
+    let reward = normal_147_reward();
+    let frames = vec![
+        reward.clone(),
+        reward.clone(),
+        native(LEVEL_UP),
+        native(LEVEL_UP),
+        reward.clone(),
+        reward.clone(),
+        menu(Control::NewGame),
+        menu(Control::Play),
+        normal_start(FULL_START),
+        normal_start(FULL_START),
+    ];
+    let episode = run_with_entry(
+        reward,
+        frames,
+        TestRestartEntry::Witnessed(third_clear_entry()),
+        GameMode::Pyramid,
+        false,
+        None,
+    );
+    assert_eq!(episode.result, Ok(true));
+    let ok = wire_point(
+        control_point(
+            &native(LEVEL_UP),
+            profiles::PYRAMID_CONTROLS.spec(Control::Ok),
+        )
+        .unwrap(),
+    );
+    assert_eq!(
+        episode.wire.downs,
+        vec![
+            wire_point(SCORE_SKIP_CONTROL.click_point),
+            ok,
+            wire_point(SCORE_SKIP_CONTROL.click_point),
+            wire_point(
+                control_point(
+                    &menu(Control::NewGame),
+                    profiles::PYRAMID_CONTROLS.spec(Control::NewGame)
+                )
+                .unwrap()
+            ),
+            wire_point(
+                control_point(
+                    &menu(Control::Play),
+                    profiles::PYRAMID_CONTROLS.spec(Control::Play)
+                )
+                .unwrap()
+            )
+        ]
+    );
+    assert_eq!(episode.wire.captures, 10);
+    assert_eq!(episode.wire.ups, 5);
+    assert_eq!(episode.completed_boards, 0);
+}
+
+
+/// Optional Level Up is skipped; the next fresh New Game capture owns its single press.
+#[test]
+#[ignore = "requires local AF_UNIX sockets"]
+fn normal_147_no_level_up_uses_new_game_without_ok_or_solver() {
+    let reward = normal_147_reward();
+    let frames = vec![
+        reward.clone(),
+        reward.clone(),
+        menu(Control::NewGame),
+        menu(Control::NewGame),
+        menu(Control::Play),
+        normal_start(FULL_START),
+        normal_start(FULL_START),
+    ];
+    let episode = run_with_entry(
+        reward,
+        frames,
+        TestRestartEntry::Witnessed(third_clear_entry()),
+        GameMode::Pyramid,
+        false,
+        None,
+    );
+    assert_eq!(episode.result, Ok(true));
+    assert_eq!(episode.wire.downs.len(), 3);
+    assert_eq!(episode.wire.captures, 7);
+    assert_eq!(episode.wire.ups, 3);
+}
+
+
+/// Shared Pyramid SOLVER keeps its own Solver/HALO readiness after the same reward stages.
+#[test]
+#[ignore = "requires local AF_UNIX sockets"]
+fn normal_147_shared_solver_reward_policy_keeps_solver_readiness() {
+    let reward = normal_147_reward();
+    let mut halo = normal_start(FULL_START);
+    paint(
+        &mut halo,
+        crate::pyramid::halo_probe(crate::pyramid::PYRAMID_TARGETS[0]),
+        [237, 207, 109],
+    );
+    let frames = vec![
+        reward.clone(),
+        reward.clone(),
+        native(LEVEL_UP),
+        native(LEVEL_UP),
+        reward.clone(),
+        reward.clone(),
+        menu(Control::NewGame),
+        menu(Control::Play),
+        normal_start(FULL_START),
+        halo,
+    ];
+    let episode = run_with_entry(
+        reward,
+        frames,
+        TestRestartEntry::ComputerVisionNormal,
+        GameMode::Pyramid,
+        false,
+        None,
+    );
+    assert_eq!(episode.result, Ok(true));
+    assert_eq!(episode.wire.downs.len(), 6);
+    assert_eq!(
+        episode.wire.downs.last(),
+        Some(&wire_point(
+            crate::parameters::SHARED_SOLVER_CONTROL.click_point
+        ))
+    );
+}
+
+
+/// Missing initial capability refuses cold normal reward before captures or presses.
+#[test]
+#[ignore = "requires local AF_UNIX sockets"]
+fn normal_147_cold_reward_and_stop_are_input_free() {
+    let cold = run(normal_147_reward(), vec![], true, false, None);
+    assert!(cold.result.is_err());
+    assert_eq!(cold.wire.captures, 0);
+    assert!(cold.wire.downs.is_empty());
+    let reward = normal_147_reward();
+    let stopped = run_with_entry(
+        reward.clone(),
+        vec![reward.clone(), reward],
+        TestRestartEntry::Witnessed(third_clear_entry()),
+        GameMode::Pyramid,
+        false,
+        Some(1),
+    );
+    assert!(stopped.result.is_err());
+    assert_eq!(stopped.wire.captures, 2);
+    assert!(stopped.wire.downs.is_empty());
+}
+
+
+/// An unknown frame breaks the post-OK reward pair and cannot renew the search allowance.
+#[test]
+#[ignore = "requires local AF_UNIX sockets"]
+fn normal_147_unknown_post_ok_does_not_authorise_a_skip() {
+    let reward = normal_147_reward();
+    let frames = vec![
+        native(LEVEL_UP),
+        native(LEVEL_UP),
+        reward.clone(),
+        blank(),
+        reward,
+    ];
+    let episode = run_with_entry(
+        native(LEVEL_UP),
+        frames,
+        TestRestartEntry::Witnessed(third_clear_entry()),
+        GameMode::Pyramid,
+        false,
+        None,
+    );
+    assert!(episode.result.is_err());
+    assert_eq!(episode.wire.downs.len(), 1);
+    assert_eq!(episode.wire.captures, 5);
+}
+
+
+/// A delivered skip with an error ACK gets release-only recovery, never another DOWN.
+#[test]
+#[ignore = "requires local AF_UNIX sockets"]
+fn normal_147_uncertain_skip_never_replays_press() {
+    let reward = normal_147_reward();
+    let episode = run_with_entry(
+        reward.clone(),
+        vec![reward.clone(), reward],
+        TestRestartEntry::WitnessedUncertain,
+        GameMode::Pyramid,
+        false,
+        None,
+    );
+    let error = episode.result.unwrap_err();
+    assert!(error.contains("No automatic retry"), "{error}");
+    assert_eq!(episode.wire.downs.len(), 1);
+    assert_eq!(episode.wire.captures, 2);
+    assert!(episode.wire.ups >= 1);
+}
+
+
+/// Constructor counterfactuals keep mode/count/HALO and actual outcome facts independent.
+#[test]
+fn normal_147_solver_capability_requires_actual_final_result() {
+    let observation = analyse_captured_frame(
+        normal_147_reward(),
+        &TableauScanState::for_mode(GameMode::Pyramid),
+    )
+    .unwrap()
+    .0;
+    let action = crate::pyramid::action_for_kind(crate::pyramid::PYRAMID_TARGETS[0].kind).unwrap();
+    let mut success = super::super::ActionSuccess {
+        plan: crate::stepper::plan_step(PredictedAction::Action(action)).unwrap(),
+        after: PredictedAction::NoHighlight,
+        observation,
+        changed_pixels: 0,
+        continued_from_halo: false,
+        observation_rounds: 2,
+        board_completed: true,
+        series_complete: true,
+        completed_boards: 3,
+        profile: super::super::ActionProfile::default(),
+    };
+    let allowed = |mode, success: &super::super::ActionSuccess| {
+        NormalPyramidCompletion::from_solver(mode, success).is_some()
+    };
+    assert!(allowed(GameMode::Pyramid, &success));
+    assert!(!allowed(GameMode::TriPeaks, &success));
+    success.board_completed = false;
+    assert!(!allowed(GameMode::Pyramid, &success));
+    success.board_completed = true;
+    success.series_complete = false;
+    assert!(!allowed(GameMode::Pyramid, &success));
+    success.series_complete = true;
+    success.continued_from_halo = true;
+    assert!(!allowed(GameMode::Pyramid, &success));
+    success.continued_from_halo = false;
+    for count in [0, 1, 2, 4] {
+        success.completed_boards = count;
+        assert!(!allowed(GameMode::Pyramid, &success));
+    }
+}
+
+
+/// Persistent positive reward never renews the shared total of three centre presses.
+#[test]
+#[ignore = "requires local AF_UNIX sockets"]
+fn normal_147_persistent_reward_exhausts_shared_skip_budget() {
+    let reward = normal_147_reward();
+    let episode = run_with_entry(
+        reward.clone(),
+        vec![reward; 20],
+        TestRestartEntry::Witnessed(third_clear_entry()),
+        GameMode::Pyramid,
+        false,
+        None,
+    );
+    assert!(episode.result.is_err());
+    assert_eq!(episode.wire.downs.len(), SCORE_SKIP_MAX_CLICK_ATTEMPTS);
+    assert_eq!(episode.wire.ups, SCORE_SKIP_MAX_CLICK_ATTEMPTS);
+    assert!(episode.wire.captures <= POST_GAME_MAX_OBSERVATION_ROUNDS);
+}
+
+
+/// Compose genuine normal-one header/footer pixels with an independently retained full deal.
+///
+/// The cards remain original. This is a labelled transport-stage composition,
+/// never a claim that the two source images form an original capture sequence.
+fn normal_start(png: &[u8]) -> CapturedFrame {
+    let mut frame = native(png);
+    let normal = native(include_bytes!(
+        "../../../tests/fixtures/pyramid-standard-series/normal-1.png"
+    ));
+    // Replace the older source's challenge label with genuine normal header pixels.
+    for y in 32..104_usize {
+        let from = y * normal.stride + 800 * 4;
+        let to = y * frame.stride + 800 * 4;
+        frame.pixels[to..to + 400 * 4].copy_from_slice(&normal.pixels[from..from + 400 * 4]);
+    }
+    let header = include_bytes!("../../../tests/fixtures/pyramid-standard-progress/header-one.rgb");
+    let footer = include_bytes!("../../../tests/fixtures/pyramid-standard-progress/footer-new.rgb");
+    for (bounds, rgb) in [
+        (PixelRect::new(1_658, 46, 160, 32), header.as_slice()),
+        (PixelRect::new(212, 998, 58, 31), footer.as_slice()),
+    ] {
+        for (index, pixel) in rgb.as_chunks::<3>().0.iter().enumerate() {
+            let x = bounds.x as usize + index % bounds.width as usize;
+            let y = bounds.y as usize + index / bounds.width as usize;
+            let offset = y * frame.stride + x * 4;
+            frame.pixels[offset..offset + 3].copy_from_slice(pixel);
+        }
+    }
+    frame
+}
+
+
+/// Actual first post-Play refusal must wait read-only for a fresh complete matching pair.
+#[test]
+#[ignore = "requires local AF_UNIX sockets"]
+fn native_151_post_play_dealing_waits_for_two_fresh_full_starts() {
+    let partial = native(include_bytes!(
+        "../../../tests/fixtures/pyramid-post-play-151/dealing.png"
+    ));
+    let vision = ReconVision::bundled_native_v23().expect("production v23");
+    assert!(
+        vision
+            .observe(&partial)
+            .unwrap_err()
+            .contains("tableau slot 12")
+    );
+    let mut frames = restart_frames();
+    frames.extend([partial, normal_start(FULL_START), normal_start(FULL_START)]);
+    let episode = run_with_entry(
+        native(LEVEL_UP),
+        frames,
+        TestRestartEntry::WitnessedNative(third_clear_entry()),
+        GameMode::Pyramid,
+        false,
+        None,
+    );
+    assert_eq!(episode.result, Ok(true));
+    assert_eq!(episode.completed_boards, 0);
+    assert_eq!(episode.wire.captures, 7);
+    assert_eq!(episode.wire.probes, 3);
+    assert_eq!(episode.wire.downs.len(), 3);
+    assert_eq!(
+        episode.latest_frame.unwrap().pixels,
+        normal_start(FULL_START).pixels
+    );
+}
+
+
+/// Later reported fresh frame also contains incomplete moving cards, not a cached full start.
+#[test]
+#[ignore = "requires local AF_UNIX sockets"]
+fn native_151_later_post_play_failure_waits_without_replaying_controls() {
+    let partial = native(include_bytes!(
+        "../../../tests/fixtures/pyramid-post-play-151/dealing-run4.png"
+    ));
+    let vision = ReconVision::bundled_native_v23().unwrap();
+    assert!(matches!(
+        independent_start_readiness(&vision, &partial).unwrap(),
+        crate::pyramid_recon::vision::StartingReadiness::Pending(_)
+    ));
+    let mut frames = restart_frames();
+    frames.extend([partial, normal_start(FULL_START), normal_start(FULL_START)]);
+    let episode = run_with_entry(
+        native(LEVEL_UP),
+        frames,
+        TestRestartEntry::WitnessedNative(third_clear_entry()),
+        GameMode::Pyramid,
+        false,
+        None,
+    );
+    assert_eq!(episode.result, Ok(true));
+    assert_eq!(episode.wire.captures, 7);
+    assert_eq!(episode.wire.downs.len(), 3);
+    assert_eq!(episode.wire.probes, 3);
+}
+
+
+/// A pending frame breaks consecutive-pair history; six supported incomplete frames exhaust safely.
+#[test]
+#[ignore = "requires local AF_UNIX sockets"]
+fn native_151_pending_resets_pair_and_exhaustion_never_resets_counter() {
+    let partial = native(include_bytes!(
+        "../../../tests/fixtures/pyramid-post-play-151/dealing.png"
+    ));
+    for exhaust in [false, true] {
+        let mut frames = restart_frames();
+        if exhaust {
+            frames.extend(vec![
+                partial.clone();
+                super::super::pyramid_session::TRANSITION_OBSERVATIONS
+            ]);
+        } else {
+            frames.extend([
+                normal_start(FULL_START),
+                partial.clone(),
+                normal_start(FULL_START),
+                normal_start(FULL_START),
+            ]);
+        }
+        let episode = run_with_entry(
+            native(LEVEL_UP),
+            frames,
+            TestRestartEntry::WitnessedNative(third_clear_entry()),
+            GameMode::Pyramid,
+            false,
+            None,
+        );
+        if exhaust {
+            assert!(
+                episode
+                    .result
+                    .unwrap_err()
+                    .contains("within 6 fresh observations")
+            );
+            assert_eq!(episode.completed_boards, 3);
+            assert_eq!(episode.wire.captures, 10);
+            assert_eq!(episode.latest_frame.unwrap().pixels, partial.pixels);
+        } else {
+            assert_eq!(episode.result, Ok(true));
+            assert_eq!(episode.completed_boards, 0);
+            assert_eq!(episode.wire.captures, 8);
+        }
+        assert_eq!(episode.wire.downs.len(), 3);
+        assert_eq!(episode.wire.probes, 3);
+    }
+}
+
+
+/// Genuine other ordinals and different complete deals refuse before any extra control or capture.
+#[test]
+#[ignore = "requires local AF_UNIX sockets"]
+fn native_151_header_contradiction_and_unequal_complete_pair_refuse() {
+    let mut changed = normal_start(FULL_START);
+    let rgb = include_bytes!("../../../tests/fixtures/pyramid-standard-series/header-2.rgb");
+    for (index, pixel) in rgb.as_chunks::<3>().0.iter().enumerate() {
+        let offset = (46 + index / 160) * changed.stride + (1_658 + index % 160) * 4;
+        changed.pixels[offset..offset + 3].copy_from_slice(pixel);
+    }
+    for (tail, expected, captures) in [
+        (vec![changed], "contradicts", 5),
+        (
+            vec![normal_start(FULL_START), normal_start(OTHER_START)],
+            "arrangement changed",
+            6,
+        ),
+    ] {
+        let mut frames = restart_frames();
+        frames.extend(tail);
+        let episode = run_with_entry(
+            native(LEVEL_UP),
+            frames,
+            TestRestartEntry::WitnessedNative(third_clear_entry()),
+            GameMode::Pyramid,
+            false,
+            None,
+        );
+        assert!(episode.result.unwrap_err().contains(expected));
+        assert_eq!(episode.wire.captures, captures);
+        assert_eq!(episode.completed_boards, 3);
+        assert_eq!(episode.wire.downs.len(), 3);
+        assert_eq!(episode.wire.probes, 3);
+    }
+}
+
+
+/// Real selection revocation and STOP after pending both prevent a second full-frame confirmation.
+#[test]
+#[ignore = "requires local AF_UNIX sockets"]
+fn native_151_pending_stop_and_context_revocation_prevent_confirmation() {
+    for context in [false, true] {
+        let mut frames = restart_frames();
+        frames.extend([
+            native(include_bytes!(
+                "../../../tests/fixtures/pyramid-post-play-151/dealing.png"
+            )),
+            normal_start(FULL_START),
+        ]);
+        let episode = run_with_entry_revocation(
+            native(LEVEL_UP),
+            frames,
+            TestRestartEntry::WitnessedNative(third_clear_entry()),
+            GameMode::Pyramid,
+            false,
+            None,
+            Some((6, context)),
+        );
+        assert!(episode.result.unwrap_err().contains("STOP"));
+        assert_eq!(episode.completed_boards, 3);
+        assert_eq!(episode.wire.captures, 6);
+        assert_eq!(episode.wire.downs.len(), 3);
+        assert_eq!(episode.wire.probes, 3);
+    }
+}
+
+
+/// Pending-only surface classification preserves static/legend/modal/geometry and profile gates.
+#[test]
+fn native_151_dealing_surface_cannot_authorise_ready_or_hide_contradictions() {
+    use crate::pyramid_recon::vision::StartingReadiness;
+    let vision = ReconVision::bundled_native_v23().unwrap();
+    let dealing = native(include_bytes!(
+        "../../../tests/fixtures/pyramid-post-play-151/dealing-run4.png"
+    ));
+    assert!(matches!(
+        independent_start_readiness(&vision, &dealing).unwrap(),
+        StartingReadiness::Pending(_)
+    ));
+    assert!(
+        independent_pyramid_start(&vision, &dealing)
+            .unwrap()
+            .is_none()
+    );
+    let legacy = ReconVision::bundled_native_v11().unwrap();
+    assert!(legacy.starting_readiness(&dealing).is_err());
+    let mut missing_static = dealing.clone();
+    paint(
+        &mut missing_static,
+        PixelRect::new(1_796, 116, 109, 18),
+        [255; 3],
+    );
+    assert!(independent_start_readiness(&vision, &missing_static).is_err());
+    let mut missing_legend = dealing;
+    paint(
+        &mut missing_legend,
+        crate::pyramid::WHITE_SCENE_PROBES[0],
+        [0; 3],
+    );
+    assert!(independent_start_readiness(&vision, &missing_legend).is_err());
+    assert!(independent_start_readiness(&vision, &blank()).is_err());
+    assert!(independent_start_readiness(&vision, &native(LEVEL_UP)).is_err());
+    let mut missing_header = normal_start(FULL_START);
+    paint(
+        &mut missing_header,
+        PixelRect::new(1_658, 46, 160, 32),
+        [0; 3],
+    );
+    assert!(matches!(
+        independent_start_readiness(&vision, &missing_header).unwrap(),
+        StartingReadiness::Pending(_)
+    ));
+    let challenge = native(include_bytes!(
+        "../../../tests/fixtures/pyramid-entry-150/background-boards.png"
+    ));
+    assert!(
+        independent_start_readiness(&vision, &challenge)
+            .err()
+            .expect("challenge contradiction")
+            .contains("contradicts")
+    );
+    let mut invalid = missing_header;
+    invalid.pixels.truncate(10);
+    assert!(independent_start_readiness(&vision, &invalid).is_err());
+}
+
+
+/// Existing composed control stages followed by actual adjacent frames exercise production settling.
+#[test]
+fn native_153_post_play_accepts_actual_ready_pair_without_extra_controls() {
+    use crate::pyramid_recon::vision::StartingReadiness;
+    let images: [&[u8]; 3] = [
+        include_bytes!("../../../tests/fixtures/pyramid-normal-entry-153/post-play-1-dealing.png"),
+        include_bytes!("../../../tests/fixtures/pyramid-normal-entry-153/post-play-2-ready.png"),
+        include_bytes!("../../../tests/fixtures/pyramid-normal-entry-153/post-play-3-ready.png"),
+    ];
+    let vision = ReconVision::bundled_native_v23().unwrap();
+    assert!(matches!(
+        independent_start_readiness(&vision, &native(images[0])).unwrap(),
+        StartingReadiness::Pending(_)
+    ));
+    for bytes in &images[1..] {
+        assert!(matches!(
+            independent_start_readiness(&vision, &native(bytes)).unwrap(),
+            StartingReadiness::Ready(_)
+        ));
+    }
+    let mut frames = restart_frames();
+    frames.extend(images.iter().map(|bytes| native(bytes)));
+    let episode = run_with_entry(
+        native(LEVEL_UP),
+        frames,
+        TestRestartEntry::WitnessedNative(third_clear_entry()),
+        GameMode::Pyramid,
+        false,
+        None,
+    );
+    assert_eq!(episode.result, Ok(true));
+    assert_eq!(episode.completed_boards, 0);
+    assert_eq!(episode.wire.captures, 7);
+    assert_eq!(episode.wire.probes, 3);
+    assert_eq!(episode.wire.downs.len(), 3);
+    assert_eq!(
+        episode.latest_frame.unwrap().pixels,
+        native(images[2]).pixels
+    );
 }

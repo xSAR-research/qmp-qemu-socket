@@ -110,6 +110,24 @@ pub(super) fn observe(frame: &CapturedFrame) -> Result<Option<ChallengeCompletio
     if !is_complete(frame)? {
         return Ok(None);
     }
+    let Some(progress) = literal_progress(frame)? else {
+        return Ok(None);
+    };
+    Ok(Some(ChallengeCompletion {
+        progress,
+        terminal_progress: Some(progress),
+        operator_continue: matches_operator_continue(frame)?,
+        reward_counting: matches_reward_counting(frame)?,
+    }))
+}
+
+
+/// Read existing whole requirement literals after the caller proves a terminal event.
+///
+/// Header evidence is independent of the modal's qualified size. Checked frame
+/// access and bundled metadata errors propagate; an unsupported or ambiguous
+/// literal stays unknown and never fabricates a numeric requirement.
+fn literal_progress(frame: &CapturedFrame) -> Result<Option<ChallengeProgress>, String> {
     let view = frame
         .as_view()
         .map_err(|error| format!("Pyramid challenge terminal frame is invalid: {error}"))?;
@@ -126,14 +144,10 @@ pub(super) fn observe(frame: &CapturedFrame) -> Result<Option<ChallengeCompletio
             if matched.is_some() {
                 return Ok(None);
             }
-            let progress = ChallengeProgress::new(kind, target, target)
-                .ok_or_else(|| "Bundled challenge terminal requirement is invalid".to_owned())?;
-            matched = Some(ChallengeCompletion {
-                progress,
-                terminal_progress: Some(progress),
-                operator_continue: matches_operator_continue(frame)?,
-                reward_counting: matches_reward_counting(frame)?,
-            });
+            matched =
+                Some(ChallengeProgress::new(kind, target, target).ok_or_else(|| {
+                    "Bundled challenge terminal requirement is invalid".to_owned()
+                })?);
         }
     }
     Ok(matched)
@@ -223,23 +237,134 @@ fn matches_reward_counting(frame: &CapturedFrame) -> Result<bool, String> {
 }
 
 
+/// Recognise only the captured small counting modal for an already-bound challenge.
+/// Full title, medal, separated scaffold and complete skip instruction all match
+/// native pixels. Changing requirement/reward values are excluded. This is not
+/// a cold-entry terminal or authority to click skip/Continue. Invalid layouts
+/// and reference metadata return errors; unsupported animation stages refuse.
+fn small_bound_counting(frame: &CapturedFrame) -> Result<bool, String> {
+    let view = frame.as_view().map_err(|error| error.to_string())?;
+    if (view.width(), view.height()) != (NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT) {
+        return Ok(false);
+    }
+    for (bounds, rgb) in [
+        (
+            PixelRect::new(832, 383, 307, 43),
+            include_bytes!("../../tests/fixtures/pyramid-native-141/small-title.rgb").as_slice(),
+        ),
+        (
+            PixelRect::new(788, 376, 40, 54),
+            include_bytes!("../../tests/fixtures/pyramid-native-141/small-medal.rgb").as_slice(),
+        ),
+        (
+            PixelRect::new(1114, 638, 17, 50),
+            include_bytes!("../../tests/fixtures/pyramid-native-141/small-scaffold.rgb").as_slice(),
+        ),
+        (
+            PixelRect::new(890, 650, 140, 22),
+            include_bytes!("../../tests/fixtures/pyramid-native-141/small-counting.rgb").as_slice(),
+        ),
+    ] {
+        if !matches_patch_with_tolerance(view, HeaderPatch { bounds, rgb }, 0)? {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+
+/// Match the genuine large Loading modal only for a caller-bound whole-action effect.
+///
+/// Every pixel of two complete title words, the medal, separated scaffold and
+/// complete Loading instruction must match its one coherent native sample. The
+/// animated dots and changing reward artwork are excluded. This retires input
+/// only; neither missing Continue nor Loading grants a reward/skip capability.
+/// Invalid frame storage or bundled patch metadata returns an error.
+fn loading_bound_completion(frame: &CapturedFrame) -> Result<bool, String> {
+    let view = frame.as_view().map_err(|error| error.to_string())?;
+    if (view.width(), view.height()) != (NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT) {
+        return Ok(false);
+    }
+    for (bounds, rgb) in [
+        (
+            PixelRect::new(640, 164, 310, 64),
+            include_bytes!("../../tests/fixtures/pyramid-score-loading-150/title-left.rgb")
+                .as_slice(),
+        ),
+        (
+            PixelRect::new(960, 164, 322, 64),
+            include_bytes!("../../tests/fixtures/pyramid-score-loading-150/title-right.rgb")
+                .as_slice(),
+        ),
+        (
+            PixelRect::new(489, 111, 110, 152),
+            include_bytes!("../../tests/fixtures/pyramid-score-loading-150/medal.rgb").as_slice(),
+        ),
+        (
+            PixelRect::new(1387, 891, 26, 60),
+            include_bytes!("../../tests/fixtures/pyramid-score-loading-150/scaffold.rgb")
+                .as_slice(),
+        ),
+        (
+            PixelRect::new(859, 875, 123, 33),
+            include_bytes!("../../tests/fixtures/pyramid-score-loading-150/loading.rgb").as_slice(),
+        ),
+    ] {
+        if !matches_patch_with_tolerance(view, HeaderPatch { bounds, rgb }, 0)? {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+
+/// Read the genuine Loading sample's whole Score literal, including its actual overshoot.
+///
+/// This exact header is numeric evidence only after independent completion proof.
+/// It can contradict a caller binding; unknown headers retain that binding and
+/// never substitute the target for an unread current value. Metadata errors propagate.
+fn loading_literal_progress(frame: &CapturedFrame) -> Result<Option<ChallengeProgress>, String> {
+    let view = frame.as_view().map_err(|error| error.to_string())?;
+    if matches_patch_with_tolerance(
+        view,
+        HeaderPatch {
+            bounds: PixelRect::new(814, 48, 296, 32),
+            rgb: include_bytes!("../../tests/fixtures/pyramid-score-loading-150/score-header.rgb"),
+        },
+        0,
+    )? {
+        return Ok(ChallengeProgress::new(ChallengeKind::Score, 2015, 1900));
+    }
+    Ok(None)
+}
+
+
 /// Bind a common terminal event to the actual requirement retained before a whole action.
 ///
-/// The caller must obtain two fresh equal observations after every action gesture
-/// acknowledged. This does not fabricate a numeric terminal reading. A calibrated
+/// The caller retains a positive source binding and supplies a fresh observation
+/// after every whole-action gesture is acknowledged. This does not fabricate a
+/// numeric terminal reading. A calibrated
 /// literal header, when present, remains authoritative even if it contradicts the binding.
 pub(super) fn observe_bound(
     frame: &CapturedFrame,
     bound: ChallengeProgress,
 ) -> Result<Option<ChallengeCompletion>, String> {
-    if let Some(literal) = observe(frame)? {
-        return Ok(Some(literal));
+    let settled = is_complete(frame)?;
+    let small_counting = small_bound_counting(frame)?;
+    let loading = loading_bound_completion(frame)?;
+    if !settled && !small_counting && !loading {
+        return Ok(None);
     }
-    Ok(is_complete(frame)?.then_some(ChallengeCompletion {
-        progress: bound,
-        terminal_progress: None,
+    let terminal_progress = literal_progress(frame)?.or(if loading {
+        loading_literal_progress(frame)?
+    } else {
+        None
+    });
+    Ok(Some(ChallengeCompletion {
+        progress: terminal_progress.unwrap_or(bound),
+        terminal_progress,
         operator_continue: matches_operator_continue(frame)?,
-        reward_counting: matches_reward_counting(frame)?,
+        reward_counting: small_counting || matches_reward_counting(frame)?,
     }))
 }
 

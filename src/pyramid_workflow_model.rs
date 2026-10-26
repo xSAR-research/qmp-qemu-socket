@@ -16,11 +16,11 @@ pub(crate) use observed::ObservedGame;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(crate) enum WorkflowMode {
     /// Each acquisition, calculation and execution needs a separate button press.
-    #[default]
     Manual,
     /// Acquire, calculate and execute one current board, then stop.
     SingleBoard,
     /// Continue under the separately selected normal-repeat or challenge-target condition.
+    #[default]
     Continuous,
 }
 
@@ -97,9 +97,9 @@ impl RouteGoal {
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(crate) enum StopCondition {
     /// Follow verified normal three-board GAME WIN, Solver-free NewGame and repeat.
-    #[default]
     RepeatNormalGames,
     /// Continue only the observed challenge and stop when its actual target is confirmed.
+    #[default]
     ChallengeTarget,
     /// Repeat current-board work without classifying or evaluating challenge targets.
     NoChallenge,
@@ -111,7 +111,7 @@ impl StopCondition {
     pub(crate) fn label(self) -> &'static str {
         match self {
             Self::RepeatNormalGames => "Repeat normal games",
-            Self::ChallengeTarget => "Stop at challenge target",
+            Self::ChallengeTarget => "Challenge",
             Self::NoChallenge => "Continuous — no challenge",
         }
     }

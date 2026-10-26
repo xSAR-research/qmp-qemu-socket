@@ -2,7 +2,7 @@
 //!
 //! These values describe legal remaining operations, not input authority. Native
 //! delivery must retain the acquisition epoch, recognise every effect and prove
-//! an enabled REDEAL independently before attempting that separate click.
+//! REDEAL appearance independently before attempting that separate click.
 
 use super::{CompleteDeal, RecordedAction, SearchState, rules};
 use crate::pyramid_progress::{ChallengeKind, ChallengeProgress};
@@ -58,6 +58,15 @@ impl StockAdvance {
         match self {
             Self::Draw => RecordedAction::Move,
             Self::Recycle => RecordedAction::Recycle,
+        }
+    }
+
+
+    /// Wait before a fresh stock-effect capture, preserving the RECYCLE policy.
+    fn settle_delay(self) -> std::time::Duration {
+        match self {
+            Self::Draw => crate::parameters::COMPUTED_ROUTE_MOVE_SETTLE_DELAY,
+            Self::Recycle => crate::parameters::PYRAMID_DRAW_SETTLE_DELAY,
         }
     }
 }
@@ -155,7 +164,7 @@ fn observe_stock(
     use super::{BoardCompletion, DriveReport, EffectObservation, RouteIo};
     for attempt in 0..super::ORDINARY_OBSERVATIONS {
         io.check()?;
-        match io.observe_effect(state, false)? {
+        match io.observe_source(state)? {
             EffectObservation::Position(true) => return Ok(None),
             EffectObservation::Challenge(proof) => return Ok(Some(DriveReport {
                 completion: BoardCompletion::ChallengeTargetVerified(proof),
@@ -178,7 +187,7 @@ fn observe_stock(
 /// Drain only the legal remaining passes, then consume one positively enabled REDEAL.
 ///
 /// The acquisition stays privately borrowed throughout; every acknowledged D has
-/// an independent effect proof. Missing allowance, STOP, changed context or any
+/// an independent effect proof. Missing appearance, STOP, changed context or any
 /// uncertain delivery ends this consumed execution without retry or cleanup.
 pub(super) fn drain_and_redeal(
     io: &mut super::NativeIo<'_>,
@@ -196,18 +205,21 @@ pub(super) fn drain_and_redeal(
     );
     io.stock_continuation = true;
     for step in &drain.steps {
+        io.pause_checkpoint()?;
         if let Some(report) = observe_stock(io, step.before)? {
             return Ok(report);
         }
+        io.begin_action(step.before, &[InputOperation::PressDrawKey])?;
         io.deliver(InputOperation::PressDrawKey, step.before)?;
         if step.operation == StockAdvance::Recycle {
             io.recycle_acknowledged()?;
         }
-        io.wait(crate::parameters::PYRAMID_DRAW_SETTLE_DELAY)?;
+        io.wait(step.operation.settle_delay())?;
         if let Some(report) = observe_stock(io, step.after)? {
             return Ok(report);
         }
     }
+    io.pause_checkpoint()?;
     if let Some(report) = observe_stock(io, drain.exhausted)? {
         return Ok(report);
     }
@@ -219,22 +231,48 @@ pub(super) fn drain_and_redeal(
         .latest_frame
         .as_ref()
         .ok_or("Missing fresh exhausted-stock frame")?;
-    let allowance = io.plan.acquisition.vision.remaining_native_redeals(frame)?;
+    let before = io
+        .redeal_before
+        .as_ref()
+        .ok_or("Missing pre-input REDEAL region; no click authorised")?;
+    let changed = before.changed(frame)?;
+    let appeared = before.appeared(frame)?;
     super::send_log(
         io.events,
         format!(
-            "Native remaining REDEAL allowance: {allowance:?}; acknowledged RECYCLE: {}",
+            "REDEAL region appearance: {changed}/3024 materially changed pixels; appeared={appeared}; acknowledged RECYCLE={}",
             io.executed_recycles
         ),
     );
-    let point = io
-        .plan
+    if !appeared {
+        // Legal stock is exhausted and observe_stock independently proved this
+        // exact same-frame endpoint. Missing appearance grants no click and
+        // does not establish that the challenge target was achieved.
+        io.check()?;
+        io.source_proof = None;
+        io.action_permit = None;
+        let remaining = u8::try_from(drain.exhausted.tableau_remaining())
+            .map_err(|_| "Invalid exhausted tableau count")?;
+        let removed = 28_u8
+            .checked_sub(remaining)
+            .ok_or("Invalid exhausted tableau count")?;
+        return Ok(DriveReport {
+            completion: BoardCompletion::PartialPositionVerified { removed, remaining },
+            message: format!(
+                "Legal stock exhausted; exact partial endpoint verified ({removed}/28 removed, {remaining} remaining). REDEAL region did not substantively change; no click authorised. Challenge completion remains unproved; control released without further input or retry."
+            ),
+        });
+    }
+    io.plan
         .acquisition
         .vision
-        .verify_native_redeal_position(frame, &tableau, right)?;
+        .verify_temporal_stock_position(frame, &tableau, None, right, appeared)?;
+    let point = super::redeal_appearance::centre()?;
     let probe = io.qmp.probe().map_err(|error| error.to_string())?;
     super::validate_probe(&probe)?;
     io.check()?;
+    io.source_proof = None;
+    io.action_permit = None;
     // The point was derived from the latest complete same-frame position/control proof.
     io.counts.attempted = io
         .counts

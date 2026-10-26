@@ -138,7 +138,12 @@ impl Harness {
                         directory: None,
                     }));
                 });
-                run_worker(command_rx, sink, worker_cancel);
+                run_worker(
+                    command_rx,
+                    sink,
+                    worker_cancel,
+                    Arc::new(AtomicBool::new(false)),
+                );
             })
             .expect("isolated diagnostic worker");
         Self {
@@ -148,6 +153,7 @@ impl Harness {
                 latest_frame,
                 join: Some(join),
                 cancel_requested,
+                shutdown_requested: Arc::new(AtomicBool::new(false)),
             },
             qmp,
             capture,

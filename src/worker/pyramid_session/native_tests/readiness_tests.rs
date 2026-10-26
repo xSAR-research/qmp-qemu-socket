@@ -239,3 +239,109 @@ fn starting_readiness_stop_and_context_revoke_before_another_capture() {
         assert!(!episode.owns_context);
     }
 }
+
+
+/// Actual Native restart waits through dealing, then opens fresh entry and fresh guarded Recon connections.
+///
+/// A deliberately different first Recon board must refuse before any stock or Undo
+/// input. The private third-clear capability is test supplied; all readiness and
+/// Recon captures traverse the real controller, transport and current v23 reader.
+#[test]
+#[ignore = "requires local AF_UNIX sockets"]
+fn native_151_restart_settling_then_fresh_recon_rejects_changed_first_capture() {
+    let _backend = TestCaptureBackend::legacy_qmp();
+    let mut fixture = Fixture::new();
+    fixture.request.reconnaissance.profile = ReconProfileSource::BundledNativeV23;
+    let menu = encode_png(&synthetic_restart_menu(Control::NewGame)).unwrap();
+    let play = encode_png(&synthetic_restart_menu(Control::Play)).unwrap();
+    let dealing =
+        include_bytes!("../../../../tests/fixtures/pyramid-post-play-151/dealing-run4.png");
+    let scripts: VecDeque<VecDeque<Vec<u8>>> = vec![
+        vec![menu.clone(), menu.clone()].into(),
+        vec![
+            menu,
+            play,
+            dealing.to_vec(),
+            NORMAL_ONE.to_vec(),
+            NORMAL_ONE.to_vec(),
+        ]
+        .into(),
+        vec![NORMAL_ONE.to_vec(), NORMAL_ONE.to_vec()].into(),
+    ]
+    .into();
+    let listener = UnixListener::bind(&fixture.context.socket_path).unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let directory = fixture.directory.0.clone();
+    let wire = Arc::new(Mutex::new(RestartWire::default()));
+    let peer_wire = Arc::clone(&wire);
+    let control = fixture.events.latest_frame.reconnaissance.clone();
+    let context = fixture.context.clone();
+    let cancel = Arc::clone(&fixture.cancel);
+    let finished = Arc::new(AtomicBool::new(false));
+    let server = thread::spawn(move || {
+        serve_restart(
+            listener.try_clone().unwrap(),
+            directory.clone(),
+            scripts,
+            peer_wire,
+            control,
+            context,
+            cancel,
+            finished,
+            RestartBoundary::None,
+        );
+        serve_changed_recon(&listener, &directory)
+    });
+    let mut adapter = fixture.adapter();
+    adapter.generation = 3;
+    let progress = BoardCount {
+        completed: 2,
+        target: 3,
+    };
+    adapter.series = Some(progress);
+    adapter.restart_entry = Some(
+        post_game::PyramidRestartEntry::verified_third_completion(
+            progress,
+            BoardCompletion::BoardClear,
+        )
+        .unwrap(),
+    );
+    assert_eq!(
+        adapter.transition().unwrap(),
+        Entry::Terminal {
+            supported_pyramid: true
+        }
+    );
+    assert_eq!(
+        restarted_progress(adapter.restart().unwrap()),
+        Ok(BoardCount {
+            completed: 0,
+            target: 3
+        })
+    );
+    assert!(adapter.starting.is_some());
+    let error = adapter
+        .acquire(1)
+        .expect_err("fresh Recon must reject the changed first board");
+    assert!(
+        error.contains("tableau") || error.contains("header"),
+        "{error}"
+    );
+    assert_eq!(
+        server.join().unwrap(),
+        1,
+        "Recon acquired new pixels on a fourth connection"
+    );
+    let wire = wire.lock().unwrap();
+    assert_eq!(wire.connections, 3);
+    assert_eq!(wire.captures, [2, 5, 2]);
+    assert_eq!(
+        wire.downs.len(),
+        2,
+        "only the retired NewGame and Play controls"
+    );
+    assert_eq!(wire.ups, 2);
+    assert_eq!(wire.remaining, 0);
+    assert!(adapter.output.is_none());
+    assert!(!fixture.request.reconnaissance.output_path.exists());
+}

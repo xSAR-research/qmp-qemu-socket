@@ -57,7 +57,7 @@ fn setup(plan: &mut Prepared) {
 }
 
 
-/// One exact target effect retires input; only two fresh actual terminals establish completion.
+/// Numeric target evidence retires input; one positive actual terminal releases the operator endpoint.
 #[test]
 fn target_completion_native_adapter_separates_pending_effect_and_operator_endpoint() {
     let terminal = decode_png(include_bytes!(
@@ -65,7 +65,7 @@ fn target_completion_native_adapter_separates_pending_effect_and_operator_endpoi
     ))
     .unwrap();
     let evidence = adapter_with_setup(
-        vec![frame("last-observed.png"), terminal.clone(), terminal],
+        vec![frame("last-observed.png"), terminal],
         None,
         setup,
         |io| {
@@ -80,11 +80,10 @@ fn target_completion_native_adapter_separates_pending_effect_and_operator_endpoi
             );
             assert_eq!(io.challenge_initial, Some(initial));
             assert_eq!(io.challenge, Some(target));
-            assert_eq!(io.observe_final(state).unwrap(), None);
             let Some(BoardCompletion::ChallengeTargetVerified(proof)) =
                 io.observe_final(state).unwrap()
             else {
-                panic!("two actual terminal observations required");
+                panic!("one actual terminal observation required");
             };
             assert_eq!(proof.progress(), target);
             assert!(proof.operator_continue());
@@ -103,12 +102,12 @@ fn target_completion_native_adapter_separates_pending_effect_and_operator_endpoi
 #[test]
 fn target_completion_native_adapter_retains_guard_stop_and_phase_refusal() {
     let calls = Cell::new(0);
-    let guard = |_frame: &CapturedFrame| {
+    let guard = |_frame: &CapturedFrame, _phase| {
         calls.set(calls.get() + 1);
         if calls.get() == 2 {
             Err("injected target frame guard refusal".to_owned())
         } else {
-            Ok(())
+            Ok(FrameGuardOutcome::Ready)
         }
     };
     let last = frame("last-observed.png");

@@ -173,6 +173,15 @@ pub(crate) fn observe_normal(frame: &CapturedFrame) -> Result<Option<BoardCount>
 }
 
 
+/// Read a complete normal ordinal solely to detect contradictions in a bound run.
+///
+/// This omits the footer and grants no entry, source, completion or input authority.
+/// Invalid pixels or bundled metadata return an error; unsupported artwork is `None`.
+pub(crate) fn observe_normal_header(frame: &CapturedFrame) -> Result<Option<BoardCount>, String> {
+    normal::observe_header(frame)
+}
+
+
 /// Read an actual challenge requirement and counter without normal-series assumptions.
 ///
 /// # Errors
@@ -182,6 +191,22 @@ pub(crate) fn observe_challenge(
     frame: &CapturedFrame,
 ) -> Result<Option<ChallengeProgress>, String> {
     challenge::observe(frame)
+}
+
+
+/// Read only the numeric counter for an already qualified challenge kind.
+///
+/// This does not classify the objective label or grant input authority. The actual
+/// numerator and denominator are returned; callers must validate monotonic progress
+/// and the unchanged target at a fresh complete-board boundary before assignment.
+///
+/// # Errors
+/// Invalid frame storage returns an error. Unsupported dimensions or glyphs return `None`.
+pub(crate) fn observe_bound_challenge_progress(
+    frame: &CapturedFrame,
+    bound: ChallengeProgress,
+) -> Result<Option<ChallengeProgress>, String> {
+    challenge::observe_bound(frame, bound)
 }
 
 

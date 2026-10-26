@@ -247,3 +247,216 @@ fn v18_rollback_retains_all_v17_card_scene_and_parser_inputs() {
     .unwrap();
     assert_eq!(value, previous);
 }
+
+
+/// Decode the unchanged actual third-board timeout image; its route was not recorded.
+fn normal_final_152() -> CapturedFrame {
+    crate::capture::decode_png(include_bytes!(
+        "../../../tests/fixtures/pyramid-normal-final-152/last-observed.png"
+    ))
+    .unwrap()
+}
+
+
+/// Actual glow may block the old lower layout while a whole upper layout proves absence.
+#[test]
+fn native_152_normal_third_clear_recognises_actual_empty_tableau_and_piles() {
+    let frame = normal_final_152();
+    let reader = ReconVision::bundled_native_v23().unwrap();
+    let left = Some(Card::new(Rank::Six, Suit::Clubs));
+    let right = Some(Card::new(Rank::Two, Suit::Spades));
+    assert_eq!(
+        crate::pyramid_progress::observe_normal(&frame).unwrap(),
+        Some(crate::pyramid_progress::BoardCount {
+            completed: 2,
+            target: 3
+        })
+    );
+    let view = frame.as_view().unwrap();
+    assert!(
+        !reader
+            .native_absence_band(view, PixelRect::new(1131, 596, 60, 4))
+            .unwrap()
+    );
+    assert!(
+        !reader
+            .native_clear_band_material_veto(view, PixelRect::new(1131, 596, 60, 4))
+            .unwrap()
+    );
+    for (x, y) in TABLEAU_ORIGINS {
+        assert!(
+            reader
+                .native_absence_band(view, PixelRect::new(x + 40, y + 4, 60, 4))
+                .unwrap()
+        );
+    }
+    assert!(
+        reader
+            .verify_position(&frame, &[None; 28], left, right)
+            .is_err()
+    );
+    assert!(
+        reader
+            .verify_final_clear(&frame, &[None; 28], left, right)
+            .is_err()
+    );
+    reader
+        .verify_normal_final_clear(&frame, &[None; 28], left, right)
+        .unwrap();
+    assert!(!matches!(reader.observe(&frame), Ok(ReconScene::Board(_))));
+    assert!(
+        ReconVision::bundled_native_v18()
+            .unwrap()
+            .verify_normal_final_clear(&frame, &[None; 28], left, right)
+            .is_err()
+    );
+    let custom = ReconVision::from_bytes(include_bytes!(
+        "../../../tests/fixtures/pyramid-recon/native-v18/profile.json"
+    ))
+    .unwrap();
+    assert!(!custom.colour_independent);
+    assert!(
+        custom
+            .verify_normal_final_clear(&frame, &[None; 28], left, right)
+            .is_err()
+    );
+}
+
+
+/// A remaining expected card, any obstructed upper band or mixed layouts cannot prove clear.
+#[test]
+fn native_152_normal_clear_requires_one_coherent_complete_layout() {
+    let original = normal_final_152();
+    let reader = ReconVision::bundled_native_v23().unwrap();
+    let left = Some(Card::new(Rank::Six, Suit::Clubs));
+    let right = Some(Card::new(Rank::Two, Suit::Spades));
+    for (index, (x, y)) in TABLEAU_ORIGINS.into_iter().enumerate() {
+        let mut expected = [None; 28];
+        expected[index] = Some(Card::new(Rank::King, Suit::Clubs));
+        assert!(
+            reader
+                .verify_normal_final_clear(&original, &expected, left, right)
+                .is_err()
+        );
+        let mut changed = original.clone();
+        paint(&mut changed, PixelRect::new(x + 40, y + 4, 60, 4), [255; 3]);
+        assert!(
+            reader
+                .verify_normal_final_clear(&changed, &[None; 28], left, right)
+                .is_err(),
+            "upper band {index}"
+        );
+    }
+    let mut mixed = original;
+    let (x, y) = TABLEAU_ORIGINS[21];
+    paint(&mut mixed, PixelRect::new(x + 40, y + 4, 60, 4), [255; 3]);
+    let view = mixed.as_view().unwrap();
+    assert!(
+        reader
+            .native_absence_band(view, PixelRect::new(x + 40, y + 164, 60, 4))
+            .unwrap()
+    );
+    assert!(
+        reader
+            .native_absence_band(view, PixelRect::new(1131, 436, 60, 4))
+            .unwrap()
+    );
+    assert!(
+        reader
+            .verify_normal_final_clear(&mixed, &[None; 28], left, right)
+            .is_err()
+    );
+}
+
+
+/// Retained flying cards still veto the new upper alternative through lower card material.
+#[test]
+fn native_152_normal_clear_retains_all_three_flying_card_refusals() {
+    let reader = ReconVision::bundled_native_v23().unwrap();
+    for (name, left, right) in [
+        (
+            "normal-one-flying.png",
+            Some(Card::new(Rank::Three, Suit::Hearts)),
+            Some(Card::new(Rank::Nine, Suit::Clubs)),
+        ),
+        ("normal-two-flying.png", None, None),
+        ("normal-three-flying.png", None, None),
+    ] {
+        let frame = frame(name);
+        let view = frame.as_view().unwrap();
+        assert!(TABLEAU_ORIGINS.into_iter().all(|(x, y)| {
+            reader
+                .native_absence_band(view, PixelRect::new(x + 40, y + 4, 60, 4))
+                .unwrap()
+        }));
+        assert!(
+            TABLEAU_ORIGINS
+                .into_iter()
+                .enumerate()
+                .any(|(index, (x, y))| reader
+                    .native_clear_band_material_veto(
+                        view,
+                        PixelRect::new(x + 40, y + if index < 21 { 4 } else { 164 }, 60, 4)
+                    )
+                    .unwrap())
+        );
+        assert!(
+            reader
+                .verify_normal_final_clear(&frame, &[None; 28], left, right)
+                .is_err(),
+            "{name}"
+        );
+    }
+}
+
+
+/// New final geometry preserves positive identity/scene/piles and checked frame admission.
+#[test]
+fn native_152_normal_clear_keeps_scene_header_piles_and_frame_refusals() {
+    let reader = ReconVision::bundled_native_v23().unwrap();
+    let original = normal_final_152();
+    let left = Some(Card::new(Rank::Six, Suit::Clubs));
+    let right = Some(Card::new(Rank::Two, Suit::Spades));
+    for (left, right) in [
+        (None, right),
+        (left, None),
+        (Some(Card::new(Rank::King, Suit::Clubs)), right),
+        (left, Some(Card::new(Rank::King, Suit::Spades))),
+    ] {
+        assert!(
+            reader
+                .verify_normal_final_clear(&original, &[None; 28], left, right)
+                .is_err()
+        );
+    }
+    for bounds in [
+        PixelRect::new(1658, 46, 160, 32),
+        PixelRect::new(212, 998, 58, 31),
+        PixelRect::new(1796, 116, 109, 18),
+        PixelRect::new(1796, 388, 109, 20),
+        PixelRect::new(931, 695, 60, 50),
+    ] {
+        let mut changed = original.clone();
+        paint(&mut changed, bounds, [255; 3]);
+        assert!(
+            reader
+                .verify_normal_final_clear(&changed, &[None; 28], left, right)
+                .is_err(),
+            "{bounds:?}"
+        );
+    }
+    let mut malformed = original.clone();
+    malformed.pixels.truncate(17);
+    assert!(
+        reader
+            .verify_normal_final_clear(&malformed, &[None; 28], left, right)
+            .is_err()
+    );
+    let mut resized = original;
+    resized.width = 1919;
+    assert!(
+        reader
+            .verify_normal_final_clear(&resized, &[None; 28], left, right)
+            .is_err()
+    );
+}

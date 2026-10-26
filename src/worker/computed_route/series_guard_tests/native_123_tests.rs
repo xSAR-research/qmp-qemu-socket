@@ -105,12 +105,12 @@ fn native_123_adapter_proves_board_target_and_unmet_score_clear_separately() {
 }
 
 
-/// Two genuine Fours terminals retire a still-unfinished route and leave Continue untouched.
+/// One genuine Fours terminal retires input before unfinished-route card validation.
 #[test]
 fn native_123_adapter_confirms_fours_before_remaining_route_actions() {
     let last = frame("fours-last-observed.png");
     let evidence = adapter_with_setup(
-        vec![last.clone(), last],
+        vec![last],
         None,
         |plan| setup_case(plan, "fours", 64),
         |io| {
@@ -126,13 +126,9 @@ fn native_123_adapter_confirms_fours_before_remaining_route_actions() {
                     rules::apply(&io.plan.acquisition.deal, state, step.action).unwrap()
                 });
             assert!(!state.is_goal());
-            assert!(matches!(
-                io.observe_effect(state, false).unwrap(),
-                EffectObservation::Position(false)
-            ));
             let EffectObservation::Challenge(proof) = io.observe_effect(state, false).unwrap()
             else {
-                panic!("two genuine completion frames must retire the unfinished route");
+                panic!("one genuine completion frame must retire the unfinished route");
             };
             assert!(proof.operator_continue());
             assert_eq!(
@@ -146,12 +142,15 @@ fn native_123_adapter_confirms_fours_before_remaining_route_actions() {
         (0, 0)
     );
     assert!(evidence.wire.events.is_empty());
+    assert!(evidence.first.is_none());
+    assert_eq!(evidence.captures, 1);
 }
 
 /// The new clear alternative still passes through fatal frame admission and pre-capture STOP.
 #[test]
 fn native_123_adapter_keeps_guard_and_stop_before_continuation() {
-    let guard = |_frame: &CapturedFrame| Err("injected native-123 guard refusal".to_owned());
+    let guard =
+        |_frame: &CapturedFrame, _phase| Err("injected native-123 guard refusal".to_owned());
     let evidence = adapter_with_setup(
         vec![frame("score-last-observed.png")],
         Some(&guard),

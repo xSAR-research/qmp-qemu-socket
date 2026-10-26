@@ -4,6 +4,44 @@ use super::*;
 use crate::capture::decode_png;
 
 
+/// Unchanged Classic Boards 0/3 entry, whose complete label differs only in native antialiasing.
+const CLASSIC_GREEN_ZERO: &[u8] =
+    include_bytes!("../../../tests/fixtures/pyramid-objectives/classic-green-zero.png");
+
+
+/// All complete ordered words and the unchanged counter identify the retained native objective.
+#[test]
+fn classic_boards_zero_uses_complete_words_without_another_rgb_bank() {
+    let frame = native(CLASSIC_GREEN_ZERO);
+    assert!(templates::LABELS.iter().all(|label| {
+        !matches_patch_with_tolerance(frame.as_view().unwrap(), label.patch, LABEL_TOLERANCE)
+            .unwrap()
+    }));
+    assert_eq!(
+        observe(&frame),
+        Ok(ChallengeProgress::new(ChallengeKind::Boards, 0, 3))
+    );
+}
+
+
+/// Complete-word recognition still rejects missing letters and unexpected coloured negative space.
+#[test]
+fn classic_boards_word_fallback_preserves_incomplete_and_background_refusals() {
+    for bounds in [
+        PixelRect::new(841, 48, 16, 32),
+        PixelRect::new(922, 48, 12, 32),
+    ] {
+        let mut frame = native(CLASSIC_GREEN_ZERO);
+        erase(&mut frame, bounds);
+        assert_eq!(observe(&frame), Ok(None));
+    }
+    let mut frame = native(CLASSIC_GREEN_ZERO);
+    let index = 48 * frame.stride + 814 * 4;
+    frame.pixels[index] = frame.pixels[index].saturating_add(40);
+    assert_eq!(observe(&frame), Ok(None));
+}
+
+
 /// Fourteen exposed original scenes, including changing counts and four actual Score counters.
 const SOURCES: [(&str, &[u8], ChallengeKind, u32, u32); 14] = [
     (
@@ -277,4 +315,35 @@ fn kings_default_hint_is_separate_from_generic_card_progress() {
     for (_, png, _, _, _) in SOURCES {
         assert_eq!(is_kings_header(&native(png)), Ok(false));
     }
+}
+
+
+/// A qualified kind reads only real digits, even when the complete objective label is erased.
+#[test]
+fn bound_counter_ignores_label_but_preserves_actual_target_and_unknown_digits() {
+    let bound = ChallengeProgress::new(ChallengeKind::Boards, 0, 3).unwrap();
+    let mut frame = native(CLASSIC_GREEN_ZERO);
+    erase(&mut frame, PixelRect::new(814, 48, 224, 32));
+    assert_eq!(observe(&frame), Ok(None), "fresh entry remains strict");
+    assert_eq!(observe_bound(&frame, bound), Ok(Some(bound)));
+
+    let changed = native(include_bytes!(
+        "../../../tests/fixtures/pyramid-objectives/boards-zero-of-two.png"
+    ));
+    let actual = observe_bound(&changed, bound).unwrap().unwrap();
+    assert_eq!(
+        actual,
+        ChallengeProgress::new(ChallengeKind::Boards, 0, 2).unwrap()
+    );
+    assert!(
+        !actual.follows(bound),
+        "the saved denominator must never be substituted"
+    );
+
+    erase(&mut frame, PixelRect::new(1_038, 48, 72, 32));
+    assert_eq!(
+        observe_bound(&frame, bound),
+        Ok(None),
+        "missing digits remain unknown"
+    );
 }

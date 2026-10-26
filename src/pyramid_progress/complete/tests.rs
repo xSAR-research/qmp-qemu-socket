@@ -137,3 +137,115 @@ fn malformed_layout_and_unsupported_geometry_do_not_supply_completion() {
     unsupported.height -= 1;
     assert_eq!(observe(&unsupported), Ok(None));
 }
+
+
+/// The actual small counting modal is positive only with a retained challenge binding.
+/// Erasing any independent required region prevents completion; no numeric target is invented.
+#[test]
+fn native_141_small_counting_modal_requires_all_patches_and_retained_binding() {
+    let frame = decode_png(include_bytes!(
+        "../../../tests/fixtures/pyramid-native-141/jacks-small-complete.png"
+    ))
+    .unwrap();
+    let bound = ChallengeProgress::new(ChallengeKind::Cards, 8, 10).unwrap();
+    assert_eq!(observe(&frame), Ok(None));
+    assert!(!is_complete(&frame).unwrap());
+    let proof = observe_bound(&frame, bound).unwrap().unwrap();
+    assert_eq!(proof.progress(), bound);
+    assert!(proof.terminal_progress.is_none());
+    assert!(proof.reward_counting());
+    assert!(!proof.operator_continue());
+    for (x, y) in [(850, 400), (800, 395), (1120, 660), (950, 660)] {
+        let mut bad = frame.clone();
+        let offset = y * bad.stride + x * 4;
+        bad.pixels[offset] ^= 128;
+        assert!(observe_bound(&bad, bound).unwrap().is_none(), "{x},{y}");
+    }
+}
+
+
+/// An existing literal requirement remains authoritative on the new small modal.
+/// Only the whole calibrated header is composed; the terminal geometry is unchanged.
+#[test]
+fn native_142_small_modal_keeps_calibrated_literal_over_conflicting_binding() {
+    let mut frame = decode_png(include_bytes!(
+        "../../../tests/fixtures/pyramid-native-141/jacks-small-complete.png"
+    ))
+    .unwrap();
+    let rgb =
+        include_bytes!("../../../tests/fixtures/pyramid-objectives/complete-boards-two-header.rgb");
+    for y in 0..32 {
+        for x in 0..296 {
+            let source = (y * 296 + x) * 3;
+            let destination = (48 + y) * frame.stride + (814 + x) * 4;
+            frame.pixels[destination..destination + 3].copy_from_slice(&rgb[source..source + 3]);
+        }
+    }
+    let bound = ChallengeProgress::new(ChallengeKind::Cards, 8, 10).unwrap();
+    let actual = ChallengeProgress::new(ChallengeKind::Boards, 2, 2).unwrap();
+    assert_eq!(
+        observe(&frame),
+        Ok(None),
+        "cold entry still requires settled geometry"
+    );
+    let proof = observe_bound(&frame, bound).unwrap().unwrap();
+    assert_eq!(proof.progress(), actual);
+    assert_eq!(proof.terminal_progress, Some(actual));
+    assert!(proof.reward_counting());
+    assert!(!proof.progress().follows(bound));
+}
+
+
+/// A genuine Loading completion retires input using its actual Score literal.
+#[test]
+fn native_150_score_loading_complete_keeps_actual_counter_and_no_control_authority() {
+    let frame = decode_png(include_bytes!(
+        "../../../tests/fixtures/pyramid-score-loading-150/last-observed.png"
+    ))
+    .unwrap();
+    let bound = ChallengeProgress::new(ChallengeKind::Score, 1260, 1900).unwrap();
+    assert_eq!(
+        observe(&frame),
+        Ok(None),
+        "the new Loading appearance is bound-only"
+    );
+    let proof = observe_bound(&frame, bound)
+        .unwrap()
+        .expect("actual Score Loading completion");
+    let actual = ChallengeProgress::new(ChallengeKind::Score, 2015, 1900).unwrap();
+    assert_eq!(proof.progress(), actual);
+    assert_eq!(proof.terminal_progress, Some(actual));
+    assert!(!proof.operator_continue());
+    assert!(!proof.reward_counting());
+    let contradiction = observe_bound(
+        &frame,
+        ChallengeProgress::new(ChallengeKind::Cards, 4, 5).unwrap(),
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(
+        contradiction.progress(),
+        actual,
+        "positive actual requirement overrides conflicting binding"
+    );
+    for bounds in [
+        PixelRect::new(640, 164, 310, 64),
+        PixelRect::new(960, 164, 322, 64),
+        PixelRect::new(489, 111, 110, 152),
+        PixelRect::new(1387, 891, 26, 60),
+        PixelRect::new(859, 875, 123, 33),
+    ] {
+        let mut damaged = frame.clone();
+        for y in bounds.y..bounds.bottom() {
+            for x in bounds.x..bounds.right() {
+                let i = y as usize * damaged.stride + x as usize * 4;
+                damaged.pixels[i..i + 3].fill(0);
+            }
+        }
+        assert_eq!(
+            observe_bound(&damaged, bound),
+            Ok(None),
+            "damaged required Loading patch {bounds:?}"
+        );
+    }
+}

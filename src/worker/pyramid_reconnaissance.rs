@@ -360,6 +360,19 @@ enum ReconRunOwner {
 }
 
 
+/// Previously qualified challenge identity carried through same-session stock reconnaissance.
+///
+/// It supplies acquisition metadata only; position, restoration and active ownership
+/// remain independently checked by the existing reconnaissance controller.
+#[derive(Clone, Copy)]
+pub(super) struct LockedChallenge {
+    /// Most recent safe complete-board counter, including the immutable kind and target.
+    pub(super) progress: crate::pyramid_progress::ChallengeProgress,
+    /// Qualified Kings artwork selects the existing Fast default without reclassification.
+    pub(super) kings: bool,
+}
+
+
 /// Additional same-session constraints borrowed from an independently qualified entry witness.
 ///
 /// This guard does not grant capture, publication or input authority. Its pure
@@ -371,6 +384,8 @@ pub(super) struct StartingGuard<'a> {
     pub(super) position: &'a BoardObservation,
     /// Caller-owned validation of that frame's retained session/header identity.
     pub(super) header: &'a dyn Fn(&CapturedFrame) -> Result<(), String>,
+    /// Optional session-qualified challenge retained without reading action-frame headers.
+    pub(super) challenge: Option<LockedChallenge>,
 }
 
 
@@ -529,6 +544,8 @@ fn run_phase(
 /// reservation authority. The caller retains request validation and cancellation.
 pub(super) fn load_vision(request: &ReconRequest) -> Result<ReconVision, String> {
     match &request.profile {
+        ReconProfileSource::BundledNativeV23 => ReconVision::bundled_native_v23(),
+        #[cfg(test)]
         ReconProfileSource::BundledNativeV22 => ReconVision::bundled_native_v22(),
         #[cfg(test)]
         ReconProfileSource::BundledNativeV17 => ReconVision::bundled_native_v17(),
@@ -552,6 +569,10 @@ fn run_checked(
     let vision = load_vision(request)?;
     control.check_active(context, cancel)?;
     let source = match &request.profile {
+        ReconProfileSource::BundledNativeV23 => {
+            "BundledNativeV23 (colour-independent Classic A* reader)".to_owned()
+        }
+        #[cfg(test)]
         ReconProfileSource::BundledNativeV22 => {
             "BundledNativeV22 (embedded in this executable)".to_owned()
         }
@@ -624,22 +645,16 @@ fn run_checked(
             }
         }
     })();
-    // Preserve a failure to decode the already retained final frame until after
-    // diagnostics finish. Never bind the last positive header from an older frame.
-    let receipt_progress = if result.is_ok() {
-        diagnostics.restored_progress()
+    // Preserve final-frame decode failures until diagnostics finish. A qualified
+    // same-session challenge is carried through restoration, never reclassified.
+    let receipt_metadata = if result.is_ok() {
+        diagnostics.restored_metadata(starting_guard.and_then(|guard| guard.challenge))
     } else {
-        Ok(None)
-    };
-    let receipt_default = if result.is_ok() {
-        diagnostics.restored_default()
-    } else {
-        Ok(crate::pyramid_workflow_model::RouteMethod::FewestActions)
-    };
-    let receipt_observed = if result.is_ok() {
-        diagnostics.restored_observed()
-    } else {
-        Ok(crate::pyramid_workflow_model::ObservedGame::Unknown)
+        Ok((
+            None,
+            crate::pyramid_workflow_model::RouteMethod::FewestActions,
+            crate::pyramid_workflow_model::ObservedGame::Unknown,
+        ))
     };
     let evidence = diagnostics.finish(
         &result,
@@ -685,6 +700,7 @@ fn run_checked(
     match (result, evidence) {
         (Ok(deal), Ok(())) if publication == Some(PublicationStatus::Published) => {
             let vision = receipt_vision.ok_or("Missing successful acquisition calibration")?;
+            let (progress, default_method, observed) = receipt_metadata?;
             super::computed_route::record_acquisition(
                 context,
                 events,
@@ -692,9 +708,9 @@ fn run_checked(
                 deal,
                 vision,
                 &output,
-                receipt_progress?,
-                receipt_default?,
-                receipt_observed?,
+                progress,
+                default_method,
+                observed,
             )?;
             Ok(output)
         }
@@ -836,6 +852,22 @@ struct QmpReconIo<'a> {
 
 
 impl ReconIo for QmpReconIo<'_> {
+
+
+    /// Acknowledge suspension only when the runner has a complete stock position.
+    fn pause_checkpoint(&mut self) -> Result<Duration, String> {
+        let paused = self
+            .events
+            .latest_frame
+            .pause
+            .checkpoint(super::pyramid_pause::Phase::Recon, || {
+                self.control.check_active(self.context, self.cancel)
+            })?;
+        if !paused.is_zero() {
+            self.ledger.probed = false;
+        }
+        Ok(paused)
+    }
 
 
     /// Check the queued request identity rather than relying on dispatch-time selection.
@@ -1115,6 +1147,8 @@ impl Diagnostics {
     /// This remains an incomplete start marker, not recognition or restoration proof.
     fn write_start(&self, profile_id: &str, profile: &ReconProfileSource) -> Result<(), String> {
         let (source, path) = match profile {
+            ReconProfileSource::BundledNativeV23 => ("bundled_native_v23", None),
+            #[cfg(test)]
             ReconProfileSource::BundledNativeV22 => ("bundled_native_v22", None),
             #[cfg(test)]
             ReconProfileSource::BundledNativeV17 => ("bundled_native_v17", None),
@@ -1161,48 +1195,57 @@ impl Diagnostics {
     }
 
 
-    /// Read the exact final retained capture before finalisation releases its bounded buffer.
+    /// Decode the exact retained restored PNG before releasing its bounded buffer.
     ///
-    /// No capture or file read is performed. Missing/invalid pixels refuse a receipt;
-    /// a supported frame without a challenge header is a valid `None` binding.
-    fn restored_progress(
+    /// A qualified same-session challenge keeps its kind, target, safe counter and
+    /// Kings default; action-frame label pixels supply none of those facts. Unbound
+    /// manual acquisition retains the existing strict restored-frame classification.
+    /// Missing or invalid retained pixels refuse the receipt. No new I/O occurs.
+    fn restored_metadata(
         &self,
-    ) -> Result<Option<crate::pyramid_progress::ChallengeProgress>, String> {
-        self.latest_png
-            .as_deref()
-            .ok_or_else(|| "Missing restored acquisition frame".to_owned())
-            .and_then(|png| crate::capture::decode_png(png).map_err(|error| error.to_string()))
-            .and_then(|frame| crate::pyramid_progress::observe_challenge(&frame))
-    }
-
-
-    /// Classify this exact retained restored frame for advisory display, without more I/O.
-    fn restored_observed(&self) -> Result<crate::pyramid_workflow_model::ObservedGame, String> {
+        challenge: Option<LockedChallenge>,
+    ) -> Result<
+        (
+            Option<crate::pyramid_progress::ChallengeProgress>,
+            crate::pyramid_workflow_model::RouteMethod,
+            crate::pyramid_workflow_model::ObservedGame,
+        ),
+        String,
+    > {
+        use crate::pyramid_workflow_model::{ObservedGame, RouteMethod};
         let png = self
             .latest_png
             .as_deref()
             .ok_or("Missing restored acquisition frame")?;
         let frame = crate::capture::decode_png(png).map_err(|error| error.to_string())?;
-        crate::pyramid_workflow_model::ObservedGame::observe(&frame)
-    }
-
-
-    /// Derive only the Kings exception from this exact restored PNG, without another capture.
-    fn restored_default(&self) -> Result<crate::pyramid_workflow_model::RouteMethod, String> {
-        use crate::pyramid_workflow_model::RouteMethod;
-        let png = self
-            .latest_png
-            .as_deref()
-            .ok_or("Missing restored acquisition frame")?;
-        let frame = crate::capture::decode_png(png).map_err(|error| error.to_string())?;
-        let progress = crate::pyramid_progress::observe_challenge(&frame)?;
-        if progress.is_some_and(|p| p.kind == crate::pyramid_progress::ChallengeKind::Cards)
-            && crate::pyramid_progress::challenge::is_kings_header(&frame)?
-        {
-            Ok(RouteMethod::Fast)
-        } else {
-            Ok(RouteMethod::FewestActions)
+        if let Some(locked) = challenge {
+            return Ok((
+                Some(locked.progress),
+                if locked.kings {
+                    RouteMethod::Fast
+                } else {
+                    RouteMethod::FewestActions
+                },
+                ObservedGame::Challenge {
+                    progress: locked.progress,
+                    kings: locked.kings,
+                },
+            ));
         }
+        let progress = crate::pyramid_progress::observe_challenge(&frame)?;
+        let observed = ObservedGame::observe(&frame)?;
+        let kings = progress
+            .is_some_and(|p| p.kind == crate::pyramid_progress::ChallengeKind::Cards)
+            && crate::pyramid_progress::challenge::is_kings_header(&frame)?;
+        Ok((
+            progress,
+            if kings {
+                RouteMethod::Fast
+            } else {
+                RouteMethod::FewestActions
+            },
+            observed,
+        ))
     }
 
 
@@ -1365,13 +1408,23 @@ mod tests {
             latest_attempted: false,
             latest_error: None,
         };
-        assert!(diagnostics.restored_default().is_err());
+        assert!(
+            diagnostics
+                .restored_metadata(None)
+                .map(|(_, method, _)| method)
+                .is_err()
+        );
         for png in [
             include_bytes!("../../tests/fixtures/pyramid-kings-default/kings-one.png").as_slice(),
             include_bytes!("../../tests/fixtures/pyramid-kings-default/kings-two.png").as_slice(),
         ] {
             diagnostics.latest_png = Some(png.to_vec());
-            assert_eq!(diagnostics.restored_default(), Ok(RouteMethod::Fast));
+            assert_eq!(
+                diagnostics
+                    .restored_metadata(None)
+                    .map(|(_, method, _)| method),
+                Ok(RouteMethod::Fast)
+            );
             let mut frame = crate::capture::decode_png(png).unwrap();
             for y in 48..80 {
                 for x in 1038..1110 {
@@ -1381,7 +1434,9 @@ mod tests {
             }
             diagnostics.latest_png = Some(crate::capture::encode_png(&frame).unwrap());
             assert_eq!(
-                diagnostics.restored_default(),
+                diagnostics
+                    .restored_metadata(None)
+                    .map(|(_, method, _)| method),
                 Ok(RouteMethod::FewestActions)
             );
         }
@@ -1390,7 +1445,9 @@ mod tests {
                 .to_vec(),
         );
         assert_eq!(
-            diagnostics.restored_default(),
+            diagnostics
+                .restored_metadata(None)
+                .map(|(_, method, _)| method),
             Ok(RouteMethod::FewestActions)
         );
     }
@@ -1452,6 +1509,7 @@ mod tests {
             latest_frame: LatestFrameSlot::default(),
             join: None,
             cancel_requested: Arc::new(AtomicBool::new(true)),
+            shutdown_requested: Arc::new(AtomicBool::new(false)),
         };
         (handle, command_rx)
     }

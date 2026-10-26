@@ -14,7 +14,9 @@ mod initial_recovery;
 mod klondike_execution;
 mod post_game;
 mod pyramid_execution;
+pub(crate) mod pyramid_pause;
 mod pyramid_reconnaissance;
+pub(crate) mod pyramid_search_control;
 mod pyramid_session;
 mod spider_execution;
 mod tcp_capture;
@@ -278,6 +280,21 @@ enum WorkerCommand {
 }
 
 
+/// Immutable source record for a stopped run, independent of later UI settings.
+pub struct WorkerRunFailure {
+    /// Game requested by this execution owner.
+    pub game_mode: GameMode,
+    /// Exact settings captured when this run began.
+    pub settings: StepRunSettings,
+    /// Startup-relative source clock identifying this run, when available.
+    pub started_at: Option<Duration>,
+    /// Whether any guest input may have been attempted before the stop.
+    pub input_attempted: bool,
+    /// Actual stop reason; a generic status must not replace it.
+    pub error: String,
+}
+
+
 /// Small ordered notifications sent from the worker to the UI.
 pub enum WorkerEvent {
     /// Inspection-only failure packet, published before the corresponding finished event.
@@ -288,6 +305,8 @@ pub enum WorkerEvent {
     PyramidSessionFinished(SessionCompletion),
     /// Detailed diagnostic text for visible and session logs.
     Log(String),
+    /// Source-owned stop details, tagged with the original request context and failure time.
+    RunFailure(WorkerRunFailure),
     /// Concise current-operation text for the status area.
     Status(String),
     /// Reconnaissance ended; only success identifies a published complete deal.
@@ -437,6 +456,10 @@ struct LatestFrameSlot {
     computed_route: Arc<Mutex<computed_route::Store>>,
     /// At most one advisory search snapshot, replaced rather than queued.
     planning_progress: Arc<Mutex<Option<PlanningProgress>>>,
+    /// Out-of-band control for one serial A* command, independent of preview pixels.
+    pause: Arc<pyramid_pause::Gate>,
+    /// Exact engine ownership and operator-requested objective replacement.
+    search_control: Arc<pyramid_search_control::Gate>,
 }
 
 
@@ -773,10 +796,94 @@ pub struct WorkerHandle {
     join: Option<JoinHandle<()>>,
     /// Atomic STOP flag checked around captures, waits and input.
     cancel_requested: Arc<AtomicBool>,
+    /// Irreversible application shutdown, shared with the UI's signal request.
+    shutdown_requested: Arc<AtomicBool>,
 }
 
 
 impl WorkerHandle {
+    /// Latch STOP and wake the worker even when a signal already set the shutdown flag.
+    /// Existing transactions finish their normal release-only recovery; no cleanup clicks are added.
+    pub(crate) fn request_shutdown(&self) {
+        self.latest_frame.pause.abort();
+        self.latest_frame.search_control.abort();
+        self.shutdown_requested.store(true, Ordering::SeqCst);
+        self.latest_frame
+            .reconnaissance
+            .stop(None, &self.cancel_requested);
+        let _ = self.command_tx.send(WorkerCommand::Shutdown);
+    }
+
+
+    /// Join only an already-finished worker, keeping the UI responsive during cooperative STOP.
+    /// Returns true after teardown, or a worker-panic error after consuming the finished join.
+    pub(crate) fn finish_shutdown_if_ready(&mut self) -> Result<bool, String> {
+        let Some(join) = &self.join else {
+            return Ok(true);
+        };
+        if !join.is_finished() {
+            return Ok(false);
+        }
+        match self.join.take() {
+            Some(join) => join.join().map(|()| true).map_err(|_| {
+                "QMP worker panicked during shutdown; teardown could not be confirmed".to_owned()
+            }),
+            None => Ok(true),
+        }
+    }
+
+
+    /// Refuse new commands after the irreversible shutdown request; never clear STOP.
+    fn check_accepting_requests(&self) -> Result<(), String> {
+        if self.shutdown_requested.load(Ordering::SeqCst) {
+            return Err(
+                "Application is shutting down; no new worker request authorised".to_owned(),
+            );
+        }
+        Ok(())
+    }
+
+
+    /// Read actual safe-point acknowledgement without issuing a worker command.
+    pub(crate) fn pause_state(&self) -> Option<pyramid_pause::Snapshot> {
+        self.latest_frame.pause.snapshot()
+    }
+
+
+    /// Change suspension only for the current epoch; cancellation always wins.
+    pub(crate) fn request_pause(&self, epoch: u64, pause: bool) -> Result<(), String> {
+        self.check_accepting_requests()?;
+        if self.cancel_requested.load(Ordering::Acquire) {
+            return Err("STOP is latched; Continue cannot restart this work".to_owned());
+        }
+        self.latest_frame.pause.request(epoch, pause)
+    }
+
+
+    /// Read the actual current search owner; coalesced progress grants no request authority.
+    pub(crate) fn pyramid_search_state(&self) -> Option<pyramid_search_control::Snapshot> {
+        self.latest_frame.search_control.snapshot()
+    }
+
+
+    /// Request Maximum for this exact Shortest engine without cancelling its owning session.
+    /// No serial command, guest I/O, acquisition reset or STOP clearing occurs.
+    pub(crate) fn request_pyramid_maximum(
+        &self,
+        owner: &pyramid_search_control::Snapshot,
+    ) -> Result<(), String> {
+        self.check_accepting_requests()?;
+        self.latest_frame
+            .reconnaissance
+            .check_active(&owner.context, &self.cancel_requested)?;
+        self.latest_frame
+            .search_control
+            .request_maximum(owner, &self.cancel_requested)?;
+        self.latest_frame.pause.wake();
+        Ok(())
+    }
+
+
     /// Queue failure persistence without clearing STOP or minting run authority.
     ///
     /// # Errors
@@ -803,7 +910,10 @@ impl WorkerHandle {
     ///
     /// # Panics
     /// Panics if the operating system cannot create the worker thread.
-    pub(crate) fn spawn(diagnostics: ImageDiagnostics) -> Self {
+    pub(crate) fn spawn(
+        diagnostics: ImageDiagnostics,
+        shutdown_requested: Arc<AtomicBool>,
+    ) -> Self {
         // Starts the QMP worker thread and creates its command and event channels.
         let (command_tx, command_rx) = mpsc::channel();
         let (event_tx, event_rx) = mpsc::channel();
@@ -815,13 +925,14 @@ impl WorkerHandle {
         };
         let cancel_requested = Arc::new(AtomicBool::new(false));
         let worker_cancel = Arc::clone(&cancel_requested);
+        let worker_shutdown = Arc::clone(&shutdown_requested);
         let join = thread::Builder::new()
             .name("qmp-socket".to_owned())
             .spawn(move || {
                 WORKER_IMAGE_DIAGNOSTICS.with(|slot| {
                     *slot.borrow_mut() = Some(WorkerImageDiagnostics::new(diagnostics));
                 });
-                run_worker(command_rx, event_sink, worker_cancel);
+                run_worker(command_rx, event_sink, worker_cancel, worker_shutdown);
             })
             .expect("failed to spawn QMP worker thread");
 
@@ -831,6 +942,7 @@ impl WorkerHandle {
             latest_frame,
             join: Some(join),
             cancel_requested,
+            shutdown_requested,
         }
     }
 
@@ -839,6 +951,7 @@ impl WorkerHandle {
     ///
     /// Returns an error if the worker command channel has closed.
     pub fn capture_frame(&self, context: ControllerContext) -> Result<(), String> {
+        self.check_accepting_requests()?;
         self.latest_frame
             .reconnaissance
             .select(&context, &self.cancel_requested)?;
@@ -859,6 +972,7 @@ impl WorkerHandle {
         context: ControllerContext,
         request_id: u64,
     ) -> Result<(), String> {
+        self.check_accepting_requests()?;
         self.latest_frame
             .reconnaissance
             .select(&context, &self.cancel_requested)?;
@@ -883,6 +997,7 @@ impl WorkerHandle {
         approved_prediction: PredictedAction,
         settings: StepRunSettings,
     ) -> Result<(), String> {
+        self.check_accepting_requests()?;
         self.latest_frame
             .reconnaissance
             .select(&context, &self.cancel_requested)?;
@@ -943,6 +1058,7 @@ impl WorkerHandle {
         run_id: u64,
         path: PathBuf,
     ) -> Result<(), String> {
+        self.check_accepting_requests()?;
         self.queue_calculate_route(context, run_id, path, RouteMethod::FewestActions)
     }
 
@@ -959,6 +1075,7 @@ impl WorkerHandle {
         path: PathBuf,
         method: RouteMethod,
     ) -> Result<(), String> {
+        self.check_accepting_requests()?;
         if method == RouteMethod::FewestActions {
             self.calculate_route(context, run_id, path)
         } else {
@@ -975,6 +1092,7 @@ impl WorkerHandle {
         path: PathBuf,
         goal: RouteGoal,
     ) -> Result<(), String> {
+        self.check_accepting_requests()?;
         self.calculate_route_with_method(context, run_id, path, goal.method())
     }
 
@@ -1015,6 +1133,7 @@ impl WorkerHandle {
     /// poisoned store is refused immediately so an idle option change cannot
     /// block egui behind a running search. Every later operation rechecks epoch.
     pub(crate) fn discard_pyramid_plan(&self) -> Result<(), String> {
+        self.check_accepting_requests()?;
         let mut store = self.latest_frame.computed_route.try_lock().map_err(|_| {
             "Pyramid plan is busy or unavailable; wait for current work to finish".to_owned()
         })?;
@@ -1035,6 +1154,7 @@ impl WorkerHandle {
         context: ControllerContext,
         request: SessionRequest,
     ) -> Result<(), String> {
+        self.check_accepting_requests()?;
         computed_route::validate_context(&context)?;
         if request.mode == WorkflowMode::Manual {
             return Err(
@@ -1083,6 +1203,7 @@ impl WorkerHandle {
         plan_id: u64,
         confirmed: bool,
     ) -> Result<(), String> {
+        self.check_accepting_requests()?;
         self.latest_frame
             .reconnaissance
             .select(&context, &self.cancel_requested)?;
@@ -1118,6 +1239,7 @@ impl WorkerHandle {
         context: ControllerContext,
         request: crate::pyramid_recon::ReconRequest,
     ) -> Result<(), String> {
+        self.check_accepting_requests()?;
         self.latest_frame
             .reconnaissance
             .select(&context, &self.cancel_requested)?;
@@ -1147,6 +1269,8 @@ impl WorkerHandle {
     ///
     /// Returns an error if the worker channel has closed; QEMU remains running.
     pub fn disconnect(&self, context: ControllerContext) -> Result<(), String> {
+        self.latest_frame.pause.abort();
+        self.latest_frame.search_control.abort();
         // Requests that the worker return to its detached state.
         self.latest_frame
             .reconnaissance
@@ -1162,6 +1286,7 @@ impl WorkerHandle {
     ///
     /// Returns an error if the worker command channel has closed.
     pub fn reset_progress(&self, context: ControllerContext) -> Result<(), String> {
+        self.check_accepting_requests()?;
         self.latest_frame
             .reconnaissance
             .select(&context, &self.cancel_requested)?;
@@ -1207,10 +1332,7 @@ impl Drop for WorkerHandle {
     /// Request STOP, send shutdown and join the QMP worker before releasing the handle.
     fn drop(&mut self) {
         // Shuts down and joins the worker thread when its handle is released.
-        self.latest_frame
-            .reconnaissance
-            .stop(None, &self.cancel_requested);
-        let _ = self.command_tx.send(WorkerCommand::Shutdown);
+        self.request_shutdown();
 
 
         if let Some(join) = self.join.take() {
@@ -1228,6 +1350,7 @@ fn run_worker(
     command_rx: Receiver<WorkerCommand>,
     event_tx: WorkerEventSink,
     cancel_requested: Arc<AtomicBool>,
+    shutdown_requested: Arc<AtomicBool>,
 ) {
     let _capture_scope = tcp_capture::WorkerCaptureScope::install(&event_tx);
     // Processes bounded commands without retaining QMP between transactions.
@@ -1237,8 +1360,33 @@ fn run_worker(
 
 
     while let Ok(command) = command_rx.recv() {
+        if shutdown_requested.load(Ordering::SeqCst)
+            && !matches!(
+                &command,
+                WorkerCommand::RecordPyramidFailure { .. } | WorkerCommand::Shutdown
+            )
+        {
+            cancel_requested.store(true, Ordering::SeqCst);
+            continue;
+        }
 
 
+        let phase = match &command {
+            WorkerCommand::Reconnoitre { .. } | WorkerCommand::StartPyramidSession { .. } => {
+                Some(pyramid_pause::Phase::Recon)
+            }
+            WorkerCommand::CalculateRoute { .. } => Some(pyramid_pause::Phase::Search),
+            WorkerCommand::ExecuteRoute { .. } => Some(pyramid_pause::Phase::Gameplay),
+            _ => None,
+        };
+        let _pause_work = phase.and_then(|phase| match event_tx.latest_frame.pause.begin(phase) {
+            Ok(work) => Some(work),
+            Err(error) => {
+                cancel_requested.store(true, Ordering::Release);
+                send_log(&event_tx, error);
+                None
+            }
+        });
         match command {
             WorkerCommand::RecordPyramidFailure {
                 context,
@@ -1955,6 +2103,8 @@ fn run_execute_steps(
                     );
                 }
 
+                let normal_completion =
+                    post_game::NormalPyramidCompletion::from_solver(scan_state.mode(), &success);
                 let mut next_observation = success.observation;
                 let mut next_prediction = success.after;
 
@@ -1973,6 +2123,7 @@ fn run_execute_steps(
                         completed_boards,
                         event_tx,
                         cancel_requested,
+                        normal_completion,
                     ) {
                         Ok(outcome) => {
 
@@ -4809,6 +4960,10 @@ mod post_game_preview_tests;
 
 #[cfg(test)]
 mod pyramid_diagnostic_tests;
+
+#[cfg(test)]
+mod shutdown_tests;
+
 
 #[cfg(test)]
 mod tests;

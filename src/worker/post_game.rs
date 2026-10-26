@@ -39,6 +39,9 @@ use crate::{
 use super::control_search::ControlLookup;
 
 
+pub(super) mod normal_reward;
+
+
 #[cfg(test)]
 mod pyramid_independent_tests;
 
@@ -49,9 +52,9 @@ enum RestartPolicy<'a> {
     /// Finish the same reward controls but release control before NewGame.
     ChallengeTarget(&'a ControllerContext, ChallengeCompletion),
     /// Preserve the existing shared Solver/HALO controller.
-    ComputerVision,
+    ComputerVision(Option<NormalPyramidCompletion>),
     /// Stop before Solver and prove a complete untouched Pyramid board.
-    IndependentPyramid(&'a ReconVision),
+    IndependentPyramid(&'a ReconVision, Option<NormalPyramidCompletion>),
 }
 
 
@@ -61,21 +64,36 @@ impl<'a> RestartPolicy<'a> {
     /// Return calibrated full-board recognition only for the independent policy.
     fn pyramid_vision(self) -> Option<&'a ReconVision> {
         match self {
-            Self::ComputerVision | Self::ChallengeTarget(..) => None,
-            Self::IndependentPyramid(vision) => Some(vision),
+            Self::ComputerVision(..) | Self::ChallengeTarget(..) => None,
+            Self::IndependentPyramid(vision, _) => Some(vision),
         }
     }
 
 
     /// Existing Solver and HALO recovery is exclusive to Computer Vision.
     fn allows_solver(self) -> bool {
-        matches!(self, Self::ComputerVision)
+        matches!(self, Self::ComputerVision(..))
     }
 
 
     /// Positive Pyramid reward recognition is independent of new-board readiness.
     fn is_pyramid(self) -> bool {
-        !matches!(self, Self::ComputerVision)
+        !matches!(self, Self::ComputerVision(..))
+    }
+
+
+    /// Actual final completion is distinct from strategy and current control pixels.
+    fn has_normal_completion(self) -> bool {
+        matches!(
+            self,
+            Self::ComputerVision(Some(_)) | Self::IndependentPyramid(_, Some(_))
+        )
+    }
+
+
+    /// Normal reward pixels require the caller's actual final-completion capability.
+    fn normal_reward(self, frame: &CapturedFrame) -> Result<bool, String> {
+        Ok(self.has_normal_completion() && normal_reward::observe(frame)?)
     }
 
 
@@ -116,6 +134,7 @@ impl<'a> RestartPolicy<'a> {
     /// Use Level Up proof or a positive challenge counting instruction, never a missing button.
     fn pyramid_reward(self, frame: &CapturedFrame) -> Result<bool, String> {
         Ok(recognised_pyramid_terminal(frame)?
+            || self.normal_reward(frame)?
             || self
                 .challenge_completion(frame)?
                 .is_some_and(ChallengeCompletion::reward_counting))
@@ -169,6 +188,41 @@ impl PyramidRestartEntry {
 }
 
 
+/// Typed normal final-completion authority, independent of the chosen readiness strategy.
+///
+/// Construction is limited to the A* actual-third receipt or verified SOLVER
+/// action result. Counts, reward pictures, planned actions and HALOs cannot mint it.
+#[derive(Clone, Copy)]
+pub(super) struct NormalPyramidCompletion {
+    /// Only validated constructors in this module can mint normal completion authority.
+    _private: (),
+}
+
+
+impl NormalPyramidCompletion {
+
+
+    /// Preserve the existing independent caller's actual final-clear capability.
+    fn independent(_entry: PyramidRestartEntry) -> Self {
+        Self { _private: () }
+    }
+
+
+    /// Admit only an actual Pyramid final effect, never HALO-only continuation.
+    pub(super) fn from_solver(
+        mode: crate::game::GameMode,
+        success: &super::ActionSuccess,
+    ) -> Option<Self> {
+        (mode == crate::game::GameMode::Pyramid
+            && success.board_completed
+            && success.series_complete
+            && !success.continued_from_halo
+            && success.completed_boards == mode.profile().boards_per_game)
+            .then_some(Self { _private: () })
+    }
+}
+
+
 /// Result of the shared terminal-screen controller.
 pub(super) enum PostGameOutcome {
     /// Reward handling reached its policy endpoint, without clicking Continue or NewGame.
@@ -180,63 +234,31 @@ pub(super) enum PostGameOutcome {
 }
 
 
-/// Finish a verified challenge through the shared XP/optional OK flow, stopping before NewGame.
+/// Revalidate the retained actual challenge receipt and release control without transport I/O.
 ///
-/// The receipt proves actual challenge completion; it does not substitute for any
-/// fresh reward/control observation. Existing timings, budgets and no-retry rules apply.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "retains the explicit same-session completion receipt and shared terminal state"
-)]
+/// Counting-stage and Continue-stage completion both belong to the operator.
+/// No reward, capture, Continue, NewGame or next-board acquisition is authorised.
 pub(super) fn finish_pyramid_challenge(
-    qmp: &mut QmpClient,
     context: &ControllerContext,
-    initial: &FrameObservation,
+    frame: &CapturedFrame,
     proof: ChallengeCompletion,
-    scan: &mut TableauScanState,
     events: &WorkerEventSink,
     cancel: &AtomicBool,
-    latest: &mut Option<CapturedFrame>,
 ) -> Result<(), String> {
     let policy = RestartPolicy::ChallengeTarget(context, proof);
     policy.check(events, cancel)?;
     if context.game_mode != crate::game::GameMode::Pyramid
-        || crate::pyramid_progress::observe_bound_challenge_complete(
-            &initial.frame,
-            proof.progress(),
-        )? != Some(proof)
+        || crate::pyramid_progress::observe_bound_challenge_complete(frame, proof.progress())?
+            != Some(proof)
     {
-        return Err("Challenge reward handling lacks its bound actual terminal receipt; no input authorised".to_owned());
-    }
-    if proof.operator_continue() {
-        policy.check(events, cancel)?;
-        send_log(
-            events,
-            "Challenge Complete verified with its operator-owned Continue control; no reward, Continue or NewGame input.".to_owned(),
-        );
-        return Ok(());
-    }
-    let mut completed = 0;
-    match run_post_game_restart_with_policy(
-        qmp,
-        &context.socket_path,
-        Some(initial),
-        scan,
-        &mut completed,
-        events,
-        cancel,
-        policy,
-        Some(latest),
-    )? {
-        PostGameOutcome::Completed => {
-            policy.check(events, cancel)?;
-            Ok(())
-        }
-        PostGameOutcome::Restarted(_) | PostGameOutcome::RecoveredGameplay(_) => Err(
-            "Challenge completion unexpectedly returned gameplay; no continuation authorised"
+        return Err(
+            "Challenge handoff lacks its bound actual terminal receipt; no input authorised"
                 .to_owned(),
-        ),
+        );
     }
+    policy.check(events, cancel)?;
+    send_log(events, "Challenge Complete verified; control released to the operator without reward, Continue, NewGame or further capture input.".to_owned());
+    Ok(())
 }
 
 
@@ -246,6 +268,10 @@ pub(super) fn finish_pyramid_challenge(
 /// observations authorise each control, with bounded observation/click budgets.
 /// Returns the first actionable restarted or recovered gameplay frame; returns
 /// an error on cancellation, capture failure, unsafe recognition or uncertain input.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "retains existing controller state and explicit verified completion capability"
+)]
 pub(super) fn run_post_game_restart(
     qmp: &mut QmpClient,
     socket_path: &Path,
@@ -254,6 +280,7 @@ pub(super) fn run_post_game_restart(
     completed_boards: &mut usize,
     event_tx: &WorkerEventSink,
     cancel_requested: &AtomicBool,
+    normal_completion: Option<NormalPyramidCompletion>,
 ) -> Result<PostGameOutcome, String> {
     run_post_game_restart_with_policy(
         qmp,
@@ -263,7 +290,7 @@ pub(super) fn run_post_game_restart(
         completed_boards,
         event_tx,
         cancel_requested,
-        RestartPolicy::ComputerVision,
+        RestartPolicy::ComputerVision(normal_completion),
         None,
     )
 }
@@ -272,11 +299,12 @@ pub(super) fn run_post_game_restart(
 /// Reuse verified terminal controls, then require two full Pyramid starting-board frames.
 ///
 /// Each already captured frame replaces `latest_frame` before recognition or STOP
-/// checks, including on failure; this adds no captures or input.
+/// checks, including on failure; retention itself adds no capture or input.
 /// This policy never activates Solver, reads Solver state or waits for a HALO.
 /// Only a positively recognised native Pyramid terminal entry or full initial
-/// board is accepted. STOP, uncertain delivery, partial/unknown board recognition
-/// and inconsistent starting arrangements end authority without recovery clicks.
+/// board is accepted. Supported dealing after Play waits read-only for a bounded
+/// complete pair. STOP, uncertain delivery, unsupported evidence, exhaustion or
+/// inconsistent complete arrangements end authority without recovery clicks.
 #[expect(
     clippy::too_many_arguments,
     reason = "retains explicit restart state, calibration and caller-owned failure pixels"
@@ -313,7 +341,7 @@ pub(super) fn run_independent_pyramid_restart_retaining_frame(
         completed_boards,
         event_tx,
         cancel_requested,
-        RestartPolicy::IndependentPyramid(vision),
+        RestartPolicy::IndependentPyramid(vision, None),
         Some(latest_frame),
     )
 }
@@ -356,7 +384,8 @@ pub(super) fn run_witnessed_pyramid_restart_retaining_frame(
     require_independent_restart_active(cancel_requested)?;
     if initial_observation.gameplay_scene
         || (!recognised_pyramid_terminal(&initial_observation.frame)?
-            && !expected_pyramid_new_game(&initial_observation.frame)?)
+            && !expected_pyramid_new_game(&initial_observation.frame)?
+            && !normal_reward::observe(&initial_observation.frame)?)
     {
         return Err("Witnessed independent Pyramid restart has no supported non-gameplay terminal or expected New Game control; no input authorised".to_owned());
     }
@@ -375,7 +404,10 @@ pub(super) fn run_witnessed_pyramid_restart_retaining_frame(
         completed_boards,
         event_tx,
         cancel_requested,
-        RestartPolicy::IndependentPyramid(vision),
+        RestartPolicy::IndependentPyramid(
+            vision,
+            Some(NormalPyramidCompletion::independent(entry)),
+        ),
         Some(latest_frame),
     )
 }
@@ -451,7 +483,12 @@ fn run_post_game_restart_with_policy(
         && initial_observation.is_some_and(|observation| {
             crate::pyramid_progress::is_challenge_complete(&observation.frame) == Ok(true)
         });
-    let mut known_terminal_stage = if initial_challenge_reward {
+    let normal_pyramid = policy.has_normal_completion();
+    let initial_normal_reward = initial_observation
+        .map(|observation| policy.normal_reward(&observation.frame))
+        .transpose()?
+        .unwrap_or(false);
+    let mut known_terminal_stage = if initial_challenge_reward || initial_normal_reward {
         None
     } else if direct_level_up_entry {
         Some(0)
@@ -557,14 +594,16 @@ fn run_post_game_restart_with_policy(
 
             let foreground_level_up = scan_state.mode() == crate::game::GameMode::TriPeaks
                 && super::tripeaks_terminal::is_direct_level_up_overlay(&observation.frame)?;
-            let observed_stage =
-                if policy.is_pyramid() && !recognised_pyramid_terminal(&observation.frame)? {
-                    None
-                } else if foreground_level_up {
-                    Some(0)
-                } else {
-                    known_post_game_stage(Some(&observation), profile)?
-                };
+            let observed_stage = if policy.is_pyramid()
+                && !recognised_pyramid_terminal(&observation.frame)?
+                && !(normal_pyramid && expected_pyramid_new_game(&observation.frame)?)
+            {
+                None
+            } else if foreground_level_up {
+                Some(0)
+            } else {
+                known_post_game_stage(Some(&observation), profile)?
+            };
             if let Some(stage) = observed_stage {
                 known_terminal_stage = Some(stage);
                 send_log(event_tx,
@@ -572,7 +611,7 @@ fn run_post_game_restart_with_policy(
                 break;
             }
 
-            let reward_visible = if policy.is_pyramid() {
+            let reward_visible = if policy.is_pyramid() || normal_pyramid {
                 policy.pyramid_reward(&observation.frame)?
             } else {
                 guarded_tripeaks_entry
@@ -590,7 +629,8 @@ fn run_post_game_restart_with_policy(
             };
 
 
-            if ((guarded_tripeaks_entry || policy.is_pyramid()) && consecutive_reward < 2)
+            if ((guarded_tripeaks_entry || policy.is_pyramid() || normal_pyramid)
+                && consecutive_reward < 2)
                 || (!guarded_tripeaks_entry && consecutive_non_gameplay < 2)
             {
                 require_post_game_observation_retry_budget(
@@ -664,6 +704,7 @@ fn run_post_game_restart_with_policy(
         }
         let mut observation_round = 1usize;
         let mut consecutive_post_ok_reward = 0usize;
+        let mut consecutive_normal_reward = 0usize;
         let mut consecutive_control_misses = 0usize;
         let mut final_ok_confirmation = false;
         let mut lookup = bounded_control(target.stage).map(|control| {
@@ -871,10 +912,17 @@ fn run_post_game_restart_with_policy(
             }
 
 
-            let post_ok_reward = direct_level_up_entry
-                && target.stage == PostGameStage::NewGame
+            let normal_reward_visible = policy.normal_reward(&observation.frame)?;
+            consecutive_normal_reward = if normal_reward_visible {
+                consecutive_normal_reward.saturating_add(1)
+            } else {
+                0
+            };
+            let post_ok_reward = target.stage == PostGameStage::NewGame
                 && click_attempts[0] > 0
-                && super::tripeaks_terminal::is_reward_overlay(&observation.frame)?;
+                && ((direct_level_up_entry
+                    && super::tripeaks_terminal::is_reward_overlay(&observation.frame)?)
+                    || normal_reward_visible);
             consecutive_post_ok_reward = if post_ok_reward {
                 consecutive_post_ok_reward.saturating_add(1)
             } else {
@@ -936,7 +984,7 @@ fn run_post_game_restart_with_policy(
 
 
             let guarded_post_ok_skip = post_ok_reward && consecutive_post_ok_reward >= 2;
-            let positive_reward = if policy.is_pyramid() {
+            let positive_reward = if policy.is_pyramid() || normal_pyramid {
                 policy.pyramid_reward(&observation.frame)?
             } else {
                 super::tripeaks_terminal::is_reward_overlay(&observation.frame)?
@@ -947,7 +995,8 @@ fn run_post_game_restart_with_policy(
                 observation_round,
             ) && !direct_level_up_entry
                 && !foreground_level_up
-                && positive_reward;
+                && positive_reward
+                && (!normal_pyramid || consecutive_normal_reward >= 2);
 
             if let Some(lookup) = lookup.as_mut() {
                 consecutive_control_misses += 1;
@@ -981,6 +1030,7 @@ fn run_post_game_restart_with_policy(
                     send_score_skip_click(qmp, cancel_requested, score_skip_click_attempts)?;
                 score_skip_click_attempts = score_skip_click_attempts.saturating_add(1);
                 consecutive_post_ok_reward = 0;
+                consecutive_normal_reward = 0;
                 send_log(
                     event_tx,
                     format!(
@@ -1317,27 +1367,65 @@ fn independent_pyramid_start(
     let ReconScene::Board(board) = vision.observe(frame)? else {
         return Ok(None);
     };
-    let StockFace::Card(left) = board.left else {
-        return Ok(None);
-    };
-    if board.right != StockFace::Empty || board.tableau.contains(&left) {
-        return Ok(None);
-    }
-    for (index, card) in board.tableau.iter().enumerate() {
-        if board.tableau[..index].contains(card) {
-            return Ok(None);
-        }
-    }
-    Ok(Some(board))
+    Ok(unique_pyramid_start(&board).then_some(board))
 }
 
 
-/// Require two fresh matching full starts; this helper never probes or sends guest input.
+/// Check the untouched-pile and unique-card requirements after complete recognition.
+fn unique_pyramid_start(board: &BoardObservation) -> bool {
+    matches!(board.left, StockFace::Card(left) if !board.tableau.contains(&left))
+        && board.right == StockFace::Empty
+        && board
+            .tableau
+            .iter()
+            .enumerate()
+            .all(|(index, card)| !board.tableau[..index].contains(card))
+}
+
+
+/// Observe a supported dealing frame without granting entry or replay authority.
+///
+/// Unreadable cards, piles or normal headers can wait. A recognised different
+/// normal ordinal or challenge is a contradiction, not a replacement binding.
+/// Malformed pixels, unsupported scenes and dialogs remain fatal.
+fn independent_start_readiness(
+    vision: &ReconVision,
+    frame: &CapturedFrame,
+) -> Result<crate::pyramid_recon::vision::StartingReadiness, String> {
+    use crate::pyramid_recon::vision::StartingReadiness;
+    let readiness = vision.starting_readiness(frame)?;
+    let expected = crate::pyramid_progress::BoardCount {
+        completed: 0,
+        target: 3,
+    };
+    if crate::pyramid_progress::observe_normal_header(frame)?
+        .is_some_and(|actual| actual != expected)
+        || crate::pyramid_progress::observe_challenge(frame)?.is_some()
+    {
+        return Err("Independent Pyramid starting-board header contradicts a new normal game; no input authorised".to_owned());
+    }
+    if crate::pyramid_progress::observe_normal(frame)? != Some(expected) {
+        return Ok(StartingReadiness::Pending(
+            "New normal-game header is not yet positively confirmed".to_owned(),
+        ));
+    }
+    Ok(match readiness {
+        StartingReadiness::Ready(board) if !unique_pyramid_start(&board) => StartingReadiness::Pending(
+            "Starting tableau and initial DL do not yet provide 29 unique cards with positively empty DR".to_owned(),
+        ),
+        other => other,
+    })
+}
+
+
+/// Require a fresh matching complete pair within the existing six-observation bound.
 ///
 /// A caller-supplied first observation is its actual most recent capture; otherwise
-/// one is acquired here after Play. The second is always newly captured after the
-/// existing stage interval. Unknown, partial or changed arrangements refuse
-/// readiness immediately. Existing GAME WIN image recording scopes remain active.
+/// every observation is newly acquired after Play. Supported incomplete evidence
+/// clears pair history and waits only between observations. Two complete unequal
+/// positions, a positive header contradiction, STOP, context cancellation, invalid
+/// pixels or transport failure refuse immediately. This helper never probes or
+/// sends input; existing GAME WIN image recording scopes remain active.
 #[expect(
     clippy::too_many_arguments,
     reason = "input-free readiness retains the controller's explicit capture and cancellation state"
@@ -1354,39 +1442,66 @@ fn verify_independent_pyramid_start(
     restarted: bool,
     latest_frame: &mut Option<&mut Option<CapturedFrame>>,
 ) -> Result<PostGameOutcome, String> {
-    require_independent_restart_active(cancel_requested)?;
-    let captured_first;
-    let first = match first {
-        Some(observation) => observation,
-        None => {
-            captured_first =
+    use crate::pyramid_recon::vision::StartingReadiness;
+    let mut previous: Option<BoardObservation> = None;
+    let mut reason = "No matching complete starting-board pair".to_owned();
+    let mut settled = None;
+    for attempt in 0..super::pyramid_session::TRANSITION_OBSERVATIONS {
+        require_independent_restart_active(cancel_requested)?;
+        let captured = if attempt == 0 && first.is_some() {
+            None
+        } else {
+            let captured =
                 capture_restart_observation(qmp, socket_path, scan_state, event_tx, latest_frame)?
                     .0;
-            publish_post_game_observation(event_tx, &captured_first);
-            &captured_first
+            publish_post_game_observation(event_tx, &captured);
+            Some(captured)
+        };
+        let observation = captured
+            .as_ref()
+            .or(first)
+            .ok_or("Missing supplied first starting observation")?;
+        require_independent_restart_active(cancel_requested)?;
+        match independent_start_readiness(vision, &observation.frame)? {
+            StartingReadiness::Ready(position) => {
+                if let Some(original) = &previous {
+                    if original.tableau != position.tableau
+                        || original.left != position.left
+                        || original.right != position.right
+                    {
+                        return Err("Independent Pyramid starting arrangement changed between two fresh observations; no further input authorised".to_owned());
+                    }
+                    settled = Some(
+                        captured
+                            .ok_or("Starting confirmation requires a newly captured observation")?,
+                    );
+                    break;
+                }
+                previous = Some(position);
+                reason = "Waiting for an equal fresh complete starting position".to_owned();
+            }
+            StartingReadiness::Pending(error) => {
+                previous = None;
+                reason = error;
+            }
         }
-    };
-    require_independent_restart_active(cancel_requested)?;
-    let original = independent_pyramid_start(vision, &first.frame)?
-        .ok_or_else(|| "Independent Pyramid restart lacks a fully recognised 28-card tableau, initial DL and positively empty DR; no input authorised".to_owned())?;
-    wait_or_stop(
-        POST_GAME_STAGE_DELAY,
-        cancel_requested,
-        "STOP was requested before the second independent Pyramid starting-board observation",
-    )?;
-    require_independent_restart_active(cancel_requested)?;
-    let (observation, _) =
-        capture_restart_observation(qmp, socket_path, scan_state, event_tx, latest_frame)?;
-    publish_post_game_observation(event_tx, &observation);
-    require_independent_restart_active(cancel_requested)?;
-    let confirmed = independent_pyramid_start(vision, &observation.frame)?
-        .ok_or_else(|| "Independent Pyramid second starting-board observation is unknown or incomplete; no Solver or recovery input authorised".to_owned())?;
-    if original.tableau != confirmed.tableau
-        || original.left != confirmed.left
-        || original.right != confirmed.right
-    {
-        return Err("Independent Pyramid starting arrangement changed between two fresh observations; no further input authorised".to_owned());
+        send_status(
+            event_tx,
+            format!(
+                "Waiting for new Pyramid board to settle — observation {}/{}; no input",
+                attempt + 1,
+                super::pyramid_session::TRANSITION_OBSERVATIONS
+            ),
+        );
+        if attempt + 1 < super::pyramid_session::TRANSITION_OBSERVATIONS {
+            wait_or_stop(
+                POST_GAME_STAGE_DELAY,
+                cancel_requested,
+                "STOP or context cancellation revoked independent Pyramid starting-board observation",
+            )?;
+        }
     }
+    let observation = settled.ok_or_else(|| format!("Independent Pyramid starting board did not settle within {} fresh observations; no input authorised: {reason}", super::pyramid_session::TRANSITION_OBSERVATIONS))?;
     require_independent_restart_active(cancel_requested)?;
     *completed_boards = 0;
     *scan_state = TableauScanState::for_mode(crate::game::GameMode::Pyramid);
@@ -1396,7 +1511,7 @@ fn verify_independent_pyramid_start(
         "Pyramid board ready for reconnaissance".to_owned(),
     );
     send_log(event_tx,
-        "Independent Pyramid restart verified by two fresh matching full tableau/initial-DL/empty-DR observations; no Solver or HALO authority used.".to_owned());
+        "Independent Pyramid restart verified by two fresh matching full tableau/initial-DL/empty-DR and normal-header observations; fresh guarded Recon follows; no Solver or HALO authority used.".to_owned());
     if restarted {
         Ok(PostGameOutcome::Restarted(observation))
     } else {

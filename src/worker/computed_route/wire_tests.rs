@@ -55,6 +55,8 @@ struct WireReport {
     inputs: Vec<(usize, Vec<Value>)>,
     /// Handshakes include any release-only recovery connection.
     connections: usize,
+    /// Native adapter wait telemetry retained by tests that consume its event channel.
+    logs: Vec<String>,
 }
 
 
@@ -242,6 +244,24 @@ struct Evidence {
 ///
 /// A test-only private plan supplies the retained complete deal. This fixture
 /// deliberately tests delivery, rather than fabricating acquisition acceptance
+/// Establish one complete source and deliver one whole test action without recapturing.
+pub(super) fn checked_delivery(
+    io: &mut NativeIo<'_>,
+    state: SearchState,
+    operations: &[InputOperation],
+) -> Result<(), String> {
+    match io.observe_source(state)? {
+        EffectObservation::Position(true) => {}
+        _ => return Err("Action source or terminal does not authorise input".to_owned()),
+    }
+    io.begin_action(state, operations)?;
+    for &operation in operations {
+        io.deliver(operation, state)?;
+    }
+    Ok(())
+}
+
+
 /// or claiming that transport acknowledgement establishes a game effect.
 fn deliver_once(operation: InputOperation, scenario: Scenario) -> Evidence {
     let _capture_backend = TestCaptureBackend::legacy_qmp();
@@ -333,6 +353,7 @@ fn deliver_once(operation: InputOperation, scenario: Scenario) -> Evidence {
         events: &events,
         cancel: &cancel,
         started: Instant::now(),
+        paused: Duration::ZERO,
         captures: 0,
         capture_limit: capture_allowance(1, 1).expect("finite one-gesture capture allowance"),
         counts: Counts::default(),
@@ -344,9 +365,12 @@ fn deliver_once(operation: InputOperation, scenario: Scenario) -> Evidence {
         challenge_initial: None,
         challenge_confirmation: None,
         position_matches: false,
+        source_proof: None,
+        action_permit: None,
+        redeal_before: None,
         frame_guard: None,
     };
-    let result = io.deliver(operation, SearchState::initial());
+    let result = checked_delivery(&mut io, SearchState::initial(), &[operation]);
     let counts = io.counts;
     let captures = io.captures;
     drop(io); // Close the last client before joining its bounded local peer.

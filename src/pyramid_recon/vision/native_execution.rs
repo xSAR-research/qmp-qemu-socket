@@ -59,7 +59,12 @@ impl ReconVision {
         };
         Ok(left.is_none()
             && right.is_none()
-            && native.matches(view)?
+            && if self.colour_independent {
+                self.native_shape(view, &native.stock_absent, 0)?
+                    && self.native_shape(view, &native.zero_deals, 1)?
+            } else {
+                native.matches(view)?
+            }
             && self.stock_face(view, LEFT_BOUNDS, &self.board.left_empty)? == StockFace::Empty
             && self.stock_face(view, RIGHT_BOUNDS, &self.board.right_empty)? == StockFace::Empty)
     }

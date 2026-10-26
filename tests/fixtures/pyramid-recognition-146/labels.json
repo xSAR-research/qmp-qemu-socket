@@ -1,0 +1,2262 @@
+{
+  "schema": "pyramid-recognition146-visible-observations-v1",
+  "scope": "Offline read-only evidence inventory; proposed exemplar split only, no classifier validation or live acceptance. Product source and route state were not changed.",
+  "coordinate_convention": "One-based original tableau row|column; all bounds and origins native pixel x,y; rectangles use x,y,width,height. Diagnostic envelope endpoints explicitly inclusive.",
+  "boards": [
+    {
+      "id": "cream_first",
+      "source_image": "/home/charlie/Documents/Pyramid/Validation/grey-board-entry-145-20261025/failure-packet/last-observed.png",
+      "source_sha256": "e941c117e0e89f1ee32d027d2ccfe330f1d4560dec122e7871b5fc13c076be09",
+      "native_dimensions": [
+        1920,
+        1080
+      ],
+      "evidence_kind": "unchanged_original_exposed_failure_frame",
+      "label_method": "independent_direct_visual_rank_and_suit",
+      "label_uncertainty": "none_for_listed_29_visible_labels",
+      "cards": [
+        {
+          "location": "1|1",
+          "tableau_index": 0,
+          "origin": [
+            890,
+            112
+          ],
+          "card": "2S",
+          "rank": "2",
+          "suit": "spades",
+          "corner_bounds": [
+            890,
+            112,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "2|1",
+          "tableau_index": 1,
+          "origin": [
+            790,
+            165
+          ],
+          "card": "3S",
+          "rank": "3",
+          "suit": "spades",
+          "corner_bounds": [
+            790,
+            165,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "2|2",
+          "tableau_index": 2,
+          "origin": [
+            990,
+            165
+          ],
+          "card": "2C",
+          "rank": "2",
+          "suit": "clubs",
+          "corner_bounds": [
+            990,
+            165,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "3|1",
+          "tableau_index": 3,
+          "origin": [
+            690,
+            218
+          ],
+          "card": "2H",
+          "rank": "2",
+          "suit": "hearts",
+          "corner_bounds": [
+            690,
+            218,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "3|2",
+          "tableau_index": 4,
+          "origin": [
+            890,
+            218
+          ],
+          "card": "3D",
+          "rank": "3",
+          "suit": "diamonds",
+          "corner_bounds": [
+            890,
+            218,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "3|3",
+          "tableau_index": 5,
+          "origin": [
+            1091,
+            218
+          ],
+          "card": "KC",
+          "rank": "K",
+          "suit": "clubs",
+          "corner_bounds": [
+            1091,
+            218,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "4|1",
+          "tableau_index": 6,
+          "origin": [
+            589,
+            272
+          ],
+          "card": "7C",
+          "rank": "7",
+          "suit": "clubs",
+          "corner_bounds": [
+            589,
+            272,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "4|2",
+          "tableau_index": 7,
+          "origin": [
+            790,
+            272
+          ],
+          "card": "6C",
+          "rank": "6",
+          "suit": "clubs",
+          "corner_bounds": [
+            790,
+            272,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "4|3",
+          "tableau_index": 8,
+          "origin": [
+            990,
+            272
+          ],
+          "card": "6H",
+          "rank": "6",
+          "suit": "hearts",
+          "corner_bounds": [
+            990,
+            272,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "4|4",
+          "tableau_index": 9,
+          "origin": [
+            1191,
+            272
+          ],
+          "card": "8H",
+          "rank": "8",
+          "suit": "hearts",
+          "corner_bounds": [
+            1191,
+            272,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "5|1",
+          "tableau_index": 10,
+          "origin": [
+            489,
+            325
+          ],
+          "card": "10H",
+          "rank": "10",
+          "suit": "hearts",
+          "corner_bounds": [
+            489,
+            325,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "5|2",
+          "tableau_index": 11,
+          "origin": [
+            690,
+            325
+          ],
+          "card": "4H",
+          "rank": "4",
+          "suit": "hearts",
+          "corner_bounds": [
+            690,
+            325,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "5|3",
+          "tableau_index": 12,
+          "origin": [
+            890,
+            325
+          ],
+          "card": "7H",
+          "rank": "7",
+          "suit": "hearts",
+          "corner_bounds": [
+            890,
+            325,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "5|4",
+          "tableau_index": 13,
+          "origin": [
+            1091,
+            325
+          ],
+          "card": "9D",
+          "rank": "9",
+          "suit": "diamonds",
+          "corner_bounds": [
+            1091,
+            325,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "5|5",
+          "tableau_index": 14,
+          "origin": [
+            1291,
+            325
+          ],
+          "card": "QD",
+          "rank": "Q",
+          "suit": "diamonds",
+          "corner_bounds": [
+            1291,
+            325,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "6|1",
+          "tableau_index": 15,
+          "origin": [
+            389,
+            378
+          ],
+          "card": "9H",
+          "rank": "9",
+          "suit": "hearts",
+          "corner_bounds": [
+            389,
+            378,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "6|2",
+          "tableau_index": 16,
+          "origin": [
+            589,
+            378
+          ],
+          "card": "QS",
+          "rank": "Q",
+          "suit": "spades",
+          "corner_bounds": [
+            589,
+            378,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "6|3",
+          "tableau_index": 17,
+          "origin": [
+            790,
+            378
+          ],
+          "card": "JD",
+          "rank": "J",
+          "suit": "diamonds",
+          "corner_bounds": [
+            790,
+            378,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "6|4",
+          "tableau_index": 18,
+          "origin": [
+            990,
+            378
+          ],
+          "card": "KD",
+          "rank": "K",
+          "suit": "diamonds",
+          "corner_bounds": [
+            990,
+            378,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "6|5",
+          "tableau_index": 19,
+          "origin": [
+            1191,
+            378
+          ],
+          "card": "8C",
+          "rank": "8",
+          "suit": "clubs",
+          "corner_bounds": [
+            1191,
+            378,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "6|6",
+          "tableau_index": 20,
+          "origin": [
+            1392,
+            378
+          ],
+          "card": "5C",
+          "rank": "5",
+          "suit": "clubs",
+          "corner_bounds": [
+            1392,
+            378,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "7|1",
+          "tableau_index": 21,
+          "origin": [
+            288,
+            432
+          ],
+          "card": "5S",
+          "rank": "5",
+          "suit": "spades",
+          "corner_bounds": [
+            288,
+            432,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "7|2",
+          "tableau_index": 22,
+          "origin": [
+            489,
+            432
+          ],
+          "card": "6S",
+          "rank": "6",
+          "suit": "spades",
+          "corner_bounds": [
+            489,
+            432,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "7|3",
+          "tableau_index": 23,
+          "origin": [
+            690,
+            432
+          ],
+          "card": "7D",
+          "rank": "7",
+          "suit": "diamonds",
+          "corner_bounds": [
+            690,
+            432,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "7|4",
+          "tableau_index": 24,
+          "origin": [
+            890,
+            432
+          ],
+          "card": "10C",
+          "rank": "10",
+          "suit": "clubs",
+          "corner_bounds": [
+            890,
+            432,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "7|5",
+          "tableau_index": 25,
+          "origin": [
+            1091,
+            432
+          ],
+          "card": "QC",
+          "rank": "Q",
+          "suit": "clubs",
+          "corner_bounds": [
+            1091,
+            432,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "7|6",
+          "tableau_index": 26,
+          "origin": [
+            1291,
+            432
+          ],
+          "card": "KH",
+          "rank": "K",
+          "suit": "hearts",
+          "corner_bounds": [
+            1291,
+            432,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "7|7",
+          "tableau_index": 27,
+          "origin": [
+            1492,
+            432
+          ],
+          "card": "2D",
+          "rank": "2",
+          "suit": "diamonds",
+          "corner_bounds": [
+            1492,
+            432,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "DL",
+          "tableau_index": null,
+          "origin": [
+            759,
+            678
+          ],
+          "card": "5D",
+          "rank": "5",
+          "suit": "diamonds",
+          "corner_bounds": [
+            759,
+            678,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        }
+      ],
+      "right_pile": {
+        "bounds": [
+          1022,
+          678,
+          139,
+          187
+        ],
+        "visible_card_identity": null,
+        "appearance": "outlined region without visible rank or suit",
+        "semantic_pile_state": "not established by visual labelling; use existing game policy"
+      },
+      "hidden_stock_inferred": false,
+      "complete_deal": false,
+      "route_authority": false,
+      "fixture": "cream_first.png"
+    },
+    {
+      "id": "cream_second",
+      "source_image": "/home/charlie/Documents/Pyramid/Validation/grey-board-entry-145-second-20261025/failure-packet/last-observed.png",
+      "source_sha256": "314197bccc48cd33d2e5a47c81087709424b9d32fb1a716ec11e664aeaea6b33",
+      "native_dimensions": [
+        1920,
+        1080
+      ],
+      "evidence_kind": "unchanged_original_exposed_failure_frame",
+      "label_method": "independent_direct_visual_rank_and_suit",
+      "label_uncertainty": "none_for_listed_29_visible_labels",
+      "cards": [
+        {
+          "location": "1|1",
+          "tableau_index": 0,
+          "origin": [
+            890,
+            112
+          ],
+          "card": "10D",
+          "rank": "10",
+          "suit": "diamonds",
+          "corner_bounds": [
+            890,
+            112,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "2|1",
+          "tableau_index": 1,
+          "origin": [
+            790,
+            165
+          ],
+          "card": "9S",
+          "rank": "9",
+          "suit": "spades",
+          "corner_bounds": [
+            790,
+            165,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "2|2",
+          "tableau_index": 2,
+          "origin": [
+            990,
+            165
+          ],
+          "card": "8C",
+          "rank": "8",
+          "suit": "clubs",
+          "corner_bounds": [
+            990,
+            165,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "3|1",
+          "tableau_index": 3,
+          "origin": [
+            690,
+            218
+          ],
+          "card": "5C",
+          "rank": "5",
+          "suit": "clubs",
+          "corner_bounds": [
+            690,
+            218,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "3|2",
+          "tableau_index": 4,
+          "origin": [
+            890,
+            218
+          ],
+          "card": "5H",
+          "rank": "5",
+          "suit": "hearts",
+          "corner_bounds": [
+            890,
+            218,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "3|3",
+          "tableau_index": 5,
+          "origin": [
+            1091,
+            218
+          ],
+          "card": "5D",
+          "rank": "5",
+          "suit": "diamonds",
+          "corner_bounds": [
+            1091,
+            218,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "4|1",
+          "tableau_index": 6,
+          "origin": [
+            589,
+            272
+          ],
+          "card": "5S",
+          "rank": "5",
+          "suit": "spades",
+          "corner_bounds": [
+            589,
+            272,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "4|2",
+          "tableau_index": 7,
+          "origin": [
+            790,
+            272
+          ],
+          "card": "3H",
+          "rank": "3",
+          "suit": "hearts",
+          "corner_bounds": [
+            790,
+            272,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "4|3",
+          "tableau_index": 8,
+          "origin": [
+            990,
+            272
+          ],
+          "card": "AC",
+          "rank": "A",
+          "suit": "clubs",
+          "corner_bounds": [
+            990,
+            272,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "4|4",
+          "tableau_index": 9,
+          "origin": [
+            1191,
+            272
+          ],
+          "card": "2H",
+          "rank": "2",
+          "suit": "hearts",
+          "corner_bounds": [
+            1191,
+            272,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "5|1",
+          "tableau_index": 10,
+          "origin": [
+            489,
+            325
+          ],
+          "card": "9C",
+          "rank": "9",
+          "suit": "clubs",
+          "corner_bounds": [
+            489,
+            325,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "5|2",
+          "tableau_index": 11,
+          "origin": [
+            690,
+            325
+          ],
+          "card": "9D",
+          "rank": "9",
+          "suit": "diamonds",
+          "corner_bounds": [
+            690,
+            325,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "5|3",
+          "tableau_index": 12,
+          "origin": [
+            890,
+            325
+          ],
+          "card": "6D",
+          "rank": "6",
+          "suit": "diamonds",
+          "corner_bounds": [
+            890,
+            325,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "5|4",
+          "tableau_index": 13,
+          "origin": [
+            1091,
+            325
+          ],
+          "card": "JH",
+          "rank": "J",
+          "suit": "hearts",
+          "corner_bounds": [
+            1091,
+            325,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "5|5",
+          "tableau_index": 14,
+          "origin": [
+            1291,
+            325
+          ],
+          "card": "6C",
+          "rank": "6",
+          "suit": "clubs",
+          "corner_bounds": [
+            1291,
+            325,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "6|1",
+          "tableau_index": 15,
+          "origin": [
+            389,
+            378
+          ],
+          "card": "10S",
+          "rank": "10",
+          "suit": "spades",
+          "corner_bounds": [
+            389,
+            378,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "6|2",
+          "tableau_index": 16,
+          "origin": [
+            589,
+            378
+          ],
+          "card": "JS",
+          "rank": "J",
+          "suit": "spades",
+          "corner_bounds": [
+            589,
+            378,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "6|3",
+          "tableau_index": 17,
+          "origin": [
+            790,
+            378
+          ],
+          "card": "2C",
+          "rank": "2",
+          "suit": "clubs",
+          "corner_bounds": [
+            790,
+            378,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "6|4",
+          "tableau_index": 18,
+          "origin": [
+            990,
+            378
+          ],
+          "card": "2D",
+          "rank": "2",
+          "suit": "diamonds",
+          "corner_bounds": [
+            990,
+            378,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "6|5",
+          "tableau_index": 19,
+          "origin": [
+            1191,
+            378
+          ],
+          "card": "6H",
+          "rank": "6",
+          "suit": "hearts",
+          "corner_bounds": [
+            1191,
+            378,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "6|6",
+          "tableau_index": 20,
+          "origin": [
+            1392,
+            378
+          ],
+          "card": "QS",
+          "rank": "Q",
+          "suit": "spades",
+          "corner_bounds": [
+            1392,
+            378,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "7|1",
+          "tableau_index": 21,
+          "origin": [
+            288,
+            432
+          ],
+          "card": "KS",
+          "rank": "K",
+          "suit": "spades",
+          "corner_bounds": [
+            288,
+            432,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "7|2",
+          "tableau_index": 22,
+          "origin": [
+            489,
+            432
+          ],
+          "card": "AD",
+          "rank": "A",
+          "suit": "diamonds",
+          "corner_bounds": [
+            489,
+            432,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "7|3",
+          "tableau_index": 23,
+          "origin": [
+            690,
+            432
+          ],
+          "card": "4S",
+          "rank": "4",
+          "suit": "spades",
+          "corner_bounds": [
+            690,
+            432,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "7|4",
+          "tableau_index": 24,
+          "origin": [
+            890,
+            432
+          ],
+          "card": "QD",
+          "rank": "Q",
+          "suit": "diamonds",
+          "corner_bounds": [
+            890,
+            432,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "7|5",
+          "tableau_index": 25,
+          "origin": [
+            1091,
+            432
+          ],
+          "card": "JC",
+          "rank": "J",
+          "suit": "clubs",
+          "corner_bounds": [
+            1091,
+            432,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "7|6",
+          "tableau_index": 26,
+          "origin": [
+            1291,
+            432
+          ],
+          "card": "7D",
+          "rank": "7",
+          "suit": "diamonds",
+          "corner_bounds": [
+            1291,
+            432,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "7|7",
+          "tableau_index": 27,
+          "origin": [
+            1492,
+            432
+          ],
+          "card": "9H",
+          "rank": "9",
+          "suit": "hearts",
+          "corner_bounds": [
+            1492,
+            432,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        },
+        {
+          "location": "DL",
+          "tableau_index": null,
+          "origin": [
+            759,
+            678
+          ],
+          "card": "QH",
+          "rank": "Q",
+          "suit": "hearts",
+          "corner_bounds": [
+            759,
+            678,
+            36,
+            50
+          ],
+          "roles": [
+            "exposed_regression_observation"
+          ]
+        }
+      ],
+      "right_pile": {
+        "bounds": [
+          1022,
+          678,
+          139,
+          187
+        ],
+        "visible_card_identity": null,
+        "appearance": "outlined region without visible rank or suit",
+        "semantic_pile_state": "not established by visual labelling; use existing game policy"
+      },
+      "hidden_stock_inferred": false,
+      "complete_deal": false,
+      "route_authority": false,
+      "fixture": "cream_second.png"
+    },
+    {
+      "id": "retro",
+      "source_image": "/home/charlie/Documents/Pyramid/Validation/board-theme-entry-145-third-20261025/failure-packet/last-observed.png",
+      "source_sha256": "f20abf37ca38d610d91f6d6e5ad55f013527ed32e995d8c6aa9a713b11376d1a",
+      "native_dimensions": [
+        1920,
+        1080
+      ],
+      "evidence_kind": "unchanged_original_exposed_failure_frame",
+      "label_method": "independent_direct_visual_rank_and_suit",
+      "label_uncertainty": "none_for_listed_29_visible_labels",
+      "cards": [
+        {
+          "location": "1|1",
+          "tableau_index": 0,
+          "origin": [
+            890,
+            112
+          ],
+          "card": "3H",
+          "rank": "3",
+          "suit": "hearts",
+          "corner_bounds": [
+            890,
+            112,
+            36,
+            50
+          ],
+          "roles": [
+            "proposed_rank_exemplar",
+            "proposed_suit_exemplar"
+          ]
+        },
+        {
+          "location": "2|1",
+          "tableau_index": 1,
+          "origin": [
+            790,
+            165
+          ],
+          "card": "7S",
+          "rank": "7",
+          "suit": "spades",
+          "corner_bounds": [
+            790,
+            165,
+            36,
+            50
+          ],
+          "roles": [
+            "proposed_rank_exemplar"
+          ]
+        },
+        {
+          "location": "2|2",
+          "tableau_index": 2,
+          "origin": [
+            990,
+            165
+          ],
+          "card": "3D",
+          "rank": "3",
+          "suit": "diamonds",
+          "corner_bounds": [
+            990,
+            165,
+            36,
+            50
+          ],
+          "roles": [
+            "held_out_from_proposed_retro_exemplars"
+          ]
+        },
+        {
+          "location": "3|1",
+          "tableau_index": 3,
+          "origin": [
+            690,
+            218
+          ],
+          "card": "AH",
+          "rank": "A",
+          "suit": "hearts",
+          "corner_bounds": [
+            690,
+            218,
+            36,
+            50
+          ],
+          "roles": [
+            "proposed_rank_exemplar"
+          ]
+        },
+        {
+          "location": "3|2",
+          "tableau_index": 4,
+          "origin": [
+            890,
+            218
+          ],
+          "card": "QC",
+          "rank": "Q",
+          "suit": "clubs",
+          "corner_bounds": [
+            890,
+            218,
+            36,
+            50
+          ],
+          "roles": [
+            "proposed_rank_exemplar"
+          ]
+        },
+        {
+          "location": "3|3",
+          "tableau_index": 5,
+          "origin": [
+            1091,
+            218
+          ],
+          "card": "5S",
+          "rank": "5",
+          "suit": "spades",
+          "corner_bounds": [
+            1091,
+            218,
+            36,
+            50
+          ],
+          "roles": [
+            "proposed_rank_exemplar",
+            "proposed_suit_exemplar"
+          ]
+        },
+        {
+          "location": "4|1",
+          "tableau_index": 6,
+          "origin": [
+            589,
+            272
+          ],
+          "card": "JH",
+          "rank": "J",
+          "suit": "hearts",
+          "corner_bounds": [
+            589,
+            272,
+            36,
+            50
+          ],
+          "roles": [
+            "proposed_rank_exemplar"
+          ]
+        },
+        {
+          "location": "4|2",
+          "tableau_index": 7,
+          "origin": [
+            790,
+            272
+          ],
+          "card": "2D",
+          "rank": "2",
+          "suit": "diamonds",
+          "corner_bounds": [
+            790,
+            272,
+            36,
+            50
+          ],
+          "roles": [
+            "proposed_rank_exemplar",
+            "proposed_suit_exemplar"
+          ]
+        },
+        {
+          "location": "4|3",
+          "tableau_index": 8,
+          "origin": [
+            990,
+            272
+          ],
+          "card": "4C",
+          "rank": "4",
+          "suit": "clubs",
+          "corner_bounds": [
+            990,
+            272,
+            36,
+            50
+          ],
+          "roles": [
+            "proposed_rank_exemplar",
+            "proposed_suit_exemplar"
+          ]
+        },
+        {
+          "location": "4|4",
+          "tableau_index": 9,
+          "origin": [
+            1191,
+            272
+          ],
+          "card": "AC",
+          "rank": "A",
+          "suit": "clubs",
+          "corner_bounds": [
+            1191,
+            272,
+            36,
+            50
+          ],
+          "roles": [
+            "held_out_from_proposed_retro_exemplars"
+          ]
+        },
+        {
+          "location": "5|1",
+          "tableau_index": 10,
+          "origin": [
+            489,
+            325
+          ],
+          "card": "9C",
+          "rank": "9",
+          "suit": "clubs",
+          "corner_bounds": [
+            489,
+            325,
+            36,
+            50
+          ],
+          "roles": [
+            "proposed_rank_exemplar"
+          ]
+        },
+        {
+          "location": "5|2",
+          "tableau_index": 11,
+          "origin": [
+            690,
+            325
+          ],
+          "card": "7H",
+          "rank": "7",
+          "suit": "hearts",
+          "corner_bounds": [
+            690,
+            325,
+            36,
+            50
+          ],
+          "roles": [
+            "held_out_from_proposed_retro_exemplars"
+          ]
+        },
+        {
+          "location": "5|3",
+          "tableau_index": 12,
+          "origin": [
+            890,
+            325
+          ],
+          "card": "4S",
+          "rank": "4",
+          "suit": "spades",
+          "corner_bounds": [
+            890,
+            325,
+            36,
+            50
+          ],
+          "roles": [
+            "held_out_from_proposed_retro_exemplars"
+          ]
+        },
+        {
+          "location": "5|4",
+          "tableau_index": 13,
+          "origin": [
+            1091,
+            325
+          ],
+          "card": "6S",
+          "rank": "6",
+          "suit": "spades",
+          "corner_bounds": [
+            1091,
+            325,
+            36,
+            50
+          ],
+          "roles": [
+            "proposed_rank_exemplar"
+          ]
+        },
+        {
+          "location": "5|5",
+          "tableau_index": 14,
+          "origin": [
+            1291,
+            325
+          ],
+          "card": "AS",
+          "rank": "A",
+          "suit": "spades",
+          "corner_bounds": [
+            1291,
+            325,
+            36,
+            50
+          ],
+          "roles": [
+            "held_out_from_proposed_retro_exemplars"
+          ]
+        },
+        {
+          "location": "6|1",
+          "tableau_index": 15,
+          "origin": [
+            389,
+            378
+          ],
+          "card": "9H",
+          "rank": "9",
+          "suit": "hearts",
+          "corner_bounds": [
+            389,
+            378,
+            36,
+            50
+          ],
+          "roles": [
+            "held_out_from_proposed_retro_exemplars"
+          ]
+        },
+        {
+          "location": "6|2",
+          "tableau_index": 16,
+          "origin": [
+            589,
+            378
+          ],
+          "card": "5D",
+          "rank": "5",
+          "suit": "diamonds",
+          "corner_bounds": [
+            589,
+            378,
+            36,
+            50
+          ],
+          "roles": [
+            "held_out_from_proposed_retro_exemplars"
+          ]
+        },
+        {
+          "location": "6|3",
+          "tableau_index": 17,
+          "origin": [
+            790,
+            378
+          ],
+          "card": "3C",
+          "rank": "3",
+          "suit": "clubs",
+          "corner_bounds": [
+            790,
+            378,
+            36,
+            50
+          ],
+          "roles": [
+            "held_out_from_proposed_retro_exemplars"
+          ]
+        },
+        {
+          "location": "6|4",
+          "tableau_index": 18,
+          "origin": [
+            990,
+            378
+          ],
+          "card": "3S",
+          "rank": "3",
+          "suit": "spades",
+          "corner_bounds": [
+            990,
+            378,
+            36,
+            50
+          ],
+          "roles": [
+            "held_out_from_proposed_retro_exemplars"
+          ]
+        },
+        {
+          "location": "6|5",
+          "tableau_index": 19,
+          "origin": [
+            1191,
+            378
+          ],
+          "card": "KC",
+          "rank": "K",
+          "suit": "clubs",
+          "corner_bounds": [
+            1191,
+            378,
+            36,
+            50
+          ],
+          "roles": [
+            "proposed_rank_exemplar"
+          ]
+        },
+        {
+          "location": "6|6",
+          "tableau_index": 20,
+          "origin": [
+            1392,
+            378
+          ],
+          "card": "10H",
+          "rank": "10",
+          "suit": "hearts",
+          "corner_bounds": [
+            1392,
+            378,
+            36,
+            50
+          ],
+          "roles": [
+            "proposed_rank_exemplar"
+          ]
+        },
+        {
+          "location": "7|1",
+          "tableau_index": 21,
+          "origin": [
+            288,
+            432
+          ],
+          "card": "6H",
+          "rank": "6",
+          "suit": "hearts",
+          "corner_bounds": [
+            288,
+            432,
+            36,
+            50
+          ],
+          "roles": [
+            "held_out_from_proposed_retro_exemplars"
+          ]
+        },
+        {
+          "location": "7|2",
+          "tableau_index": 22,
+          "origin": [
+            489,
+            432
+          ],
+          "card": "QS",
+          "rank": "Q",
+          "suit": "spades",
+          "corner_bounds": [
+            489,
+            432,
+            36,
+            50
+          ],
+          "roles": [
+            "held_out_from_proposed_retro_exemplars"
+          ]
+        },
+        {
+          "location": "7|3",
+          "tableau_index": 23,
+          "origin": [
+            690,
+            432
+          ],
+          "card": "2C",
+          "rank": "2",
+          "suit": "clubs",
+          "corner_bounds": [
+            690,
+            432,
+            36,
+            50
+          ],
+          "roles": [
+            "held_out_from_proposed_retro_exemplars"
+          ]
+        },
+        {
+          "location": "7|4",
+          "tableau_index": 24,
+          "origin": [
+            890,
+            432
+          ],
+          "card": "8H",
+          "rank": "8",
+          "suit": "hearts",
+          "corner_bounds": [
+            890,
+            432,
+            36,
+            50
+          ],
+          "roles": [
+            "proposed_rank_exemplar"
+          ]
+        },
+        {
+          "location": "7|5",
+          "tableau_index": 25,
+          "origin": [
+            1091,
+            432
+          ],
+          "card": "9S",
+          "rank": "9",
+          "suit": "spades",
+          "corner_bounds": [
+            1091,
+            432,
+            36,
+            50
+          ],
+          "roles": [
+            "held_out_from_proposed_retro_exemplars"
+          ]
+        },
+        {
+          "location": "7|6",
+          "tableau_index": 26,
+          "origin": [
+            1291,
+            432
+          ],
+          "card": "7C",
+          "rank": "7",
+          "suit": "clubs",
+          "corner_bounds": [
+            1291,
+            432,
+            36,
+            50
+          ],
+          "roles": [
+            "held_out_from_proposed_retro_exemplars"
+          ]
+        },
+        {
+          "location": "7|7",
+          "tableau_index": 27,
+          "origin": [
+            1492,
+            432
+          ],
+          "card": "QH",
+          "rank": "Q",
+          "suit": "hearts",
+          "corner_bounds": [
+            1492,
+            432,
+            36,
+            50
+          ],
+          "roles": [
+            "held_out_from_proposed_retro_exemplars"
+          ]
+        },
+        {
+          "location": "DL",
+          "tableau_index": null,
+          "origin": [
+            759,
+            678
+          ],
+          "card": "KD",
+          "rank": "K",
+          "suit": "diamonds",
+          "corner_bounds": [
+            759,
+            678,
+            36,
+            50
+          ],
+          "roles": [
+            "held_out_from_proposed_retro_exemplars"
+          ]
+        }
+      ],
+      "right_pile": {
+        "bounds": [
+          1022,
+          678,
+          139,
+          187
+        ],
+        "visible_card_identity": null,
+        "appearance": "green dotted/card-back rectangle",
+        "semantic_pile_state": "not established by visual labelling; use existing game policy"
+      },
+      "hidden_stock_inferred": false,
+      "complete_deal": false,
+      "route_authority": false,
+      "fixture": "retro.png"
+    }
+  ],
+  "duplicate_board_capture": {
+    "source_image": "/home/charlie/Documents/Pyramid/Validation/automatic-entry-144-20261025/failure-packet/last-observed.png",
+    "source_sha256": "df563e62c911a05f8bbfd373bc519b0bfa6f9dbd563ef93c2f1d6bc9081f65b0",
+    "same_visible_labels_as": "cream_second",
+    "byte_identical": false,
+    "independent_identity_coverage": false
+  },
+  "retro_split": {
+    "status": "proposed before prototype evaluation; source frames are exposed regression evidence",
+    "rank_exemplars": {
+      "A": {
+        "exemplar_location": "3|1",
+        "exemplar_card": "AH",
+        "exemplar_origin": [
+          690,
+          218
+        ],
+        "held_out_locations": [
+          "4|4",
+          "5|5"
+        ]
+      },
+      "2": {
+        "exemplar_location": "4|2",
+        "exemplar_card": "2D",
+        "exemplar_origin": [
+          790,
+          272
+        ],
+        "held_out_locations": [
+          "7|3"
+        ]
+      },
+      "3": {
+        "exemplar_location": "1|1",
+        "exemplar_card": "3H",
+        "exemplar_origin": [
+          890,
+          112
+        ],
+        "held_out_locations": [
+          "2|2",
+          "6|3",
+          "6|4"
+        ]
+      },
+      "4": {
+        "exemplar_location": "4|3",
+        "exemplar_card": "4C",
+        "exemplar_origin": [
+          990,
+          272
+        ],
+        "held_out_locations": [
+          "5|3"
+        ]
+      },
+      "5": {
+        "exemplar_location": "3|3",
+        "exemplar_card": "5S",
+        "exemplar_origin": [
+          1091,
+          218
+        ],
+        "held_out_locations": [
+          "6|2"
+        ]
+      },
+      "6": {
+        "exemplar_location": "5|4",
+        "exemplar_card": "6S",
+        "exemplar_origin": [
+          1091,
+          325
+        ],
+        "held_out_locations": [
+          "7|1"
+        ]
+      },
+      "7": {
+        "exemplar_location": "2|1",
+        "exemplar_card": "7S",
+        "exemplar_origin": [
+          790,
+          165
+        ],
+        "held_out_locations": [
+          "5|2",
+          "7|6"
+        ]
+      },
+      "8": {
+        "exemplar_location": "7|4",
+        "exemplar_card": "8H",
+        "exemplar_origin": [
+          890,
+          432
+        ],
+        "held_out_locations": []
+      },
+      "9": {
+        "exemplar_location": "5|1",
+        "exemplar_card": "9C",
+        "exemplar_origin": [
+          489,
+          325
+        ],
+        "held_out_locations": [
+          "6|1",
+          "7|5"
+        ]
+      },
+      "10": {
+        "exemplar_location": "6|6",
+        "exemplar_card": "10H",
+        "exemplar_origin": [
+          1392,
+          378
+        ],
+        "held_out_locations": []
+      },
+      "J": {
+        "exemplar_location": "4|1",
+        "exemplar_card": "JH",
+        "exemplar_origin": [
+          589,
+          272
+        ],
+        "held_out_locations": []
+      },
+      "Q": {
+        "exemplar_location": "3|2",
+        "exemplar_card": "QC",
+        "exemplar_origin": [
+          890,
+          218
+        ],
+        "held_out_locations": [
+          "7|2",
+          "7|7"
+        ]
+      },
+      "K": {
+        "exemplar_location": "6|5",
+        "exemplar_card": "KC",
+        "exemplar_origin": [
+          1191,
+          378
+        ],
+        "held_out_locations": [
+          "DL"
+        ]
+      }
+    },
+    "suit_exemplars": {
+      "hearts": {
+        "exemplar_location": "1|1",
+        "exemplar_card": "3H",
+        "exemplar_origin": [
+          890,
+          112
+        ],
+        "held_out_locations": [
+          "5|2",
+          "6|1",
+          "7|1",
+          "7|7"
+        ]
+      },
+      "diamonds": {
+        "exemplar_location": "4|2",
+        "exemplar_card": "2D",
+        "exemplar_origin": [
+          790,
+          272
+        ],
+        "held_out_locations": [
+          "2|2",
+          "6|2",
+          "DL"
+        ]
+      },
+      "clubs": {
+        "exemplar_location": "4|3",
+        "exemplar_card": "4C",
+        "exemplar_origin": [
+          990,
+          272
+        ],
+        "held_out_locations": [
+          "4|4",
+          "6|3",
+          "7|3",
+          "7|6"
+        ]
+      },
+      "spades": {
+        "exemplar_location": "3|3",
+        "exemplar_card": "5S",
+        "exemplar_origin": [
+          1091,
+          218
+        ],
+        "held_out_locations": [
+          "5|3",
+          "5|5",
+          "6|4",
+          "7|2",
+          "7|5"
+        ]
+      }
+    },
+    "exemplar_locations": [
+      "1|1",
+      "2|1",
+      "3|1",
+      "3|2",
+      "3|3",
+      "4|1",
+      "4|2",
+      "4|3",
+      "5|1",
+      "5|4",
+      "6|5",
+      "6|6",
+      "7|4"
+    ],
+    "held_out_locations": [
+      "2|2",
+      "4|4",
+      "5|2",
+      "5|3",
+      "5|5",
+      "6|1",
+      "6|2",
+      "6|3",
+      "6|4",
+      "7|1",
+      "7|2",
+      "7|3",
+      "7|5",
+      "7|6",
+      "7|7",
+      "DL"
+    ],
+    "independent_retro_holdout_unavailable_for_ranks": [
+      "8",
+      "10",
+      "J"
+    ],
+    "warning": "A passing exemplar self-check is not independent held-out evidence. There are only 16 whole-card observations outside the proposed 13 rank exemplar positions."
+  },
+  "geometry": {
+    "legacy_rank_roi": [
+      2,
+      6,
+      27,
+      24
+    ],
+    "legacy_suit_roi": [
+      5,
+      30,
+      20,
+      16
+    ],
+    "legacy_alignment": 1,
+    "cream_rank_core_envelope_inclusive": [
+      4,
+      8,
+      27,
+      29
+    ],
+    "cream_suit_core_envelope_inclusive": [
+      7,
+      30,
+      22,
+      46
+    ],
+    "retro_rank_core_envelope_inclusive": [
+      5,
+      5,
+      25,
+      31
+    ],
+    "retro_suit_core_envelope_inclusive": [
+      5,
+      32,
+      22,
+      49
+    ],
+    "retro_examples": {
+      "Q_at_3|2": [
+        7,
+        6,
+        20,
+        31
+      ],
+      "Q_at_7|2": [
+        7,
+        5,
+        20,
+        30
+      ],
+      "Q_at_7|7": [
+        7,
+        5,
+        19,
+        30
+      ],
+      "10_at_6|6": [
+        5,
+        8,
+        21,
+        29
+      ]
+    },
+    "measurement_method": "Diagnostic core pixels: neutral dark max(R,G,B)<140 and channel range<50; or strongly red R>140,R-G>100,R-B>100. Connected components inspected alongside original image. These thresholds are measurement aids, not a proposed final classifier.",
+    "findings": [
+      "Retro Queen is 26 pixels high, exceeding legacy 24-pixel rank ROI at every alignment.",
+      "Retro suit tails end at y48..49, below the legacy suit ROI even with alignment1.",
+      "Retro Ace reaches x25, cream10 reaches x27, and 10 must preserve separate digit components.",
+      "Central pips or face artwork may begin at x27,y22; simply widening and unioning all ink absorbs unrelated body art."
+    ]
+  },
+  "suggested_cases": [
+    {
+      "id": "positive_exact_originals",
+      "mutation": "none",
+      "assertion": "All28 original tableau identities and DL exactly match manual labels on all3 distinct boards."
+    },
+    {
+      "id": "erase_rank_retro_3H",
+      "board": "retro",
+      "location": "1|1",
+      "relative_bounds": [
+        4,
+        4,
+        25,
+        27
+      ],
+      "mutation": "Replace rank corridor with sampled local paper, preserving suit and surrounding scene.",
+      "assertion": "Card identity unreadable; no fallback to suit or body pips."
+    },
+    {
+      "id": "erase_suit_retro_3H",
+      "board": "retro",
+      "location": "1|1",
+      "relative_bounds": [
+        4,
+        30,
+        22,
+        21
+      ],
+      "mutation": "Replace suit corridor with sampled local paper, preserving rank and surrounding scene.",
+      "assertion": "Card identity unreadable; no empty-pile inference."
+    },
+    {
+      "id": "queen_tail_occlusion",
+      "board": "retro",
+      "location": "3|2",
+      "relative_bounds": [
+        14,
+        27,
+        9,
+        5
+      ],
+      "mutation": "Cover Queen descender with sampled paper.",
+      "assertion": "Evaluate strict score/gap refusal for material lost shape; record actual outcome before setting an unsupported tolerance requirement."
+    },
+    {
+      "id": "same_colour_wrong_suit",
+      "board": "retro",
+      "location": "2|1",
+      "mutation": "Replace complete spade label with intact club label, keeping rank and remaining frame fixed.",
+      "assertion": "Recognise donor suit if the synthetic composition is valid; never retain original spades. Do not demand unreadable for a complete valid alternate glyph."
+    },
+    {
+      "id": "ten_missing_digit",
+      "board": "retro",
+      "location": "6|6",
+      "relative_bounds": [
+        4,
+        6,
+        6,
+        25
+      ],
+      "mutation": "Erase digit1 core, preserving0 and suit.",
+      "assertion": "Reject remaining0 as unsupported rank; do not silently retain10."
+    },
+    {
+      "id": "mixed_ink_components",
+      "board": "retro",
+      "location": "1|1",
+      "mutation": "Keep red rank but replace suit with dark neutral suit, or inject incompatible second-colour label ink.",
+      "assertion": "Refuse contradictory colour evidence rather than borrowing compatible fragments."
+    },
+    {
+      "id": "outside_background_replacement",
+      "board": "cream_second",
+      "mutation": "Replace background outside all card envelopes and required header/control/scene roles with solid grey, blue, purple, checker pattern and deterministic noise; preserve all measured label pixels exactly.",
+      "assertion": "Identity arrays unchanged whenever complete required scene evidence is retained. Call synthetic derivatives synthetic; no new-theme guest proof."
+    },
+    {
+      "id": "paper_border_replacement",
+      "board": "cream_first",
+      "mutation": "Separately change pale paper and gold border pixels while retaining true ink and required local paper evidence; keep mutation masks explicit.",
+      "assertion": "Valid ink remains stable under supported paper variation; contradictory ink or lost evidence fails closed."
+    }
+  ],
+  "coverage": {
+    "distinct_board_count": 3,
+    "visible_observation_count": 87,
+    "combined_visible_card_identity_count": 49,
+    "combined_missing_identities": [
+      "4D",
+      "8D",
+      "8S"
+    ],
+    "classic_manifest": "/home/charlie/repo/RUST/qmp-qemu-socket/tests/fixtures/pyramid-recon/manifest.json",
+    "classic_labelled_observation_count": 46,
+    "classic_endpoint_observation_count": 58,
+    "classic_labelled_ranks_complete": true,
+    "classic_labelled_suits_complete": true
+  }
+}

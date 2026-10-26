@@ -4,8 +4,12 @@
 //! only while its mode, socket and dimensions remain current; snapshot bytes and
 //! diagnostic frames are retained separately from that authority.
 
+mod activity_status;
+mod diagnostics;
+mod log_window;
 mod pyramid_defaults;
 mod pyramid_workflow;
+mod window_chrome;
 
 #[cfg(test)]
 mod pyramid_workflow_tests;
@@ -45,19 +49,18 @@ use crate::parameters::{
     KLONDIKE_DEFAULT_MULTI_STEP_ACTIONS, KLONDIKE_MAX_MULTI_STEP_ACTIONS,
     KLONDIKE_REOBSERVE_DELAY_MS, KLONDIKE_SETTLE_DELAY_MS, KLONDIKE_SOLVE_SETTLE_DELAY_MS,
     LEVEL_UP_APPEAR_DELAY, MAX_LOG_LINES, MAXIMUM_ANIMATION_SETTLE_DELAY_MS,
-    MIN_PREVIEW_VIEWPORT_HEIGHT_POINTS, MINIMUM_ANIMATION_SETTLE_DELAY_MS,
-    MINIMUM_DRAW_CHANGED_PIXELS, MINIMUM_TABLEAU_CHANGED_PIXELS, MOUSE_HOLD,
-    MULTI_STEP_INPUT_ENABLED, NOMINAL_FRAME_HEIGHT, NOMINAL_FRAME_WIDTH, OUTPUT_PANEL_HEIGHT,
+    MINIMUM_ANIMATION_SETTLE_DELAY_MS, MINIMUM_DRAW_CHANGED_PIXELS, MINIMUM_TABLEAU_CHANGED_PIXELS,
+    MOUSE_HOLD, MULTI_STEP_INPUT_ENABLED, NOMINAL_FRAME_HEIGHT, NOMINAL_FRAME_WIDTH,
     POINTER_SETTLE_DELAY, POST_GAME_MAX_CLICK_ATTEMPTS, POST_GAME_MAX_OBSERVATION_ROUNDS,
     POST_GAME_STAGE_DELAY, POST_GAME_TARGETS, PREVIEW_FOOTER_RESERVE_POINTS,
-    PREVIEW_SCROLLBAR_ALLOWANCE_POINTS, PYRAMID_CARD_SETTLE_DELAY_MS, PYRAMID_MOVE_SETTLE_DELAY_MS,
-    PYRAMID_REOBSERVE_DELAY_MS, RELEASE_LABEL, SCORE_SKIP_MAX_CLICK_ATTEMPTS,
-    SHARED_TOOLBAR_CONTROLS, SNAPSHOT_LABEL_MAX_CHARS, SPIDER_DEFAULT_MULTI_STEP_ACTIONS,
-    SPIDER_DEFAULT_OBSERVATION_LIMIT, SPIDER_DRAW_SETTLE_DELAY_MS, SPIDER_GAME_START_DELAY_MS,
-    SPIDER_MAX_MULTI_STEP_ACTIONS, SPIDER_MAX_OBSERVATION_LIMIT, SPIDER_REOBSERVE_DELAY_MS,
-    SPIDER_SETTLE_DELAY_MS, STEP_ONCE_ACTIONS, STEP_ONCE_INPUT_ENABLED,
-    TABLEAU_ANIMATION_SETTLE_DELAY_MS, TERMINAL_CONTROL_SEARCH_ATTEMPTS,
-    TRIPEAKS_REOBSERVE_DELAY_MS, UNBOUNDED_MULTI_STEP_ACTIONS, VISIBLE_LOG_ROLLOVER_GAMES,
+    PYRAMID_CARD_SETTLE_DELAY_MS, PYRAMID_MOVE_SETTLE_DELAY_MS, PYRAMID_REOBSERVE_DELAY_MS,
+    RELEASE_LABEL, SCORE_SKIP_MAX_CLICK_ATTEMPTS, SHARED_TOOLBAR_CONTROLS,
+    SNAPSHOT_LABEL_MAX_CHARS, SPIDER_DEFAULT_MULTI_STEP_ACTIONS, SPIDER_DEFAULT_OBSERVATION_LIMIT,
+    SPIDER_DRAW_SETTLE_DELAY_MS, SPIDER_GAME_START_DELAY_MS, SPIDER_MAX_MULTI_STEP_ACTIONS,
+    SPIDER_MAX_OBSERVATION_LIMIT, SPIDER_REOBSERVE_DELAY_MS, SPIDER_SETTLE_DELAY_MS,
+    STEP_ONCE_ACTIONS, STEP_ONCE_INPUT_ENABLED, TABLEAU_ANIMATION_SETTLE_DELAY_MS,
+    TERMINAL_CONTROL_SEARCH_ATTEMPTS, TRIPEAKS_REOBSERVE_DELAY_MS, UNBOUNDED_MULTI_STEP_ACTIONS,
+    VISIBLE_LOG_ROLLOVER_GAMES,
 };
 use crate::parameters::{AnimationSettleDelays, StepRunSettings};
 use crate::parameters::{default_qmp_socket_path, session_log_directory, snapshot_directory};
@@ -440,7 +443,7 @@ impl ReconnaissanceForm {
         validation?;
         Ok(ReconRequest {
             profile: if self.use_bundled_profile {
-                ReconProfileSource::BundledNativeV22
+                ReconProfileSource::BundledNativeV23
             } else {
                 ReconProfileSource::File(PathBuf::from(&self.profile_path))
             },
@@ -467,6 +470,12 @@ enum SnapshotEditAction {
 pub struct QmpQemuSocketApp {
     /// Command sender and event receiver for the background QMP worker.
     worker: WorkerHandle,
+    /// Own termination-signal handlers and the irreversible shared shutdown request.
+    shutdown: crate::shutdown::ShutdownRequest,
+    /// EXIT/X/signal has requested STOP and worker retirement.
+    exiting: bool,
+    /// The worker was joined; native close may now proceed.
+    close_ready: bool,
     /// Latest worker state used to gate controls and describe connection progress.
     worker_state: WorkerState,
     /// Selected calibration and gameplay profile.
@@ -491,8 +500,14 @@ pub struct QmpQemuSocketApp {
     qmp_socket_path: String,
     /// Bounded visible tail of timestamped session output.
     log_lines: Vec<String>,
-    /// Whether the detailed-output body occupied space in the previous render.
-    output_expanded: bool,
+    /// Session-only visibility of the live output window.
+    show_output: bool,
+    /// Presentation geometry is independent of retained log contents.
+    output_chrome: window_chrome::WindowChrome,
+    /// Shared native-edge window controls for parameter presentation only.
+    parameters_chrome: window_chrome::WindowChrome,
+    /// Frozen last failure, independent of workflow resets or STOP.
+    failure_window: diagnostics::FailureWindow,
     /// Session-only detailed-output font size, resolved from its style when first opened.
     output_text_size_points: Option<f32>,
     /// Complete private session history, absent after creation or write failure.
@@ -605,14 +620,32 @@ pub struct QmpQemuSocketApp {
 
 
 impl QmpQemuSocketApp {
-    /// Creates UI state, starts the worker and requests one read-only capture.
+    /// Request cooperative STOP once; all application close paths share this operation.
+    pub(super) fn request_exit(&mut self) {
+        if self.exiting {
+            return;
+        }
+        self.exiting = true;
+        self.stop_requested = true;
+        self.shutdown.request();
+        self.reconnaissance_form.confirmed_context = None;
+        self.computed_route_form.revoke_acquisition();
+        self.current_status = "Closing — waiting for the worker to stop safely…".to_owned();
+        self.push_log("Application close requested; STOP latched, queued gameplay retired; waiting for worker teardown.");
+        self.worker.request_shutdown();
+    }
+
+
+    /// Create UI state and its idle worker, awaiting an explicit strategy choice.
     ///
     /// Uses the display handle for clipboard access. A log-creation failure is
     /// reported in the visible output and does not prevent the application opening.
     pub(crate) fn new(
         creation_context: &eframe::CreationContext<'_>,
         diagnostics: ImageDiagnostics,
+        shutdown: crate::shutdown::ShutdownRequest,
     ) -> Self {
+        activity_status::install_fonts(&creation_context.egui_ctx);
         let started_at = diagnostics.started_at;
         let qmp_socket_path = default_qmp_socket_path().display().to_string();
         let clipboard = Clipboard::new(
@@ -633,7 +666,10 @@ impl QmpQemuSocketApp {
             ..ComputedRouteForm::default()
         };
         let mut app = Self {
-            worker: WorkerHandle::spawn(diagnostics.clone()),
+            worker: WorkerHandle::spawn(diagnostics.clone(), shutdown.flag()),
+            shutdown,
+            exiting: false,
+            close_ready: false,
             worker_state: WorkerState::Detached,
             game_mode: GameMode::TriPeaks,
             computer_vision_game_mode: GameMode::TriPeaks,
@@ -646,7 +682,10 @@ impl QmpQemuSocketApp {
             pyramid_workflow: PyramidWorkflow::default(),
             qmp_socket_path,
             log_lines: Vec::new(),
-            output_expanded: false,
+            show_output: false,
+            output_chrome: window_chrome::WindowChrome::default(),
+            parameters_chrome: window_chrome::WindowChrome::default(),
+            failure_window: diagnostics::FailureWindow::default(),
             output_text_size_points: None,
             session_log,
             completed_games: 0,
@@ -884,6 +923,10 @@ impl QmpQemuSocketApp {
 
             match tagged.event {
                 WorkerEvent::Log(message) => self.push_log_at(elapsed, message),
+                WorkerEvent::RunFailure(failure) => {
+                    self.failure_window
+                        .worker_run(&failure, tagged.context.as_ref(), elapsed);
+                }
                 WorkerEvent::Status(message) => {
                     if self.uses_pyramid_workflow()
                         && self.worker_state == WorkerState::Error
@@ -897,15 +940,25 @@ impl QmpQemuSocketApp {
                             .unwrap_or(PyramidPhase::Reconnaissance);
                         self.pyramid_ui_failure(phase, message.clone());
                     }
+                    if self.worker_state == WorkerState::Error && !self.uses_pyramid_workflow() {
+                        self.failure_window.general(
+                            "Worker",
+                            &message,
+                            self.pyramid_failure_details(),
+                        );
+                    }
                     self.current_status = message;
                 }
                 WorkerEvent::PyramidDiagnostic(diagnostic) => {
                     let selected = self.current_preview_context();
-                    if !self.pyramid_workflow.receive(
+                    let new_failure = !self.pyramid_workflow.details_visible(&selected);
+                    if self.pyramid_workflow.receive(
                         diagnostic,
                         &selected,
                         self.computed_route_form.active_run_id,
                     ) {
+                        self.retain_pyramid_failure(new_failure);
+                    } else {
                         self.push_log(
                             "Ignored Pyramid diagnostics from a different step or request.",
                         );
@@ -1257,6 +1310,7 @@ impl QmpQemuSocketApp {
                         ));
                         continue;
                     }
+                    self.pyramid_workflow.finish_search();
                     if let Err(error) = &result
                         && !self
                             .pyramid_workflow
@@ -1906,9 +1960,10 @@ impl QmpQemuSocketApp {
 
     /// Offer both startup strategies before any socket connection or automatic capture.
     fn startup_choices(&mut self, ui: &mut egui::Ui) {
-        ui.add_space(24.0);
-        ui.heading("Choose a solving strategy");
-        ui.label("Select how to work with the guest game.");
+        activity_status::header(self, ui, |_, ui| {
+            ui.heading("Choose a solving strategy");
+            ui.label("Select how to work with the guest game.");
+        });
         ui.add_space(16.0);
 
 
@@ -1957,93 +2012,103 @@ impl QmpQemuSocketApp {
             controls_are_mutable(self.active_run, self.worker_state, self.stop_requested)
                 && !self.show_snapshot_dialog;
         let mut preview_available = self.has_current_preview();
-        let mut selected_strategy = self.solving_strategy;
-        ui.horizontal(|ui| {
-            ui.label("Solving strategy");
-            ui.add_enabled_ui(controls_enabled, |ui| {
-                egui::ComboBox::from_id_salt("solving-strategy")
-                    .selected_text(self.solving_strategy.label())
-                    .show_ui(ui, |ui| {
+        let strategy_changed = activity_status::header(self, ui, |app, ui| {
+            let mut selected_strategy = app.solving_strategy;
+            ui.horizontal_wrapped(|ui| {
+                ui.label("Solving strategy");
+                ui.add_enabled_ui(controls_enabled, |ui| {
+                    egui::ComboBox::from_id_salt("solving-strategy")
+                        .selected_text(app.solving_strategy.label())
+                        .show_ui(ui, |ui| {
 
 
-                        for strategy in SolvingStrategy::AVAILABLE {
-                            ui.selectable_value(&mut selected_strategy, strategy, strategy.label());
-                        }
-                    });
-            });
-        });
-
-
-        if selected_strategy != self.solving_strategy {
-            self.select_strategy(selected_strategy);
-            return;
-        }
-
-
-        if self.solving_strategy == SolvingStrategy::ShortestPath {
-            ui.strong("Pyramid · Capture / reconnaissance / computed route");
-            ui.label("Capture controls remain read-only. Use the separate reconnaissance, input-free calculation and confirmed computed-route execution controls below.");
-        }
-        ui.horizontal(|ui| {
-            ui.label("Game Type");
-            let previous_mode = self.game_mode;
-            ui.add_enabled_ui(controls_enabled && self.solving_strategy.permits_input(), |ui| {
-                let style = ui.style_mut();
-                style.visuals.widgets.inactive.bg_fill = SETUP_BLUE;
-                style.visuals.widgets.hovered.bg_fill = SETUP_BLUE.gamma_multiply(1.2);
-                style.visuals.widgets.inactive.fg_stroke.color = Color32::WHITE;
-                egui::ComboBox::from_id_salt("game-mode")
-                    .selected_text(egui::RichText::new(self.game_mode.label()).strong().color(Color32::WHITE))
-                    .show_ui(ui, |ui| {
-
-
-                        for mode in GameMode::AVAILABLE {
-                            ui.selectable_value(&mut self.game_mode, mode, egui::RichText::new(mode.label()).strong());
-                        }
-                    });
+                            for strategy in SolvingStrategy::AVAILABLE {
+                                ui.selectable_value(
+                                    &mut selected_strategy,
+                                    strategy,
+                                    strategy.label(),
+                                );
+                            }
+                        });
+                });
             });
 
 
-            if self.game_mode != previous_mode {
-                self.computer_vision_game_mode = self.game_mode;
-                self.context_generation = self.context_generation.wrapping_add(1);
-                self.reconnaissance_form.confirmed_context = None;
-                self.reconnaissance_report = None;
-                self.computed_route_form.revoke_acquisition();
-                self.computed_route_form.report = None;
-                self.invalidate_preview();
-                preview_available = false;
-                self.current_board = 1;
-                self.board_position_established = false;
-                self.boards_per_game = self.game_mode.profile().boards_per_game;
-
-
-                self.current_status = if self.game_mode.calibration_only() {
-                    format!("{} calibration — input disabled", self.game_mode)
-                } else {
-                    "Ready — capture required".to_owned()
-                };
-
-
-                match self.worker.reset_progress(self.current_preview_context()) {
-                    Ok(()) => {
-                        self.push_log(format!(
-                            "Game Type changed to {}; prior prediction and advisory progress were cleared. Capturing a fresh read-only frame; guest input events=0.",
-                            self.game_mode,
-                        ));
-                        self.request_capture("Game Type changed");
-                    }
-                    Err(error) => {
-                        self.worker_state = WorkerState::Error;
-                        self.current_status = "Mode change failed".to_owned();
-                        self.push_log(format!(
-                            "Game Type changed locally, but worker progress reset failed: {error}"
-                        ));
-                    }
-                }
+            if selected_strategy != app.solving_strategy {
+                app.select_strategy(selected_strategy);
+                return true;
             }
 
 
+            if app.solving_strategy == SolvingStrategy::ShortestPath {
+                ui.strong("Pyramid · Capture / reconnaissance / computed route");
+                ui.label("Capture controls remain read-only. Use the separate reconnaissance, input-free calculation and confirmed computed-route execution controls below.");
+            }
+            ui.horizontal_wrapped(|ui| {
+                ui.label("Game Type");
+                let previous_mode = app.game_mode;
+                ui.add_enabled_ui(controls_enabled && app.solving_strategy.permits_input(), |ui| {
+                    let style = ui.style_mut();
+                    style.visuals.widgets.inactive.bg_fill = SETUP_BLUE;
+                    style.visuals.widgets.hovered.bg_fill = SETUP_BLUE.gamma_multiply(1.2);
+                    style.visuals.widgets.inactive.fg_stroke.color = Color32::WHITE;
+                    egui::ComboBox::from_id_salt("game-mode")
+                        .selected_text(egui::RichText::new(app.game_mode.label()).strong().color(Color32::WHITE))
+                        .show_ui(ui, |ui| {
+
+
+                            for mode in GameMode::AVAILABLE {
+                                ui.selectable_value(&mut app.game_mode, mode, egui::RichText::new(mode.label()).strong());
+                            }
+                        });
+                });
+
+
+                if app.game_mode != previous_mode {
+                    app.computer_vision_game_mode = app.game_mode;
+                    app.context_generation = app.context_generation.wrapping_add(1);
+                    app.reconnaissance_form.confirmed_context = None;
+                    app.reconnaissance_report = None;
+                    app.computed_route_form.revoke_acquisition();
+                    app.computed_route_form.report = None;
+                    app.invalidate_preview();
+                    preview_available = false;
+                    app.current_board = 1;
+                    app.board_position_established = false;
+                    app.boards_per_game = app.game_mode.profile().boards_per_game;
+
+
+                    app.current_status = if app.game_mode.calibration_only() {
+                        format!("{} calibration — input disabled", app.game_mode)
+                    } else {
+                        "Ready — capture required".to_owned()
+                    };
+
+
+                    match app.worker.reset_progress(app.current_preview_context()) {
+                        Ok(()) => {
+                            app.push_log(format!(
+                                "Game Type changed to {}; prior prediction and advisory progress were cleared. Capturing a fresh read-only frame; guest input events=0.",
+                                app.game_mode,
+                            ));
+                            app.request_capture("Game Type changed");
+                        }
+                        Err(error) => {
+                            app.worker_state = WorkerState::Error;
+                            app.current_status = "Mode change failed".to_owned();
+                            app.push_log(format!(
+                                "Game Type changed locally, but worker progress reset failed: {error}"
+                            ));
+                        }
+                    }
+                }
+            });
+            false
+        });
+        if strategy_changed {
+            return;
+        }
+        ui.horizontal(|ui| {
             if bevel_button(ui, "Capture Frame", SETUP_BLUE, false, controls_enabled)
                 .on_hover_text("Capture and analyse one frame; send no guest input")
                 .clicked()
@@ -2112,6 +2177,7 @@ impl QmpQemuSocketApp {
 
                     if bevel_button(ui, "STOP", STATE_RED, false, true).clicked() {
                         self.stop_requested = true;
+                        self.pyramid_workflow.retire_observed();
                         self.reconnaissance_form.confirmed_context = None;
                         self.computed_route_form.revoke_acquisition();
                         self.current_status = "Stopping…".to_owned();
@@ -2248,27 +2314,22 @@ impl QmpQemuSocketApp {
         }
         if technical {
             ui.small(format!(
-                "Native 1920×1080 pixel preview; scroll to pan. Display scale: {:.2} physical pixels per UI point.",
+                "Preview fits the available area; native capture pixels are unchanged. Display scale: {:.2} physical pixels per UI point.",
                 ui.pixels_per_point()
             ));
         }
         let mut tracked_point = None;
-        let viewport_height = preview_viewport_height(
-            ui.available_height(),
-            ui.pixels_per_point(),
-            self.output_expanded && technical,
+        let viewport_height = preview_viewport_height(ui.available_height(), simplified);
+        let available = egui::vec2(ui.available_width(), viewport_height);
+        let canvas_size = fitted_preview_size(
+            available,
+            self.captured_dimensions
+                .unwrap_or((NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT)),
         );
         egui::ScrollArea::both()
             .auto_shrink([false, false])
             .max_height(viewport_height)
             .show(ui, |ui| {
-                // The logical canvas scales with the host display so its physical
-                // extent remains one framebuffer pixel per image pixel.
-                let scale = ui.pixels_per_point();
-                let canvas_size = egui::vec2(
-                    NOMINAL_FRAME_WIDTH as f32 / scale,
-                    NOMINAL_FRAME_HEIGHT as f32 / scale,
-                );
                 let (canvas, response) = ui.allocate_exact_size(canvas_size, Sense::click());
                 let painter = ui.painter_at(canvas);
                 painter.rect_filled(canvas, 0.0, Color32::from_rgb(24, 43, 37));
@@ -2379,109 +2440,6 @@ impl QmpQemuSocketApp {
     }
 
 
-    /// Draws the collapsible diagnostic tail and complete-history copy controls.
-    ///
-    /// Records the expanded state so the preview can reclaim space when collapsed.
-    /// Manual clearing resets progress only after the worker accepts the reset.
-    fn output(&mut self, ui: &mut egui::Ui) {
-        ui.separator();
-        let output_response = egui::CollapsingHeader::new("Detailed output")
-            .default_open(false)
-            .show(ui, |ui| {
-                let mut output_text_size_points = self.output_text_size_points.unwrap_or_else(|| {
-                    egui::TextStyle::Monospace
-                        .resolve(ui.style())
-                        .size
-                        .clamp(MINIMUM_OUTPUT_TEXT_SIZE_POINTS, MAXIMUM_OUTPUT_TEXT_SIZE_POINTS)
-                });
-                ui.horizontal(|ui| {
-
-
-                    if ui
-                        .button("Copy Output")
-                        .on_hover_text(
-                            "Copy the complete file-backed session output to the clipboard",
-                        )
-                        .clicked()
-                    {
-
-
-                        match self.complete_output() {
-                            Ok(output) => ui.ctx().copy_text(output),
-                            Err(error) => self.push_log(error),
-                        }
-                    }
-
-
-                    if ui
-                        .add_enabled(
-                            controls_are_mutable(self.active_run, self.worker_state, self.stop_requested) && !self.show_snapshot_dialog,
-                            egui::Button::new("Clear Output"),
-                        )
-                        .on_hover_text(
-                            "Clear the visible panel and reset board, game, and row-scan progress; the complete session log is retained",
-                        )
-                        .clicked()
-                    {
-
-
-                        match self.worker.reset_progress(self.current_preview_context()) {
-                            Ok(()) => {
-                                self.completed_games = 0;
-                                self.current_board = 1;
-                                self.board_position_established = false;
-                                self.current_status = "Ready".to_owned();
-                                let clear_result = self.append_session_only(
-                                    "Visible output was manually cleared; board, game, and row-scan progress were reset; complete session history retained.",
-                                );
-
-
-                                match clear_result {
-                                    Ok(()) => self.log_lines.clear(),
-                                    Err(error) => self.push_log(format!(
-                                        "Progress tracking was reset, but visible output was retained because {error}."
-                                    )),
-                                }
-                            }
-                            Err(error) => self.push_log(format!(
-                                "Clear Output refused because progress tracking could not be reset: {error}; visible history was retained."
-                            )),
-                        }
-                    }
-                    ui.label("Text size");
-                    ui.add(
-                        egui::DragValue::new(&mut output_text_size_points)
-                            .range(MINIMUM_OUTPUT_TEXT_SIZE_POINTS..=MAXIMUM_OUTPUT_TEXT_SIZE_POINTS)
-                            .speed(1.0)
-                            .suffix(" pt"),
-                    )
-                    .on_hover_text("Change only the detailed-output text size; preview scaling and copied text remain unchanged");
-                });
-                egui::Frame::group(ui.style()).show(ui, |ui| {
-                    ui.set_min_height(OUTPUT_PANEL_HEIGHT);
-                    egui::ScrollArea::vertical()
-                        .stick_to_bottom(true)
-                        .max_height(OUTPUT_PANEL_HEIGHT)
-                        .auto_shrink([false, false])
-                        .show(ui, |ui| {
-                            ui.set_width(ui.available_width());
-
-
-                            for line in &self.log_lines {
-                                ui.label(
-                                    egui::RichText::new(line)
-                                        .monospace()
-                                        .size(output_text_size_points),
-                                );
-                            }
-                        });
-                });
-                self.output_text_size_points = Some(output_text_size_points);
-            });
-        self.output_expanded = output_response.body_response.is_some();
-    }
-
-
     /// Shows the concise operational status and advisory board position outside detailed output.
     fn status_panel(&self, ui: &mut egui::Ui) {
         egui::Frame::group(ui.style()).show(ui, |ui| {
@@ -2517,10 +2475,17 @@ impl QmpQemuSocketApp {
         }
 
         let mut open = self.show_parameters;
-        egui::Window::new("Parameters")
-            .open(&mut open)
-            .resizable(true)
-            .show(context, |ui| {
+        let mut chrome = std::mem::take(&mut self.parameters_chrome);
+        chrome.show(context, window_chrome::WindowAppearance {
+            id: egui::Id::new("parameters-owned-chrome-v139"), title: "PARAMS",
+            colour: egui::Color32::from_rgb(26, 84, 148),
+            default_size: crate::parameters::DETAILS_WINDOW_DEFAULT_SIZE_POINTS.into(),
+            min_size: crate::parameters::DETAILS_WINDOW_MIN_SIZE_POINTS.into(),
+        }, &mut open, |ui| {
+            egui::ScrollArea::both()
+                .id_salt("parameters-content-v139")
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
                 ui.strong(RELEASE_LABEL);
                 ui.label(format!("Solving strategy: {}", self.solving_strategy.label()));
                 ui.label(format!("Game Type: {}", self.game_mode));
@@ -3096,7 +3061,9 @@ impl QmpQemuSocketApp {
                 ui.monospace(format!(
                     "multi-step-input-enabled = {MULTI_STEP_INPUT_ENABLED}"
                 ));
+                });
             });
+        self.parameters_chrome = chrome;
         self.show_parameters = open;
     }
 
@@ -3328,6 +3295,32 @@ impl eframe::App for QmpQemuSocketApp {
     /// Drains worker events and schedules updates without blocking on worker I/O.
     fn logic(&mut self, context: &egui::Context, _frame: &mut eframe::Frame) {
         self.poll_worker(context);
+        let native_close = context.input(|input| input.viewport().close_requested());
+        if self.shutdown.requested() || native_close {
+            if !self.close_ready {
+                context.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            }
+            self.request_exit();
+        }
+        if self.exiting && !self.close_ready {
+            match self.worker.finish_shutdown_if_ready() {
+                Ok(false) => {}
+                Ok(true) => {
+                    self.poll_worker(context);
+                    self.push_log(
+                        "QMP worker stopped and joined; closing application. QEMU is left running.",
+                    );
+                    self.close_ready = true;
+                }
+                Err(error) => {
+                    self.push_log(error);
+                    self.close_ready = true;
+                }
+            }
+            if self.close_ready {
+                context.send_viewport_cmd(egui::ViewportCommand::Close);
+            }
+        }
         context.request_repaint_after(crate::parameters::UI_REPAINT_INTERVAL);
     }
 
@@ -3335,9 +3328,13 @@ impl eframe::App for QmpQemuSocketApp {
     /// Renders the main controls and dialogs; EXIT requests worker detachment before closing.
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ui, |ui| {
-
-
-            if self.strategy_choice_pending {
+            if self.exiting {
+                activity_status::header(self, ui, |app, ui| {
+                    ui.heading("Closing application");
+                    ui.label("STOP is latched. Waiting for the current worker transaction or release-only recovery to finish.");
+                    if ui.button("View Log").clicked() { app.show_output = true; }
+                });
+            } else if self.strategy_choice_pending {
                 self.startup_choices(ui);
             } else if self.uses_pyramid_workflow() {
                 self.pyramid_workflow_screen(ui);
@@ -3347,26 +3344,36 @@ impl eframe::App for QmpQemuSocketApp {
                 self.status_panel(ui);
                 ui.separator();
                 self.preview(ui);
-                self.output(ui);
             }
+            if !self.uses_pyramid_workflow() && !self.exiting {
             ui.add_space(8.0);
             ui.with_layout(Layout::top_down(Align::Center), |ui| {
 
 
+                ui.horizontal_wrapped(|ui| {
+                    if ui.button("View Log").clicked() {
+                        self.show_output = true;
+                    }
+                    if ui.add_enabled(self.failure_window.available(), egui::Button::new("Failure details")).clicked() {
+                        self.failure_window.reopen();
+                    }
+                });
                 if bevel_button(ui, "EXIT", STATE_RED, false, true).clicked() {
-                    self.push_log("EXIT requested; detaching locally and leaving QEMU untouched.");
-                    let _ = self.worker.disconnect(self.current_preview_context());
-                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+                    self.request_exit();
                 }
             });
+            }
         });
 
-        if !self.uses_pyramid_workflow() {
+        self.output_window(ui.ctx());
+        self.failure_window.show(ui.ctx());
+        if !self.exiting && !self.uses_pyramid_workflow() {
             self.parameters_window(ui.ctx());
             self.snapshot_window(ui.ctx());
-        } else if self
-            .pyramid_workflow
-            .details_visible(&self.current_preview_context())
+        } else if !self.exiting
+            && self
+                .pyramid_workflow
+                .details_visible(&self.current_preview_context())
         {
             self.snapshot_window(ui.ctx());
         }
@@ -3529,7 +3536,7 @@ fn diagnostic_preview_status(state: WorkerState) -> &'static str {
     if state.is_busy() {
         "Verification in progress; this frame does not authorise another run."
     } else {
-        "For inspection only; use Capture Frame before another run."
+        "For inspection only; reacquire the board before another run."
     }
 }
 
@@ -3600,28 +3607,34 @@ fn board_position_label(
 }
 
 
-/// Returns preview height in UI points after reserving footer and expanded-output space.
-///
-/// The height stays between the minimum viewport and native guest height plus
-/// scrollbar allowance; collapsing detailed output removes its reservation.
-fn preview_viewport_height(
-    available_height: f32,
-    pixels_per_point: f32,
-    output_expanded: bool,
-) -> f32 {
-    let image_height = NOMINAL_FRAME_HEIGHT as f32 / pixels_per_point;
-    let image_and_scrollbar =
-        (image_height + PREVIEW_SCROLLBAR_ALLOWANCE_POINTS).max(MIN_PREVIEW_VIEWPORT_HEIGHT_POINTS);
+/// Reserve only the shared footer; no output panel or minimum canvas consumes image space.
+fn preview_viewport_height(available_height: f32, simplified: bool) -> f32 {
+    if !available_height.is_finite() {
+        return 0.0;
+    }
+    (available_height
+        - if simplified {
+            0.0
+        } else {
+            PREVIEW_FOOTER_RESERVE_POINTS
+        })
+    .max(0.0)
+}
 
 
-    let reserved_output = if output_expanded {
-        OUTPUT_PANEL_HEIGHT
-    } else {
-        0.0
-    };
-    (available_height - PREVIEW_FOOTER_RESERVE_POINTS - reserved_output)
-        .max(MIN_PREVIEW_VIEWPORT_HEIGHT_POINTS)
-        .min(image_and_scrollbar)
+/// Fit the entire captured image into finite UI-point bounds, preserving its aspect ratio.
+/// Returns zero for empty/invalid extents; display scaling never changes captured pixels.
+fn fitted_preview_size(available: egui::Vec2, dimensions: (u32, u32)) -> egui::Vec2 {
+    if !available.is_finite()
+        || available.x <= 0.0
+        || available.y <= 0.0
+        || dimensions.0 == 0
+        || dimensions.1 == 0
+    {
+        return egui::Vec2::ZERO;
+    }
+    let image = egui::vec2(dimensions.0 as f32, dimensions.1 as f32);
+    image * (available.x / image.x).min(available.y / image.y)
 }
 
 
@@ -4249,14 +4262,42 @@ mod tests {
     }
 
 
-    /// Checks native-height limits and the reclaimed preview space when output is collapsed.
+    /// Resizing fits all native corners in both dimensions without consuming log-panel space.
     #[test]
-    fn preview_uses_the_full_guest_height_when_the_host_has_room() {
-        assert_eq!(preview_viewport_height(1_400.0, 1.0, false), 1_104.0);
-        assert_eq!(preview_viewport_height(900.0, 1.0, false), 804.0);
-        assert_eq!(preview_viewport_height(1_400.0, 2.0, false), 564.0);
-        assert_eq!(preview_viewport_height(900.0, 1.0, true), 519.0);
-        assert_eq!(preview_viewport_height(1_400.0, 2.0, true), 564.0);
+    fn preview_fits_width_height_and_preserves_native_mapping() {
+        for available in [
+            egui::vec2(800.0, 300.0),
+            egui::vec2(320.0, 800.0),
+            egui::vec2(1600.0, 900.0),
+        ] {
+            let size = fitted_preview_size(available, (1920, 1080));
+            assert!(size.x <= available.x + 0.001 && size.y <= available.y + 0.001);
+            assert!((size.x / size.y - 16.0 / 9.0).abs() < 0.001);
+            let canvas = Rect::from_min_size(Pos2::new(13.0, 29.0), size);
+            assert_eq!(
+                preview_to_pixel(canvas, canvas.left_top()),
+                PixelPoint::new(0, 0)
+            );
+            assert_eq!(
+                preview_to_pixel(canvas, canvas.right_bottom()),
+                PixelPoint::new(1919, 1079)
+            );
+            assert_eq!(
+                preview_to_pixel(canvas, canvas.center()),
+                PixelPoint::new(960, 540)
+            );
+        }
+        assert_eq!(
+            preview_viewport_height(900.0, false),
+            900.0 - PREVIEW_FOOTER_RESERVE_POINTS
+        );
+        assert_eq!(preview_viewport_height(10.0, false), 0.0);
+        assert_eq!(preview_viewport_height(900.0, true), 900.0);
+        assert_eq!(preview_viewport_height(10.0, true), 10.0);
+        assert_eq!(
+            fitted_preview_size(egui::vec2(800.0, 600.0), (0, 1080)),
+            egui::Vec2::ZERO
+        );
     }
 
 
@@ -4502,8 +4543,8 @@ mod tests {
             diagnostic_preview_status(WorkerState::Capturing)
                 .starts_with("Verification in progress")
         );
-        assert!(diagnostic_preview_status(WorkerState::Uncertain).contains("Capture Frame"));
-        assert!(diagnostic_preview_status(WorkerState::Detached).contains("Capture Frame"));
+        assert!(diagnostic_preview_status(WorkerState::Uncertain).contains("reacquire"));
+        assert!(diagnostic_preview_status(WorkerState::Detached).contains("reacquire"));
     }
 
 
@@ -4906,7 +4947,7 @@ mod tests {
         let request = form.take_request(&context).unwrap();
         assert!(matches!(
             request.profile,
-            ReconProfileSource::BundledNativeV22
+            ReconProfileSource::BundledNativeV23
         ));
         assert_eq!(request.output_path, PathBuf::from(&form.output_path));
         assert_eq!(request.deal_id, form.deal_id);
@@ -4971,7 +5012,7 @@ mod tests {
         let request = form.take_request(&context).unwrap();
         assert!(matches!(
             request.profile,
-            ReconProfileSource::BundledNativeV22
+            ReconProfileSource::BundledNativeV23
         ));
         assert_eq!(request.output_path, PathBuf::from(" manual destination "));
         assert_eq!(request.deal_id, "Manual_Deal");

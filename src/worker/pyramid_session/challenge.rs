@@ -24,7 +24,7 @@ fn completed(bound: ChallengeProgress, proof: ChallengeCompletion) -> Result<Str
     let endpoint = if proof.operator_continue() {
         "Challenge Complete; Continue left to the operator"
     } else {
-        "shared GAME WIN rewards completed; control released before NewGame or Solver input"
+        "Challenge Complete; reward animation left to the operator with control released"
     };
     Ok(format!(
         "Challenge target verified: {}; {endpoint}.",
@@ -33,7 +33,7 @@ fn completed(bound: ChallengeProgress, proof: ChallengeCompletion) -> Result<Str
 }
 
 
-/// Retain the success receipt through the shared reward controller before releasing control.
+/// Retain the actual completion receipt through input-free handoff, without a new board.
 fn finish(
     io: &mut impl Pipeline,
     generation: u64,
@@ -92,10 +92,13 @@ pub(super) fn drive(io: &mut impl Pipeline) -> Result<String, String> {
                     return Err("Pending challenge terminal differs from its actual reached requirement; no continuation input authorised".to_owned());
                 }
             }
-            BoardCompletion::PartialPositionVerified { removed, remaining } => return Ok(format!("Challenge partial endpoint verified: {removed}/28 tableau cards removed, {remaining} remain. Last observed requirement is {witnessed:?}; control released. DRAW/REDEAL continuation is a later milestone; no continuation input authorised.")),
+            BoardCompletion::PartialPositionVerified { removed, remaining } => return Ok(format!("Challenge partial endpoint verified: {removed}/28 tableau cards removed, {remaining} remain. Last observed requirement is {witnessed:?}; control released. No positively authorised continuation remains; inspect and reacquire before another execution. No further input authorised.")),
             BoardCompletion::DeliveredUnconfirmed => return Err("Challenge final input acknowledged but effect unconfirmed; inspect and reacquire, no continuation or retry".to_owned()),
             BoardCompletion::BoardClear | BoardCompletion::NextBoardReady | BoardCompletion::GameComplete | BoardCompletion::StockRedealt => {}
-            BoardCompletion::AwaitingFreshBoard => return Err("Target-aware continuation requires observed completion; no further input".to_owned()),
+            // Final whole-route ACK permits only transition observations. A fresh
+            // distinct complete-board pair and the actual bound counter are still
+            // required below; this result is never completion or input authority.
+            BoardCompletion::AwaitingFreshBoard => {}
         }
         io.phase(generation, SessionPhase::Transition);
         io.check()?;

@@ -543,15 +543,10 @@ fn episode(frames: Vec<Vec<u8>>, run_core: bool, fault: Fault) -> Episode {
         }
         receipt_vision = native.vision;
     }
-    let receipt_progress = result
+    let receipt_metadata = result
         .as_ref()
         .ok()
-        .map(|_| diagnostics.restored_progress());
-    let receipt_default = result.as_ref().ok().map(|_| diagnostics.restored_default());
-    let receipt_observed = result
-        .as_ref()
-        .ok()
-        .map(|_| diagnostics.restored_observed());
+        .map(|_| diagnostics.restored_metadata(None));
     diagnostics
         .finish(&result, None, &ledger, captures, publication)
         .expect("production final evidence");
@@ -560,7 +555,8 @@ fn episode(frames: Vec<Vec<u8>>, run_core: bool, fault: Fault) -> Episode {
         "finalisation releases the PNG buffer"
     );
     let result = result.and_then(|deal| {
-        let progress = receipt_progress.ok_or("Missing successful restoration binding")??;
+        let (progress, default, observed) =
+            receipt_metadata.ok_or("Missing successful restoration binding")??;
         super::super::computed_route::record_acquisition(
             &context,
             &events,
@@ -569,8 +565,8 @@ fn episode(frames: Vec<Vec<u8>>, run_core: bool, fault: Fault) -> Episode {
             receipt_vision,
             &output,
             progress,
-            receipt_default.ok_or("Missing successful default binding")??,
-            receipt_observed.ok_or("Missing successful observed header")??,
+            default,
+            observed,
         )?;
         let (_, retained) =
             super::super::computed_route::reuse_metadata(&context, &output, &events, &cancel)?;

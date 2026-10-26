@@ -26,3 +26,18 @@ and post-probe STOP, not an observed guest transition or fresh live acceptance.
 
 Original packets, matching Recon, exports and controller-log prefixes remain in
 `/home/charlie/Documents/Pyramid/Validation/challenge-redeal-20261023/`.
+
+## Actual 2.9.135 Score refusal
+
+`score.png` and `score-deal.json` are unchanged originals from the retained
+2.9.135 packet identified in `provenance.json`. Five fixed slots remain: 0=AS,
+2=5S, 5=10S, 9=3H, 14=QD; LEFT is exhausted/X and RIGHT is 8H. The controller
+verified its partial route and two RECYCLEs. The complete enabled REDEAL widget
+already matched, including its own count one; only the redundant lower-caption
+RGB requirement refused. No fifth RGB variant or tolerance change is added.
+
+Tests allow an unknown lower caption only with the complete positive enabled
+widget, exact position and positive LEFT-X. A measured zero caption still vetoes
+contradictory evidence. The unknown advisory caption count remains `None`.
+Synthetic lower-caption and widget mutations are labelled in the tests; they do
+not establish new themes, real zero/two widget renderings or live acceptance.

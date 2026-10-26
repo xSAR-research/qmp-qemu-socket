@@ -19,13 +19,19 @@ use crate::{
 };
 
 
+mod card_paper;
+mod foreground_card;
 mod graded_glyph;
 
 
 #[cfg(test)]
 mod execution_observability_tests;
 mod final_clear;
+mod native_colour;
 mod native_execution;
+
+#[cfg(test)]
+mod native_colour_tests;
 mod normal_clear;
 mod redeal;
 
@@ -195,6 +201,8 @@ pub struct ReconVision {
     native_redeal: Option<redeal::NativeRedeal>,
     /// Private measured execution alternatives; only the bundled constructor opts in.
     native_execution: Option<native_execution::NativeExecution>,
+    /// Private appearance policy; serialized/custom profiles cannot enable it.
+    colour_independent: bool,
 }
 
 
@@ -213,6 +221,8 @@ struct Pattern {
 /// One complete factorised glyph reader or whole-identity bank for a card setting.
 #[derive(Clone, Debug)]
 struct CardReader {
+    /// Private native corner capability; no serialized profile can enable it.
+    foreground: Option<foreground_card::Reader>,
     /// Labelled, pairwise discriminating rank-and-suit templates.
     templates: Vec<(Card, Pattern)>,
     /// Independent rank/suit banks when real evidence uses factorised typography.
@@ -547,6 +557,7 @@ impl ReconVision {
             dialog: DialogProfile::parse(&root["dialog"], schema)?,
             native_redeal: None,
             native_execution: None,
+            colour_independent: false,
         })
     }
 
@@ -597,8 +608,8 @@ impl ReconVision {
         let view = frame
             .as_view()
             .map_err(|_| "invalid recon frame layout".to_owned())?;
-        let board_matches = self.board.matches(view)?;
-        let dialog_matches = self.dialog.matches(view, after_confirmation)?;
+        let board_matches = self.board_scene_matches(view)?;
+        let dialog_matches = self.dialog_matches(view, after_confirmation)?;
 
 
         match (board_matches, dialog_matches) {
@@ -648,9 +659,7 @@ impl ReconVision {
         }
 
         let undo_all = self
-            .board
-            .undo_all
-            .matches(view, (0, 0))?
+            .native_undo(view)?
             .then_some(PixelPoint::new(1320, 978));
         Ok(ReconScene::Board(BoardObservation {
             tableau,
@@ -685,7 +694,7 @@ impl ReconVision {
             .map_err(|_| "invalid execution frame layout".to_owned())?;
         // Diagnose a positive modal before its dimmed scene patches can mask it.
         require(
-            !self.dialog.matches(view, true)?,
+            !self.dialog_matches(view, true)?,
             "execution refused: matched complete Undo All dialog",
         )?;
         let coupled_empty_stock = self.matches_execution_empty_stock(view, left, right)?;
@@ -696,7 +705,7 @@ impl ReconVision {
             {
                 continue;
             }
-            if !pattern.matches(view, (0, 0))? {
+            if !self.native_scene_anchor(view, index, pattern)? {
                 let bounds = pattern.bounds;
                 return Err(format!(
                     "execution board scene[{index}] mismatch at [{},{},{},{}]",
@@ -730,7 +739,7 @@ impl ReconVision {
         right: Option<Card>,
         left_empty: &Pattern,
     ) -> Result<(), String> {
-        let occupancy = crate::pyramid::tableau_evidence(frame).map_err(|e| e.to_string())?;
+        let occupancy = self.native_occupancy(frame)?;
         for (index, origin) in TABLEAU_ORIGINS.into_iter().enumerate() {
             let expected_card = expected.get(index).ok_or("invalid tableau expectation")?;
             if let Some(card) = expected_card {
@@ -793,11 +802,13 @@ impl ReconVision {
         let Some(variant) = &self.board.execution_empty_stock else {
             return Ok(false);
         };
-        if !variant.scene.matches(view, (0, 0))? {
+        if !self.native_shape(view, &variant.scene, 1)? {
             return Ok(false);
         }
         for (index, pattern) in self.board.scene.iter().enumerate() {
-            if index != EXECUTION_EMPTY_STOCK_SCENE_INDEX && !pattern.matches(view, (0, 0))? {
+            if index != EXECUTION_EMPTY_STOCK_SCENE_INDEX
+                && !self.native_scene_anchor(view, index, pattern)?
+            {
                 return Ok(false);
             }
         }
@@ -817,7 +828,7 @@ impl ReconVision {
         empty: &Pattern,
     ) -> Result<StockFace, String> {
         let card = self.stock_reader.recognise(view, (bounds.x, bounds.y))?;
-        let empty_matches = empty.matches(view, (0, 0))?;
+        let empty_matches = self.native_empty(view, bounds, empty)?;
 
 
         match (card, empty_matches) {
@@ -990,6 +1001,9 @@ impl Pattern {
 impl CardReader {
     /// Summarise versioned deterministic bounds without claiming probability.
     fn policy(&self) -> String {
+        if self.foreground.is_some() {
+            return foreground_card::Reader::policy().to_owned();
+        }
         match self
             .glyphs
             .as_ref()
@@ -1018,6 +1032,9 @@ impl CardReader {
 
     /// Explain a refusal from the same immutable pixels; this grants no authority.
     fn failure_details(&self, view: FrameView<'_>, origin: (u32, u32)) -> String {
+        if let Some(reader) = &self.foreground {
+            return reader.failure_details(view, origin);
+        }
         let Some(glyphs) = &self.glyphs else {
             return self.policy();
         };
@@ -1079,6 +1096,7 @@ impl CardReader {
             "schema-2 requires graded factorised readers",
         )?;
         Ok(Self {
+            foreground: None,
             templates: Vec::new(),
             glyphs: Some(GlyphReader::parse_graded(value, width, height)?),
         })
@@ -1089,6 +1107,7 @@ impl CardReader {
     fn parse(value: &Value, width: u32, height: u32) -> Result<Self, String> {
         if value.get("ranks").is_some() {
             return Ok(Self {
+                foreground: None,
                 templates: Vec::new(),
                 glyphs: Some(GlyphReader::parse(value, width, height)?),
             });
@@ -1155,6 +1174,7 @@ impl CardReader {
         }
 
         Ok(Self {
+            foreground: None,
             templates,
             glyphs: None,
         })
@@ -1163,6 +1183,9 @@ impl CardReader {
 
     /// Return only an independently matched identity; absent and ambiguous differ.
     fn recognise(&self, view: FrameView<'_>, origin: (u32, u32)) -> Result<Option<Card>, String> {
+        if let Some(reader) = &self.foreground {
+            return reader.recognise(view, origin);
+        }
         if let Some(glyphs) = &self.glyphs {
             return glyphs.recognise(view, origin);
         }

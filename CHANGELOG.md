@@ -1,5 +1,253 @@
 # Changelog
 
+## 2.9.153
+
+- Recognise the complete measured normal-one header appearance shared by the retained automatic NEW GAME and manual START refusals, retaining all pixels and original channel tolerances. Same-count aliases retain one identity; conflicting counts remain unknown.
+- Add four actual-image/production-path regressions for fresh readiness, manual entry and revocation. Preserve existing six-frame settling, fresh guarded Recon and all controller/input boundaries.1522 full tests pass; metadata-only alignment follows qualification. Fresh153 guest verification remains separate.
+
+## 2.9.152
+
+- Prove normal final clears despite moving Perfect glow using coherent all 28 upper absence bands with all original lower-region material vetoes. Preserve flying-card refusals/exact piles/normal identity/final guards and actual-third receipt before unchanged GAME WIN.
+- Retain the actual151 image and six new regressions;1518 full tests pass. Metadata-only alignment follows qualification; fresh152 guest acceptance remains separate.
+
+## 2.9.151
+
+- Wait read-only through supported new-game dealing after GAME WIN / Play, using the existing six-observation bound and stage interval. Require a fresh consecutive full-board/pile/normal-header pair before fresh entry and guarded Recon.
+- Keep strict Ready recognition, static scene/legend guards, STOP/context cancellation and no retired-control replay. Missing dynamic stock control may be Pending only for the bundled profile.
+- Add eight regressions including both unchanged actual150 partial captures, pair reset/exhaustion, duplicates/occupied RIGHT, contradiction/static/legend refusal, STOP/context, and real Native restart to a fourth fresh Recon connection.
+- Prepare guarded `--image` execution and the full goal acceptance checklist.
+
+## [2.9.150] — 2026-10-25
+
+- Keep post-ACK normal footer uncertainty Pending within the existing effect
+  window, withholding effect commitment and further input until proof settles.
+- Permit bounded read-only normal/challenge board handoff after full-route ACKs;
+  require a distinct fresh matching full-board pair and valid counter progression.
+  Preserve actual third-board completion receipts and no uncertain-input replay.
+- Compose Boards/Perfect final absence with exact stock/pile evidence, recognise
+  the bound Score Challenge Complete/Loading appearance, and correct the existing
+  Boards/cleared literal foreground mask without relaxing RGB/word limits.
+- Record exact exhausted stock without REDEAL appearance as a partial stop only
+  with independent endpoint proof; otherwise preserve the existing refusal.
+- Verify the retained football tableau and draw-left identities using the existing
+  reader; retain missing-ordinal and unreadable-card refusals.
+- Replace stale Spider Failure Details with actual source-owned game/settings,
+  error and worker times. Terminal control policy remains unchanged.
+- Host qualification: 1504 tests, zero failures/ignored/filtered, 770 sealed inputs
+  and six gates passed before metadata alignment. Fresh guest verification is
+  separate; see [verification](docs/Verification-Track-B-150.md).
+
+## [2.9.149] — 2026-10-25
+
+- Support the retained Wild West aged-paper cards with bounded material,
+  paper-relative ink and complete Western calibration; retain quality/gap limits.
+- Apply that material to stock coverage without changing the 45% threshold.
+- Veto false ordinary/final-band absence on intact aged cards; preserve Unknown,
+  scene/modal proof, STOP/context and no uncertain replay.
+- Host qualification: 1483 tests, 753 seals and all six gates passed.
+  Fresh live acceptance is pending; see [verification](docs/Verification-2.9.149.md).
+
+## 2.9.148 — shared selection header and SOLVING label; host qualified
+
+- Align the game/solution heading and its wrapping options at the top left beside
+  the fixed right activity indicator. Action controls, status and preview retain
+  the full panel width; startup, CV and closing screens share the same layout.
+- Change the displayed SOLVE label to SOLVING. Keep the 240×80 face, 3-point white
+  border, centred bold text, colours and active halo timing.
+- Hold recognition resolution for the retained wood/aged-paper 147 entry failure.
+  Its scene and Score header pass; the apex fails the current light-paper minimum,
+  and the isolated stock reader reports Empty for the visibly occupied left pile.
+  No recognition thresholds, fonts, glyph banks or worker policy change here.
+- Host result: 1478 full tests, zero failures/ignored/filtered, 747 sealed inputs and all six required gates passed. Fresh Beast/Charlie acceptance remains pending.
+
+## 2.9.147 — normal reward continuation, bound challenge and objective switch; host qualified
+
+- Bind normal Pyramid GAME WIN reward/counting entry to its completion receipt and
+  continue through the existing paired Native/shared reward → optional LevelUp OK
+  → New Game → Play controller, including reward remaining after OK. Preserve
+  input/observation budgets, STOP/context, fresh probes and uncertain-input non-replay.
+- Let A* prove a fresh matching complete-board pair, then Recon without Solver/HALO.
+  Preserve actual Pyramid SOLVER's Solver/HALO readiness requirements.
+- Lock identified challenge kind, target and Kings policy at START/RECON. Action
+  frames do not reclassify labels; safe-boundary numeric progress requires monotonic
+  numerator and unchanged denominator. Bound terminal contradiction remains fatal;
+  START/RECON replace the binding and STOP/RESET retire it and queued updates.
+- Add **Switch to Maximum card matches** during the matching actual Shortest
+  invocation. Retire it cooperatively, discard any concurrent old result and reuse
+  the authenticated RECON without capture. Preserve Manual/automatic ownership,
+  PAUSE until CONTINUE and STOP/context/stale-request gates. Explicit replacement
+  proves no no-win result; automatic exhaustive-no-win fallback remains separate.
+  Maximum remains the existing uncapped weighted search with no fixed time guarantee.
+- Record the source-audit result: manual RECON and automatic START already return/
+  hand off directly after completed acquisition. Make no timing edit; preserve the
+  mandatory 1000 ms UndoAll/OK settle inside Recon before both restoration frames.
+- 147 passed all six host gates: 1476 full tests, 747 sealed inputs and native release/help; artifact/source identity is recorded in verification;
+  fresh Beast/Charlie acceptance is pending. Retain 146's 1449 tests/743 seals as
+  historical evidence. xSAR 0.9.0, all 19 matrix states and all 14 milestone states
+  remain unchanged. See [147 verification](docs/Verification-2.9.147.md) and
+  [manual checks](docs/Live-Test-2.9.147.md).
+
+## 2.9.146 — complete native corner ink and fixed activity badge; host qualified
+
+- Add private native-v23 `native_corner_ink_v1` identity recognition using
+  paper-relative seeded components and complete coherent Classic/Retro families.
+  Compare rank/suit ink with native half-pixel translation within ±1 pixel, without
+  scaling, deck inference or a legacy fallback. Keep custom/frozen policies intact.
+- Use complete-corner rank error ≤220000 ppm/gap ≥80000 and suit error ≤200000 ppm/same-colour
+  gap ≥40000. Reject complete components below the measured exclusive suit bottom
+  51 instead of clipping them; preserve Retro DL's genuine antialias pixel at row50.
+- Preserve three unchanged actual boards with 87 visible labels and the 423-label
+  Classic corpus. Use 13 Retro exemplar cards with 16 whole-card held-outs; 8, 10
+  and J have no independent Retro holdout. Add clipping, wrong-label replacement,
+  external-background, body-art and refusal-diagnostic regressions.
+- Replace the activity indicator with a fixed 240×80 logical-point face, 3-point
+  white border and centred embedded licensed DejaVu Sans Bold at 26 points.
+  WAITING/ERROR stay static; RECON/ROUTE/SOLVE animate only their surrounding halo
+  on a 1.6-second period with 25 ms repaint requests. Inert visual review: 20 PASS.
+- Eleven focused foreground tests and the occupied-RIGHT temporal REDEAL adapter
+  pass after the measured whole-component correction. Three Clippy iterator fixes
+  preserve behaviour. Full qualification passed: 1449 tests and 743 sealed inputs; all six gates and
+  native release/help passed. Final results and artifact hashes are recorded in
+  [146 verification](docs/Verification-2.9.146.md).
+- Preserve 145's 45%/RGB180 stock rule, input/STOP/context safeguards, xSAR 0.9.0,
+  all 19 matrix states and all 14 milestone states. Automatic board-to-RECON remains
+  open. No 146 install, launch, guest input or push; fresh acceptance is pending.
+
+## 2.9.145 — inverse light-paper coverage for DL and DR; host qualified
+
+- Classify native DL/DR emptiness as the inverse of at least 45% light-paper coverage
+  over the full 139×187 pile rectangle, with the retained RGB channel floor of 180.
+- Replace the zero-paper requirement; isolated light pixels below the cutoff now
+  count as empty. High-paper unreadable faces remain Unknown, and card/empty
+  ambiguity still refuses. Preserve scene/modal checks and unique card identity.
+- Add exact cutoff/bounds tests for both piles and unchanged cream Q♥ imagery;
+  retain the selected K♥ reference and document the measured calibration margin.
+- Pass 1436 full tests, zero failed/ignored/filtered, all six gates and native help;
+  731 sealed inputs. xSAR 0.9.0 is unchanged. Fresh guest acceptance remains pending.
+- Keep football rank reading and the automatic next-board handoff outside this build.
+
+## 2.9.144 — temporal REDEAL with an occupied RIGHT; host qualified
+
+- Let the already-approved same-execution region appearance establish an exhausted stock layout while RIGHT retains its exact replayed card.
+- Keep complete tableau/pile verification, positive empty LEFT, native scene/modal proof, legal stock progression, fresh probes, STOP/context and one unreplayed REDEAL click.
+- Preserve the unchanged actual Sixes 8/10 Xbox frame and deal. Add actual-position negatives plus a labelled synthetic production-adapter regression for one click, STOP and missing/unchanged origins; both regressions reproduce the143failure before the fix.
+- Host qualification passed: **1434 full application tests**, zero failed/ignored/filtered, **729 sealed inputs**, all six required gates and native release/help. Fresh corrected guest behaviour and Charlie acceptance remain pending. xSAR remains 0.9.0; no timing, search, transport, dependency or public API change. The separate full-clear confirmation timeout remains open.
+
+## 2.9.143 — bounded mixed-legend scene correction; host qualified
+
+- Preserve the original all-white legend proof; additionally recognise exactly two adjacent complete bright separators and four complete neutral dim separators with measured surrounding-row contrast.
+- Refuse partial bright strips, white specks in dim strips, nonadjacent bright groups, fully dimmed scenes, coloured/low-contrast strips and independent scene loss.
+- Keep modal exclusion on the original all-white predicate so broader positive board evidence cannot suppress a specific dialog. Retain existing identity, stock, control and input guards.
+- Add the unchanged actual Score 775/2200 Xbox frame and four focused regressions, including production entry with two captures and first-capture STOP/context revocation.
+- Reconcile current M11/M14 and matrix REDEAL criteria to execution-bound temporal appearance; retain all acceptance statuses and dated evidence.
+- All six host gates passed: 1432 full tests, zero failed/ignored/filtered, 726 sealed inputs and native release/help. Fresh corrected guest behaviour and Charlie acceptance remain pending. xSAR remains 0.9.0.
+
+## 2.9.142 — terminal literal precedence correction; host qualified
+
+- Retain the Xbox artwork, generic header-border and bound small-modal corrections from the withheld 141 revision.
+- Extract the existing whole literal-header reader from the settled-modal gate. After either supported bound terminal appearance, preserve positively read kind/target evidence so the native driver rejects a contradiction. Cold entry still requires its original settled shape.
+- Reproduce the review finding with unit and actual native-driver regressions: a composed calibrated Boards 2/2 header over the small modal must override the retained Cards 8/10 binding and stop after the first acknowledged MATCH, without a second action or skip input.
+- All six host gates passed: 1428 full tests, zero failed/ignored/filtered, 724 sealed inputs, strict private documentation/Clippy and native release/help. Dependencies, timing, cadence and input authority retain their existing contracts.
+- Fresh corrected Beast/Charlie acceptance remains pending; the earlier 140 REDEAL success remains accepted for that case only.
+
+## 2.9.141 — Xbox artwork, header borders and bound completion; host checks passed, withheld
+
+- Accept sharp coloured artwork in an empty tableau clearance only when the entire clearance has no possible card paper and every sharp edge remains chromatic at both ends. Neutral occlusions and pale remnants still refuse.
+- Exclude only six background-blended rounded-corner pixels per header border strip; keep all remaining border pixels, complete words and counter checks.
+- Recognise the captured small counting modal only for an already-bound challenge, requiring the complete title, medal, separated scaffold and skip instruction. Retire input before remaining route actions; reward handling remains operator-owned.
+- Preserve both actual Xbox stops, the entry frame and Jacks completion as labelled regression evidence. Four focused regressions pass, including the actual native driver and production challenge guard.
+- All six host gates passed: 1426 full tests, 724 sealed inputs and native release/help. Independent review then found a small-modal literal-header precedence gap; this binary was withheld before launch. xSAR remains 0.9.0.
+- Charlie confirmed the retained 140 REDEAL case; corrected 141 guest behaviour and broader background/challenge acceptance remain pending.
+
+## 2.9.140 — continuous challenge-guard correction; host qualified
+
+- Pass explicit Source/Effect phase through the private execution frame guard.
+- Let the production Continuous/Challenge guard defer an unreadable post-ACK header
+  to existing effect confirmation, including the final partial-route endpoint.
+- Keep positive source binding, challenge contradictions, arbitrary guard errors,
+  post-capture STOP/context checks and no-replay handling strict.
+- Exercise the real session guard in a five-frame two-MATCH driver sequence;
+  retain the original 139 failure and strict-source/independent-guard negatives.
+- Recognition, timing, dependencies and the retained 139 QOL/pause policies are unchanged.
+- All six host gates passed: 1422 full tests, zero failed/ignored/filtered, 712 sealed inputs, strict private documentation/Clippy and native release/help.
+- Fresh Beast/Charlie acceptance remains pending; 139 is retained separately.
+
+## 2.9.139 — QOL, cooperative pause and Xbox stock proof; host qualified
+
+- Add full-phase cooperative A* PAUSE/CONTINUE with retained search state and active-time accounting, using the approved additive xSAR 0.9.0 API.
+- Set Continuous / Shortest route / Challenge defaults; add idle-only RESET that retains STOP and inventory while retiring prepared work.
+- Add contrasting popup chrome, collapse/maximise/restore/close controls and the START/RECON/LOG/ANALYSIS control row.
+- Recognise Xbox stock emptiness from full-footprint possible-paper absence; preserve independent tableau and control-layout guards.
+- Replace REDEAL count/caption authority with execution-scoped temporal region appearance and one guarded centre click.
+- Retry transient unreadable challenge headers only inside the existing post-ACK effect window.
+- All six application host gates passed: 1420 full tests, zero failures/ignored/filtered, 710 seals, strict private docs/Clippy and release/help. xSAR 0.9.0 passed 296 full tests and its default/feature checks; exact pause primitive passed three Miri tests.
+- Fresh Beast and Charlie acceptance remain pending; historical delivery evidence follows unchanged.
+
+## 2.9.138 — empty-circle partial endpoint, 24 October 2026; host qualified
+
+- Prove the additional native partial endpoint where both stock piles are empty,
+  LEFT retains its circle and the enabled REDEAL widget carries its own count 1.
+  Keep exact cards, exclusive empty piles, native/static/modal checks and the
+  known-zero contradiction veto. Add no signature, colour bank or tolerance.
+- Exercise the unchanged original frame and a labelled synthetic legally replayed
+  partial-to-REDEAL adapter sequence, including source reuse and STOP after probe.
+- Retain the combined 2.9.137 UI, image roles, two-second observation window and
+  shutdown work. Computer Vision/HALO timing and per-gesture input guards remain.
+- All six host gates passed: 1404 full tests, zero failed/ignored/filtered, 698
+  sealed inputs and native release/help. Fresh Beast/Charlie acceptance is pending.
+
+
+## 2.9.137 — combined correction, 24 October 2026; host qualified
+
+- Preserve the whole-action ACK-relative two-second observation window, immediate
+  first read, 50 ms bounded retries and independent source/final capture limits.
+- Verify Clear-route exhausted LEFT with an exact occupied RIGHT, then the
+  both-empty position before the last King, using existing checked stock evidence.
+  Its optional REDEAL point grants no authority to this winning-route adapter.
+- Fit the whole captured frame within both preview dimensions without changing
+  native pixels, calibration, overlays or coordinate mapping.
+- Retain each newly accepted failure in a resizable, scrollable, selectable and
+  copyable window with frozen failure-time context and late packet-result updates.
+  Move Detailed output into a separate live View Log window.
+- Keep RECON, Start continuous, View Log and STOP on one row with EXIT at the right.
+  EXIT, native close, SIGINT and SIGTERM retire queued gameplay, preserve normal
+  release-only recovery and join the worker before closing. SIGKILL is uncatchable.
+  Add Unix signal-hook 0.4.5 and signal-hook-registry 1.4.8; other dependencies retain
+  their versions.
+- Extract pure checked appearance evidence and add bundled native-v23 A* roles
+  for calibrated Classic white-face cards on variable-colour surfaces. Preserve
+  exact identity, positive control shapes, modal vetoes and Unknown/Blocked states.
+  Custom JSON semantics, Computer Vision/HALO timing and ordinary game owners remain.
+- Recognise the retained complete Boards 0/3 header without another RGB bank or
+  relaxed tolerance. Preserve full word cores, negative space and counter grammar.
+- The combined source passed 1401 full tests, zero failures/ignored cases, strict
+  gates and native release with 695 sealed inputs. Fresh Beast/Charlie acceptance
+  remains pending; the prior timing-only 1376-test artifact is retained history.
+
+## 2.9.136 — whole-action cadence and REDEAL authority, 24 October 2026; host qualified
+
+- Share one checked boundary frame between the preceding effect and next action;
+  consume a private state/route/epoch/capture/input-bound source proof and ordered
+  whole-action permit. Remove delivery-time and mid-MATCH captures and the two
+  redundant initial captures/waits. Fresh probes and STOP remain before each gesture.
+- Classify bound Challenge Complete before expected cards and retire input from
+  its first positive frame, with correct prior-action accounting at a precondition.
+- Replace fixed computed MATCH/KING two-second settling with immediate bounded
+  observation and 50 ms retries. Preserve MOVE 250 ms and Computer Vision HALO timing.
+- Remove redundant positive lower-caption REDEAL dependence; preserve complete
+  enabled-widget count-one proof, known-zero veto, exact position and single-click guards.
+  Add the unchanged failed135 frame/deal and native driver/cadence regressions.
+
+All required host gates passed with **1371** tests, zero failed or ignored. Fresh live acceptance remains pending; no milestone accepted.
+
+## 2.9.135 — partial-route continuation, 24 October 2026; host qualified
+
+- Use the existing exact empty-stock continuation recogniser for the final partial endpoint in automatic policies. Preserve ordinary Standard proof, exact original card slots, whole-action ACK, STOP/context, bounded drain, enabled-REDEAL evidence and no uncertain-input replay.
+- Retain the reported six-card Score frame and original complete deal unchanged. Label the independently reconstructed regression route; it is neither the original recorded route nor a new maximum proof. Check one guarded RECYCLE followed by refusal of an unchanged effect frame, plus Standard and STOP boundaries.
+- Verify the existing native next-board reset from Maximum card matches to Shortest route, including the UI progress event.
+- Request 250 ms for planned and residual stock-drain MOVE. Preserve Computer Vision's 1,000 ms HALO wait, planned RECYCLE at 1,000 ms, stock-drain RECYCLE and Recon D at 500 ms, plus MATCH/KING and final-observation timings. Record configured and actual elapsed computed-route waits separately.
+- Apply forward `major.minor.patch` numbering: corrections increment patch; the next approved minor milestone starts at `0`. This correction does not complete or renumber an open milestone. All required host gates passed with 1364 tests, zero failed or ignored; the protected native release is ready. Fresh live reliability acceptance remains pending.
+
 ## 2.9.134 — timing constants, 23 October 2026
 
 - Centralise Recon, planned-route, stock-drain, final-confirmation, handoff, partial-REDEAL, repaint and reporting timings in `src/parameters.rs`. Alias shared xSAR QMP defaults and reuse animation defaults where purpose and value match. Add the [timing catalogue](docs/Timing-Constants.md).

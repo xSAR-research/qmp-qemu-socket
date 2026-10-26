@@ -64,14 +64,14 @@ fn actual_board_count_final_clear_adapter_retains_phase_piles_initial_binding_gu
     let first = frame("first-unmatched.png");
     let last = frame("last-observed.png");
     let calls = Cell::new(0);
-    let guard = |frame: &CapturedFrame| {
+    let guard = |frame: &CapturedFrame, _phase| {
         let current = crate::pyramid_progress::observe_challenge(frame)?;
         assert_eq!(current, ChallengeProgress::new(ChallengeKind::Boards, 1, 2));
         calls.set(calls.get() + 1);
         if calls.get() == 3 {
             Err("injected caller frame guard refusal".to_owned())
         } else {
-            Ok(())
+            Ok(FrameGuardOutcome::Ready)
         }
     };
     let evidence = adapter_with_setup(
@@ -139,6 +139,137 @@ fn actual_board_count_final_clear_adapter_retains_phase_piles_initial_binding_gu
     );
     assert_eq!(calls.get(), 3);
     assert_eq!(evidence.captures, 4);
+    assert_eq!(
+        (evidence.counts.attempted, evidence.counts.acknowledged),
+        (0, 0)
+    );
+    assert!(evidence.wire.events.is_empty());
+    assert_eq!(evidence.wire.unused_frames, 0);
+}
+
+
+/// Compose only the literal piles from the independently replayed native121 deal.
+///
+/// Perfect/header pixels remain the actual151 third-clear incident. The piles and
+/// replay belong to a different retained51-action route, not the missing67-action
+/// guest trace. This synthetic transport derivative is labelled deliberately.
+fn normal_152_replayed_piles() -> CapturedFrame {
+    let mut final_frame = decode_png(include_bytes!(
+        "../../../../tests/fixtures/pyramid-normal-final-152/last-observed.png"
+    ))
+    .unwrap();
+    let piles = frame("last-observed.png");
+    for bounds in [
+        crate::pyramid::LEFT_TARGET.bounds,
+        crate::pyramid::RIGHT_TARGET.bounds,
+    ] {
+        final_frame
+            .as_view()
+            .unwrap()
+            .checked_bounds(bounds)
+            .unwrap();
+        piles.as_view().unwrap().checked_bounds(bounds).unwrap();
+        for y in bounds.y..bounds.y + bounds.height {
+            let destination = y as usize * final_frame.stride + bounds.x as usize * 4;
+            let source = y as usize * piles.stride + bounds.x as usize * 4;
+            let bytes = bounds.width as usize * 4;
+            final_frame.pixels[destination..destination + bytes]
+                .copy_from_slice(&piles.pixels[source..source + bytes]);
+        }
+    }
+    final_frame
+}
+
+
+/// Retain an independently solved/replayed deal while selecting the actual current reader.
+fn normal_152_setup(plan: &mut Prepared) {
+    setup(plan);
+    plan.acquisition.challenge_progress = None;
+    plan.acquisition.vision = ReconVision::bundled_native_v23().unwrap();
+}
+
+
+/// New geometry is final-only; actual normal guards and STOP still own completion authority.
+#[test]
+fn native_152_normal_final_adapter_keeps_phase_guard_stop_and_third_receipt() {
+    let frame = normal_152_replayed_piles();
+    let progress = BoardCount {
+        completed: 2,
+        target: 3,
+    };
+    let calls = Cell::new(0);
+    let guard = |frame: &CapturedFrame, phase| {
+        calls.set(calls.get() + 1);
+        crate::worker::pyramid_session::guard_normal_progress(frame, phase, progress)
+    };
+    let evidence = adapter_with_setup(
+        vec![frame.clone(), frame],
+        Some(&guard),
+        normal_152_setup,
+        |io| {
+            io.policy = ExecutionPolicy::NormalSeries(progress);
+            assert!(
+                !io.handoff_after_final_ack(),
+                "third ACK cannot request a read-only next-board handoff"
+            );
+            let state = goal(io.plan);
+            assert!(
+                !io.observe(state, false).unwrap(),
+                "ordinary observation never receives new final geometry"
+            );
+            let completion = io.observe_final(state).unwrap().unwrap();
+            assert_eq!(completion, BoardCompletion::BoardClear);
+            crate::worker::post_game::PyramidRestartEntry::verified_third_completion(
+                progress, completion,
+            )
+            .unwrap();
+            assert!(
+                crate::worker::post_game::PyramidRestartEntry::verified_third_completion(
+                    progress,
+                    BoardCompletion::DeliveredUnconfirmed
+                )
+                .is_err()
+            );
+            let captures = io.captures;
+            io.cancel.store(true, std::sync::atomic::Ordering::SeqCst);
+            assert!(io.observe_final(state).is_err());
+            assert_eq!(io.captures, captures);
+        },
+    );
+    assert_eq!(calls.get(), 1);
+    assert_eq!(evidence.captures, 2);
+    assert_eq!(
+        (evidence.counts.attempted, evidence.counts.acknowledged),
+        (0, 0)
+    );
+    assert!(evidence.wire.events.is_empty());
+    assert_eq!(evidence.wire.unused_frames, 0);
+}
+
+
+/// A positive final-position proof never overrides an actual different normal ordinal.
+#[test]
+fn native_152_normal_final_adapter_rejects_positive_header_contradiction() {
+    let progress = BoardCount {
+        completed: 1,
+        target: 3,
+    };
+    let guard = |frame: &CapturedFrame, phase| {
+        crate::worker::pyramid_session::guard_normal_progress(frame, phase, progress)
+    };
+    let evidence = adapter_with_setup(
+        vec![normal_152_replayed_piles()],
+        Some(&guard),
+        normal_152_setup,
+        |io| {
+            assert!(
+                io.observe_final(goal(io.plan))
+                    .unwrap_err()
+                    .contains("frame guard rejected")
+            );
+        },
+    );
+    assert_eq!(evidence.captures, 1);
     assert_eq!(
         (evidence.counts.attempted, evidence.counts.acknowledged),
         (0, 0)

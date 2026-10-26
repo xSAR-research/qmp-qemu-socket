@@ -185,14 +185,27 @@ fn completed_target_header_cannot_use_intermediate_board_clear() {
 }
 
 
-/// Identity, independent scene, exact piles, modal veto and frame layout remain required.
+/// Bound counters, independent scene, exact piles, modal veto and frame layout remain required.
 #[test]
 fn board_count_clear_keeps_scene_modal_pile_and_frame_layout_refusals() {
     let reader = ReconVision::bundled_native_v19().unwrap();
     let original = frame("last-observed.png");
     let (left, right) = piles();
-    for bounds in [
+    let mut changed_label = original.clone();
+    paint(
+        &mut changed_label,
         PixelRect::new(839, 50, 96, 28),
+        [30, 80, 20],
+    );
+    assert!(
+        crate::pyramid_progress::observe_challenge(&changed_label)
+            .unwrap()
+            .is_none()
+    );
+    reader
+        .verify_board_count_final_clear(&changed_label, &[None; 28], left, right, initial())
+        .unwrap();
+    for bounds in [
         PixelRect::new(1038, 48, 72, 32),
         PixelRect::new(1796, 116, 109, 18),
         PixelRect::new(1796, 388, 109, 20),

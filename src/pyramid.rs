@@ -322,7 +322,7 @@ pub const PROFILE: GameProfile = GameProfile {
 // Move icon also has a stable signature, but can be obscured by the guest
 // cursor immediately after clicking; it must not be a required scene probe.
 /// Guest-pixel legend separator patches required to remain entirely white.
-const WHITE_SCENE_PROBES: [PixelRect; 6] = [
+pub(crate) const WHITE_SCENE_PROBES: [PixelRect; 6] = [
     PixelRect::new(1_816, 169, 68, 2),
     PixelRect::new(1_816, 207, 68, 2),
     PixelRect::new(1_816, 245, 68, 2),
@@ -520,6 +520,16 @@ fn face_evidence(
 pub(crate) fn tableau_evidence(
     frame: &CapturedFrame,
 ) -> Result<[FaceEvidence; TARGET_COUNT], HaloDetectionError> {
+    tableau_evidence_with(frame, face_evidence)
+}
+
+
+/// Apply a selected face reader while preserving the fixed bottom-up accessibility contract.
+/// Returns its layout/evidence error; unknown children continue to block their parent.
+pub(crate) fn tableau_evidence_with(
+    frame: &CapturedFrame,
+    classify: impl Fn(&CapturedFrame, PyramidTargetSlot) -> Result<FaceEvidence, HaloDetectionError>,
+) -> Result<[FaceEvidence; TARGET_COUNT], HaloDetectionError> {
     let mut evidence = [FaceEvidence::Unknown; TARGET_COUNT];
 
 
@@ -551,7 +561,7 @@ pub(crate) fn tableau_evidence(
                 continue;
             }
         }
-        evidence[index] = face_evidence(frame, slot)?;
+        evidence[index] = classify(frame, slot)?;
     }
     Ok(evidence)
 }

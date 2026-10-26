@@ -1,6 +1,124 @@
 # Timing constants and tuning reference
 
-This refactor preserves every previous timing value. The values are established policies, not measured minimums. It centralises constant definitions and explains their purpose; it does not speed up or retune gameplay. Tests, transport acknowledgements and a completed wait do not prove a guest effect.
+## Current correction — 2.9.149 / xSAR 0.9.0
+
+The bounded Wild West aged-paper correction is host qualified: 1483 application
+tests, 753 sealed inputs and all six required gates passed. Fresh Beast behaviour
+and Charlie's acceptance remain pending.
+
+The original bright-paper path is retained. When it is insufficient, measured aged
+material and a complete Western glyph family support the two retained entry frames.
+Stock keeps the inclusive 45% presence threshold over its full 139×187 footprint.
+Unreadable occupied stock remains Unknown. Aged material above the existing 5%
+allowance also vetoes ordinary/final-band absence; it grants no presence or input
+authority by itself.
+
+The two actual frames provide 58 visible identities, with 25 exact rank-by-colour
+exemplars and 33 whole-card held-outs. No black Ten was available; black Nine, red
+Jack and red Queen have calibration-only same-rank/colour evidence. All 423 Classic
+and 87 cream/Retro observations remain covered. Quality/ambiguity limits, complete
+scene/modal proof, STOP/context, fresh probes and no uncertain replay remain intact.
+The separate Boards/Perfect final-proof case remains deferred.
+
+See [verification](Verification-2.9.149.md) and the
+[fresh live-test brief](Live-Test-2.9.149.md). Earlier release sections are
+retained evidence and do not establish 149 guest acceptance.
+
+## Retained correction — 2.9.148 / xSAR 0.9.0; host qualified
+
+The game and solution heading starts at the top left, with wrapping options below
+it and the fixed activity badge alongside on the right. Action controls, status
+and preview retain the full panel width. The displayed execution label is
+**SOLVING**; face size, centred bold text, border, colours and halo timing remain.
+
+This presentation revision preserves 147 gameplay and search ownership. Recognition
+resolution for the saved wood/aged-paper entry failure is held for further testing;
+its exact-reader diagnosis is recorded in the verification brief. No recognition,
+worker, dependency or timing policy changes are included.
+
+Host result: 1478 full tests, zero failures/ignored/filtered, 747 sealed inputs and all six required gates passed. Fresh Beast/Charlie acceptance remains pending.
+The 19 matrix cases and 14 milestone states remain unchanged. See
+[148 verification](Verification-2.9.148.md) and [148 manual checks](Live-Test-2.9.148.md).
+
+## Retained 2.9.147 candidate: direct completed-RECON handoff
+
+Source inspection found no artificial wait after completed Recon for the RECON
+button or START's acquisition → planning → execution paths. No timing edit is
+required. Once the restored deal has been validated/published and its receipt
+authenticated, manual RECON returns directly and automatic START proceeds directly
+to planning, then execution according to the selected lifecycle.
+
+The existing 1000 ms UndoAll/OK settle is **inside Recon**, after the acknowledged
+confirmation and before the first of two positive original-board restoration
+observations. Preserve it, the two observations, conditional stale-scene retry
+waits, DRAW settling, cancellation slices, effect deadlines and capture budgets.
+Do not move or remove a restoration proof to improve the apparent completion time.
+
+Reward/counting continuation and the explicit Shortest-to-Maximum switch introduce
+no new fixed wait. The switch retains PAUSE until CONTINUE and uses the same
+authenticated RECON; Maximum keeps its uncapped weighted search with no completion-
+time guarantee. Receipt/publication, search, fresh probes and capture latency are
+real work, separate from intentional waits. The source audit is not a new timing
+measurement or guest acceptance. 147 passed all six host gates (1476 full tests, 747 sealed inputs); see
+[verification](Verification-2.9.147.md) and [manual checks](Live-Test-2.9.147.md).
+
+## Retained 2.9.146 candidate: display-only halo timing
+
+Full 146 host qualification passed (1449 tests, 743 sealed inputs); see [verification](Verification-2.9.146.md).
+Gameplay waits, cancellation slices, effect deadlines and capture budgets retain
+their existing values. The activity badge adds display-only timing in
+`src/app/activity_status/badge.rs`; it neither sleeps nor starts a worker.
+
+| Display value | Value | Scope |
+| --- | --- | --- |
+| Active halo period | 1.6 seconds | RECON, ROUTE and SOLVING only |
+| Active repaint request | 25 ms | egui repaint request; not an input or capture cadence |
+| Halo level | 0.15 to 0.85 | Surrounding glow only; face colour stays constant |
+| Static states | WAITING and ERROR | No halo animation or active repaint request |
+| Fixed face and reserved halo | 240×80 and 10 points | Logical points, independent of label length |
+
+Independent inert render review passed 20 cases; this is not guest timing evidence.
+The following qualified145 and older timing records remain historical evidence.
+
+Retained 145 is host qualified (1436 full tests): [stock-paper correction](Verification-2.9.145.md). No timing, deadline or capture-budget values change. The separate final-confirmation handoff remains open.
+
+Retained 144 is host qualified (1434 full tests): [temporal RIGHT correction](Verification-2.9.144.md). No timing, deadline or capture-budget values change. The separate run 8 final-confirmation timeout remains open.
+
+Retained 140 is host qualified (1422 full tests): [session-guard qualification](Verification-2.9.140.md).
+No timing, deadline or capture-budget values change in this correction.
+
+Retained 139 is host qualified (1420 full tests): [qualification and pause accounting](Verification-2.9.139.md).
+Intentional acknowledged suspension is excluded from A* active deadlines/statistics;
+ordinary effect windows and MOVE/CV timings are unchanged. The older catalogue follows.
+
+Retained 138 correction: [2.9.138 empty-circle verification](Verification-2.9.138.md).
+Its stock-position change adds no timing changes. The combined 2.9.137 timing and
+UI qualification below is retained evidence; 2.9.138 independently passed 1404 tests
+and all six host gates with 698 seals. Fresh acceptance remains pending.
+
+
+## Retained combined 2.9.137 roles
+
+The catalogue below retains the original 2.9.134 timing refactor. Its no-new-dependency
+statement applies to that delivery; the current app adds Unix signal-hook for shutdown.
+Current corrections are authoritative where their roles differ:
+
+| Owner constant | Value | Current purpose |
+| --- | --- | --- |
+| `COMPUTED_ROUTE_MOVE_SETTLE_DELAY` | 250 ms | Computed planned and residual DRAW/MOVE only |
+| `COMPUTED_ROUTE_REOBSERVE_DELAY` | 50 ms | Read-only ordinary computed effect retry |
+| `COMPUTED_ROUTE_EFFECT_WINDOW` | 2 s | Last whole-action ACK deadline; includes settle |
+| `PYRAMID_MOVE_SETTLE_DELAY` | 1000 ms | Planned non-final computed RECYCLE |
+| `PYRAMID_MOVE_SETTLE_DELAY_MS` | 1000 ms | Unchanged Computer Vision HALO setting |
+| `PYRAMID_CARD_SETTLE_DELAY_MS` | 2000 ms | Unchanged CV/manual card setting; the old Duration alias was removed |
+
+Computed MATCH/KING observe immediately; no two-second fixed card sleep remains.
+Residual RECYCLE and Recon retain their separate 500 ms policy. Final and REDEAL
+policies stay independent. See [combined evidence](Verification-2.9.137.md).
+
+## Retained timing catalogue
+
+The 2.9.134 refactor preserved every previous timing value. The 2.9.135 correction separates computed MOVE 250 ms from Computer Vision/RECYCLE. The 2.9.136 correction removes fixed computed MATCH/KING settling and uses immediate observation with bounded 50 ms retries; the live 136 log provides cadence samples, while full acceptance remains open. The 2.9.137 correction adds a separate two-second ordinary-effect window from the last whole-action ACK, including settle, without imposing a fixed two-second wait. Values are configured policies, not measured minimums. Tests, transport acknowledgements and a completed wait do not prove a guest effect.
 
 ## Source files
 
@@ -15,18 +133,21 @@ xSAR owns the five shared QMP defaults. The application aliases these defaults, 
 
 ## First places to inspect for Pyramid pacing
 
-| Setting | Preserved value | Actual use |
+| Setting | Configured value | Actual use |
 | --- | --- | --- |
-| `PYRAMID_CARD_SETTLE_DELAY` | 2 s | Ordinary non-final A* MATCH/KING effect settle |
-| `PYRAMID_MOVE_SETTLE_DELAY` | 1 s | Ordinary non-final planned A* MOVE/RECYCLE settle |
-| `PYRAMID_DRAW_SETTLE_DELAY` | 500 ms | Each Recon D release and each remaining-stock drain D release |
-| `PYRAMID_REOBSERVE_DELAY` | 1 s | Recon observation/restoration settle, original-position proofs, ordinary effect retries and session transition observations |
+| `PYRAMID_CARD_SETTLE_DELAY_MS` | 2,000 ms | Unchanged Computer Vision card-animation default; computed MATCH/KING uses no fixed settle |
+| `COMPUTED_ROUTE_REOBSERVE_DELAY` | 50 ms | Ordinary computed source/effect retry only when the captured position is not ready; no input is repeated |
+| `COMPUTED_ROUTE_EFFECT_WINDOW` | 2 s | Ordinary-effect capture-start/retry window from the whole action's last ACK, including settle; immediate first read, finite derived 41-read cap, no input replay |
+| `COMPUTED_ROUTE_MOVE_SETTLE_DELAY` | 250 ms | Planned and residual stock-drain MOVE only; fresh live reliability pending |
+| `PYRAMID_MOVE_SETTLE_DELAY` | 1 s | Non-final planned RECYCLE; Computer Vision separately retains the 1,000 ms `PYRAMID_MOVE_SETTLE_DELAY_MS` default |
+| `PYRAMID_DRAW_SETTLE_DELAY` | 500 ms | Each Recon D release and each stock-drain RECYCLE; stock-drain MOVE uses the separate 250 ms policy |
+| `PYRAMID_REOBSERVE_DELAY` | 1 s | Recon observation/restoration and session/stock-boundary retry policies; ordinary computed retries use their separate 50 ms value |
 | `PYRAMID_FINAL_OBSERVATION_DELAY` | 200 ms | Final-action settle and repeated final observations |
 | `PYRAMID_FINAL_CONFIRMATION_WINDOW` | 2 s | ACK-relative final effect confirmation budget; expiry withholds success |
 | `PYRAMID_CLEAR_HANDOFF_DELAY` | 3 s | NoChallenge full-clear handoff to fresh Recon after final ACK |
 | `PYRAMID_REDEAL_SETTLE_DELAY` | 1.5 s | Guarded partial-board REDEAL before fresh Recon |
 
-These waits do not all occur after every move. Retry intervals apply when another observation is needed; input holds, transport, capture/PNG work and synchronous processing contribute additional time. The two initial position proofs retain their existing waits. The final action uses its dedicated 200 ms policy instead of the ordinary 1/2-second settle. The normal game's `BOARD_REDEAL_SETTLE_DELAY` remains 4 s because it has a different workflow from partial-board REDEAL.
+These waits do not all occur after every move. Retry intervals apply when another observation is needed; input holds, transport, capture/PNG work and synchronous processing contribute additional time. The first action acquires one source frame; each verified effect supplies the next action's source. Ordinary source checks retain six reads, effects have the ACK-based window, and final confirmation retains its independent 200 ms policy and final budget. The normal game's `BOARD_REDEAL_SETTLE_DELAY` remains 4 s because it has a different workflow from partial-board REDEAL.
 
 Animation settings already exposed by the UI still use their existing immutable execution snapshot and clamps. The computed A* executor uses the compiled Pyramid defaults rather than mutable UI animation settings. Changing a Rust constant requires rebuilding and restarting the affected executable; editing source does not change an already running process. Changing a default does not overwrite an existing operator setting.
 
@@ -136,4 +257,5 @@ Definitions are in `qemu-screen-grab-server/src/parameters.rs`. Values below inc
 
 ## Verification
 
-See [Verification-2.9.134.md](Verification-2.9.134.md) for this revision's actual owning-package tests, feature checks, preserved source/fixture hashes and host/live boundaries. No guest actions, installation or process replacement are part of this refactor.
+See [Verification-2.9.145.md](Verification-2.9.145.md) for the current stock-paper correction; it changes no timing values. Retain [Verification-2.9.137.md](Verification-2.9.137.md) as historical timing evidence.
+The original refactor's [Verification-2.9.134.md](Verification-2.9.134.md) records its actual owning-package tests, feature checks, preserved source/fixture hashes and host/live boundaries. No guest actions, installation or process replacement are part of this refactor.

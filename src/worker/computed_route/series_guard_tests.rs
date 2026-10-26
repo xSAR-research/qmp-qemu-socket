@@ -38,6 +38,12 @@ mod target_completion_tests;
 mod native_123_tests;
 
 
+mod cadence_tests;
+
+
+mod exhausted_left_tests;
+
+
 
 
 /// Accepted deal's original untouched board, before any synthetic header overlay.
@@ -124,14 +130,17 @@ fn drift(mut frame: CapturedFrame, bounds: PixelRect) -> CapturedFrame {
 
 
 /// Real normal-one predicate, borrowed by the adapter without extra capture or input.
-fn require_normal_one(frame: &CapturedFrame) -> Result<(), String> {
+fn require_normal_one(
+    frame: &CapturedFrame,
+    _phase: FrameGuardPhase,
+) -> Result<FrameGuardOutcome, String> {
     if observe_normal(frame)?
         == Some(BoardCount {
             completed: 0,
             target: 3,
         })
     {
-        Ok(())
+        Ok(FrameGuardOutcome::Ready)
     } else {
         Err("normal series header/footer changed".to_owned())
     }
@@ -427,6 +436,18 @@ fn adapter_with_setup<T>(
     setup: impl FnOnce(&mut Prepared),
     operation: impl FnOnce(&mut NativeIo<'_>) -> T,
 ) -> Evidence<T> {
+    adapter_with_progress(frames, guard, setup, 0, operation)
+}
+
+
+/// Run the same native harness with an explicit expected driver-committed prefix.
+fn adapter_with_progress<T>(
+    frames: Vec<CapturedFrame>,
+    guard: Option<&FrameGuard<'_>>,
+    setup: impl FnOnce(&mut Prepared),
+    expected_verified: usize,
+    operation: impl FnOnce(&mut NativeIo<'_>) -> T,
+) -> Evidence<T> {
     let _capture = TestCaptureBackend::legacy_qmp();
     let directory = directory();
     let socket = directory.0.join("qmp.sock");
@@ -466,6 +487,7 @@ fn adapter_with_setup<T>(
         cancel: &cancel,
         frame_guard: guard,
         started: Instant::now(),
+        paused: Duration::ZERO,
         captures: 0,
         capture_limit: 20,
         counts: Counts::default(),
@@ -473,10 +495,13 @@ fn adapter_with_setup<T>(
         latest_frame: None,
         verified_actions: 0,
         final_confirmation: FinalConfirmation::default(),
-        challenge: None,
-        challenge_initial: None,
+        challenge: plan.acquisition.challenge_progress,
+        challenge_initial: plan.acquisition.challenge_progress,
         challenge_confirmation: None,
         position_matches: false,
+        source_proof: None,
+        action_permit: None,
+        redeal_before: None,
     };
     let result = operation(&mut io);
     let counts = io.counts;
@@ -484,17 +509,33 @@ fn adapter_with_setup<T>(
     let first = io.first_mismatch.take();
     let latest = io.latest_frame.take();
     assert_eq!(
-        io.verified_actions, 0,
-        "observations/ACKs never commit logical effects"
+        io.verified_actions, expected_verified,
+        "only the driver commits the expected independently verified prefix"
     );
     drop(io);
-    // An injected STOP stays latched. Probe ownership independently so STOP
-    // refusal cannot be mistaken for releasing the owner's reservation.
+    // An injected context change revokes authority but must retain its owner's reservation.
     let ownership_probe = AtomicBool::new(false);
-    assert!(
-        control.check_active(&context, &ownership_probe).is_ok(),
-        "adapter cannot release its owner's reservation"
-    );
+    if control.epoch().unwrap() == plan.acquisition.epoch {
+        assert!(
+            control.check_active(&context, &ownership_probe).is_ok(),
+            "adapter cannot release its owner's reservation"
+        );
+    } else {
+        assert!(control.check_active(&context, &ownership_probe).is_err());
+        let sent = std::cell::Cell::new(false);
+        assert!(
+            control
+                .queue_execution(&ownership_probe, || {
+                    sent.set(true);
+                    Ok(())
+                })
+                .is_err()
+        );
+        assert!(
+            !sent.get(),
+            "a revoked reservation still blocks replacement execution"
+        );
+    }
     let wire = peer.join().unwrap();
     Evidence {
         result,
@@ -538,32 +579,46 @@ fn synthetic_series_header_derivatives_preserve_native_position() {
 }
 
 
-/// Native terminal pairing is separate from ordinary precondition/selection observation.
+/// One bound completion frame stops before hidden expected cards can cause a mismatch.
 #[test]
-fn native_challenge_terminal_requires_two_effect_captures_without_input() {
+fn native_challenge_terminal_releases_from_one_source_frame_without_card_mismatch() {
     let frame = decode_png(include_bytes!(
         "../../../tests/fixtures/pyramid-objectives/fours-complete.png"
     ))
     .unwrap();
     let bound =
         ChallengeProgress::new(crate::pyramid_progress::ChallengeKind::Cards, 4, 12).unwrap();
-    let evidence = adapter(vec![frame.clone(), frame.clone(), frame], None, |io| {
+    let evidence = adapter(vec![frame], None, |io| {
         io.challenge = Some(bound);
-        assert!(!io.observe(SearchState::initial(), false).unwrap());
-        assert!(io.challenge_confirmation.is_none());
-        assert!(matches!(
-            io.observe_effect(SearchState::initial(), false).unwrap(),
-            EffectObservation::Position(false)
-        ));
         let EffectObservation::Challenge(proof) =
-            io.observe_effect(SearchState::initial(), false).unwrap()
+            io.observe_source(SearchState::initial()).unwrap()
         else {
-            panic!("two fresh native effect observations")
+            panic!("one positive bound Challenge Complete source")
         };
         assert_eq!(proof.progress().current, 12);
+        assert!(
+            !proof.operator_continue(),
+            "the actual fixture is the counting stage"
+        );
+        crate::worker::post_game::finish_pyramid_challenge(
+            io.context,
+            io.latest_frame.as_ref().unwrap(),
+            proof,
+            io.events,
+            io.cancel,
+        )
+        .unwrap();
+        assert!(
+            io.begin_action(SearchState::initial(), &[InputOperation::PressDrawKey])
+                .is_err()
+        );
     });
-    assert_eq!(evidence.captures, 3);
+    assert_eq!(evidence.captures, 1);
     assert_eq!(evidence.counts.acknowledged, 0);
+    assert!(
+        evidence.first.is_none(),
+        "terminal classification precedes card validation"
+    );
     assert!(evidence.wire.events.is_empty());
     assert_eq!(evidence.wire.unused_frames, 0);
 }
@@ -579,12 +634,8 @@ fn native_common_challenge_terminal_preserves_last_actual_score_and_rejects_wron
     paint(&mut frame, PixelRect::new(814, 48, 296, 32), [255; 3]);
     let bound =
         ChallengeProgress::new(crate::pyramid_progress::ChallengeKind::Score, 1280, 3000).unwrap();
-    let evidence = adapter(vec![frame.clone(), frame], None, |io| {
+    let evidence = adapter(vec![frame], None, |io| {
         io.challenge = Some(bound);
-        assert!(matches!(
-            io.observe_effect(SearchState::initial(), false).unwrap(),
-            EffectObservation::Position(false)
-        ));
         let EffectObservation::Challenge(proof) =
             io.observe_effect(SearchState::initial(), false).unwrap()
         else {
@@ -598,7 +649,7 @@ fn native_common_challenge_terminal_preserves_last_actual_score_and_rejects_wron
                 .contains("final numeric counter not read")
         );
     });
-    assert_eq!(evidence.captures, 2);
+    assert_eq!(evidence.captures, 1);
     assert!(evidence.wire.events.is_empty());
     let frame = decode_png(include_bytes!(
         "../../../tests/fixtures/pyramid-objectives/fours-complete.png"
@@ -628,7 +679,11 @@ fn guarded_native_delivery_refuses_series_drift_before_first_gesture() {
     for bounds in [HEADER, FOOTER] {
         let frame = drift(synthetic_start(), bounds);
         let evidence = adapter(vec![frame.clone()], Some(&require_normal_one), |io| {
-            io.deliver(operation(location("7|6")).unwrap(), SearchState::initial())
+            super::wire_tests::checked_delivery(
+                io,
+                SearchState::initial(),
+                &[operation(location("7|6")).unwrap()],
+            )
         });
         assert!(
             evidence
@@ -655,18 +710,26 @@ fn guarded_native_delivery_refuses_series_drift_before_first_gesture() {
 }
 
 
-/// The second MATCH gesture is denied after a fully ACKed selection; no replay/cleanup follows.
+/// Header drift at the next whole-action boundary stops before any new input.
 #[test]
 #[ignore = "requires local AF_UNIX sockets"]
-fn guarded_native_delivery_stops_series_drift_after_one_acknowledged_gesture() {
+fn guarded_native_delivery_stops_series_drift_before_next_whole_action() {
     for bounds in [HEADER, FOOTER] {
         let evidence = adapter(
             vec![synthetic_start(), drift(synthetic_start(), bounds)],
             Some(&require_normal_one),
             |io| {
-                io.deliver(operation(location("7|6")).unwrap(), SearchState::initial())
-                    .unwrap();
-                io.deliver(operation(location("7|7")).unwrap(), SearchState::initial())
+                super::wire_tests::checked_delivery(
+                    io,
+                    SearchState::initial(),
+                    &[operation(location("7|6")).unwrap()],
+                )
+                .unwrap();
+                super::wire_tests::checked_delivery(
+                    io,
+                    SearchState::initial(),
+                    &[operation(location("7|7")).unwrap()],
+                )
             },
         );
         assert!(
@@ -714,7 +777,11 @@ fn guarded_native_delivery_stops_series_drift_after_one_acknowledged_gesture() {
 fn unguarded_native_delivery_preserves_existing_header_independent_behaviour() {
     let frame = drift(drift(synthetic_start(), HEADER), FOOTER);
     let evidence = adapter(vec![frame], None, |io| {
-        io.deliver(operation(location("7|6")).unwrap(), SearchState::initial())
+        super::wire_tests::checked_delivery(
+            io,
+            SearchState::initial(),
+            &[operation(location("7|6")).unwrap()],
+        )
     });
     assert!(evidence.result.is_ok());
     assert_eq!(
@@ -791,7 +858,7 @@ fn guarded_native_final_preserves_specific_terminal_and_fresh_board_classifier()
         (START, BoardCompletion::NextBoardReady),
     ] {
         let calls = Cell::new(0usize);
-        let guard = |_: &CapturedFrame| {
+        let guard = |_: &CapturedFrame, _phase| {
             calls.set(calls.get() + 1);
             Err("old gameplay header must not be required here".to_owned())
         };
@@ -983,14 +1050,14 @@ fn native_normal_final_clear_retains_exact_replay_final_phase_and_fatal_series_g
             NORMAL_HEADER
         };
         patch(&mut changed, HEADER, header);
-        let guard = |observed: &CapturedFrame| {
+        let guard = |observed: &CapturedFrame, _phase| {
             if observe_normal(observed)?
                 == Some(BoardCount {
                     completed: ordinal,
                     target: 3,
                 })
             {
-                Ok(())
+                Ok(FrameGuardOutcome::Ready)
             } else {
                 Err("normal series changed after acquisition".to_owned())
             }
