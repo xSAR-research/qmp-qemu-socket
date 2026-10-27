@@ -318,6 +318,56 @@ fn loading_bound_completion(frame: &CapturedFrame) -> Result<bool, String> {
 }
 
 
+/// Recognise one coherent native large reward-counting appearance for a retained goal.
+///
+/// Complete title words, medal, separated scaffold and the whole skip instruction
+/// compare byte-exactly. Dynamic level/reward artwork is excluded. This retires
+/// a whole-action route only; it does not supply a cold-entry goal or a final number.
+/// Invalid storage, bounds or reference metadata returns an error.
+fn counting_bound_completion(frame: &CapturedFrame) -> Result<bool, String> {
+    let view = frame.as_view().map_err(|error| error.to_string())?;
+    if (view.width(), view.height()) != (NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT) {
+        return Ok(false);
+    }
+    for (bounds, rgb) in [
+        (
+            PixelRect::new(640, 164, 310, 64),
+            include_bytes!(
+                "../../tests/fixtures/pyramid-testing-156/score-counting-title-left.rgb"
+            )
+            .as_slice(),
+        ),
+        (
+            PixelRect::new(960, 164, 322, 64),
+            include_bytes!(
+                "../../tests/fixtures/pyramid-testing-156/score-counting-title-right.rgb"
+            )
+            .as_slice(),
+        ),
+        (
+            PixelRect::new(489, 111, 110, 152),
+            include_bytes!("../../tests/fixtures/pyramid-testing-156/score-counting-medal.rgb")
+                .as_slice(),
+        ),
+        (
+            PixelRect::new(1_387, 891, 26, 60),
+            include_bytes!("../../tests/fixtures/pyramid-testing-156/score-counting-scaffold.rgb")
+                .as_slice(),
+        ),
+        (
+            PixelRect::new(795, 858, 330, 40),
+            include_bytes!("../../tests/fixtures/pyramid-testing-156/score-counting-skip.rgb")
+                .as_slice(),
+        ),
+    ] {
+        if !matches_patch_with_tolerance(view, HeaderPatch { bounds, rgb }, 0)? {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+
 /// Read the genuine Loading sample's whole Score literal, including its actual overshoot.
 ///
 /// This exact header is numeric evidence only after independent completion proof.
@@ -339,6 +389,29 @@ fn loading_literal_progress(frame: &CapturedFrame) -> Result<Option<ChallengePro
 }
 
 
+/// Preserve the counting sample's actual Score overshoot for binding contradictions.
+///
+/// This full dimmed header is numeric evidence only after independent completion
+/// proof. Unknown headers retain the caller's last actual reading without invention.
+/// Returns an error for malformed storage, bounds or reference metadata.
+fn counting_literal_progress(frame: &CapturedFrame) -> Result<Option<ChallengeProgress>, String> {
+    let view = frame.as_view().map_err(|error| error.to_string())?;
+    if matches_patch_with_tolerance(
+        view,
+        HeaderPatch {
+            bounds: PixelRect::new(814, 48, 296, 32),
+            rgb: include_bytes!(
+                "../../tests/fixtures/pyramid-testing-156/score-counting-header.rgb"
+            ),
+        },
+        0,
+    )? {
+        return Ok(ChallengeProgress::new(ChallengeKind::Score, 1755, 1700));
+    }
+    Ok(None)
+}
+
+
 /// Bind a common terminal event to the actual requirement retained before a whole action.
 ///
 /// The caller retains a positive source binding and supplies a fresh observation
@@ -352,19 +425,26 @@ pub(super) fn observe_bound(
     let settled = is_complete(frame)?;
     let small_counting = small_bound_counting(frame)?;
     let loading = loading_bound_completion(frame)?;
-    if !settled && !small_counting && !loading {
+    let counting = counting_bound_completion(frame)?;
+    if !settled && !small_counting && !loading && !counting {
         return Ok(None);
     }
-    let terminal_progress = literal_progress(frame)?.or(if loading {
-        loading_literal_progress(frame)?
-    } else {
-        None
-    });
+    let terminal_progress = literal_progress(frame)?
+        .or(if loading {
+            loading_literal_progress(frame)?
+        } else {
+            None
+        })
+        .or(if counting {
+            counting_literal_progress(frame)?
+        } else {
+            None
+        });
     Ok(Some(ChallengeCompletion {
         progress: terminal_progress.unwrap_or(bound),
         terminal_progress,
         operator_continue: matches_operator_continue(frame)?,
-        reward_counting: small_counting || matches_reward_counting(frame)?,
+        reward_counting: small_counting || counting || matches_reward_counting(frame)?,
     }))
 }
 

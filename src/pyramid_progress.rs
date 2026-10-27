@@ -298,3 +298,18 @@ fn matches_patch_with_tolerance(
     }
     Ok(true)
 }
+
+
+/// Match a complete native RGB reference with the existing checked patch comparison.
+///
+/// The caller owns native scene and temporal authority. All reference channels and
+/// bounds are checked; no mask, scaling, alignment search or input is introduced.
+/// Returns an error for invalid bounds, length, arithmetic or pixel storage.
+pub(crate) fn matches_native_rgb_patch(
+    view: FrameView<'_>,
+    bounds: PixelRect,
+    rgb: &'static [u8],
+    tolerance: u8,
+) -> Result<bool, String> {
+    matches_patch_with_tolerance(view, HeaderPatch { bounds, rgb }, tolerance)
+}

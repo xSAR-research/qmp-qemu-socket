@@ -32,7 +32,7 @@ const BAND_Y: (u32, u32) = (4, 164);
 pub(super) struct NormalClearProfile {
     /// Positive full-region empty circle; card recognition never implies absence.
     left_circle: Pattern,
-    /// Full exhausted-stock cross, independently positive only with two empty piles.
+    /// Full exhausted-stock cross; an independently checked RIGHT card may remain.
     left_exhausted: Pattern,
 }
 
@@ -114,10 +114,9 @@ impl ReconVision {
             !self.dialog_matches(view, true)?,
             "normal final-clear refused complete Undo All dialog",
         )?;
-        // The final board has no REDEAL input authority: require the entire measured
-        // cross and both replayed/actual empty piles, rather than a REDEAL control.
+        // The final board has no REDEAL input authority. The complete exhausted
+        // cross proves empty LEFT; the exact replayed RIGHT is checked separately.
         let exhausted = left.is_none()
-            && right.is_none()
             && self.native_stock_layout(view, LEFT_BOUNDS, &calibration.left_exhausted)?;
         let circle = left.is_none()
             && self.native_stock_layout(view, LEFT_BOUNDS, &calibration.left_circle)?;

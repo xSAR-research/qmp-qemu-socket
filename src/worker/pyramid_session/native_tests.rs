@@ -1386,6 +1386,8 @@ enum RestartEntry {
     WitnessedNewGame,
     /// Actual reward pair under the same actual-third-clear test capability.
     WitnessedNormalReward,
+    /// Newly retained small reward under the unchanged actual-third-clear capability.
+    WitnessedSmallNormalReward,
 }
 
 
@@ -1562,10 +1564,10 @@ fn serve_restart_connection(
 }
 
 
-/// Serve simultaneous retained-controller/fresh-entry connections without environment changes.
+/// Serve one monitor client until EOF before accepting the next, matching QEMU ownership.
 #[expect(
     clippy::too_many_arguments,
-    reason = "bounded concurrent local peer retains explicit authority and ownership"
+    reason = "bounded local peer retains explicit authority and sequential ownership"
 )]
 fn serve_restart(
     listener: UnixListener,
@@ -1578,7 +1580,6 @@ fn serve_restart(
     finished: Arc<AtomicBool>,
     boundary: RestartBoundary,
 ) {
-    let mut peers = Vec::new();
     let deadline = Instant::now() + Duration::from_secs(45);
     while !scripts.is_empty() && !finished.load(Ordering::Acquire) {
         let stream = match listener.accept() {
@@ -1593,32 +1594,26 @@ fn serve_restart(
             }
             Err(error) => panic!("native restart accept: {error}"),
         };
-        let connection = peers.len();
-        wire.lock().unwrap().connections += 1;
+        let connection = {
+            let mut report = wire.lock().unwrap();
+            let connection = report.connections;
+            report.connections += 1;
+            connection
+        };
         let frames = scripts.pop_front().unwrap();
-        let peer_directory = directory.clone();
-        let peer_wire = Arc::clone(&wire);
-        let peer_control = control.clone();
-        let peer_context = context.clone();
-        let peer_cancel = Arc::clone(&cancel);
-        peers.push(thread::spawn(move || {
-            serve_restart_connection(
-                stream,
-                connection,
-                peer_directory,
-                frames,
-                peer_wire,
-                peer_control,
-                peer_context,
-                peer_cancel,
-                boundary,
-            )
-        }));
+        serve_restart_connection(
+            stream,
+            connection,
+            directory.clone(),
+            frames,
+            Arc::clone(&wire),
+            control.clone(),
+            context.clone(),
+            Arc::clone(&cancel),
+            boundary,
+        );
     }
     wire.lock().unwrap().remaining += scripts.iter().map(VecDeque::len).sum::<usize>();
-    for peer in peers {
-        peer.join().expect("native restart connection completed");
-    }
 }
 
 
@@ -1658,21 +1653,29 @@ fn restart_episode(
     let fixture = Fixture::new();
     let menu = synthetic_restart_menu(Control::NewGame);
     let play = synthetic_restart_menu(Control::Play);
+    let reward = if matches!(entry, RestartEntry::WitnessedSmallNormalReward) {
+        include_bytes!("../../../tests/fixtures/pyramid-testing-156/normal-reward-small.png")
+            .as_slice()
+    } else {
+        NORMAL_REWARD_147
+    };
     let initial_png = match entry {
         RestartEntry::ColdLevelUp => TERMINAL.to_vec(),
         RestartEntry::WitnessedNewGame => encode_png(&menu).unwrap(),
-        RestartEntry::WitnessedNormalReward => NORMAL_REWARD_147.to_vec(),
+        RestartEntry::WitnessedNormalReward | RestartEntry::WitnessedSmallNormalReward => {
+            reward.to_vec()
+        }
     };
     let mut controller = match entry {
         RestartEntry::ColdLevelUp => vec![TERMINAL.to_vec(), TERMINAL.to_vec()],
         RestartEntry::WitnessedNewGame => Vec::new(),
-        RestartEntry::WitnessedNormalReward => vec![
-            NORMAL_REWARD_147.to_vec(),
-            NORMAL_REWARD_147.to_vec(),
+        RestartEntry::WitnessedNormalReward | RestartEntry::WitnessedSmallNormalReward => vec![
+            reward.to_vec(),
+            reward.to_vec(),
             TERMINAL.to_vec(),
             TERMINAL.to_vec(),
-            NORMAL_REWARD_147.to_vec(),
-            NORMAL_REWARD_147.to_vec(),
+            reward.to_vec(),
+            reward.to_vec(),
         ],
     };
     controller.extend([
@@ -1713,7 +1716,9 @@ fn restart_episode(
     let mut adapter = fixture.adapter();
     let initial = match entry {
         RestartEntry::ColdLevelUp => adapter.entry(WorkflowMode::Continuous),
-        RestartEntry::WitnessedNewGame | RestartEntry::WitnessedNormalReward => {
+        RestartEntry::WitnessedNewGame
+        | RestartEntry::WitnessedNormalReward
+        | RestartEntry::WitnessedSmallNormalReward => {
             let progress = BoardCount {
                 completed: 2,
                 target: 3,
@@ -1809,7 +1814,7 @@ fn assert_normal_restart(episode: RestartEpisode, entry: RestartEntry) {
     let (controls, captures): (&[Control], [usize; 3]) = match entry {
         RestartEntry::ColdLevelUp => (&[Control::Ok, Control::NewGame, Control::Play], [2, 6, 2]),
         RestartEntry::WitnessedNewGame => (&[Control::NewGame, Control::Play], [2, 4, 2]),
-        RestartEntry::WitnessedNormalReward => {
+        RestartEntry::WitnessedNormalReward | RestartEntry::WitnessedSmallNormalReward => {
             unreachable!("reward flow has separate point assertions")
         }
     };
@@ -2281,3 +2286,6 @@ fn native_153_manual_entry_binds_actual_pair_and_preserves_revocation() {
         );
     }
 }
+
+
+mod testing_156;

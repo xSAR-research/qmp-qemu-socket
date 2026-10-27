@@ -1,5 +1,29 @@
 # qmp-qemu-socket
 
+2.9.156 is host qualified for the retained Pyramid testing observations: complete Score entry/counting appearances, exhausted DL with an exact remaining DR, and the small normal reward in the guarded normal-game restart. All six gates pass with 1,549 tests and 821 sealed inputs. Approved version-only alignment passed locked check, release and protected `--help`; the other 819 inputs, including all 52 xSAR inputs, are unchanged.
+
+[Verification and fresh guest checks](docs/Verification-2.9.156.md) and the [current handoff](docs/handoff.md) record the evidence and limits. The objective label is `Continuous - no challenge`; its existing no-challenge policy is unchanged. Charlie's next normal-game test uses Mode Continuous / Objective Repeat normal games. Fresh 156 guest acceptance is pending; the running 155 process was preserved. No agent GUI launch, guest input, installation, commit or push occurred.
+
+## Retained 2.9.155 delivery context
+
+The following statements are dated evidence; the current receipt above governs this delivery.
+
+2.9.155 is host qualified: the repeated Pyramid DL King of diamonds refusal is corrected, and failure packets retain current frame-bound mismatch/pending-action details alongside first evidence. All six gates passed with 1,538 tests and 798 sealed inputs. Approved version-only alignment passed locked check, native release and protected `--help`; the other 796 inputs, including all 52 xSAR inputs, are unchanged. xSAR 0.9.0 / 296 tests / three Miri checks remain cached.
+
+[Verification and guest checks](docs/Verification-2.9.155.md), [current handoff](docs/handoff.md) and the saved [Free Cell future-work plan](docs/free-cell-block-1-plan.md) record the results. Fresh guest acceptance remains pending. No GUI launch, START, guest input, installation, commit or push was performed. The separately approved future Free Cell 3.0.0 milestone remains unimplemented.
+
+## Retained 2.9.154 delivery context
+
+The following statements are dated evidence; the current receipt above governs this delivery.
+
+2.9.154 is host qualified with the three approved corrections: complete current Klondike OK caption proof, current Klondike Failure Details and explicit QMP connection release before Pyramid Continuous fresh entry. All six gates passed with 1,531 tests and 791 sealed inputs. Approved version-only alignment then passed locked check, native release and protected `--help`; the other 789 inputs, including all 52 xSAR inputs, are unchanged. xSAR 0.9.0 / 296 tests / three Miri checks remain cached.
+
+[Verification and guest acceptance checks](docs/Verification-2.9.154.md) and [current handoff](docs/handoff.md) record the evidence and exact dirty baseline. Fresh 2.9.154 guest acceptance remains pending; the later 2.9.153 request 9 effect timeout is a separate unresolved incident. No GUI launch, START, guest input, installation, commit or push was performed for this delivery. The Free Cell 3.0.0 milestone remains separate.
+
+## Retained 2.9.153 delivery context
+
+The following statements are dated evidence; the current receipt above governs this delivery.
+
 2.9.153 is host qualified under Charlie's explicit approval m11412: 1522 tests passed, zero failed/ignored/filtered, 782 sealed inputs and six gates passed. Only the two own-package version fields then changed; aligned locked native check, release and help passed. The other 780 compiler inputs and all 52 xSAR inputs remain identical. xSAR 0.9.0 / 296 tests / 3 Miri remain cached. Protected executable: /home/charlie/Documents/Pyramid/Validation/pyramid-normal-entry-20261026/native/qmp-qemu-socket-2.9.153; SHA-256 8f7297cae0cec014fbaec6f116b867d5460ddca1a5bf88c148761b0010833cbc. Fresh 153 guest acceptance remains separate. No agent GUI launch, START, guest input, installation or publication occurred.
 
 The automatic NEW GAME and manual START failures shared a complete normal-header appearance refusal. Two pixels differed by 13 against the existing per-channel limit of 12; the complete New footer passed. Fresh TCP captures and complete card observations were verified. The correction retains an additional complete 160 by 32 ordinal-one RGB appearance and every pixel/channel check at the original limits. Coherent appearances for the same count share one identity; conflicting counts still refuse. The 151 bounded Pending/Ready pair, strict normal footer, exclusive piles, fresh entry and fresh guarded Recon remain unchanged. No timing, control, threshold, crop, glyph, dependency, API, concurrency or xSAR policy changes are introduced.

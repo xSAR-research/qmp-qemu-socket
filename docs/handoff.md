@@ -1,31 +1,62 @@
-# Current handoff — qmp-qemu-socket 2.9.153
+# Current handoff — qmp-qemu-socket 2.9.156
 
-2.9.153 is host qualified under Charlie's explicit approval m11412: 1522 tests passed, zero failed/ignored/filtered, 782 sealed inputs and six gates passed. Only the two own-package version fields then changed; aligned locked native check, release and help passed. The other 780 compiler inputs and all 52 xSAR inputs remain identical. xSAR 0.9.0 / 296 tests / 3 Miri remain cached. Protected executable: /home/charlie/Documents/Pyramid/Validation/pyramid-normal-entry-20261026/native/qmp-qemu-socket-2.9.153; SHA-256 8f7297cae0cec014fbaec6f116b867d5460ddca1a5bf88c148761b0010833cbc. Fresh 153 guest acceptance remains separate. At host-qualification closeout no agent GUI launch, START, guest input, installation or publication had occurred. The current promotion authority and published dependency are recorded below.
+The named Pyramid testing observations approved in m01441 are corrected and host
+qualified. All six gates pass with 1,549 tests and 821 sealed inputs. Approved
+version-only alignment passed locked check, release and protected `--help`;
+the other 819 inputs, including all 52 xSAR inputs, are identical. Existing
+154/155 corrections are retained. Fresh 156 guest acceptance remains pending.
+
+Protected executable: `/home/charlie/Documents/Pyramid/Validation/testing-155-to-156-20261027-xemrbswl/application-156/native/qmp-qemu-socket-2.9.156`.
+SHA-256: `3c72b6a0009f7b46f826a8cfcaa36f2922731c08cada25a317e0cea85eade9ab`.
+The operator's running 155 process was preserved. No agent GUI launch, START,
+guest input, new capture, installation, index change, commit or push occurred.
 
 ## Destination Sentinel
 
-Run the exact read-only command via context-mode before new edits:
+Run once via context-mode before new edits:
 
 ```sh
-python3 /home/charlie/Documents/Pyramid/Validation/pyramid-normal-entry-20261026/destination-sentinel.py
+python3 /home/charlie/Documents/Pyramid/Validation/testing-155-to-156-20261027-xemrbswl/application-156/destination-sentinel.py
 ```
 
-Expected HANDOFF VERIFIED. The sentinel binds four repository identities/index/diff/status, 782 aligned compiler inputs, current documents, exact generated receipts and the protected binary. Only SQLite WAL/SHM transient status is excluded. Unchanged baseline Cargo remains PASSED (Cached); reconcile exact discrepancies before editing.
+Expected HANDOFF VERIFIED. It binds four repository identities/parents/indices,
+complete porcelain/diffs (only SQLite WAL/SHM transients excluded), 821 aligned
+inputs, current documents/receipts and the protected executable. An exact match
+authorises PASSED (Cached) for this qualified dirty baseline. Report exact
+regression and reconcile before editing; do not rebuild an unchanged baseline.
 
 ## Scope and authority
 
-Approval m11412 covers this correction, required host qualification and preparing 2.9.153. Charlie subsequently invoked signed-push and separately approved publishing xSAR. xSAR 0.9.0 was published first at d20dca8ad2320dcbbf869e22b35a2583317d4569, with a Good ED25519-SK signature and matching origin/main. The consumer retains path = "../xsar", dependency-free defaults and its seven existing features; the path is not a Git pin. All 52 xSAR inputs and all 782 qualified compiler inputs remain unchanged. The application promotion contains the reviewed 220 paths; unrelated .gitignore and local agent/memory/search files remain outside the commit. The exact post-promotion repository state is recorded by the Destination Sentinel rather than the pre-promotion base 23016ba497f543a5aeee7bf97fe00e0a3c826b28. Track A remains closed with open fixes. No next increment, GUI launch, START, guest input or installation is authorised. Requirements, source/provenance and promotion receipts remain in /home/charlie/Documents/Pyramid/Validation/pyramid-normal-entry-20261026. Root owns edits/build/launch; xSAR's 296 tests and 3 Miri checks remain cached unchanged.
+Only the four reported packets from `Testing_v2.9.155.md` and the later request 12
+packet in m01711 were diagnosed. Other
+logged errors were explicitly excluded as operator mode-exit artefacts. Complete
+Score labels/counting, exhausted DL with exact DR, and the small normal reward
+are corrected without relaxing limits or expanding input authority. m01587 also
+authorised the ASCII label `Continuous - no challenge`. Its workflow policy is
+unchanged. m01640 specifies the next test as Continuous / Repeat normal games;
+it does not retrospectively resolve earlier mode rows or approve a new policy.
 
-Prepared optional command after separate launch approval and closing the old controller:
+Application HEAD remains `b67d93942c68c55bfebe90e0f4e1e03f57300740`, parent
+`23016ba497f543a5aeee7bf97fe00e0a3c826b28`; all indices are unchanged.
+xSAR remains 0.9.0 at `d20dca8ad2320dcbbf869e22b35a2583317d4569`, parent
+`e50f7b3222fbd803d9eeecd8a2a37ba6fec856ca`; all 52 inputs are unchanged,
+296 tests/three Miri checks remain cached and its relative path is not a Git pin.
+No further increment, GUI launch, START, guest input, installation or publication
+is authorised by this handoff. Operator testing and fresh acceptance are separate.
 
-```sh
-python3 /home/charlie/Documents/Pyramid/Validation/pyramid-normal-entry-20261026/launch-with-images.py --image
-```
+## Continuity and boundaries
 
---check is read-only. Actual launch validates source/binary/owned Wayland, refuses another controller and privately preserves existing GAME WIN images before startup cleanup. START is operator-owned. No PATH installation is needed.
+The complete [Free Cell plan](free-cell-block-1-plan.md) is unchanged at SHA-256
+`b2e9bde0ac4e88244509e38d459859fae92f517a859bbd94e6d1681f5dce0181`;
+future 3.0.0 classification is retained and implementation remains unapproved.
+The flat `/home/charlie/tmp/_HOLDER_` archive remains until 3.0.0 is ready after
+testing. Only then select long-term evidence for `/home/charlie/tmp/Evidence/`.
+No archive selection or move is part of this delivery.
 
-## Preserved boundaries
-
-The automatic NEW GAME and manual START failures shared a complete normal-header appearance refusal. Two pixels differed by 13 against the existing per-channel limit of 12; the complete New footer passed. Fresh TCP captures and complete card observations were verified. The correction retains an additional complete 160 by 32 ordinal-one RGB appearance and every pixel/channel check at the original limits. Coherent appearances for the same count share one identity; conflicting counts still refuse. The 151 bounded Pending/Ready pair, strict normal footer, exclusive piles, fresh entry and fresh guarded Recon remain unchanged. No timing, control, threshold, crop, glyph, dependency, API, concurrency or xSAR policy changes are introduced.
-
-Native nightly/edition2024/MSRV1.101.0; scoped formatting, locked package checks, strict private rustdoc/Clippy/full include-ignored tests remain required. Use Tree Ring → billion-context → exact qmpview-current/Xerj → context-mode; never codex-process-jobs. Preserve STOP/context, fresh scene/probes, ACK versus effect, no uncertain replay, Unknown versus Empty, one-based row|column, bounded strict JSON and atomic private exports. Old process records do not establish current process identity. [Verification](Verification-2.9.153.md), [live brief](Live-Test-2.9.153.md), [full retained checklist](Acceptance-Tests-2.9.151.md).
+Preserve STOP/context, fresh supported scenes/probes, separate ACK/effect proof,
+existing finite windows, no uncertain replay, Unknown versus Empty, fixed
+one-based Pyramid locations, strict JSON and private atomic exports. Preserve
+original and first-failure evidence. Use native nightly, scoped formatting and
+locked package gates; no codex-process-jobs. Read [156 verification](Verification-2.9.156.md)
+and the retained [155 verification](Verification-2.9.155.md) for evidence limits.
+Complete path inventories and source/log receipts are in `/home/charlie/Documents/Pyramid/Validation/testing-155-to-156-20261027-xemrbswl/application-156`.

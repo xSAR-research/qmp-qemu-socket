@@ -75,6 +75,9 @@ pub(in crate::worker) fn observe(frame: &CapturedFrame) -> Result<bool, String> 
     if (frame.width, frame.height) != (1_920, 1_080) {
         return Ok(false);
     }
+    if small_counting(frame)? {
+        return Ok(true);
+    }
     if !text(
         frame,
         (708, 200),
@@ -163,4 +166,64 @@ fn text(
         }
     }
     (0..2).all(|i| total[i] > 0 && matched[i] * 100 >= total[i] * 98)
+}
+
+
+/// Recognise the complete small normal reward layout independently of challenge parsing.
+///
+/// The whole Congratulations title, skip instruction, third-board ordinal, complete
+/// Pyramid legend and separated panel edges match one native sample byte-exactly.
+/// Dynamic XP/level values are excluded. Callers still require their own verified
+/// normal completion before this observation can participate in guarded restart.
+/// Returns an error for malformed storage, bounds or bundled reference metadata.
+fn small_counting(frame: &CapturedFrame) -> Result<bool, String> {
+    let view = frame.as_view().map_err(|error| error.to_string())?;
+    for (bounds, rgb) in [
+        (
+            PixelRect::new(782, 306, 360, 50),
+            include_bytes!("../../../tests/fixtures/pyramid-testing-156/normal-small-title.rgb")
+                .as_slice(),
+        ),
+        (
+            PixelRect::new(845, 746, 230, 30),
+            include_bytes!("../../../tests/fixtures/pyramid-testing-156/normal-small-skip.rgb")
+                .as_slice(),
+        ),
+        (
+            PixelRect::new(1_658, 46, 160, 32),
+            include_bytes!("../../../tests/fixtures/pyramid-testing-156/normal-small-header.rgb")
+                .as_slice(),
+        ),
+        (
+            PixelRect::new(1_796, 116, 109, 290),
+            include_bytes!("../../../tests/fixtures/pyramid-testing-156/normal-small-legend.rgb")
+                .as_slice(),
+        ),
+        (
+            PixelRect::new(648, 390, 4, 300),
+            include_bytes!(
+                "../../../tests/fixtures/pyramid-testing-156/normal-small-left-edge.rgb"
+            )
+            .as_slice(),
+        ),
+        (
+            PixelRect::new(1_268, 390, 4, 300),
+            include_bytes!(
+                "../../../tests/fixtures/pyramid-testing-156/normal-small-right-edge.rgb"
+            )
+            .as_slice(),
+        ),
+        (
+            PixelRect::new(690, 806, 500, 4),
+            include_bytes!(
+                "../../../tests/fixtures/pyramid-testing-156/normal-small-bottom-edge.rgb"
+            )
+            .as_slice(),
+        ),
+    ] {
+        if !crate::pyramid_progress::matches_native_rgb_patch(view, bounds, rgb, 0)? {
+            return Ok(false);
+        }
+    }
+    Ok(true)
 }

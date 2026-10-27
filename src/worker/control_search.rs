@@ -17,7 +17,10 @@ use crate::{
         LEVEL_UP_CONFIRMATION_DELAY, TERMINAL_CONTROL_SEARCH_ATTEMPTS,
         TERMINAL_OK_FINAL_CONFIRMATIONS,
     },
-    terminal_controls::{self, Control, profiles::{GameControlProfile, SearchSpec}},
+    terminal_controls::{
+        self, Control,
+        profiles::{GameControlProfile, OkGlyphPolicy, SearchSpec},
+    },
 };
 
 
@@ -29,6 +32,8 @@ pub(super) struct ControlLookup<'a> {
     control: Control,
     /// Per-game native bounds and required consecutive black run length.
     spec: SearchSpec,
+    /// Selected-game caption proof; exact-black scans themselves remain unchanged.
+    ok_glyph_policy: terminal_controls::profiles::OkGlyphPolicy,
     /// Worker event sink receiving source-timestamped scan diagnostics.
     events: &'a WorkerEventSink,
     /// Wall-clock origin including waits and captures while this lookup is alive.
@@ -70,6 +75,7 @@ impl<'a> ControlLookup<'a> {
     ) -> Self {
         Self {
             game: game.into(), control, spec: profile.spec(control), events, started: Instant::now(),
+            ok_glyph_policy: profile.ok_glyph_policy,
             searches: 0, recaptures: 0, pixels: 0, rows: 0,
             scan_total: Duration::ZERO, outcome: "not-searched",
             ok_readiness: terminal_controls::ok_readiness::OkReadiness::new(),
@@ -127,8 +133,8 @@ impl<'a> ControlLookup<'a> {
     ///
     /// The caller supplies each fresh frame once within its normal search
     /// budget or the single final OK reserve. The current frame needs settled
-    /// geometry agreeing with its predecessor and a current exact-black glyph; the fading fixed caption
-    /// is diagnostic only and never vetoes that evidence.
+    /// geometry agreeing with its predecessor and current selected-game caption
+    /// evidence. The fading fixed caption is diagnostic only.
     /// Missing or incomplete evidence returns the normal no-match sentinel.
     /// Other controls keep their existing coordinate-only readiness policy.
     pub(super) fn confirm_ok(
@@ -144,7 +150,14 @@ impl<'a> ControlLookup<'a> {
             return Ok(point);
         }
         let started = Instant::now();
-        let observation = self.ok_readiness.observe(frame, point).map_err(|error| {
+        let observation = match self.ok_glyph_policy {
+            OkGlyphPolicy::ExactBlack => self.ok_readiness.observe(frame, point),
+            OkGlyphPolicy::KlondikeCaption => {
+                self.ok_readiness
+                    .observe_with_policy(frame, point, self.ok_glyph_policy)
+            }
+        }
+        .map_err(|error| {
             self.forget_ok_geometry();
             self.outcome = "readiness-error";
             format!("{} OK readiness failed: {error}", self.game)
@@ -159,10 +172,10 @@ impl<'a> ControlLookup<'a> {
             "awaiting-settled-OK"
         };
         send_log(self.events, format!(
-            "{} OK readiness: raw=({}, {}); selected=({}, {}); button={:?}; caption_present={}; caption_y={:?}; geometry_stable={}; glyph_bounds={:?}; ready={}; confirmation_pending={}; interrupted_confirmation={}; body_confirmation_pending={}; reason={}; readiness_pixels={}/{}; readiness_ms={:.3}; caption_gate=false; normal_search_budget={}; final_OK_reserve={}; reserve_consumed={}; guest input sent=0.",
+            "{} OK readiness: raw=({}, {}); selected=({}, {}); button={:?}; caption_present={}; caption_y={:?}; geometry_stable={}; glyph_bounds={:?}; glyph_evidence={:?}; ready={}; confirmation_pending={}; interrupted_confirmation={}; body_confirmation_pending={}; reason={}; readiness_pixels={}/{}; readiness_ms={:.3}; caption_gate=false; normal_search_budget={}; final_OK_reserve={}; reserve_consumed={}; guest input sent=0.",
             self.game, point.x, point.y, observation.point.x, observation.point.y,
             observation.button, observation.caption_present, observation.caption_y,
-            observation.geometry_stable, observation.glyph_bounds,
+            observation.geometry_stable, observation.glyph_bounds, observation.glyph_evidence,
             observation.ready, observation.confirmation_pending, observation.interrupted_confirmation,
             observation.body_confirmation_pending,
             observation.reason, observation.pixels_examined,
@@ -336,7 +349,7 @@ mod tests {
     }
 
 
-    /// Every game can reserve a lost-glyph observation but must click only its fresh ink.
+    /// Exact-black profiles reserve interrupted ink; Klondike's complete current caption can qualify.
     #[test]
     fn all_profiles_reserve_interrupted_confirmation_only_on_third_observation() {
         let (sender, receiver) = std::sync::mpsc::channel();
@@ -362,9 +375,24 @@ mod tests {
         for game in GameMode::AVAILABLE {
             let mut lookup =
                 ControlLookup::new(format!("{game:?}"), for_game(game), Control::Ok, &events);
-            for frame in [&entering, &clean, &washed] {
+            for frame in [&entering, &clean] {
                 assert_eq!(inspect_ok(&mut lookup, frame), PixelPoint::new(0, 0));
             }
+            let current = inspect_ok(&mut lookup, &washed);
+            if game == GameMode::Klondike {
+                assert_eq!(current, PixelPoint::new(960, 758));
+                assert!(lookup.has_ok_panel());
+                assert!(!lookup.ok_confirmation_pending && !lookup.ok_interrupted_confirmation);
+                assert!(!lookup.ok_body_confirmation_pending);
+                for observations in [1, 2, 3, 4] {
+                    assert!(!lookup.reserve_final_ok_confirmation(observations));
+                }
+                lookup.note_recapture();
+                assert_eq!(inspect_ok(&mut lookup, &fresh), PixelPoint::new(930, 770));
+                assert_eq!(lookup.searches, 4);
+                continue;
+            }
+            assert_eq!(current, PixelPoint::new(0, 0));
             assert!(!lookup.ok_confirmation_pending && lookup.ok_interrupted_confirmation);
             assert!(lookup.has_ok_panel());
             assert_eq!(
@@ -399,14 +427,14 @@ mod tests {
             .collect();
         assert_eq!(logs.iter().filter(|line| line.contains(
             "chosen_ms=200; normal_ms=2000; confirmation_pending=false; policy=reserved interrupted OK confirmation"
-        )).count(), GameMode::AVAILABLE.len());
+        )).count(), GameMode::AVAILABLE.len() - 1);
         assert_eq!(
             logs.iter()
                 .filter(|line| line
                     .contains("final OK confirmation reserve: granted=true; observations=3;")
                     && line.contains("interrupted_confirmation=true"))
                 .count(),
-            GameMode::AVAILABLE.len()
+            GameMode::AVAILABLE.len() - 1
         );
     }
 
@@ -616,7 +644,7 @@ mod tests {
 
 
 
-    /// Recorded late entry can reserve one fresh response, but only its current ink clicks.
+    /// Late bodies reserve a fresh response; Klondike's complete caption requests geometry only.
     #[test]
     fn all_profiles_reserve_late_body_confirmation_only_on_third_observation() {
         let (sender, receiver) = std::sync::mpsc::channel();
@@ -645,9 +673,19 @@ mod tests {
             for frame in [&reward, &entering, &near_black] {
                 assert_eq!(inspect_ok(&mut lookup, frame), PixelPoint::new(0, 0));
             }
-            assert!(lookup.has_ok_panel() && lookup.ok_body_confirmation_pending);
-            assert!(!lookup.ok_confirmation_pending && !lookup.ok_interrupted_confirmation);
-            assert_eq!(lookup.retry_delay(Duration::from_secs(2)), Duration::from_secs(2));
+            assert!(lookup.has_ok_panel());
+            if game == GameMode::Klondike {
+                assert!(lookup.ok_confirmation_pending && !lookup.ok_body_confirmation_pending);
+            } else {
+                assert!(lookup.ok_body_confirmation_pending && !lookup.ok_confirmation_pending);
+            }
+            assert!(!lookup.ok_interrupted_confirmation);
+            let expected_delay = if game == GameMode::Klondike {
+                LEVEL_UP_CONFIRMATION_DELAY
+            } else {
+                Duration::from_secs(2)
+            };
+            assert_eq!(lookup.retry_delay(Duration::from_secs(2)), expected_delay);
             for observations in [1, 2, 4] {
                 assert!(!lookup.reserve_final_ok_confirmation(observations));
             }
@@ -666,7 +704,10 @@ mod tests {
         }).collect();
         assert_eq!(logs.iter().filter(|line| line.contains(
             "policy=reserved late OK body confirmation"
-        )).count(), GameMode::AVAILABLE.len());
+        )).count(), GameMode::AVAILABLE.len() - 1);
+        assert!(logs.iter().any(|line| line.contains(
+            "Klondike OK retry wait: chosen_ms=200; normal_ms=2000; confirmation_pending=true; policy=fresh OK geometry confirmation"
+        )));
     }
 
 

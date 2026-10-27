@@ -291,6 +291,7 @@ fn run_stock_empty_tail(
         counts: Counts::default(),
         first_mismatch: None,
         latest_frame: None,
+        latest_observation: None,
         verified_actions: 0,
         final_confirmation: FinalConfirmation::default(),
         challenge,

@@ -44,6 +44,12 @@ mod cadence_tests;
 mod exhausted_left_tests;
 
 
+mod effect_155;
+
+
+mod testing_156;
+
+
 
 
 /// Accepted deal's original untouched board, before any synthetic header overlay.
@@ -493,6 +499,7 @@ fn adapter_with_progress<T>(
         counts: Counts::default(),
         first_mismatch: None,
         latest_frame: None,
+        latest_observation: None,
         verified_actions: 0,
         final_confirmation: FinalConfirmation::default(),
         challenge: plan.acquisition.challenge_progress,

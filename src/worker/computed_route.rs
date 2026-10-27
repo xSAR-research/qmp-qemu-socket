@@ -45,6 +45,7 @@ use std::{
 
 
 mod cadence;
+mod diagnostics;
 mod partial;
 
 
@@ -1835,6 +1836,8 @@ struct NativeIo<'a> {
     first_mismatch: Option<(String, crate::capture::CapturedFrame)>,
     /// One last native observation, retained without requesting an extra capture.
     latest_frame: Option<crate::capture::CapturedFrame>,
+    /// Current refusal and expected state belonging to that exact retained frame.
+    latest_observation: Option<diagnostics::Observation>,
     /// Whole-action effects independently verified before any failure.
     verified_actions: usize,
     /// Consecutive actual board or terminal evidence, used only after the final ACK.
@@ -1882,6 +1885,37 @@ impl NativeIo<'_> {
         let (frame, _) = capture_screen(&mut self.qmp, &self.context.socket_path, self.events)?;
         // One bounded native copy preserves the last observation even after UI consumption.
         self.latest_frame = Some(frame.clone());
+        self.latest_observation = Some(diagnostics::Observation {
+            capture: self.captures,
+            phase: if allow_pending_header {
+                FrameGuardPhase::Effect
+            } else {
+                FrameGuardPhase::Source
+            },
+            state,
+            final_effect,
+            acknowledged: self.counts.acknowledged,
+            mismatch: None,
+        });
+        let result = self.classify_observation(frame, state, final_effect, allow_pending_header);
+        if let Err(reason) = &result
+            && let Some(observation) = &mut self.latest_observation
+        {
+            observation.mismatch.get_or_insert_with(|| reason.clone());
+        }
+        result
+    }
+
+
+    /// Classify one already retained frame without another capture or input attempt.
+    /// The caller binds all errors to these pixels while preserving first-failure evidence.
+    fn classify_observation(
+        &mut self,
+        frame: CapturedFrame,
+        state: SearchState,
+        final_effect: bool,
+        allow_pending_header: bool,
+    ) -> Result<bool, String> {
         // A bound completion retires input before hidden cards can be misclassified.
         if let Some(bound) = self.challenge
             && let Some(proof) =
@@ -1982,7 +2016,11 @@ impl NativeIo<'_> {
         } else {
             Ok(FrameGuardOutcome::Ready)
         };
-        if let Some(reason) = observed.as_ref().err().or_else(|| guarded.as_ref().err())
+        let reason = observed.as_ref().err().or_else(|| guarded.as_ref().err());
+        if let Some(observation) = &mut self.latest_observation {
+            observation.mismatch = reason.cloned();
+        }
+        if let Some(reason) = reason
             && self.first_mismatch.is_none()
         {
             send_log(
@@ -2013,6 +2051,9 @@ impl NativeIo<'_> {
             FrameGuardOutcome::Ready => {}
             FrameGuardOutcome::Pending if allow_pending_header => {
                 matched = false;
+                if let Some(observation) = &mut self.latest_observation {
+                    observation.mismatch = Some("Same-frame series witness unreadable; effect pending".to_owned());
+                }
                 send_log(self.events, "Computed-route effect pending: same-frame series witness unreadable; no input authorised".to_owned());
             }
             FrameGuardOutcome::Pending => {
@@ -2037,6 +2078,9 @@ impl NativeIo<'_> {
                 Some(current) if current.follows(previous) => self.challenge = Some(current),
                 None if allow_pending_header => {
                     matched = false;
+                    if let Some(observation) = &mut self.latest_observation {
+                        observation.mismatch = Some("Bound challenge counter unreadable; final effect pending".to_owned());
+                    }
                     send_log(self.events, "Computed-route final effect pending: bound challenge counter unreadable; no input authorised".to_owned());
                 }
                 actual => {
@@ -2582,6 +2626,7 @@ fn execute_owned_guarded(
             counts,
             first_mismatch: None,
             latest_frame: None,
+            latest_observation: None,
             verified_actions: 0,
             final_confirmation: FinalConfirmation::default(),
             challenge: if policy == ExecutionPolicy::NoChallenge {
@@ -2669,6 +2714,41 @@ fn execute_owned_guarded(
                 .as_ref()
                 .is_ok_and(|report| report.completion == BoardCompletion::DeliveredUnconfirmed);
         let mut result = result;
+        if diagnostic_failure {
+            if let Some(observation) = &io.latest_observation {
+                match observation.value(&plan.acquisition.deal) {
+                    Ok(value) => record_detail(&mut details, "last_observation", value),
+                    Err(error) => record_detail(
+                        &mut details,
+                        "last_observation_diagnostic_error",
+                        serde_json::json!(error),
+                    ),
+                }
+                record_detail(
+                    &mut details,
+                    "last_unmatched_observation",
+                    serde_json::json!(observation.mismatch),
+                );
+                if let Some(reason) = &observation.mismatch {
+                    result = result.map_err(|error| {
+                        format!(
+                            "{error}; last unmatched observation (capture {}): {reason}",
+                            observation.capture
+                        )
+                    });
+                }
+            }
+            match diagnostics::pending_action(&plan, io.verified_actions) {
+                Ok(action) => {
+                    record_detail(&mut details, "pending_action", serde_json::json!(action))
+                }
+                Err(error) => record_detail(
+                    &mut details,
+                    "pending_action_diagnostic_error",
+                    serde_json::json!(error),
+                ),
+            }
+        }
         if diagnostic_failure && let Some((reason, frame)) = io.first_mismatch.take() {
             record_detail(
                 &mut details,

@@ -42,8 +42,8 @@ fn classic_boards_word_fallback_preserves_incomplete_and_background_refusals() {
 }
 
 
-/// Fourteen exposed original scenes, including changing counts and four actual Score counters.
-const SOURCES: [(&str, &[u8], ChallengeKind, u32, u32); 14] = [
+/// Fifteen exposed original scenes, including changing counts and five actual Score counters.
+const SOURCES: [(&str, &[u8], ChallengeKind, u32, u32); 15] = [
     (
         "boards-two",
         include_bytes!("../../../tests/fixtures/pyramid-objectives/boards-zero-of-two.png"),
@@ -150,6 +150,13 @@ const SOURCES: [(&str, &[u8], ChallengeKind, u32, u32); 14] = [
         0,
         7,
     ),
+    (
+        "score-entry-156",
+        include_bytes!("../../../tests/fixtures/pyramid-testing-156/score-entry.png"),
+        ChallengeKind::Score,
+        0,
+        2500,
+    ),
 ];
 
 
@@ -173,7 +180,7 @@ fn erase(frame: &mut CapturedFrame, bounds: PixelRect) {
 
 /// Each real objective is classified independently of its changing numeric values.
 #[test]
-fn fourteen_native_counters_keep_exact_objective_and_values() {
+fn native_counters_keep_exact_objective_and_values() {
     for (name, bytes, kind, current, target) in SOURCES {
         assert_eq!(
             observe(&native(bytes)),

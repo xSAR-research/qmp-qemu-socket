@@ -16,7 +16,9 @@ a run length of five. Pixels must have RGB exactly `(0,0,0)`; alpha is ignored.
 Rows run bottom-to-top and columns left-to-right. The first qualifying run's
 leftmost full-frame coordinate is a candidate point. A miss returns `(0,0)`.
 For OK, visual readiness narrows the final exact-black scan to the measured
-settled glyph band; only that latest validated point may reach input.
+settled glyph band. The Klondike profile additionally permits its complete
+current native OK caption appearance as described below. Only a point validated
+from the current selected-game proof may reach input.
 
 The crop is a bounded view over the existing image buffer, not a new allocation.
 Native 1920×1080 geometry and valid storage are required before guest input.
@@ -31,7 +33,8 @@ Native 1920×1080 geometry and valid storage are required before guest input.
 
 The application configuration lives in `src/terminal_controls/profiles.rs`.
 Each game has a named `GameControlProfile` constant containing `ok`, `new_game`
-and `play` search specifications. Each specification supplies its rectangle and
+and `play` search specifications, plus an explicit `ok_glyph_policy`. Each
+search specification supplies its rectangle and
 run length. `for_game` selects the block once; the controller passes it through
 searches, retries and diagnostics. The Params panel reads the same block.
 Change a game's layout here rather than modifying the scanner or click logic.
@@ -49,6 +52,36 @@ rectangle and minimum run length. It contains no game types, button identities,
 application coordinates, retry policy or logging. The application adapter also
 receives a numerical `SearchSpec`, while the controller owns game selection.
 
+## Klondike complete caption appearance — proposed 2.9.154
+
+The existing scanner and its exact-black RGB requirement remain unchanged.
+Only `KLONDIKE_CONTROLS` enables an additional current-caption proof when the
+black scan misses. It matches all 2,100 pixels of the measured native 60 by 35
+O/K caption, including both letters, their holes and surrounding button
+material. Every RGB channel must differ from the retained reference by at
+most 12; no omitted pixels or partial-match allowance are permitted.
+
+The reference comes only from original level-841 observation 17. Held-out
+observations 18 and 19 differ by at most 10 and 3 per channel. The body must
+have settled dimensions and match the immediately preceding measurement.
+The first complete caption may seed geometry, but cannot click. The current
+body supplies the vertical alignment; the derived point must lie inside it.
+The extra matcher borrows the native frame and adds at most 2,100 RGB reads
+within the existing readiness-work limit. Other game profiles retain their
+exact-black requirement. This appearance does not establish completion or
+identify arbitrary words, fonts or scales.
+
+The following confirmation and retry rules operate on the selected profile's
+current caption proof. Klondike's complete appearance may therefore request
+geometry confirmation or become ready where an exact-black-only profile
+still reports a missing glyph. Observation counts, intentional waits,
+foreground-modal precedence, fresh probes, STOP/context checks and the
+prohibition on acknowledged or uncertain input replay remain unchanged.
+
+Fixture provenance and the offline/live evidence boundary are recorded in
+`tests/fixtures/klondike-level841-20261026/README.md` and
+[the proposed verification record](Verification-2.9.154.md).
+
 ## Context and retries
 
 The caller still establishes the expected game/menu stage. Five black pixels
@@ -59,7 +92,7 @@ there is no subsequent replacement with a fixed button coordinate.
 
 An absent control or unsettled OK receives three normal observations: the
 initial frame and at most two input-free recaptures. If observation three has
-a settled-size OK body and a current exact-black central glyph awaiting only
+a settled-size OK body and a current profile-approved caption awaiting only
 geometry agreement, a lookup may consume one final 200 ms OK-only confirmation.
 Candidate.12 also permits the reserve if the immediately preceding settled body
 had a valid central glyph and observation three independently measures the same
@@ -99,7 +132,7 @@ unresolved control frames, not a universal cap on every recovery episode.
 reduced from 3000 ms so the first OK search starts before the reported later
 fireworks. Capture and recognition add elapsed time beyond this intentional
 wait. `LEVEL_UP_CONFIRMATION_DELAY` is 200 ms only when the latest frame has a
-settled-size OK body and current exact-black central glyph, awaiting geometry
+settled-size OK body and current profile-approved caption, awaiting geometry
 agreement with a fresh frame, or when the single interrupted/late-body confirmation reserve
 has actually been granted on observation three. `ControlLookup::retry_delay` selects that wait
 across all five games and logs `chosen_ms`, `normal_ms` and

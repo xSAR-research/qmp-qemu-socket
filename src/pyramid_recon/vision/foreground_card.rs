@@ -629,6 +629,14 @@ fn paper_reference(pixels: &[[u8; 3]]) -> Option<u8> {
 }
 
 
+/// Identify neutral or existing aged-blue support for a complete black component.
+/// Connected dark chromatic contours remain intact when neutral seeds anchor the glyph.
+fn black_compatible([r, g, b]: [u8; 3], aged: bool) -> bool {
+    r.max(g).max(b) - r.min(g).min(b) <= 40
+        || (aged && b >= g && g >= r && b.saturating_sub(r) <= 96 && g.saturating_sub(r) <= 64)
+}
+
+
 /// Extract seed-supported same-colour ink, excluding disconnected single-pixel art.
 fn components(pixels: &[[u8; 3]], paper_override: Option<u8>) -> Vec<Component> {
     let Some(paper) = paper_override.or_else(|| paper_reference(pixels)) else {
@@ -671,14 +679,7 @@ fn components(pixels: &[[u8; 3]], paper_override: Option<u8>) -> Vec<Component> 
         let mut eligible = vec![false; pixels.len()];
         for (index, [r, g, b]) in pixels.iter().enumerate() {
             let compatible = match colour {
-                Colour::Black => {
-                    (*r).max(*g).max(*b) - (*r).min(*g).min(*b) <= 40
-                        || (aged
-                            && b >= g
-                            && g >= r
-                            && b.saturating_sub(*r) <= 96
-                            && g.saturating_sub(*r) <= 64)
-                }
+                Colour::Black => black_compatible([*r, *g, *b], aged),
                 Colour::Red => {
                     *r >= 120
                         && r.saturating_sub(*g) >= red_bias_green.saturating_add(24)
@@ -704,10 +705,15 @@ fn components(pixels: &[[u8; 3]], paper_override: Option<u8>) -> Vec<Component> 
             seen[start] = true;
             let mut head = 0;
             let mut points = Vec::new();
+            let mut supported_strong = 0;
             while let Some(index) = queue.get(head).copied() {
                 head += 1;
                 let x = index % CORNER_WIDTH;
                 let y = index / CORNER_WIDTH;
+                supported_strong += usize::from(
+                    strong[index]
+                        && (colour != Colour::Black || black_compatible(pixels[index], aged)),
+                );
                 points.push(Point {
                     x: (x + 3) as u8,
                     y: (y + 4) as u8,
@@ -724,7 +730,8 @@ fn components(pixels: &[[u8; 3]], paper_override: Option<u8>) -> Vec<Component> 
                     }
                 }
             }
-            if points.iter().filter(|point| point.strong).count() >= 2 {
+            // Preserve the two-seed minimum and every pixel of supported components.
+            if supported_strong >= 2 {
                 result.push(Component { colour, points });
             }
         }

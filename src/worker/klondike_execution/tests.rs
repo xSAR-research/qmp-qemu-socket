@@ -2810,3 +2810,165 @@ fn bounded_control_first_match_reports_no_retry() {
     }).collect();
     assert!(logs.iter().any(|line| line.contains("Klondike Play search summary: searches=1; recaptures=0; second_grab=false;") && line.ends_with("outcome=found.")));
 }
+
+
+
+/// Decode an original level-841 observation without replacing native classification.
+fn level841(number: u8) -> FrameObservation {
+    let name = match number {
+        15 => "010725.982_000015.png",
+        16 => "010727.677_000016.png",
+        17 => "010728.791_000017.png",
+        18 => "010729.141_000018.png",
+        19 => "010729.531_000019.png",
+        _ => panic!("only original level-841 observations are supplied"),
+    };
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/klondike-level841-20261026")
+        .join(name);
+    native_observation(crate::capture::decode_png(&std::fs::read(path).unwrap()).unwrap())
+}
+
+
+/// The real first three OK observations permit one current-caption click.
+/// Controlled repetitions after its acknowledgement prove no replay or underlay input.
+#[test]
+fn native_154_level841_washout_clicks_ok_once_and_stops_on_unchanged_modal() {
+    use klondike::terminal::TerminalStage;
+    let mut io = fake_frames(vec![
+        level841(16),
+        level841(17),
+        level841(18),
+        level841(19),
+        level841(19),
+        level841(19),
+    ]);
+    io.native_terminal_analysis = true;
+    let mut latest = Some(level841(15));
+    let mut attempted = false;
+    let result = resume_after_win(
+        &mut io,
+        &mut latest,
+        StepRunSettings::new(AnimationSettleDelays::default(), 0),
+        &event_sink(),
+        &AtomicBool::new(false),
+        &mut attempted,
+    );
+    assert!(
+        result
+            .unwrap_err()
+            .contains("terminal advancement exhausted 2")
+    );
+    assert!(attempted);
+    assert_eq!(
+        io.terminal_inputs,
+        [TerminalStage::ScoreCounting, TerminalStage::LevelUp]
+    );
+    assert_eq!(io.terminal_points[1], PixelPoint::new(960, 758));
+    assert_eq!(
+        io.trace.iter().filter(|step| **step == "capture").count(),
+        6
+    );
+    assert_eq!(
+        &io.waits[..3],
+        &[
+            Duration::from_millis(1000),
+            Duration::from_millis(1000),
+            Duration::from_millis(200)
+        ]
+    );
+    assert!(io.frames.is_empty() && io.inputs.is_empty());
+    assert_eq!(latest.unwrap().frame.pixels, level841(19).frame.pixels);
+}
+
+
+/// STOP at the final fresh probe revokes even a complete current-caption approval.
+#[test]
+fn native_154_level841_stop_before_ok_input_keeps_only_score_input() {
+    use klondike::terminal::TerminalStage;
+    let stop = AtomicBool::new(false);
+    let mut io = fake_frames(vec![level841(16), level841(17), level841(18)]);
+    io.native_terminal_analysis = true;
+    io.stop_on_probe = Some(&stop);
+    io.probes_before_stop = 1;
+    let mut latest = Some(level841(15));
+    let mut attempted = false;
+    let result = resume_after_win(
+        &mut io,
+        &mut latest,
+        StepRunSettings::new(AnimationSettleDelays::default(), 0),
+        &event_sink(),
+        &stop,
+        &mut attempted,
+    );
+    assert!(result.unwrap_err().contains("STOP"));
+    assert_eq!(io.terminal_inputs, [TerminalStage::ScoreCounting]);
+    assert!(io.inputs.is_empty() && io.frames.is_empty());
+    assert_eq!(latest.unwrap().frame.pixels, level841(18).frame.pixels);
+}
+
+
+/// An uncertain caption click is attempted once and cannot consume another capture.
+#[test]
+fn native_154_level841_uncertain_ok_input_is_never_replayed() {
+    use klondike::terminal::TerminalStage;
+    let mut io = fake_frames(vec![level841(16), level841(17), level841(18), level841(19)]);
+    io.native_terminal_analysis = true;
+    io.fail_terminal_stage = Some(TerminalStage::LevelUp);
+    let mut latest = Some(level841(15));
+    let mut attempted = false;
+    let result = resume_after_win(
+        &mut io,
+        &mut latest,
+        StepRunSettings::new(AnimationSettleDelays::default(), 0),
+        &event_sink(),
+        &AtomicBool::new(false),
+        &mut attempted,
+    );
+    assert!(
+        result
+            .unwrap_err()
+            .contains("simulated uncertain terminal input")
+    );
+    assert!(attempted);
+    assert_eq!(
+        io.terminal_inputs,
+        [TerminalStage::ScoreCounting, TerminalStage::LevelUp]
+    );
+    assert_eq!(io.frames.len(), 1);
+    assert_eq!(latest.unwrap().frame.pixels, level841(18).frame.pixels);
+}
+
+
+/// A guarded stop publishes immutable Klondike facts without entering QMP or capture.
+#[test]
+fn native_154_stopped_klondike_worker_emits_its_current_run_failure() {
+    let (events, receiver) = std::sync::mpsc::channel();
+    let sink = WorkerEventSink {
+        events,
+        latest_frame: super::super::LatestFrameSlot::default(),
+        capture_context: std::sync::Mutex::new(None),
+    };
+    let settings = StepRunSettings::new(AnimationSettleDelays::default(), 0);
+    run_klondike_steps(
+        Path::new("/unused-klondike.sock"),
+        PredictedAction::NoHighlight,
+        settings,
+        &TableauScanState::default(),
+        &sink,
+        &AtomicBool::new(true),
+    );
+    let events: Vec<_> = receiver.try_iter().collect();
+    let failures: Vec<_> = events
+        .iter()
+        .filter_map(|event| match &event.event {
+            WorkerEvent::RunFailure(failure) => Some(failure),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(failures.len(), 1);
+    assert_eq!(failures[0].game_mode, GameMode::Klondike);
+    assert_eq!(failures[0].settings.operation_limit(), 0);
+    assert!(!failures[0].input_attempted);
+    assert!(failures[0].error.contains("STOP"));
+}

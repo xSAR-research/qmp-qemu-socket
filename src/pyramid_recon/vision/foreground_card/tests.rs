@@ -1004,3 +1004,6 @@ fn native_foreground_refuses_blank_corner_in_retained_football_board() {
         "blank football corner must block complete-board recognition"
     );
 }
+
+
+mod effect_155;

@@ -1,32 +1,86 @@
 # Milestone Tracker & Baseline Receipt — `qmp-qemu-socket`
 
-This file (`docs/milestones.md`) is the authoritative repository-local state receipt for the `Session-Start MCP, Memory & Baseline Gate` (`~/.codex/AGENTS.md`) and `qmp-qemu-socket/AGENTS.md`.
+This repository-local receipt is authoritative together with the current handoff.
 
 **Session-Start Evaluation Rule:**
-1. Run the Destination Sentinel in `docs/handoff.md` via `ctx_execute`, and inspect `git rev-parse HEAD`, `git status --porcelain`, and sibling `../xsar` state.
-2. Treat baseline compilation and the 1,522-test working-candidate suite as **PASSED (Cached)** when either:
-- **Pre-Promotion Qualified Working Tree:** `HEAD` is `23016ba497f543a5aeee7bf97fe00e0a3c826b28` with the qualified, aligned153 release (manifest 153) and retained Track A acceptance (`../xsar` at `e50f7b3222fbd803d9eeecd8a2a37ba6fec856ca` with `10` porcelain lines) and `docs/handoff.md` reports `HANDOFF VERIFIED`, **OR**
-- **Post-Promotion Clean Tree:** `git status --porcelain` is empty (`0` lines) and `Baseline_HEAD_SHA` matches `HEAD` or `HEAD~1`, **OR**
-- **Approved Paired Promotion with Preserved Local Files:** the exact Destination Sentinel reports `HANDOFF VERIFIED` against the post-promotion state. It binds both published revisions, empty indices, complete porcelain state and all 782 unchanged compiler inputs. Unrelated `.gitignore` and local agent/memory/search files remain preserved outside the commits.
-3. Do not run baseline `cargo check`, `cargo test`, `clippy`, `rustdoc`, or `release` builds before starting new work-product when `PASSED (Cached)` holds. Preserve all unrelated changes, calibration, evidence, and the Git index.
-
----
+1. Run the exact current Destination Sentinel via context-mode before new edits.
+2. An exact match authorises compilation and the 1,549-test suite as PASSED (Cached)
+   for this qualified 2.9.156 dirty baseline. A clean tree may use matching HEAD/parent.
+3. The receipt binds four repositories, unchanged indices, complete porcelain/diffs,
+   821 aligned inputs, current documents/receipts and the protected executable.
+4. Preserve unrelated changes; report exact discrepancies before editing. Do not
+   rebuild the baseline or rerun an unchanged full suite before new work-product.
 
 ## 1. Active Baseline Receipt
 
 | Field | Value | Notes |
-| :--- | :--- | :--- |
-| Package | qmp-qemu-socket 2.9.153 | Edition 2024 / MSRV 1.101.0 / native nightly |
-| Current Manifest Version | 2.9.153 | Explicit approval m11412; alignment after qualification |
-| Provisional target | None | No next increment authorised |
-| Active state | 153 complete normal-header appearance correction host-qualified | Fresh153 trial pending; accepted Track A/Track B retained |
-| Baseline_HEAD_SHA | 23016ba497f543a5aeee7bf97fe00e0a3c826b28 | Qualified pre-promotion base; exact published revision and preserved local state are bound by the Destination Sentinel |
-| xSAR | 0.9.0 @ d20dca8ad2320dcbbf869e22b35a2583317d4569 | Published first with Good ED25519-SK signature; origin/main matches; all52 inputs unchanged;296 tests / 3 Miri cached |
-| Host qualification | 1522 pass / 0 failed,ignored,filtered / 782 seals / six gates | Metadata-only aligned check/release/help then passed |
-| Protected executable | /home/charlie/Documents/Pyramid/Validation/pyramid-normal-entry-20261026/native/qmp-qemu-socket-2.9.153 | SHA-256 8f7297cae0cec014fbaec6f116b867d5460ddca1a5bf88c148761b0010833cbc |
-| Current state/sentinel | /home/charlie/Documents/Pyramid/Validation/pyramid-normal-entry-20261026/destination-state.json | Exact command in [handoff](handoff.md) |
-| Acceptance | [Full25-case checklist](Acceptance-Tests-2.9.151.md) | All13 standing outcomes plus TracksA/B; no synthetic live passes |
+| --- | --- | --- |
+| Package / Current Manifest Version | qmp-qemu-socket 2.9.156 | Edition 2024 / MSRV 1.101.0 / native nightly |
+| Approval | m01441 — retain named testing evidence and build 2.9.156; m01587 — ASCII objective label | m01640 specifies the next Continuous / Repeat normal games test |
+| Provisional target | None | No further increment authorised |
+| Active state | Four retained appearances corrected and host qualified in their approved paths | NoChallenge restart is not added; fresh 156 acceptance pending |
+| Baseline_HEAD_SHA | b67d93942c68c55bfebe90e0f4e1e03f57300740 | Qualified dirty tree; index unchanged |
+| Baseline parent | 23016ba497f543a5aeee7bf97fe00e0a3c826b28 | No branch, synchronisation, commit or push |
+| xSAR | 0.9.0 @ d20dca8ad2320dcbbf869e22b35a2583317d4569 | 52 inputs unchanged; 296 tests / three Miri cached; relative path is not a Git pin |
+| Host qualification | 1549 pass / 0 failed, ignored, filtered / 821 seals / six gates | Full suite 592.970 seconds including Cargo |
+| Version-only alignment | Own Cargo.toml/Cargo.lock fields 2.9.155 → 2.9.156 | Check/release/help pass; other 819 inputs unchanged |
+| Protected executable | /home/charlie/Documents/Pyramid/Validation/testing-155-to-156-20261027-xemrbswl/application-156/native/qmp-qemu-socket-2.9.156 | SHA-256 3c72b6a0009f7b46f826a8cfcaa36f2922731c08cada25a317e0cea85eade9ab |
+| Current state/sentinel | /home/charlie/Documents/Pyramid/Validation/testing-155-to-156-20261027-xemrbswl/application-156/destination-state.json | Exact command in [handoff](handoff.md) |
+| Fresh guest acceptance | Pending | [Verification and live checks](Verification-2.9.156.md) |
+| Free Cell continuity | [Complete saved plan](free-cell-block-1-plan.md) | Future 3.0.0 classification retained; implementation unapproved |
 
+### 2.9.156 retained Pyramid testing observations
+
+The exact 155 sentinel verified before edits. Four named original observations
+failed their real readers before correction. Eleven new pure/native adapter
+regressions and all six required gates now pass. The first full run exposed a
+missing calibration-source inventory entry; its original failure/source seal
+are retained and all prior assertions remain. No recognition threshold changed.
+
+Charlie explicitly excluded other mode-exit errors from diagnosis. The testing
+table's ambiguous prior objective rows remain unresolved; the next requested
+normal test is Continuous / Repeat normal games. NoChallenge policy and future
+Free Cell implementation are unchanged. The running 155 process and the agreed
+archive were preserved. All source, evidence and qualification receipts are in
+`/home/charlie/Documents/Pyramid/Validation/testing-155-to-156-20261027-xemrbswl/application-156`. Fresh 156 guest results remain separate.
+
+Further improvement ideas: gather labelled held-out theme observations before
+extending finite complete appearance banks; define no-challenge GAME WIN policy
+only under explicit agreement. Neither item is implemented or counted as a pass.
+
+### 2.9.155 repeated effect refusal and current evidence
+
+The actual reader reproduced the same DL King of diamonds refusal on both original
+153/154 final frames. Compatible strong support is now required per complete black
+component; intact warm glyph contours and all matching/absence limits remain.
+First mismatch evidence is preserved separately from current capture-bound reason,
+expected state and pending one-based operation. Seven new regressions, the complete
+reader corpus and the final full suite pass. The first full attempt exposed two
+real contour regressions; those logs/source are retained and the narrower fix was
+qualified again without changing existing expectations.
+
+The earlier request 9 investigation is superseded by this direct Rust reader proof;
+its original consumed route was not saved. Diagnostic action prefixes are explicitly
+reconstructions. Before new edits the 154 sentinel returned HANDOFF VERIFIED.
+All results/source seals/backups are in `/home/charlie/Documents/Pyramid/Validation/pyramid-effect-154-20261027-ltmz6fel/application-155`. Free Cell planning was saved first
+and copied byte-identically to the private delivery record. No guest input, GUI
+launch, installation or publication occurred. Historical entries below remain dated.
+
+### 2.9.154 approved corrections and verification
+
+Klondike adds a complete current 2,100-pixel caption proof only in its own
+profile, retaining current settled geometry and finite input controls.
+Its guarded-stop branch emits the existing immutable current failure event.
+Pyramid releases the old restart QMP client before fresh entry; the stricter
+native peer services each client through EOF. Nine new regressions, existing
+native restart checks and the complete 1,531-test suite pass together.
+
+Before edits, the approved reconciliation changed only the known split
+Free Cell document status and the original sentinel returned HANDOFF VERIFIED.
+The full before/aligned source seals, commands, logs, backups and actual release
+receipt are in `/home/charlie/Documents/Pyramid/Validation/pyramid-qmp-eagain-153-20261027-op57jvto/application-154`. Fresh guest outcomes remain separate.
+No installation or publication is included; unrelated changes and indices
+remain preserved. The later request 9 report is recorded separately in section 5.
 
 ### 2.9.153 approved normal-entry correction
 
@@ -56,6 +110,8 @@ Each row of the master implementation schedule is an agreed **minor** milestone 
 
 | Version | xSAR | Host Tests / Seals | Status | Scope & Verification Reference (in `docs/`) |
 | :--- | :--- | :--- | :--- | :--- |
+| **2.9.154** |0.9.0 |1531 tests /791 seals | HOST QUALIFIED; VERSION ALIGNED | Klondike complete-caption OK, current Failure Details and Pyramid QMP ownership release ([verification](Verification-2.9.154.md)); guest acceptance pending. |
+| **2.9.153** |0.9.0 |1522 tests /782 seals | PUBLISHED; RETAINED HOST QUALIFICATION | Complete normal-one header appearance ([verification](Verification-2.9.153.md)); actual later reports retained separately. |
 | **2.9.152** |0.9.0 |1518 tests /775 seals | HOST QUALIFIED; VERSION ALIGNED | Coherent final absence and lower-material veto ([verification](Verification-2.9.152.md)). |
 | **2.9.151** |0.9.0 |1512 tests /773 seals | RETAINED HOST QUALIFICATION | Bounded post-Play settling/fresh pair ([verification](Verification-2.9.151.md)). |
 | **2.9.150** | 0.9.0 | 1504 tests / 770 seals | ACCEPTED; VERSION ALIGNED | Code fixes and Track B; post-approval locked check/release/help passed ([verification](Verification-Track-B-150.md)). Fresh 150 guest verification is separate. |
@@ -90,6 +146,25 @@ Any subsequent edit must preserve these 13 baseline contracts from [Pyramid-Shor
   ---
   
 ## 5. Held Diagnostics & Open Items (Separate Scope)
+
+### New 2.9.153 request 9 effect timeout — unresolved
+
+The packet reports 10 verified actions, 15 attempted/acknowledged gestures and
+an ordinary-effect deadline. First retained slot 23 (`7|3`) absence failed at
++22977.985s; action 2 passed at +22978.691s and actions through 10 subsequently
+passed. Final independent pixel inspection supports absence at `7|3` and four
+other removed slots. This is source-equivalent pixel evidence, not a Rust
+observer run or the unretained consumed trace. The final mismatch/pending state
+is not saved, so the terminal cause remains unestablished. Preserve the packet,
+do not resume/replay, and keep any fourth correction separate from the three
+approved changes. Evidence: `/home/charlie/Documents/Pyramid/Validation/pyramid-slot23-153-20261027-o35s4q0t`.
+
+Improvement idea: retain the last mismatch and pending typed action/expected
+state alongside first-failure evidence. This has not been implemented or
+accepted. Free Cell Block 1 planning/3.0.0 also remains separate.
+
+### Retained earlier diagnostics
+
 
 Track A acceptance is closed by section 6. The bounded 149 aged-paper correction
 is part of that accepted baseline; it does not establish arbitrary artwork support.

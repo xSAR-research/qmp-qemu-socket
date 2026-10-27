@@ -112,7 +112,7 @@ impl StopCondition {
         match self {
             Self::RepeatNormalGames => "Repeat normal games",
             Self::ChallengeTarget => "Challenge",
-            Self::NoChallenge => "Continuous — no challenge",
+            Self::NoChallenge => "Continuous - no challenge",
         }
     }
 

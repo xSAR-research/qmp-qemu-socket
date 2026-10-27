@@ -18,9 +18,21 @@ pub struct SearchSpec {
 }
 
 
+/// Current-caption evidence allowed by an application's selected-game profile.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OkGlyphPolicy {
+    /// Retain the existing five consecutive exact RGB(0,0,0) pixels.
+    ExactBlack,
+    /// Also permit the complete calibrated native Klondike OK appearance.
+    KlondikeCaption,
+}
+
+
 /// One game's complete expected-control calibration block.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GameControlProfile {
+    /// Current-frame caption evidence; independent win and geometry gates still apply.
+    pub ok_glyph_policy: OkGlyphPolicy,
     /// Level Up may move vertically with the level/rank artwork.
     pub ok: SearchSpec,
     /// New Game occupies a stable caption region for this game.
@@ -44,6 +56,7 @@ impl GameControlProfile {
 
 /// Free Cell's expected control rectangles, maintained independently of other games.
 pub const FREECELL_CONTROLS: GameControlProfile = GameControlProfile {
+    ok_glyph_policy: OkGlyphPolicy::ExactBlack,
     ok: SearchSpec { bounds: PixelRect::new(930, 700, 25, 151), run_length: BLACK_RUN_LENGTH },
     new_game: SearchSpec { bounds: PixelRect::new(810, 831, 69, 49), run_length: BLACK_RUN_LENGTH },
     play: SearchSpec { bounds: PixelRect::new(675, 740, 20, 51), run_length: BLACK_RUN_LENGTH },
@@ -52,6 +65,7 @@ pub const FREECELL_CONTROLS: GameControlProfile = GameControlProfile {
 
 /// Spider's expected control rectangles, maintained independently of other games.
 pub const SPIDER_CONTROLS: GameControlProfile = GameControlProfile {
+    ok_glyph_policy: OkGlyphPolicy::ExactBlack,
     ok: SearchSpec { bounds: PixelRect::new(930, 700, 25, 151), run_length: BLACK_RUN_LENGTH },
     new_game: SearchSpec { bounds: PixelRect::new(810, 831, 69, 49), run_length: BLACK_RUN_LENGTH },
     play: SearchSpec { bounds: PixelRect::new(675, 840, 20, 51), run_length: BLACK_RUN_LENGTH },
@@ -60,6 +74,7 @@ pub const SPIDER_CONTROLS: GameControlProfile = GameControlProfile {
 
 /// Klondike's O stripe excludes the retained pointer in native K53.
 pub const KLONDIKE_CONTROLS: GameControlProfile = GameControlProfile {
+    ok_glyph_policy: OkGlyphPolicy::KlondikeCaption,
     ok: SearchSpec { bounds: PixelRect::new(930, 700, 25, 151), run_length: BLACK_RUN_LENGTH },
     new_game: SearchSpec { bounds: PixelRect::new(810, 831, 69, 49), run_length: BLACK_RUN_LENGTH },
     play: SearchSpec { bounds: PixelRect::new(675, 840, 20, 51), run_length: BLACK_RUN_LENGTH },
@@ -68,6 +83,7 @@ pub const KLONDIKE_CONTROLS: GameControlProfile = GameControlProfile {
 
 /// TriPeaks has native OK evidence; New Game and Play still need live acceptance.
 pub const TRIPEAKS_CONTROLS: GameControlProfile = GameControlProfile {
+    ok_glyph_policy: OkGlyphPolicy::ExactBlack,
     ok: SearchSpec { bounds: PixelRect::new(930, 700, 25, 151), run_length: BLACK_RUN_LENGTH },
     new_game: SearchSpec { bounds: PixelRect::new(810, 831, 69, 49), run_length: BLACK_RUN_LENGTH },
     play: SearchSpec { bounds: PixelRect::new(675, 885, 20, 56), run_length: BLACK_RUN_LENGTH },
@@ -76,6 +92,7 @@ pub const TRIPEAKS_CONTROLS: GameControlProfile = GameControlProfile {
 
 /// Pyramid's inherited menu calibration still requires native/live acceptance.
 pub const PYRAMID_CONTROLS: GameControlProfile = GameControlProfile {
+    ok_glyph_policy: OkGlyphPolicy::ExactBlack,
     ok: SearchSpec { bounds: PixelRect::new(930, 700, 25, 151), run_length: BLACK_RUN_LENGTH },
     new_game: SearchSpec { bounds: PixelRect::new(810, 831, 69, 49), run_length: BLACK_RUN_LENGTH },
     play: SearchSpec { bounds: PixelRect::new(675, 885, 20, 56), run_length: BLACK_RUN_LENGTH },

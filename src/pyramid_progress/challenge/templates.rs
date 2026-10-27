@@ -19,7 +19,7 @@ pub(super) const CHARACTERS: &[u8; 74] =
 
 
 /// Whole Boards/Score words and their native negative space; counter pixels are excluded.
-pub(super) const LABELS: [Label; 9] = [
+pub(super) const LABELS: [Label; 10] = [
     Label {
         kind: ChallengeKind::Boards,
         patch: HeaderPatch {
@@ -91,6 +91,13 @@ pub(super) const LABELS: [Label; 9] = [
             rgb: include_bytes!(
                 "../../../tests/fixtures/pyramid-objectives/label-score-final-empty.rgb"
             ),
+        },
+    },
+    Label {
+        kind: ChallengeKind::Score,
+        patch: HeaderPatch {
+            bounds: PixelRect::new(814, 48, 132, 32),
+            rgb: include_bytes!("../../../tests/fixtures/pyramid-testing-156/label-score-entry.rgb"),
         },
     },
 ];

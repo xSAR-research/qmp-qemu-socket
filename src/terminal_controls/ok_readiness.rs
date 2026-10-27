@@ -2,8 +2,9 @@
 //!
 //! A black run can appear while the modal is still entering, and the retained
 //! pointer can itself supply a run. Before input, require consecutive matching
-//! button geometry at its settled size and a current exact-black match inside
-//! the button's central caption band. The invariant `You've Reached` caption
+//! button geometry at its settled size and current caption evidence. The default
+//! requires exact-black ink; Klondike also permits its complete native RGB caption.
+//! Both proofs inspect the current button's central caption band. The invariant `You've Reached` caption
 //! is measured for diagnostics only; its independent fade does not gate input.
 //! Callers supply fresh captures within their finite normal and conditional
 //! final-confirmation budgets. This module neither captures frames nor sends
@@ -18,7 +19,15 @@ use crate::{
     parameters::{NOMINAL_FRAME_HEIGHT, NOMINAL_FRAME_WIDTH},
 };
 
-use super::{BLACK_RUN_LENGTH, profiles::SearchSpec, search};
+use super::{
+    BLACK_RUN_LENGTH,
+    profiles::{OkGlyphPolicy, SearchSpec},
+    search,
+};
+
+
+/// Complete native Klondike caption calibration, independent of game/rank artwork.
+mod native_caption;
 
 /// Maximum RGB comparisons in one readiness observation, including a glyph rescan.
 pub const MAX_READINESS_PIXEL_COMPARISONS: u64 = 150_000;
@@ -77,19 +86,31 @@ const CAPTION_DARK_PROBES: [(u32, u32); 20] = [
     (1030, 14), (1042, 14), (1054, 20), (1066, 8), (1078, 25),
 ];
 
+/// Current-frame evidence used for the selected OK coordinate.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GlyphEvidence {
+    /// Neither permitted caption proof passed on this frame.
+    Missing,
+    /// The unchanged exact-black run passed inside the central caption band.
+    ExactBlack,
+    /// All 2,100 current RGB pixels matched the native Klondike caption appearance.
+    KlondikeCaption,
+}
+
+
 /// Consecutive button observations belonging to one expected Level Up lookup.
 #[derive(Default)]
 pub struct OkReadiness {
     /// Geometry from the immediately preceding observation, including fading text.
     previous_button: Option<PixelRect>,
-    /// The preceding fresh body had settled size and a valid exact-black central glyph.
+    /// The preceding fresh body had settled size and permitted current caption evidence.
     previous_settled_glyph: bool,
 }
 
 /// Evidence from one frame; input is permitted only when `ready` is true.
 #[derive(Clone, Copy, Debug)]
 pub struct OkObservation {
-    /// Settled consecutive geometry and the current exact-black glyph passed.
+    /// Settled consecutive geometry and the selected current-caption proof passed.
     pub ready: bool,
     /// Only fresh geometry agreement remains after a settled-size current glyph.
     /// This permits a shorter input-free confirmation wait, never a click.
@@ -114,6 +135,8 @@ pub struct OkObservation {
     pub geometry_stable: bool,
     /// Central caption band used to reject pointer runs below the glyphs.
     pub glyph_bounds: Option<PixelRect>,
+    /// Exact current-frame proof, distinguishing full appearance from a black run.
+    pub glyph_evidence: GlyphEvidence,
     /// Actual RGB comparisons in geometry, caption checks and any glyph rescan.
     pub pixels_examined: u64,
 }
@@ -136,6 +159,22 @@ impl OkReadiness {
         &mut self,
         frame: &CapturedFrame,
         raw_point: PixelPoint,
+    ) -> Result<OkObservation, HaloDetectionError> {
+        self.observe_with_policy(frame, raw_point, OkGlyphPolicy::ExactBlack)
+    }
+
+
+    /// Inspect current native pixels using the selected game's explicit caption policy.
+    ///
+    /// The Klondike appearance checks the complete O, K, counters and surrounding
+    /// button pixels. It requires settled dimensions and never replaces consecutive
+    /// geometry, independent completion, fresh capture or caller input safeguards.
+    /// Errors consume predecessor evidence; no earlier coordinate can authorise input.
+    pub fn observe_with_policy(
+        &mut self,
+        frame: &CapturedFrame,
+        raw_point: PixelPoint,
+        policy: OkGlyphPolicy,
     ) -> Result<OkObservation, HaloDetectionError> {
         // Consume predecessor evidence before fallible work so any error leaves
         // an independent next observation, with no stale geometry or glyph validity.
@@ -173,14 +212,30 @@ impl OkReadiness {
                 glyph_point = result.point;
             }
         }
+        let mut glyph_evidence = if glyph_point == PixelPoint::new(0, 0) {
+            GlyphEvidence::Missing
+        } else {
+            GlyphEvidence::ExactBlack
+        };
+        if glyph_evidence == GlyphEvidence::Missing
+            && policy == OkGlyphPolicy::KlondikeCaption
+            && let Some(bounds) = button.filter(|bounds| settled_size(*bounds))
+            && let Some(point) = native_caption::recognise(view, bounds, &mut pixels_examined)
+        {
+            glyph_point = point;
+            glyph_evidence = GlyphEvidence::KlondikeCaption;
+        }
         let reason = match button {
             None => "missing-button-body",
             Some(bounds) if !settled_size(bounds) => "entrance-button-size",
             Some(_) if !geometry_stable => "button-geometry-changing",
             Some(_) if glyph_point == PixelPoint::new(0, 0) => "missing-current-caption-glyph",
+            Some(_) if glyph_evidence == GlyphEvidence::KlondikeCaption => "settled-button-and-caption-appearance",
             Some(_) => "settled-button-and-glyph",
         };
-        let ready = reason == "settled-button-and-glyph";
+        let ready = geometry_stable
+            && button.is_some_and(settled_size)
+            && glyph_point != PixelPoint::new(0, 0);
         let confirmation_pending = !ready
             && !geometry_stable
             && glyph_point != PixelPoint::new(0, 0)
@@ -208,6 +263,7 @@ impl OkReadiness {
             caption_y,
             geometry_stable,
             glyph_bounds,
+            glyph_evidence,
             pixels_examined,
         })
     }

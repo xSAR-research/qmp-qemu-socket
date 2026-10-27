@@ -359,6 +359,7 @@ fn deliver_once(operation: InputOperation, scenario: Scenario) -> Evidence {
         counts: Counts::default(),
         first_mismatch: None,
         latest_frame: None,
+        latest_observation: None,
         verified_actions: 0,
         final_confirmation: FinalConfirmation::default(),
         challenge: None,

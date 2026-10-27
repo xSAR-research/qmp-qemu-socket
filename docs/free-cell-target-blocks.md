@@ -1,0 +1,6 @@
+| Target Bulk Blocks | Files Touched / Created | Verification Command |  |
+|--------------------|-------------------------------------------|-------------------------------------------------------------------------------------------------|--------------------------------------|
+| **Pass 1** | **Block 1: T=0T=0T=0 Recon & Geometry** | `src/geometry.rs`, `src/capture.rs`, `src/image_matching.rs`, `src/freecell_json.rs`<br>ZIP | `cargo test --test freecell_models` |
+| **Pass 2** | **Block 2: A∗A^*A∗ Solver & 8-Column Hashing** | `src/games.rs`, `src/games/freecell.rs`, `src/games/freecell/{rules.rs, search.rs, replay.rs}`<br>ZIP | `cargo test --test freecell_planning` |
+| **Pass 3** | **Block 3: Best-Effort Suit Maximizer** | `src/games/freecell/planning.rs`, `src/search/best_effort.rs`<br>ZIP | `cargo test --test freecell_best_effort` |
+| **Pass 4** | **Blocks 4 & 5: QMP Execution & Win Loop** | `src/execution.rs`, `src/qmp.rs`, `tests/execution_generic.rs`<br>ZIP | `cargo test --test execution_generic` |

@@ -1373,6 +1373,8 @@ impl Pipeline for Native<'_> {
         self.latest = Some(observation.frame);
         // The compatibility controller's local counter is not series-progress evidence.
         // Recovered gameplay must pass the same fresh actual-header pair as a restart.
+        // Release the terminal monitor before the entry helper opens its fresh connection.
+        drop(qmp);
         self.observed_entry()
     }
 }

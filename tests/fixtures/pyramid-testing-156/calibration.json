@@ -1,0 +1,198 @@
+{
+  "native_dimensions": [
+    1920,
+    1080
+  ],
+  "score_label_channel_limit": 9,
+  "coherent_terminal_channel_limit": 0,
+  "roles": [
+    {
+      "source": "score-entry.png",
+      "file": "label-score-entry.rgb",
+      "bounds": [
+        814,
+        48,
+        132,
+        32
+      ],
+      "sha256": "21aa37ad4a99435303a703d5d564f8d334da374b184e271f38e4a02b5e37a454",
+      "bytes": 12672
+    },
+    {
+      "source": "score-complete.png",
+      "file": "score-counting-title-left.rgb",
+      "bounds": [
+        640,
+        164,
+        310,
+        64
+      ],
+      "sha256": "5201187c7b4d73750c33a09451b5e6666dd32ec4fa8dcff85cc65d94b1092984",
+      "bytes": 59520
+    },
+    {
+      "source": "score-complete.png",
+      "file": "score-counting-title-right.rgb",
+      "bounds": [
+        960,
+        164,
+        322,
+        64
+      ],
+      "sha256": "10bd022a1111e45be75ed8948b8dfff6417e2783d81961d64ab01354f6da2f51",
+      "bytes": 61824
+    },
+    {
+      "source": "score-complete.png",
+      "file": "score-counting-medal.rgb",
+      "bounds": [
+        489,
+        111,
+        110,
+        152
+      ],
+      "sha256": "4b8cf37aaae2a101a409ef6fd8e553ccbc90928a069b45127b66a8800383eaef",
+      "bytes": 50160
+    },
+    {
+      "source": "score-complete.png",
+      "file": "score-counting-scaffold.rgb",
+      "bounds": [
+        1387,
+        891,
+        26,
+        60
+      ],
+      "sha256": "988f81bfecf738a064fd14c7eacb8691d2170631e1b82ac56c1c6dce96174679",
+      "bytes": 4680
+    },
+    {
+      "source": "score-complete.png",
+      "file": "score-counting-skip.rgb",
+      "bounds": [
+        795,
+        858,
+        330,
+        40
+      ],
+      "sha256": "30c1e2775360971276c5fdb102726d2653a417338e6cbf5e69371985570d5295",
+      "bytes": 39600
+    },
+    {
+      "source": "normal-reward-small.png",
+      "file": "normal-small-title.rgb",
+      "bounds": [
+        782,
+        306,
+        360,
+        50
+      ],
+      "sha256": "46c56069169b53bc9392c77f00b472d369fb54dc1ef076f308b1ba8aea9bae31",
+      "bytes": 54000
+    },
+    {
+      "source": "normal-reward-small.png",
+      "file": "normal-small-skip.rgb",
+      "bounds": [
+        845,
+        746,
+        230,
+        30
+      ],
+      "sha256": "6c9e0bf13feca1c30c06a52c494c7c849057aff3188d4ac94700b5abdbf8abdf",
+      "bytes": 20700
+    },
+    {
+      "source": "normal-reward-small.png",
+      "file": "normal-small-header.rgb",
+      "bounds": [
+        1658,
+        46,
+        160,
+        32
+      ],
+      "sha256": "d8e3646b5d102928c785e6d9e9ac8ea3bf5c8f1488a289b0badeaf3b9cff2835",
+      "bytes": 15360
+    },
+    {
+      "source": "normal-reward-small.png",
+      "file": "normal-small-legend.rgb",
+      "bounds": [
+        1796,
+        116,
+        109,
+        290
+      ],
+      "sha256": "25b7bc8a49afd438756334cbb9669fc5343f75f395c6e5a6b556c559a86055b4",
+      "bytes": 94830
+    },
+    {
+      "source": "normal-reward-small.png",
+      "file": "normal-small-left-edge.rgb",
+      "bounds": [
+        648,
+        390,
+        4,
+        300
+      ],
+      "sha256": "8ae982996a943cd24b04de90af5a0a43f9b5fc66b420fedb06345d9ea4026bda",
+      "bytes": 3600
+    },
+    {
+      "source": "normal-reward-small.png",
+      "file": "normal-small-right-edge.rgb",
+      "bounds": [
+        1268,
+        390,
+        4,
+        300
+      ],
+      "sha256": "4dc06c6779d0b3935aecb11395501e156ef09ad8f2225936f9e1b3d45f2ab155",
+      "bytes": 3600
+    },
+    {
+      "source": "normal-reward-small.png",
+      "file": "normal-small-bottom-edge.rgb",
+      "bounds": [
+        690,
+        806,
+        500,
+        4
+      ],
+      "sha256": "35a63aba977c8b01ef0b4f274dcb8b65a8c0b8dbac722aefe91211635d954708",
+      "bytes": 6000
+    },
+    {
+      "source": "score-complete.png",
+      "file": "score-counting-header.rgb",
+      "bounds": [
+        814,
+        48,
+        296,
+        32
+      ],
+      "sha256": "8767e797262e104dd741dd3ce2259f65369ec1b0edaff71c04784f6461893d02",
+      "bytes": 28416,
+      "manually_transcribed_current": 1755,
+      "manually_transcribed_target": 1700
+    }
+  ],
+  "originals_not_modified": true,
+  "source_packets_only": [
+    0,
+    1,
+    2,
+    7,
+    8
+  ],
+  "held_out_originals": [
+    {
+      "source": "normal-final-king-spades.png",
+      "sha256": "f0fbba1367737006ae8542ffef5809a6373bc0a4c1b590925688ec0ddd73c1b2",
+      "packet": "pyramid-error-1793094093873-15609-8",
+      "expected_DL": null,
+      "expected_DR": "K of spades",
+      "used_for_RGB_calibration": false
+    }
+  ]
+}

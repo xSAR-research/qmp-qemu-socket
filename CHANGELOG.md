@@ -1,5 +1,27 @@
 # Changelog
 
+## [2.9.156] - 2026-10-27
+
+- Recognise the retained complete Score entry and large bound Challenge Complete counting appearances without relaxing matching limits; preserve the actual Score overshoot and reject contradictory bindings.
+- Permit the complete exhausted-DL final-clear witness with an independently exact remaining DR card, retaining tableau material/absence, scene and final-phase checks.
+- Recognise the small normal Congratulations reward within the existing receipt-bound normal restart; retain STOP/context/probe and no-replay boundaries.
+- Use an ordinary ASCII dash in `Continuous - no challenge`; its workflow policy is unchanged.
+- Qualify eleven new regressions and the complete 1,549-test suite with all six host gates and 821 sealed inputs. Apply the approved own-package version alignment, then pass locked check, release and protected help. Fresh guest acceptance remains separate.
+
+## 2.9.155
+
+- Correct repeated Pyramid stock refusal on the retained King of diamonds by requiring compatible seed support per black component while retaining complete supported contours and all recognition limits.
+- Preserve first-failure evidence and add current capture-bound mismatch, expected position and one-based pending-action details; retain STOP/context and no-replay behaviour.
+- Save the full Free Cell future-work plan, including later contracts, unresolved reference-code issues and its separate approved 3.0.0 classification.
+- Qualify 1,538 tests and all six host gates, then apply the approved version-only alignment. Fresh Windows guest acceptance remains pending.
+
+## 2.9.154
+
+- Recognise the complete measured Klondike OK caption when its exact-black run is absent, retaining current settled geometry, all pixels/channel bounds, finite observations and existing STOP/input guards. Other game profiles retain exact-black proof.
+- Replace stale Pyramid A* Failure Details after a Klondike guarded stop with the immutable current Klondike game/settings/error snapshot.
+- Release the terminal restart QMP client before opening the fresh Pyramid entry connection. Model QEMU's one-client-until-EOF ownership in native restart tests; preserve the 750 ms timeout and no uncertain-input replay.
+- Qualify all three corrections together: 1,531 tests pass, all six host gates pass, and 791 inputs are sealed. Approved own-version alignment then passes locked check/release/help. Fresh guest acceptance and the separate request 9 effect-timeout diagnosis remain open.
+
 ## 2.9.153
 
 - Recognise the complete measured normal-one header appearance shared by the retained automatic NEW GAME and manual START refusals, retaining all pixels and original channel tolerances. Same-count aliases retain one identity; conflicting counts remain unknown.

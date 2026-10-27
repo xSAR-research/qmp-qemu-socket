@@ -287,4 +287,64 @@ mod tests {
         assert_eq!(window.text, frozen);
     }
 
+
+    /// A current Klondike stop replaces the retained A* packet and survives reopening.
+    #[test]
+    fn native_154_klondike_failure_replaces_pyramid_astar_fields() {
+        let mut window = FailureWindow::default();
+        let old = PyramidDiagnostic {
+            context: ControllerContext::new(
+                "/tmp/old-pyramid.sock".into(),
+                GameMode::Pyramid,
+                SolvingStrategy::ShortestPath,
+                1,
+            ),
+            phase: PyramidPhase::Execution,
+            run_id: Some(2),
+            ui_failure_id: None,
+            error: "old A* execution observation expired".to_owned(),
+            directory: Some("/tmp/old-pyramid-packet".into()),
+            persistence_error: None,
+        };
+        window.receive(
+            &old,
+            serde_json::json!({
+                "game": "Pyramid", "strategy": "A* Route Solution",
+                "route_method": "Weighted A* (weight 2)",
+            }),
+            true,
+        );
+        assert!(window.key.is_some());
+        let error = "Klondike terminal advancement exhausted 3 delayed read-only captures after Some(ScoreCounting); the last control was not retried";
+        let failure = crate::worker::WorkerRunFailure {
+            game_mode: GameMode::Klondike,
+            settings: StepRunSettings::new(AnimationSettleDelays::default(), 0),
+            started_at: Some(Duration::from_secs(10)),
+            input_attempted: true,
+            error: error.to_owned(),
+        };
+        let context = ControllerContext::new(
+            "/tmp/current-klondike.sock".into(),
+            GameMode::Klondike,
+            SolvingStrategy::ComputerVision,
+            3,
+        );
+        window.worker_run(&failure, Some(&context), Duration::from_secs(20));
+        assert!(window.open && window.key.is_none());
+        assert_eq!(window.fields["game_mode"], "Klondike");
+        assert_eq!(window.fields["requested_operations"], 0);
+        assert_eq!(window.fields["guest_input_attempted"], true);
+        assert!(window.text.contains(error));
+        assert!(window.text.contains("ComputerVision"));
+        assert!(window.text.contains("current-klondike.sock"));
+        for stale in ["old-pyramid", "old A*", "A* Route Solution", "Weighted A*"] {
+            assert!(!window.text.contains(stale));
+        }
+        let frozen = window.text.clone();
+        window.open = false;
+        window.reopen();
+        assert!(window.open);
+        assert_eq!(window.text, frozen);
+    }
+
 }

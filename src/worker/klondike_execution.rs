@@ -22,25 +22,24 @@
 use std::{path::Path, sync::atomic::{AtomicBool, Ordering}, time::{Duration, Instant}};
 
 use super::{
-    FrameObservation, WorkerEvent, WorkerEventSink, WorkerState, analyse_captured_frame, capture_screen,
-    control_search::ControlLookup,
-    connect_and_probe, execute_planned_input, format_action_status, format_prediction_target,
-    format_step_plan, milliseconds, send_log, send_state,
-    send_status, validate_probe, wait_or_stop,
+    FrameObservation, WorkerEvent, WorkerEventSink, WorkerState, analyse_captured_frame,
+    capture_screen, connect_and_probe, control_search::ControlLookup, execute_planned_input,
+    format_action_status, format_prediction_target, format_step_plan, milliseconds, send_log,
+    send_state, send_status, validate_probe, wait_or_stop,
 };
 use crate::{
     capture::CapturedFrame,
-    game::{ActionTarget, GuidedAction},
+    game::{ActionTarget, GameMode, GuidedAction},
     geometry::PixelPoint,
-    terminal_controls::{Control, profiles::KLONDIKE_CONTROLS},
     klondike,
     parameters::{
-        KEY_HOLD, KLONDIKE_MAX_MULTI_STEP_ACTIONS, MOUSE_HOLD,
-        NOMINAL_FRAME_HEIGHT, NOMINAL_FRAME_WIDTH, POINTER_SETTLE_DELAY, POST_GAME_MAX_OBSERVATION_ROUNDS,
-        SOLVER_MOUSE_HOLD, TERMINAL_CONTROL_SEARCH_ATTEMPTS, StepRunSettings,
+        KEY_HOLD, KLONDIKE_MAX_MULTI_STEP_ACTIONS, MOUSE_HOLD, NOMINAL_FRAME_HEIGHT,
+        NOMINAL_FRAME_WIDTH, POINTER_SETTLE_DELAY, POST_GAME_MAX_OBSERVATION_ROUNDS,
+        SOLVER_MOUSE_HOLD, StepRunSettings, TERMINAL_CONTROL_SEARCH_ATTEMPTS,
     },
     qmp::QmpClient,
     stepper::{StepPlan, plan_step},
+    terminal_controls::{Control, profiles::KLONDIKE_CONTROLS},
     tracker::{PredictedAction, TableauScanState},
 };
 
@@ -340,6 +339,7 @@ pub(super) fn run_klondike_steps(
     event_tx: &WorkerEventSink,
     cancel_requested: &AtomicBool,
 ) {
+    let started_at = super::worker_elapsed();
     let mut latest = None;
     let mut input_attempted = false;
     let result = (|| {
@@ -403,6 +403,13 @@ pub(super) fn run_klondike_steps(
             }
             send_state(event_tx, WorkerState::Uncertain);
             send_status(event_tx, "Klondike stopped".to_owned());
+            let _ = event_tx.send(WorkerEvent::RunFailure(super::WorkerRunFailure {
+                game_mode: GameMode::Klondike,
+                settings,
+                started_at,
+                input_attempted,
+                error: error.clone(),
+            }));
             send_log(event_tx, format!("Klondike stopped: {error}; guest input attempted={input_attempted}. No uncertain gameplay, Solver or terminal input was retried; the latest available frame was retained for inspection."));
         }
     }

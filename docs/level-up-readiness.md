@@ -1,10 +1,13 @@
-# Level Up OK readiness — v2.2.100
+# Level Up OK readiness
+
+The shared bounds retain the v2.2.100 baseline. The proposed 2.9.154 Klondike
+caption appearance is described below; other profiles retain exact-black ink.
 
 The first post-score capture follows the existing 1000 ms intentional wait.
 All five controllers use one borrowed-pixel readiness helper before their
 single OK click. The fading “You've Reached” caption remains **diagnostic
 only**. A 200 ms fresh confirmation wait applies when the current settled-size
-button and exact-black central glyph need only geometry agreement. Candidate.10
+button and profile-approved current caption need only geometry agreement. Candidate.10
 adds one final OK-only confirmation if that evidence first becomes eligible on
 the third normal observation. Candidate.12 also permits that final observation
 when the preceding valid glyph disappears on observation three while its
@@ -18,11 +21,13 @@ geometry confirmation. Click eligibility is unchanged.
 Each fresh control observation measures the button body. The current body must
 have settled dimensions and agree with the immediately preceding observation
 within one pixel in position, width and height. The current frame must also
-supply five consecutive exact RGB(0,0,0) glyph pixels inside the measured
-button's central caption band. Separate completion evidence continues to
+supply its selected profile's current caption proof inside the measured
+button's central caption band. The default requires five consecutive exact
+RGB(0,0,0) pixels; Klondike additionally permits its complete native O/K
+appearance. Separate completion evidence continues to
 establish GAME WIN; this readiness helper does not declare a win.
 
-A missing black glyph can seed geometry evidence but cannot authorise input.
+A missing current caption proof can seed geometry but cannot authorise input.
 Missing body geometry clears consecutive evidence. A fading or brightened
 fixed caption changes diagnostics only. The caption check does not inspect the
 level number, rank, medal or fireworks art.
@@ -46,7 +51,7 @@ from bypassing the foreground modal, even when its black glyph is washed out.
 ## Conditional confirmation wait
 
 `OkReadiness::observe` reports `confirmation_pending` only when the current
-body has settled dimensions, a valid exact-black central glyph is present and
+body has settled dimensions, the current profile-approved caption is present and
 consecutive geometry has not yet agreed. This is scheduling evidence, never
 permission to click. `ControlLookup::retry_delay(normal)` selects
 `LEVEL_UP_CONFIRMATION_DELAY` (200 ms) for that observation across Free Cell,
@@ -62,8 +67,8 @@ flag also selects 200 ms only after the final reserve is consumed; it does not
 shorten ordinary earlier retries. Consuming the reserve is permanent
 for that lookup, including across resets and later outcomes.
 
-The next capture is checked from its own pixels. A missing or tinted glyph
-still withholds input, even after a short wait. A new search, consumed
+The next capture is checked from its own pixels. Missing current caption
+proof still withholds input, even after a short wait. A tint alone is no proof. A new search, consumed
 recapture, explicit reset or error clears the scheduling flag; missing body
 geometry also resets consecutive geometry. Every successful observation replaces
 the prior glyph-validity flag, so an older valid glyph cannot cross an
@@ -262,12 +267,40 @@ Removing the caption veto does not authorise the pointer match or reuse an
 old coordinate. The existing entrance and glyph checks still reject these
 premature observations.
 
+## Klondike level 841 complete caption — proposed 2.9.154
+
+The original 2.9.153 sequence supplies a clean exact-black observation followed
+by two settled observations with no exact-black pixels in the configured
+region. The complete 60 by 35 O/K RGB patch is calibrated only from the clean
+observation. Every current pixel and channel must remain within 12 of that
+reference; held-out observations 18 and 19 have maxima 10 and 3. The matcher
+includes both letters, their holes and surrounding button material. Removing
+either letter from a controlled copy must refuse, even when the body remains
+stable. Unknown scale or an incomplete appearance still withholds input.
+
+Only the selected Klondike profile enables this additional proof. It performs
+at most 2,100 extra borrowed RGB reads. Current settled dimensions, consecutive
+geometry, independent completion, finite observation budgets and all input
+guards remain mandatory. It derives a point inside the current measured body;
+an earlier point cannot authorise input. The original sequence reaches
+readiness on observation three without consuming the final reserve.
+
+The native driver regression attempts OK once and then deliberately repeats
+the original final image after a simulated acknowledgement. It expects a
+guarded stop on the unchanged modal, without OK replay or underlay input.
+Those repetitions are controlled test inputs. No real post-click effect frame
+was supplied, so fresh guest acceptance remains separate. Source history
+shows the exact-black policy predates 2.9.153; the retained refusal does not
+establish a newly introduced regression or the cause of the colour changes.
+
 ## Diagnostics and limits
 
 Each `OK readiness` log records raw and selected points, measured body, caption
 presence/origin, `caption_gate=false`, geometry stability, `confirmation_pending`, glyph bounds,
 decision, reason, additional pixel comparisons and elapsed readiness time.
-The successful reason is `settled-button-and-glyph`. This work is separate from
+The successful reason is `settled-button-and-glyph` for exact-black ink or
+`settled-button-and-caption-appearance` for the complete Klondike appearance.
+`glyph_evidence` records `Missing`, `ExactBlack` or `KlondikeCaption`. This work is separate from
 the original black-scanner `pixels`, `rows` and `scan_ms` fields. It contributes
 to the encompassing lookup's wall time.
 
