@@ -1,0 +1,212 @@
+{
+  "classic_spade": {
+    "source_fixture": "five-spades.png",
+    "source_sha256": "a780c8c51e335f1716c512395300993aec01d72d69a19e8f9d5c478cabc9b21d",
+    "native_card_origin": [
+      1091,
+      325
+    ],
+    "one_based_location": "5|4",
+    "visible_reference": "Five of Spades",
+    "rgb_rectangle_exclusive": [
+      1094,
+      329,
+      1125,
+      378
+    ],
+    "raw_rgb_bytes": 4557,
+    "rgb_sha256": "89055e43e7dd1b2576eef99eafb7557de303e8bbf6b5a8c160ec623ec43a5366",
+    "role": "additional complete Classic Five-of-spades raster appearance, only after accepted rank Five and an unsplit separator; other ranks retain their original suit bank and all quality/gap checks; calibration source is not an independent held-out positive",
+    "accepted_rank_context": "5"
+  },
+  "underwater": {
+    "references": [
+      {
+        "rank": "A",
+        "suit": "spades",
+        "fixture": "underwater.png",
+        "fixture_sha256": "013bce0fe1a82109aeb38edb30f6d1fb739ef0c33f5c4dd447093e9a9a972821",
+        "slot_zero_based": 9,
+        "one_based_location": "4|4",
+        "origin": [
+          1191,
+          272
+        ],
+        "rgb_sha256": "a8bcd806e9838249b82a038fd0c3196601af6af1ca5bda948261f147c25fdcb5"
+      },
+      {
+        "rank": "2",
+        "suit": "clubs",
+        "fixture": "underwater.png",
+        "fixture_sha256": "013bce0fe1a82109aeb38edb30f6d1fb739ef0c33f5c4dd447093e9a9a972821",
+        "slot_zero_based": 10,
+        "one_based_location": "5|1",
+        "origin": [
+          489,
+          325
+        ],
+        "rgb_sha256": "1ac723376cff786dc20eb71e503d57ce647ee89f30abfd74f7b327bf6b373b5a"
+      },
+      {
+        "rank": "3",
+        "suit": "diamonds",
+        "fixture": "underwater-three-nine.png",
+        "fixture_sha256": "b6f22b489ac9180feb9071b9c19a6dd4f688573983e37e03e443118dcb53a506",
+        "slot_zero_based": 16,
+        "one_based_location": "6|2",
+        "origin": [
+          589,
+          378
+        ],
+        "rgb_sha256": "c06e09176b40a043d8ac705d2a00c9937b9d1a5c43994aa26f59c32d6708618e"
+      },
+      {
+        "rank": "4",
+        "suit": "diamonds",
+        "fixture": "underwater.png",
+        "fixture_sha256": "013bce0fe1a82109aeb38edb30f6d1fb739ef0c33f5c4dd447093e9a9a972821",
+        "slot_zero_based": 2,
+        "one_based_location": "2|2",
+        "origin": [
+          990,
+          165
+        ],
+        "rgb_sha256": "49dd7d7fb8b9e6511e319a5319737ee38ed8ad9968003b55b701d341ad03cdf4"
+      },
+      {
+        "rank": "5",
+        "suit": "spades",
+        "fixture": "underwater.png",
+        "fixture_sha256": "013bce0fe1a82109aeb38edb30f6d1fb739ef0c33f5c4dd447093e9a9a972821",
+        "slot_zero_based": 21,
+        "one_based_location": "7|1",
+        "origin": [
+          288,
+          432
+        ],
+        "rgb_sha256": "1da409a66bb01eb040f7d4295f504184129a9c1d27a8b3363d2475816987d1ba"
+      },
+      {
+        "rank": "6",
+        "suit": "hearts",
+        "fixture": "underwater.png",
+        "fixture_sha256": "013bce0fe1a82109aeb38edb30f6d1fb739ef0c33f5c4dd447093e9a9a972821",
+        "slot_zero_based": 22,
+        "one_based_location": "7|2",
+        "origin": [
+          489,
+          432
+        ],
+        "rgb_sha256": "005bf1e64c6107c63ea5df3caf1d9aa6edd00be2bf630c9ccc4d14cf733137f7"
+      },
+      {
+        "rank": "7",
+        "suit": "clubs",
+        "fixture": "underwater.png",
+        "fixture_sha256": "013bce0fe1a82109aeb38edb30f6d1fb739ef0c33f5c4dd447093e9a9a972821",
+        "slot_zero_based": 1,
+        "one_based_location": "2|1",
+        "origin": [
+          790,
+          165
+        ],
+        "rgb_sha256": "1220ecdbaeccf6b4f5383c0909fc4e20563cb812edc03df77038c11b761f94f9"
+      },
+      {
+        "rank": "8",
+        "suit": "hearts",
+        "fixture": "underwater.png",
+        "fixture_sha256": "013bce0fe1a82109aeb38edb30f6d1fb739ef0c33f5c4dd447093e9a9a972821",
+        "slot_zero_based": 4,
+        "one_based_location": "3|2",
+        "origin": [
+          890,
+          218
+        ],
+        "rgb_sha256": "4679a11f99eaa8dd60c792135e47e95f9217dbd82ff092bb6a736cc1de433468"
+      },
+      {
+        "rank": "9",
+        "suit": "clubs",
+        "fixture": "underwater-three-nine.png",
+        "fixture_sha256": "b6f22b489ac9180feb9071b9c19a6dd4f688573983e37e03e443118dcb53a506",
+        "slot_zero_based": 6,
+        "one_based_location": "4|1",
+        "origin": [
+          589,
+          272
+        ],
+        "rgb_sha256": "bd84f5c4b019966090979a8d1edc61af5264539c392215bebd8270bf8225da7f"
+      },
+      {
+        "rank": "10",
+        "suit": "spades",
+        "fixture": "underwater.png",
+        "fixture_sha256": "013bce0fe1a82109aeb38edb30f6d1fb739ef0c33f5c4dd447093e9a9a972821",
+        "slot_zero_based": 7,
+        "one_based_location": "4|2",
+        "origin": [
+          790,
+          272
+        ],
+        "rgb_sha256": "12dc43d3f993a826c026c67d3d1c684cb8ade2a454db3931ea2d9692782d1681"
+      },
+      {
+        "rank": "J",
+        "suit": "hearts",
+        "fixture": "underwater.png",
+        "fixture_sha256": "013bce0fe1a82109aeb38edb30f6d1fb739ef0c33f5c4dd447093e9a9a972821",
+        "slot_zero_based": 6,
+        "one_based_location": "4|1",
+        "origin": [
+          589,
+          272
+        ],
+        "rgb_sha256": "6df8ed2c584d524de0600a8b704fc297e8bd75d3382d853caea3d5238341b828"
+      },
+      {
+        "rank": "Q",
+        "suit": "diamonds",
+        "fixture": "underwater.png",
+        "fixture_sha256": "013bce0fe1a82109aeb38edb30f6d1fb739ef0c33f5c4dd447093e9a9a972821",
+        "slot_zero_based": 14,
+        "one_based_location": "5|5",
+        "origin": [
+          1291,
+          325
+        ],
+        "rgb_sha256": "34ebbed7499df71c03568af4bfdf22853f90c0b4398767366594313540f00242"
+      },
+      {
+        "rank": "K",
+        "suit": "spades",
+        "fixture": "underwater.png",
+        "fixture_sha256": "013bce0fe1a82109aeb38edb30f6d1fb739ef0c33f5c4dd447093e9a9a972821",
+        "slot_zero_based": 0,
+        "one_based_location": "1|1",
+        "origin": [
+          890,
+          112
+        ],
+        "rgb_sha256": "06820bf45cc8744da23762b7af3e5908c1bee77804c8aa51c77f70ea849a810e"
+      }
+    ],
+    "asset": "assets/pyramid-glyphs/underwater-corners-v1.json",
+    "asset_sha256": "de2e2da0f5a24d55a9a3600b3dbaee74ae0977e41a3e43b538f63e11f29287db",
+    "printed_ink_policy": {
+      "brown_strong_maximum_channel": 160,
+      "brown_strong_minimum_channel_ceiling": 110,
+      "ordered_r_g_b": true,
+      "red_green_difference_maximum": 64,
+      "green_blue_difference_inclusive": [
+        12,
+        96
+      ],
+      "growth_minimum_relative_ink": 32,
+      "seed_radius": 2,
+      "compatible_strong_minimum": 2
+    },
+    "geometry": "Fixed measured card-relative separator y30; complete rank bounds to x34 for native Ten, original suit/combined bounds; native-size margin2 measured across red/brown originals; connected Queen/Heart is divided at the measured glyph boundary, not rejected as artwork.",
+    "calibration_originals_are_not_independent_held_outs": true
+  }
+}

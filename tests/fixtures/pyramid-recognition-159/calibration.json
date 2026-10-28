@@ -1,0 +1,53 @@
+{
+  "native_dimensions": [
+    1920,
+    1080
+  ],
+  "originals": {
+    "coral-effect.png": {
+      "sha256": "60e851e6a8c79d367dba1cdda599972e679cca82d1ab5ffabf97722c41a9a1bb",
+      "role": "unchanged original"
+    },
+    "normal-two.png": {
+      "sha256": "ad9d49eea78c1e8ae0170af15b1a9ce63a1c2d5a9dfdb79a3af5763a73e021a0",
+      "role": "unchanged original"
+    },
+    "deal.json": {
+      "sha256": "d13a05bf27f8a93f382ee34eed5bde961ee72fa14bfa35a9321c806e58436d49",
+      "role": "unchanged original"
+    }
+  },
+  "references": {
+    "underwater-coral-clearance.rgb": {
+      "bounds": [
+        286,
+        588,
+        144,
+        34
+      ],
+      "source": "coral-effect.png",
+      "sha256": "8963e77ea34bcdc102c3eebd5f67e1078bff473d997277dfd37241e345133371",
+      "bytes": 14688,
+      "role": "calibration; not an independent held-out"
+    },
+    "normal-header-two.rgb": {
+      "bounds": [
+        1658,
+        46,
+        160,
+        32
+      ],
+      "source": "normal-two.png",
+      "sha256": "54005a3b4a1fc1f24cd2da77fe871557ecf6a7f85e6e7c30032e9bbcfae2fb89",
+      "bytes": 15360,
+      "role": "calibration; not an independent held-out"
+    }
+  },
+  "coral_fixed_location": "7|1",
+  "coral_channel_limit": 0,
+  "header_completed": 1,
+  "header_target": 3,
+  "header_channel_limit": 12,
+  "positive_tests": "training; no independent native held-out for either new reference",
+  "acceptance": "fresh guest verification pending; standard Continuous acceptance retracted"
+}

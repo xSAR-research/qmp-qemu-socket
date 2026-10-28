@@ -112,6 +112,42 @@ enum NativeObservation {
 }
 
 
+/// Classification and its same-frame refusal remain separate from input authority.
+struct NativeFrameObservation {
+    /// The unchanged supported scene fact used by admission and pairing.
+    fact: NativeObservation,
+    /// A native-reader explanation; unknown evidence still authorises nothing.
+    refusal: Option<String>,
+}
+
+
+impl NativeFrameObservation {
+    /// Explain this exact captured frame without capturing or recognising it again.
+    fn diagnostic_text(&self) -> String {
+        let description = match &self.fact {
+            NativeObservation::Board {
+                position,
+                progress,
+                standard_three,
+            } => format!(
+                "complete board, progress={progress:?}, supported_normal={standard_three}, DL={:?}, DR={:?}",
+                position.left, position.right
+            ),
+            NativeObservation::Challenge { progress, .. } => {
+                format!("complete challenge board, progress={progress:?}")
+            }
+            NativeObservation::ChallengeComplete(proof) => format!("Challenge Complete {proof:?}"),
+            NativeObservation::Terminal(stage) => format!("terminal {stage:?}"),
+            NativeObservation::Unknown => "unknown or incomplete scene".to_owned(),
+        };
+        match &self.refusal {
+            Some(reason) => format!("{description}; native reader refusal: {reason}"),
+            None => description,
+        }
+    }
+}
+
+
 /// Pair equal board/header/mode facts or two observations of the same supported terminal kind.
 fn paired_entry(first: &NativeObservation, second: &NativeObservation) -> Option<Entry> {
     if first != second {
@@ -613,21 +649,96 @@ impl Native<'_> {
     }
 
 
+    /// Permit one read-only confirmation of a complete distinct next normal board.
+    ///
+    /// This does not bind a board or grant input. Only Continuous Repeat normal
+    /// games with an authenticated clear handoff and exact one-board advance can
+    /// spend the reserve; challenge, terminal and incomplete observations cannot.
+    fn late_normal_confirmation(&self, observation: &NativeObservation) -> bool {
+        if self.request.mode != WorkflowMode::Continuous
+            || self.request.stop_condition != StopCondition::RepeatNormalGames
+            || self.challenge_progress.is_some()
+            || !self.distinct_start
+        {
+            return false;
+        }
+        let (
+            Some(previous),
+            NativeObservation::Board {
+                position,
+                progress: Some(progress),
+                standard_three: true,
+            },
+        ) = (self.series, observation)
+        else {
+            return false;
+        };
+        previous.target == BOARDS_PER_GAME
+            && progress.target == BOARDS_PER_GAME
+            && progress.completed < BOARDS_PER_GAME
+            && previous.completed.checked_add(1) == Some(progress.completed)
+            && matches!(position.left, StockFace::Card(_))
+            && position.right == StockFace::Empty
+            && self
+                .original_tableau
+                .as_ref()
+                .is_some_and(|original| position.tableau != *original)
+    }
+
+
     /// Recognise all starting identities and positive empty RIGHT using the actual profile.
-    fn starting_board(&self, frame: &CapturedFrame) -> Option<BoardObservation> {
-        match self.vision.as_ref()?.observe(frame).ok()? {
+    fn starting_board_with_reason(
+        &self,
+        frame: &CapturedFrame,
+    ) -> Result<Option<BoardObservation>, String> {
+        let Some(vision) = self.vision.as_ref() else {
+            return Ok(None);
+        };
+        match vision.observe(frame)? {
             ReconScene::Board(board)
                 if matches!(board.left, StockFace::Card(_)) && board.right == StockFace::Empty =>
             {
-                Some(board)
+                Ok(Some(board))
             }
-            _ => None,
+            ReconScene::Board(board) => Err(format!(
+                "Starting board requires a recognised LEFT card and positively empty RIGHT; observed LEFT={:?}, RIGHT={:?}",
+                board.left, board.right
+            )),
+            _ => Ok(None),
         }
     }
 
 
-    /// Read scene and header from the same existing frame without granting input authority.
+    /// Retain the established optional starting-board helper for native policy tests.
+    #[cfg(test)]
+    fn starting_board(&self, frame: &CapturedFrame) -> Option<BoardObservation> {
+        self.starting_board_with_reason(frame).ok().flatten()
+    }
+
+
+    /// Preserve classification and reader refusal from one existing frame with no new I/O.
+    fn observe_with_reason(&self, frame: &CapturedFrame) -> Result<NativeFrameObservation, String> {
+        let mut refusal = None;
+        let fact = self.classify(frame, &mut refusal)?;
+        Ok(NativeFrameObservation { fact, refusal })
+    }
+
+
+    /// Keep the established scene-only contract for native policy regression tests.
+    #[cfg(test)]
     fn observe(&self, frame: &CapturedFrame) -> Result<NativeObservation, String> {
+        self.observe_with_reason(frame)
+            .map(|observed| observed.fact)
+    }
+
+
+    /// Classify once; a transient card refusal remains pending evidence, not a fatal error.
+    /// The freshly empty output receives only this frame's reader explanation.
+    fn classify(
+        &self,
+        frame: &CapturedFrame,
+        refusal: &mut Option<String>,
+    ) -> Result<NativeObservation, String> {
         let challenge_complete = match self.challenge_progress {
             Some(bound) => crate::pyramid_progress::observe_bound_challenge_complete(frame, bound)?,
             None => crate::pyramid_progress::observe_challenge_complete(frame)?,
@@ -650,7 +761,14 @@ impl Native<'_> {
                 return Ok(NativeObservation::Terminal(NativeTerminal::NewGame));
             }
         }
-        match self.starting_board(frame) {
+        let starting = match self.starting_board_with_reason(frame) {
+            Ok(position) => position,
+            Err(reason) => {
+                *refusal = Some(reason);
+                None
+            }
+        };
+        match starting {
             Some(position) => {
                 if let Some(bound) = self.challenge_progress {
                     return Ok(
@@ -748,16 +866,17 @@ impl Native<'_> {
         let mut qmp =
             QmpClient::connect(&self.context.socket_path).map_err(|error| error.to_string())?;
         let first = self.capture(&mut qmp)?;
-        let first = self.observe(&first)?;
+        let first = self.observe_with_reason(&first)?;
         self.wait()?;
         let second = self.capture(&mut qmp)?;
-        let second = self.observe(&second)?;
-        let entry = paired_entry(&first, &second).ok_or_else(||
-            "Automatic entry lacks two matching supported board/header or terminal observations; no input authorised".to_owned()
-        )?;
-        self.starting = starting_witness(entry, &second);
+        let second = self.observe_with_reason(&second)?;
+        let entry = paired_entry(&first.fact, &second.fact).ok_or_else(|| format!(
+            "Automatic entry lacks two matching supported board/header or terminal observations; no input authorised; first capture: {}; second capture: {}",
+            first.diagnostic_text(), second.diagnostic_text()
+        ))?;
+        self.starting = starting_witness(entry, &second.fact);
         self.series = self.starting.as_ref().map(|witness| witness.progress);
-        self.challenge_starting = challenge_witness(entry, &second);
+        self.challenge_starting = challenge_witness(entry, &second.fact);
         self.challenge_progress = self
             .challenge_starting
             .as_ref()
@@ -1230,18 +1349,44 @@ impl Pipeline for Native<'_> {
     }
 
 
+    /// Pair at most six fresh transition observations, with one qualified normal reserve.
+    ///
+    /// The sixth must independently qualify before a seventh is acquired at the
+    /// existing cadence. An unequal seventh ends the transition, without renewal,
+    /// input, a new binding or a fabricated third-clear receipt. STOP/context checks
+    /// remain on both sides of each wait and capture.
     fn transition(&mut self) -> Result<Entry, String> {
         self.starting = None;
         self.challenge_starting = None;
         let mut qmp =
             QmpClient::connect(&self.context.socket_path).map_err(|error| error.to_string())?;
         let mut previous = NativeObservation::Unknown;
-        for observation in 0..TRANSITION_OBSERVATIONS {
+        let mut confirmation_reserved = false;
+        let mut last_diagnostic = "no successful classification".to_owned();
+        let mut captures = 0;
+        for observation in 0..=TRANSITION_OBSERVATIONS {
+            if observation == TRANSITION_OBSERVATIONS && !confirmation_reserved {
+                break;
+            }
             if observation > 0 {
                 self.wait()?;
             }
             let frame = self.capture(&mut qmp)?;
-            let current = self.observe(&frame)?;
+            let observed = self.observe_with_reason(&frame)?;
+            let description = observed.diagnostic_text();
+            let current = observed.fact;
+            last_diagnostic = description.clone();
+            captures = observation + 1;
+            send_log(
+                self.events,
+                format!(
+                    "Pyramid transition observation {}: normal_budget={}, reserved_confirmation={}, matching_previous={}; {description}",
+                    observation + 1,
+                    TRANSITION_OBSERVATIONS,
+                    observation == TRANSITION_OBSERVATIONS,
+                    paired_entry(&previous, &current).is_some(),
+                ),
+            );
             if let Some(entry) = paired_entry(&previous, &current)
                 && !matches!(entry, Entry::Board { progress: None, .. })
             {
@@ -1303,9 +1448,17 @@ impl Pipeline for Native<'_> {
                 }
                 return Ok(entry);
             }
+            if observation + 1 == TRANSITION_OBSERVATIONS && self.late_normal_confirmation(&current)
+            {
+                confirmation_reserved = true;
+                send_log(self.events,
+                    "Pyramid transition: complete distinct next normal board on observation six; reserving one read-only confirmation, no input or board binding authorised".to_owned());
+            }
             previous = current;
         }
-        Err("No positively confirmed next board or terminal scene within transition budget; no input sent".to_owned())
+        Err(format!(
+            "No positively confirmed next board or terminal scene within transition budget; no input sent; last capture {captures}: {last_diagnostic}"
+        ))
     }
 
 

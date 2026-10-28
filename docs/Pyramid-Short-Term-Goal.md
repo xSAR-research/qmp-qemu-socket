@@ -230,6 +230,11 @@ No new milestone or live outcome is accepted by this delivery.
    footprint: original RGB-channel floor 180 plus bounded aged material. Unreadable
    occupied stock remains Unknown. Aged material above the existing 5% allowance vetoes
    ordinary/final absence; scene/modal, exclusivity and layout proof still apply.
+   The 159 ordinary-position correction additionally recognises the complete measured
+   bare-coral clearance at fixed 7|1 only when every RGB channel matches exactly.
+   Positive paper presence still vetoes it; other locations, changed artwork and
+   nonmatching aged material retain the existing refusal. See the
+   [native reference provenance](../tests/fixtures/pyramid-recognition-159/README.md).
    Complete foreground rank/suit recognition is now the private native-v23 identity owner.
    It must refuse missing, contradictory or ambiguous ink without a legacy fallback;
    scene/modal, position, Unknown/Blocked and continuity guards remain required.

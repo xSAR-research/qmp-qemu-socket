@@ -1,5 +1,50 @@
 # Pyramid reconnaissance native profile
 
+## Current 2.9.158 native recognition correction
+
+The bundled native-v23 reader adds a measured complete Classic Spades appearance
+and a separate Underwater font/ink family. The retained Five of Spades must still
+pass its existing rank checks, complete same-colour glyph geometry and every suit
+competitor. This one measured appearance requires an accepted Five rank and no
+component crossing the selected separator; other ranks keep their original suit
+bank. Extending the sample to other ranks made a retained Seven of Clubs
+ambiguous, so that failed prototype was narrowed without changing quality/gap
+thresholds. Existing Classic/Retro/Western ink, geometry and native
+size rules remain unchanged.
+
+Underwater has thirteen original native rank corners and four suit labels.
+Spades/Clubs use measured brown print: ordered R ≥ G ≥ B, R−G ≤64 and
+12 ≤ G−B ≤96; strong cores additionally require R ≤160 and B ≤110. The existing
+relative-ink32 growth floor, radius2 support, two compatible strong anchors per
+component and eight strong pixels per glyph remain required. Orange/red glyphs
+keep the existing red predicate. These printed-ink rules belong only to the
+Underwater family.
+
+The native corner remains 31×49 at card-relative (3,4), with no scaling. Both
+Underwater Ten digits fit the measured exclusive rank x34 bound. Its fixed
+separator is y30; the real Queen of Hearts has touching rank/suit ink across that
+boundary, so both complete glyphs are retained. A two-pixel native-size envelope
+covers measured red/brown raster variation. Rank error ≤220000 ppm/gap ≥80000 and
+suit error ≤200000 ppm/same-colour gap ≥40000 remain mandatory; unrelated families
+cannot supply halves of one identity.
+
+The three originals and [fixture provenance](../tests/fixtures/pyramid-recognition-158/README.md)
+retain exact native pixels. The underwater corpus contains 59 visible card
+positions: thirteen calibrated corners and 46 other corners in those same two
+frames. This is same-source regression evidence; black Three and arbitrary unseen
+fonts/deals are not demonstrated. The Three/Nine reference was captured with the
+application Capture PNG at 100% scale and already has occupied RIGHT, which
+continues to disqualify fresh entry.
+
+Entry and transition failures retain reader explanations from their own existing
+captures, including first/second or latest observation. Unknown animation frames
+remain pending under the original capture budgets. No extra captures, timing,
+input permissions, RESET behaviour or restoration/publication rules are added.
+
+The release verification record distinguishes required host qualification from
+fresh operator acceptance. Earlier dated profile records below preserve their
+historical scope.
+
 ## Current correction — 2.9.149 / xSAR 0.9.0
 
 The bounded Wild West aged-paper correction is host qualified: 1483 application
@@ -1008,8 +1053,14 @@ produces `undo_all: None`; it does not prevent card classification. `Some` is
 returned only when the current frame matches the profile's **enabled** Undo All
 signature. Its point is fixed at `(1320, 978)`.
 
-The controller must require `Some` on the freshly observed exhausted board before
-clicking Undo All. It must not reuse an earlier point across frames or contexts.
+From application 2.9.157, this match is advisory. After all 52 unique identities,
+24 acknowledged stock advances and two positive empty-LEFT observations, the
+controller uses the shared calibrated `(1320,978)` point for one Undo All attempt.
+This follows the deterministic move history even when theme-dependent icon pixels
+do not match. Fresh VM/pointer probes and STOP/context checks still apply. The
+complete confirmation dialog must match twice before OK, and two consecutive
+original-tableau/initial-LEFT/empty-RIGHT observations remain mandatory before
+publication. Failure or uncertain delivery grants no retry or cleanup input.
 Historical images **01–18** match the enabled icon. Images **19 and 20** match
 the disabled icon byte-for-byte in its calibrated bounds; the earlier evidence
 inventory's “01–19 enabled” label was incorrect. Image 19 remains Solver ON, so
@@ -1345,3 +1396,22 @@ Explicit allocation/work caps prevent arbitrary-sized calibration or matching
 searches. Strict false-negative behaviour is intentional: an unrecognised font,
 cursor, rasterisation variant, scene or dialog stops rather than selecting a
 nearest identity or granting fallback input authority.
+## Bounded 159 native evidence additions
+
+The complete ordinary-position bare-coral reference covers only the native
+144 by 34 clearance at (286,588), below fixed tableau location 7|1. Every RGB
+channel must match the measured image exactly, and positive paper presence
+still refuses. This positively identifies one known bare artwork footprint;
+the generic paper, aged-material, chroma and continuity limits are unchanged.
+Other locations and nonmatching material retain their previous rules.
+
+The complete native Boards 2 of 3 header has one additional measured appearance.
+It retains the existing RGB-channel limit 12, complete New-footer requirement
+and conflicting-ordinal refusal. It reports one completed board out of three;
+no count is inferred from the scene or a previous run.
+
+[Original frames, exact crop hashes and refusal tests](../tests/fixtures/pyramid-recognition-159/README.md)
+bound both additions. The new positive images are calibration regressions,
+with fresh guest acceptance still pending. The
+[acceptance checklist](Pyramid-Acceptance-Before-3.0.0.md) records the remaining
+Pyramid verification before the separate Free Cell transition.

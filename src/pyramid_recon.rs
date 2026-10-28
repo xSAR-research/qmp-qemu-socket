@@ -10,6 +10,9 @@ pub mod vision;
 #[cfg(test)]
 mod paired_tests;
 
+#[cfg(test)]
+mod testing_157;
+
 use std::{
     path::PathBuf,
     time::{Duration, Instant},
@@ -17,7 +20,7 @@ use std::{
 
 use crate::parameters::{
     PYRAMID_DRAW_SETTLE_DELAY as DRAW_DELAY, PYRAMID_RECON_DEADLINE as MAX_DURATION,
-    PYRAMID_REOBSERVE_DELAY as OBSERVATION_DELAY,
+    PYRAMID_REOBSERVE_DELAY as OBSERVATION_DELAY, SHARED_UNDO_ALL_CONTROL,
 };
 
 use xsar::games::{
@@ -119,7 +122,7 @@ impl ReconRequest {
 pub enum ReconInput {
     /// One stock advance, acknowledged once and never replayed on uncertainty.
     Draw,
-    /// Fresh enabled Undo All toolbar target, only after complete acquisition.
+    /// One calibrated Undo All attempt after complete observed acquisition and 24 ACKed draws.
     UndoAll(PixelPoint),
     /// Fresh complete Undo All confirmation signature and its measured target.
     Confirm(PixelPoint),
@@ -464,19 +467,19 @@ impl<Adapter: ReconIo> Runner<'_, Adapter> {
         current = self.advance_stock(&initial, &current, false)?;
 
 
-        if current.left != StockFace::Empty || self.progress.stock.len() != MAX_DRAWS {
+        if current.left != StockFace::Empty
+            || self.progress.stock.len() != MAX_DRAWS
+            || self.progress.draws != MAX_DRAWS
+        {
             return Err("Reconnaissance ended without complete inventory and two positive empty-LEFT observations".to_owned());
         }
         if let Some(fresh) = self.pause_before(&current)? {
             current = fresh;
         }
-        let undo_all = current
-            .undo_all
-            .ok_or_else(|| "Fresh enabled Undo All toolbar signature is absent".to_owned())?;
         self.io.progress(
-            "Recon inventory complete: 28 tableau + 24 ordered stock; LEFT positively empty twice",
+            "Recon inventory complete: 28 tableau + 24 ordered stock; LEFT positively empty twice; 24 draws acknowledged; one calibrated Undo All attempt, toolbar icon advisory",
         );
-        self.perform(ReconInput::UndoAll(undo_all))?;
+        self.perform(ReconInput::UndoAll(SHARED_UNDO_ALL_CONTROL.click_point))?;
         let mut confirmation_target = None;
 
 
@@ -933,7 +936,12 @@ mod tests {
             assert_eq!(adapter.input_remaining_scenes[input_index], remaining - 1);
         }
         assert_eq!(&adapter.inputs[..24], &[ReconInput::Draw; 24]);
-        assert_eq!(adapter.inputs[24], ReconInput::UndoAll(fresh_undo));
+        // The fresh board is mandatory; its advisory icon point cannot move the target.
+        assert_ne!(fresh_undo, SHARED_UNDO_ALL_CONTROL.click_point);
+        assert_eq!(
+            adapter.inputs[24],
+            ReconInput::UndoAll(SHARED_UNDO_ALL_CONTROL.click_point)
+        );
         assert_eq!(adapter.inputs.len(), 26);
         assert_eq!(adapter.published, 1);
         assert!(adapter.scenes.is_empty());
@@ -1635,16 +1643,9 @@ mod tests {
     }
 
 
-    /// A stale/absent toolbar target or changed full dialog never receives a click.
+    /// A changed or absent complete dialog never grants confirmation input.
     #[test]
     fn restoration_controls_require_fresh_positive_signatures() {
-        let mut no_toolbar = empty();
-        no_toolbar.undo_all = None;
-        let mut scenes = happy_scenes();
-        scenes[15] = ReconScene::Board(no_toolbar);
-        let mut adapter = FakeIo::new(scenes);
-        assert!(run(&mut adapter, &request()).is_err());
-        assert_eq!(adapter.inputs.len(), 24);
         for changed in [
             ReconScene::UndoConfirmation {
                 ok: PixelPoint::new(961, 600),

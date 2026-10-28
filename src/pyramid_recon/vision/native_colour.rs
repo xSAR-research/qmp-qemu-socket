@@ -23,6 +23,25 @@ const PAPER: PaperPolicy = PaperPolicy {
 };
 
 
+/// Complete native bare-coral clearance at fixed tableau location 7|1.
+/// Every RGB channel is retained; no card pixels are masked or inferred empty.
+const UNDERWATER_CORAL_RGB: &[u8; 14_688] = include_bytes!(
+    "../../../tests/fixtures/pyramid-recognition-159/underwater-coral-clearance.rgb"
+);
+
+
+/// Positively recognise one complete exposed artwork footprint at native scale.
+/// This exact appearance is limited to the measured 144 by 34 rectangle at 7|1.
+/// Every channel must match, and callers retain positive paper presence as a veto.
+/// Invalid frame geometry propagates as an error; no input authority is created.
+fn measured_coral_surface(view: FrameView<'_>, bounds: PixelRect) -> Result<bool, String> {
+    if bounds != PixelRect::new(286, 588, 144, 34) {
+        return Ok(false);
+    }
+    crate::pyramid_progress::matches_native_rgb_patch(view, bounds, UNDERWATER_CORAL_RGB, 0)
+}
+
+
 /// Veto absence when aged material exceeds the existing possible-paper allowance.
 /// Both the probe and complete clearance must stay within the unchanged percentage.
 /// This only withholds absence; it grants neither card presence nor input authority.
@@ -429,6 +448,12 @@ impl ReconVision {
             let clearance = PixelRect::new(slot.bounds.x - 2, slot.bounds.y + 156, 144, 34);
             let evidence = image_evidence::paper_evidence(view, probe, clearance, PAPER)
                 .map_err(|_| HaloDetectionError::BoundsOutsideFrame)?;
+            if evidence != PaperEvidence::Present
+                && measured_coral_surface(view, clearance)
+                    .map_err(|_| HaloDetectionError::BoundsOutsideFrame)?
+            {
+                return Ok(FaceEvidence::Absent);
+            }
             if evidence != PaperEvidence::Present
                 && aged_material_blocks_absence(view, probe, clearance)
                     .map_err(|_| HaloDetectionError::BoundsOutsideFrame)?

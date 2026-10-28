@@ -165,6 +165,8 @@ struct Corner {
     suit: Glyph,
     /// Rank and suit must independently establish this same colour.
     colour: Colour,
+    /// The separator does not cut any eligible connected component.
+    whole_separator: bool,
 }
 
 
@@ -204,6 +206,44 @@ impl Distance {
 }
 
 
+/// Measured printed ink used only with its complete native font family.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum InkPolicy {
+    /// Existing neutral black, aged blue and red printed glyphs.
+    Standard,
+    /// Underwater brown Spades/Clubs and the existing red glyph predicate.
+    Sepia,
+}
+
+
+/// Maximum brown-print channel in the retained Underwater strong-ink cores.
+const UNDERWATER_BROWN_MAX: u8 = 160;
+
+
+/// Blue-channel ceiling for the measured Underwater brown strong cores.
+const UNDERWATER_BROWN_BLUE_MAX: u8 = 110;
+
+
+/// Measured brown compatibility allows at most this red-minus-green difference.
+const UNDERWATER_BROWN_RG_MAX: u8 = 64;
+
+
+/// Minimum green-minus-blue separation from neutral print in this native family.
+const UNDERWATER_BROWN_GB_MIN: u8 = 12;
+
+
+/// Maximum green-minus-blue difference retaining the measured brown antialias fringe.
+const UNDERWATER_BROWN_GB_MAX: u8 = 96;
+
+
+/// The complete native rank ends before this measured Underwater suit boundary.
+const UNDERWATER_SEPARATOR: u8 = 30;
+
+
+/// Exclusive card-relative x bound retaining both measured Underwater Ten digits.
+const UNDERWATER_RANK_RIGHT: u8 = 34;
+
+
 /// Both complete independent label banks for one coherent font family.
 #[derive(Clone, Debug)]
 struct Family {
@@ -211,10 +251,14 @@ struct Family {
     ranks: Vec<(Rank, Vec<Glyph>)>,
     /// All four suit labels and measured raster variants.
     suits: Vec<(Suit, Vec<Glyph>)>,
-    /// Retro exemplars also prove per-witness native size within one pixel.
+    /// Complete measured exemplars enable this family's explicit native-size bound.
     native_size: bool,
     /// Smaller Western labels use whole-component separation before matching.
     western: bool,
+    /// Printed ink and native component extents belonging to this family alone.
+    ink: InkPolicy,
+    /// One measured Five-of-spades appearance requires its rank and an unsplit separator.
+    separated_spade: Option<Glyph>,
 }
 
 
@@ -222,10 +266,35 @@ struct Family {
 const WESTERN_NATIVE_SIZE_MARGIN: usize = 2;
 
 
+/// Native Underwater red/brown Eight envelopes differ by two rows in the originals.
+const UNDERWATER_NATIVE_SIZE_MARGIN: usize = 2;
+
+
 impl Family {
+    /// Compare the measured alternate only when no candidate stroke was cut.
+    fn suit_bank(&self, corner: &Corner, rank: Option<Rank>) -> Vec<(Suit, Vec<Glyph>)> {
+        let mut suits: Vec<_> = self
+            .suits
+            .iter()
+            .filter(|(suit, _)| red_suit(*suit) == (corner.colour == Colour::Red))
+            .cloned()
+            .collect();
+        if rank == Some(Rank::Five)
+            && corner.whole_separator
+            && let Some(spade) = &self.separated_spade
+            && let Some((_, variants)) = suits.iter_mut().find(|(suit, _)| *suit == Suit::Spades)
+        {
+            variants.push(spade.clone());
+        }
+        suits
+    }
+
+
     /// Keep each calibrated family's complete native raster bounds after competition.
     fn native_tolerance(&self) -> Option<usize> {
-        if self.western {
+        if self.ink == InkPolicy::Sepia {
+            Some(UNDERWATER_NATIVE_SIZE_MARGIN)
+        } else if self.western {
             Some(WESTERN_NATIVE_SIZE_MARGIN)
         } else {
             self.native_size.then_some(1)
@@ -243,9 +312,9 @@ pub(super) struct Reader {
 
 
 impl Reader {
-    /// Compile unchanged Classic RGB references and thirteen measured retro corners.
+    /// Compile separate complete Classic, Retro, Western and Underwater families.
     pub(super) fn new(classic: &GlyphReader) -> Result<Self, String> {
-        let ranks = classic
+        let ranks: Vec<(Rank, Vec<Glyph>)> = classic
             .ranks
             .iter()
             .map(|(label, variants)| {
@@ -258,7 +327,7 @@ impl Reader {
                 ))
             })
             .collect::<Result<_, String>>()?;
-        let suits = classic
+        let suits: Vec<(Suit, Vec<Glyph>)> = classic
             .suits
             .iter()
             .map(|(label, variants)| {
@@ -274,13 +343,16 @@ impl Reader {
         Ok(Self {
             families: vec![
                 Family {
+                    separated_spade: Some(measured_classic_spade(&ranks)?),
                     ranks,
                     suits,
                     native_size: false,
                     western: false,
+                    ink: InkPolicy::Standard,
                 },
                 retro_family()?,
                 wild_west_family()?,
+                underwater_family()?,
             ],
         })
     }
@@ -295,7 +367,7 @@ impl Reader {
         let pixels = corner_pixels(view, origin)?;
         let mut recognised = None;
         for family in &self.families {
-            for corner in corners_with_layout(&pixels, None, None, family.western) {
+            for corner in corners_with_ink(&pixels, None, None, family.western, family.ink) {
                 let Some(rank) = matching_label_with_tolerance(
                     &corner.rank,
                     &family.ranks,
@@ -305,12 +377,7 @@ impl Reader {
                 ) else {
                     continue;
                 };
-                let suit_bank: Vec<_> = family
-                    .suits
-                    .iter()
-                    .filter(|(suit, _)| red_suit(*suit) == (corner.colour == Colour::Red))
-                    .cloned()
-                    .collect();
+                let suit_bank = family.suit_bank(&corner, Some(rank));
                 let suit = matching_label_with_tolerance(
                     &corner.suit,
                     &suit_bank,
@@ -341,7 +408,7 @@ impl Reader {
             let candidates: Vec<_> = self
                 .families
                 .iter()
-                .map(|family| corners_with_layout(&pixels, None, None, family.western))
+                .map(|family| corners_with_ink(&pixels, None, None, family.western, family.ink))
                 .collect();
             let mut details = vec![format!(
                 "{}; paper_reference={paper:?}; components={}; corner_candidates={}",
@@ -357,19 +424,23 @@ impl Reader {
             }
             for (family, candidates) in self.families.iter().zip(candidates) {
                 for (candidate, corner) in candidates.iter().enumerate() {
-                    let name = if family.western {
+                    let name = if family.ink == InkPolicy::Sepia {
+                        "underwater"
+                    } else if family.western {
                         "wild-west"
                     } else if family.native_size {
                         "retro"
                     } else {
                         "classic"
                     };
-                    let suits: Vec<_> = family
-                        .suits
-                        .iter()
-                        .filter(|(suit, _)| red_suit(*suit) == (corner.colour == Colour::Red))
-                        .cloned()
-                        .collect();
+                    let rank = matching_label_with_tolerance(
+                        &corner.rank,
+                        &family.ranks,
+                        RANK_ERROR,
+                        RANK_GAP,
+                        family.native_tolerance(),
+                    );
+                    let suits = family.suit_bank(corner, rank);
                     details.push(format!(
                         "candidate={candidate} family={name} colour={:?}; rank {}; suit {}",
                         corner.colour,
@@ -639,6 +710,25 @@ fn black_compatible([r, g, b]: [u8; 3], aged: bool) -> bool {
 
 /// Extract seed-supported same-colour ink, excluding disconnected single-pixel art.
 fn components(pixels: &[[u8; 3]], paper_override: Option<u8>) -> Vec<Component> {
+    components_with_ink(pixels, paper_override, InkPolicy::Standard)
+}
+
+
+/// Identify the measured brown print without admitting orange/red glyph cores.
+fn brown_compatible([r, g, b]: [u8; 3]) -> bool {
+    r >= g
+        && g >= b
+        && r - g <= UNDERWATER_BROWN_RG_MAX
+        && (UNDERWATER_BROWN_GB_MIN..=UNDERWATER_BROWN_GB_MAX).contains(&(g - b))
+}
+
+
+/// Grow bounded whole components using the selected family's printed ink.
+fn components_with_ink(
+    pixels: &[[u8; 3]],
+    paper_override: Option<u8>,
+    policy: InkPolicy,
+) -> Vec<Component> {
     let Some(paper) = paper_override.or_else(|| paper_reference(pixels)) else {
         return Vec::new();
     };
@@ -666,7 +756,11 @@ fn components(pixels: &[[u8; 3]], paper_override: Option<u8>) -> Vec<Component> 
         let strong: Vec<_> = pixels
             .iter()
             .map(|[r, g, b]| match colour {
-                Colour::Black => (*r).max(*g).max(*b) <= 100,
+                Colour::Black => match policy {
+                    InkPolicy::Standard => (*r).max(*g).max(*b) <= 100,
+                    InkPolicy::Sepia => *r <= UNDERWATER_BROWN_MAX
+                        && *b <= UNDERWATER_BROWN_BLUE_MAX && brown_compatible([*r, *g, *b]),
+                },
                 Colour::Red => {
                     (*r >= 160 && r.saturating_sub(*g) >= 80 && r.saturating_sub(*b) >= 80)
                         || (aged
@@ -679,7 +773,10 @@ fn components(pixels: &[[u8; 3]], paper_override: Option<u8>) -> Vec<Component> 
         let mut eligible = vec![false; pixels.len()];
         for (index, [r, g, b]) in pixels.iter().enumerate() {
             let compatible = match colour {
-                Colour::Black => black_compatible([*r, *g, *b], aged),
+                Colour::Black => match policy {
+                    InkPolicy::Standard => black_compatible([*r, *g, *b], aged),
+                    InkPolicy::Sepia => brown_compatible([*r, *g, *b]),
+                },
                 Colour::Red => {
                     *r >= 120
                         && r.saturating_sub(*g) >= red_bias_green.saturating_add(24)
@@ -712,7 +809,10 @@ fn components(pixels: &[[u8; 3]], paper_override: Option<u8>) -> Vec<Component> 
                 let y = index / CORNER_WIDTH;
                 supported_strong += usize::from(
                     strong[index]
-                        && (colour != Colour::Black || black_compatible(pixels[index], aged)),
+                        && (colour != Colour::Black || match policy {
+                            InkPolicy::Standard => black_compatible(pixels[index], aged),
+                            InkPolicy::Sepia => brown_compatible(pixels[index]),
+                        }),
                 );
                 points.push(Point {
                     x: (x + 3) as u8,
@@ -758,7 +858,25 @@ fn corners_with_layout(
     reference_cut: Option<u8>,
     western: bool,
 ) -> Vec<Corner> {
-    let eligible: Vec<_> = components(pixels, paper_override)
+    corners_with_ink(
+        pixels,
+        paper_override,
+        reference_cut,
+        western,
+        InkPolicy::Standard,
+    )
+}
+
+
+/// Extract complete native glyphs at the measured family separator without resizing.
+fn corners_with_ink(
+    pixels: &[[u8; 3]],
+    paper_override: Option<u8>,
+    reference_cut: Option<u8>,
+    western: bool,
+    policy: InkPolicy,
+) -> Vec<Corner> {
+    let eligible: Vec<_> = components_with_ink(pixels, paper_override, policy)
         .into_iter()
         .filter(|component| {
             let Some(left) = component.points.iter().map(|point| point.x).min() else {
@@ -782,7 +900,12 @@ fn corners_with_layout(
                 .map(|point| point.y)
                 .max()
                 .map_or(0, |y| y + 1);
-            if western {
+            if policy == InkPolicy::Sepia {
+                // Native "10" reaches x32; both digits must remain inside this x34 crop.
+                (left >= 3 && right <= UNDERWATER_RANK_RIGHT && top >= 4 && bottom <= 33)
+                    || (left >= 4 && right <= 26 && top >= 29 && bottom <= SUIT_BOTTOM)
+                    || (left >= 4 && right <= 26 && top >= 4 && bottom <= SUIT_BOTTOM)
+            } else if western {
                 // Measured complete label extents over both saved Western boards.
                 (left >= 3 && right <= 24 && top >= 4 && bottom <= 26)
                     || (left >= 3 && right <= 19 && top >= 27 && bottom <= 45)
@@ -794,7 +917,14 @@ fn corners_with_layout(
         })
         .collect();
     let mut candidates = Vec::new();
-    for cut in if western { 26..=27 } else { 30..=33 } {
+    let separators = if western {
+        26..=27
+    } else if policy == InkPolicy::Sepia {
+        UNDERWATER_SEPARATOR..=UNDERWATER_SEPARATOR
+    } else {
+        30..=33
+    };
+    for cut in separators {
         if reference_cut.is_some_and(|required| required != cut) {
             continue;
         }
@@ -841,13 +971,37 @@ fn corners_with_layout(
             Glyph::from_points(&suit),
             rank_colour,
         ) {
-            let corner = Corner { rank, suit, colour };
+            let whole_separator = !eligible.iter().any(|component| {
+                component.points.iter().any(|point| point.y < cut)
+                    && component.points.iter().any(|point| point.y >= cut)
+            });
+            let corner = Corner { rank, suit, colour, whole_separator };
             if !candidates.contains(&corner) {
                 candidates.push(corner);
             }
         }
     }
     candidates
+}
+
+
+/// Compile one complete measured Classic spade with its independently recognised Five.
+/// The original full corner is retained: no stroke clipping, scaling or changed limits.
+fn measured_classic_spade(ranks: &[(Rank, Vec<Glyph>)]) -> Result<Glyph, String> {
+    const RGB: &[u8; 4_557] = include_bytes!("foreground_card/classic-spade-158.rgb");
+    let pixels: Vec<_> = RGB.as_chunks::<3>().0.to_vec();
+    let mut candidates = corners_with_layout(&pixels, None, Some(30), false).into_iter();
+    let corner = candidates
+        .next()
+        .ok_or("Measured Classic spade lacks a complete corner")?;
+    if candidates.next().is_some()
+        || corner.colour != Colour::Black
+        || matching_label_with_tolerance(&corner.rank, ranks, RANK_ERROR, RANK_GAP, None)
+            != Some(Rank::Five)
+    {
+        return Err("Measured Classic spade lacks its coherent Five/black witness".to_owned());
+    }
+    Ok(corner.suit)
 }
 
 
@@ -901,6 +1055,28 @@ fn wild_west_family() -> Result<Family, String> {
 
 /// Validate a complete labelled family before any candidate can be recognised.
 fn complete_family(text: &str, family: &str, western: bool) -> Result<Family, String> {
+    complete_family_with_ink(text, family, western, InkPolicy::Standard)
+}
+
+
+/// Load all thirteen native Underwater ranks and all four measured suits.
+fn underwater_family() -> Result<Family, String> {
+    complete_family_with_ink(
+        include_str!("../../../assets/pyramid-glyphs/underwater-corners-v1.json"),
+        "Underwater",
+        false,
+        InkPolicy::Sepia,
+    )
+}
+
+
+/// Compile a complete bounded family using only its own colour/layout policy.
+fn complete_family_with_ink(
+    text: &str,
+    family: &str,
+    western: bool,
+    ink: InkPolicy,
+) -> Result<Family, String> {
     let data: serde_json::Value = serde_json::from_str(text).map_err(|error| error.to_string())?;
     let entries = data["corners"]
         .as_array()
@@ -944,7 +1120,8 @@ fn complete_family(text: &str, family: &str, western: bool) -> Result<Family, St
             .map(|pair| Ok(super::hex(pair[0])? * 16 + super::hex(pair[1])?))
             .collect::<Result<_, String>>()?;
         let pixels = bytes.as_chunks::<3>().0.to_vec();
-        let corner = corners_with_layout(&pixels, None, (!western).then_some(32), western)
+        let reference_cut = if ink == InkPolicy::Sepia { Some(UNDERWATER_SEPARATOR) } else { (!western).then_some(32) };
+        let corner = corners_with_ink(&pixels, None, reference_cut, western, ink)
             .into_iter()
             .next()
             .ok_or_else(|| format!("{family} {rank:?}/{suit:?} corner lacks complete same-colour glyphs: paper={:?}; components={:?}", paper_reference(&pixels), components(&pixels, None).iter().map(|c| (c.colour, c.points.iter().map(|p|p.x).min(), c.points.iter().map(|p|p.x).max(), c.points.iter().map(|p|p.y).min(), c.points.iter().map(|p|p.y).max(), c.points.iter().filter(|p|p.strong).count())).collect::<Vec<_>>()))?;
@@ -981,6 +1158,8 @@ fn complete_family(text: &str, family: &str, western: bool) -> Result<Family, St
         suits,
         native_size: true,
         western,
+        ink,
+        separated_spade: None,
     })
 }
 

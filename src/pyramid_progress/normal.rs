@@ -44,6 +44,12 @@ const HEADER_TWO_RGB: &[u8; 15_360] =
     include_bytes!("../../tests/fixtures/pyramid-standard-series/header-2.rgb");
 
 
+/// Complete measured ordinal-two raster from the retained 158 normal-entry refusal.
+/// It uses the original header tolerance and does not alter another ordinal.
+const HEADER_TWO_159_RGB: &[u8; 15_360] =
+    include_bytes!("../../tests/fixtures/pyramid-recognition-159/normal-header-two.rgb");
+
+
 /// Complete original ordinal-three header; no digit substitution is used.
 const HEADER_THREE_RGB: &[u8; 15_360] =
     include_bytes!("../../tests/fixtures/pyramid-standard-series/header-3.rgb");
@@ -103,7 +109,7 @@ const NORMAL_HEADERS: [(BoardCount, HeaderPatch); 3] = [
 ///
 /// The three original source patches stay independently retained. Two coherent
 /// appearances for ordinal one still denote one count, never two board changes.
-const NORMAL_APPEARANCES: [(BoardCount, HeaderPatch); 4] = [
+const NORMAL_APPEARANCES: [(BoardCount, HeaderPatch); 5] = [
     NORMAL_HEADERS[0],
     NORMAL_HEADERS[1],
     NORMAL_HEADERS[2],
@@ -115,6 +121,16 @@ const NORMAL_APPEARANCES: [(BoardCount, HeaderPatch); 4] = [
         HeaderPatch {
             bounds: PixelRect::new(1_658, 46, 160, 32),
             rgb: HEADER_ONE_NEW_GAME_RGB,
+        },
+    ),
+    (
+        BoardCount {
+            completed: 1,
+            target: 3,
+        },
+        HeaderPatch {
+            bounds: PixelRect::new(1_658, 46, 160, 32),
+            rgb: HEADER_TWO_159_RGB,
         },
     ),
 ];

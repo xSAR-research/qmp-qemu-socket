@@ -1,62 +1,46 @@
-# Current handoff — qmp-qemu-socket 2.9.156
+# Current handoff - qmp-qemu-socket 2.9.159
 
-The named Pyramid testing observations approved in m01441 are corrected and host
-qualified. All six gates pass with 1,549 tests and 821 sealed inputs. Approved
-version-only alignment passed locked check, release and protected `--help`;
-the other 819 inputs, including all 52 xSAR inputs, are identical. Existing
-154/155 corrections are retained. Fresh 156 guest acceptance remains pending.
+The approved measured bare-coral and complete normal ordinal-two corrections
+are implemented and host qualified. Six gates pass with 1,583 tests and 846
+sealed inputs. Approved version-only alignment passes locked check, native
+release and protected help; the other 844 inputs including all 52 xSAR inputs
+are unchanged. Fresh 159 guest acceptance is pending. The user retracted the
+earlier standard Continuous acceptance; it remains open.
 
-Protected executable: `/home/charlie/Documents/Pyramid/Validation/testing-155-to-156-20261027-xemrbswl/application-156/native/qmp-qemu-socket-2.9.156`.
-SHA-256: `3c72b6a0009f7b46f826a8cfcaa36f2922731c08cada25a317e0cea85eade9ab`.
-The operator's running 155 process was preserved. No agent GUI launch, START,
-guest input, new capture, installation, index change, commit or push occurred.
+Protected executable: `/home/charlie/Documents/Pyramid/Validation/pyramid-effect-158-20261028-mca9017u/application-159/native/qmp-qemu-socket-2.9.159`.
+SHA-256: `5e16e00756f8dedff36b9b83300e120062ad3c0e76b42266271b6f595c20544d`.
+The existing controller remains under operator control. No GUI/START, live
+guest input/capture, installation, staging, commit or push occurred.
 
 ## Destination Sentinel
 
-Run once via context-mode before new edits:
+Run this exact command once through context-mode before new edits:
 
 ```sh
-python3 /home/charlie/Documents/Pyramid/Validation/testing-155-to-156-20261027-xemrbswl/application-156/destination-sentinel.py
+python3 /home/charlie/Documents/Pyramid/Validation/pyramid-effect-158-20261028-mca9017u/application-159/destination-sentinel.py
 ```
 
-Expected HANDOFF VERIFIED. It binds four repository identities/parents/indices,
-complete porcelain/diffs (only SQLite WAL/SHM transients excluded), 821 aligned
-inputs, current documents/receipts and the protected executable. An exact match
-authorises PASSED (Cached) for this qualified dirty baseline. Report exact
-regression and reconcile before editing; do not rebuild an unchanged baseline.
+Require `HANDOFF VERIFIED`. On `HANDOFF REGRESSION`, preserve the exact discrepancy
+and stop before changing state; reconcile it before editing. The state binds
+four repository identities/indices/diffs, 846 aligned inputs, current documents,
+old/new receipts and the protected binary. The preserved dirty baseline permits
+baseline compilation/tests PASSED (Cached), with no unchanged rebuild. New
+implementation still needs Charlie's go-ahead. [Milestones](milestones.md) owns
+the receipt.
 
-## Scope and authority
+## Scope and limits
 
-Only the four reported packets from `Testing_v2.9.155.md` and the later request 12
-packet in m01711 were diagnosed. Other
-logged errors were explicitly excluded as operator mode-exit artefacts. Complete
-Score labels/counting, exhausted DL with exact DR, and the small normal reward
-are corrected without relaxing limits or expanding input authority. m01587 also
-authorised the ASCII label `Continuous - no challenge`. Its workflow policy is
-unchanged. m01640 specifies the next test as Continuous / Repeat normal games;
-it does not retrospectively resolve earlier mode rows or approve a new policy.
+The whole native 144 by 34 coral clearance at fixed 7|1 must match every RGB
+channel exactly, with positive paper still a veto. Other artwork and material
+retain generic refusals. The complete ordinal-two appearance retains header
+limit 12, complete footer and conflicting-count checks. Both references are
+training regressions, with finite coverage and no independent new held-out.
+The [fixture record](../tests/fixtures/pyramid-recognition-159/README.md) and
+[verification](Verification-2.9.159.md) distinguish original, synthetic and live
+evidence. STOP/context, fresh probes, two-frame entry and no-replay rules remain.
 
-Application HEAD remains `b67d93942c68c55bfebe90e0f4e1e03f57300740`, parent
-`23016ba497f543a5aeee7bf97fe00e0a3c826b28`; all indices are unchanged.
-xSAR remains 0.9.0 at `d20dca8ad2320dcbbf869e22b35a2583317d4569`, parent
-`e50f7b3222fbd803d9eeecd8a2a37ba6fec856ca`; all 52 inputs are unchanged,
-296 tests/three Miri checks remain cached and its relative path is not a Git pin.
-No further increment, GUI launch, START, guest input, installation or publication
-is authorised by this handoff. Operator testing and fresh acceptance are separate.
-
-## Continuity and boundaries
-
-The complete [Free Cell plan](free-cell-block-1-plan.md) is unchanged at SHA-256
-`b2e9bde0ac4e88244509e38d459859fae92f517a859bbd94e6d1681f5dce0181`;
-future 3.0.0 classification is retained and implementation remains unapproved.
-The flat `/home/charlie/tmp/_HOLDER_` archive remains until 3.0.0 is ready after
-testing. Only then select long-term evidence for `/home/charlie/tmp/Evidence/`.
-No archive selection or move is part of this delivery.
-
-Preserve STOP/context, fresh supported scenes/probes, separate ACK/effect proof,
-existing finite windows, no uncertain replay, Unknown versus Empty, fixed
-one-based Pyramid locations, strict JSON and private atomic exports. Preserve
-original and first-failure evidence. Use native nightly, scoped formatting and
-locked package gates; no codex-process-jobs. Read [156 verification](Verification-2.9.156.md)
-and the retained [155 verification](Verification-2.9.155.md) for evidence limits.
-Complete path inventories and source/log receipts are in `/home/charlie/Documents/Pyramid/Validation/testing-155-to-156-20261027-xemrbswl/application-156`.
+[Remaining acceptance before 3.0.0](Pyramid-Acceptance-Before-3.0.0.md) covers M11
+and M14; M12 pacing and planned M13 migration remain visible separately. RESET
+and Free Cell implementation are excluded. The saved Free Cell plan and approved
+3.0.0 first-build classification are retained. `_HOLDER_` selection remains
+deferred until 3.0.0 is ready after testing. No sibling repository was edited.

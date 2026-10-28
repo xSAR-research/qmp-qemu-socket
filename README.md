@@ -1,5 +1,53 @@
 # qmp-qemu-socket
 
+2.9.159 is host qualified for the measured bare-coral effect footprint and
+the retained complete Boards 2 of 3 appearance. All six gates pass with 1,583
+tests and 846 sealed inputs; approved version-only alignment passes locked
+check, native release and protected help. Generic material and matching limits,
+complete card/pile checks, two-frame entry and STOP/no-replay rules are retained.
+
+[Verification and fresh guest checks](docs/Verification-2.9.159.md), the
+[acceptance checklist before 3.0.0](docs/Pyramid-Acceptance-Before-3.0.0.md) and
+the [current handoff](docs/handoff.md) describe the evidence and limits. Standard
+Continuous acceptance was retracted after the 158 failure and remains open;
+fresh 159 guest acceptance is pending. RESET and Free Cell implementation are
+outside this revision.
+
+## Retained 2.9.158 delivery context
+
+2.9.158 is host qualified for the retained Five of spades refusal, the measured
+Underwater card family and current-frame entry/transition diagnostics. Complete
+card identity and fresh-board evidence remain required. All six gates pass with
+1,574 tests and 836 sealed inputs. Approved version-only alignment passed locked
+check, native release and protected help; the other 834 inputs, including all 52
+xSAR inputs, are unchanged.
+
+[Verification and fresh guest checks](docs/Verification-2.9.158.md) and the
+[current handoff](docs/handoff.md) describe the evidence and its limits. Fresh 158
+guest acceptance is pending. RESET is outside this revision; the existing
+controller was left under operator control.
+
+## Retained 2.9.157 delivery context
+
+The following statements are dated evidence; the current receipt above governs.
+
+2.9.157 is host qualified for the late normal-board transition and theme-dependent
+Recon Undo All refusal. A fully qualified sixth next-normal-board observation may
+receive one matching fresh confirmation. Complete acknowledged acquisition history
+selects one calibrated Undo All attempt; full dialog and original-deal restoration
+remain required. All six gates pass with 1,559 tests and 827 sealed inputs.
+Approved version-only alignment passed locked check, release and protected help;
+the other 825 inputs, including all 52 xSAR inputs, are unchanged.
+
+[Verification and fresh guest checks](docs/Verification-2.9.157.md) and the
+[current handoff](docs/handoff.md) describe the evidence. Fresh 157 guest acceptance
+is pending. The running 156 process was preserved; no agent GUI launch, guest
+input, installation, staging, commit or push occurred.
+
+## Retained 2.9.156 delivery context
+
+The following statements are dated evidence; the current receipt above governs.
+
 2.9.156 is host qualified for the retained Pyramid testing observations: complete Score entry/counting appearances, exhausted DL with an exact remaining DR, and the small normal reward in the guarded normal-game restart. All six gates pass with 1,549 tests and 821 sealed inputs. Approved version-only alignment passed locked check, release and protected `--help`; the other 819 inputs, including all 52 xSAR inputs, are unchanged.
 
 [Verification and fresh guest checks](docs/Verification-2.9.156.md) and the [current handoff](docs/handoff.md) record the evidence and limits. The objective label is `Continuous - no challenge`; its existing no-challenge policy is unchanged. Charlie's next normal-game test uses Mode Continuous / Objective Repeat normal games. Fresh 156 guest acceptance is pending; the running 155 process was preserved. No agent GUI launch, guest input, installation, commit or push occurred.

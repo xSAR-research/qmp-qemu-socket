@@ -177,6 +177,81 @@ fn expected_input(events: &mut Vec<Event>, operation: ReconInput) {
 }
 
 
+/// Completed observed draws permit one Undo All attempt despite unmatched toolbar pixels.
+#[test]
+fn recon_157_confirmed_inventory_uses_one_undo_attempt_without_icon_matching() {
+    let mut scenes = happy_scenes();
+    for scene in &mut scenes {
+        if let ReconScene::Board(board) = scene {
+            board.undo_all = None;
+        }
+    }
+    let mut adapter = EventIo::new(scenes);
+    assert!(run(&mut adapter, &request()).is_ok());
+    assert_eq!(adapter.inputs().len(), 26);
+    assert_eq!(
+        adapter.inputs()[24],
+        ReconInput::UndoAll(crate::parameters::SHARED_UNDO_ALL_CONTROL.click_point)
+    );
+    assert_eq!(adapter.count(|event| *event == Event::Publish), 1);
+}
+
+
+/// Absence of the expected full dialog ends after one Undo All; no confirmation or export.
+#[test]
+fn recon_157_missing_dialog_never_retries_undo_or_publishes() {
+    let mut scenes = happy_scenes();
+    scenes.truncate(16);
+    let mut exhausted = scenes.last().unwrap().clone();
+    if let ReconScene::Board(board) = &mut exhausted {
+        board.undo_all = None;
+    }
+    scenes[15] = exhausted.clone();
+    scenes.extend(vec![exhausted; MAX_OBSERVATIONS]);
+    let mut adapter = EventIo::new(scenes);
+    let failure = run(&mut adapter, &request()).unwrap_err();
+    assert!(failure.message.contains("confirmation did not appear"));
+    assert_eq!(adapter.inputs().len(), 25);
+    assert_eq!(
+        adapter.inputs().last(),
+        Some(&ReconInput::UndoAll(
+            crate::parameters::SHARED_UNDO_ALL_CONTROL.click_point
+        ))
+    );
+    assert_eq!(adapter.count(|event| *event == Event::Publish), 0);
+}
+
+
+/// Confirmed history cannot bypass STOP or replay an uncertain Undo All attempt.
+#[test]
+fn recon_157_icon_independent_undo_retains_stop_and_uncertain_delivery_guards() {
+    for stop in [true, false] {
+        let mut scenes = happy_scenes();
+        for scene in &mut scenes {
+            if let ReconScene::Board(board) = scene {
+                board.undo_all = None;
+            }
+        }
+        let mut adapter = EventIo::new(scenes);
+        if stop {
+            adapter.stop_after_capture = Some(16);
+        } else {
+            adapter.uncertain_input = Some(25);
+        }
+        assert!(run(&mut adapter, &request()).is_err());
+        assert_eq!(adapter.inputs().len(), if stop { 24 } else { 25 });
+        assert_eq!(adapter.count(|event| *event == Event::Capture), 16);
+        assert_eq!(adapter.count(|event| *event == Event::Publish), 0);
+        assert!(
+            !adapter
+                .inputs()
+                .iter()
+                .any(|input| matches!(input, ReconInput::Confirm(_)))
+        );
+    }
+}
+
+
 /// The approved schedule has 20 captures, 24 independent D probes and exact phase pacing.
 #[test]
 fn paired_scan_observes_twenty_frames_with_exact_draw_and_restoration_pacing() {

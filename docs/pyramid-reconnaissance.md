@@ -56,8 +56,9 @@ provenance requirements are documented in
 [the profile contract](pyramid-recon-profile.md).
 
 Normal Capture remains read-only, and ShortestPath.permits_input remains false.
-The dedicated command grants only stock D, freshly recognised enabled Undo All,
-and the supported confirmation's freshly recognised OK point. It cannot click
+The dedicated command grants only stock D, one calibrated Undo All attempt after
+the complete confirmed acquisition history, and the supported confirmation's
+freshly recognised OK point. It cannot click
 tableau cards, activate Solver, recycle, start another game or execute a route.
 
 ## Acquisition and restoration
@@ -75,7 +76,12 @@ tableau cards, activate Solver, recycle, start another game or execute a route.
 4. After all 24 unique stock identities, require positive empty LEFT and the
    last identity in RIGHT on two consecutive fresh observations. Early emptiness,
    unknown/ambiguous cards, duplicate identity or a changed tableau stops safely.
-5. Click freshly recognised enabled Undo All once. Observe its full specific
+5. After 24 acknowledged D operations, all 52 unique identities and two positive
+   empty-LEFT observations, attempt Undo All once at the shared calibrated point
+   `(1320,978)`. Confirmed operation history supplies availability; the toolbar
+   icon match is advisory across background themes. Fresh running-VM and absolute
+   pointer probes, STOP and selected-context checks still precede the attempt.
+   Observe its full specific
    confirmation, then obtain another complete fresh matching signature before
    its single OK click. Generic gold/OK decoration is never sufficient.
 6. Verify the original tableau, initial LEFT identity and positive empty RIGHT

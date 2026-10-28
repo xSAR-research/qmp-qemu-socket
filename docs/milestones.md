@@ -1,33 +1,137 @@
-# Milestone Tracker & Baseline Receipt — `qmp-qemu-socket`
+# Milestone Tracker & Baseline Receipt - `qmp-qemu-socket`
 
 This repository-local receipt is authoritative together with the current handoff.
 
-**Session-Start Evaluation Rule:**
-1. Run the exact current Destination Sentinel via context-mode before new edits.
-2. An exact match authorises compilation and the 1,549-test suite as PASSED (Cached)
-   for this qualified 2.9.156 dirty baseline. A clean tree may use matching HEAD/parent.
-3. The receipt binds four repositories, unchanged indices, complete porcelain/diffs,
-   821 aligned inputs, current documents/receipts and the protected executable.
-4. Preserve unrelated changes; report exact discrepancies before editing. Do not
-   rebuild the baseline or rerun an unchanged full suite before new work-product.
+**Session-Start Evaluation Rule:** run the exact current Destination Sentinel
+through context-mode before edits. An exact match authorises compilation and
+the 1,583-test suite as PASSED (Cached) for the preserved 2.9.159 tree. It binds
+four repository identities, unchanged indices, complete status/diffs, 846 aligned
+inputs, documents/receipts and the protected executable. Report discrepancies
+before changes; no unchanged baseline rebuild is authorised.
 
 ## 1. Active Baseline Receipt
 
 | Field | Value | Notes |
 | --- | --- | --- |
-| Package / Current Manifest Version | qmp-qemu-socket 2.9.156 | Edition 2024 / MSRV 1.101.0 / native nightly |
-| Approval | m01441 — retain named testing evidence and build 2.9.156; m01587 — ASCII objective label | m01640 specifies the next Continuous / Repeat normal games test |
-| Provisional target | None | No further increment authorised |
-| Active state | Four retained appearances corrected and host qualified in their approved paths | NoChallenge restart is not added; fresh 156 acceptance pending |
-| Baseline_HEAD_SHA | b67d93942c68c55bfebe90e0f4e1e03f57300740 | Qualified dirty tree; index unchanged |
-| Baseline parent | 23016ba497f543a5aeee7bf97fe00e0a3c826b28 | No branch, synchronisation, commit or push |
+| Package / Current Manifest Version | qmp-qemu-socket 2.9.159 | Edition 2024 / MSRV 1.101.0 / native nightly |
+| Approval | m02912 - coral correction and v2.9.159 | m02920 retracts standard-theme acceptance and supplies the complete normal-header refusal |
+| Provisional target | None | Approved 159 alignment completed after full host qualification |
+| Active state | 159 implemented and host qualified; uncommitted | Fresh 159 guest acceptance pending; standard Continuous remains unaccepted |
+| Baseline_HEAD_SHA | 58aa2882fb0c4ff3aa0d71ae49de0871545b86e3 | Published 156 base; preserved approved 157/158/159 changes; index empty |
+| Baseline parent | b67d93942c68c55bfebe90e0f4e1e03f57300740 | Prior published history retained |
 | xSAR | 0.9.0 @ d20dca8ad2320dcbbf869e22b35a2583317d4569 | 52 inputs unchanged; 296 tests / three Miri cached; relative path is not a Git pin |
-| Host qualification | 1549 pass / 0 failed, ignored, filtered / 821 seals / six gates | Full suite 592.970 seconds including Cargo |
-| Version-only alignment | Own Cargo.toml/Cargo.lock fields 2.9.155 → 2.9.156 | Check/release/help pass; other 819 inputs unchanged |
-| Protected executable | /home/charlie/Documents/Pyramid/Validation/testing-155-to-156-20261027-xemrbswl/application-156/native/qmp-qemu-socket-2.9.156 | SHA-256 3c72b6a0009f7b46f826a8cfcaa36f2922731c08cada25a317e0cea85eade9ab |
-| Current state/sentinel | /home/charlie/Documents/Pyramid/Validation/testing-155-to-156-20261027-xemrbswl/application-156/destination-state.json | Exact command in [handoff](handoff.md) |
-| Fresh guest acceptance | Pending | [Verification and live checks](Verification-2.9.156.md) |
+| Host qualification | 1583 pass / 0 failed, ignored, filtered / 846 seals / six gates | Full command 553.919 seconds |
+| Version-only alignment | Own Cargo.toml/Cargo.lock fields 2.9.158 to 2.9.159 | Check/release/help pass; other 844 inputs unchanged |
+| Protected executable | /home/charlie/Documents/Pyramid/Validation/pyramid-effect-158-20261028-mca9017u/application-159/native/qmp-qemu-socket-2.9.159 | SHA-256 5e16e00756f8dedff36b9b83300e120062ad3c0e76b42266271b6f595c20544d |
+| Current state/sentinel | /home/charlie/Documents/Pyramid/Validation/pyramid-effect-158-20261028-mca9017u/application-159/destination-state.json | Exact command in [handoff](handoff.md) |
+| Guest evidence | The 158 standard Continuous acceptance was explicitly retracted | Both original 158 failures retained; no fresh 159 acceptance |
+| Remaining acceptance | [Pre-3.0.0 checklist](Pyramid-Acceptance-Before-3.0.0.md) | M11/M14 live gaps; M12 in progress; M13 planned separately |
 | Free Cell continuity | [Complete saved plan](free-cell-block-1-plan.md) | Future 3.0.0 classification retained; implementation unapproved |
+
+### 2.9.159 measured artwork and complete normal-header correction
+
+The 158 sentinel verified before edits. Nine regressions and all six host gates
+pass. [Verification](Verification-2.9.159.md) records the complete fixed-slot RGB
+proof, the unchanged ordinal/header/footer contract, original failures, bounded
+negative tests, actual gate results and live limitations. No generic paper,
+aged-material, hue, shape or card-identity threshold was raised. Current RUN,
+STOP/context, uncertain input and ordinary gameplay recording rules are unchanged.
+
+Original evidence, exact input versions, logs and the protected executable are
+retained in `/home/charlie/Documents/Pyramid/Validation/pyramid-effect-158-20261028-mca9017u/application-159`. RESET remains an optional future QoL note; archive selection
+is deferred until 3.0.0 is ready after testing. The master schedule remains the
+milestone authority; no live acceptance was inferred from host tests.
+
+## Retained 2.9.158 baseline receipt
+
+
+| Field | Value | Notes |
+| --- | --- | --- |
+| Package / Current Manifest Version | qmp-qemu-socket 2.9.158 | Edition 2024 / MSRV 1.101.0 / native nightly |
+| Approval | m02419 - recognition, diagnostics and v2.9.158 | m02442 explicitly excludes RESET; m02545/m02552 supply native calibration evidence |
+| Provisional target | None | Approved 158 alignment completed after full host qualification |
+| Active state | 158 implemented and host qualified; uncommitted | Fresh 158 guest acceptance pending |
+| Baseline_HEAD_SHA | 58aa2882fb0c4ff3aa0d71ae49de0871545b86e3 | Published 156 base; preserved approved 157/158 changes; index empty |
+| Baseline parent | b67d93942c68c55bfebe90e0f4e1e03f57300740 | Prior published history retained |
+| xSAR | 0.9.0 @ d20dca8ad2320dcbbf869e22b35a2583317d4569 | 52 inputs unchanged; 296 tests / three Miri cached; relative path is not a Git pin |
+| Host qualification | 1574 pass / 0 failed, ignored, filtered / 836 seals / six gates | Full suite 572.689 seconds including Cargo |
+| Version-only alignment | Own Cargo.toml/Cargo.lock fields 2.9.157 to 2.9.158 | Check/release/help pass; other 834 inputs unchanged |
+| Protected executable | /home/charlie/Documents/Pyramid/Validation/recognition-157-to-158-20261028-3dxw5v0d/application-158/native/qmp-qemu-socket-2.9.158 | SHA-256 8a4ef553145dada1eeefe47c86d9596bbfb0c9f626eb2dc84857754295d7afc5 |
+| Current state/sentinel | /home/charlie/Documents/Pyramid/Validation/recognition-157-to-158-20261028-3dxw5v0d/application-158/destination-state.json | Exact command in [handoff](handoff.md) |
+| Guest evidence | Operator reported over one hour of successful 157 Continuous operation | Later Five of spades and Underwater refusals retained; fresh 158 acceptance pending |
+| Free Cell continuity | [Complete saved plan](free-cell-block-1-plan.md) | Future 3.0.0 classification retained; implementation unapproved |
+
+### 2.9.158 bounded card recognition and same-frame diagnostics
+
+The 157 sentinel verified before edits. Fifteen regressions and all six host gates
+pass. [Verification](Verification-2.9.158.md) records the measured Classic Spade,
+complete Underwater family, thirteen training versus 46 within-source held-out
+corners, native mock limits, pre-correction failures and actual gate results.
+No existing-family quality/gap threshold or input policy was relaxed. Entry and
+transition diagnostics retain each actual frame's reader refusal without changing
+capture budgets. RESET remains a future idea, outside this revision.
+
+The exact pre-edit state, original-file backups, source evidence and raw failed
+prototypes, final seals, gate logs, protected executable and explicit promotion
+inventory are in `/home/charlie/Documents/Pyramid/Validation/recognition-157-to-158-20261028-3dxw5v0d/application-158`. Old 157 records below remain dated receipts. No guest
+input, agent launch, installation, index change, commit or push occurred.
+
+Separate improvement ideas: obtain independent Underwater runs and any missing
+rank/ink-colour held-outs before broadening coverage; keep the existing RESET
+feasibility note as future work. Archive selection stays deferred until 3.0.0 is
+ready after testing.
+
+### 2.9.157 late transition and deterministic Recon restoration
+
+The original 156 sentinel verified before edits. Ten focused regressions and all
+six host gates pass. Only the approved own-package version fields changed after
+qualification. [Verification](Verification-2.9.157.md) records actual native
+frames, pre-correction failures, synthetic mock boundaries, full results and guest
+checks. The new reserve is normal-only, cannot renew and commits no unpaired
+board. Complete acquisition history chooses one Undo All attempt; the existing
+observed dialog/restoration, STOP/context/probe and no-replay contracts remain.
+
+The exact pre-edit publication state and 12 original-file backups, all 43 retained
+evidence files, three byte-original unit fixtures, current 19-path inventory,
+source seals, root review, gate logs and protected executable are recorded in
+`/home/charlie/Documents/Pyramid/Validation/pyramid-transition-156-20261027-cmswhmob/application-157`. Old 156 qualification/publication records remain immutable. The running
+156 controller, all other repositories, the index and the archive are preserved.
+
+Further improvement ideas: retain independently labelled settled transition pairs
+from future operator tests to evaluate readiness latency; they are not required
+for this bounded correction and do not authorise unattended data collection.
+
+### 2.9.156 operator publication — 2026-10-27
+
+Charlie reported a successful GitHub push of `main` to `58aa2882fb0c4ff3aa0d71ae49de0871545b86e3`.
+Local HEAD and origin/main match that commit; its local ED25519-SK signature
+verifies for info@xsar.com.au with fingerprint
+`SHA256:BcOVc2yRJy48uRtoPwqxZGvLjtFcp8Mpvopw8wcYfW0`.
+The commit contains all 73 qualified release paths, all nine linked Free Cell
+specification documents, and the pre-existing `.gitignore` edit added by the
+operator. That extra edit exactly matches the previously preserved patch.
+All 821 aligned inputs, 73 committed release-file hashes and the protected
+executable match the qualification. The 1,549 tests/six gates remain
+PASSED (Cached); no rebuild, further increment or guest result is implied.
+
+The old sentinel correctly reported `HANDOFF REGRESSION: qmp-qemu-socket head changed`.
+All four-repository differences were accounted for as the operator publication;
+a new exact sentinel verified before these two local reference-document updates.
+The original qualification and pre-publication sentinel records remain immutable.
+Publication receipt and current sentinel: `/home/charlie/Documents/Pyramid/Validation/testing-155-to-156-20261027-xemrbswl/publication-156-58aa288`.
+Only this tracker and the handoff receive local metadata updates; they remain
+uncommitted for operator review. Charlie subsequently reported the 156 Request 2
+failure in m01895 (normal game, Continuous, Exact A*, Repeat normal games).
+Its log records a complete Board 1 clear, then a transition refusal before
+Board 2 Recon; the first recognised Board 2 header occurs on the sixth/final
+capture. In m01935 Charlie clarified that Recon was assumed from the retained
+Route found message rather than watched. The exact running executable matches
+the protected 156 SHA-256. Packet, log snapshot, referenced deals and 24 GAME WIN
+images are preserved under
+`/home/charlie/Documents/Pyramid/Validation/pyramid-transition-156-20261027-cmswhmob`.
+Fresh guest acceptance therefore has an open failure; host qualification remains
+cached. No correction or next version is yet approved. No source, version,
+sibling repository or archive change is included in this reference update.
 
 ### 2.9.156 retained Pyramid testing observations
 
@@ -110,6 +214,7 @@ Each row of the master implementation schedule is an agreed **minor** milestone 
 
 | Version | xSAR | Host Tests / Seals | Status | Scope & Verification Reference (in `docs/`) |
 | :--- | :--- | :--- | :--- | :--- |
+| **2.9.156** |0.9.0 |1549 tests /821 seals | PUBLISHED; GUEST FAILURE OPEN | Guarded Pyramid recognition/completion and ASCII objective label ([verification](Verification-2.9.156.md)); operator main @ 58aa288; Request 2 transition refusal retained. |
 | **2.9.154** |0.9.0 |1531 tests /791 seals | HOST QUALIFIED; VERSION ALIGNED | Klondike complete-caption OK, current Failure Details and Pyramid QMP ownership release ([verification](Verification-2.9.154.md)); guest acceptance pending. |
 | **2.9.153** |0.9.0 |1522 tests /782 seals | PUBLISHED; RETAINED HOST QUALIFICATION | Complete normal-one header appearance ([verification](Verification-2.9.153.md)); actual later reports retained separately. |
 | **2.9.152** |0.9.0 |1518 tests /775 seals | HOST QUALIFIED; VERSION ALIGNED | Coherent final absence and lower-material veto ([verification](Verification-2.9.152.md)). |

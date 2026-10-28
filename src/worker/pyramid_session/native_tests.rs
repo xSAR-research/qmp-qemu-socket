@@ -90,6 +90,9 @@ static NEXT_SOCKET: AtomicUsize = AtomicUsize::new(0);
 mod readiness_tests;
 
 
+mod testing_157;
+
+
 /// Decode retained native bytes using the shared production PNG codec.
 fn native(png: &[u8]) -> CapturedFrame {
     decode_png(png).expect("retained native session PNG")
@@ -283,6 +286,8 @@ enum Operation {
     NoChallengeAcquire,
     /// Retain an actually bound requirement across an input-free transition.
     BoundTransition(ChallengeProgress),
+    /// Use current native-v23 identity for a bound, input-free challenge transition.
+    ColourBoundTransition(ChallengeProgress),
     /// Inject only the already retired clear/ACK handoff; real paired captures must prove a distinct board.
     ClearTransition(ChallengeProgress),
     /// Inject an original normal board and retired ACK handoff; all next-board evidence stays native.
@@ -293,6 +298,8 @@ enum Operation {
     CardEntry,
     /// Capture an actual colour-independent native-v23 challenge entry.
     ColourEntry,
+    /// Use native-v23 with the actual Continuous Repeat normal games entry policy.
+    NormalColourEntry,
     /// Start a new target-agnostic session after the previous reservation retired.
     NoChallengeEntry,
     /// Start a new single-board session, independently of the old preview.
@@ -311,6 +318,10 @@ enum Revocation {
     Stop,
     /// Select another generation, then the original, proving revocation stays latched.
     ContextRoundTrip,
+    /// Use actual STOP after supplying the selected one-based capture.
+    StopAfterCapture(usize),
+    /// Revoke and reselect the original context after the selected capture.
+    ContextRoundTripAfterCapture(usize),
 }
 
 
@@ -409,11 +420,19 @@ fn serve(
                 fs::write(destination, png)
                     .expect("retained PNG at production capture destination");
                 report.captures += 1;
-                if report.captures == 1 {
+                let revocation_capture = match revocation {
+                    Revocation::StopAfterCapture(capture)
+                    | Revocation::ContextRoundTripAfterCapture(capture) => capture,
+                    _ => 1,
+                };
+                if report.captures == revocation_capture {
                     match revocation {
                         Revocation::None => {}
-                        Revocation::Stop => control.stop(Some(&context), &cancel),
-                        Revocation::ContextRoundTrip => {
+                        Revocation::Stop | Revocation::StopAfterCapture(_) => {
+                            control.stop(Some(&context), &cancel)
+                        }
+                        Revocation::ContextRoundTrip
+                        | Revocation::ContextRoundTripAfterCapture(_) => {
                             let mut changed = context.clone();
                             changed.generation += 1;
                             control
@@ -475,8 +494,15 @@ fn run(operation: Operation, frames: Vec<Vec<u8>>, revocation: Revocation) -> Ep
         fixture.request.mode = WorkflowMode::Continuous;
         fixture.request.stop_condition = StopCondition::NoChallenge;
     }
-    if matches!(operation, Operation::ColourEntry) {
+    if matches!(
+        operation,
+        Operation::ColourEntry | Operation::NormalColourEntry | Operation::ColourBoundTransition(_)
+    ) {
         fixture.request.reconnaissance.profile = ReconProfileSource::BundledNativeV23;
+    }
+    if matches!(operation, Operation::NormalColourEntry) {
+        fixture.request.mode = WorkflowMode::Continuous;
+        fixture.request.stop_condition = StopCondition::RepeatNormalGames;
     }
     let explicit_start = matches!(
         operation,
@@ -529,7 +555,7 @@ fn run(operation: Operation, frames: Vec<Vec<u8>>, revocation: Revocation) -> Ep
             progress: None,
             standard_three: false,
         }),
-        Operation::BoundTransition(bound) | Operation::ClearTransition(bound) => {
+        Operation::BoundTransition(bound) | Operation::ColourBoundTransition(bound) | Operation::ClearTransition(bound) => {
             adapter.challenge_progress = Some(bound);
             if matches!(operation, Operation::ClearTransition(_)) {
                 adapter.original_tableau =
@@ -570,7 +596,7 @@ fn run(operation: Operation, frames: Vec<Vec<u8>>, revocation: Revocation) -> Ep
         Operation::Entry | Operation::CardEntry | Operation::ColourEntry => {
             adapter.observed_entry()
         }
-        Operation::NoChallengeEntry | Operation::SingleBoardEntry => {
+        Operation::NoChallengeEntry | Operation::SingleBoardEntry | Operation::NormalColourEntry => {
             adapter.entry(fixture.request.mode)
         }
         Operation::Transition => adapter.transition(),
@@ -1434,8 +1460,8 @@ fn revoke_restart(
 ) {
     match revocation {
         Revocation::None => {}
-        Revocation::Stop => control.stop(Some(context), cancel),
-        Revocation::ContextRoundTrip => {
+        Revocation::Stop | Revocation::StopAfterCapture(_) => control.stop(Some(context), cancel),
+        Revocation::ContextRoundTrip | Revocation::ContextRoundTripAfterCapture(_) => {
             let mut changed = context.clone();
             changed.generation += 1;
             control.select(&changed, cancel).unwrap();
@@ -2289,3 +2315,9 @@ fn native_153_manual_entry_binds_actual_pair_and_preserves_revocation() {
 
 
 mod testing_156;
+
+
+mod testing_158;
+
+
+mod testing_159;

@@ -1,5 +1,44 @@
 # Changelog
 
+## [2.9.159] - 2026-10-28
+
+- Recognise the complete exact bare-coral clearance at native fixed 7|1 while
+  retaining positive paper and all other material/identity/pile refusals.
+- Add one complete measured Boards 2 of 3 header appearance without raising
+  tolerances, inferring progress or enlarging capture/input authority.
+- Add nine focused regressions. All six host gates pass with 1,583 tests and
+  846 sealed inputs; approved 159 alignment passes check/release/help.
+- Preserve the retracted standard Continuous acceptance and record the remaining
+  [pre-3.0.0 checks](docs/Pyramid-Acceptance-Before-3.0.0.md). RESET stays excluded.
+  See [verification](docs/Verification-2.9.159.md).
+
+## [2.9.158] - 2026-10-28
+
+- Add the measured complete Classic Spade appearance with an unsplit-component
+  separator guard; retain suit quality, gap, colour and whole-card checks.
+- Add the bounded Underwater native font and family-local brown ink policy using
+  thirteen complete reference corners and the original Capture PNG pixels.
+- Report both entry-frame refusals and the final transition-frame refusal without
+  adding captures, waiting, input authority or ordinary-gameplay image recording.
+- Add fifteen reader/native-adapter regressions. All six host gates pass with
+  1,574 tests and 836 sealed inputs; approved 158 alignment passes check/release/help.
+- Keep RESET outside scope and distinguish retained/synthetic evidence from fresh
+  guest acceptance. See [verification](docs/Verification-2.9.158.md).
+
+## [2.9.157] - 2026-10-27
+
+- Reserve one read-only confirmation only for a complete distinct next normal
+  board first qualified on transition observation six; retain full pairing,
+  exact counter/context checks and the six-observation limits of other policies.
+- Log each transition classification, pair and budget decision without extra
+  diagnostic captures or ordinary gameplay image recording.
+- Use the confirmed complete 24-draw acquisition history for one calibrated
+  Undo All attempt across themes. Retain fresh probes, STOP/context, two complete
+  dialog observations, two original-board restoration observations and no replay.
+- Pass ten new focused regressions, the full 1,559-test suite and all six host
+  gates with 827 inputs; align the approved version and pass check/release/help.
+  Fresh Windows guest acceptance remains separate.
+
 ## [2.9.156] - 2026-10-27
 
 - Recognise the retained complete Score entry and large bound Challenge Complete counting appearances without relaxing matching limits; preserve the actual Score overshoot and reject contradictory bindings.
