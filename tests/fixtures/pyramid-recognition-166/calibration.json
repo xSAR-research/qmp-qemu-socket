@@ -1,0 +1,80 @@
+{
+  "application_version": "2.9.166 (approved; qualification pending)",
+  "source_application_version": "2.9.165",
+  "request": 2,
+  "source_packet": "/home/charlie/tmp/Evidence/Pyramid/Validation/pyramid-coral-166-20261029-e2n5d7ie/pyramid-error-1793252534960-1302238-1",
+  "native_dimensions": [
+    1920,
+    1080
+  ],
+  "original_location": "7|5",
+  "original_deal_index": 25,
+  "clearance_xywh": [
+    1089,
+    588,
+    144,
+    34
+  ],
+  "rgb_bytes": 14688,
+  "matching": "Complete exact RGB; zero tolerance; no masks or structural threshold changes.",
+  "guard_order": "Strong-white Present excludes absence; new exact proof precedes generic aged refusal.",
+  "pending_action": "Action6 MATCH AC at7|5 +QS DL; afterDL9C/DRKH; original21,23,25,26absent",
+  "files_sha256": {
+    "deal.json": "6fccb23420145ee447871c2b1554605232ada1e19b2e586c3c63b1995333e665",
+    "first-unmatched.png": "2ee2265652725c31bf5a2e82ae6893176c8b0efa4a85e092f1eebbedabb82e66",
+    "last-observed.png": "ddfe1fd5382a80ddbff2d0990c49f810f2460b83f388a5e5c8e9bec47b2fb9ba",
+    "clearance.rgb": "0eb35ddbbd80f3423259ab83c921d6d3bf02c508fc629d9d85cea85f23c405e1"
+  },
+  "evidence_limits": [
+    "Retained calibration appearance, already inspected; no independent future-rendering acceptance.",
+    "Both complete remaining identities and occupied piles must pass production verify_position.",
+    "Low white count alone is not declared tableau absence.",
+    "No key timing, RECON no-advancement, capture, input, STOP or replay changes."
+  ],
+  "diagnosed_edges": [
+    {
+      "upper_xy": [
+        1177,
+        620
+      ],
+      "upper_rgb": [
+        123,
+        155,
+        155
+      ],
+      "lower_rgb": [
+        54,
+        85,
+        84
+      ],
+      "channel_deltas": [
+        69,
+        70,
+        71
+      ]
+    },
+    {
+      "upper_xy": [
+        1178,
+        620
+      ],
+      "upper_rgb": [
+        147,
+        178,
+        179
+      ],
+      "lower_rgb": [
+        81,
+        109,
+        112
+      ],
+      "channel_deltas": [
+        66,
+        69,
+        67
+      ]
+    }
+  ],
+  "unchanged_generic_surface_delta": 64,
+  "test_contract_correction": "A one-pixel-up crop is accepted by an unchanged generic artwork proof. Shift rejection is tested directly on the new exact helper, not imposed on prior proofs."
+}

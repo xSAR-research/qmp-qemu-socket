@@ -139,22 +139,73 @@ pub(super) fn synthetic_glyph(
 }
 
 
-/// Check two rules-derived actions with exactly three frames and fresh per-gesture probes.
+/// Check two actions with two settled frames per removal and fresh per-gesture probes.
 fn check_two_actions(actions: [RecordedAction; 2]) {
+    check_two_actions_from(SearchState::initial(), actions);
+}
+
+
+/// Check cadence from a rules-derived position with independently verified source pixels.
+fn check_two_actions_from(initial: SearchState, actions: [RecordedAction; 2]) {
+    check_two_actions_with_live_settings(initial, actions, false);
+}
+
+
+/// Add card-specific synthetic quarter-body colour outside identity glyphs for positive cadence.
+/// This supplies explicit test occurrence evidence; it is not a captured card appearance.
+fn decorate_synthetic_stock(frame: &mut CapturedFrame, deal: &CompleteDeal, state: SearchState) {
+    let (_, left, right) = expected(deal, state).unwrap();
+    for (slot, card) in [
+        (crate::pyramid::LEFT_TARGET, left),
+        (crate::pyramid::RIGHT_TARGET, right),
+    ] {
+        if let Some(card) = card {
+            let rank = [
+                "A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K",
+            ]
+            .iter()
+            .position(|s| *s == card.rank().as_str())
+            .unwrap();
+            let suit = ["clubs", "diamonds", "hearts", "spades"]
+                .iter()
+                .position(|s| *s == card.suit().as_str())
+                .unwrap();
+            let shade = u8::try_from(((rank * 4 + suit) * 17) % 200).unwrap();
+            paint(
+                frame,
+                PixelRect::new(slot.bounds.x + 40, slot.bounds.y + 10, 20, 30),
+                [shade; 3],
+            );
+        }
+    }
+}
+
+
+/// Run identical native cadence with optional live edits between action boundaries.
+fn check_two_actions_with_live_settings(
+    initial: SearchState,
+    actions: [RecordedAction; 2],
+    live: bool,
+) {
     let deal = original_deal();
-    let initial = SearchState::initial();
     let middle = rules::apply(&deal, initial, actions[0]).unwrap();
     let last = rules::apply(&deal, middle, actions[1]).unwrap();
-    let frames: Vec<_> = [initial, middle, last]
+    let position_frames: Vec<_> = [initial, middle, last]
         .into_iter()
-        .map(|state| synthetic_state(&deal, state))
+        .map(|state| {
+            let mut frame=synthetic_state(&deal,state);
+            if matches!(actions,[RecordedAction::Move,RecordedAction::Move]) {
+                decorate_synthetic_stock(&mut frame,&deal,state);
+            }
+            frame
+        })
         .collect();
     let reader = ReconVision::load(
         &Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/fixtures/pyramid-recon/native-v7/profile.json"),
     )
     .unwrap();
-    for (state, frame) in [initial, middle, last].into_iter().zip(&frames) {
+    for (state, frame) in [initial, middle, last].into_iter().zip(&position_frames) {
         let (tableau, left, right) = expected(&deal, state).unwrap();
         reader
             .verify_position(frame, &tableau, left, right)
@@ -163,36 +214,62 @@ fn check_two_actions(actions: [RecordedAction; 2]) {
     let first = operations(actions[0]).unwrap();
     let second = operations(actions[1]).unwrap();
     let gestures = first.len() + second.len();
+    let first_observations = 2;
+    let second_observations = 2;
+    let total = 1 + first_observations + second_observations;
+    let mut frames = vec![position_frames[0].clone()];
+    frames.extend(std::iter::repeat_n(
+        position_frames[1].clone(),
+        first_observations,
+    ));
+    frames.extend(std::iter::repeat_n(
+        position_frames[2].clone(),
+        second_observations,
+    ));
     let evidence = adapter(frames, None, |io| {
         assert!(matches!(
             io.observe_source(initial).unwrap(),
             EffectObservation::Position(true)
         ));
-        io.begin_action(initial, &first).unwrap();
+        let first_settings=crate::parameters::PyramidEffectSettings::default();
+        let next_settings=crate::parameters::PyramidEffectSettings::new(9,85).unwrap();
+        let pending_edit=crate::parameters::PyramidEffectSettings::new(255,1000).unwrap();
+        io.begin_transition(initial, middle, &first).unwrap();
+        if live { io.events.latest_frame.set_effect_settings(pending_edit); }
+        assert_eq!(io.effect_settings,first_settings);
         for &operation in &first {
             io.deliver(operation, initial).unwrap();
         }
-        assert!(matches!(
-            io.observe_effect(middle, false).unwrap(),
-            EffectObservation::Position(true)
-        ));
-        assert_eq!(io.captures, 2);
+        for observation in 0..first_observations {
+            let observed=io.observe_effect(middle, false).unwrap();
+            assert!(matches!(observed, EffectObservation::Position(ready) if ready == (observation + 1 == first_observations)),"{:?}",io.latest_observation.as_ref().and_then(|x|x.mismatch.as_ref()));
+        }
+        assert_eq!(io.captures, 1 + first_observations);
         assert!(matches!(
             io.observe_source(middle).unwrap(),
             EffectObservation::Position(true)
         ));
         assert_eq!(
-            io.captures, 2,
+            io.captures, 1 + first_observations,
             "previous effect is the next source; no recapture"
         );
-        io.begin_action(middle, &second).unwrap();
+        if live { io.events.latest_frame.set_effect_settings(next_settings); }
+        io.begin_transition(middle, last, &second).unwrap();
+        if live {
+            assert_eq!(io.effect_settings,first_settings);
+            io.events.latest_frame.set_effect_settings(pending_edit);
+        }
         for &operation in &second {
             io.deliver(operation, middle).unwrap();
         }
-        assert!(matches!(
-            io.observe_effect(last, false).unwrap(),
-            EffectObservation::Position(true)
-        ));
+        for observation in 0..second_observations {
+            assert!(matches!(io.observe_effect(last, false).unwrap(), EffectObservation::Position(ready) if ready == (observation + 1 == second_observations)));
+        }
+        if live {
+            assert_eq!(io.effect_settings,first_settings, "card actions do not freeze RGB settings");
+            io.freeze_effect_settings("REDEAL fixture boundary");
+            assert_eq!(io.effect_settings,pending_edit);
+        }
     });
     assert_eq!(
         (
@@ -200,7 +277,7 @@ fn check_two_actions(actions: [RecordedAction; 2]) {
             evidence.counts.attempted,
             evidence.counts.acknowledged
         ),
-        (3, gestures, gestures)
+        (total, gestures, gestures)
     );
     assert!(evidence.first.is_none());
     assert_eq!(evidence.wire.unused_frames, 0);
@@ -211,8 +288,15 @@ fn check_two_actions(actions: [RecordedAction; 2]) {
         .enumerate()
         .filter_map(|(i, name)| (name == "screendump").then_some(i))
         .collect();
-    assert_eq!(boundaries.len(), 3);
-    for (interval, operations) in boundaries.windows(2).zip([first, second]) {
+    assert_eq!(boundaries.len(), total);
+    let input_intervals = [
+        [boundaries[0], boundaries[1]],
+        [
+            boundaries[first_observations],
+            boundaries[first_observations + 1],
+        ],
+    ];
+    for (interval, operations) in input_intervals.into_iter().zip([first, second]) {
         let commands = &evidence.wire.commands[interval[0] + 1..interval[1]];
         assert_eq!(
             commands
@@ -251,14 +335,91 @@ fn check_two_actions(actions: [RecordedAction; 2]) {
 
 /// Two independent legal DRAWs share each boundary frame, preserving their distinct effects.
 #[test]
-fn native_cadence_move_move_uses_three_frames_for_two_actions() {
-    check_two_actions([RecordedAction::Move, RecordedAction::Move]);
+fn native_cadence_move_move_uses_five_frames_for_two_actions() {
+    let deal = original_deal();
+    let mut source = SearchState::initial();
+    // The positive cadence fixture includes explicitly synthetic quarter-body decoration.
+    // Glyph-only paper remains covered by the separate conservative stock refusal.
+    for _ in 0..15 {
+        source = rules::apply(&deal, source, RecordedAction::Move).unwrap();
+    }
+    check_two_actions_from(source, [RecordedAction::Move, RecordedAction::Move]);
+}
+
+
+/// Stock-only MATCH and KING use actual native transition staging, not tableau history.
+/// Synthetic rules-derived pixels verify unchanged refusal and exact capture/input counts.
+#[test]
+fn source_172_native_stock_only_match_and_king_require_two_identity_checks() {
+    let deal = original_deal();
+    for (draws, action, accepted) in [
+        (3, RecordedAction::Match(Location::DL, Location::DR), true),
+        (8, RecordedAction::King(Location::DL), true),
+    ] {
+        let mut before = SearchState::initial();
+        for _ in 0..draws {
+            before = rules::apply(&deal, before, RecordedAction::Move).unwrap();
+        }
+        let after = rules::apply(&deal, before, action).unwrap();
+        assert_eq!(
+            expected(&deal, before).unwrap().0,
+            expected(&deal, after).unwrap().0
+        );
+        let mut source = synthetic_state(&deal, before);
+        let mut result = synthetic_state(&deal, after);
+        if accepted {
+            decorate_synthetic_stock(&mut source,&deal,before);
+            decorate_synthetic_stock(&mut result,&deal,after);
+        }
+        let gestures = operations(action).unwrap();
+        let evidence = adapter(vec![source.clone(), source, result.clone(), result], None, |io| {
+            assert!(matches!(
+                io.observe_source(before).unwrap(),
+                EffectObservation::Position(true)
+            ));
+            let frozen = crate::parameters::PyramidEffectSettings::new(26, 100).unwrap();
+            io.events.latest_frame.set_effect_settings(frozen);
+            io.begin_transition(before, after, &gestures).unwrap();
+            io.events.latest_frame.set_effect_settings(
+                crate::parameters::PyramidEffectSettings::new(255, 999).unwrap(),
+            );
+            assert_ne!(io.effect_settings, frozen);
+            assert!(io.source_transition.is_some());
+            for &operation in &gestures {
+                io.deliver(operation, before).unwrap();
+            }
+            assert!(matches!(
+                io.observe_effect(after, false).unwrap(),
+                EffectObservation::Position(false)
+            ));
+            assert!(io.source_proof.is_none());
+            assert!(io.source_transition.is_some());
+            assert!(
+                matches!(io.observe_effect(after, false).unwrap(), EffectObservation::Position(ready) if !ready),
+                "{action:?}: {:?}",
+                io.latest_observation
+                    .as_ref()
+                    .and_then(|o| o.mismatch.as_ref())
+            );
+            assert!(matches!(io.observe_effect(after,false).unwrap(),EffectObservation::Position(true)));
+            assert!(io.source_proof.is_some());
+        });
+        assert_eq!(
+            (
+                evidence.captures,
+                evidence.counts.attempted,
+                evidence.counts.acknowledged
+            ),
+            (4, gestures.len(), gestures.len())
+        );
+        assert_eq!(evidence.wire.unused_frames, 0);
+    }
 }
 
 
 /// Both legal initial MATCH pairs use one source each and no capture between pair clicks.
 #[test]
-fn native_cadence_match_match_uses_three_frames_without_midpair_capture() {
+fn native_cadence_match_match_uses_five_frames_without_midpair_capture() {
     let actions = accepted_actions();
     assert!(matches!(actions[0], RecordedAction::Match(..)));
     assert!(matches!(actions[1], RecordedAction::Match(..)));
@@ -271,13 +432,13 @@ fn native_cadence_match_match_uses_three_frames_without_midpair_capture() {
 /// Two retained oracle MATCH actions are independently replayed. Their synthetic
 /// frames prove controller capture ordering, not maximum optimality or guest effects.
 #[test]
-fn native_cadence_driver_two_matches_has_three_frames_and_typed_partial_completion() {
+fn native_cadence_driver_two_matches_has_five_frames_and_typed_partial_completion() {
     let deal = original_deal();
     let actions = accepted_actions();
     let initial = SearchState::initial();
     let middle = rules::apply(&deal, initial, actions[0]).unwrap();
     let final_state = rules::apply(&deal, middle, actions[1]).unwrap();
-    let frames = [initial, middle, final_state]
+    let frames = [initial, middle, middle, final_state, final_state]
         .into_iter()
         .map(|state| synthetic_state(&deal, state))
         .collect();
@@ -307,7 +468,7 @@ fn native_cadence_driver_two_matches_has_three_frames_and_typed_partial_completi
             evidence.counts.attempted,
             evidence.counts.acknowledged
         ),
-        (3, 4, 4)
+        (5, 4, 4)
     );
     assert!(evidence.first.is_none());
     assert_eq!(evidence.wire.unused_frames, 0);
@@ -318,7 +479,7 @@ fn native_cadence_driver_two_matches_has_three_frames_and_typed_partial_completi
             .iter()
             .filter(|name| *name == "screendump")
             .count(),
-        3
+        5
     );
     assert_eq!(
         evidence
@@ -498,10 +659,10 @@ fn challenge_header(mut frame: CapturedFrame, source: &CapturedFrame) -> Capture
 }
 
 
-/// Bound Standard and Continuous gameplay use exactly three position frames for two MATCHes.
+/// Bound Standard and Continuous gameplay use two settled after frames per MATCH.
 /// Real moving-card header contamination cannot reclassify the objective or replay a pair.
 #[test]
-fn native_cadence_bound_challenge_keeps_three_captures_and_four_acknowledged_gestures() {
+fn native_cadence_bound_challenge_keeps_five_captures_and_four_acknowledged_gestures() {
     use crate::pyramid_progress::{ChallengeKind, ChallengeProgress, observe_challenge};
     let moving = decode_png(include_bytes!(
         "../../../../tests/fixtures/pyramid-challenge-motion/last-observed.png"
@@ -524,6 +685,8 @@ fn native_cadence_bound_challenge_keeps_three_captures_and_four_acknowledged_ges
             vec![
                 challenge_header(synthetic_state(&deal, initial), &settled),
                 challenge_header(synthetic_state(&deal, middle), &moving),
+                challenge_header(synthetic_state(&deal, middle), &moving),
+                challenge_header(synthetic_state(&deal, end), &moving),
                 challenge_header(synthetic_state(&deal, end), &moving),
             ],
             None,
@@ -556,7 +719,7 @@ fn native_cadence_bound_challenge_keeps_three_captures_and_four_acknowledged_ges
                 evidence.counts.attempted,
                 evidence.counts.acknowledged
             ),
-            (3, 4, 4)
+            (5, 4, 4)
         );
         assert_eq!(evidence.wire.unused_frames, 0);
         assert_eq!(
@@ -929,6 +1092,8 @@ fn native_150_normal_footer_pending_settles_without_replay() {
             synthetic_state(&deal, initial),
             native_150_occluded_footer(synthetic_state(&deal, middle)),
             synthetic_state(&deal, middle),
+            synthetic_state(&deal, middle),
+            synthetic_state(&deal, end),
             synthetic_state(&deal, end),
         ],
         Some(&guard),
@@ -955,7 +1120,7 @@ fn native_150_normal_footer_pending_settles_without_replay() {
             evidence.counts.attempted,
             evidence.counts.acknowledged
         ),
-        (4, 4, 4)
+        (6, 4, 4)
     );
     assert_eq!(evidence.wire.unused_frames, 0);
     assert_eq!(
@@ -1138,4 +1303,144 @@ fn native_150_normal_footer_pending_stop_and_context_revoke() {
             (1, 0, 0)
         );
     }
+}
+
+
+/// In-flight edits do not reinterpret either action; a subsequent boundary copies both fields.
+#[test]
+fn live_168_native_two_actions_and_redeal_boundary_freeze_complete_pairs() {
+    let actions = accepted_actions();
+    check_two_actions_with_live_settings(SearchState::initial(), [actions[0], actions[1]], true);
+}
+
+
+/// A previous accepted effect can hide the next source; only fresh same-frame readiness permits input.
+#[test]
+fn readiness_173_occluded_boundary_recovers_before_the_next_pair() {
+    let deal = original_deal();
+    let actions = accepted_actions();
+    let initial = SearchState::initial();
+    let middle = rules::apply(&deal, initial, actions[0]).unwrap();
+    let last = rules::apply(&deal, middle, actions[1]).unwrap();
+    let source = synthetic_state(&deal, initial);
+    let middle_frame = synthetic_state(&deal, middle);
+    let final_frame = synthetic_state(&deal, last);
+    let operation = operations(actions[1]).unwrap()[0];
+    let InputOperation::Click(point) = operation else {
+        panic!("expected MATCH");
+    };
+    let slot = crate::pyramid::PYRAMID_TARGETS
+        .iter()
+        .find(|target| target.click_point == point)
+        .unwrap();
+    let mut obscured = middle_frame.clone();
+    paint(
+        &mut obscured,
+        PixelRect::new(slot.bounds.x + 3, slot.bounds.y + 4, 31, 49),
+        [30, 95, 65],
+    );
+    let evidence = adapter_with_progress(
+        vec![
+            source,
+            obscured.clone(),
+            obscured.clone(),
+            obscured,
+            middle_frame,
+            final_frame.clone(),
+            final_frame,
+        ],
+        None,
+        |plan| {
+            plan.trace = replay::replay(&plan.acquisition.deal, &actions[..2], false).unwrap();
+            plan.objective = RouteObjective::Removal {
+                removed: 4,
+                proof: PartialProof::Bounded(xsar::search::SearchStop::ExpansionLimit),
+            };
+        },
+        2,
+        |io| {
+            let result = drive(io.plan, io);
+            (result, io.failure_progress.clone())
+        },
+    );
+    assert!(evidence.result.0.is_ok(), "{:?}", evidence.result.0);
+    assert_eq!(evidence.captures, 7);
+    assert_eq!(
+        (evidence.counts.attempted, evidence.counts.acknowledged),
+        (4, 4)
+    );
+    assert_eq!(evidence.result.1.initial_checks, 3);
+    assert_eq!(evidence.result.1.fresh_retries, 2);
+    assert_eq!(evidence.wire.unused_frames, 0);
+    // Freshness and no mid-pair capture are verified by the existing wire harness.
+}
+
+
+/// The existing finite precondition budget stops unreadable sources without any input.
+#[test]
+fn readiness_173_six_misses_exhaust_without_authorising_a_gesture() {
+    let deal = original_deal();
+    let actions = accepted_actions();
+    let initial = SearchState::initial();
+    let operation = operations(actions[0]).unwrap()[0];
+    let InputOperation::Click(point) = operation else {
+        panic!("expected MATCH");
+    };
+    let slot = crate::pyramid::PYRAMID_TARGETS
+        .iter()
+        .find(|target| target.click_point == point)
+        .unwrap();
+    let mut obscured = synthetic_state(&deal, initial);
+    paint(
+        &mut obscured,
+        PixelRect::new(slot.bounds.x + 3, slot.bounds.y + 4, 31, 49),
+        [30, 95, 65],
+    );
+    let evidence = adapter(vec![obscured; ORDINARY_OBSERVATIONS], None, |io| {
+        let result = drive(io.plan, io);
+        (result, io.failure_progress.clone())
+    });
+    assert!(evidence.result.0.is_err());
+    assert_eq!(evidence.captures, ORDINARY_OBSERVATIONS);
+    assert_eq!(
+        (evidence.counts.attempted, evidence.counts.acknowledged),
+        (0, 0)
+    );
+    assert_eq!(
+        evidence.result.1.stage,
+        crate::pyramid_diagnostics::progress::FailureStage::InitialSource
+    );
+    assert_eq!(evidence.result.1.initial_checks, ORDINARY_OBSERVATIONS);
+    assert_eq!(evidence.wire.unused_frames, 0);
+}
+
+
+/// A received unsupported frame is reported as retained even when validation stops immediately.
+#[test]
+fn readiness_173_unsupported_fresh_frame_is_counted_without_retry_or_input() {
+    let deal = original_deal();
+    let before = SearchState::initial();
+    let after = rules::apply(&deal, before, accepted_actions()[0]).unwrap();
+    let good = synthetic_state(&deal, before);
+    let mut bad = good.clone();
+    paint(&mut bad, PixelRect::new(0, 0, 1920, 1080), [0; 3]);
+    let evidence = adapter(vec![good, bad], None, |io| {
+        assert!(matches!(
+            io.observe_source(before).unwrap(),
+            EffectObservation::Position(true)
+        ));
+        io.source_proof = None;
+        io.record_stage(
+            crate::pyramid_diagnostics::progress::FailureStage::InitialSource,
+            1,
+            io.plan.trace.len(),
+            1,
+        );
+        assert!(io.observe_action_source(before, after).is_err());
+        assert_eq!(io.failure_progress.fresh_retries, 1);
+        assert_eq!(io.failure_progress.capture, 2);
+    });
+    assert_eq!(evidence.captures, 2);
+    assert_eq!(evidence.counts.attempted, 0);
+    assert_eq!(evidence.wire.unused_frames, 0);
 }

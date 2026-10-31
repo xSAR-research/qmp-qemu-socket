@@ -172,6 +172,7 @@ fn native_empty_stock_tail_delivers_one_apex_king_and_requires_positive_clearanc
         EMPTY_STOCK_DEAL,
         ReconVision::bundled_native_v15().expect("production native-v15"),
         None,
+        None,
     );
 }
 
@@ -192,6 +193,7 @@ fn execution_observability_native_apex_click_uses_real_position_and_independent_
             )
             .unwrap(),
         ),
+        Some(BoardCompletion::BoardClear),
     );
 }
 
@@ -202,6 +204,7 @@ fn run_stock_empty_tail(
     deal_bytes: &[u8],
     vision: ReconVision,
     challenge: Option<crate::pyramid_progress::ChallengeProgress>,
+    completion: Option<BoardCompletion>,
 ) {
     let _capture_backend = TestCaptureBackend::legacy_qmp();
     let directory = SocketDirectory(std::env::temp_dir().join(format!(
@@ -245,7 +248,7 @@ fn run_stock_empty_tail(
         objective: RouteObjective::Clear,
         acquisition: Acquisition {
             challenge_progress: None,
-            default_method: RouteMethod::FewestActions,
+            default_method: None,
             observed_game: crate::pyramid_workflow_model::ObservedGame::Unknown,
             context: context.clone(),
             epoch: control.epoch().expect("current empty-stock epoch"),
@@ -256,7 +259,8 @@ fn run_stock_empty_tail(
         trace,
     };
     // Prepare the synthetic PNG before the peer starts its bounded QMP handshake.
-    let frames = vec![stock.to_vec(), stock.to_vec(), synthetic_apex_absent(stock)];
+    let absent = synthetic_apex_absent(stock);
+    let frames = vec![stock.to_vec(), stock.to_vec(), absent.clone(), absent];
     let listener = UnixListener::bind(&context.socket_path).expect("private empty-stock socket");
     listener
         .set_nonblocking(true)
@@ -274,6 +278,15 @@ fn run_stock_empty_tail(
         })
         .sum();
     let mut io = NativeIo {
+ execution_vision: plan.acquisition.vision.for_temporal_execution(),
+ source_transition: None,
+            ready_transition: None,
+            failure_progress: crate::pyramid_diagnostics::progress::FailureProgress::default(),
+ removals: crate::pyramid_recon::vision::removal::RemovalHistory::from_verified_position(
+            &expected(&plan.acquisition.deal, before).unwrap().0,
+        ),
+            stock_effect: None,
+            effect_settings: crate::parameters::PyramidEffectSettings::default(),
         policy: ExecutionPolicy::Standard,
         stock_continuation: false,
         executed_recycles: 0,
@@ -306,7 +319,7 @@ fn run_stock_empty_tail(
         io.observe(before, false)
             .expect("penultimate effect recognised")
     );
-    io.begin_action(before, &[final_operation])
+    io.begin_transition(before, after, &[final_operation])
         .expect("exact checked whole King action");
     io.deliver(final_operation, before)
         .expect("fresh guard and sole King click");
@@ -315,15 +328,30 @@ fn run_stock_empty_tail(
         io.observe_final(after).expect("unchanged retained frame"),
         None
     );
-    assert!(io.first_mismatch.is_some(), "remaining King is not a clear");
+    assert!(
+        io.first_mismatch.is_none(),
+        "unchanged source remains pending"
+    );
+    assert!(io.source_transition.is_some());
+    for _ in 0..1 {
+        assert_eq!(
+            io.observe_final(after)
+                .expect("first source-disappearance check"),
+            None
+        );
+    }
     assert_eq!(
         io.observe_final(after)
-            .expect("explicitly synthetic positive absence"),
-        Some(BoardCompletion::BoardClear)
+            .expect("second synthetic source-disappearance check"),
+        completion
+    );
+    assert!(
+        io.position_matches,
+        "the source effect is verified independently of clear semantics"
     );
     assert_eq!(
         (io.counts.attempted, io.counts.acknowledged, io.captures),
-        (1, 1, 3)
+        (1, 1, 4)
     );
     drop(io);
     let wire = server.join().expect("empty-stock local peer completion");
@@ -347,7 +375,7 @@ fn run_stock_empty_tail(
             .iter()
             .filter(|name| name.as_str() == "screendump")
             .count(),
-        3
+        4
     );
     assert_eq!(
         wire.commands

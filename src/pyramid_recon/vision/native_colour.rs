@@ -30,15 +30,350 @@ const UNDERWATER_CORAL_RGB: &[u8; 14_688] = include_bytes!(
 );
 
 
-/// Positively recognise one complete exposed artwork footprint at native scale.
-/// This exact appearance is limited to the measured 144 by 34 rectangle at 7|1.
-/// Every channel must match, and callers retain positive paper presence as a veto.
-/// Invalid frame geometry propagates as an error; no input authority is created.
+/// Second byte-original measured rendering of the same fixed bare-art footprint.
+const UNDERWATER_CORAL_VARIANT_RGB: &[u8; 14_688] = include_bytes!(
+    "../../../tests/fixtures/pyramid-recognition-160/underwater-coral-clearance-variant.rgb"
+);
+
+
+/// Third byte-original measured rendering from the stopped 160 request.
+const UNDERWATER_CORAL_THIRD_RGB: &[u8; 14_688] = include_bytes!(
+    "../../../tests/fixtures/pyramid-recognition-161/underwater-coral-clearance-third.rgb"
+);
+
+
+/// Separate exact bare-coral rendering from the stopped 163 first MATCH.
+/// This complete crop adds no structural reference, tolerance or masked pixels.
+const UNDERWATER_CORAL_EXACT_RGB: &[u8; 14_688] = include_bytes!(
+    "../../../tests/fixtures/pyramid-recognition-164/underwater-coral-clearance-exact.rgb"
+);
+
+
+/// Fixed native clearance rectangle for original one-based tableau location 7|1.
+const UNDERWATER_CORAL_EXACT_BOUNDS: PixelRect = PixelRect::new(286, 588, 144, 34);
+
+
+/// Entire byte-original native bare-rock footprint from the stopped 162 MATCH.
+/// All 4,896 RGB pixels participate, with no tolerance or material-pixel exclusion.
+const UNDERWATER_ROCK_RGB: &[u8; 14_688] =
+    include_bytes!("../../../tests/fixtures/pyramid-recognition-163/underwater-rock-clearance.rgb");
+
+
+/// Fixed native clearance rectangle for original one-based tableau location 7|6.
+const UNDERWATER_ROCK_BOUNDS: PixelRect = PixelRect::new(1289, 588, 144, 34);
+
+
+/// Complete byte-original 7|1 Coral appearance from retained 164 Request 13.
+/// This adds one exact positive proof without changing structural material roles.
+const UNDERWATER_CORAL_CHALLENGE_RGB: &[u8; 14_688] =
+    include_bytes!("../../../tests/fixtures/pyramid-recognition-165/request13/clearance.rgb");
+
+
+/// Complete byte-original 7|6 rock appearance from retained 164 Request 2.
+/// All channels remain exact, including the three changed rightmost columns.
+const UNDERWATER_ROCK_VARIANT_RGB: &[u8; 14_688] =
+    include_bytes!("../../../tests/fixtures/pyramid-recognition-165/request2/clearance.rgb");
+
+
+/// Complete retained Request 13 background below the removed 3H at original 7|2.
+const UNDERWATER_CORAL_SEVEN_TWO_RGB: &[u8; 14_688] = include_bytes!(
+    "../../../tests/fixtures/pyramid-recognition-165/request13/clearance-seven-two.rgb"
+);
+
+
+/// Fixed native clearance rectangle for original one-based tableau location 7|2.
+const UNDERWATER_CORAL_SEVEN_TWO_BOUNDS: PixelRect = PixelRect::new(487, 588, 144, 34);
+
+
+/// Recognise three additional complete retained Coral appearances at fixed slots.
+/// Reject other locations or any changed RGB byte; checked bounds and pixel
+/// access report malformed geometry. No old positive proof or material limit is
+/// changed, and the caller must still exclude strong-white card presence.
+fn measured_retained_underwater_surface(
+    view: FrameView<'_>,
+    bounds: PixelRect,
+) -> Result<bool, &'static str> {
+    let reference = if bounds == UNDERWATER_CORAL_EXACT_BOUNDS {
+        UNDERWATER_CORAL_CHALLENGE_RGB
+    } else if bounds == UNDERWATER_ROCK_BOUNDS {
+        UNDERWATER_ROCK_VARIANT_RGB
+    } else if bounds == UNDERWATER_CORAL_SEVEN_TWO_BOUNDS {
+        UNDERWATER_CORAL_SEVEN_TWO_RGB
+    } else {
+        return Ok(false);
+    };
+    view.checked_bounds(bounds)
+        .map_err(|_| "retained Coral clearance outside frame")?;
+    let coordinates =
+        (bounds.y..bounds.bottom()).flat_map(|y| (bounds.x..bounds.right()).map(move |x| (x, y)));
+    for (index, (x, y)) in coordinates.enumerate() {
+        let actual = view
+            .pixel_rgb(x, y)
+            .ok_or("retained Coral pixel outside frame")?;
+        let expected = *reference
+            .as_chunks::<3>()
+            .0
+            .get(index)
+            .ok_or("retained Coral reference outside footprint")?;
+        if actual != expected {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+
+/// Only the three original calibration frames participate; 162 is evaluation only.
+const CORAL_REFERENCES: [&[u8; 14_688]; 3] = [
+    UNDERWATER_CORAL_RGB,
+    UNDERWATER_CORAL_VARIANT_RGB,
+    UNDERWATER_CORAL_THIRD_RGB,
+];
+
+
+/// Maximum corresponding-channel differences across pairs of the three originals.
+const CORAL_ABSOLUTE_DELTA: [u8; 3] = [17, 22, 26];
+
+
+/// Maximum signed spatial-edge differences across the same original pairs, in RGB.
+const CORAL_EDGE_DELTA: [u16; 3] = [5, 7, 9];
+
+
+/// Inclusive complete-footprint RGB sums measured only from those three originals.
+const CORAL_SUM_RANGES: [[u32; 2]; 3] =
+    [[458_826, 465_353], [511_146, 520_014], [491_004, 501_980]];
+
+
+/// Complete byte-original bare Coral at original 7|5 from stopped 165 Request 2.
+/// This adds one fixed exact proof without altering any earlier reference or limit.
+const UNDERWATER_CORAL_SEVEN_FIVE_RGB: &[u8; 14_688] =
+    include_bytes!("../../../tests/fixtures/pyramid-recognition-166/clearance.rgb");
+
+
+/// Original native lower clearance below the removed Ace of clubs at 7|5.
+const UNDERWATER_CORAL_SEVEN_FIVE_BOUNDS: PixelRect = PixelRect::new(1089, 588, 144, 34);
+
+
+/// Prove the retained 7|5 background using every RGB byte at its fixed geometry.
+/// Other locations or any changed byte refuse. Invalid frame bounds or missing
+/// pixels return an error; the caller still excludes strong-white card presence.
+/// This single calibration gives no tolerance or future-rendering guarantee.
+pub(super) fn measured_coral_seven_five_surface(
+    view: FrameView<'_>,
+    bounds: PixelRect,
+) -> Result<bool, &'static str> {
+    if bounds != UNDERWATER_CORAL_SEVEN_FIVE_BOUNDS {
+        return Ok(false);
+    }
+    view.checked_bounds(bounds)
+        .map_err(|_| "7|5 clearance outside frame")?;
+    let reference = UNDERWATER_CORAL_SEVEN_FIVE_RGB.as_chunks::<3>().0;
+    let coordinates =
+        (bounds.y..bounds.bottom()).flat_map(|y| (bounds.x..bounds.right()).map(move |x| (x, y)));
+    for (index, (x, y)) in coordinates.enumerate() {
+        let actual = view.pixel_rgb(x, y).ok_or("7|5 pixel outside frame")?;
+        let expected = reference
+            .get(index)
+            .ok_or("7|5 reference outside footprint")?;
+        if actual != *expected {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+
+/// Classify aged, possible-paper and strong-white material using existing rules.
+/// These are per-pixel veto roles, not card presence or permission to ignore pixels.
+fn coral_material_roles([r, g, b]: [u8; 3]) -> [bool; 3] {
+    let minimum = r.min(g).min(b);
+    [
+        super::card_paper::aged_pixel([r, g, b]),
+        minimum >= PAPER.possible_paper_minimum,
+        minimum >= PAPER.white_minimum,
+    ]
+}
+
+
+/// Prove exact bare rock only at original 7|6 using the complete retained crop.
+/// Every RGB channel must equal the single calibration frame; any changed pixel
+/// refuses, including material overlays. Checked bounds/layout errors propagate.
+/// This proof supplies positive absence before generic aged-colour heuristics,
+/// while its caller retains strong-white presence and all scene/card/pile checks.
+/// Calibration-frame success grants no future-rendering or live-input guarantee.
+fn measured_rock_surface(view: FrameView<'_>, bounds: PixelRect) -> Result<bool, String> {
+    if bounds != UNDERWATER_ROCK_BOUNDS {
+        return Ok(false);
+    }
+    view.checked_bounds(bounds)
+        .map_err(|_| "rock clearance outside frame")?;
+    let reference = UNDERWATER_ROCK_RGB.as_chunks::<3>().0;
+    let coordinates =
+        (bounds.y..bounds.bottom()).flat_map(|y| (bounds.x..bounds.right()).map(move |x| (x, y)));
+    for (index, (x, y)) in coordinates.enumerate() {
+        let actual = view.pixel_rgb(x, y).ok_or("rock pixel outside frame")?;
+        let expected = reference
+            .get(index)
+            .ok_or("rock reference outside footprint")?;
+        if actual != *expected {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+
+/// Prove the additional bare-coral rendering only at original 7|1 by exact RGB.
+/// All 4,896 pixels must match; checked bounds and pixel errors propagate.
+/// The caller retains strong-white presence and all scene, identity and pile checks.
+/// This single-frame calibration provides no tolerance for future appearances.
+fn measured_exact_coral_surface(view: FrameView<'_>, bounds: PixelRect) -> Result<bool, String> {
+    if bounds != UNDERWATER_CORAL_EXACT_BOUNDS {
+        return Ok(false);
+    }
+    view.checked_bounds(bounds)
+        .map_err(|_| "exact coral clearance outside frame")?;
+    let reference = UNDERWATER_CORAL_EXACT_RGB.as_chunks::<3>().0;
+    let coordinates =
+        (bounds.y..bounds.bottom()).flat_map(|y| (bounds.x..bounds.right()).map(move |x| (x, y)));
+    for (index, (x, y)) in coordinates.enumerate() {
+        let actual = view
+            .pixel_rgb(x, y)
+            .ok_or("exact coral pixel outside frame")?;
+        let expected = reference
+            .get(index)
+            .ok_or("exact coral reference outside footprint")?;
+        if actual != *expected {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+
+/// Compare one signed edge in RGB; i16 differences stay within -255 through 255.
+/// Their unsigned distance is at most 510, so no wrapping or saturation occurs.
+fn coral_edge_matches(
+    actual: [u8; 3],
+    neighbour: [u8; 3],
+    reference: [u8; 3],
+    reference_neighbour: [u8; 3],
+) -> bool {
+    actual
+        .into_iter()
+        .zip(neighbour)
+        .zip(reference.into_iter().zip(reference_neighbour))
+        .zip(CORAL_EDGE_DELTA)
+        .all(
+            |(((actual, neighbour), (reference, reference_neighbour)), maximum)| {
+                let observed = i16::from(actual) - i16::from(neighbour);
+                let expected = i16::from(reference) - i16::from(reference_neighbour);
+                observed.abs_diff(expected) <= maximum
+            },
+        )
+}
+
+
+/// Require all channels and all 9,614 edges to match one complete reference.
+/// The caller fixes bounds to 144 by 34; row-major predecessors therefore exist
+/// whenever their left/upper guards pass. Missing pixels or references are errors.
+fn coral_reference_matches(
+    view: FrameView<'_>,
+    bounds: PixelRect,
+    reference: &[u8; 14_688],
+) -> Result<bool, String> {
+    let pixels = reference.as_chunks::<3>().0;
+    let width = usize::try_from(bounds.width).map_err(|_| "coral width overflow")?;
+    let coordinates =
+        (bounds.y..bounds.bottom()).flat_map(|y| (bounds.x..bounds.right()).map(move |x| (x, y)));
+    for (index, (x, y)) in coordinates.enumerate() {
+        let actual = view.pixel_rgb(x, y).ok_or("coral pixel outside frame")?;
+        let expected = *pixels
+            .get(index)
+            .ok_or("coral reference outside footprint")?;
+        if actual
+            .into_iter()
+            .zip(expected)
+            .zip(CORAL_ABSOLUTE_DELTA)
+            .any(|((actual, expected), maximum)| actual.abs_diff(expected) > maximum)
+        {
+            return Ok(false);
+        }
+        for (nx, ny, previous) in [
+            (x > bounds.x).then(|| (x - 1, y, index - 1)),
+            (y > bounds.y).then(|| (x, y - 1, index - width)),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            let neighbour = view
+                .pixel_rgb(nx, ny)
+                .ok_or("coral neighbour outside frame")?;
+            let reference_neighbour = *pixels
+                .get(previous)
+                .ok_or("coral reference neighbour outside footprint")?;
+            if !coral_edge_matches(actual, neighbour, expected, reference_neighbour) {
+                return Ok(false);
+            }
+        }
+    }
+    Ok(true)
+}
+
+
+/// Positively recognise the complete native bare-Coral footprint at original 7|1.
+/// Every pixel participates in bounded RGB sums, material vetoes and one coherent
+/// reference comparison. New material locations refuse even if structure agrees.
+/// Only originals 159-161 establish limits; no fourth-reference fitting occurs.
+/// The fixed 4,896 pixels sum to at most 1,248,480 per channel, fitting u32.
+/// Invalid bounds/layout propagate errors; the caller retains its strong-white
+/// presence veto, all other card/pile checks and sole input authority.
 fn measured_coral_surface(view: FrameView<'_>, bounds: PixelRect) -> Result<bool, String> {
     if bounds != PixelRect::new(286, 588, 144, 34) {
         return Ok(false);
     }
-    crate::pyramid_progress::matches_native_rgb_patch(view, bounds, UNDERWATER_CORAL_RGB, 0)
+    view.checked_bounds(bounds)
+        .map_err(|_| "coral clearance outside frame")?;
+    let mut sums = [0_u32; 3];
+    let coordinates =
+        (bounds.y..bounds.bottom()).flat_map(|y| (bounds.x..bounds.right()).map(move |x| (x, y)));
+    for (index, (x, y)) in coordinates.enumerate() {
+        let actual = view.pixel_rgb(x, y).ok_or("coral pixel outside frame")?;
+        for (sum, value) in sums.iter_mut().zip(actual) {
+            *sum += u32::from(value);
+        }
+        let mut allowed_roles = [false; 3];
+        for reference in CORAL_REFERENCES {
+            let pixel = *reference
+                .as_chunks::<3>()
+                .0
+                .get(index)
+                .ok_or("coral material reference outside footprint")?;
+            for (allowed, role) in allowed_roles.iter_mut().zip(coral_material_roles(pixel)) {
+                *allowed |= role;
+            }
+        }
+        if coral_material_roles(actual)
+            .into_iter()
+            .zip(allowed_roles)
+            .any(|(present, allowed)| present && !allowed)
+        {
+            return Ok(false);
+        }
+    }
+    if sums
+        .into_iter()
+        .zip(CORAL_SUM_RANGES)
+        .any(|(sum, [minimum, maximum])| sum < minimum || sum > maximum)
+    {
+        return Ok(false);
+    }
+    for reference in CORAL_REFERENCES {
+        if coral_reference_matches(view, bounds, reference)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 
@@ -450,6 +785,30 @@ impl ReconVision {
                 .map_err(|_| HaloDetectionError::BoundsOutsideFrame)?;
             if evidence != PaperEvidence::Present
                 && measured_coral_surface(view, clearance)
+                    .map_err(|_| HaloDetectionError::BoundsOutsideFrame)?
+            {
+                return Ok(FaceEvidence::Absent);
+            }
+            if evidence != PaperEvidence::Present
+                && measured_exact_coral_surface(view, clearance)
+                    .map_err(|_| HaloDetectionError::BoundsOutsideFrame)?
+            {
+                return Ok(FaceEvidence::Absent);
+            }
+            if evidence != PaperEvidence::Present
+                && measured_rock_surface(view, clearance)
+                    .map_err(|_| HaloDetectionError::BoundsOutsideFrame)?
+            {
+                return Ok(FaceEvidence::Absent);
+            }
+            if evidence != PaperEvidence::Present
+                && measured_retained_underwater_surface(view, clearance)
+                    .map_err(|_| HaloDetectionError::BoundsOutsideFrame)?
+            {
+                return Ok(FaceEvidence::Absent);
+            }
+            if evidence != PaperEvidence::Present
+                && measured_coral_seven_five_surface(view, clearance)
                     .map_err(|_| HaloDetectionError::BoundsOutsideFrame)?
             {
                 return Ok(FaceEvidence::Absent);

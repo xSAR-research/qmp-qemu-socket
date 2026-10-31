@@ -171,8 +171,8 @@ struct Acquisition {
     vision: ReconVision,
     /// Actual requirement from the final restored acquisition frame, never the latest positive.
     challenge_progress: Option<ChallengeProgress>,
-    /// Advisory method from the same restored native frame; never an input permit.
-    default_method: RouteMethod,
+    /// Optional challenge objective from the restored frame; never an input permit.
+    default_method: Option<RouteMethod>,
     /// Advisory actual header from the same restored frame; never input authority.
     observed_game: crate::pyramid_workflow_model::ObservedGame,
 }
@@ -384,7 +384,7 @@ pub(super) fn record_acquisition(
     vision: ReconVision,
     output: &Path,
     challenge_progress: Option<ChallengeProgress>,
-    default_method: RouteMethod,
+    default_method: Option<RouteMethod>,
     observed_game: crate::pyramid_workflow_model::ObservedGame,
 ) -> Result<(), String> {
     let control = &events.latest_frame.reconnaissance;
@@ -461,7 +461,7 @@ pub(super) fn acquisition_default(
     path: &Path,
     events: &WorkerEventSink,
     cancel: &AtomicBool,
-) -> Result<RouteMethod, String> {
+) -> Result<Option<RouteMethod>, String> {
     let mut store = events
         .latest_frame
         .computed_route
@@ -649,6 +649,8 @@ pub(super) struct PlanningReport {
     pub(super) message: String,
     /// Method actually used by the retained execution candidate.
     pub(super) method: RouteMethod,
+    /// True only for the accepted operator switch; automatic fallback leaves false.
+    pub(super) operator_requested_maximum: bool,
 }
 
 
@@ -726,6 +728,7 @@ pub(super) fn calculate_owned_with_policy(
                 "Challenge target is already reached; no further route input authorised".to_owned(),
             );
         }
+        let mut operator_requested_maximum = false;
         let (actions, stats, objective, guarantee) = loop {
             check_acquisition(&acquisition, context, events, cancel)?;
             let search_work = events.latest_frame.search_control.begin(
@@ -855,6 +858,7 @@ pub(super) fn calculate_owned_with_policy(
             let replace = search_work.finish()?;
             check_acquisition(&acquisition, context, events, cancel)?;
             if replace {
+                operator_requested_maximum = true;
                 method = RouteMethod::Fast;
                 record_detail(
                     &mut details,
@@ -1080,6 +1084,7 @@ pub(super) fn calculate_owned_with_policy(
         Ok(PlanningReport {
             message,
             method,
+            operator_requested_maximum,
             card_route: objective != RouteObjective::Drain,
         })
     })();
@@ -1087,6 +1092,7 @@ pub(super) fn calculate_owned_with_policy(
         publish_pyramid_failure(
             events,
             FailureEvidence {
+                progress: None,
                 context,
                 phase: PyramidPhase::Planning,
                 run_id: Some(run_id),
@@ -1236,6 +1242,27 @@ trait RouteIo {
     }
 
 
+    /// Verify the upcoming exact sources within the existing precondition budget.
+    fn observe_action_source(
+        &mut self,
+        before: SearchState,
+        _after: SearchState,
+    ) -> Result<EffectObservation, String> {
+        self.observe_source(before)
+    }
+
+
+    /// Record an immutable-ready controller boundary without acquiring pixels.
+    fn record_stage(
+        &mut self,
+        _stage: crate::pyramid_diagnostics::progress::FailureStage,
+        _action: usize,
+        _total: usize,
+        _check: usize,
+    ) {
+    }
+
+
     /// Consume checked source evidence for this whole logical action.
     fn begin_action(
         &mut self,
@@ -1243,6 +1270,18 @@ trait RouteIo {
         _operations: &[InputOperation],
     ) -> Result<(), String> {
         self.check()
+    }
+
+
+    /// Bind the independently replayed after-state before the first gesture.
+    /// Native execution captures temporal removal baselines at this source boundary.
+    fn begin_transition(
+        &mut self,
+        before: SearchState,
+        _after: SearchState,
+        operations: &[InputOperation],
+    ) -> Result<(), String> {
+        self.begin_action(before, operations)
     }
 
 
@@ -1565,10 +1604,12 @@ fn drive(plan: &Prepared, io: &mut impl RouteIo) -> Result<DriveReport, String> 
                             },
                         )?;
                     }
+                    io.record_stage(if is_effect { crate::pyramid_diagnostics::progress::FailureStage::PostConfirmation } else { crate::pyramid_diagnostics::progress::FailureStage::InitialSource }, action_index + 1, plan.trace.len(), phase_observations);
                     let observation = if is_effect {
                         io.observe_effect(state, final_effect)?
                     } else {
-                        io.observe_source(state)?
+                        let after = *states.get(action_index + 1).ok_or("Missing upcoming state")?;
+                        io.observe_action_source(state, after)?
                     };
                     io.check()?;
                     let completed = action_index + usize::from(is_effect);
@@ -1636,8 +1677,10 @@ fn drive(plan: &Prepared, io: &mut impl RouteIo) -> Result<DriveReport, String> 
                             .get(action_index)
                             .ok_or("Missing input action")?
                             .action;
-                        io.begin_action(state, &operations(action)?)?;
+                        let after = *states.get(action_index + 1).ok_or("Missing post-input state")?;
+                        io.begin_transition(state, after, &operations(action)?)?;
                     }
+                    io.record_stage(crate::pyramid_diagnostics::progress::FailureStage::InputDelivery, action_index + 1, plan.trace.len(), 0);
                     let before = io.counts();
                     let delivery = io.deliver(operation, state);
                     let after = io.counts();
@@ -1804,6 +1847,20 @@ impl ExecutionPolicy {
 
 /// Concrete finite worker I/O, holding exclusive run authority and loaded calibration.
 struct NativeIo<'a> {
+    /// Private execution reader using route-owned temporal removal evidence.
+    execution_vision: crate::pyramid_recon::vision::ReconVision,
+    /// Source identities and successive fresh disappearance checks for one action.
+    source_transition: Option<crate::pyramid_recon::vision::source_transition::SourceTransition>,
+    /// Prepared source tracker bound to an exact unchanged input/capture boundary.
+    ready_transition: Option<(cadence::SourceProof, SearchState, crate::pyramid_recon::vision::source_transition::SourceTransition)>,
+    /// Current controller stage, independent of saved image provenance.
+    failure_progress: crate::pyramid_diagnostics::progress::FailureProgress,
+    /// Before images and committed fixed-slot removal history for this route only.
+    removals: crate::pyramid_recon::vision::removal::RemovalHistory,
+    /// Same-action pile source and expected changed sides; never input authority.
+    stock_effect: Option<(crate::pyramid_effect::StockBefore, [bool; 2])>,
+    /// Pair frozen for the current action, or at the explicit REDEAL boundary.
+    effect_settings: crate::parameters::PyramidEffectSettings,
     /// Explicit session policy; no-challenge suppresses target classification entirely.
     policy: ExecutionPolicy,
     /// Continuation observations use the separate positive stock-X evidence.
@@ -1860,6 +1917,61 @@ struct NativeIo<'a> {
 
 
 impl NativeIo<'_> {
+    /// Derive original identities only from the independently replayed action.
+    fn action_sources(
+        &self,
+        before: SearchState,
+        after: SearchState,
+    ) -> Result<Vec<crate::pyramid_recon::vision::source_transition::SourceCard>, String> {
+        let (before, before_left, before_right) = expected(&self.plan.acquisition.deal, before)?;
+        let (after, after_left, after_right) = expected(&self.plan.acquisition.deal, after)?;
+        let mut sources = Vec::new();
+        for (index, (&old, &new)) in before.iter().zip(&after).enumerate() {
+            if old != new
+                && let Some(card) = old
+            {
+                let (row, column) = xsar::games::pyramid::planning::tableau_coordinates(index)
+                    .ok_or("invalid source slot")?;
+                sources.push(
+                    crate::pyramid_recon::vision::source_transition::SourceCard {
+                        location: PyramidTargetKind::Card {
+                            row: u8::try_from(row).map_err(|_| "invalid source row")?,
+                            column: u8::try_from(column).map_err(|_| "invalid source column")?,
+                        },
+                        card,
+                    },
+                );
+            }
+        }
+        for (location, old, new) in [
+            (PyramidTargetKind::Left, before_left, after_left),
+            (PyramidTargetKind::Right, before_right, after_right),
+        ] {
+            if old != new
+                && let Some(card) = old
+            {
+                sources.push(
+                    crate::pyramid_recon::vision::source_transition::SourceCard { location, card },
+                );
+            }
+        }
+        Ok(sources)
+    }
+
+
+    /// Snapshot and log exactly once at the owning action/REDEAL boundary.
+    fn freeze_effect_settings(&mut self, boundary: &str) {
+        self.effect_settings = self.events.latest_frame.effect_settings();
+        send_log(
+            self.events,
+            format!(
+                "Pyramid {boundary} effect settings: {}",
+                self.effect_settings.description()
+            ),
+        );
+    }
+
+
     /// Classify fresh native pixels; ordinary frames remain memory-only diagnostics.
     fn observe_checked(
         &mut self,
@@ -1869,6 +1981,7 @@ impl NativeIo<'_> {
     ) -> Result<bool, String> {
         self.position_matches = false;
         self.source_proof = None;
+        self.ready_transition = None;
         self.challenge_confirmation = None;
         if self.action_permit.is_some() {
             self.action_permit = None;
@@ -1937,67 +2050,84 @@ impl NativeIo<'_> {
             && !final_effect
             && !state.is_goal()
             && left.is_none();
-        let observed = if self.stock_continuation || winning_stock_boundary {
-            let appeared = self
-                .redeal_before
-                .as_ref()
-                .map(|before| before.appeared(&frame))
-                .transpose()?
-                .unwrap_or(false);
-            self.plan
-                .acquisition
-                .vision
-                .verify_temporal_stock_position(&frame, &tableau, left, right, appeared)
+        let source_mode = self.source_transition.is_some();
+        let disappearance = if let Some(transition) = &mut self.source_transition {
+            transition.observe(&self.execution_vision, &frame, self.captures)
         } else {
-            self.plan
-                .acquisition
-                .vision
-                .verify_position(&frame, &tableau, left, right)
-                .or_else(|ordinary_error| {
-                    if final_effect && state.is_goal() {
-                        self.plan
-                            .acquisition
-                            .vision
-                            .verify_final_clear(&frame, &tableau, left, right)
-                            .or_else(|_| {
-                                self.plan
-                                    .acquisition
-                                    .vision
-                                    .verify_normal_final_clear(&frame, &tableau, left, right)
-                            })
-                            .or_else(|error| {
-                                if let Some(initial) = self.challenge_initial {
-                                    self.plan
-                                        .acquisition
-                                        .vision
-                                        .verify_board_count_final_clear(
-                                            &frame, &tableau, left, right, initial,
-                                        )
-                                        .or_else(|_| {
-                                            self.plan
-                                                .acquisition
-                                                .vision
-                                                .verify_board_count_target_clear(
-                                                    &frame, &tableau, left, right, initial,
-                                                )
-                                        })
-                                        .or_else(|_| {
-                                            self.plan
-                                                .acquisition
-                                                .vision
-                                                .verify_challenge_final_clear(
-                                                    &frame, &tableau, left, right, initial,
-                                                )
-                                        })
-                                } else {
-                                    Err(error)
-                                }
-                            })
-                            .map_err(|alternative_error| format!("{ordinary_error}; final-clear alternatives refused: {alternative_error}"))
-                    } else {
-                        Err(ordinary_error)
-                    }
-                })
+            Ok(false)
+        };
+        let removal = if source_mode {
+            Ok(crate::pyramid_recon::vision::removal::RemovalCandidate {
+                proof: self.removals.proof(),
+                settled: disappearance.as_ref().is_ok_and(|ready| *ready),
+            })
+        } else {
+            self.removals
+                .stage(&frame, &tableau, self.captures, &self.execution_vision)
+        };
+        self.execution_vision.set_temporal_removals(
+            removal
+                .as_ref()
+                .map_or(self.removals.proof(), |candidate| candidate.proof),
+        );
+        let observed = if source_mode {
+            disappearance.as_ref().map_err(Clone::clone).map(|_| ())
+        } else {
+            removal.as_ref().map_err(Clone::clone).and_then(|_| {
+            if state.is_goal() && !final_effect {
+                return Err("Replayed empty tableau requires the final-effect phase".to_owned());
+            }
+            if self.stock_continuation || winning_stock_boundary {
+                let appeared = self
+                    .redeal_before
+                    .as_ref()
+                    .map(|before| before.appeared(&frame, self.effect_settings))
+                    .transpose()?
+                    .unwrap_or(false);
+                self.execution_vision
+                    .verify_temporal_stock_position(&frame, &tableau, left, right, appeared)
+            } else {
+                self.execution_vision
+                    .verify_position(&frame, &tableau, left, right)
+                    .or_else(|ordinary_error| {
+                        if final_effect && state.is_goal() {
+                            self.execution_vision
+                                .verify_final_clear(&frame, &tableau, left, right)
+                                .or_else(|_| {
+                                    self.execution_vision
+                                        .verify_normal_final_clear(&frame, &tableau, left, right)
+                                })
+                                .or_else(|error| {
+                                    if let Some(initial) = self.challenge_initial {
+                                        self.execution_vision
+                                            .verify_board_count_final_clear(
+                                                &frame, &tableau, left, right, initial,
+                                            )
+                                            .or_else(|_| {
+                                                self.execution_vision
+                                                    .verify_board_count_target_clear(
+                                                        &frame, &tableau, left, right, initial,
+                                                    )
+                                            })
+                                            .or_else(|_| {
+                                                self.execution_vision
+                                                    .verify_challenge_final_clear(
+                                                        &frame, &tableau, left, right, initial,
+                                                    )
+                                            })
+                                    } else {
+                                        Err(error)
+                                    }
+                                })
+                                .map_err(|alternative_error| format!("{ordinary_error}; final-clear alternatives refused: {alternative_error}"))
+                        } else {
+                            Err(ordinary_error)
+                        }
+                    })
+            }
+        }).and_then(|()| {
+            self.stock_effect.as_ref().map_or(Ok(()), |(before,changed)| before.verify_with_settings(&frame,*changed,self.effect_settings))
+        })
         };
         // A header refusal is fatal, rather than an unmatched position that could
         // be reclassified as a new board or terminal after the final gesture.
@@ -2016,12 +2146,33 @@ impl NativeIo<'_> {
         } else {
             Ok(FrameGuardOutcome::Ready)
         };
+        let awaiting_settle = observed.is_ok()
+            && matches!(&guarded, Ok(FrameGuardOutcome::Ready))
+            && removal.as_ref().is_ok_and(|candidate| !candidate.settled);
+        let observed = if observed.is_ok() && matches!(&guarded, Ok(FrameGuardOutcome::Ready)) {
+            if source_mode {
+                if disappearance? {
+                    self.removals.confirm_source_transition(&tableau);
+                    self.execution_vision.set_temporal_removals(self.removals.proof());
+                    Ok(())
+                } else {
+                    Err("original source disappearance requires two successive fresh checks".to_owned())
+                }
+            } else {
+                self.removals.commit(removal.map_err(|error| error.to_owned())?).map(|()| { self.stock_effect=None; })
+            }
+        } else {
+            self.removals.reject();
+            if let Some(transition) = &mut self.source_transition { transition.reset(); }
+            observed
+        };
         let reason = observed.as_ref().err().or_else(|| guarded.as_ref().err());
         if let Some(observation) = &mut self.latest_observation {
             observation.mismatch = reason.cloned();
         }
         if let Some(reason) = reason
             && self.first_mismatch.is_none()
+            && !awaiting_settle
         {
             send_log(
                 self.events,
@@ -2253,13 +2404,47 @@ impl RouteIo for NativeIo<'_> {
                 return Ok(Some(BoardCompletion::ChallengeTargetVerified(proof)));
             }
         };
+        if matched {
+            self.failure_progress.stage =
+                crate::pyramid_diagnostics::progress::FailureStage::FinalConfirmation;
+        }
         let frame = self
             .latest_frame
             .as_ref()
             .ok_or("Missing final native observation")?;
+        // Source disappearance verifies the action, not an observed board clear.
+        // Completion retains its own semantic classification on these same pixels.
+        let (tableau, left, right) = expected(&self.plan.acquisition.deal, state)?;
+        let clear = matched
+            && self
+                .execution_vision
+                .verify_final_clear(frame, &tableau, left, right)
+                .or_else(|_| {
+                    self.execution_vision
+                        .verify_normal_final_clear(frame, &tableau, left, right)
+                })
+                .or_else(|error| {
+                    if let Some(initial) = self.challenge_initial {
+                        self.execution_vision
+                            .verify_board_count_final_clear(frame, &tableau, left, right, initial)
+                            .or_else(|_| {
+                                self.execution_vision.verify_board_count_target_clear(
+                                    frame, &tableau, left, right, initial,
+                                )
+                            })
+                            .or_else(|_| {
+                                self.execution_vision.verify_challenge_final_clear(
+                                    frame, &tableau, left, right, initial,
+                                )
+                            })
+                    } else {
+                        Err(error)
+                    }
+                })
+                .is_ok();
         let completion =
             self.final_confirmation
-                .observe(&self.plan.acquisition.vision, frame, matched)?;
+                .observe(&self.execution_vision, frame, clear)?;
         self.check()?;
         Ok(completion)
     }
@@ -2292,6 +2477,150 @@ impl RouteIo for NativeIo<'_> {
             return Ok(EffectObservation::ChallengePending(progress));
         }
         Ok(EffectObservation::Position(matched))
+    }
+
+
+    /// Exact source readiness participates in the existing six-check sequencer loop.
+    fn observe_action_source(
+        &mut self,
+        before: SearchState,
+        after: SearchState,
+    ) -> Result<EffectObservation, String> {
+        let previous_capture = self
+            .latest_observation
+            .as_ref()
+            .map(|observation| observation.capture);
+        self.ready_transition = None;
+        let observation = self.observe_source(before);
+        let retained_capture = self
+            .latest_observation
+            .as_ref()
+            .map(|observation| observation.capture);
+        if retained_capture.is_some() && retained_capture != previous_capture {
+            self.failure_progress.fresh_retries += 1;
+        }
+        self.failure_progress.capture = retained_capture.unwrap_or(0);
+        let observation = observation?;
+        let EffectObservation::Position(matched) = observation else {
+            return Ok(observation);
+        };
+        let sources = self.action_sources(before, after)?;
+        let frame = self
+            .latest_frame
+            .as_ref()
+            .ok_or("Missing checked source frame")?;
+        let (prepared, reads) =
+            crate::pyramid_recon::vision::source_transition::SourceTransition::prepare(
+                &self.execution_vision,
+                frame,
+                sources,
+                self.captures,
+            )?;
+        self.failure_progress.sources = reads;
+        self.failure_progress.capture = self.captures;
+        if matched && let Some(transition) = prepared {
+            self.ready_transition =
+                Some((cadence::SourceProof::new(self, before), after, transition));
+            self.failure_progress.reason = None;
+            return Ok(EffectObservation::Position(true));
+        }
+        self.source_proof = None;
+        self.position_matches = false;
+        let reason = format!(
+            "INITIAL source check {}/{}: expected source not ready; no input authorised; {}",
+            self.failure_progress.initial_checks,
+            ORDINARY_OBSERVATIONS,
+            self.failure_progress.sources.join("; ")
+        );
+        self.failure_progress.reason = Some(reason.clone());
+        if self.first_mismatch.is_none() {
+            self.first_mismatch = Some((reason.clone(), frame.clone()));
+        }
+        send_log(self.events, reason);
+        Ok(EffectObservation::Position(false))
+    }
+
+
+    /// Preserve current-stage facts separately from the last frame's provenance.
+    fn record_stage(
+        &mut self,
+        stage: crate::pyramid_diagnostics::progress::FailureStage,
+        action: usize,
+        total: usize,
+        check: usize,
+    ) {
+        use crate::pyramid_diagnostics::progress::FailureStage;
+        if self.failure_progress.action != Some(action) {
+            self.failure_progress.initial_checks = 0;
+            self.failure_progress.fresh_retries = 0;
+            self.failure_progress.previous_post_confirmations = if self.verified_actions > 0 {
+                self.source_transition
+                    .as_ref()
+                    .map(|source| source.confirmations())
+            } else {
+                None
+            };
+            self.failure_progress.post_confirmations = 0;
+            self.failure_progress.sources.clear();
+            self.failure_progress.reason = None;
+            self.failure_progress.action_attempted_start = self.counts.attempted;
+            self.failure_progress.action_acknowledged_start = self.counts.acknowledged;
+        }
+        self.failure_progress.stage = stage;
+        self.failure_progress.action = Some(action);
+        self.failure_progress.total = Some(total);
+        self.failure_progress.operation = self
+            .plan
+            .trace
+            .get(action.saturating_sub(1))
+            .map(|step| format!("{:?}", step.action));
+        self.failure_progress.initial_limit = ORDINARY_OBSERVATIONS;
+        if stage == FailureStage::InitialSource {
+            self.failure_progress.initial_checks = check;
+        }
+        self.failure_progress.capture = self.captures;
+    }
+
+
+    /// Capture occupied corners and changed pile sources for the exact replayed action.
+    fn begin_transition(
+        &mut self,
+        before: SearchState,
+        after: SearchState,
+        operations: &[InputOperation],
+    ) -> Result<(), String> {
+        let prepared = self.ready_transition.take();
+        self.begin_action(before, operations)?;
+        let source = if let Some((proof, endpoint, transition)) = prepared {
+            if proof.matches(self, before) && endpoint == after {
+                Ok(transition)
+            } else {
+                Err("Stale prepared source; no input authorised".to_owned())
+            }
+        } else {
+            (|| {
+                let sources = self.action_sources(before, after)?;
+            let frame = self
+                .latest_frame
+                .as_ref()
+                .ok_or("Missing checked source frame")?;
+            crate::pyramid_recon::vision::source_transition::SourceTransition::begin(
+                &self.execution_vision,
+                frame,
+                sources,
+                self.captures,
+            )
+            })()
+        };
+        match source {
+            Ok(source) => self.source_transition = Some(source),
+            Err(error) => {
+                self.action_permit = None;
+                return Err(error);
+            }
+        }
+        send_log(self.events, "Pyramid source identity verified; action permitted once; two fresh disappearance checks required".to_owned());
+        Ok(())
     }
 
 
@@ -2558,6 +2887,7 @@ fn execute_owned_guarded(
     let mut counts = Counts::default();
     let mut source_document = None;
     let mut first_frame = None;
+    let mut failure_progress = None;
     let mut latest_frame = None;
     let mut details = serde_json::json!({
         "plan_id": plan_id,
@@ -2604,6 +2934,13 @@ fn execute_owned_guarded(
         let started = Instant::now();
         let qmp = QmpClient::connect(&context.socket_path).map_err(|e| e.to_string())?;
         let mut io = NativeIo {
+            execution_vision: plan.acquisition.vision.for_temporal_execution(),
+            source_transition: None,
+            ready_transition: None,
+            failure_progress: crate::pyramid_diagnostics::progress::FailureProgress::default(),
+            removals: Default::default(),
+            stock_effect: None,
+            effect_settings: crate::parameters::PyramidEffectSettings::default(),
             policy,
             stock_continuation: false,
             executed_recycles: 0,
@@ -2681,6 +3018,31 @@ fn execute_owned_guarded(
                 }
             })
         };
+        io.failure_progress.capture = io
+            .latest_observation
+            .as_ref()
+            .map_or(0, |observation| observation.capture);
+        io.failure_progress.verified_actions = io.verified_actions;
+        io.failure_progress.attempted = io.counts.attempted;
+        io.failure_progress.acknowledged = io.counts.acknowledged;
+        if matches!(
+            io.failure_progress.stage,
+            crate::pyramid_diagnostics::progress::FailureStage::PostConfirmation
+                | crate::pyramid_diagnostics::progress::FailureStage::FinalConfirmation
+        ) {
+            io.failure_progress.post_confirmations = io
+                .source_transition
+                .as_ref()
+                .map_or(0, |source| source.confirmations());
+        }
+        io.failure_progress.reason = result
+            .as_ref()
+            .err()
+            .cloned()
+            .or(io.failure_progress.reason.clone());
+        io.failure_progress.earlier_observation =
+            io.first_mismatch.as_ref().map(|(reason, _)| reason.clone());
+        failure_progress = Some(io.failure_progress.clone());
         counts = io.counts;
         record_detail(
             &mut details,
@@ -2797,6 +3159,7 @@ fn execute_owned_guarded(
         publish_pyramid_failure(
             events,
             FailureEvidence {
+                progress: failure_progress.as_ref(),
                 context,
                 phase: PyramidPhase::Execution,
                 run_id: Some(run_id),

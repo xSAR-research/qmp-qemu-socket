@@ -1,0 +1,27 @@
+{
+  "source_packet": "pyramid-error-1793219219108-169489-1",
+  "source_role": "retained Request3 final capture; calibration, not blind evaluation",
+  "native_dimensions": [
+    1920,
+    1080
+  ],
+  "one_based_location": "7|6",
+  "clearance": [
+    1289,
+    588,
+    144,
+    34
+  ],
+  "pixel_count": 4896,
+  "rgb_byte_count": 14688,
+  "tolerance": 0,
+  "reference_count": 1,
+  "inspection_limit": "Future appearance coverage and live guest acceptance unproven",
+  "files": {
+    "rock-effect.png": "7ec239bbdecf2c83e3b53f5d66d21ba3e7c620a7c0e5b32c49435968f317ec2c",
+    "before-match.png": "0b96e68667f3b11a4f8a17c9f2af26b6ae4d59df12bf999aba682029043cc999",
+    "deal.json": "eb02225c35538a023d3a16ebd28b4691652297cfdd9ff85a73c9832cf67e4a80",
+    "underwater-rock-clearance.rgb": "8f372a70d69e23e2d32d0ab54dc897304550fd880c7be9828a21118658d7a11a",
+    "README.md": "4b027a52ac3c353fba80ce687b3fc3eaa639f2e978e225bb7dfe5af3cefbed81"
+  }
+}

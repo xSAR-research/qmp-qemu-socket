@@ -29,6 +29,8 @@ pub(super) struct FailureWindow {
     key: Option<FailureKey>,
     /// Original request fields; later settings changes must not replace them.
     fields: serde_json::Value,
+    /// Immutable stage survives a matching persistence-only receipt.
+    progress: Option<crate::pyramid_diagnostics::progress::FailureProgress>,
     /// Complete selectable/copyable text, including persistence updates.
     text: String,
 }
@@ -54,7 +56,11 @@ impl FailureWindow {
         };
         if new_failure || self.key.as_ref() != Some(&key) {
             self.fields = fields;
+            self.progress = None;
             self.open = true;
+        }
+        if let Some(progress) = &diagnostic.progress {
+            self.progress = Some(progress.clone());
         }
         self.key = Some(key);
         let directory = diagnostic.directory.as_ref().map_or_else(
@@ -67,7 +73,7 @@ impl FailureWindow {
             diagnostic.phase,
             diagnostic.run_id,
             diagnostic.ui_failure_id,
-            diagnostic.error,
+            format_args!("{}\n\n{}",self.progress.as_ref().map_or_else(|| "Detailed controller stage: unavailable".to_owned(), |progress| progress.display_text()),diagnostic.error),
             directory,
             diagnostic.persistence_error.as_deref().unwrap_or("None"),
             serde_json::to_string_pretty(&self.fields)
@@ -171,6 +177,7 @@ mod tests {
     fn diagnostics_preserve_failure_fields_and_only_open_for_new_identity() {
         let mut window = FailureWindow::default();
         let mut diagnostic = PyramidDiagnostic {
+            progress: Some(crate::pyramid_diagnostics::progress::FailureProgress { stage: crate::pyramid_diagnostics::progress::FailureStage::InitialSource, action: Some(5), total: Some(67), verified_actions: 4, attempted: 5, acknowledged: 5, action_attempted_start: 5, action_acknowledged_start: 5, initial_checks: 6, initial_limit: 6, fresh_retries: 5, reason: Some("expected 9S at 7|7".to_owned()), earlier_observation: Some("old scene mismatch".to_owned()), ..Default::default() }),
             context: ControllerContext::new(
                 "/tmp/test.sock".into(),
                 GameMode::Pyramid,
@@ -192,11 +199,21 @@ mod tests {
         assert!(window.open);
         window.open = false;
         diagnostic.directory = Some("/tmp/retained-packet".into());
+        diagnostic.progress = None;
         window.receive(&diagnostic, serde_json::json!({"socket":"edited"}), false);
         assert!(!window.open);
         assert!(window.text.contains("original.log"));
         assert!(window.text.contains("retained-packet"));
         assert!(!window.text.contains("edited"));
+        assert!(window.text.contains("INITIAL source verification"));
+        assert!(window.text.contains("4 logical actions"));
+        assert!(
+            window
+                .text
+                .contains("none sent (0 attempted / 0 acknowledged)")
+        );
+        assert!(window.text.contains("6/6; fresh captures: 5"));
+        assert!(window.text.contains("historical): old scene mismatch"));
         window.reopen();
         assert!(window.open);
         window.open = false;
@@ -216,6 +233,7 @@ mod tests {
     fn diagnostics_display_persistence_failure_after_initial_presentation() {
         let mut window = FailureWindow::default();
         let mut diagnostic = PyramidDiagnostic {
+            progress: None,
             context: ControllerContext::new(
                 "/tmp/test.sock".into(),
                 GameMode::Pyramid,
@@ -293,6 +311,7 @@ mod tests {
     fn native_154_klondike_failure_replaces_pyramid_astar_fields() {
         let mut window = FailureWindow::default();
         let old = PyramidDiagnostic {
+            progress: None,
             context: ControllerContext::new(
                 "/tmp/old-pyramid.sock".into(),
                 GameMode::Pyramid,

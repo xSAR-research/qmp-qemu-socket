@@ -115,6 +115,7 @@ fn native_155_actual_adapter_accepts_both_retained_effect_positions_without_inpu
             None,
             |plan| final_state.set(retained_prefix(plan, exact)),
             |io| {
+                retain_verified_position(io, final_state.get());
                 assert!(io.observe_checked(final_state.get(), false, true).unwrap());
                 assert!(io.latest_observation.as_ref().unwrap().mismatch.is_none());
             },

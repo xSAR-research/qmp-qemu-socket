@@ -141,9 +141,9 @@ fn execution_observability_ui_rejects_stale_reports_and_retains_bound_challenge(
 }
 
 
-/// Advisory Kings defaults preserve explicit choices and the target-agnostic opt-out.
+/// Authenticated challenge advice applies at RECON, including prior explicit and no-challenge choices.
 #[test]
-fn kings_default_preserves_explicit_preferences_and_no_challenge() {
+fn challenge_default_applies_at_recon_over_prior_preferences_and_no_challenge() {
     let mut workflow = PyramidWorkflow::default();
     workflow.apply_acquisition_default(Some(RouteMethod::Fast));
     assert_eq!(workflow.method(), RouteMethod::Fast);
@@ -160,7 +160,7 @@ fn kings_default_preserves_explicit_preferences_and_no_challenge() {
         )
         .unwrap();
     workflow.apply_acquisition_default(Some(RouteMethod::FewestActions));
-    assert_eq!(workflow.method(), RouteMethod::Fast);
+    assert_eq!(workflow.method(), RouteMethod::FewestActions);
     let mut no_challenge = PyramidWorkflow::default();
     no_challenge
         .select_preferences(
@@ -172,13 +172,13 @@ fn kings_default_preserves_explicit_preferences_and_no_challenge() {
         )
         .unwrap();
     no_challenge.apply_acquisition_default(Some(RouteMethod::Fast));
-    assert_eq!(no_challenge.method(), RouteMethod::FewestActions);
+    assert_eq!(no_challenge.method(), RouteMethod::Fast);
 }
 
 
-/// First-board explicit ownership survives phase ordering, then retires on stats-first board two.
+/// RECON challenge advice applies on board one and after statistics arrive before board-two phase.
 #[test]
-fn kings_default_retires_explicit_choice_on_later_board_statistics() {
+fn challenge_default_applies_on_first_board_and_stats_first_later_board() {
     let selected = context();
     let mut workflow = PyramidWorkflow::default();
     workflow.bind(&selected);
@@ -208,8 +208,8 @@ fn kings_default_retires_explicit_choice_on_later_board_statistics() {
     workflow.apply_acquisition_default(Some(RouteMethod::Fast));
     assert_eq!(
         workflow.method(),
-        RouteMethod::FewestActions,
-        "explicit first-board Shortest"
+        RouteMethod::Fast,
+        "fresh first-board challenge advice replaces earlier Shortest"
     );
     assert!(workflow.receive_planning(
         planning_update(&selected, 9, 2, RouteMethod::FewestActions, true),
@@ -223,7 +223,7 @@ fn kings_default_retires_explicit_choice_on_later_board_statistics() {
     assert_eq!(
         workflow.method(),
         RouteMethod::Fast,
-        "new board can use its Kings default"
+        "new board can use its authenticated challenge advice"
     );
 }
 
@@ -358,6 +358,7 @@ fn diagnostic(
     run_id: Option<u64>,
 ) -> PyramidDiagnostic {
     PyramidDiagnostic {
+        progress: None,
         context,
         phase,
         run_id,

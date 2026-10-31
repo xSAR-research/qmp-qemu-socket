@@ -227,7 +227,8 @@ pub(crate) struct SessionRequest {
     pub(crate) reuse_acquisition: Option<std::path::PathBuf>,
     /// First-board preference; later acquisitions apply their independently observed default.
     pub(crate) method: RouteMethod,
-    /// First-board method is a default unless the operator explicitly chose an objective.
+    /// Reused RECON applies its challenge advice unless a later idle choice replaced it.
+    /// A fresh RECON always applies its positively identified challenge objective.
     pub(crate) use_challenge_default: bool,
     /// Intended route outcome fixed before acquisition and calculation.
     pub(crate) route_goal: RouteGoal,

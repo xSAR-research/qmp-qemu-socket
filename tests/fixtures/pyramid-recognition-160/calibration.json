@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "purpose": "Fixed 7|1 bare coral rendering bounds; recognition evidence only",
+  "source_packet": "/home/charlie/tmp/pyramid-error-1793176713992-3068879-1",
+  "original_native_png": {
+    "file": "coral-effect.png",
+    "sha256": "b64a80b9f56201e37d6459850c4b6fa70f052cd33310a2e182c9985d4e92a4af",
+    "dimensions": [
+      1920,
+      1080
+    ],
+    "role": "Second calibration rendering; previously held out from159"
+  },
+  "bounds": [
+    286,
+    588,
+    144,
+    34
+  ],
+  "pixel_count": 4896,
+  "channel_count": 14688,
+  "first_reference": {
+    "file": "../pyramid-recognition-159/underwater-coral-clearance.rgb",
+    "sha256": "8963e77ea34bcdc102c3eebd5f67e1078bff473d997277dfd37241e345133371"
+  },
+  "second_reference": {
+    "file": "underwater-coral-clearance-variant.rgb",
+    "sha256": "767f05b4568f518b798219cd9d3907c963d5ad803b9c1d311db2ae80323ef7a7"
+  },
+  "bounds_policy": "Every channel at the same fixed pixel lies between its two observed values, inclusive. No additional tolerance.",
+  "exact_channels": 9209,
+  "variable_channels": 5479,
+  "maximum_observed_channel_span": 26,
+  "same_session_game_win_frames_used_for_calibration": false,
+  "evidence_boundary": "Two calibration renderings; no independent third rendering, arbitrary animation/theme coverage or new live effect proof."
+}

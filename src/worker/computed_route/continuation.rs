@@ -160,11 +160,18 @@ impl StockDrain {
 fn observe_stock(
     io: &mut super::NativeIo<'_>,
     state: SearchState,
+    next: Option<SearchState>,
 ) -> Result<Option<super::DriveReport>, String> {
     use super::{BoardCompletion, DriveReport, EffectObservation, RouteIo};
     for attempt in 0..super::ORDINARY_OBSERVATIONS {
         io.check()?;
-        match io.observe_source(state)? {
+        let observation = if let Some(after) = next {
+            io.failure_progress.stage = crate::pyramid_diagnostics::progress::FailureStage::InitialSource;
+            io.failure_progress.initial_checks = attempt + 1;
+            io.failure_progress.initial_limit = super::ORDINARY_OBSERVATIONS;
+            io.observe_action_source(state, after)?
+        } else { io.observe_source(state)? };
+        match observation {
             EffectObservation::Position(true) => return Ok(None),
             EffectObservation::Challenge(proof) => return Ok(Some(DriveReport {
                 completion: BoardCompletion::ChallengeTargetVerified(proof),
@@ -206,21 +213,30 @@ pub(super) fn drain_and_redeal(
     io.stock_continuation = true;
     for step in &drain.steps {
         io.pause_checkpoint()?;
-        if let Some(report) = observe_stock(io, step.before)? {
+        io.failure_progress.action_attempted_start = io.counts.attempted;
+        io.failure_progress.action_acknowledged_start = io.counts.acknowledged;
+        io.failure_progress.initial_checks = 0;
+        io.failure_progress.fresh_retries = 0;
+        io.failure_progress.operation = Some("Stock continuation D".to_owned());
+        io.failure_progress.total = None;
+        if let Some(report) = observe_stock(io, step.before, Some(step.after))? {
             return Ok(report);
         }
-        io.begin_action(step.before, &[InputOperation::PressDrawKey])?;
+        io.begin_transition(step.before, step.after, &[InputOperation::PressDrawKey])?;
+        io.failure_progress.stage = crate::pyramid_diagnostics::progress::FailureStage::InputDelivery;
         io.deliver(InputOperation::PressDrawKey, step.before)?;
+        io.failure_progress.stage = crate::pyramid_diagnostics::progress::FailureStage::PostConfirmation;
         if step.operation == StockAdvance::Recycle {
             io.recycle_acknowledged()?;
         }
         io.wait(step.operation.settle_delay())?;
-        if let Some(report) = observe_stock(io, step.after)? {
+        if let Some(report) = observe_stock(io, step.after, None)? {
             return Ok(report);
         }
     }
     io.pause_checkpoint()?;
-    if let Some(report) = observe_stock(io, drain.exhausted)? {
+    io.freeze_effect_settings("REDEAL");
+    if let Some(report) = observe_stock(io, drain.exhausted, None)? {
         return Ok(report);
     }
     let (tableau, left, right) = super::expected(&io.plan.acquisition.deal, drain.exhausted)?;
@@ -235,8 +251,8 @@ pub(super) fn drain_and_redeal(
         .redeal_before
         .as_ref()
         .ok_or("Missing pre-input REDEAL region; no click authorised")?;
-    let changed = before.changed(frame)?;
-    let appeared = before.appeared(frame)?;
+    let changed = before.changed(frame, io.effect_settings)?;
+    let appeared = before.appeared(frame, io.effect_settings)?;
     super::send_log(
         io.events,
         format!(
@@ -263,9 +279,7 @@ pub(super) fn drain_and_redeal(
             ),
         });
     }
-    io.plan
-        .acquisition
-        .vision
+    io.execution_vision
         .verify_temporal_stock_position(frame, &tableau, None, right, appeared)?;
     let point = super::redeal_appearance::centre()?;
     let probe = io.qmp.probe().map_err(|error| error.to_string())?;

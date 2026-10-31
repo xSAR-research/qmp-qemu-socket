@@ -1,5 +1,6 @@
 //! Advisory mode facts from existing native pixels; never an input or completion permit.
 
+use super::RouteMethod;
 use crate::{
     capture::CapturedFrame,
     pyramid_progress::{self, BoardCount, ChallengeKind, ChallengeProgress},
@@ -62,6 +63,20 @@ fn execution_observability_observed_headers_preserve_actual_progress_and_unknown
 
 
 impl ObservedGame {
+    /// Select this RECON's objective only for a positively identified challenge.
+    /// Score and Card challenges use Maximum; Boards uses Shortest. Normal and
+    /// unknown headers leave the operator's selection intact and grant no input.
+    pub(crate) fn route_method_override(self) -> Option<RouteMethod> {
+        match self {
+            Self::Challenge { progress, .. } => Some(match progress.kind {
+                ChallengeKind::Score | ChallengeKind::Cards => RouteMethod::Fast,
+                ChallengeKind::Boards => RouteMethod::FewestActions,
+            }),
+            Self::Normal(_) | Self::Unknown => None,
+        }
+    }
+
+
     /// Read supported header facts from an already captured frame without capture or input.
     /// Invalid pixels/metadata return an error; unsupported or conflicting headers stay unknown.
     pub(crate) fn observe(frame: &CapturedFrame) -> Result<Self, String> {
@@ -109,4 +124,39 @@ impl ObservedGame {
             }
         }
     }
+}
+
+
+/// All supported challenge kinds override RECON; ordinary or unknown headers do not.
+#[cfg(test)]
+#[test]
+fn recon_route_objective_policy_uses_challenge_kind_without_rank_guessing() {
+    for kind in [
+        ChallengeKind::Score,
+        ChallengeKind::Cards,
+        ChallengeKind::Boards,
+    ] {
+        for kings in [false, true] {
+            let observed = ObservedGame::Challenge {
+                progress: ChallengeProgress::new(kind, 0, 3).unwrap(),
+                kings,
+            };
+            assert_eq!(
+                observed.route_method_override(),
+                Some(match kind {
+                    ChallengeKind::Score | ChallengeKind::Cards => RouteMethod::Fast,
+                    ChallengeKind::Boards => RouteMethod::FewestActions,
+                })
+            );
+        }
+    }
+    assert_eq!(ObservedGame::Unknown.route_method_override(), None);
+    assert_eq!(
+        ObservedGame::Normal(BoardCount {
+            completed: 0,
+            target: 3
+        })
+        .route_method_override(),
+        None
+    );
 }

@@ -184,7 +184,7 @@ fn exhausted_left_winning_suffix_keeps_match_then_king_without_redeal() {
     }
     patch(&mut last, counter, &rgb);
     let evidence = adapter_with_setup(
-        vec![frame, middle, last],
+        vec![frame, middle.clone(), middle, last.clone(), last],
         None,
         |plan| {
             plan.acquisition.deal = xsar::pyramid_json::read_from(DEAL).unwrap();
@@ -196,15 +196,19 @@ fn exhausted_left_winning_suffix_keeps_match_then_king_without_redeal() {
         |io| {
             io.challenge = Some(bound);
             io.challenge_initial = Some(bound);
+            retain_verified_position(io, states[50]);
             for index in 50..52 {
                 assert!(matches!(
                     io.observe_source(states[index]).unwrap(),
                     EffectObservation::Position(true)
                 ));
                 let operations = operations(actions[index]).unwrap();
-                io.begin_action(states[index], &operations).unwrap();
+                io.begin_transition(states[index], states[index + 1], &operations).unwrap();
                 for operation in operations {
                     io.deliver(operation, states[index]).unwrap();
+                }
+                for _ in 0..1 {
+                    assert!(matches!(io.observe_effect(states[index + 1], index == 51).unwrap(), EffectObservation::Position(false)));
                 }
                 let observation = io.observe_effect(states[index + 1], index == 51).unwrap();
                 assert!(
@@ -222,7 +226,7 @@ fn exhausted_left_winning_suffix_keeps_match_then_king_without_redeal() {
             evidence.counts.attempted,
             evidence.counts.acknowledged
         ),
-        (3, 3, 3)
+        (5, 3, 3)
     );
     assert!(evidence.first.is_none());
     assert_eq!(evidence.wire.unused_frames, 0);

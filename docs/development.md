@@ -1,5 +1,231 @@
 # Development conventions
 
+## Current 2.9.174 delivery
+
+2.9.174 corrects native Boards challenge-header recognition using the union of
+the five existing validated Boards literal ink supports, restricted to independently
+proven complete word spans. All reference geometries and lengths are checked before
+indexing. RGB tolerance 9, blue floor 6, word distance, letter cores, banner anchors,
+boundaries and counter parsing remain unchanged. No new reference bank or dilation
+is introduced. Score/Card recognition and input authority are unchanged.
+
+The six controller gates passed, including 1687 tests with zero failures,
+ignored or filtered tests. Qualification sealed 942 inputs; after qualification only
+the application's manifest/lock version pair changed from 2.9.173 to 2.9.174,
+leaving 940 inputs identical. Aligned locked check, release and protected help passed.
+The 56 unchanged xSAR inputs retain cached sixteen-gate qualification (303 full
+tests, 14 default tests and two Miri tests); xSAR remains modified/unreleased 0.9.1.
+User profiles and CPU/hardening configuration are preserved. Evidence: `/home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/pyramid-challenge-174-proposal-9yca399e`.
+
+[Verification](Verification-2.9.174.md).
+
+## Retained 2.9.173 delivery
+
+2.9.173 places exact INITIAL source identity readiness inside the existing
+six-check computed-route precondition budget. The immediately retained boundary
+frame is checked first. A supported identity nonmatch remains pending; subsequent
+checks use fresh captures and the existing re-observation delay (50 ms for ordinary
+actions; final-action pacing retains its existing owner). Both expected MATCH
+sources must match in the SAME frame. At most six checks are made before refusal.
+A ready boundary adds no capture. Input remains withheld until a source proof and
+its exact replayed after-state bind the prepared once-only action.
+
+Structural frame/reader errors, unsupported source scenes and STOP still refuse
+input. The two successive fresh POST source-disappearance checks remain unchanged;
+a different card or undetermined rank/suit can qualify only for the already-issued
+action. No input replay, RGB coverage veto or pixel-quietness test is introduced.
+The next action independently identifies its own expected sources. Completion,
+RECON inventory/restoration and REDEAL keep their separate semantic authority.
+
+Failure packets and the window now carry an optional typed current-stage snapshot,
+independent of the retained frame phase. It records INITIAL checks and fresh
+captures, expected/observed sources, current action attempts/acknowledgements,
+completed actions and separate earlier observations. Current POST confirmations
+are distinct from the previous action's retained confirmations. Matching
+persistence-only updates preserve the displayed stage. Unsupported fresh frames
+are counted as received; a failed transport attempt is not called a retained image.
+RECON reports its available acquisition/restoration counters; owners without a
+detailed snapshot explicitly report that it is unavailable.
+
+Dependencies, user Cargo profiles, CPU/hardening configuration and modified,
+unreleased xSAR 0.9.1 remain unchanged. No guest operation, new live capture,
+installation, staging, commit or push was performed. Fresh Coral and standard
+live acceptance remains pending.
+
+All six controller gates pass, including 1683 include-ignored tests with zero failures/ignored/filtered (149.37 seconds). Aligned locked check, native release and protected --help pass. Library qualification is PASSED (Cached): 56 unchanged inputs, 303 full tests, 14 default tests and two focused Miri checks.
+
+[Verification](Verification-2.9.173.md).
+
+## Retained 2.9.172 delivery
+
+2.9.172 verifies the expected original card at its exact source location before
+sending the logical action once. Two successive fresh supported observations must
+then stop identifying that same source card. A different recognised card or an
+undetermined rank/suit (`None`) qualifies; structural reader/layout errors do not.
+An original card reappearing or an unsupported observation resets the pair.
+
+RGB coverage, replacement/ancestor identity matching and pixel quietness no longer
+veto MOVE/MATCH/KING action acceptance. The next action independently identifies
+its own expected source on the retained frame before input. The existing capture
+budgets, probes, STOP and no-replay rules remain. RECON uses two supported source
+identity checks within its existing observation loop, while ordered identities,
+unique inventory, exhaustion, Undo All, confirmation and restored-board publication
+remain separate requirements. Final-clear, terminal and next-board claims retain
+their semantic checks on the same captured frames; source disappearance alone is
+not reported as an observed board clear.
+
+REDEAL retains its separate appearance policy. PARAMS labels its RGB controls for
+that scope. Glyph recognition, package dependencies, user Cargo profiles, host CPU
+and hardening configuration are preserved. xSAR remains the unchanged modified,
+unreleased 0.9.1 path dependency. No guest operation, new capture, installation,
+staging, commit or push was performed. Fresh guest acceptance remains pending.
+
+All six controller gates pass, including 1678 include-ignored tests with zero failures/ignored/filtered (154.10 seconds). Aligned locked check, native release and protected --help pass. Library qualification is PASSED (Cached): 56 unchanged inputs, 303 full tests, 14 default tests and two focused Miri checks.
+
+[Verification](Verification-2.9.172.md).
+
+## 2.9.171 qualified tolerance correction
+
+2.9.171 changes the default Pyramid RGB tolerance from 13 to 5 intensity
+levels (5/255, about 1.96 percent). A pixel counts only when all three
+same-coordinate absolute RGB differences are strictly greater than 5; alpha
+is ignored. A difference of 5 is excluded and 6 qualifies. Joint coverage stays
+strictly greater than 5.0 percent in the card-relative (3,4), 66-by-89 effect
+quarter: 293 of 5,874 eligible pixels refuse and 294 pass. Existing guided cursor
+exclusions retain their adjusted eligible denominator.
+
+Live PARAMS still publishes a complete pair frozen per action or paired-D batch;
+edits affect the next boundary. Glyph recognition and independent quiet settling
+remain 31 by 49. The quiet byte tolerance 12, per-channel 1-percent/mean-2 limits,
+two-capture requirement, exact identities, stock order, inventory, restoration,
+terminal, STOP and no-replay checks are unchanged. No input, capture or timing
+policy changed. User optimisation profiles and CPU/hardening flags are preserved.
+
+The reported 170 Coral 4-spades/4-diamonds refusal was 289/5,874 (4.92 percent)
+at tolerance 13. A later different-theme diamond report was 140/5,874 (2.38 percent),
+also at 13. Immediate pre-batch pixels are missing for both reports; their actual
+tolerance-5 counts and complete Recon/restoration outcomes cannot be reconstructed.
+The earlier independent Coral settling stop is not established resolved.
+
+All seven retained picture-card controls pass the tightened default, while their
+exact historical counts remain tested explicitly at 13/5. These are aligned
+artwork comparisons, not natural temporal transitions. Suitable retained evidence
+for four other Coral picture-card suit pairs is still unavailable. Fresh complete
+standard/Coral guest Recon, restoration and broader theme acceptance remain pending.
+
+All six controller gates pass, including **1,675 include-ignored tests**, zero failed, ignored or filtered; test time 149.57 seconds. Aligned locked check, release and protected --help pass. xSAR remains the unchanged modified/unreleased 0.9.1 path dependency; its sixteen-gate receipt (303 full tests, 14 default tests, feature checks and two focused Miri checks) is cached over 56 unchanged library inputs.
+
+[Verification](Verification-2.9.171.md).
+
+## 2.9.170 qualified quarter comparison
+
+2.9.170 enlarges Pyramid card-effect comparison to the top-left quarter of
+the common card interior: card-relative (3, 4), 66 by 89 pixels. All three
+same-coordinate absolute RGB differences must still be strictly greater than
+13; alpha is ignored, and joint coverage must remain strictly greater than
+5.0 percent. With all 5,874 pixels eligible, 293 changes refuse and 294 pass.
+The glyph reader and independent after-action quiet-settling sample stay
+31 by 49. Guided pile comparisons keep their existing cursor-exclusion union,
+so their eligible denominator can be smaller. REDEAL keeps its separate region.
+
+Live PARAMS still publishes a complete validated pair, frozen for the current
+action or paired-D batch; edits affect the next boundary. Expected identities,
+stock order, inventory, restoration, terminal checks, STOP and no-replay rules
+remain independent. This change does not replace the separate quiet-settling
+policy or establish that the previously reported settling stop is resolved.
+
+Seven exposed same-theme picture-card comparisons pass the quarter policy.
+The two retained Coral controls are J-clubs/J-spades 1,025/5,874 (17.45 percent)
+and K-hearts/K-diamonds 564/5,874 (9.60 percent). The other four Coral picture
+suit-pairs lack suitable exposed retained evidence. These are aligned artwork
+controls, not natural before/after transitions. The exact failed Coral 7-clubs
+to 7-spades transition lacks its immediate pre-D frame, so its quarter coverage
+cannot be reconstructed. Fresh complete standard/Coral live Recon, restoration
+and broader theme acceptance remain pending.
+
+All six controller gates pass, including 1,674 tests in the required
+include-ignored scope. The user optimisation profiles and CPU configuration
+are preserved. xSAR stays unchanged at the existing modified, unreleased 0.9.1
+path dependency; its sixteen-gate receipt is cached, not a new library run.
+
+## 2.9.169 qualified coverage default
+
+2.9.169 changes the starting Pyramid joint-change coverage from strictly more
+than 10.0 percent to strictly more than **5.0 percent**. The RGB tolerance stays
+13: a pixel counts only when all three absolute R, G and B differences at the
+same coordinate are strictly greater than 13; alpha is ignored. On the existing
+31 by 49 corner, 75 pixels refuse and 76 of 1,519 pixels pass. Live PARAMS still
+publishes one complete pair, frozen for the current action or paired-D batch;
+an in-flight edit takes effect at the next established boundary.
+
+The reported Recon counts of 102 (6.71 percent, standard-theme 9D to 5D as
+clarified by Charlie) and 131 (8.62 percent, Coral) clear this pixel gate under
+the new default. Synthetic regressions check both counts against 5 and 10
+percent. Immediate runtime pre-batch pixel pairs were not retained, so these
+tests do not reproduce those guest transitions or prove complete Recon.
+Expected identities, stock order, full inventory, restoration, quiet settling,
+STOP/context revocation and no-replay rules remain in force. Fresh live
+standard/Coral Recon acceptance remains pending.
+
+All six controller gates pass, including 1,670 tests with the required
+include-ignored scope, locked checks, strict private rustdoc, Clippy, scoped
+formatting and release. xSAR is unchanged at the modified, unreleased 0.9.1
+path dependency; its 16-gate receipt (303 full tests, 14 default tests, feature
+checks and two focused Miri checks) is PASSED (Cached). User Cargo profiles
+and CPU configuration are preserved. No install or guest launch was performed.
+
+## 2.9.168 qualified joint RGB occurrence
+
+2.9.168 is host qualified with the modified xSAR 0.9.1 path dependency.
+All 1,669 controller tests and 303 full xSAR tests pass. Controller format,
+locked check, strict private rustdoc, Clippy and release pass. xSAR's default
+14 tests, seven individual feature checks, all-feature checks, strict docs,
+Clippy, release and two new focused Miri checks pass. The qualified xSAR working tree retains 0.9.1; its added comparator remains an unreleased path-dependency change.
+
+Computed tableau removals keep the occupied pre-action corner, recognised-card
+veto, two fresh quiet after-observations and original-slot history. Computed
+stock-only KING/MATCH, MOVE/RECYCLE and stock continuation also require RGB
+occurrence on the pile corners whose expected identities change. Full scene,
+remaining-card and exact pile identities remain mandatory. Ordinary position
+and frame-guard checks precede removal-history commitment; the later bound
+challenge-counter check still precedes progression and new source authority.
+
+Native Recon keeps one original stock baseline across paired D and stale
+observations, with no intermediate capture. Recognised stock advancement must
+also satisfy the joint RGB rule. UndoAll/Confirm and pause revoke these pixel
+baselines; their specific dialog/restored-arrangement proofs remain authoritative.
+Guided/Solver pile comparisons preserve the inset and union of cursor exclusions,
+the unique highlighted partner rules and semantic terminal exceptions. REDEAL
+appearance uses the shared predicate, while one acknowledged click still hands
+off to fresh Recon. Challenge completion, terminal/final-apex and restoration
+proofs remain explicit semantic exceptions. Colour change alone grants no input.
+
+[Receipt](Verification-2.9.168.md).
+
+## Retained earlier development
+
+## Current paired slice: 2.9.167 / xSAR 0.9.1
+
+2.9.167 and xSAR 0.9.1 are host qualified for route-owned temporal card-removal
+verification and the reusable safe packed-byte comparator. All 1,660 controller
+tests and 299 xSAR tests pass, including the required ignored-test scope. xSAR's
+dependency-free default, seven individual feature checks, strict private
+rustdoc, Clippy and two new focused Miri checks also pass.
+
+The computed route uses the actual occupied rank/suit corner and two settled
+after-observations. Prior removed slots and final clear use the same committed
+history rather than exposed-background special cases. Static readers retain
+their existing rules. Fresh Coral, Xbox and Wild West temporal acceptance
+remains pending.
+
+Only the four approved package manifest/lock files changed after qualification;
+901 other sealed inputs remained identical. The path dependency remains local,
+not a Git pin. Both aligned locked checks and release builds pass. The help
+branch exits before image cleanup or GUI startup. [Verification](Verification-2.9.167.md)
+records the preserved packaging assertion and authoritative Cargo artifact IDs.
+
+## Retained development records
+
 ## Current schema-2 slice: v2.2.0
 
 Charlie approved schema-2 integration after successful live acquisition and

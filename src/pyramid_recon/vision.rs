@@ -34,6 +34,8 @@ mod native_execution;
 mod native_colour_tests;
 mod normal_clear;
 mod redeal;
+pub(crate) mod removal;
+pub(crate) mod source_transition;
 
 
 mod starting;
@@ -94,6 +96,26 @@ const LEFT_BOUNDS: PixelRect = PixelRect::new(759, 678, 139, 187);
 
 /// Original RIGHT face, independent of the legacy controller's target ordering.
 const RIGHT_BOUNDS: PixelRect = PixelRect::new(1022, 678, 139, 187);
+
+
+/// Sample the effect quarter in the selected authoritative pile, independently of glyphs.
+pub(crate) fn stock_corner(frame: &CapturedFrame, right: bool) -> Result<Vec<u32>, String> {
+    if frame.width != NATIVE_BOUNDS.width || frame.height != NATIVE_BOUNDS.height {
+        return Err("Stock effect requires native dimensions".to_owned());
+    }
+    let bounds = if right { RIGHT_BOUNDS } else { LEFT_BOUNDS };
+    crate::pyramid_effect::card_pixels(frame, (bounds.x, bounds.y))
+}
+
+
+/// Measure the effect quarter without changing the independent glyph-reader corner.
+#[cfg(test)]
+pub(crate) fn card_corner(frame: &CapturedFrame, origin: (u32, u32)) -> Result<Vec<u32>, String> {
+    if frame.width != NATIVE_BOUNDS.width || frame.height != NATIVE_BOUNDS.height {
+        return Err("Card effect requires native dimensions".to_owned());
+    }
+    crate::pyramid_effect::card_pixels(frame, origin)
+}
 
 
 /// Positive REDEAL artwork corridor used only by an explicitly declared execution variant.
@@ -203,6 +225,8 @@ pub struct ReconVision {
     native_execution: Option<native_execution::NativeExecution>,
     /// Private appearance policy; serialized/custom profiles cannot enable it.
     colour_independent: bool,
+    /// Route-owned temporal absence; never installed by serialised calibration.
+    temporal_removed: Option<removal::RemovalProof>,
 }
 
 
@@ -558,6 +582,7 @@ impl ReconVision {
             native_redeal: None,
             native_execution: None,
             colour_independent: false,
+            temporal_removed: None,
         })
     }
 
@@ -739,7 +764,11 @@ impl ReconVision {
         right: Option<Card>,
         left_empty: &Pattern,
     ) -> Result<(), String> {
-        let occupancy = self.native_occupancy(frame)?;
+        let occupancy = self
+            .temporal_removed
+            .is_none()
+            .then(|| self.native_occupancy(frame))
+            .transpose()?;
         for (index, origin) in TABLEAU_ORIGINS.into_iter().enumerate() {
             let expected_card = expected.get(index).ok_or("invalid tableau expectation")?;
             if let Some(card) = expected_card {
@@ -761,6 +790,11 @@ impl ReconVision {
                     ));
                 }
             } else {
+                if let Some(proof) = self.temporal_removed {
+                    require(proof.contains(index), &format!("execution slot {index} lacks temporal removal evidence"))?;
+                    require(self.tableau_reader.recognise(view, origin)?.is_none(), &format!("execution removed slot {index} contains a recognised card"))?;
+                    continue;
+                }
                 let (row, column) = xsar::games::pyramid::planning::tableau_coordinates(index)
                     .ok_or("invalid execution tableau coordinate")?;
                 let kind = crate::pyramid::PyramidTargetKind::Card {
@@ -769,7 +803,7 @@ impl ReconVision {
                 };
                 let slot = kind.slot_index().ok_or("invalid execution absence slot")?;
                 require(
-                    occupancy.get(slot) == Some(&crate::pyramid::FaceEvidence::Absent),
+                    occupancy.as_ref().and_then(|occupancy| occupancy.get(slot)) == Some(&crate::pyramid::FaceEvidence::Absent),
                     &format!("execution slot {index} lacks positive absence"),
                 )?;
             }

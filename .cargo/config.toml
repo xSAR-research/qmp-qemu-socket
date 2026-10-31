@@ -1,0 +1,25 @@
+# File path: qmp-qemu-socket/.cargo/config.toml
+# Target Host: beast (AMD Ryzen 9 7940HS - Zen 4 / Arch Linux x86_64)
+
+[build]
+# Explicitly set default target so Cargo always applies the target-specific rustflags below
+target = "x86_64-unknown-linux-gnu"
+
+[target.x86_64-unknown-linux-gnu]
+rustflags = [
+# 1. Architecture Optimization: Lock explicitly to AMD Zen 4 (Ryzen 9 7940HS).
+#    Unlocks 512-bit AVX-512 (AVX512F/BW/VL/VNNI) for CV pixel comparison
+#    and BMI2/ABM/POPCNT/LZCNT for fast A* and Dijkstra bitsets & heaps.
+"-C", "target-cpu=znver4",
+
+# 2. Zero-Trust ELF Binary Hardening (GNU ld / lld compatible):
+#    -z,relro,-z,now: Full RELRO (resolves all dynamic symbols at startup and
+#      marks the Global Offset Table read-only before QMP socket traffic begins).
+#    -z,noexecstack: Strictly enforces a non-executable stack segment.
+"-C", "link-arg=-Wl,-z,relro,-z,now",
+"-C", "link-arg=-Wl,-z,noexecstack",
+
+# 3. Optional Arch Linux Fast Linker (uncomment if `lld` or `mold` is installed via pacman):
+# "-C", "link-arg=-fuse-ld=lld",
+]
+

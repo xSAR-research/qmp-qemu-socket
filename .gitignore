@@ -6,6 +6,9 @@
 .vscode/
 *.code-workspace
 
+# Evidence retained files preserved for future regression testing
+.Evidence/
+
 # Trigger Tree: ignore local telemetry, retain project configuration
 !.trigger-tree/
 .trigger-tree/*
@@ -15,3 +18,6 @@
 
 # Local developer and agent notes
 AGENTS.md
+
+# Preserved local validation evidence; never publish to GitHub.
+/Evidence/

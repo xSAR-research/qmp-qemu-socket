@@ -35,6 +35,11 @@ pub(super) struct PyramidActionVerification {
     pub(super) plan: StepPlan,
     /// Pyramid target used for effect and final-apex interpretation.
     pub(super) kind: PyramidTargetKind,
+    /// Existing source frame identities; the verifier owns no input or capture authority.
+    pub(super) sources: (
+        crate::pyramid_recon::vision::ReconVision,
+        crate::pyramid_recon::vision::source_transition::SourceTransition,
+    ),
     /// Start of the shared planning/input cycle for total timing.
     pub(super) action_started: Instant,
     /// Work already measured before result verification began.
@@ -61,6 +66,7 @@ pub(super) fn verify_pyramid_action(
         mut before_series,
         plan,
         kind,
+        sources: (source_vision, mut source_transition),
         action_started,
         mut profile,
     } = verification;
@@ -137,6 +143,7 @@ pub(super) fn verify_pyramid_action(
 
 
             if !observation.gameplay_scene {
+                source_transition.reset();
                 redeal_no_halo_captures = 0;
                 redeal_confirmation.observe(false, observation.game_progress);
 
@@ -230,23 +237,8 @@ pub(super) fn verify_pyramid_action(
 
 
                 if !effect_verified {
-                    let evidence = pyramid::measure_effect(&before.frame, &observation.frame, kind)
-                        .map_err(|error| format!("Pyramid effect analysis failed: {error}"))?;
-                    effect_verified = evidence.verified;
-                    send_log(
-                        event_tx,
-                        format!(
-                            "Pyramid effect evidence for {kind:?}: verified={effect_verified}, before face={:?}, after face={:?}, pile interior changed pixels={:?}, opposite pile={:?}, highlighted partner={:?}, pair interior changed pixels={:?}, removed highlighted partner={:?}; next target={}.",
-                            evidence.before_face,
-                            evidence.after_face,
-                            evidence.pile_changed_pixels,
-                            evidence.opposite_pile,
-                            evidence.highlighted_partner,
-                            evidence.pair_changed_pixels,
-                            evidence.removed_highlighted_partner,
-                            format_prediction_target(observation.prediction),
-                        ),
-                    );
+                    effect_verified = source_transition.observe(&source_vision, &observation.frame, observation_rounds)?;
+                    send_log(event_tx, format!("Pyramid source disappearance for {kind:?}: two fresh checks verified={effect_verified}"));
 
 
                     if effect_verified {
@@ -419,7 +411,7 @@ pub(super) fn verify_pyramid_action(
                     expected_final_transition,
                     board_completed,
                     awaiting_redeal,
-                ) && pyramid::has_repeated_pile_pair(
+                ) && effect_verified && pyramid::has_repeated_pile_pair(
                     &before.frame,
                     &observation.frame,
                     kind,

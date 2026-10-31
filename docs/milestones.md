@@ -1,32 +1,636 @@
-# Milestone Tracker & Baseline Receipt - `qmp-qemu-socket`
+# Milestone Tracker & Baseline Receipt — qmp-qemu-socket
 
-This repository-local receipt is authoritative together with the current handoff.
+## 1. Active Baseline Receipt — 2.9.174
 
-**Session-Start Evaluation Rule:** run the exact current Destination Sentinel
-through context-mode before edits. An exact match authorises compilation and
-the 1,583-test suite as PASSED (Cached) for the preserved 2.9.159 tree. It binds
-four repository identities, unchanged indices, complete status/diffs, 846 aligned
-inputs, documents/receipts and the protected executable. Report discrepancies
-before changes; no unchanged baseline rebuild is authorised.
+2.9.174 corrects native Boards challenge-header recognition using the union of
+the five existing validated Boards literal ink supports, restricted to independently
+proven complete word spans. All reference geometries and lengths are checked before
+indexing. RGB tolerance 9, blue floor 6, word distance, letter cores, banner anchors,
+boundaries and counter parsing remain unchanged. No new reference bank or dilation
+is introduced. Score/Card recognition and input authority are unchanged.
 
-## 1. Active Baseline Receipt
+The six controller gates passed, including 1687 tests with zero failures,
+ignored or filtered tests. Qualification sealed 942 inputs; after qualification only
+the application's manifest/lock version pair changed from 2.9.173 to 2.9.174,
+leaving 940 inputs identical. Aligned locked check, release and protected help passed.
+The 56 unchanged xSAR inputs retain cached sixteen-gate qualification (303 full
+tests, 14 default tests and two Miri tests); xSAR remains modified/unreleased 0.9.1.
+User profiles and CPU/hardening configuration are preserved. Evidence: `/home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/pyramid-challenge-174-proposal-9yca399e`.
+
+Protected executable SHA256: `37cb60771f807c6adff064a5aa0fd2de37368a5adbae4734b7924a75113e2d96`.
+
+[Verification](Verification-2.9.174.md).
+
+## Retained 2.9.173 baseline receipt
+
+2.9.173 places exact INITIAL source identity readiness inside the existing
+six-check computed-route precondition budget. The immediately retained boundary
+frame is checked first. A supported identity nonmatch remains pending; subsequent
+checks use fresh captures and the existing re-observation delay (50 ms for ordinary
+actions; final-action pacing retains its existing owner). Both expected MATCH
+sources must match in the SAME frame. At most six checks are made before refusal.
+A ready boundary adds no capture. Input remains withheld until a source proof and
+its exact replayed after-state bind the prepared once-only action.
+
+Structural frame/reader errors, unsupported source scenes and STOP still refuse
+input. The two successive fresh POST source-disappearance checks remain unchanged;
+a different card or undetermined rank/suit can qualify only for the already-issued
+action. No input replay, RGB coverage veto or pixel-quietness test is introduced.
+The next action independently identifies its own expected sources. Completion,
+RECON inventory/restoration and REDEAL keep their separate semantic authority.
+
+Failure packets and the window now carry an optional typed current-stage snapshot,
+independent of the retained frame phase. It records INITIAL checks and fresh
+captures, expected/observed sources, current action attempts/acknowledgements,
+completed actions and separate earlier observations. Current POST confirmations
+are distinct from the previous action's retained confirmations. Matching
+persistence-only updates preserve the displayed stage. Unsupported fresh frames
+are counted as received; a failed transport attempt is not called a retained image.
+RECON reports its available acquisition/restoration counters; owners without a
+detailed snapshot explicitly report that it is unavailable.
+
+Dependencies, user Cargo profiles, CPU/hardening configuration and modified,
+unreleased xSAR 0.9.1 remain unchanged. No guest operation, new live capture,
+installation, staging, commit or push was performed. Fresh Coral and standard
+live acceptance remains pending.
+
+All six controller gates pass, including 1683 include-ignored tests with zero failures/ignored/filtered (149.37 seconds). Aligned locked check, native release and protected --help pass. Library qualification is PASSED (Cached): 56 unchanged inputs, 303 full tests, 14 default tests and two focused Miri checks.
+
+Protected executable SHA256: `8a54c7a7ae3f06eb6b6b4e0d7843a49cfaa72c8e01885e364665f087eda2537a`.
+
+[Verification](Verification-2.9.173.md).
+
+## Retained 2.9.172 baseline receipt
+
+2.9.172 verifies the expected original card at its exact source location before
+sending the logical action once. Two successive fresh supported observations must
+then stop identifying that same source card. A different recognised card or an
+undetermined rank/suit (`None`) qualifies; structural reader/layout errors do not.
+An original card reappearing or an unsupported observation resets the pair.
+
+RGB coverage, replacement/ancestor identity matching and pixel quietness no longer
+veto MOVE/MATCH/KING action acceptance. The next action independently identifies
+its own expected source on the retained frame before input. The existing capture
+budgets, probes, STOP and no-replay rules remain. RECON uses two supported source
+identity checks within its existing observation loop, while ordered identities,
+unique inventory, exhaustion, Undo All, confirmation and restored-board publication
+remain separate requirements. Final-clear, terminal and next-board claims retain
+their semantic checks on the same captured frames; source disappearance alone is
+not reported as an observed board clear.
+
+REDEAL retains its separate appearance policy. PARAMS labels its RGB controls for
+that scope. Glyph recognition, package dependencies, user Cargo profiles, host CPU
+and hardening configuration are preserved. xSAR remains the unchanged modified,
+unreleased 0.9.1 path dependency. No guest operation, new capture, installation,
+staging, commit or push was performed. Fresh guest acceptance remains pending.
+
+All six controller gates pass, including 1678 include-ignored tests with zero failures/ignored/filtered (154.10 seconds). Aligned locked check, native release and protected --help pass. Library qualification is PASSED (Cached): 56 unchanged inputs, 303 full tests, 14 default tests and two focused Miri checks.
+
+Protected executable SHA256: `59097363173a592be47f85e22ff0ca7415089c3ddba8fc30858cb9e7d7b68d80`.
+
+[Verification](Verification-2.9.172.md).
+
+## Retained 2.9.171 baseline receipt
+
+| Field | Value |
+| --- | --- |
+| Packages | qmp-qemu-socket 2.9.171 / unchanged modified xSAR 0.9.1 |
+| Approval | Charlie approved RGB5 and 171, then exact handoff reconciliation and build |
+| Baseline_HEAD_SHA | dcb92241aac491d917431b2ddcb851284f71898a |
+| Baseline_parent_SHA | 58aa2882fb0c4ff3aa0d71ae49de0871545b86e3 |
+| Controller gates | Six PASS; 1,675 full tests; zero failed/ignored/filtered |
+| Library gates | PASSED (Cached); 56 unchanged inputs, 303 full tests, 14 default, two focused Miri |
+| Inputs | 937 paired inputs; only four Rust paths changed before version alignment |
+| Protected executable | SHA256 c037258e67041f6d182605fe22afb427df9915a0c06609754959ef206ab0c9a3; mode 0700; not installed |
+| Delivery evidence | /home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/pyramid-tolerance-171-5r42tdxy |
+| Promotion | Unstaged, uncommitted, unpushed; server and siblings unchanged |
+
+2.9.171 changes the default Pyramid RGB tolerance from 13 to 5 intensity
+levels (5/255, about 1.96 percent). A pixel counts only when all three
+same-coordinate absolute RGB differences are strictly greater than 5; alpha
+is ignored. A difference of 5 is excluded and 6 qualifies. Joint coverage stays
+strictly greater than 5.0 percent in the card-relative (3,4), 66-by-89 effect
+quarter: 293 of 5,874 eligible pixels refuse and 294 pass. Existing guided cursor
+exclusions retain their adjusted eligible denominator.
+
+Live PARAMS still publishes a complete pair frozen per action or paired-D batch;
+edits affect the next boundary. Glyph recognition and independent quiet settling
+remain 31 by 49. The quiet byte tolerance 12, per-channel 1-percent/mean-2 limits,
+two-capture requirement, exact identities, stock order, inventory, restoration,
+terminal, STOP and no-replay checks are unchanged. No input, capture or timing
+policy changed. User optimisation profiles and CPU/hardening flags are preserved.
+
+The reported 170 Coral 4-spades/4-diamonds refusal was 289/5,874 (4.92 percent)
+at tolerance 13. A later different-theme diamond report was 140/5,874 (2.38 percent),
+also at 13. Immediate pre-batch pixels are missing for both reports; their actual
+tolerance-5 counts and complete Recon/restoration outcomes cannot be reconstructed.
+The earlier independent Coral settling stop is not established resolved.
+
+All seven retained picture-card controls pass the tightened default, while their
+exact historical counts remain tested explicitly at 13/5. These are aligned
+artwork comparisons, not natural temporal transitions. Suitable retained evidence
+for four other Coral picture-card suit pairs is still unavailable. Fresh complete
+standard/Coral guest Recon, restoration and broader theme acceptance remain pending.
+
+[Verification](Verification-2.9.171.md).
+
+## Retained 2.9.170 baseline receipt
+
+| Field | Value |
+| --- | --- |
+| Packages | qmp-qemu-socket 2.9.170 / unchanged modified xSAR 0.9.1 |
+| Approval | Charlie approved quarter effect comparison and exact post-169 lifecycle reconciliation |
+| Baseline_HEAD_SHA | dcb92241aac491d917431b2ddcb851284f71898a |
+| Baseline_parent_SHA | 58aa2882fb0c4ff3aa0d71ae49de0871545b86e3 |
+| Controller gates | Six PASS; 1,674 full tests, zero failed/ignored/filtered; include-ignored scope |
+| Library gates | PASSED (Cached); sixteen gates, 303 full tests, 14 default, feature checks, two focused Miri |
+| Card effect | 66 by 89 quarter, RGB >13, joint coverage >5.0 percent |
+| Glyph and quiet sample | Unchanged 31 by 49; quiet-settling remains separate |
+| Guest acceptance | Fresh complete Recon/restoration and broader theme acceptance pending |
+| Delivery evidence | /home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/pyramid-quarter-170-7y7dx2zz |
+
+2.9.170 enlarges Pyramid card-effect comparison to the top-left quarter of
+the common card interior: card-relative (3, 4), 66 by 89 pixels. All three
+same-coordinate absolute RGB differences must still be strictly greater than
+13; alpha is ignored, and joint coverage must remain strictly greater than
+5.0 percent. With all 5,874 pixels eligible, 293 changes refuse and 294 pass.
+The glyph reader and independent after-action quiet-settling sample stay
+31 by 49. Guided pile comparisons keep their existing cursor-exclusion union,
+so their eligible denominator can be smaller. REDEAL keeps its separate region.
+
+Live PARAMS still publishes a complete validated pair, frozen for the current
+action or paired-D batch; edits affect the next boundary. Expected identities,
+stock order, inventory, restoration, terminal checks, STOP and no-replay rules
+remain independent. This change does not replace the separate quiet-settling
+policy or establish that the previously reported settling stop is resolved.
+
+Seven exposed same-theme picture-card comparisons pass the quarter policy.
+The two retained Coral controls are J-clubs/J-spades 1,025/5,874 (17.45 percent)
+and K-hearts/K-diamonds 564/5,874 (9.60 percent). The other four Coral picture
+suit-pairs lack suitable exposed retained evidence. These are aligned artwork
+controls, not natural before/after transitions. The exact failed Coral 7-clubs
+to 7-spades transition lacks its immediate pre-D frame, so its quarter coverage
+cannot be reconstructed. Fresh complete standard/Coral live Recon, restoration
+and broader theme acceptance remain pending.
+
+All six controller gates pass, including 1,674 tests in the required
+include-ignored scope. The user optimisation profiles and CPU configuration
+are preserved. xSAR stays unchanged at the existing modified, unreleased 0.9.1
+path dependency; its sixteen-gate receipt is cached, not a new library run.
+
+## Retained 2.9.169 baseline receipt
+
+| Field | Value |
+| --- | --- |
+| Packages | qmp-qemu-socket 2.9.169 / unchanged modified xSAR 0.9.1 |
+| Approval | Charlie approved 5 percent default and urgent 169 delivery; separately approved exact lifecycle reconciliation |
+| Baseline_HEAD_SHA | dcb92241aac491d917431b2ddcb851284f71898a |
+| Baseline parent | 58aa2882fb0c4ff3aa0d71ae49de0871545b86e3 |
+| Porcelain / index | Exact four-repository bytes in destination-state.json; all original indices preserved |
+| Controller gates | Six PASS; 1,670 full tests, zero failed/ignored/filtered; include-ignored scope |
+| Library gates | PASSED (Cached); sixteen gates, 303 full tests, 14 default, feature checks, two focused Miri |
+| Inputs | 920 paired inputs; 56 library inputs unchanged |
+| Protected executable | SHA256 5e6c414442ff7876691e4e944e0c43f0c5f9b9377354db154fb89ca0fda8d884; mode 0700; not installed |
+| Delivery evidence | /home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/pyramid-coverage-169-20261030-9ppdzni6 |
+| Promotion | Unstaged, uncommitted, unpushed, unpublished; sibling code unchanged |
+
+2.9.169 changes the starting Pyramid joint-change coverage from strictly more
+than 10.0 percent to strictly more than **5.0 percent**. The RGB tolerance stays
+13: a pixel counts only when all three absolute R, G and B differences at the
+same coordinate are strictly greater than 13; alpha is ignored. On the existing
+31 by 49 corner, 75 pixels refuse and 76 of 1,519 pixels pass. Live PARAMS still
+publishes one complete pair, frozen for the current action or paired-D batch;
+an in-flight edit takes effect at the next established boundary.
+
+The reported Recon counts of 102 (6.71 percent, standard-theme 9D to 5D as
+clarified by Charlie) and 131 (8.62 percent, Coral) clear this pixel gate under
+the new default. Synthetic regressions check both counts against 5 and 10
+percent. Immediate runtime pre-batch pixel pairs were not retained, so these
+tests do not reproduce those guest transitions or prove complete Recon.
+Expected identities, stock order, full inventory, restoration, quiet settling,
+STOP/context revocation and no-replay rules remain in force. Fresh live
+standard/Coral Recon acceptance remains pending.
+
+All six controller gates pass, including 1,670 tests with the required
+include-ignored scope, locked checks, strict private rustdoc, Clippy, scoped
+formatting and release. xSAR is unchanged at the modified, unreleased 0.9.1
+path dependency; its 16-gate receipt (303 full tests, 14 default tests, feature
+checks and two focused Miri checks) is PASSED (Cached). User Cargo profiles
+and CPU configuration are preserved. No install or guest launch was performed.
+
+## Retained 2.9.168 baseline receipt
+
+| Field | Value |
+| --- | --- |
+| Packages | qmp-qemu-socket 2.9.168 / qualified modified xSAR 0.9.1 |
+| Approval | Charlie approved discussed changes into 2.9.168 in m03125; default13 / strict10 percent rule with live pair frozen per action/batch approved in m03677/m03686 |
+| Baseline_HEAD_SHA | dcb92241aac491d917431b2ddcb851284f71898a |
+| Baseline parent | 58aa2882fb0c4ff3aa0d71ae49de0871545b86e3 |
+| xSAR HEAD / parent | d20dca8ad2320dcbbf869e22b35a2583317d4569 / e50f7b3222fbd803d9eeecd8a2a37ba6fec856ca |
+| Porcelain / index | Exact four-repository bytes in destination-state.json; original indices preserved |
+| Controller gates | Six PASS; 1,669 full tests, zero failed/ignored/filtered; include-ignored scope |
+| Library gates | Sixteen PASS; 303 full tests, 14 default, seven feature checks, two new focused Miri |
+| Inputs | 920 paired inputs, 56 library inputs; project CPU configs included |
+| Protected executable | SHA256 8f20ec38b2fc59af2b7e99d0a838ce5320bf9c1acdc801a7120a41d3d7bb8013; mode 0700; not installed |
+| Delivery evidence | /home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/pyramid-temporal-168-4ysoo5xU |
+| Promotion | Unstaged, uncommitted, unpushed, unpublished; server read-only |
+
+The qualified xSAR working tree retains 0.9.1; its added comparator remains an unreleased path-dependency change.
+
+A pixel counts only when the absolute R, G and B differences at the same
+coordinate are ALL strictly greater than the selected tolerance (default 13); alpha is ignored. An occurrence
+requires strictly more than the selected eligible-pixel coverage (default 10.0 percent). For the existing
+31 by 49 corner this means at least 152 of 1,519 pixels. There is no mean gate.
+LE packing remains `u32::from_le_bytes([r,g,b,0])`. The generic comparator uses
+safe `abs_diff` and the minimum of the three deltas, with overflow-free integer
+percentage arithmetic and bounded batches. Application coverage uses exact
+tenths-of-a-percent allowance arithmetic; count aggregation always scans both regions fully. Early positive counts are prefix
+counts and lower bounds; refusal counts cover the complete eligible region.
+
+
+Computed tableau removals keep the occupied pre-action corner, recognised-card
+veto, two fresh quiet after-observations and original-slot history. Computed
+stock-only KING/MATCH, MOVE/RECYCLE and stock continuation also require RGB
+occurrence on the pile corners whose expected identities change. Full scene,
+remaining-card and exact pile identities remain mandatory. Ordinary position
+and frame-guard checks precede removal-history commitment; the later bound
+challenge-counter check still precedes progression and new source authority.
+
+Native Recon keeps one original stock baseline across paired D and stale
+observations, with no intermediate capture. Recognised stock advancement must
+also satisfy the joint RGB rule. UndoAll/Confirm and pause revoke these pixel
+baselines; their specific dialog/restored-arrangement proofs remain authoritative.
+Guided/Solver pile comparisons preserve the inset and union of cursor exclusions,
+the unique highlighted partner rules and semantic terminal exceptions. REDEAL
+appearance uses the shared predicate, while one acknowledged click still hands
+off to fresh Recon. Challenge completion, terminal/final-apex and restoration
+proofs remain explicit semantic exceptions. Colour change alone grants no input.
+
+
+The retained standard-green and both Coral cases pass their complete expected
+positions offline at the approved default13/10 policy. In the latest saved
+pairs, Coral's two corners measure 353 and 362 of 1,519 jointly changed pixels;
+green measures 367. The older Coral partner measures 318. Explicit frozen26
+controls retain the original 147/1,519 and 127/1,519 refusals; no glyph/scene
+recognition or quiet-settling threshold was relaxed. The synthetic stock-only
+MATCH control also preserves its exact frozen26 refusal (115/1,519), and KING
+passes despite in-flight edits. Native tests confirm action-pair snapshots,
+next-action refresh, first/second-D batch retention and next-batch refresh.
+
+Stored first/final images are not the immediate runtime pre-action source.
+Two repeated retained-image serials test settling mechanics, not a fresh live
+settling interval. The native paired-D adapter test is synthetic and does not
+prove complete guest Recon. Fresh Coral/green and Xbox, Wild West, Classic Blue,
+Cream/Retro acceptance remains pending. Normal Continuous retraction and the
+acknowledged-D/no-advancement investigation remain open; no timing/focus fix is
+claimed. No guest input, new capture, install, staging, commit, push or publication
+was performed. Preserve GAME WIN images before controller startup and leave
+any active original session log in place.
+
+
+### Separate improvement ideas
+
+Evaluate any threshold change separately with Charlie; this delivery preserves
+all under-threshold refusals. Preserve earlier diagnostics and the active log.
+Fresh live theme/action acceptance and the existing Continuous/Recon issues
+remain separate. [Verification](Verification-2.9.168.md).
+
+### Possible futures
+
+**Guest-side region capture and expected-change verification — proposal only.**
+Investigate requests for a bounded native screen rectangle and, optionally,
+comparison against a board-bound occupied baseline inside the Windows guest.
+The server could return the comparison result and counts instead of transferring
+an entire screenshot. Compare true regional GDI capture/readback with cropping a
+full capture; these have different costs. Measure allocation, BitBlt, GetDIBits,
+pixel packing and TCP separately before selecting an approach.
+
+A future protocol would need checked rectangle/stride/size bounds, request and
+frame identity, freshness, baseline lifetime and explicit error results. Keep
+the agreed same-coordinate all-RGB comparison, alpha handling and percentage
+boundaries identical across host and guest, with diagnostic pixels available
+when verification fails. The application still owns expected game-state checks,
+settling, input authority, STOP and no replay of uncertain input. CPU switches
+for a Windows executable must follow guest-exposed capabilities rather than
+assuming the Linux build host's instruction set. The guest screenshot server
+remains read-only; no protocol, server implementation or live validation is
+approved or claimed by this note.
+
+## Retained 2.9.166 baseline receipt
+
+| Field | Value | Notes |
+| --- | --- | --- |
+| Package / Current Manifest Version | qmp-qemu-socket 2.9.166 | Edition 2024 / MSRV 1.101.0 / native nightly |
+| Approval | m01872 | Build 166 for the retained Coral failure |
+| Active state | 166 host qualified; unpublished | Fresh Coral guest acceptance pending |
+| Baseline_HEAD_SHA | dcb92241aac491d917431b2ddcb851284f71898a | Qualified dirty working tree; empty index preserved |
+| Baseline parent | 58aa2882fb0c4ff3aa0d71ae49de0871545b86e3 | All four repository histories and indices preserved |
+| Baseline porcelain | Exact bytes in private destination-state.json | Exact sentinel binds existing dirty/untracked files; no blanket receipt exclusion |
+| Source gates | Scoped format, locked check, strict private rustdoc, Clippy, full tests, native release: PASS | Full tests include ignored; 1,652 passed, zero failed/ignored/filtered |
+| Version alignment | Own manifest and lock only, after full tests | Aligned locked check, native release and help PASS |
+| Compiler inputs | 895 sealed files | Other 893 identical after alignment; 52 xSAR inputs unchanged |
+| xSAR | 0.9.0 unchanged | 296 tests / 3 Miri PASSED (Cached); path is not a Git pin |
+| Protected executable | SHA256 83bbb04a64580ccad51f47f750b7fdd48baae7be00691833d986683b88406ab4 | Mode 0700; not installed |
+| Guest evidence | Retained 165 Request 2 verifies offline, including 7&#124;5 | Calibration frame only; fresh guest acceptance pending |
+| Promotion | Not staged, committed, pushed or installed | No sibling, capture or guest input changes |
+
+### 2.9.166 bounded retained Coral appearance
+
+The new full-crop exact 7|5 proof resolves the retained final slot 25 refusal
+without changing any older helper, reference, material predicate or threshold.
+The complete pending-after state removes original indices 21/23/25/26 and
+requires DL9C/DRKH, every remaining identity and the supported scene. Nine new
+tests and 44 retained focused tests pass. [Verification](Verification-2.9.166.md)
+records the first red result, corrected translation-test scope and full gates.
+
+### Separate improvement ideas and live gaps
+
+Fresh Coral guest acceptance, future rendering coverage and rendering cause
+remain unproven. RECON no-advancement after acknowledged D is unresolved and
+outside this correction. Route objective selection was confirmed during 165;
+wider mode/persistence cases and the Continuous retraction remain open. No
+binary absence inversion, input replay, timing extension, King/scoring/projection,
+Single-board withholding or Free Cell work is included.
+
+## Retained 2.9.165 baseline receipt
+
+The current handoff binds the qualified dirty 165 tree. Run its exact sentinel
+before new edits; HANDOFF VERIFIED retains the baseline as PASSED (Cached).
+
+### Retained 165 receipt fields
+
+| Field | Value | Notes |
+| --- | --- | --- |
+| Package / Current Manifest Version | qmp-qemu-socket 2.9.165 | Edition 2024 / MSRV 1.101.0 / native nightly |
+| Approval | m01659 | Build 165 for Coral; Route objective confirmed correct |
+| Active state | 165 host qualified; unpublished | Fresh Coral guest acceptance pending |
+| Baseline_HEAD_SHA | dcb92241aac491d917431b2ddcb851284f71898a | Qualified dirty tree; empty index preserved |
+| Baseline parent | 58aa2882fb0c4ff3aa0d71ae49de0871545b86e3 | History unchanged |
+| Porcelain state | Exact NUL-separated state in destination-state.json | Unrelated changes retained |
+| xSAR | 0.9.0 @ d20dca8ad2320dcbbf869e22b35a2583317d4569 | 52 inputs unchanged; 296 tests / 3 Miri PASSED (Cached) |
+| Host qualification | 1643 passed / 0 failed, ignored, measured, filtered / 888 inputs | All six gates passed |
+| Version alignment | Own Cargo.toml/Cargo.lock 164 to 165 | Check/release/help passed; other 886 inputs identical |
+| Protected executable | /home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/pyramid-coral-165-20261029-zoj98pfk/native/qmp-qemu-socket-2.9.165 | SHA256 c5fa1292a84ec4b7fca89c3b0cece056c234b6c4fa2e1a4c7abd7665e8eccde3; mode 0700; not installed |
+| Checkpoint | /home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/pyramid-coral-165-20261029-zoj98pfk/destination-state.json | Exact sentinel in [handoff](handoff.md) |
+| Guest evidence | Two complete retained 164 positions now verify offline | No fresh Coral pass claimed |
+| Route objective | Charlie confirms correct selection (m01659) | Existing policy unchanged; wider live cases remain separate |
+
+### 2.9.165 bounded retained Coral appearances
+
+The first two full-position red tests reproduce original slots 26 and 21. Adding
+those exact appearances revealed a later Request 13 slot 22 refusal; the recorded
+occupancy was [Absent,Unknown,Absent] for original 7&#124;1,7&#124;2,7&#124;6.
+A third complete exact crop fixes only 7&#124;2. Both whole positions now verify.
+Ten new tests cover all three crops, complete originals, partial/full material,
+all RGB corners/centre, shifts, actual other-slot bounds, identities/piles and
+scene/layout. The 34 retained 162-164 focused regressions also pass. Independent
+review reports NO REMAINING FINDINGS. [Verification](Verification-2.9.165.md).
+
+### Separate improvement ideas and live gaps
+
+Rendering cause and future appearance coverage remain unproven. Keep the new
+164 RECON no-advancement report separate from this frozen Coral correction.
+The failure form's Exact A* field disagreed with Request13's actual Weighted
+A* log; its diagnostic presentation is separate work. No King/scoring/M12/M13,
+Free Cell, input replay or timing change is included.
+
+## Retained 2.9.164 baseline receipt
+
+| Field | Value | Notes |
+| --- | --- | --- |
+| Package / Current Manifest Version | qmp-qemu-socket 2.9.164 | Edition 2024 / MSRV 1.101.0 / native nightly |
+| Approval | m00996 / m01006 | Build/deliver 164 for Coral and RECON route objectives |
+| Provisional target | None | Approved 164 alignment completed after Tier 2 |
+| Active state | 164 host qualified; unpublished | Fresh guest acceptance pending |
+| Baseline_HEAD_SHA | dcb92241aac491d917431b2ddcb851284f71898a | Published 159; qualified dirty tree, empty index |
+| Baseline parent | 58aa2882fb0c4ff3aa0d71ae49de0871545b86e3 | Existing history retained |
+| Porcelain state | Exact NUL-separated state in current checkpoint | Uncommitted source/docs; inherited .gitignore preserved |
+| xSAR | 0.9.0 @ d20dca8ad2320dcbbf869e22b35a2583317d4569 | 52 inputs unchanged; 296 tests / three Miri PASSED (Cached) |
+| Host qualification | 1633 pass / 0 failed, ignored, measured, filtered / 876 seals / six gates | Actual new gates in [verification](Verification-2.9.164.md) |
+| Version-only alignment | Own Cargo.toml/Cargo.lock 2.9.163 to 2.9.164 | Check/release/help pass; other 874 inputs identical |
+| Protected executable | /home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/pyramid-coral-objective-164-20261029-fvp9nijq/native/qmp-qemu-socket-2.9.164 | SHA-256 5bd44ed9e700746762e54220b717691b66b1676721d66da50c52ef9130a1b1f0 |
+| Current state/sentinel | /home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/pyramid-coral-objective-164-20261029-fvp9nijq/destination-state.json | Exact command in [handoff](handoff.md) |
+| Guest evidence | Retained 163 Request 2 refusal at original 7&#124;1 now verifies offline | Fresh live acceptance pending; standard Continuous retraction remains |
+| RECON policy | Score/Card: Maximum; Board: Shortest; normal/unknown: no override | Later idle choice allowed; unknown grants no input authority |
+| Normal preference | Selected objective retained between boards | Automatic fallback stays board-local; accepted operator switch persists |
+| Remaining acceptance | [Pre-3.0.0 checklist](Pyramid-Acceptance-Before-3.0.0.md) | M11/M14 live gaps; M12/M13 separate |
+| Scoring discussion | [Historical proposal](../doc/scoring-target.md) | No King/projection/scoring algorithm authorised for 164 |
+| Free Cell continuity | [Complete saved plan](free-cell-block-1-plan.md) | First build 3.0.0 classification retained; separate implementation approval |
+
+### 2.9.164 Coral and RECON route objectives
+
+The retained first MATCH removes 5S at original 7&#124;1 and 8S at 7&#124;3,
+leaving DL 8C and DR empty. Its full-position regression reproduced the absence
+refusal before the correction and now passes. A separate exact 144 by 34 RGB
+proof admits only this additional complete pattern at (286,588). The old Coral
+structural proof, including blue minimum 491004, and the exact 7&#124;6 proof are
+unchanged. Eleven new image regressions preserve material, location, pixel,
+scene, remaining-identity and pile refusals.
+
+One optional route policy is shared by locked and fresh restored RECON facts.
+Authenticated Score/Card challenges select Maximum, Boards select Shortest and
+normal/unknown do not override. Six new objective regressions cover the shared
+policy, actual headers, fresh/reused acquisition, app choice and preference
+continuity. Superseded default assertions were corrected. All 1,633 tests pass.
+
+Independent image review found no issues. Objective production review found no
+functional/safety issues; its test findings were corrected and focused checks
+passed. Four repository histories, indices, siblings and unrelated changes are
+preserved. No guest input, capture, install, staging, commit or push occurred.
+The previous 163 receipt is preserved in this delivery's originals and
+[verification](Verification-2.9.163.md).
+
+### Separate improvement ideas
+
+Fresh guest success, rendering cause and future appearance coverage remain
+unproven. Do not widen artwork proofs or replay uncertain input. King/scoring
+algorithms, M12 pacing, M13 migration, RESET and Free Cell implementation remain
+separate work. An unknown header never gains input authority from a retained
+route preference.
+
+## Retained 2.9.162 baseline receipt
+
+| Field | Value | Notes |
+| --- | --- | --- |
+| Package / Current Manifest Version | qmp-qemu-socket 2.9.162 | Edition 2024 / MSRV 1.101.0 / native nightly |
+| Approval | m00272; reaffirmed m00495 | Build/deliver executable for Charlie's live verification |
+| Provisional target | None | Approved 162 alignment completed after Tier 2 |
+| Active state | 162 host qualified; unpublished | Fresh guest acceptance pending |
+| Baseline_HEAD_SHA | dcb92241aac491d917431b2ddcb851284f71898a | Published 159; qualified dirty tree, empty index |
+| Baseline parent | 58aa2882fb0c4ff3aa0d71ae49de0871545b86e3 | Existing history retained |
+| Porcelain state | Exact NUL-separated state in current checkpoint | Uncommitted source/docs; inherited .gitignore preserved |
+| xSAR | 0.9.0 @ d20dca8ad2320dcbbf869e22b35a2583317d4569 | 52 inputs unchanged; 296 tests / three Miri PASSED (Cached) |
+| Host qualification | 1606 pass / 0 failed, ignored, measured, filtered / 862 seals / six gates | Actual new gates in [verification](Verification-2.9.162.md) |
+| Version-only alignment | Own Cargo.toml/Cargo.lock 2.9.161 to 2.9.162 | Check/release/help pass; other 860 inputs identical |
+| Protected executable | /home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/pyramid-coral-162-20261028-15yvu03j/native/qmp-qemu-socket-2.9.162 | SHA-256 5b0a9860d8d446f31ac91325ff725d4b0414c866b227a68268c3d843c2f6505c |
+| Current state/sentinel | /home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/scoring-target-doc-20261029-ye0fumdt/destination-state.json | Exact command in [handoff](handoff.md) |
+| Guest evidence | Retained 161 Request 2 refusal and fresh 162 Request 3 refusal at original 7&#124;6; preserved private packet | Final frame consistent with MATCH effect; positive absence unproved outside fixed 7&#124;1 correction; live acceptance pending; standard Continuous retraction remains |
+| Remaining acceptance | [Pre-3.0.0 checklist](Pyramid-Acceptance-Before-3.0.0.md) | M11/M14 live gaps; M12/M13 separate |
+| Scoring discussion | [Requested note](../doc/scoring-target.md); 29 October 2026 | Automatic Score-challenge scope; Single board pre-final handoff proposed, not implemented |
+| Free Cell continuity | [Complete saved plan](free-cell-block-1-plan.md) | First build 3.0.0 classification retained; separate implementation approval |
+
+### 2.9.162 bounded Coral replacement
+
+All three calibration originals and the fourth evaluation rendering remain
+preserved. Only originals 159-161 establish the absolute RGB caps 17/22/26,
+signed-edge caps 5/7/9, full RGB sum intervals and per-pixel material veto.
+One common reference must pass all absolute/edge checks across 4,896 pixels and
+9,614 edges. The old exact-channel envelope is explicitly superseded. Strong
+white still vetoes before the Coral exception, with generic aged refusal after.
+
+All six host gates and 1,606 tests passed; the approved version alignment then
+passed check/release/help. One independent read-only review found no findings.
+Host evidence grants no live acceptance. No guest input, GUI launch, install,
+index change, commit, push, sibling edit, Free Cell implementation or RESET
+occurred. First failures and the original stopped route remain preserved.
+
+### Separate improvement ideas
+
+The rendering cause, future appearance coverage and fresh guest success remain
+unproven; leave-one-out accepts only 1/3. The requested mandatory DRAW-stock King
+collection needs agreed objective, physical-stock and completion contracts.
+M12 pacing, M13 migration, RESET and Free Cell implementation remain separate.
+
+### Documentation-only scoring follow-up, 29 October 2026
+
+Created Charlie's requested `doc/scoring-target.md` and updated only this receipt
+and the handoff. The note distinguishes five game points per removal operation
+from the current tableau-count objective, records the preferred King-free
+planning view and original-stock mapping, explains the QUEEN/ACE heuristic,
+and describes the proposed automatic Score-challenge / Single board manual
+handoff. Charlie confirmed the existing End game / Undo last move dialog resolves
+the manual recovery point for an unsolvable partial route. Covered-card demand,
+one-action/no-route boundaries,
+actual challenge completion and fresh acquisition after manual UNDO remain
+explicit. No scoring or input behaviour has been implemented.
+
+Content, Markdown whitespace and current local-link checks passed. The note had
+one independent read-only requirements review. All 862 runtime input seals and
+the protected binary match the qualified 162 delivery; the 1,606 tests and six
+host gates remain PASSED (Cached), with no rebuild or version increment. HEAD,
+parent, empty index and sibling states are preserved. Exact porcelain and full
+diffs are bound by the current documentation checkpoint. Earlier delivery
+checkpoints remain intact. The user's live 162 Request 3 refused positive absence
+at original 7|6 after one verified action and four acknowledged gestures; the
+retained final frame is consistent with the pending MATCH effect. This footprint
+is outside the fixed 7|1 Coral correction. The whole packet and available
+references are preserved under
+`/home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/pyramid-coral-162-request3-20261029-0drdefj9`.
+The stale restored-JSON reference was absent; the packet retains its deal.
+Live acceptance remains pending. No guest interaction or controller restart
+occurred in this task.
+
+## Retained 2.9.161 baseline receipt
+
+| Field | Value | Notes |
+| --- | --- | --- |
+| Package / Current Manifest Version | qmp-qemu-socket 2.9.161 | Edition 2024 / MSRV 1.101.0 / native nightly |
+| Approval | m00075 - produce 2.9.161 and provide executable | Charlie will verify live operation |
+| Provisional target | None | Approved 161 alignment completed after Tier 2 |
+| Active state | 161 host qualified; unpublished | Fresh guest acceptance pending |
+| Baseline_HEAD_SHA | dcb92241aac491d917431b2ddcb851284f71898a | Published 159; qualified dirty tree and empty index |
+| Baseline parent | 58aa2882fb0c4ff3aa0d71ae49de0871545b86e3 | Existing history retained |
+| Porcelain state | Exact NUL-separated state in current checkpoint | Qualified uncommitted source/docs; inherited .gitignore preserved |
+| xSAR | 0.9.0 @ d20dca8ad2320dcbbf869e22b35a2583317d4569 | All 52 inputs unchanged; 296 tests / three Miri cached |
+| Host qualification | 1593 pass / 0 failed, ignored, filtered / 856 seals / six gates | Actual new gates in [verification](Verification-2.9.161.md) |
+| Version-only alignment | Own Cargo.toml/Cargo.lock 2.9.160 to 2.9.161 | Check/release/help pass; other 854 inputs identical |
+| Protected executable | /home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/pyramid-coral-161-20261028-nitmucjf/native/qmp-qemu-socket-2.9.161 | SHA-256 81b242b5d501e141bf2dc41980144cee7593478fe9045ac0c12d0b3868954d7c |
+| Current state/sentinel | /home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/pyramid-coral-161-20261028-nitmucjf/destination-state.json | Exact command in [handoff](handoff.md) |
+| Guest evidence | Fresh 160 Request 1 failed at first Coral MATCH | 161 live acceptance pending; standard Continuous retraction remains |
+| Remaining acceptance | [Pre-3.0.0 checklist](Pyramid-Acceptance-Before-3.0.0.md) | M11/M14 live gaps; M12/M13 separate |
+| Free Cell continuity | [Complete saved plan](free-cell-block-1-plan.md) | First build 3.0.0 classification retained; implementation separate |
+
+### 2.9.161 third measured Coral rendering
+
+All three native calibration renderings, the original 160 failure and earlier
+evidence remain preserved. The fixed complete footprint checks every channel
+within its three measured extrema, without added tolerance. Six new regressions,
+all 1,593 tests and all six host gates pass; one independent review found no
+issues. Charlie's explicit version approval was applied only after qualification.
+The executable is ready for his fresh guest verification; host evidence grants
+no live acceptance. No guest input, GUI launch, install, staging, commit, push,
+sibling edit, Free Cell code or RESET is included.
+
+### Separate improvement ideas
+
+The rendering cause and unseen Coral appearances remain unproven. Broader
+appearance evidence, M12 pacing, M13 migration, RESET and the Free Cell plan
+remain separate from this bounded correction; no speculative margin is added.
+
+## Retained 2.9.160 baseline receipt
+
+| Field | Value | Notes |
+| --- | --- | --- |
+| Package / Current Manifest Version | qmp-qemu-socket 2.9.160 | Edition 2024 / MSRV 1.101.0 / native nightly |
+| Approval | m03359 - build 160, then context handoff | Free Cell implementation is separate scope |
+| Provisional target | None | Approved 160 alignment completed after Tier 2 |
+| Active state | 160 host qualified; unpublished | Fresh guest acceptance pending |
+| Baseline_HEAD_SHA | dcb92241aac491d917431b2ddcb851284f71898a | Published 159; preserved dirty tree and empty index |
+| Baseline parent | 58aa2882fb0c4ff3aa0d71ae49de0871545b86e3 | Published 156 history retained |
+| xSAR | 0.9.0 @ d20dca8ad2320dcbbf869e22b35a2583317d4569 | 52 unchanged inputs; 296 tests / three Miri cached |
+| Host qualification | 1587 pass / 0 failed, ignored, filtered / 850 seals / six gates | Actual gates in [verification](Verification-2.9.160.md) |
+| Version-only alignment | Own Cargo.toml/Cargo.lock 2.9.159 to 2.9.160 | Check/release/help pass; other 848 inputs identical |
+| Protected executable | /home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/pyramid-effect-159-20261028-mhgd526b/application-160/native/qmp-qemu-socket-2.9.160 | SHA-256 f295528f67b0b002d583a0123b8acb14d4b5afac73bcea762e49b4e4c7c9b932 |
+| Current state/sentinel | /home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/pyramid-effect-159-20261028-mhgd526b/application-160/destination-state.json | Exact command in [handoff](handoff.md) |
+| Guest evidence | No fresh 160 acceptance | Previous standard Continuous acceptance remains retracted |
+| Remaining acceptance | [Pre-3.0.0 checklist](Pyramid-Acceptance-Before-3.0.0.md) | M11/M14 live gaps; M12/M13 separate |
+| Free Cell continuity | [Complete saved plan](free-cell-block-1-plan.md) | Five blocks/four passes; first build 3.0.0 classification retained |
+
+### 2.9.160 bounded coral-rendering correction
+
+Both native calibration renderings and all 16 original case files remain private
+and byte-verified. The fixed 144 by 34 footprint checks all 14,688 channels inside
+their measured endpoint values, with no added tolerance. Generic material rules,
+remaining card/pile evidence, STOP/context and uncertain-input refusal remain.
+Four new tests and all six gates pass. Fresh guest acceptance is separate.
+
+The next authorised deliverable is a handoff based on this qualified build.
+No Free Cell code, RESET, refactor, sibling edit, install, staging or publication
+is included. Archive relocation and the inherited .gitignore addition remain
+preserved. Further ideas stay separate from the completed correction.
+
+## Retained published 2.9.159 baseline receipt
 
 | Field | Value | Notes |
 | --- | --- | --- |
 | Package / Current Manifest Version | qmp-qemu-socket 2.9.159 | Edition 2024 / MSRV 1.101.0 / native nightly |
 | Approval | m02912 - coral correction and v2.9.159 | m02920 retracts standard-theme acceptance and supplies the complete normal-header refusal |
 | Provisional target | None | Approved 159 alignment completed after full host qualification |
-| Active state | 159 implemented and host qualified; uncommitted | Fresh 159 guest acceptance pending; standard Continuous remains unaccepted |
-| Baseline_HEAD_SHA | 58aa2882fb0c4ff3aa0d71ae49de0871545b86e3 | Published 156 base; preserved approved 157/158/159 changes; index empty |
-| Baseline parent | b67d93942c68c55bfebe90e0f4e1e03f57300740 | Prior published history retained |
+| Active state | 159 published at dcb9224; evidence relocated | Fresh formal 159 guest acceptance pending; standard Continuous remains unaccepted |
+| Baseline_HEAD_SHA | dcb92241aac491d917431b2ddcb851284f71898a | Operator published all 47 qualified paths; index empty; local archival metadata update retained |
+| Baseline parent | 58aa2882fb0c4ff3aa0d71ae49de0871545b86e3 | Published 156 base; history retained |
 | xSAR | 0.9.0 @ d20dca8ad2320dcbbf869e22b35a2583317d4569 | 52 inputs unchanged; 296 tests / three Miri cached; relative path is not a Git pin |
 | Host qualification | 1583 pass / 0 failed, ignored, filtered / 846 seals / six gates | Full command 553.919 seconds |
 | Version-only alignment | Own Cargo.toml/Cargo.lock fields 2.9.158 to 2.9.159 | Check/release/help pass; other 844 inputs unchanged |
-| Protected executable | /home/charlie/Documents/Pyramid/Validation/pyramid-effect-158-20261028-mca9017u/application-159/native/qmp-qemu-socket-2.9.159 | SHA-256 5e16e00756f8dedff36b9b83300e120062ad3c0e76b42266271b6f595c20544d |
-| Current state/sentinel | /home/charlie/Documents/Pyramid/Validation/pyramid-effect-158-20261028-mca9017u/application-159/destination-state.json | Exact command in [handoff](handoff.md) |
+| Protected executable | /home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/pyramid-effect-158-20261028-mca9017u/application-159/native/qmp-qemu-socket-2.9.159 | SHA-256 5e16e00756f8dedff36b9b83300e120062ad3c0e76b42266271b6f595c20544d; unchanged after relocation; help passes |
+| Current state/sentinel | /home/charlie/repo/RUST/qmp-qemu-socket/Evidence/relocation-v2.9.159-dcb9224/destination-state.json | Exact command in [handoff](handoff.md); original qualification state preserved in archive |
 | Guest evidence | The 158 standard Continuous acceptance was explicitly retracted | Both original 158 failures retained; no fresh 159 acceptance |
 | Remaining acceptance | [Pre-3.0.0 checklist](Pyramid-Acceptance-Before-3.0.0.md) | M11/M14 live gaps; M12 in progress; M13 planned separately |
 | Free Cell continuity | [Complete saved plan](free-cell-block-1-plan.md) | Future 3.0.0 classification retained; implementation unapproved |
+
+### 2.9.159 operator publication and evidence relocation
+
+Charlie published `dcb92241aac491d917431b2ddcb851284f71898a` with parent `58aa2882fb0c4ff3aa0d71ae49de0871545b86e3`. The commit contains exactly
+the 47 qualified release paths; each committed blob matches its release hash.
+Live GitHub main and local refs agree, and the ED25519-SK signature verifies.
+All 846 compiler inputs, the protected binary and the other three repository
+baselines remain unchanged. Host qualification is PASSED (Cached), not rerun.
+
+User m03153 explicitly requested relocation now, superseding the earlier 3.0.0
+deferral; m03198 confirmed controller exit. [Archive index](/home/charlie/repo/RUST/qmp-qemu-socket/Evidence/README.md)
+and [move receipt](/home/charlie/repo/RUST/qmp-qemu-socket/Evidence/relocation-v2.9.159-dcb9224/verification.json) record 22,580 files,
+20,586,245,827 bytes, 101 preserved symbolic links and the exact
+old-to-current path map. Original bundles, filenames, logs and qualification
+records are unchanged. All 44 prior archive references resolve. Two obsolete
+test socket endpoints remain; unrelated projects/configuration remain in
+`_HOLDER_`. Tracked docs stay in the checkout, and the empty untracked Free Cell
+Recon placeholder is retained in the archive for possible future use.
+
+Only active handoff/milestone pointers changed. The inherited `.gitignore`
+addition for `.Evidence/` is preserved byte-for-byte; the index remains empty.
+No Rust/version/dependency changes, rebuild, GUI launch, guest input, acceptance
+upgrade, refactor, sibling edit, commit or push occurred during archival.
+Historical paths in dated records remain provenance; use the archive locator.
 
 ### 2.9.159 measured artwork and complete normal-header correction
 
@@ -392,3 +996,11 @@ The retained normal third-board clear was refused because moving Perfect glow cr
 [Verification](Verification-2.9.152.md), [live brief](Live-Test-2.9.152.md), retained [complete 25-case checklist](Acceptance-Tests-2.9.151.md).
 
 Original failed reproduction, exact source/review seals and protected151 are retained. Current sentinel/audit/promotion are linked from handoff.md; no original67-action route is invented.
+
+
+### Exact telemetry delta at closeout
+
+One tool-hook read of AGENTS.md appended a local trigger-tree event. The exact
+path, old/new hashes and unchanged prior entries are audited in the private
+telemetry-delta.json. The file is preserved and pinned by the destination
+checkpoint, without becoming a promotion path or a blanket exclusion.

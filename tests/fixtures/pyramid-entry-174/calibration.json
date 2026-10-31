@@ -1,0 +1,22 @@
+{
+  "source_packet": "pyramid-error-1793343837945-473727-3",
+  "source_file": "last-observed.png",
+  "sha256": "f0330ab532892d91eaecb481fc826c31d9c61c8bf93ff8f3dbcb262a7eb963f7",
+  "version": "2.9.173",
+  "request": 4,
+  "literal_challenge": {
+    "kind": "Boards",
+    "current": 0,
+    "target": 3
+  },
+  "retained_fringe": {
+    "x": 878,
+    "y": 63,
+    "rgb": [
+      155,
+      92,
+      15
+    ]
+  },
+  "evidence_limit": "Retained offline entry image; no new guest capture or live174 acceptance"
+}

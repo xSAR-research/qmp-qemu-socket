@@ -1,0 +1,25 @@
+{
+  "source_packet": "/home/charlie/tmp/Evidence/Pyramid/Validation/pyramid-coral-163-request2-20261029-gb4sj723/evidence/pyramid-error-1793225420596-416386-1",
+  "source_version": "2.9.163",
+  "request": 2,
+  "pending_action": "MATCH 5S 7|1 + 8S 7|3",
+  "native_dimensions": [
+    1920,
+    1080
+  ],
+  "bounds": [
+    286,
+    588,
+    144,
+    34
+  ],
+  "bytes": 14688,
+  "calibration": "exact full RGB crop only; structural references and limits remain 159-161",
+  "limitation": "same-frame calibration regression only; no future appearance tolerance or fresh live acceptance",
+  "sha256": {
+    "coral-effect.png": "176c24ba1aeec1bb0ca2e5e9492cb3c50f57079ca56508bbee978143401b8377",
+    "before-match.png": "dd6303f4ff374dd5f52f572b54c062db4fce24b1c73cdbdd847249a472bebc77",
+    "deal.json": "7c5ede4e85d16492b0642e50e080817507656e905e9719cffee151ce71c18512",
+    "underwater-coral-clearance-exact.rgb": "11058b3d28f0635ce6c546e56ac23f35abdc7358e13c7889df1078d95cacee1e"
+  }
+}

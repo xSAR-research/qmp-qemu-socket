@@ -309,7 +309,7 @@ fn deliver_once(operation: InputOperation, scenario: Scenario) -> Evidence {
         objective: RouteObjective::Clear,
         acquisition: Acquisition {
             challenge_progress: None,
-            default_method: RouteMethod::FewestActions,
+            default_method: None,
             observed_game: crate::pyramid_workflow_model::ObservedGame::Unknown,
             context: context.clone(),
             epoch: control.epoch().expect("current authority epoch"),
@@ -344,6 +344,13 @@ fn deliver_once(operation: InputOperation, scenario: Scenario) -> Evidence {
     let qmp = QmpClient::connect(&context.socket_path)
         .expect("real production QMP handshake with local fixture");
     let mut io = NativeIo {
+            execution_vision: plan.acquisition.vision.for_temporal_execution(),
+            source_transition: None,
+            ready_transition: None,
+            failure_progress: crate::pyramid_diagnostics::progress::FailureProgress::default(),
+            removals: Default::default(),
+            stock_effect: None,
+            effect_settings: crate::parameters::PyramidEffectSettings::default(),
         policy: ExecutionPolicy::Standard,
         stock_continuation: false,
         executed_recycles: 0,

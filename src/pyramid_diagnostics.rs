@@ -5,6 +5,8 @@
 //! Filesystem operations are synchronous and belong on the worker thread. Failed
 //! writes retain their partial files and are reported to the caller without retry.
 
+pub mod progress;
+
 use std::{
     fs::{self, DirBuilder, OpenOptions},
     io::{self, Write},
@@ -102,6 +104,8 @@ impl PyramidPhase {
 /// Failure state for the UI, independent of whether diagnostic persistence succeeds.
 #[derive(Clone, Debug)]
 pub struct PyramidDiagnostic {
+    /// Immutable controller stage and completed-work snapshot.
+    pub progress: Option<progress::FailureProgress>,
     /// Exact request identity; diagnostic files grant no input authority.
     pub context: ControllerContext,
     /// Operation that failed or was interrupted.
@@ -121,6 +125,8 @@ pub struct PyramidDiagnostic {
 
 /// Borrowed evidence supplied by the failing worker; no fresh capture is requested.
 pub(crate) struct FailureEvidence<'a> {
+    /// Optional worker-owned progress, retained independently of packet persistence.
+    pub progress: Option<&'a progress::FailureProgress>,
     /// Exact request identity at failure.
     pub context: &'a ControllerContext,
     /// Operation that failed.
@@ -330,6 +336,7 @@ fn persist_packet(
         )
     });
     let mut state = json!({
+        "progress": evidence.progress.map(progress::FailureProgress::as_json),
         "diagnostic_only": true,
         "input_authority": false,
         "resume_authority": false,
@@ -412,6 +419,7 @@ fn diagnostic(
     persistence_error: Option<String>,
 ) -> PyramidDiagnostic {
     PyramidDiagnostic {
+        progress: evidence.progress.cloned(),
         context: evidence.context.clone(),
         phase: evidence.phase,
         run_id: evidence.run_id,
@@ -836,6 +844,7 @@ mod tests {
         source: Option<&'a [u8]>,
     ) -> FailureEvidence<'a> {
         FailureEvidence {
+            progress: None,
             context,
             phase: PyramidPhase::Execution,
             run_id: Some(41),

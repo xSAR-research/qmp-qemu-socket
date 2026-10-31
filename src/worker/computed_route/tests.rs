@@ -114,7 +114,7 @@ fn accepted_plan() -> Prepared {
         id: 17,
         acquisition: Acquisition {
             challenge_progress: None,
-            default_method: RouteMethod::FewestActions,
+            default_method: None,
             observed_game: crate::pyramid_workflow_model::ObservedGame::Unknown,
             context: ControllerContext::new(
                 "/unused/test-qmp.sock".into(),
@@ -1151,7 +1151,7 @@ fn same_session_receipt_accepts_identical_moved_document_and_consumes_execution_
         plan.acquisition.vision,
         &source,
         None,
-        RouteMethod::FewestActions,
+        None,
         crate::pyramid_workflow_model::ObservedGame::Unknown,
     )
     .unwrap();
@@ -1223,7 +1223,7 @@ fn owned_fast_calculation_retains_authority_and_final_weighted_search_statistics
         plan.acquisition.vision,
         &fixture_path("pyramid-recon-20261019-v7-01.json"),
         None,
-        RouteMethod::FewestActions,
+        None,
         crate::pyramid_workflow_model::ObservedGame::Unknown,
     )
     .expect("private test-only same-session receipt");
@@ -1385,7 +1385,7 @@ fn context_changed_and_back_or_idle_stop_cannot_reauthenticate_acquisition() {
             plan.acquisition.vision,
             &fixture_path("pyramid-recon-20261019-v7-01.json"),
             None,
-            RouteMethod::FewestActions,
+            None,
             crate::pyramid_workflow_model::ObservedGame::Unknown,
         )
         .unwrap();
@@ -1849,7 +1849,7 @@ fn production_switch_case(board_generation: u64, stop_after_request: bool) {
         plan.acquisition.vision,
         &fixture_path("pyramid-recon-20261019-v7-01.json"),
         None,
-        RouteMethod::FewestActions,
+        None,
         crate::pyramid_workflow_model::ObservedGame::Unknown,
     )
     .unwrap();

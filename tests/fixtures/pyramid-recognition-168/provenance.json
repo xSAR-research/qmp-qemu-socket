@@ -1,0 +1,34 @@
+{
+  "coral/first-unmatched.png": {
+    "sha256": "282850b91dad8ef3875eb655479f211f0d47b4cb05186857363f873d55de8f3e",
+    "source": "/home/charlie/tmp/Evidence/Pyramid/Validation/pyramid-coral-167-request1-20261029-ba2hmeqc/pyramid-error-1793274814866-2193358-0/first-unmatched.png"
+  },
+  "coral/last-observed.png": {
+    "sha256": "3aa5dcbd1d66fe3437b2ac53528a76ce09c16644607d6148f9a7faa4be202624",
+    "source": "/home/charlie/tmp/Evidence/Pyramid/Validation/pyramid-coral-167-request1-20261029-ba2hmeqc/pyramid-error-1793274814866-2193358-0/last-observed.png"
+  },
+  "coral/deal.json": {
+    "sha256": "809f9e2fff02343815e9999245a6cc7d4e1847f573fc42e7fa3600275d0c7368",
+    "source": "/home/charlie/tmp/Evidence/Pyramid/Validation/pyramid-coral-167-request1-20261029-ba2hmeqc/pyramid-error-1793274814866-2193358-0/deal.json"
+  },
+  "coral/error-state.json": {
+    "sha256": "fb473d3f863a06cdfd3cbff435d94d79612bc5a306163ed6b99d23b6611554ab",
+    "source": "/home/charlie/tmp/Evidence/Pyramid/Validation/pyramid-coral-167-request1-20261029-ba2hmeqc/pyramid-error-1793274814866-2193358-0/error-state.json"
+  },
+  "green/first-unmatched.png": {
+    "sha256": "0c2739d70ffe3620239b51bc66b4581f8cae32b8d0d3ea4c98a03ddeabc603d3",
+    "source": "/home/charlie/tmp/Evidence/Pyramid/Validation/pyramid-coral-167-request1-20261029-ba2hmeqc/pyramid-error-1793274948308-2193358-1/first-unmatched.png"
+  },
+  "green/last-observed.png": {
+    "sha256": "f5c1a67a2700838fc3d72b504976f98a0e3766bb02437d853cc6506899c241d3",
+    "source": "/home/charlie/tmp/Evidence/Pyramid/Validation/pyramid-coral-167-request1-20261029-ba2hmeqc/pyramid-error-1793274948308-2193358-1/last-observed.png"
+  },
+  "green/deal.json": {
+    "sha256": "ade7d5d7f01ad05ea5ccc19d7198a1485b77170f35c4eb96f028a75b215c38ff",
+    "source": "/home/charlie/tmp/Evidence/Pyramid/Validation/pyramid-coral-167-request1-20261029-ba2hmeqc/pyramid-error-1793274948308-2193358-1/deal.json"
+  },
+  "green/error-state.json": {
+    "sha256": "06d94d00a6f24dd2feae55fa86b2eb9a852dd3cffb78806f5d6f1e0db37ed155",
+    "source": "/home/charlie/tmp/Evidence/Pyramid/Validation/pyramid-coral-167-request1-20261029-ba2hmeqc/pyramid-error-1793274948308-2193358-1/error-state.json"
+  }
+}

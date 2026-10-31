@@ -80,6 +80,7 @@ fn actual_board_count_final_clear_adapter_retains_phase_piles_initial_binding_gu
         setup,
         |io| {
             let state = goal(io.plan);
+            retain_verified_position(io, state);
             let (tableau, left, right) = expected(&io.plan.acquisition.deal, state).unwrap();
             assert_eq!(tableau, [None; 28]);
             assert_eq!(
@@ -213,6 +214,7 @@ fn native_152_normal_final_adapter_keeps_phase_guard_stop_and_third_receipt() {
                 "third ACK cannot request a read-only next-board handoff"
             );
             let state = goal(io.plan);
+            retain_verified_position(io, state);
             assert!(
                 !io.observe(state, false).unwrap(),
                 "ordinary observation never receives new final geometry"
@@ -262,8 +264,10 @@ fn native_152_normal_final_adapter_rejects_positive_header_contradiction() {
         Some(&guard),
         normal_152_setup,
         |io| {
+            let state = goal(io.plan);
+            retain_verified_position(io, state);
             assert!(
-                io.observe_final(goal(io.plan))
+                io.observe_final(state)
                     .unwrap_err()
                     .contains("frame guard rejected")
             );

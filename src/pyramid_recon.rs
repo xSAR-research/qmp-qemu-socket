@@ -357,6 +357,7 @@ impl<Adapter: ReconIo> Runner<'_, Adapter> {
             self.perform(ReconInput::Draw)?;
         }
         let mut empty_observations = 0;
+        let mut source_checks = 0;
 
 
         for _observation in 0..MAX_OBSERVATIONS {
@@ -365,10 +366,16 @@ impl<Adapter: ReconIo> Runner<'_, Adapter> {
             unchanged_tableau(initial, &observed)?;
 
 
-            if observed.left == current.left && observed.right == current.right {
+            let sources_gone = observed.left != current.left
+                && (current.right == StockFace::Empty || observed.right != current.right);
+            if !sources_gone {
                 empty_observations = 0;
+                source_checks = 0;
                 continue;
             }
+            source_checks += 1;
+            if observed.left == StockFace::Empty { empty_observations += 1; } else { empty_observations = 0; }
+            if source_checks < 2 { continue; }
 
 
             if paired {
@@ -411,10 +418,7 @@ impl<Adapter: ReconIo> Runner<'_, Adapter> {
                                 .to_owned(),
                         );
                     }
-                    empty_observations += 1;
-
-
-                    if empty_observations == 2 {
+                    if empty_observations >= 2 {
                         self.io.progress(&format!(
                             "Recon exhaustion: DL: empty | DR: {previous}; fresh capture {}",
                             self.progress.captures
@@ -702,10 +706,11 @@ mod tests {
 
 
         for ordinal in (1..24).step_by(2) {
-            scenes.push(ReconScene::Board(observation(
+            let endpoint = ReconScene::Board(observation(
                 StockFace::Card(identities[28 + ordinal]),
                 StockFace::Card(identities[27 + ordinal]),
-            )));
+            ));
+            scenes.extend([endpoint.clone(), endpoint]);
         }
         scenes.extend([ReconScene::Board(empty()), ReconScene::Board(empty())]);
         scenes.extend([
@@ -959,7 +964,7 @@ mod tests {
             }
             let next = observation(StockFace::Card(deck()[29]), StockFace::Card(deck()[28]));
             let mut adapter =
-                FakeIo::new(vec![ReconScene::Board(resumed), ReconScene::Board(next)]);
+                FakeIo::new(vec![ReconScene::Board(resumed), ReconScene::Board(next.clone()), ReconScene::Board(next)]);
             adapter.pause_durations.push_back(MAX_DURATION);
             // Simulate elapsed wall time without sleeping or weakening active().
             let started = Instant::now()
@@ -992,7 +997,7 @@ mod tests {
                 assert_eq!(runner.io.published, 0);
             } else {
                 assert_eq!(result.unwrap().left, StockFace::Card(deck()[29]));
-                assert_eq!(runner.progress.captures, 2);
+                assert_eq!(runner.progress.captures, 3);
                 assert_eq!(runner.io.inputs, vec![ReconInput::Draw]);
                 assert!(runner.active().is_ok());
                 // Restoring the elapsed pause makes the existing deadline fail again.
@@ -1292,7 +1297,7 @@ mod tests {
             decoded
                 .metadata()
                 .source()
-                .contains("; 20 capture attempts;")
+                .contains("; 32 capture attempts;")
         );
         assert_eq!(decoded.metadata().restoration(), Restoration::Verified);
         assert_eq!(adapter.inputs.len(), 26);
@@ -1577,7 +1582,8 @@ mod tests {
 
         for failed in failures {
             let mut scenes = happy_scenes();
-            scenes[2] = ReconScene::Board(failed);
+            scenes[2] = ReconScene::Board(failed.clone());
+            scenes[3] = ReconScene::Board(failed);
             let mut adapter = FakeIo::new(scenes);
             assert!(run(&mut adapter, &request()).is_err());
             assert_eq!(adapter.inputs, [ReconInput::Draw]);
@@ -1636,7 +1642,7 @@ mod tests {
     #[test]
     fn one_empty_observation_cannot_authorise_undo_all() {
         let mut scenes = happy_scenes();
-        scenes[15] = ReconScene::Unknown;
+        scenes[27] = ReconScene::Unknown;
         let mut adapter = FakeIo::new(scenes);
         assert!(run(&mut adapter, &request()).is_err());
         assert_eq!(adapter.inputs, [ReconInput::Draw; 24]);
@@ -1653,7 +1659,7 @@ mod tests {
             ReconScene::Unknown,
         ] {
             let mut scenes = happy_scenes();
-            scenes[17] = changed;
+            scenes[29] = changed;
             let mut adapter = FakeIo::new(scenes);
             assert!(run(&mut adapter, &request()).is_err());
             assert_eq!(adapter.inputs.len(), 25);
@@ -1675,7 +1681,7 @@ mod tests {
     #[test]
     fn restoration_requires_two_original_tableau_and_pile_observations() {
         let mut scenes = happy_scenes();
-        scenes[19] = ReconScene::Board(empty());
+        scenes[31] = ReconScene::Board(empty());
         let mut adapter = FakeIo::new(scenes);
         let failure = run(&mut adapter, &request()).unwrap_err();
         assert!(!failure.progress.restored);

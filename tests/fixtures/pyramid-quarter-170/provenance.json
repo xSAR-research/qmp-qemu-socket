@@ -1,0 +1,252 @@
+{
+  "region": [
+    3,
+    4,
+    66,
+    89
+  ],
+  "tolerance": 13,
+  "coverage_percent": 5,
+  "pairs": [
+    {
+      "name": "coral-jc-js",
+      "sources": [
+        {
+          "file": "coral-jc-js-a.rgb",
+          "card": "J of clubs",
+          "source_png": "tests/fixtures/pyramid-recognition-167/last-observed.png",
+          "source_png_sha256": "31a0b20ec92fc80c5ead2616f4f7c1996f1368d2f3f5e810060109a59d20ab70",
+          "identity_metadata": "tests/fixtures/pyramid-recognition-167/error-state.json",
+          "identity_sha256": "8b467b7165723e8b73f5e10a03df72817a4206de480bdc3ab5c17fc3a651d620",
+          "origin": [
+            890,
+            325
+          ],
+          "rgb_sha256": "d8b23f0f275b3f519e73a4c04dc2c9d7518d03a5771d447924ab80a3ba4cff35"
+        },
+        {
+          "file": "coral-jc-js-b.rgb",
+          "card": "J of spades",
+          "source_png": "tests/fixtures/pyramid-recognition-168/coral/last-observed.png",
+          "source_png_sha256": "3aa5dcbd1d66fe3437b2ac53528a76ce09c16644607d6148f9a7faa4be202624",
+          "identity_metadata": "tests/fixtures/pyramid-recognition-168/coral/error-state.json",
+          "identity_sha256": "fb473d3f863a06cdfd3cbff435d94d79612bc5a306163ed6b99d23b6611554ab",
+          "origin": [
+            990,
+            378
+          ],
+          "rgb_sha256": "1f85e42bfa89d629f3fad05cff12d901c2412ca15459f4262f0969ed98932c33"
+        }
+      ],
+      "changed": 1025,
+      "total": 5874,
+      "percent": 17.44977868573374
+    },
+    {
+      "name": "coral-kh-kd",
+      "sources": [
+        {
+          "file": "coral-kh-kd-a.rgb",
+          "card": "K of hearts",
+          "source_png": "retained-captures/.pyramid-recon-939442-24/baseline.png",
+          "source_png_sha256": "75faa92e05d4171b44405cd2551f28d717ecb4fd9b30b029643cc4ba920ddc42",
+          "identity_metadata": "retained-captures/.pyramid-recon-939442-24/COMPLETE-diagnostics.json",
+          "identity_sha256": "f7821fc38aa4933c4ba1b101991f9b47091982820f8254e3e9f193d2bebb98b2",
+          "origin": [
+            1091,
+            432
+          ],
+          "rgb_sha256": "45959b1cd4c8e2f047fe4de53ec2026c5cda55016436b6b78f81d65dfce97041"
+        },
+        {
+          "file": "coral-kh-kd-b.rgb",
+          "card": "K of diamonds",
+          "source_png": "retained-captures/.pyramid-recon-939442-24/baseline.png",
+          "source_png_sha256": "75faa92e05d4171b44405cd2551f28d717ecb4fd9b30b029643cc4ba920ddc42",
+          "identity_metadata": "retained-captures/.pyramid-recon-939442-24/COMPLETE-diagnostics.json",
+          "identity_sha256": "f7821fc38aa4933c4ba1b101991f9b47091982820f8254e3e9f193d2bebb98b2",
+          "origin": [
+            288,
+            432
+          ],
+          "rgb_sha256": "0807b529b0feaac3243e1f169b5f84d444632f04266316efbdfa5922805a8353"
+        }
+      ],
+      "changed": 564,
+      "total": 5874,
+      "percent": 9.601634320735444
+    },
+    {
+      "name": "white-qc-qs",
+      "sources": [
+        {
+          "file": "white-qc-qs-a.rgb",
+          "card": "Q of clubs",
+          "source_png": "retained-captures/.pyramid-recon-939442-0/baseline.png",
+          "source_png_sha256": "02ff7a0551eddb5a91186a28ba8f9c7ede64e33760581beaef966b0259edbd88",
+          "identity_metadata": "retained-captures/.pyramid-recon-939442-0/COMPLETE-diagnostics.json",
+          "identity_sha256": "7f3638e3fde9a4ef317d4e521768a2f72fea36d1e2e0c150a376845f4c042863",
+          "origin": [
+            890,
+            432
+          ],
+          "rgb_sha256": "e19ec080f8e716fba14a6be9ff944138784310e848011eb817230eb2502b7b26"
+        },
+        {
+          "file": "white-qc-qs-b.rgb",
+          "card": "Q of spades",
+          "source_png": "retained-captures/.pyramid-recon-939442-0/baseline.png",
+          "source_png_sha256": "02ff7a0551eddb5a91186a28ba8f9c7ede64e33760581beaef966b0259edbd88",
+          "identity_metadata": "retained-captures/.pyramid-recon-939442-0/COMPLETE-diagnostics.json",
+          "identity_sha256": "7f3638e3fde9a4ef317d4e521768a2f72fea36d1e2e0c150a376845f4c042863",
+          "origin": [
+            288,
+            432
+          ],
+          "rgb_sha256": "ce5e0e83d9957601b6838145309932a26cc91e03ef348f290b112a79d6c7dda0"
+        }
+      ],
+      "changed": 2229,
+      "total": 5874,
+      "percent": 37.94688457609806
+    },
+    {
+      "name": "white-kc-ks",
+      "sources": [
+        {
+          "file": "white-kc-ks-a.rgb",
+          "card": "K of clubs",
+          "source_png": "retained-captures/.pyramid-recon-939442-22/baseline.png",
+          "source_png_sha256": "7caa02235b5d17a531c8434fb18b7d1a9087475ca6598685075f7f7eccdcb78a",
+          "identity_metadata": "retained-captures/.pyramid-recon-939442-22/COMPLETE-diagnostics.json",
+          "identity_sha256": "26397db557d9ce35c98fd28317c96e6df16db8b2298a0632a3958dc7dca416a8",
+          "origin": [
+            1091,
+            432
+          ],
+          "rgb_sha256": "fbb4fec380a77fcea5e8e91b707e8f7518ed16574790211cadc0ed97116ad5b3"
+        },
+        {
+          "file": "white-kc-ks-b.rgb",
+          "card": "K of spades",
+          "source_png": "retained-captures/.pyramid-recon-939442-22/baseline.png",
+          "source_png_sha256": "7caa02235b5d17a531c8434fb18b7d1a9087475ca6598685075f7f7eccdcb78a",
+          "identity_metadata": "retained-captures/.pyramid-recon-939442-22/COMPLETE-diagnostics.json",
+          "identity_sha256": "26397db557d9ce35c98fd28317c96e6df16db8b2298a0632a3958dc7dca416a8",
+          "origin": [
+            890,
+            432
+          ],
+          "rgb_sha256": "22ccf1dd2b1b0a08c682e2735b997ecb2555b50bdd948f2b11f4e6a4a6314d26"
+        }
+      ],
+      "changed": 2258,
+      "total": 5874,
+      "percent": 38.44058563159687
+    },
+    {
+      "name": "white-qh-qd",
+      "sources": [
+        {
+          "file": "white-qh-qd-a.rgb",
+          "card": "Q of hearts",
+          "source_png": "retained-captures/.pyramid-recon-939442-22/baseline.png",
+          "source_png_sha256": "7caa02235b5d17a531c8434fb18b7d1a9087475ca6598685075f7f7eccdcb78a",
+          "identity_metadata": "retained-captures/.pyramid-recon-939442-22/COMPLETE-diagnostics.json",
+          "identity_sha256": "26397db557d9ce35c98fd28317c96e6df16db8b2298a0632a3958dc7dca416a8",
+          "origin": [
+            1291,
+            432
+          ],
+          "rgb_sha256": "6e743c95c741ceeb91f29e5e493575c011dfcf994dbc3c407c21c8f1cab62519"
+        },
+        {
+          "file": "white-qh-qd-b.rgb",
+          "card": "Q of diamonds",
+          "source_png": "retained-captures/.pyramid-recon-939442-22/baseline.png",
+          "source_png_sha256": "7caa02235b5d17a531c8434fb18b7d1a9087475ca6598685075f7f7eccdcb78a",
+          "identity_metadata": "retained-captures/.pyramid-recon-939442-22/COMPLETE-diagnostics.json",
+          "identity_sha256": "26397db557d9ce35c98fd28317c96e6df16db8b2298a0632a3958dc7dca416a8",
+          "origin": [
+            690,
+            432
+          ],
+          "rgb_sha256": "5bec93e90a69e4893bc81f73133349fd8472879c5e93e1e1f42b46f62946d598"
+        }
+      ],
+      "changed": 2095,
+      "total": 5874,
+      "percent": 35.66564521620701
+    },
+    {
+      "name": "cream-jc-js",
+      "sources": [
+        {
+          "file": "cream-jc-js-a.rgb",
+          "card": "J of clubs",
+          "source_png": "retained-captures/.pyramid-recon-939442-14/baseline.png",
+          "source_png_sha256": "7d8e288feb79860211192cb6558df342764f52bc0395470c25d31e615c9c897d",
+          "identity_metadata": "retained-captures/.pyramid-recon-939442-14/COMPLETE-diagnostics.json",
+          "identity_sha256": "a8afd8884a344f95e48089cc9ab2717f138cf03cf6b45188a1da5bce861e28ec",
+          "origin": [
+            288,
+            432
+          ],
+          "rgb_sha256": "ffa7718fb9214ca2f4b087c8a71aa36ebe6b1daf115ed8fc72587b8855eeb28a"
+        },
+        {
+          "file": "cream-jc-js-b.rgb",
+          "card": "J of spades",
+          "source_png": "retained-captures/.pyramid-recon-939442-13/baseline.png",
+          "source_png_sha256": "d311c50dcc7b2bfd2701243e25c38c4346b8ef7dd46b8ee9de13b7e667043495",
+          "identity_metadata": "retained-captures/.pyramid-recon-939442-13/COMPLETE-diagnostics.json",
+          "identity_sha256": "a6e12bee8da01e04746205e7d9874e0a0c803610f92c6abccd03572af52e5a43",
+          "origin": [
+            690,
+            432
+          ],
+          "rgb_sha256": "7959378d81607df7d8ed2f2f0b1578e995660747cc0149987d926e3f927438a4"
+        }
+      ],
+      "changed": 1940,
+      "total": 5874,
+      "percent": 33.02689819543752
+    },
+    {
+      "name": "cream-jh-jd",
+      "sources": [
+        {
+          "file": "cream-jh-jd-a.rgb",
+          "card": "J of hearts",
+          "source_png": "retained-captures/.pyramid-recon-939442-16/baseline.png",
+          "source_png_sha256": "c2b839e43300badd6dc9b2dc656cda742bfbabe0be83a995f36790a69324df7f",
+          "identity_metadata": "retained-captures/.pyramid-recon-939442-16/COMPLETE-diagnostics.json",
+          "identity_sha256": "f5805e6f8cd64c4dca4dff924f383e49520d43696917df99ec20f0ae19d3adb9",
+          "origin": [
+            489,
+            432
+          ],
+          "rgb_sha256": "bbf0dbb3e13d7960c88c4d74b5a19cb9999405e0011041e7193c10081da59586"
+        },
+        {
+          "file": "cream-jh-jd-b.rgb",
+          "card": "J of diamonds",
+          "source_png": "retained-captures/.pyramid-recon-939442-18/baseline.png",
+          "source_png_sha256": "a0b81b13bcfeccbfb6b9e36d6b5ad2d362a9cdf1bb1a84f20ab62486bada8048",
+          "identity_metadata": "retained-captures/.pyramid-recon-939442-18/COMPLETE-diagnostics.json",
+          "identity_sha256": "a4526f242de745fdc714a306945cea0d74451348dfba9d77c02d42bc2b6c1e75",
+          "origin": [
+            690,
+            432
+          ],
+          "rgb_sha256": "62700919b99f58164abb9534cb41bbdd4e7f7ff7f179387b97909081758c80af"
+        }
+      ],
+      "changed": 2003,
+      "total": 5874,
+      "percent": 34.099421178072866
+    }
+  ],
+  "limitation": "Aligned exposed real faces, not natural temporal transitions. Coral four other same-colour J/Q/K suit pairs unavailable.",
+  "private_locators": "Full absolute locators and source snapshots remain in the private delivery case; hashes and capture identifiers here preserve provenance without a host-specific path."
+}

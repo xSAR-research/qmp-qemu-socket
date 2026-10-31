@@ -1415,3 +1415,16 @@ bound both additions. The new positive images are calibration regressions,
 with fresh guest acceptance still pending. The
 [acceptance checklist](Pyramid-Acceptance-Before-3.0.0.md) records the remaining
 Pyramid verification before the separate Free Cell transition.
+
+## Bounded 160 coral-rendering refinement
+
+The 159 single exact reference is retained alongside a second byte-original
+rendering of the same native 144 by 34 clearance at (286,588), fixed 7|1.
+Every one of 14,688 channels must lie within its measured inclusive endpoint
+range, without added tolerance. The 9,209 unchanged channels remain exact.
+Positive paper presence, generic aged/material/continuity policies, remaining
+card identities and exact pile observations are unchanged.
+
+Both originals calibrate this finite proof; no independent third rendering or
+fresh guest acceptance is claimed. [References and negative tests](../tests/fixtures/pyramid-recognition-160/README.md)
+and [actual host qualification](Verification-2.9.160.md) preserve those limits.

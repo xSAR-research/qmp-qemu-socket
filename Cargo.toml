@@ -1,6 +1,6 @@
 [package]
 name = "qmp-qemu-socket"
-version = "2.9.159"
+version = "2.9.174"
 edition = "2024"
 rust-version = "1.101.0"
 description = "A guarded QEMU/QMP controller operating on a Windows 11 VM running `Solitaire & Casual Games` application. This is to experiment with remote control and optimised screen image processing. Also Dijkstra/A* algorithm implementation for solving games."
@@ -11,12 +11,10 @@ eframe = { version = "0.36.2", default-features = false, features = [
     "default_fonts",
     "glow",
     "wayland",
-    "x11",
 ] }
 egui-winit = { version = "0.36.2", default-features = false, features = [
     "clipboard",
     "wayland",
-    "x11",
 ] }
 raw-window-handle = "0.6.2"
 serde_json = "1.0.154"
@@ -34,6 +32,22 @@ xsar = { path = "../xsar", default-features = false, features = [
 [target.'cfg(unix)'.dependencies]
 signal-hook = { version = "0.4.5", default-features = false }
 
+# --- MAXIMUM THROUGHPUT RELEASE PROFILE ---
 [profile.release]
-lto = "thin"
-strip = "symbols"
+opt-level = 3           # Full LLVM loop-vectorization and AVX-512 unrolling
+lto = "fat"             # Full cross-crate LTO: fuses ../xsar directly into qmp-qemu-socket
+codegen-units = 1       # Prevents splitting crates into 16 parallel chunks so LLVM sees all code
+panic = "abort"         # Removes stack-unwinding landing pads from hot A*/Dijkstra & CV loops
+strip = "symbols"       # Strips symbol tables for a lean production binary
+
+# --- FAST DEV & TEST PROFILE (Smooth GUI + Fast CV in Debug Builds) ---
+[profile.dev]
+opt-level = 1           # Enables basic vectorization in qmp-qemu-socket with near-zero compile cost
+
+# Compile external crates (eframe/glow, serde_json, png) at full speed even during `cargo run`
+[profile.dev.package."*"]
+opt-level = 3
+
+# Explicitly compile local path dependency `xsar` (image_matching & pyramid_search) at full speed
+[profile.dev.package.xsar]
+opt-level = 3

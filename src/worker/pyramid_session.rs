@@ -538,7 +538,9 @@ struct Native<'a> {
     restart_entry: Option<post_game::PyramidRestartEntry>,
     /// Whether a phase helper already persisted this failure.
     failure_saved: bool,
-    /// Current board's effective method; reset after a new-board acquisition.
+    /// Operator's objective retained across boards, separate from automatic fallback.
+    preferred_method: crate::pyramid_workflow_model::RouteMethod,
+    /// Current board's effective method, including its authenticated challenge override.
     method: crate::pyramid_workflow_model::RouteMethod,
     /// One optional first-board reuse request, retired before any later acquisition.
     reuse_acquisition: Option<PathBuf>,
@@ -596,27 +598,39 @@ impl Native<'_> {
     }
 
 
-    /// Apply this board's authenticated default, preserving explicit first-board choice.
-    fn apply_acquisition_default(&mut self, generation: u64) -> Result<(), String> {
-        if (self.request.mode == WorkflowMode::Continuous
-            && self.request.stop_condition == StopCondition::NoChallenge)
-            || (generation == 1 && !self.request.use_challenge_default)
-        {
+    /// Retain an accepted operator switch while keeping automatic fallback board-local.
+    /// The effective method always follows the completed authenticated calculation.
+    fn retain_planning_method(&mut self, report: &computed_route::PlanningReport) {
+        if report.operator_requested_maximum {
+            self.preferred_method = crate::pyramid_workflow_model::RouteMethod::Fast;
+        }
+        self.method = report.method;
+    }
+
+
+    /// Apply a fresh RECON's authenticated challenge objective before planning.
+    /// Reusing RECON preserves a later explicit idle choice. Normal and unknown
+    /// headers supply no override and leave the selected objective intact.
+    fn apply_acquisition_default(&mut self, fresh_recon: bool) -> Result<(), String> {
+        if !fresh_recon && !self.request.use_challenge_default {
             return Ok(());
         }
         let path = self
             .output
             .as_ref()
             .ok_or("Missing acquisition for challenge default")?;
-        self.method =
-            computed_route::acquisition_default(self.context, path, self.events, self.cancel)?;
-        send_log(
-            self.events,
-            format!(
-                "Current-board default: {}; Kings Card challenges use Maximum, all other recognised challenges use Shortest.",
-                self.method.route_goal().label()
-            ),
-        );
+        if let Some(method) =
+            computed_route::acquisition_default(self.context, path, self.events, self.cancel)?
+        {
+            self.method = method;
+            send_log(
+                self.events,
+                format!(
+                    "RECON challenge objective: {}; Score and Card challenges use Maximum; Board challenges use Shortest.",
+                    self.method.route_goal().label()
+                ),
+            );
+        }
         Ok(())
     }
 
@@ -997,7 +1011,7 @@ impl Pipeline for Native<'_> {
             return;
         }
         if generation > 1 && generation > self.generation {
-            self.method = crate::pyramid_workflow_model::RouteMethod::FewestActions;
+            self.method = self.preferred_method;
             if self.challenge_progress.is_none() {
                 self.observed_game = crate::pyramid_workflow_model::ObservedGame::Unknown;
             }
@@ -1102,7 +1116,7 @@ impl Pipeline for Native<'_> {
                 self.events,
                 "Reusing current-board Recon; no acquisition input or rescan.".to_owned(),
             );
-            self.apply_acquisition_default(generation)?;
+            self.apply_acquisition_default(false)?;
             self.publish_observed(
                 computed_route::acquisition_observed(
                     self.context,
@@ -1220,7 +1234,7 @@ impl Pipeline for Native<'_> {
         };
         self.failure_saved = result.is_err();
         self.output = Some(result?);
-        self.apply_acquisition_default(generation)?;
+        self.apply_acquisition_default(true)?;
         self.publish_observed(
             computed_route::acquisition_observed(
                 self.context,
@@ -1251,7 +1265,7 @@ impl Pipeline for Native<'_> {
         );
         self.failure_saved = result.is_err();
         let report = result?;
-        self.method = report.method;
+        self.retain_planning_method(&report);
         self.phase(generation, SessionPhase::Planning);
         send_log(self.events, report.message);
         Ok(())
@@ -1558,6 +1572,7 @@ pub(super) fn run(
         distinct_start: false,
         restart_entry: None,
         failure_saved: false,
+        preferred_method: request.method,
         method: request.method,
         reuse_acquisition: request.reuse_acquisition.clone(),
         observed_game: crate::pyramid_workflow_model::ObservedGame::Unknown,
@@ -1599,6 +1614,7 @@ pub(super) fn run(
         publish_pyramid_failure(
             events,
             FailureEvidence {
+                progress: None,
                 context,
                 phase,
                 run_id: Some(request.run_id),

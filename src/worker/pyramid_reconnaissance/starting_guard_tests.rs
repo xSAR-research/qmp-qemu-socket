@@ -340,6 +340,8 @@ enum Operation {
     Unbound,
     /// Production observation/publication boundary with synthetic completed-restoration ledger state.
     RestoredBoundary,
+    /// Actual native Draw batching with independent synthetic stock-only derivatives.
+    JointBaseline,
 }
 
 
@@ -430,6 +432,9 @@ fn run_episode(frames: Vec<Vec<u8>>, operation: Operation, stop_after_draw: bool
         Operation::RestoredBoundary => {
             restored_boundary(&context, &request, guard, &events, &cancel)
         }
+        Operation::JointBaseline => {
+            joint_baseline_boundary(&context, &request, &events, &cancel)
+        }
     };
     let wire = server.join().expect("local guard QMP server");
     let diagnostic = fs::read_dir(&directory.0)
@@ -501,6 +506,8 @@ fn restored_boundary(
             captures: &mut captures,
             publication: &mut publication,
             starting_guard: Some(guard),
+            latest_stock: None,
+            pending_stock: None,
         };
         (|| {
             io.observe()?;
@@ -512,6 +519,173 @@ fn restored_boundary(
     let diagnostic_result = result.as_ref().map(|_| deal).map_err(Clone::clone);
     diagnostics.finish(&diagnostic_result, None, &ledger, captures, publication)?;
     result
+}
+
+
+/// Exercise native paired Draw baseline retention without claiming full acquisition/restoration.
+/// The pure controller's ordered inventory and dialog proofs remain independently required.
+fn joint_baseline_boundary(
+    context: &ControllerContext,
+    request: &ReconRequest,
+    events: &WorkerEventSink,
+    cancel: &AtomicBool,
+) -> Result<PathBuf, String> {
+    let output = resolve_new_output(&request.output_path)?;
+    let mut diagnostics = Diagnostics::reserve(&output)?;
+    let vision = load_vision(request)?;
+    diagnostics.write_start(vision.profile_id(), &request.profile)?;
+    let mut ledger = InputLedger::default();
+    let mut captures = 0;
+    let mut publication = None;
+    let mut qmp = QmpClient::connect(&context.socket_path).map_err(|e| e.to_string())?;
+    let result = {
+        let mut io = QmpReconIo {
+            qmp: &mut qmp,
+            context,
+            control: &events.latest_frame.reconnaissance,
+            cancel,
+            events,
+            vision,
+            diagnostics: &mut diagnostics,
+            output: &output,
+            ledger: &mut ledger,
+            captures: &mut captures,
+            publication: &mut publication,
+            starting_guard: None,
+            latest_stock: None,
+            pending_stock: None,
+        };
+        (|| {
+            let ReconScene::Board(original) = io.observe()? else {
+                panic!("supported initial board")
+            };
+            let original_settings = crate::parameters::PyramidEffectSettings::new(26, 100).unwrap();
+            let next_settings = crate::parameters::PyramidEffectSettings::new(255, 999).unwrap();
+            io.events
+                .latest_frame
+                .set_effect_settings(original_settings);
+            for _ in 0..2 {
+                io.probe()?;
+                io.input(ReconInput::Draw)?;
+                io.events.latest_frame.set_effect_settings(next_settings);
+
+                assert!(io.latest_stock.is_none());
+                assert_eq!(
+                    *io.pending_stock.as_ref().unwrap(),
+                    [original.left, original.right]
+                );
+            }
+            assert_eq!(*io.captures, 1, "paired D has no intervening capture");
+            assert_eq!(io.observe()?, ReconScene::Board(original.clone()));
+            assert_eq!(
+                *io.pending_stock.as_ref().unwrap(),
+                [original.left, original.right]
+            );
+            let ReconScene::Board(changed) = io.observe()? else {
+                panic!("supported changed board")
+            };
+            assert_eq!(changed.tableau, original.tableau);
+            assert_ne!(changed.left, original.left);
+            assert!(io.pending_stock.is_none());
+            assert_eq!(io.ledger.draws_acknowledged, 2);
+
+            // Adapter accepts a changed supported identity without a second RGB veto.
+            // The pure controller still owns its two fresh reads and inventory order.
+            io.probe()?;
+            io.input(ReconInput::Draw)?;
+
+            let mut forged = changed;
+            forged.left = original.left;
+            let pixels = io
+                .events
+                .latest_frame
+                .state
+                .lock()
+                .unwrap()
+                .pending
+                .as_ref()
+                .unwrap()
+                .frame
+                .clone();
+            io.record_stock_effect(&pixels, &ReconScene::Board(forged))?;
+            assert!(io.pending_stock.is_none());
+
+            // Out-of-order controls revoke samples before the existing ledger refuses input.
+            // This asserts no dialog pixel disappearance and sends no restoration click.
+            let point = PixelPoint::new(0, 0);
+            io.probe()?;
+            assert!(io.input(ReconInput::UndoAll(point)).is_err());
+            assert!(io.pending_stock.is_none() && io.latest_stock.is_none());
+            io.probe()?;
+            assert!(io.input(ReconInput::Confirm(point)).is_err());
+            assert!(io.pending_stock.is_none() && io.latest_stock.is_none());
+            Err("native joint baseline fixture complete; no publication".to_owned())
+        })()
+    };
+    let diagnostic_result: Result<CompleteDeal, String> =
+        Err(result.as_ref().err().unwrap().clone());
+    diagnostics.finish(&diagnostic_result, None, &ledger, captures, publication)?;
+    result
+}
+
+
+/// Retain the supported v7 scene/tableau while replacing the LEFT target bytes.
+/// Its tableau contains neither source stock identity, preserving unique-card validation.
+fn joint_stock_derivative(stock: &CapturedFrame) -> CapturedFrame {
+    let mut frame = native(include_bytes!(
+        "../../../tests/fixtures/pyramid-recon/native-v7/baseline.png"
+    ));
+    let bounds = crate::pyramid::LEFT_TARGET.bounds;
+    let view = stock.as_view().unwrap();
+    for y in bounds.y..bounds.bottom() {
+        for x in bounds.x..bounds.right() {
+            let offset =
+                usize::try_from(y).unwrap() * frame.stride + usize::try_from(x).unwrap() * 4;
+            frame.pixels[offset..offset + 3].copy_from_slice(&view.pixel_rgb(x, y).unwrap());
+        }
+    }
+    frame
+}
+
+
+/// Native adapter proves paired-D original baseline, stale retention and RGB/identity separation.
+/// Frames are labelled derivatives; wire counts are local, not live guest evidence.
+#[test]
+#[ignore = "requires local AF_UNIX sockets"]
+fn native_joint_168_recon_paired_draw_retains_original_pixel_baseline() {
+    let before = joint_stock_derivative(&native(include_bytes!(
+        "../../../tests/fixtures/pyramid-recognition-168/green/first-unmatched.png"
+    )));
+    let after = joint_stock_derivative(&native(include_bytes!(
+        "../../../tests/fixtures/pyramid-recognition-168/green/last-observed.png"
+    )));
+    let before = encode_png(&before).unwrap();
+    let after = encode_png(&after).unwrap();
+    let episode = run_episode(
+        vec![before.clone(), before.clone(), after.clone()],
+        Operation::JointBaseline,
+        false,
+    );
+    assert!(
+        episode
+            .result
+            .as_ref()
+            .unwrap_err()
+            .contains("native joint baseline fixture complete"),
+        "{:?}",
+        episode.result
+    );
+    assert_refusal(&episode, 3, 3);
+    assert_eq!(episode.wire.probes, 5);
+    assert_eq!(episode.baseline, before);
+    assert_eq!(episode.latest, after);
+    assert_eq!(episode.incomplete["draws_acknowledged"], 3);
+    assert!(
+        episode
+            .result
+            .unwrap_err()
+            .contains("native joint baseline fixture complete")
+    );
 }
 
 
@@ -724,11 +898,10 @@ fn locked_recon_metadata_preserves_requirement_kings_and_tableau_guard() {
         assert_eq!(actual, Some(progress));
         assert_eq!(
             default,
-            if kings {
-                RouteMethod::Fast
-            } else {
-                RouteMethod::FewestActions
-            }
+            Some(match progress.kind {
+                ChallengeKind::Score | ChallengeKind::Cards => RouteMethod::Fast,
+                ChallengeKind::Boards => RouteMethod::FewestActions,
+            })
         );
         assert_eq!(observed, ObservedGame::Challenge { progress, kings });
     }

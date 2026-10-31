@@ -74,6 +74,7 @@ fn target_completion_native_adapter_separates_pending_effect_and_operator_endpoi
             io.challenge = Some(initial);
             io.challenge_initial = Some(initial);
             let state = goal(io.plan);
+            retain_verified_position(io, state);
             assert_eq!(
                 io.observe_final(state).unwrap(),
                 Some(BoardCompletion::ChallengeTargetReached(target))
@@ -125,6 +126,7 @@ fn target_completion_native_adapter_retains_guard_stop_and_phase_refusal() {
             io.challenge = Some(initial);
             io.challenge_initial = Some(initial);
             let state = goal(io.plan);
+            retain_verified_position(io, state);
             assert!(!io.observe(state, false).unwrap());
             assert_eq!(io.observe_final(state).unwrap(), None);
             assert!(matches!(

@@ -1,0 +1,53 @@
+{
+  "schema": 1,
+  "purpose": "Fixed 7|1 bare Coral measured-channel bounds; recognition evidence only",
+  "original_archive": "/home/charlie/tmp/Evidence/Pyramid/Validation/pyramid-effect-160-20261028-qss_vq13",
+  "original_native_png": {
+    "file": "coral-effect.png",
+    "sha256": "605ec99be69fbbec66332f9cf568f3670c6be1b0c1f441024aefaf88fb268981",
+    "dimensions": [
+      1920,
+      1080
+    ],
+    "role": "Third calibration rendering from actual 160 Request1 final observation"
+  },
+  "original_deal": {
+    "file": "deal.json",
+    "sha256": "083c446a19dc7cd7fbd6f463f4fdbc3f11ef32202c279d9fa10ca4e238077bfd",
+    "pending_match": [
+      "5 of spades at7|1",
+      "8 of spades at7|3"
+    ]
+  },
+  "bounds": [
+    286,
+    588,
+    144,
+    34
+  ],
+  "pixel_count": 4896,
+  "channel_count": 14688,
+  "references": [
+    {
+      "file": "pyramid-recognition-159/underwater-coral-clearance.rgb",
+      "sha256": "8963e77ea34bcdc102c3eebd5f67e1078bff473d997277dfd37241e345133371"
+    },
+    {
+      "file": "pyramid-recognition-160/underwater-coral-clearance-variant.rgb",
+      "sha256": "767f05b4568f518b798219cd9d3907c963d5ad803b9c1d311db2ae80323ef7a7"
+    },
+    {
+      "file": "pyramid-recognition-161/underwater-coral-clearance-third.rgb",
+      "sha256": "45a229b6dc4ea7c417e31823a62d96600b0e165ecc1d698148143ed9ae99b55f"
+    }
+  ],
+  "bounds_policy": "Every channel at the same fixed pixel lies between the minimum and maximum of its three directly measured values, inclusive. No added tolerance.",
+  "exact_channels": 7862,
+  "variable_channels": 6826,
+  "maximum_observed_channel_span": 26,
+  "old_bounds_exceeded_channels": 1467,
+  "old_bounds_exceeded_pixels": 620,
+  "maximum_outside_old_bounds": 5,
+  "same_session_game_win_frames_used_for_calibration": false,
+  "evidence_boundary": "Three calibration renderings, plus explicitly synthetic negatives. Not independent held-out or fresh live execution proof; arbitrary future Coral appearances remain unproven."
+}

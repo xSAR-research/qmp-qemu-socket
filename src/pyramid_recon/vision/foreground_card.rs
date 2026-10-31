@@ -476,7 +476,10 @@ impl Reader {
 
 
 /// Read exactly one checked native corner for both decisions and refusal diagnostics.
-fn corner_pixels(view: FrameView<'_>, origin: (u32, u32)) -> Result<Vec<[u8; 3]>, String> {
+pub(super) fn corner_pixels(
+    view: FrameView<'_>,
+    origin: (u32, u32),
+) -> Result<Vec<[u8; 3]>, String> {
     let left = origin
         .0
         .checked_add(3)

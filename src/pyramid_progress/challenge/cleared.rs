@@ -234,19 +234,44 @@ pub(super) fn observe_boards(view: FrameView<'_>) -> Result<bool, String> {
     if Some(pixels.len()) != width.checked_mul(height) {
         return Err("Incomplete native Boards background samples".to_owned());
     }
+    // Every existing Boards appearance shares this native canvas. Validate the
+    // whole bank before using any appearance to identify weak literal ink.
+    for label in super::templates::LABELS
+        .iter()
+        .filter(|label| label.kind == super::ChallengeKind::Boards)
+    {
+        if label.patch.bounds != reference.patch.bounds
+            || label.patch.rgb.len() != reference.patch.rgb.len()
+        {
+            return Err("Inconsistent native Boards literal samples".to_owned());
+        }
+    }
     let mut selected = 0_usize;
     for (index, expected) in pixels.iter().enumerate() {
         let x = reference.patch.bounds.x
             + u32::try_from(index % width).map_err(|_| "Boards background x overflow")?;
         let y = reference.patch.bounds.y
             + u32::try_from(index / width).map_err(|_| "Boards background y overflow")?;
-        // The complete literal reference also contains genuine weak letter
-        // fringes absent from the shared Sixes-word mask. They belong to ink,
-        // not background. All complete-word and core limits stay unchanged.
-        let literal_ink = expected[2] > BLUE_FLOOR
-            && [(&COMPLETE_BOARDS, boards), (&CLEARED, cleared)]
-                .into_iter()
-                .any(|(word, origin)| x.checked_sub(origin).is_some_and(|dx| dx < word.width));
+        // Genuine weak letter fringes vary across the existing native Boards
+        // appearances. Only already-observed ink inside both proven word spans
+        // is excluded; the remaining background keeps its original tolerance.
+        let blue_index = index
+            .checked_mul(3)
+            .and_then(|offset| offset.checked_add(2))
+            .ok_or("Boards literal index overflow")?;
+        let literal_ink = [(&COMPLETE_BOARDS, boards), (&CLEARED, cleared)]
+            .into_iter()
+            .any(|(word, origin)| x.checked_sub(origin).is_some_and(|dx| dx < word.width))
+            && super::templates::LABELS
+                .iter()
+                .filter(|label| label.kind == super::ChallengeKind::Boards)
+                .any(|label| {
+                    label
+                        .patch
+                        .rgb
+                        .get(blue_index)
+                        .is_some_and(|blue| *blue > BLUE_FLOOR)
+                });
         if literal_ink
             || ink_at(&COMPLETE_BOARDS, boards, x, y).ok_or("Invalid Boards word mask")?
             || ink_at(&CLEARED, cleared, x, y).ok_or("Invalid cleared word mask")?

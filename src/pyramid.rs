@@ -2,6 +2,7 @@
 
 use std::fmt;
 
+#[cfg(test)]
 use xsar::image_matching::{MatchError, comparison};
 
 use crate::{
@@ -12,10 +13,7 @@ use crate::{
         GuidedAction, InputOperation, PreviewTarget, RepeatTargetPolicy, TargetSelectionPolicy,
     },
     geometry::{PixelPoint, PixelRect},
-    parameters::{
-        ACTION_CHANGE_CHANNEL_THRESHOLD, NOMINAL_FRAME_HEIGHT, NOMINAL_FRAME_WIDTH,
-        SHARED_SOLVER_PROGRESS_PROFILE,
-    },
+    parameters::{NOMINAL_FRAME_HEIGHT, NOMINAL_FRAME_WIDTH, SHARED_SOLVER_PROGRESS_PROFILE},
     tracker::{FrameAnalysis, PredictedAction, RowMask},
 };
 
@@ -820,31 +818,22 @@ pub fn redeal_after_final_tableau_action(
 
 
 /// Count material changes inside a pile while excluding borders and cursor hotspots.
-fn changed_pile_interior(
+#[cfg(test)]
+fn changed_pile_interior_with_settings(
     before: &CapturedFrame,
     after: &CapturedFrame,
     pile: PyramidTargetSlot,
-) -> Result<usize, HaloDetectionError> {
-    // The inset removes border/halo changes. Exclude the clicked cursor region
-    // explicitly; pointer movement is not evidence of a delivered game action.
-    let bounds = PixelRect::new(
-        pile.bounds
-            .x
-            .checked_add(12)
-            .ok_or(HaloDetectionError::BoundsOutsideFrame)?,
-        pile.bounds
-            .y
-            .checked_add(12)
-            .ok_or(HaloDetectionError::BoundsOutsideFrame)?,
-        pile.bounds
-            .width
-            .checked_sub(24)
-            .ok_or(HaloDetectionError::BoundsOutsideFrame)?,
-        pile.bounds
-            .height
-            .checked_sub(24)
-            .ok_or(HaloDetectionError::BoundsOutsideFrame)?,
-    );
+    settings: crate::parameters::PyramidEffectSettings,
+) -> Result<xsar::image_matching::packed_rgb::PackedRgbComparison, HaloDetectionError> {
+    // Keep cursor exclusions when replacing the old inset with the effect quarter.
+    let bounds = crate::pyramid_effect::card_bounds((pile.bounds.x, pile.bounds.y))
+        .map_err(|_| HaloDetectionError::BoundsOutsideFrame)?;
+    let quarter = crate::pyramid_effect::CARD_QUARTER;
+    if pile.bounds.width < quarter.x + quarter.width
+        || pile.bounds.height < quarter.y + quarter.height
+    {
+        return Err(HaloDetectionError::BoundsOutsideFrame);
+    }
     // The previous verified frame may retain the cursor over either pile.
     // Exclude both old and new possible pile hotspots, not just the new click.
     let optional_exclusions = [MOVE_TARGET, LEFT_TARGET, RIGHT_TARGET]
@@ -857,25 +846,63 @@ fn changed_pile_interior(
         exclusions[exclusion_count] = exclusion;
         exclusion_count += 1;
     }
-    let before = before
+    let before_view = before
         .as_view()
         .map_err(|_| HaloDetectionError::InvalidFrameLayout)?;
-    let after = after
+    let after_view = after
         .as_view()
         .map_err(|_| HaloDetectionError::InvalidFrameLayout)?;
-    let changed = comparison::count_rgb_changes(
+    if before.width != after.width || before.height != after.height {
+        return Err(HaloDetectionError::BoundsOutsideFrame);
+    }
+    for view in [before_view, after_view] {
+        view.checked_bounds(bounds)
+            .map_err(|error| comparison_error(comparison::ComparisonError::InvalidInput(error)))?;
+    }
+    crate::pyramid_effect::region_counts(
         before,
         after,
         bounds,
         &exclusions[..exclusion_count],
-        ACTION_CHANGE_CHANNEL_THRESHOLD,
+        settings,
     )
-    .map_err(comparison_error)?;
-    usize::try_from(changed).map_err(|_| HaloDetectionError::InvalidFrameLayout)
+    .map_err(|_| HaloDetectionError::InvalidFrameLayout)
+}
+
+
+/// Supply explicit defaults to existing isolated geometry/count fixtures.
+#[cfg(test)]
+fn changed_pile_interior(
+    before: &CapturedFrame,
+    after: &CapturedFrame,
+    pile: PyramidTargetSlot,
+) -> Result<xsar::image_matching::packed_rgb::PackedRgbComparison, HaloDetectionError> {
+    changed_pile_interior_with_settings(before, after, pile, Default::default())
+}
+
+
+/// Require joint RGB change within the shared top-left effect quarter.
+/// The guided controller independently retains scene, occupancy and terminal checks.
+#[cfg(test)]
+fn changed_tableau_corner(
+    before: &CapturedFrame,
+    after: &CapturedFrame,
+    slot: PyramidTargetSlot,
+    settings: crate::parameters::PyramidEffectSettings,
+) -> Result<bool, HaloDetectionError> {
+    let origin = (slot.bounds.x, slot.bounds.y);
+    let before = crate::pyramid_recon::vision::card_corner(before, origin)
+        .map_err(|_| HaloDetectionError::InvalidFrameLayout)?;
+    let after = crate::pyramid_recon::vision::card_corner(after, origin)
+        .map_err(|_| HaloDetectionError::InvalidFrameLayout)?;
+    crate::pyramid_effect::compare_with_settings(&before, &after, settings)
+        .map(|measured| measured.exceeds_allowance())
+        .map_err(|_| HaloDetectionError::InvalidFrameLayout)
 }
 
 
 /// Retain the detector's error vocabulary without converting invalid evidence to zero.
+#[cfg(test)]
 fn comparison_error(error: comparison::ComparisonError) -> HaloDetectionError {
     match error {
         comparison::ComparisonError::DimensionsDiffer { .. }
@@ -899,6 +926,7 @@ fn comparison_error(error: comparison::ComparisonError) -> HaloDetectionError {
 
 /// Before/after occupancy and cursor-excluded change count for one lower pile.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg(test)]
 pub struct PileEffectEvidence {
     /// Planning-frame occupancy at this lower pile.
     pub before_face: FaceEvidence,
@@ -906,12 +934,15 @@ pub struct PileEffectEvidence {
     pub after_face: FaceEvidence,
     /// Materially changed interior pixels outside all lower-control cursor masks.
     pub changed_pixels: usize,
+    /// Eligible cursor-excluded denominator for the joint RGB percentage decision.
+    pub eligible_pixels: usize,
 }
 
 
 /// The measurements which actually decide a Pyramid action's effect. Counts
 /// use cursor-excluded pile interiors, not the display-only effect rectangle.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg(test)]
 pub struct PyramidEffectEvidence {
     /// Whether positive effect evidence proves the previous action.
     pub verified: bool,
@@ -934,7 +965,7 @@ pub struct PyramidEffectEvidence {
 
 /// Identify the pair from the planning frame, never from the result's halos.
 /// Unknown or covered faces are ineligible; more than one partner is ambiguous.
-fn unique_highlighted_partner(
+pub(crate) fn unique_highlighted_partner(
     before: &CapturedFrame,
     clicked: PyramidTargetSlot,
 ) -> Result<Option<PyramidTargetSlot>, HaloDetectionError> {
@@ -1011,14 +1042,30 @@ pub fn has_repeated_pile_pair(
 }
 
 
-/// A tableau card succeeds only on a positive Present -> Absent transition.
-/// Bottom piles require material interior change or their unique pre-highlighted
-/// partner's positive removal. A known Left/Right pair measures both interiors
-/// together. Unknown scenes remain unverified.
+/// Retain the explicit13/10 policy for historical guided-effect regression fixtures.
+/// Runtime verification receives the settings frozen before input instead.
+#[cfg(test)]
 pub fn measure_effect(
     before: &CapturedFrame,
     after: &CapturedFrame,
     kind: PyramidTargetKind,
+) -> Result<PyramidEffectEvidence, HaloDetectionError> {
+    measure_effect_with_settings(
+        before,
+        after,
+        kind,
+        crate::parameters::PyramidEffectSettings::new(13, 100).unwrap(),
+    )
+}
+
+
+/// Verify the delivered action under the pair frozen at its pre-input boundary.
+#[cfg(test)]
+pub(crate) fn measure_effect_with_settings(
+    before: &CapturedFrame,
+    after: &CapturedFrame,
+    kind: PyramidTargetKind,
+    settings: crate::parameters::PyramidEffectSettings,
 ) -> Result<PyramidEffectEvidence, HaloDetectionError> {
     let mut evidence = PyramidEffectEvidence::default();
 
@@ -1039,7 +1086,8 @@ pub fn measure_effect(
             evidence.before_face = Some(tableau_evidence(before)?[index]);
             evidence.after_face = Some(tableau_evidence(after)?[index]);
             evidence.verified = evidence.before_face == Some(FaceEvidence::Present)
-                && evidence.after_face == Some(FaceEvidence::Absent);
+                && evidence.after_face == Some(FaceEvidence::Absent)
+                && changed_tableau_corner(before,after,slot,settings)?;
         }
         PyramidTargetKind::Move => {
 
@@ -1057,10 +1105,11 @@ pub fn measure_effect(
                     return Ok(evidence);
                 }
             }
-            let changed = changed_pile_interior(before, after, LEFT_TARGET)?
-                + changed_pile_interior(before, after, RIGHT_TARGET)?;
+            let left = changed_pile_interior_with_settings(before, after, LEFT_TARGET, settings)?;
+            let right = changed_pile_interior_with_settings(before, after, RIGHT_TARGET, settings)?;
+            let changed=left.changed_pixels+right.changed_pixels;
             evidence.pile_changed_pixels = Some(changed);
-            evidence.verified = changed >= PILE_CHANGE_MINIMUM;
+            evidence.verified = changed > settings.allowed_changes(left.total_pixels+right.total_pixels);
         }
         PyramidTargetKind::Left | PyramidTargetKind::Right => {
 
@@ -1072,11 +1121,14 @@ pub fn measure_effect(
             };
             let before_face = face_evidence(before, slot)?;
             let after_face = face_evidence(after, slot)?;
-            let changed = changed_pile_interior(before, after, slot)?;
+            let clicked = changed_pile_interior_with_settings(before, after, slot, settings)?;
+            let changed=clicked.changed_pixels;
+            let other=changed_pile_interior_with_settings(before,after,opposite,settings)?;
             let opposite_evidence = PileEffectEvidence {
                 before_face: face_evidence(before, opposite)?,
                 after_face: face_evidence(after, opposite)?,
-                changed_pixels: changed_pile_interior(before, after, opposite)?,
+                changed_pixels: other.changed_pixels,
+                eligible_pixels: other.total_pixels,
             };
             evidence.before_face = Some(before_face);
             evidence.after_face = Some(after_face);
@@ -1089,7 +1141,7 @@ pub fn measure_effect(
             {
 
 
-                if changed >= PILE_CHANGE_MINIMUM {
+                if clicked.exceeds_allowance() {
                     evidence.verified = true;
                 } else if let Some(partner) = unique_highlighted_partner(before, slot)? {
                     evidence.highlighted_partner = Some(partner.kind);
@@ -1100,7 +1152,8 @@ pub fn measure_effect(
                     {
 
 
-                        if tableau_evidence(after)?[index] == FaceEvidence::Absent {
+                        if tableau_evidence(after)?[index] == FaceEvidence::Absent
+                            && changed_tableau_corner(before,after,partner,settings)? {
                             evidence.removed_highlighted_partner = Some(partner.kind);
                             evidence.verified = true;
                         }
@@ -1120,8 +1173,8 @@ pub fn measure_effect(
                         if opposite_evidence.after_face == FaceEvidence::Absent {
                             evidence.removed_highlighted_partner = Some(partner.kind);
                         }
-                        evidence.verified = pair_changed >= PILE_CHANGE_MINIMUM
-                            || evidence.removed_highlighted_partner.is_some();
+                        evidence.verified = (pair_changed > settings.allowed_changes(clicked.total_pixels+opposite_evidence.eligible_pixels))
+                            || (evidence.removed_highlighted_partner.is_some() && other.exceeds_allowance());
                     }
                 }
             }
@@ -1208,6 +1261,17 @@ mod tests {
         if highlighted {
             paint(frame, halo_probe(slot), GOLD);
         }
+    }
+
+
+    /// Paint the existing 31 by 49 rank/suit region in a synthetic source or result.
+    /// This is synthetic occurrence evidence, separate from lower-face occupancy.
+    fn paint_corner(frame: &mut CapturedFrame, slot: PyramidTargetSlot, rgba: [u8; 4]) {
+        paint(
+            frame,
+            PixelRect::new(slot.bounds.x + 3, slot.bounds.y + 4, 31, 49),
+            rgba,
+        );
     }
 
 
@@ -1457,6 +1521,11 @@ mod tests {
         let mut before = empty_board();
         let king = PyramidTargetKind::Card { row: 7, column: 3 };
         add_card(&mut before, king, true);
+        paint_corner(
+            &mut before,
+            PYRAMID_TARGETS[king.slot_index().unwrap()],
+            WHITE,
+        );
         let mut after = empty_board();
         // An ancestor can supply white at the removed card's old top strip.
         let slot = PYRAMID_TARGETS[king.slot_index().unwrap()];
@@ -1468,6 +1537,11 @@ mod tests {
         assert!(verify_effect(&before, &after, king).unwrap());
         let partner = PyramidTargetKind::Card { row: 7, column: 4 };
         add_card(&mut before, partner, true);
+        paint_corner(
+            &mut before,
+            PYRAMID_TARGETS[partner.slot_index().unwrap()],
+            WHITE,
+        );
         assert!(verify_effect(&before, &after, king).unwrap());
         assert!(verify_effect(&before, &after, partner).unwrap());
     }
@@ -1537,7 +1611,7 @@ mod tests {
         paint(&mut after, halo_probe(LEFT_TARGET), GOLD);
         paint(&mut after, PixelRect::new(960, 758, 4, 10), WHITE);
         assert!(!verify_effect(&before, &after, PyramidTargetKind::Move).unwrap());
-        paint(&mut after, PixelRect::new(775, 695, 20, 20), WHITE);
+        paint(&mut after, PixelRect::new(775, 695, 50, 128), WHITE);
         assert!(verify_effect(&before, &after, PyramidTargetKind::Move).unwrap());
 
         let mut left_before = empty_board();
@@ -1569,8 +1643,10 @@ mod tests {
             let mut before = empty_board();
             add_card(&mut before, pile.kind, true);
             add_card(&mut before, partner, true);
+        paint_corner(&mut before, partner_slot, WHITE);
             let mut after = before.clone();
             paint(&mut after, lower_face_probe(partner_slot), FELT);
+        paint_corner(&mut after, partner_slot, FELT);
             paint(&mut after, halo_probe(partner_slot), FELT);
             paint(&mut after, halo_probe(pile), FELT);
 
@@ -1657,22 +1733,34 @@ mod tests {
 
     /// Alter a requested number of interior pixels outside cursor exclusions.
     fn paint_pile_changes(frame: &mut CapturedFrame, pile: PyramidTargetSlot, count: u32) {
-        assert!(count <= 128);
-
-
-        // Synthetic evidence outside the cursor mask, halo and face probe.
-        for pixel in 0..count {
-            paint(
-                frame,
-                PixelRect::new(
-                    pile.bounds.x + 16 + pixel % 4,
-                    pile.bounds.y + 16 + pixel / 4,
-                    1,
-                    1,
-                ),
-                WHITE,
-            );
+        let mut painted = 0;
+        let exclusions = [MOVE_TARGET, LEFT_TARGET, RIGHT_TARGET]
+            .map(|target| guided_action(target).effect_exclusion_bounds());
+        let quarter = crate::pyramid_effect::card_bounds((pile.bounds.x, pile.bounds.y)).unwrap();
+        for y in quarter.y..quarter.bottom() {
+            for x in quarter.x..quarter.right() {
+                if painted == count {
+                    return;
+                }
+                if exclusions
+                    .iter()
+                    .flatten()
+                    .any(|r| x >= r.x && y >= r.y && x - r.x < r.width && y - r.y < r.height)
+                {
+                    continue;
+                }
+                let offset = y as usize * frame.stride + x as usize * 4;
+                if frame.pixels[offset..offset + 3] == WHITE[..3] {
+                    continue;
+                }
+                paint(frame, PixelRect::new(x, y, 1, 1), WHITE);
+                painted += 1;
+            }
         }
+        assert_eq!(
+            painted, count,
+            "fixture has enough eligible non-white pixels"
+        );
     }
 
 
@@ -1699,9 +1787,9 @@ mod tests {
 
 
         for (pile, expected) in [(LEFT_TARGET, 127), (RIGHT_TARGET, 4)] {
-            assert_eq!(changed_pile_interior(&before, &after, pile), Ok(expected));
-            assert_eq!(changed_pile_interior(&before, &padded, pile), Ok(expected));
-            assert_eq!(changed_pile_interior(&padded, &before, pile), Ok(expected));
+            assert_eq!(changed_pile_interior(&before, &after, pile).map(|m| m.changed_pixels), Ok(expected));
+            assert_eq!(changed_pile_interior(&before, &padded, pile).map(|m| m.changed_pixels), Ok(expected));
+            assert_eq!(changed_pile_interior(&padded, &before, pile).map(|m| m.changed_pixels), Ok(expected));
         }
     }
 
@@ -1747,7 +1835,7 @@ mod tests {
         };
         assert_eq!(
             changed_pile_interior(&frame, &frame, empty),
-            Err(HaloDetectionError::EmptyBounds)
+            Err(HaloDetectionError::BoundsOutsideFrame)
         );
     }
 
@@ -1762,29 +1850,34 @@ mod tests {
 
             // These are synthetic threshold cases, not reconstructed historical
             // before/after captures. Both new cards may retain the same halos.
+            let source = pile_pair();
+            let clicked_pixels = changed_pile_interior(&source, &source, clicked).unwrap().total_pixels;
+            let opposite_pixels = changed_pile_interior(&source, &source, opposite).unwrap().total_pixels;
+            let allowance = (clicked_pixels + opposite_pixels) / 10;
+            let half = allowance / 2;
+            assert!(half <= clicked_pixels / 10);
             for (clicked_count, opposite_count, verified) in [
                 (0, 0, false),
-                (124, 0, false),
-                (124, 3, false),
-                (124, 4, true),
-                (127, 1, true),
-                (124, 124, true),
-                (0, 128, true),
+                (half, 0, false),
+                (half, allowance - half, false),
+                (half, allowance - half + 1, true),
+                (half - 1, allowance - half + 2, true),
+                (0, allowance + 1, true),
             ] {
                 let before = pile_pair();
                 let mut after = before.clone();
-                paint_pile_changes(&mut after, clicked, clicked_count);
-                paint_pile_changes(&mut after, opposite, opposite_count);
+                paint_pile_changes(&mut after, clicked, u32::try_from(clicked_count).unwrap());
+                paint_pile_changes(&mut after, opposite, u32::try_from(opposite_count).unwrap());
                 let measured = measure_effect(&before, &after, clicked.kind).unwrap();
-                assert_eq!(measured.pile_changed_pixels, Some(clicked_count as usize));
+                assert_eq!(measured.pile_changed_pixels, Some(clicked_count));
                 assert_eq!(
                     measured.opposite_pile.unwrap().changed_pixels,
-                    opposite_count as usize
+                    opposite_count
                 );
                 assert_eq!(measured.highlighted_partner, Some(opposite.kind));
                 assert_eq!(
                     measured.pair_changed_pixels,
-                    Some((clicked_count + opposite_count) as usize)
+                    Some(clicked_count + opposite_count)
                 );
                 assert_eq!(measured.removed_highlighted_partner, None);
                 assert_eq!(measured.verified, verified);
@@ -1793,9 +1886,9 @@ mod tests {
     }
 
 
-    /// Verify positive opposite-pile absence proves removal even with no measured delta.
+    /// Verify opposite-pile absence needs joint RGB evidence while the clicked pile may stay unchanged.
     #[test]
-    fn pile_pair_accepts_positive_partner_removal_without_interior_delta() {
+    fn pile_pair_partner_absence_also_requires_joint_rgb_occurrence() {
 
 
         for (clicked, opposite) in [(LEFT_TARGET, RIGHT_TARGET), (RIGHT_TARGET, LEFT_TARGET)] {
@@ -1806,6 +1899,12 @@ mod tests {
             let measured = measure_effect(&before, &after, clicked.kind).unwrap();
             assert_eq!(measured.pile_changed_pixels, Some(0));
             assert_eq!(measured.pair_changed_pixels, Some(0));
+            assert_eq!(measured.removed_highlighted_partner, Some(opposite.kind));
+            assert!(!measured.verified);
+            let eligible = changed_pile_interior(&before, &before, opposite).unwrap().total_pixels;
+            paint_pile_changes(&mut after, opposite, u32::try_from(eligible / 10 + 1).unwrap());
+            let measured = measure_effect(&before, &after, clicked.kind).unwrap();
+            assert_eq!(measured.pile_changed_pixels, Some(0));
             assert_eq!(measured.removed_highlighted_partner, Some(opposite.kind));
             assert!(measured.verified);
         }
@@ -1820,8 +1919,12 @@ mod tests {
         for (clicked, opposite) in [(LEFT_TARGET, RIGHT_TARGET), (RIGHT_TARGET, LEFT_TARGET)] {
             let before = pile_pair();
             let mut after = before.clone();
-            paint_pile_changes(&mut after, clicked, 124);
-            paint_pile_changes(&mut after, opposite, 124);
+            let pixels = changed_pile_interior(&before, &before, clicked).unwrap().total_pixels
+                + changed_pile_interior(&before, &before, opposite).unwrap().total_pixels;
+            let half = pixels / 20;
+            paint_pile_changes(&mut after, clicked, u32::try_from(half).unwrap());
+            paint_pile_changes(&mut after, opposite, u32::try_from(pixels / 10 - half + 1).unwrap());
+            assert!(verify_effect(&before, &after, clicked.kind).unwrap());
 
 
             for pile in [clicked, opposite] {
@@ -1977,8 +2080,10 @@ mod tests {
         let mut before = empty_board();
         add_card(&mut before, PyramidTargetKind::Left, true);
         add_card(&mut before, partner, true);
+        paint_corner(&mut before, partner_slot, WHITE);
         let mut after = before.clone();
         paint(&mut after, lower_face_probe(partner_slot), FELT);
+        paint_corner(&mut after, partner_slot, FELT);
         paint(&mut after, halo_probe(partner_slot), FELT);
         assert!(verify_effect(&before, &after, PyramidTargetKind::Left).unwrap());
 

@@ -30,6 +30,7 @@ use super::*;
 use crate::{
     capture::{PixelFormat, decode_png, encode_png},
     geometry::{PixelPoint, PixelRect},
+    pyramid_progress::ChallengeKind,
     pyramid_recon::ReconProfileSource,
     pyramid_workflow_model::RouteMethod,
     strategy::SolvingStrategy,
@@ -248,6 +249,7 @@ impl Fixture {
             distinct_start: false,
             restart_entry: None,
             failure_saved: false,
+            preferred_method: self.request.method,
             method: self.request.method,
             reuse_acquisition: self.request.reuse_acquisition.clone(),
             observed_game: crate::pyramid_workflow_model::ObservedGame::Unknown,
@@ -256,24 +258,140 @@ impl Fixture {
 }
 
 
-/// A Maximum fallback is discarded before a new board and in its published UI state.
+/// Explicit Maximum is retained before the next normal board and in published UI state.
 #[test]
-fn new_board_resets_maximum_fallback_to_shortest_before_reconnaissance() {
+fn new_board_preserves_selected_maximum_before_reconnaissance() {
     let fixture = Fixture::new();
     let mut adapter = fixture.adapter();
     adapter.phase(1, SessionPhase::Execution);
     assert_eq!(adapter.method, RouteMethod::Fast);
     adapter.phase(2, SessionPhase::Reconnaissance);
-    assert_eq!(adapter.method, RouteMethod::FewestActions);
+    assert_eq!(adapter.method, RouteMethod::Fast);
     assert!(fixture._receiver.try_iter().any(|event| matches!(
         event.event,
         WorkerEvent::PyramidSessionProgress(SessionProgress {
             board_generation: 2,
             phase: SessionPhase::Reconnaissance,
-            effective_method: RouteMethod::FewestActions,
+            effective_method: RouteMethod::Fast,
             ..
         })
     )));
+}
+
+
+/// Authenticate a known complete deal and the exact header advice without any input.
+fn objective_acquisition(
+    fixture: &Fixture,
+    observed: crate::pyramid_workflow_model::ObservedGame,
+) -> PathBuf {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/pyramid-recognition-163/deal.json");
+    let deal = xsar::pyramid_json::read_from(fs::File::open(&path).unwrap()).unwrap();
+    let progress = match observed {
+        crate::pyramid_workflow_model::ObservedGame::Challenge { progress, .. } => Some(progress),
+        _ => None,
+    };
+    computed_route::record_acquisition(
+        &fixture.context,
+        &fixture.events,
+        &fixture.cancel,
+        deal,
+        ReconVision::bundled_native_v23().unwrap(),
+        &path,
+        progress,
+        observed.route_method_override(),
+        observed,
+    )
+    .unwrap();
+    path
+}
+
+
+/// Fresh RECON overrides earlier choices for every challenge, independent of stop policy.
+#[test]
+fn recon_route_objective_applies_all_authenticated_challenge_kinds() {
+    use crate::pyramid_workflow_model::ObservedGame;
+    for kind in [
+        ChallengeKind::Score,
+        ChallengeKind::Cards,
+        ChallengeKind::Boards,
+    ] {
+        let fixture = Fixture::new();
+        let observed = ObservedGame::Challenge {
+            progress: ChallengeProgress::new(kind, 0, 3).unwrap(),
+            kings: false,
+        };
+        let path = objective_acquisition(&fixture, observed);
+        let mut adapter = fixture.adapter();
+        adapter.output = Some(path);
+        adapter.method = if kind == ChallengeKind::Boards {
+            RouteMethod::Fast
+        } else {
+            RouteMethod::FewestActions
+        };
+        adapter.apply_acquisition_default(true).unwrap();
+        assert_eq!(adapter.method, observed.route_method_override().unwrap());
+        assert_eq!(adapter.preferred_method, fixture.request.method);
+    }
+}
+
+
+/// Normal RECON and explicit post-RECON reuse preserve the chosen objective.
+#[test]
+fn recon_route_objective_preserves_normal_and_explicit_reuse_choices() {
+    use crate::pyramid_workflow_model::ObservedGame;
+    for observed in [
+        ObservedGame::Normal(crate::pyramid_progress::BoardCount {
+            completed: 0,
+            target: 3,
+        }),
+        ObservedGame::Unknown,
+        ObservedGame::Challenge {
+            progress: ChallengeProgress::new(ChallengeKind::Cards, 0, 3).unwrap(),
+            kings: false,
+        },
+    ] {
+        let fixture = Fixture::new();
+        let path = objective_acquisition(&fixture, observed);
+        let mut adapter = fixture.adapter();
+        adapter.output = Some(path);
+        adapter.method = RouteMethod::FewestActions;
+        adapter.apply_acquisition_default(false).unwrap();
+        assert_eq!(adapter.method, RouteMethod::FewestActions);
+        if observed.route_method_override().is_none() {
+            adapter.method = RouteMethod::Fast;
+            adapter.apply_acquisition_default(true).unwrap();
+            assert_eq!(adapter.method, RouteMethod::Fast);
+        }
+    }
+}
+
+
+/// Automatic fallback stays local; an accepted operator Maximum switch persists.
+#[test]
+fn new_board_distinguishes_automatic_fallback_from_operator_maximum() {
+    for operator_requested_maximum in [false, true] {
+        let mut fixture = Fixture::new();
+        fixture.request.method = RouteMethod::FewestActions;
+        let mut adapter = fixture.adapter();
+        adapter.phase(1, SessionPhase::Planning);
+        adapter.retain_planning_method(&computed_route::PlanningReport {
+            card_route: true,
+            message: String::new(),
+            method: RouteMethod::Fast,
+            operator_requested_maximum,
+        });
+        assert_eq!(adapter.method, RouteMethod::Fast);
+        adapter.phase(2, SessionPhase::Reconnaissance);
+        assert_eq!(
+            adapter.method,
+            if operator_requested_maximum {
+                RouteMethod::Fast
+            } else {
+                RouteMethod::FewestActions
+            }
+        );
+    }
 }
 
 
@@ -2321,3 +2439,25 @@ mod testing_158;
 
 
 mod testing_159;
+
+
+/// The retained 173 entry reaches production v23 challenge classification without guest I/O.
+#[test]
+fn native_174_observe_retained_entry_is_boards_challenge() {
+    let mut fixture = Fixture::new();
+    fixture.request.reconnaissance.profile = ReconProfileSource::BundledNativeV23;
+    let adapter = fixture.adapter();
+    let frame = native(include_bytes!(
+        "../../../tests/fixtures/pyramid-entry-174/boards-zero-of-three.png"
+    ));
+    let observation = adapter.observe(&frame).unwrap();
+    let expected = ChallengeProgress::new(ChallengeKind::Boards, 0, 3).unwrap();
+    assert!(
+        matches!(observation, NativeObservation::Challenge { progress, .. } if progress == expected)
+    );
+    assert_eq!(
+        paired_entry(&observation, &observation),
+        Some(Entry::Challenge(expected))
+    );
+    assert!(standard_progress(Entry::Challenge(expected)).is_err());
+}

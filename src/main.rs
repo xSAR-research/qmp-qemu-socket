@@ -16,6 +16,7 @@ mod klondike;
 mod parameters;
 mod pyramid;
 mod pyramid_diagnostics;
+mod pyramid_effect;
 mod pyramid_progress;
 mod pyramid_recon;
 mod pyramid_search_policy;

@@ -1,0 +1,45 @@
+{
+  "2": {
+    "source_packet": "/home/charlie/tmp/Evidence/Pyramid/Validation/pyramid-coral-164-request2-20261029-4fli1_ee/pyramid-error-1793241931712-939442-0",
+    "bounds_xywh": [
+      1289,
+      588,
+      144,
+      34
+    ],
+    "sha256": {
+      "deal.json": "91248f2947b8290b199639ccb7616ae26b3b1197673a96888059fce24f449d72",
+      "first-unmatched.png": "2ac454c90fab08a746722cac8523258d5a0c84a12b4b08bce22275b096297733",
+      "last-observed.png": "4c834e702c2975eb122c7fa4e8080883c984b5dad3dffbdb1171c52864728b9a",
+      "clearance.rgb": "db44bc433c54a5a25192e08e1bd8be22b49bee59c52a5b60b17db8a17cc2541f"
+    },
+    "evidence": "Retained calibration only; no independent future appearance or fresh live acceptance."
+  },
+  "13": {
+    "source_packet": "/home/charlie/tmp/Evidence/Pyramid/Validation/pyramid-coral-164-request13-20261029-r0dql72x/pyramid-error-1793249750618-939442-7",
+    "bounds_xywh": [
+      286,
+      588,
+      144,
+      34
+    ],
+    "sha256": {
+      "deal.json": "114f692fa21de4cfa82fbbfb082667d8af2b4f36791331c9c54790e30f6e3468",
+      "first-unmatched.png": "bc98bef6b63b6ee436e880273d642ca3454d30d0379f6ea0000891a7f1f0dbc7",
+      "last-observed.png": "ee10b201fc5d57a057ef17d825131519b3df3d1a6532b6b7a55ddd02e8301112",
+      "clearance.rgb": "8e826cfc05367cb8a88a93b582a3e7ed7d160663113443468698380ca51fdaba"
+    },
+    "evidence": "Retained calibration only; no independent future appearance or fresh live acceptance.",
+    "additional_crop": {
+      "path": "clearance-seven-two.rgb",
+      "bounds_xywh": [
+        487,
+        588,
+        144,
+        34
+      ],
+      "sha256": "bdd2d3dea7a691eb063dff9316010f9b82748fe84bfaee8227cf83951536dc45",
+      "reason": "Whole-position reader next refused original22, one-based7|2, after the reported7|1 guard passed. Native occupancy for original columns1,2,6 was [Absent,Unknown,Absent]."
+    }
+  }
+}

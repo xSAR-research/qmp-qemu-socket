@@ -80,6 +80,7 @@ fn native_123_adapter_proves_board_target_and_unmet_score_clear_separately() {
                 io.challenge = Some(initial);
                 io.challenge_initial = Some(initial);
                 let state = goal(io.plan);
+                retain_verified_position(io, state);
                 let completion = io.observe_final(state).unwrap().unwrap();
                 if reached {
                     assert!(matches!(
@@ -160,6 +161,7 @@ fn native_123_adapter_keeps_guard_and_stop_before_continuation() {
             io.challenge = Some(initial);
             io.challenge_initial = Some(initial);
             let state = goal(io.plan);
+            retain_verified_position(io, state);
             assert!(
                 io.observe_final(state)
                     .unwrap_err()

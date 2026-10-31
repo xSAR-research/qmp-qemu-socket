@@ -341,7 +341,13 @@ impl ReconVision {
                 "final-clear scene anchor mismatch",
             )?;
         }
+        if self.temporal_removed.is_some() {
+            self.verify_temporal_clear(view)?;
+        }
         for (index, (x, y)) in TABLEAU_ORIGINS.iter().copied().enumerate() {
+            if self.temporal_removed.is_some() {
+                continue;
+            }
             // Each explicit proof selects its measured unobscured band. Every
             // variant still requires all 240 pixels and leaves old geometry intact.
             let offset = match (proof, index >= 21) {

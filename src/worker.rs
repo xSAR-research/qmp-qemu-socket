@@ -316,7 +316,7 @@ pub enum WorkerEvent {
         /// Advisory current-board default from authenticated restored native evidence.
         default_method: Option<(
             ControllerContext,
-            crate::pyramid_workflow_model::RouteMethod,
+            Option<crate::pyramid_workflow_model::RouteMethod>,
             crate::pyramid_workflow_model::ObservedGame,
         )>,
     },
@@ -460,10 +460,30 @@ struct LatestFrameSlot {
     pause: Arc<pyramid_pause::Gate>,
     /// Exact engine ownership and operator-requested objective replacement.
     search_control: Arc<pyramid_search_control::Gate>,
+    /// One coherent live pair; copied only at an action or batch boundary.
+    pyramid_effect_settings: Arc<Mutex<crate::parameters::PyramidEffectSettings>>,
 }
 
 
 impl LatestFrameSlot {
+    /// Copy both live fields under one short lock, recovering the stored pair after poison.
+    fn effect_settings(&self) -> crate::parameters::PyramidEffectSettings {
+        *self
+            .pyramid_effect_settings
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+
+    /// Replace both validated fields atomically without changing any input authority.
+    fn set_effect_settings(&self, settings: crate::parameters::PyramidEffectSettings) {
+        *self
+            .pyramid_effect_settings
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = settings;
+    }
+
+
 
 
     /// Clear stale advisory search work without changing input or run authority.
@@ -1304,6 +1324,21 @@ impl WorkerHandle {
     }
 
 
+    /// Copy the complete live Pyramid settings pair without queuing a worker command.
+    pub(crate) fn pyramid_effect_settings(&self) -> crate::parameters::PyramidEffectSettings {
+        self.latest_frame.effect_settings()
+    }
+
+
+    /// Publish one complete pair directly while the serial worker is busy.
+    pub(crate) fn set_pyramid_effect_settings(
+        &self,
+        settings: crate::parameters::PyramidEffectSettings,
+    ) {
+        self.latest_frame.set_effect_settings(settings);
+    }
+
+
     /// Take at most one pending preview, including its displaced-frame count.
     pub fn take_latest_frame(&self) -> Option<LatestWorkerFrame> {
         // Takes at most one preview frame, together with the number of stale
@@ -1398,6 +1433,7 @@ fn run_worker(
                 publish_pyramid_failure(
                     &event_tx,
                     FailureEvidence {
+                        progress: None,
                         context: &context,
                         phase,
                         run_id: None,
@@ -2861,6 +2897,60 @@ fn execute_guarded_action(
         ));
     }
 
+    let pyramid_sources = if let ActionTarget::Pyramid(kind) = plan.input().action().target {
+        let result = (|| {
+            let frame = &before_series
+                .observations
+                .last()
+                .ok_or("Missing Pyramid source frame")?
+                .frame;
+            let vision = crate::pyramid_recon::vision::ReconVision::bundled_native_v23()?;
+            let mut kinds = vec![kind];
+            if kind == crate::pyramid::PyramidTargetKind::Move {
+                kinds = vec![vision.draw_source(frame)?];
+            } else if let Some(slot) = crate::pyramid::PYRAMID_TARGETS
+                .iter()
+                .find(|slot| slot.kind == kind)
+                && let Some(partner) = crate::pyramid::unique_highlighted_partner(frame, *slot)
+                    .map_err(|error| error.to_string())?
+            {
+                kinds.push(partner.kind);
+            }
+            let sources = kinds
+                .into_iter()
+                .map(|location| {
+                    Ok(
+                        crate::pyramid_recon::vision::source_transition::SourceCard {
+                            location,
+                            card: vision.source_identity(frame, location)?.ok_or(
+                                "Pyramid source rank/suit is not identified; no input authorised",
+                            )?,
+                        },
+                    )
+                })
+                .collect::<Result<Vec<_>, String>>()?;
+            let transition =
+                crate::pyramid_recon::vision::source_transition::SourceTransition::begin(
+                    &vision, frame, sources, 0,
+                )?;
+            Ok((vision, transition))
+        })();
+        match result {
+            Ok(source) => Some(source),
+            Err(error) => {
+                return Err(action_failure(
+                    action_started,
+                    profile,
+                    WorkerState::Ready,
+                    error,
+                    before_series.observations.pop(),
+                    FailureFramePhase::PreAction,
+                ));
+            }
+        }
+    } else {
+        None
+    };
     send_state(event_tx, WorkerState::Acting);
     send_status(event_tx, format_action_status(plan.before()));
     profile.input_attempted = true;
@@ -2926,6 +3016,7 @@ fn execute_guarded_action(
                 before_series,
                 plan,
                 kind,
+                sources: pyramid_sources.ok_or_else(|| action_failure(action_started, profile, WorkerState::Ready, "Missing Pyramid source proof".to_owned(), None, FailureFramePhase::PreAction))?,
                 action_started,
                 profile,
             },

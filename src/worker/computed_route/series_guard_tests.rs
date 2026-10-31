@@ -215,7 +215,7 @@ fn plan(context: &ControllerContext, epoch: u64) -> Prepared {
         id: 17,
         acquisition: Acquisition {
             challenge_progress: None,
-            default_method: RouteMethod::FewestActions,
+            default_method: None,
             observed_game: crate::pyramid_workflow_model::ObservedGame::Unknown,
             context: context.clone(),
             epoch,
@@ -284,6 +284,17 @@ fn goal(plan: &Prepared) -> SearchState {
         });
     assert!(state.is_goal());
     state
+}
+
+
+/// Supply prior verified occupancy for isolated mid-route/final guard fixtures.
+/// Complete driver tests instead build actual before/after history as they run.
+fn retain_verified_position(io: &mut NativeIo<'_>, state: SearchState) {
+    let (tableau, _, _) = expected(&io.plan.acquisition.deal, state).unwrap();
+    io.removals =
+        crate::pyramid_recon::vision::removal::RemovalHistory::from_verified_position(&tableau);
+    io.execution_vision
+        .set_temporal_removals(io.removals.proof());
 }
 
 
@@ -483,6 +494,13 @@ fn adapter_with_progress<T>(
     let peer = thread::spawn(move || serve(listener, peer_directory, pngs));
     let qmp = QmpClient::connect(&context.socket_path).unwrap();
     let mut io = NativeIo {
+            execution_vision: plan.acquisition.vision.for_temporal_execution(),
+            source_transition: None,
+            ready_transition: None,
+            failure_progress: crate::pyramid_diagnostics::progress::FailureProgress::default(),
+            removals: Default::default(),
+            stock_effect: None,
+            effect_settings: crate::parameters::PyramidEffectSettings::default(),
         policy: ExecutionPolicy::Standard,
         stock_continuation: false,
         executed_recycles: 0,
@@ -495,7 +513,7 @@ fn adapter_with_progress<T>(
         started: Instant::now(),
         paused: Duration::ZERO,
         captures: 0,
-        capture_limit: 20,
+        capture_limit: capture_allowance(plan.trace.len(), plan.trace.iter().map(|action| operations(action.action).unwrap().len()).sum()).unwrap(),
         counts: Counts::default(),
         first_mismatch: None,
         latest_frame: None,
@@ -812,10 +830,10 @@ fn unguarded_native_delivery_preserves_existing_header_independent_behaviour() {
 }
 
 
-/// Exact empty-goal pixels still require the guard; refusal cannot become BoardClear.
+/// An uncalibrated empty-goal fixture cannot promote action evidence to BoardClear.
 #[test]
 #[ignore = "requires local AF_UNIX sockets"]
-fn guarded_native_final_goal_accepts_current_series_and_refuses_changed_series() {
+fn guarded_native_uncalibrated_goal_keeps_clear_semantics_separate() {
     for changed in [false, true] {
         let frame = if changed {
             drift(synthetic_goal(), HEADER)
@@ -823,7 +841,9 @@ fn guarded_native_final_goal_accepts_current_series_and_refuses_changed_series()
             synthetic_goal()
         };
         let evidence = adapter(vec![frame], Some(&require_normal_one), |io| {
-            io.observe_final(goal(io.plan))
+            let state = goal(io.plan);
+            retain_verified_position(io, state);
+            io.observe_final(state)
         });
         if changed {
             assert!(
@@ -840,7 +860,7 @@ fn guarded_native_final_goal_accepts_current_series_and_refuses_changed_series()
                     .contains("normal series header/footer changed")
             );
         } else {
-            assert_eq!(evidence.result.unwrap(), Some(BoardCompletion::BoardClear));
+            assert_eq!(evidence.result.unwrap(), None);
             assert!(evidence.first.is_none());
         }
         assert_eq!(
@@ -872,6 +892,7 @@ fn guarded_native_final_preserves_specific_terminal_and_fresh_board_classifier()
         let frame = decode_png(png).unwrap();
         let evidence = adapter(vec![frame.clone(), frame], Some(&guard), |io| {
             let state = goal(io.plan);
+            retain_verified_position(io, state);
             assert_eq!(io.observe_final(state).unwrap(), None);
             io.observe_final(state)
         });
@@ -958,6 +979,7 @@ fn native_perfect_final_clear_retains_phase_exact_piles_and_series_guard() {
             |plan| final_fixture_plan(plan, deal, actions),
             |io| {
                 let state = goal(io.plan);
+                retain_verified_position(io, state);
                 let (tableau, actual_left, actual_right) =
                     expected(&io.plan.acquisition.deal, state).unwrap();
                 assert_eq!(tableau, [None; 28]);
@@ -1075,6 +1097,7 @@ fn native_normal_final_clear_retains_exact_replay_final_phase_and_fatal_series_g
             |plan| normal_final_fixture_plan(plan, label, actions),
             |io| {
                 let state = goal(io.plan);
+                retain_verified_position(io, state);
                 let (tableau, actual_left, actual_right) =
                     expected(&io.plan.acquisition.deal, state).unwrap();
                 assert_eq!(tableau, [None; 28]);

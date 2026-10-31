@@ -1,0 +1,21 @@
+{
+  "role": "Offline already-inspected initial and final evidence. Not a retained pre-action frame or live timing acceptance.",
+  "files": {
+    "initial.png": {
+      "sha256": "d7400fe520956c489feb4da1aad9b635fff2ada4d28c3ef0076cf0a679249cce",
+      "source": "/home/charlie/tmp/Evidence/Pyramid/Validation/pyramid-coral-166-request1-20261029-wqaui3w4/paper-channel-proposal/baseline.png"
+    },
+    "last-observed.png": {
+      "sha256": "31a0b20ec92fc80c5ead2616f4f7c1996f1368d2f3f5e810060109a59d20ab70",
+      "source": "/home/charlie/tmp/Evidence/Pyramid/Validation/pyramid-coral-166-request1-20261029-wqaui3w4/packet/last-observed.png"
+    },
+    "deal.json": {
+      "sha256": "c802d4eb3e8abb56f8ab4a2ba08f85a023c05071aed4f5bbe55f0157b18bfde3",
+      "source": "/home/charlie/tmp/Evidence/Pyramid/Validation/pyramid-coral-166-request1-20261029-wqaui3w4/packet/deal.json"
+    },
+    "error-state.json": {
+      "sha256": "8b467b7165723e8b73f5e10a03df72817a4206de480bdc3ab5c17fc3a651d620",
+      "source": "/home/charlie/tmp/Evidence/Pyramid/Validation/pyramid-coral-166-request1-20261029-wqaui3w4/packet/error-state.json"
+    }
+  }
+}

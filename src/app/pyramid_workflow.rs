@@ -441,14 +441,13 @@ impl PyramidWorkflow {
     }
 
 
-    /// Apply an authenticated idle Recon default without replacing an explicit choice.
+    /// Apply the authenticated challenge objective when idle RECON finishes.
+    /// Normal and unknown headers preserve the selection. A later idle selection
+    /// remains explicit and can be used with this same acquisition.
     pub(super) fn apply_acquisition_default(&mut self, method: Option<RouteMethod>) {
-        if !self.method_explicit
-            && !(self.mode == WorkflowMode::Continuous
-                && self.stop_condition == StopCondition::NoChallenge)
-            && let Some(method) = method
-        {
+        if let Some(method) = method {
             self.method = method;
+            self.method_explicit = false;
         }
     }
 
@@ -985,6 +984,7 @@ impl QmpQemuSocketApp {
         };
         self.pyramid_workflow.request_details = Some(details.clone());
         self.pyramid_workflow.diagnostic = Some(PyramidDiagnostic {
+            progress: None,
             context: context.clone(),
             phase,
             run_id: self.computed_route_form.active_run_id,
@@ -1539,6 +1539,42 @@ mod identity_tests {
     //! Boundary checks for local diagnostic identities without worker or filesystem I/O.
 
     use super::*;
+
+
+    /// Idle RECON applies challenge advice even after a prior explicit preference.
+    /// A later manual selection survives ordinary RECON and remains explicitly reusable.
+    #[test]
+    fn recon_route_objective_preserves_normal_choice_and_later_idle_selection() {
+        let mut workflow = PyramidWorkflow::default();
+        assert_eq!(workflow.method, RouteMethod::FewestActions);
+        workflow.method_explicit = true;
+        workflow.apply_acquisition_default(Some(RouteMethod::Fast));
+        assert_eq!(workflow.method, RouteMethod::Fast);
+        assert!(!workflow.method_explicit);
+        workflow.apply_acquisition_default(None);
+        assert_eq!(workflow.method, RouteMethod::Fast);
+        workflow
+            .select_preferences(
+                WorkflowMode::SingleBoard,
+                RouteMethod::FewestActions,
+                StopCondition::NoChallenge,
+                1,
+                true,
+            )
+            .unwrap();
+        assert!(workflow.method_explicit);
+        workflow.apply_acquisition_default(None);
+        assert_eq!(workflow.method, RouteMethod::FewestActions);
+        assert!(workflow.method_explicit);
+        workflow.apply_acquisition_default(Some(RouteMethod::Fast));
+        assert_eq!(workflow.method, RouteMethod::Fast);
+        workflow.apply_acquisition_default(Some(RouteMethod::FewestActions));
+        assert_eq!(workflow.method, RouteMethod::FewestActions);
+        workflow.reset_preferences();
+        assert_eq!(workflow.method, RouteMethod::FewestActions);
+        assert_eq!(workflow.mode, WorkflowMode::Continuous);
+        assert_eq!(workflow.stop_condition, StopCondition::ChallengeTarget);
+    }
 
 
     /// Diagnostic identity exhaustion never reuses an earlier expected packet token.

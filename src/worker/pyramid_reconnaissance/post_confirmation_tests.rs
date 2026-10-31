@@ -235,6 +235,7 @@ fn synthetic_acquisition(original: &BoardObservation, ok: PixelPoint) -> VecDequ
         board.left = StockFace::Card(stock[left_index]);
         board.right = StockFace::Card(stock[left_index - 1]);
         board.undo_all = Some(PixelPoint::new(1320, 978));
+        scenes.push_back(ReconScene::Board(board.clone()));
         scenes.push_back(ReconScene::Board(board));
     }
     let mut exhausted = original.clone();
@@ -502,6 +503,8 @@ fn episode(frames: Vec<Vec<u8>>, run_core: bool, fault: Fault) -> Episode {
             captures: &mut captures,
             publication: &mut publication,
             starting_guard: None,
+            latest_stock: None,
+            pending_stock: None,
         };
         if run_core {
             let original = original_position();
@@ -570,18 +573,32 @@ fn episode(frames: Vec<Vec<u8>>, run_core: bool, fault: Fault) -> Episode {
         )?;
         let (_, retained) =
             super::super::computed_route::reuse_metadata(&context, &output, &events, &cancel)?;
+        let expected_observed = crate::pyramid_workflow_model::ObservedGame::Challenge {
+            progress: crate::pyramid_progress::ChallengeProgress::new(
+                crate::pyramid_progress::ChallengeKind::Boards,
+                0,
+                1,
+            )
+            .expect("valid Boards 0/1 fixture target"),
+            kings: false,
+        };
+        assert_eq!(
+            crate::pyramid_workflow_model::ObservedGame::observe(
+                &decode_png(RESTORED).expect("actual restored frame")
+            )?,
+            expected_observed,
+            "the retained frame literally shows Boards cleared 0/1",
+        );
         assert_eq!(
             super::super::computed_route::acquisition_observed(
                 &context, &output, &events, &cancel
             )?,
-            crate::pyramid_workflow_model::ObservedGame::observe(
-                &decode_png(RESTORED).expect("actual restored frame")
-            )?
+            expected_observed,
         );
         assert_eq!(
             super::super::computed_route::acquisition_default(&context, &output, &events, &cancel)?,
-            crate::pyramid_workflow_model::RouteMethod::FewestActions,
-            "this actual non-Kings restored frame retains the Shortest default",
+            Some(crate::pyramid_workflow_model::RouteMethod::FewestActions),
+            "this actual Boards challenge selects Shortest after restored RECON",
         );
         assert_eq!(
             retained, progress,

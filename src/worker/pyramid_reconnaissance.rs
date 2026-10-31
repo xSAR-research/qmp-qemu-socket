@@ -31,7 +31,7 @@ use crate::{
     pyramid_diagnostics::{FailureEvidence, PyramidPhase},
     pyramid_recon::{
         self, ReconInput, ReconIo, ReconProfileSource, ReconProgress, ReconRequest,
-        vision::{BoardObservation, ReconScene, ReconVision},
+        vision::{BoardObservation, ReconScene, ReconVision, StockFace},
     },
     qmp::QmpClient,
     strategy::{ControllerContext, SolvingStrategy},
@@ -520,9 +520,26 @@ fn run_phase(
         starting_guard,
     );
     if let Err(error) = &result {
+        let count = |name: &str| details.get(name).and_then(serde_json::Value::as_u64).and_then(|n| usize::try_from(n).ok()).unwrap_or(0);
+        let acknowledged = |name: &str| details.get(name).and_then(serde_json::Value::as_bool).unwrap_or(false);
+        let substage = if count("confirmation_attempted") != 0 {
+            "Original-board restoration after confirmation"
+        } else if count("undo_all_attempted") != 0 {
+            "Undo All / confirmation dialog"
+        } else { "Stock identity acquisition" };
+        let progress = crate::pyramid_diagnostics::progress::FailureProgress {
+            stage: crate::pyramid_diagnostics::progress::FailureStage::Reconnaissance,
+            operation: Some(format!("{substage}; D acknowledged {}/{}; Undo All acknowledged={}; confirmation acknowledged={}; publication={}", count("draws_acknowledged"), count("draws_attempted"), acknowledged("undo_all_acknowledged"), acknowledged("confirmation_acknowledged"), details.get("publication_status").and_then(serde_json::Value::as_str).unwrap_or("unavailable"))),
+            capture: count("captures_attempted"),
+            attempted: count("draws_attempted") + count("undo_all_attempted") + count("confirmation_attempted"),
+            acknowledged: count("draws_acknowledged") + usize::from(acknowledged("undo_all_acknowledged")) + usize::from(acknowledged("confirmation_acknowledged")),
+            reason: Some(error.clone()),
+            ..Default::default()
+        };
         publish_pyramid_failure(
             events,
             FailureEvidence {
+                progress: Some(&progress),
                 context,
                 phase: PyramidPhase::Reconnaissance,
                 run_id,
@@ -630,6 +647,8 @@ fn run_checked(
             captures: &mut captures,
             publication: &mut publication,
             starting_guard,
+            latest_stock: None,
+            pending_stock: None,
         };
         io.probe()?;
 
@@ -652,7 +671,7 @@ fn run_checked(
     } else {
         Ok((
             None,
-            crate::pyramid_workflow_model::RouteMethod::FewestActions,
+            None,
             crate::pyramid_workflow_model::ObservedGame::Unknown,
         ))
     };
@@ -848,6 +867,35 @@ struct QmpReconIo<'a> {
     publication: &'a mut Option<PublicationStatus>,
     /// Optional borrowed same-session constraint; this never creates input authority.
     starting_guard: Option<StartingGuard<'a>>,
+    /// Positively recognised original pile identities on the latest existing capture.
+    latest_stock: Option<[StockFace; 2]>,
+    /// Original first-D identities, retained across an intentional paired D batch.
+    pending_stock: Option<[StockFace; 2]>,
+}
+
+
+impl QmpReconIo<'_> {
+    /// Validate a native stock transition while retaining the original paired-D baseline.
+    /// Stale same-arrangement frames remain available to the existing bounded observer.
+    /// Specific confirmation and full-restoration proofs remain in the pure controller.
+    fn record_stock_effect(
+        &mut self,
+        frame: &CapturedFrame,
+        scene: &ReconScene,
+    ) -> Result<(), String> {
+        let ReconScene::Board(board) = scene else {
+            return Ok(());
+        };
+        let current = [board.left, board.right];
+        if let Some(original) = self.pending_stock
+            && current != original
+        {
+            self.pending_stock = None;
+        }
+        self.latest_stock = Some(current);
+        let _ = frame; // The existing rank/suit observation owns these identities.
+        Ok(())
+    }
 }
 
 
@@ -865,6 +913,8 @@ impl ReconIo for QmpReconIo<'_> {
             })?;
         if !paused.is_zero() {
             self.ledger.probed = false;
+            self.latest_stock = None;
+            self.pending_stock = None;
         }
         Ok(paused)
     }
@@ -905,11 +955,16 @@ impl ReconIo for QmpReconIo<'_> {
                 self.check_active()?;
                 let scene = recognition?;
                 guard.validate(&frame, &scene, self.ledger.draws_attempted)?;
+                self.record_stock_effect(&frame,&scene)?;
                 Ok(scene)
             })();
             self.events.publish_diagnostic_frame(frame);
             return guarded;
         }
+        let recognition = recognition.and_then(|scene| {
+            self.record_stock_effect(&frame, &scene)?;
+            Ok(scene)
+        });
         self.events.publish_diagnostic_frame(frame);
         self.diagnostics.record_capture(png)?;
         self.check_active()?;
@@ -934,6 +989,21 @@ impl ReconIo for QmpReconIo<'_> {
 
     /// Deliver only D, Undo All or confirmation, with a final post-probe STOP check.
     fn input(&mut self, input: ReconInput) -> Result<(), String> {
+        match input {
+            ReconInput::Draw if self.pending_stock.is_none() => {
+                let original = self.latest_stock.take().ok_or("Recon D has no checked source identities")?;
+                if !matches!(original[0], StockFace::Card(_)) {
+                    return Err("Recon D source LEFT is not identified; no input authorised".to_owned());
+                }
+                self.pending_stock = Some(original);
+                send_log(self.events, "Pyramid Recon D batch: original source identities bound; two fresh disappearance checks required".to_owned());
+            }
+            ReconInput::Draw => {}
+            ReconInput::UndoAll(_) | ReconInput::Confirm(_) => {
+                self.latest_stock = None;
+                self.pending_stock = None;
+            }
+        }
         let qmp = &mut self.qmp;
         let events = self.events;
         deliver_guarded_input(
@@ -1207,45 +1277,31 @@ impl Diagnostics {
     ) -> Result<
         (
             Option<crate::pyramid_progress::ChallengeProgress>,
-            crate::pyramid_workflow_model::RouteMethod,
+            Option<crate::pyramid_workflow_model::RouteMethod>,
             crate::pyramid_workflow_model::ObservedGame,
         ),
         String,
     > {
-        use crate::pyramid_workflow_model::{ObservedGame, RouteMethod};
+        use crate::pyramid_workflow_model::ObservedGame;
         let png = self
             .latest_png
             .as_deref()
             .ok_or("Missing restored acquisition frame")?;
         let frame = crate::capture::decode_png(png).map_err(|error| error.to_string())?;
         if let Some(locked) = challenge {
+            let observed = ObservedGame::Challenge {
+                progress: locked.progress,
+                kings: locked.kings,
+            };
             return Ok((
                 Some(locked.progress),
-                if locked.kings {
-                    RouteMethod::Fast
-                } else {
-                    RouteMethod::FewestActions
-                },
-                ObservedGame::Challenge {
-                    progress: locked.progress,
-                    kings: locked.kings,
-                },
+                observed.route_method_override(),
+                observed,
             ));
         }
         let progress = crate::pyramid_progress::observe_challenge(&frame)?;
         let observed = ObservedGame::observe(&frame)?;
-        let kings = progress
-            .is_some_and(|p| p.kind == crate::pyramid_progress::ChallengeKind::Cards)
-            && crate::pyramid_progress::challenge::is_kings_header(&frame)?;
-        Ok((
-            progress,
-            if kings {
-                RouteMethod::Fast
-            } else {
-                RouteMethod::FewestActions
-            },
-            observed,
-        ))
+        Ok((progress, observed.route_method_override(), observed))
     }
 
 
@@ -1397,9 +1453,9 @@ mod starting_guard_tests;
 mod tests {
     //! No live guest input: request queues, cancellation, bounded evidence and mock delivery.
 
-    /// Actual restored frames choose Kings only; a missing counter never supplies that advice.
+    /// Actual Card counters choose Maximum regardless of rank; a missing counter supplies no override.
     #[test]
-    fn kings_default_requires_the_same_restored_card_counter() {
+    fn challenge_default_requires_the_same_restored_card_counter() {
         use crate::pyramid_workflow_model::RouteMethod;
         let mut diagnostics = super::Diagnostics {
             directory: std::path::PathBuf::new(),
@@ -1423,7 +1479,7 @@ mod tests {
                 diagnostics
                     .restored_metadata(None)
                     .map(|(_, method, _)| method),
-                Ok(RouteMethod::Fast)
+                Ok(Some(RouteMethod::Fast))
             );
             let mut frame = crate::capture::decode_png(png).unwrap();
             for y in 48..80 {
@@ -1437,7 +1493,7 @@ mod tests {
                 diagnostics
                     .restored_metadata(None)
                     .map(|(_, method, _)| method),
-                Ok(RouteMethod::FewestActions)
+                Ok(None)
             );
         }
         diagnostics.latest_png = Some(
@@ -1448,8 +1504,43 @@ mod tests {
             diagnostics
                 .restored_metadata(None)
                 .map(|(_, method, _)| method),
-            Ok(RouteMethod::FewestActions)
+            Ok(Some(RouteMethod::Fast))
         );
+    }
+
+
+    /// Real Score and Board headers reach restored advice without changing recognition.
+    #[test]
+    fn recon_route_objective_uses_restored_score_and_board_headers() {
+        use crate::pyramid_workflow_model::RouteMethod;
+        for (png, expected) in [
+            (
+                include_bytes!(
+                    "../../tests/fixtures/pyramid-execution-observability/score-final.png"
+                )
+                .as_slice(),
+                RouteMethod::Fast,
+            ),
+            (
+                include_bytes!(
+                    "../../tests/fixtures/pyramid-execution-observability/boards-two.png"
+                )
+                .as_slice(),
+                RouteMethod::FewestActions,
+            ),
+        ] {
+            let diagnostics = super::Diagnostics {
+                directory: std::path::PathBuf::new(),
+                baseline_written: false,
+                latest_png: Some(png.to_vec()),
+                latest_attempted: false,
+                latest_error: None,
+            };
+            assert_eq!(
+                diagnostics.restored_metadata(None).unwrap().1,
+                Some(expected)
+            );
+        }
     }
 
 

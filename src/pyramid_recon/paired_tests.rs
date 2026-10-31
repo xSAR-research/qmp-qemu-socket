@@ -201,12 +201,12 @@ fn recon_157_confirmed_inventory_uses_one_undo_attempt_without_icon_matching() {
 #[test]
 fn recon_157_missing_dialog_never_retries_undo_or_publishes() {
     let mut scenes = happy_scenes();
-    scenes.truncate(16);
+    scenes.truncate(28);
     let mut exhausted = scenes.last().unwrap().clone();
     if let ReconScene::Board(board) = &mut exhausted {
         board.undo_all = None;
     }
-    scenes[15] = exhausted.clone();
+    scenes[27] = exhausted.clone();
     scenes.extend(vec![exhausted; MAX_OBSERVATIONS]);
     let mut adapter = EventIo::new(scenes);
     let failure = run(&mut adapter, &request()).unwrap_err();
@@ -234,13 +234,13 @@ fn recon_157_icon_independent_undo_retains_stop_and_uncertain_delivery_guards() 
         }
         let mut adapter = EventIo::new(scenes);
         if stop {
-            adapter.stop_after_capture = Some(16);
+            adapter.stop_after_capture = Some(28);
         } else {
             adapter.uncertain_input = Some(25);
         }
         assert!(run(&mut adapter, &request()).is_err());
         assert_eq!(adapter.inputs().len(), if stop { 24 } else { 25 });
-        assert_eq!(adapter.count(|event| *event == Event::Capture), 16);
+        assert_eq!(adapter.count(|event| *event == Event::Capture), 28);
         assert_eq!(adapter.count(|event| *event == Event::Publish), 0);
         assert!(
             !adapter
@@ -252,23 +252,28 @@ fn recon_157_icon_independent_undo_retains_stop_and_uncertain_delivery_guards() 
 }
 
 
-/// The approved schedule has 20 captures, 24 independent D probes and exact phase pacing.
+/// Two source-disappearance checks per endpoint retain 24 D probes and exact pacing.
 #[test]
-fn paired_scan_observes_twenty_frames_with_exact_draw_and_restoration_pacing() {
+fn source_172_paired_scan_observes_thirty_two_frames_with_exact_draw_and_restoration_pacing() {
     let mut adapter = EventIo::new(happy_scenes());
     let deal = run(&mut adapter, &request()).unwrap();
     let half_second = Duration::from_millis(500);
     let one_second = Duration::from_secs(1);
     let mut expected = vec![Event::Capture, Event::Wait(one_second), Event::Capture];
     expected_input(&mut expected, ReconInput::Draw);
-    expected.extend([Event::Wait(half_second), Event::Capture]);
+    expected.extend([
+        Event::Wait(half_second),
+        Event::Capture,
+        Event::Wait(half_second),
+        Event::Capture,
+    ]);
 
 
     for _pair in 0..11 {
         expected_input(&mut expected, ReconInput::Draw);
         expected.push(Event::Wait(half_second));
         expected_input(&mut expected, ReconInput::Draw);
-        expected.extend([Event::Wait(half_second), Event::Capture]);
+        expected.extend([Event::Wait(half_second), Event::Capture, Event::Wait(half_second), Event::Capture]);
     }
     expected_input(&mut expected, ReconInput::Draw);
     expected.extend([
@@ -293,7 +298,7 @@ fn paired_scan_observes_twenty_frames_with_exact_draw_and_restoration_pacing() {
         Event::Publish,
     ]);
     assert_eq!(adapter.events, expected);
-    assert_eq!(adapter.count(|event| *event == Event::Capture), 20);
+    assert_eq!(adapter.count(|event| *event == Event::Capture), 32);
     assert_eq!(adapter.count(|event| *event == Event::Probe), 26);
     assert_eq!(
         adapter.count(|event| *event == Event::Input(ReconInput::Draw)),
@@ -336,28 +341,28 @@ fn paired_scan_observes_twenty_frames_with_exact_draw_and_restoration_pacing() {
 }
 
 
-/// Every pair may use five input-free stale endpoints before its sixth fresh proof.
+/// Four stale endpoints leave two input-free fresh checks within the six-observation budget.
 #[test]
 fn delayed_pair_endpoints_reobserve_without_another_draw() {
     for pair in 0..11 {
         let mut scenes = happy_scenes();
-        let endpoint = 3 + pair;
+        let endpoint = 4 + pair * 2;
         let unchanged = scenes[endpoint - 1].clone();
         scenes.splice(
             endpoint..endpoint,
-            std::iter::repeat_n(unchanged, MAX_OBSERVATIONS - 1),
+            std::iter::repeat_n(unchanged, MAX_OBSERVATIONS - 2),
         );
         let mut adapter = EventIo::new(scenes);
         let deal = run(&mut adapter, &request()).unwrap();
         assert_eq!(adapter.inputs().len(), 26, "pair {pair}");
         assert_eq!(
             adapter.count(|event| *event == Event::Capture),
-            25,
+            36,
             "pair {pair}"
         );
         assert_eq!(
             adapter.count(|event| *event == Event::Wait(Duration::from_millis(500))),
-            30
+            41
         );
         assert_eq!(deal.stock().as_slice(), &deck()[28..]);
     }
@@ -369,7 +374,7 @@ fn delayed_pair_endpoints_reobserve_without_another_draw() {
 fn unchanged_pair_endpoint_exhausts_only_the_observation_budget() {
     for pair in 0..11 {
         let mut scenes = happy_scenes();
-        let endpoint = 3 + pair;
+        let endpoint = 4 + pair * 2;
         let unchanged = scenes[endpoint - 1].clone();
         scenes.truncate(endpoint);
         scenes.extend(std::iter::repeat_n(unchanged, MAX_OBSERVATIONS));
@@ -397,7 +402,10 @@ fn missed_first_or_second_draw_in_any_pair_cannot_trigger_catchup() {
             let mut effects = vec![true; draws];
             effects[draws - 2 + missed_member] = false;
             let mut scenes = happy_scenes();
-            scenes[3 + pair] = ReconScene::Board(after_draws(&effects));
+            let endpoint = 4 + pair * 2;
+            let failed = ReconScene::Board(after_draws(&effects));
+            scenes[endpoint] = failed.clone();
+            scenes[endpoint + 1] = failed;
             let mut adapter = EventIo::new(scenes);
             let failure = run(&mut adapter, &request()).unwrap_err();
             assert!(
@@ -407,7 +415,7 @@ fn missed_first_or_second_draw_in_any_pair_cannot_trigger_catchup() {
             );
             assert_eq!(failure.progress.stock.len(), 2 + pair * 2);
             assert_eq!(adapter.inputs(), vec![ReconInput::Draw; draws]);
-            assert_eq!(adapter.count(|event| *event == Event::Capture), 4 + pair);
+            assert_eq!(adapter.count(|event| *event == Event::Capture), 6 + pair * 2);
             assert_eq!(adapter.count(|event| *event == Event::Publish), 0);
         }
     }
@@ -436,14 +444,18 @@ fn conflicting_pair_evidence_stops_before_further_input() {
         ReconScene::Board(changed_tableau),
         ReconScene::Unknown,
     ];
-    for scene in cases {
+    for (case, scene) in cases.into_iter().enumerate() {
         let mut scenes = happy_scenes();
-        scenes[3] = scene;
+        scenes[4] = scene.clone();
+        scenes[5] = scene;
         let mut adapter = EventIo::new(scenes);
         let failure = run(&mut adapter, &request()).unwrap_err();
         assert!(!failure.progress.restored);
         assert_eq!(adapter.inputs(), [ReconInput::Draw; 3]);
-        assert_eq!(adapter.count(|event| *event == Event::Capture), 4);
+        assert_eq!(
+            adapter.count(|event| *event == Event::Capture),
+            if case >= 4 { 5 } else { 6 }
+        );
         assert_eq!(adapter.count(|event| *event == Event::Publish), 0);
     }
 }
@@ -454,7 +466,7 @@ fn conflicting_pair_evidence_stops_before_further_input() {
 fn stop_between_pair_members_withholds_second_draw_and_cleanup() {
     for pair in 0..11 {
         let mut adapter = EventIo::new(happy_scenes());
-        adapter.stop_after_wait = Some(3 + pair * 2);
+        adapter.stop_after_wait = Some(4 + pair * 3);
         let failure = run(&mut adapter, &request()).unwrap_err();
         assert!(failure.message.contains("STOP"));
         assert_eq!(failure.progress.stock.len(), 2 + pair * 2);
@@ -471,7 +483,7 @@ fn stop_between_pair_members_withholds_second_draw_and_cleanup() {
 /// STOP after exhaustion, dialog confirmation or the first restored frame grants no later work.
 #[test]
 fn stop_at_restoration_boundaries_never_adds_cleanup_or_publication() {
-    for (capture, inputs) in [(16, 24), (18, 25), (19, 26)] {
+    for (capture, inputs) in [(28, 24), (30, 25), (31, 26)] {
         let mut adapter = EventIo::new(happy_scenes());
         adapter.stop_after_capture = Some(capture);
         let failure = run(&mut adapter, &request()).unwrap_err();
@@ -505,8 +517,8 @@ fn uncertainty_at_each_pair_member_ends_the_event_trace_immediately() {
 #[test]
 fn final_single_draw_cannot_be_replayed_or_promoted_to_a_pair() {
     let mut scenes = happy_scenes();
-    let last_pair = scenes[13].clone();
-    scenes.truncate(14);
+    let last_pair = scenes[25].clone();
+    scenes.truncate(26);
     scenes.extend(std::iter::repeat_n(last_pair, MAX_OBSERVATIONS));
     let mut adapter = EventIo::new(scenes);
     let failure = run(&mut adapter, &request()).unwrap_err();
@@ -514,6 +526,6 @@ fn final_single_draw_cannot_be_replayed_or_promoted_to_a_pair() {
     assert_eq!(failure.progress.stock.len(), 24);
     assert_eq!(failure.progress.draws, 24);
     assert_eq!(adapter.inputs(), [ReconInput::Draw; 24]);
-    assert_eq!(adapter.count(|event| *event == Event::Capture), 20);
+    assert_eq!(adapter.count(|event| *event == Event::Capture), 32);
     assert_eq!(adapter.count(|event| *event == Event::Publish), 0);
 }

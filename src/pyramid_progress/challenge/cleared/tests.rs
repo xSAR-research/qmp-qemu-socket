@@ -266,3 +266,85 @@ fn native_150_entry_background_keeps_negative_space_and_complete_words() {
         }
     }
 }
+
+
+/// A retained standard-theme entry reads the literal 0/3 despite known weak letter fringes.
+#[test]
+fn native_174_boards_entry_reads_existing_literal_fringe() {
+    let frame = native(include_bytes!(
+        "../../../../tests/fixtures/pyramid-entry-174/boards-zero-of-three.png"
+    ));
+    let view = frame.as_view().unwrap();
+    assert_eq!(view.pixel_rgb(878, 63), Some([155, 92, 15]));
+    assert!(observe_boards(view).unwrap());
+    assert_eq!(
+        crate::pyramid_progress::observe_challenge(&frame),
+        Ok(crate::pyramid_progress::ChallengeProgress::new(
+            ChallengeKind::Boards,
+            0,
+            3
+        ))
+    );
+}
+
+
+/// Unobserved pixels beside the accepted fringe remain required RGB negative space.
+#[test]
+fn native_174_boards_entry_keeps_adjacent_and_shared_word_negative_space() {
+    let source = native(include_bytes!(
+        "../../../../tests/fixtures/pyramid-entry-174/boards-zero-of-three.png"
+    ));
+    for (x, y) in [(877, 63), (921, 63), (945, 48), (814, 48), (900, 75)] {
+        let mut corrupted = source.clone();
+        let mut rgb = corrupted.as_view().unwrap().pixel_rgb(x, y).unwrap();
+        rgb[0] = rgb[0].saturating_add(40);
+        paint(&mut corrupted, PixelRect::new(x, y, 1, 1), rgb);
+        assert!(
+            !observe_boards(corrupted.as_view().unwrap()).unwrap(),
+            "{x},{y}"
+        );
+        assert_eq!(
+            crate::pyramid_progress::observe_challenge(&corrupted),
+            Ok(None),
+            "{x},{y}"
+        );
+    }
+}
+
+
+/// Every complete letter, native banner and literal counter is still required on the retained entry.
+#[test]
+fn native_174_boards_entry_keeps_words_banner_and_counter() {
+    let source = native(include_bytes!(
+        "../../../../tests/fixtures/pyramid-entry-174/boards-zero-of-three.png"
+    ));
+    for (word, x) in [(&COMPLETE_BOARDS, 841), (&CLEARED, 922)] {
+        for &(dx, dy) in word.anchors {
+            let mut missing = source.clone();
+            paint(
+                &mut missing,
+                PixelRect::new(x + dx - 3, SEARCH.y + dy - 3, 7, 7),
+                [161, 102, 6],
+            );
+            assert!(
+                !observe_boards(missing.as_view().unwrap()).unwrap(),
+                "{x}+{dx},{dy}"
+            );
+            assert_eq!(
+                crate::pyramid_progress::observe_challenge(&missing),
+                Ok(None)
+            );
+        }
+    }
+    for bounds in [
+        PixelRect::new(1038, 48, 72, 32),
+        PixelRect::new(814, 41, 292, 7),
+    ] {
+        let mut missing = source.clone();
+        paint(&mut missing, bounds, [0; 3]);
+        assert_eq!(
+            crate::pyramid_progress::observe_challenge(&missing),
+            Ok(None)
+        );
+    }
+}

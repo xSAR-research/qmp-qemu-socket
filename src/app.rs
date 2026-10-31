@@ -1250,7 +1250,7 @@ impl QmpQemuSocketApp {
                                 self.pyramid_workflow.apply_observed(*observed);
                             }
                             self.pyramid_workflow
-                                .apply_acquisition_default(advisory.map(|(_, method, _)| method));
+                                .apply_acquisition_default(advisory.and_then(|(_, method, _)| method));
                         }
                         let acquisition_context = self.current_preview_context();
                         if let Err(error) = self
@@ -2200,7 +2200,7 @@ impl QmpQemuSocketApp {
         ui.horizontal(|ui| {
 
 
-            if bevel_button(ui, "Params", SETUP_BLUE, self.show_parameters, controls_enabled).clicked() {
+            if bevel_button(ui, "Params", SETUP_BLUE, self.show_parameters, controls_enabled || self.game_mode == GameMode::Pyramid).clicked() {
                 self.show_parameters = true;
             }
 
@@ -2519,6 +2519,29 @@ impl QmpQemuSocketApp {
                 ui.separator();
 
 
+                if self.game_mode == GameMode::Pyramid {
+                    ui.strong("Pyramid REDEAL appearance");
+                    let settings=self.worker.pyramid_effect_settings();
+                    let mut tolerance=settings.rgb_tolerance();
+                    let mut coverage=f64::from(settings.coverage_tenths())/10.0;
+                    let mut changed=false;
+                    ui.horizontal(|ui| {
+                        ui.label("RGB difference above");
+                        changed |= ui.add(egui::DragValue::new(&mut tolerance).range(0..=255).speed(1.0)).changed();
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Changed pixels above");
+                        changed |= ui.add(egui::DragValue::new(&mut coverage).range(0.0..=100.0).speed(0.1).fixed_decimals(1).suffix("%")).changed();
+                    });
+                    if changed {
+                        let tenths=(coverage*10.0).round() as u16;
+                        if let Ok(settings)=crate::parameters::PyramidEffectSettings::new(tolerance,tenths) {
+                            self.worker.set_pyramid_effect_settings(settings);
+                        }
+                    }
+                    ui.small("These RGB settings apply only to REDEAL appearance. MOVE and MATCH use two fresh source-identity disappearance checks.");
+                    ui.separator();
+                }
                 if self.solving_strategy == SolvingStrategy::ShortestPath {
                     ui.strong("Pyramid reconnaissance and computed routes");
                     ui.label("Capture Frame obtains fresh raw pixels. Capture PNG previews a PNG of that frame and saves the exact retained bytes.");

@@ -184,6 +184,9 @@ impl ReconVision {
         view: FrameView<'_>,
         bottom_offset: u32,
     ) -> Result<(), String> {
+        if self.temporal_removed.is_some() {
+            return self.verify_temporal_clear(view);
+        }
         for (index, (x, y)) in TABLEAU_ORIGINS.iter().copied().enumerate() {
             let offset = if index < BOTTOM_ROW_FIRST_SLOT {
                 BAND_Y.0

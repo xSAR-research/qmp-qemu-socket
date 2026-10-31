@@ -1,46 +1,62 @@
-# Current handoff - qmp-qemu-socket 2.9.159
+# Active handoff — qualified 2.9.174 / unchanged xSAR 0.9.1
 
-The approved measured bare-coral and complete normal ordinal-two corrections
-are implemented and host qualified. Six gates pass with 1,583 tests and 846
-sealed inputs. Approved version-only alignment passes locked check, native
-release and protected help; the other 844 inputs including all 52 xSAR inputs
-are unchanged. Fresh 159 guest acceptance is pending. The user retracted the
-earlier standard Continuous acceptance; it remains open.
+2.9.174 corrects native Boards challenge-header recognition using the union of
+the five existing validated Boards literal ink supports, restricted to independently
+proven complete word spans. All reference geometries and lengths are checked before
+indexing. RGB tolerance 9, blue floor 6, word distance, letter cores, banner anchors,
+boundaries and counter parsing remain unchanged. No new reference bank or dilation
+is introduced. Score/Card recognition and input authority are unchanged.
 
-Protected executable: `/home/charlie/Documents/Pyramid/Validation/pyramid-effect-158-20261028-mca9017u/application-159/native/qmp-qemu-socket-2.9.159`.
-SHA-256: `5e16e00756f8dedff36b9b83300e120062ad3c0e76b42266271b6f595c20544d`.
-The existing controller remains under operator control. No GUI/START, live
-guest input/capture, installation, staging, commit or push occurred.
+The six controller gates passed, including 1687 tests with zero failures,
+ignored or filtered tests. Qualification sealed 942 inputs; after qualification only
+the application's manifest/lock version pair changed from 2.9.173 to 2.9.174,
+leaving 940 inputs identical. Aligned locked check, release and protected help passed.
+The 56 unchanged xSAR inputs retain cached sixteen-gate qualification (303 full
+tests, 14 default tests and two Miri tests); xSAR remains modified/unreleased 0.9.1.
+User profiles and CPU/hardening configuration are preserved. Evidence: `/home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/pyramid-challenge-174-proposal-9yca399e`.
+
+Charlie explicitly accepted the automatic post-173 metadata updates and
+continuing 174. baseline-state.json preserves the accepted two changed sealed files
+(Tree Ring SQLite and TriggerTree read telemetry), eight recall receipts and SQLite
+sidecars. All 939 prior compiler inputs, 17 documents and four repository histories,
+indices and tracked diffs matched before application. The prior 173 sentinel's
+HANDOFF REGRESSION remains historical. No metadata was deleted or broadly ignored.
+The two transient SQLite sidecars subsequently became absent; the main store and
+all eight receipt hashes remain exact. The last observed WAL was empty. The exact
+absence and unchanged store are recorded in sqlite-sidecar-audit.json and sealed
+by the new checkpoint; their disappearance cause is not established.
+
+## Current documentation and evidence relocation
+
+The approved housekeeping moved the retained scoring note into
+[docs/scoring-target.md](scoring-target.md), installed the editable
+[refactoring task list](refactoring-work-tasks.md), and moved the preserved local
+archive into the ignored repository `Evidence/` directory. No refactor was
+implemented. The task-list contents are excluded from long-term memory and
+search indexing.
+
+Historical archive JSON/scripts are byte-identical. The active verifier remaps
+only the exact former Evidence-root prefix and checks the new current snapshot.
+The old 174 verifier and its qualified snapshot are retained unchanged; running
+it directly still refers to historical absolute paths. Existing Cargo feature/lock
+changes and automatic metadata are preserved in the relocation snapshot, and are
+not newly qualified. No build, version increment, guest action, staging or push
+was performed. See [relocation details](evidence-relocation.md).
 
 ## Destination Sentinel
 
-Run this exact command once through context-mode before new edits:
+Run exactly once before further edits:
 
 ```sh
-python3 /home/charlie/Documents/Pyramid/Validation/pyramid-effect-158-20261028-mca9017u/application-159/destination-sentinel.py
+python3 /home/charlie/repo/RUST/qmp-qemu-socket/Evidence/repository-docs/housekeeping-20261101/verify-relocation.py
 ```
 
-Require `HANDOFF VERIFIED`. On `HANDOFF REGRESSION`, preserve the exact discrepancy
-and stop before changing state; reconcile it before editing. The state binds
-four repository identities/indices/diffs, 846 aligned inputs, current documents,
-old/new receipts and the protected binary. The preserved dirty baseline permits
-baseline compilation/tests PASSED (Cached), with no unchanged rebuild. New
-implementation still needs Charlie's go-ahead. [Milestones](milestones.md) owns
-the receipt.
+Require HANDOFF VERIFIED or report the exact discrepancy. Preserve receipts.
+Protected executable: /home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/pyramid-challenge-174-proposal-9yca399e/native/qmp-qemu-socket-2.9.174; SHA256 37cb60771f807c6adff064a5aa0fd2de37368a5adbae4734b7924a75113e2d96; mode 0700.
+[Verification](Verification-2.9.174.md) records scope and evidence.
 
-## Scope and limits
-
-The whole native 144 by 34 coral clearance at fixed 7|1 must match every RGB
-channel exactly, with positive paper still a veto. Other artwork and material
-retain generic refusals. The complete ordinal-two appearance retains header
-limit 12, complete footer and conflicting-count checks. Both references are
-training regressions, with finite coverage and no independent new held-out.
-The [fixture record](../tests/fixtures/pyramid-recognition-159/README.md) and
-[verification](Verification-2.9.159.md) distinguish original, synthetic and live
-evidence. STOP/context, fresh probes, two-frame entry and no-replay rules remain.
-
-[Remaining acceptance before 3.0.0](Pyramid-Acceptance-Before-3.0.0.md) covers M11
-and M14; M12 pacing and planned M13 migration remain visible separately. RESET
-and Free Cell implementation are excluded. The saved Free Cell plan and approved
-3.0.0 first-build classification are retained. `_HOLDER_` selection remains
-deferred until 3.0.0 is ready after testing. No sibling repository was edited.
+Fresh guest acceptance is pending. The retained standard-theme 0/3 frame is an
+offline regression, including actual v23 Native::observe and paired_entry
+classification; it is not a fresh capture or a complete live RECON/play run.
+Startup deletes the fixed images directory; preserve existing evidence first.
+No installation, guest input/captures, staging, commit, push or sibling edits occurred.

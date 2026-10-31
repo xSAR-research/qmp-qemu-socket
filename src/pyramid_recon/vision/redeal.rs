@@ -345,6 +345,34 @@ impl ReconVision {
     }
 
 
+    /// Reuse the supported exhausted/recyclable stock artwork for source scene validation.
+    pub(super) fn source_exhausted_stock_scene(&self, view: FrameView<'_>) -> Result<bool, String> {
+        if self.native_exhausted_left(view)? {
+            return Ok(true);
+        }
+        let Some(native) = &self.native_redeal else {
+            return Ok(false);
+        };
+        let [upper, lower] = &native.recyclable_move;
+        Ok(self.native_shape(view, upper, 1)? && self.native_shape(view, lower, 1)?)
+    }
+
+
+    /// Read the D source using the existing positive LEFT-X or ordinary empty layout.
+    pub(super) fn source_draw_face(&self, view: FrameView<'_>) -> Result<StockFace, String> {
+        let empty = if self.native_exhausted_left(view)? {
+            &self
+                .native_redeal
+                .as_ref()
+                .ok_or("missing exhausted LEFT capability")?
+                .left_x
+        } else {
+            &self.board.left_empty
+        };
+        self.stock_face(view, LEFT_BOUNDS, empty)
+    }
+
+
     /// Return the measured click centre only after exact same-frame exhaustion/control proof.
     #[cfg(test)]
     pub(crate) fn verify_native_redeal_position(

@@ -1272,6 +1272,72 @@ impl Default for AnimationSettleDelays {
 }
 
 
+/// Live Pyramid RGB policy, copied once before each action or paired-D batch.
+/// Edits change future boundaries only; they do not reinterpret committed removals.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct PyramidEffectSettings {
+    /// Strict per-channel RGB delta; alpha never contributes.
+    rgb_tolerance: u8,
+    /// Maximum unchanged-decision allowance in tenths of one percent, 0..=1000.
+    coverage_tenths: u16,
+}
+
+
+impl Default for PyramidEffectSettings {
+    /// Start with strict RGB delta >5 and changed coverage >5.0 percent.
+    fn default() -> Self {
+        Self {
+            rgb_tolerance: 5,
+            coverage_tenths: 50,
+        }
+    }
+}
+
+
+impl PyramidEffectSettings {
+    /// Validate a complete pair; byte tolerance accepts 0..=255 and coverage 0..=1000.
+    pub(crate) fn new(rgb_tolerance: u8, coverage_tenths: u16) -> Result<Self, &'static str> {
+        if coverage_tenths > 1000 {
+            return Err("Pyramid changed coverage must be between 0.0 and 100.0 percent");
+        }
+        Ok(Self {
+            rgb_tolerance,
+            coverage_tenths,
+        })
+    }
+
+
+    /// Return the strict same-pixel threshold applied to each RGB byte.
+    pub(crate) fn rgb_tolerance(self) -> u8 {
+        self.rgb_tolerance
+    }
+
+
+    /// Return the coverage allowance in tenths of one percent.
+    pub(crate) fn coverage_tenths(self) -> u16 {
+        self.coverage_tenths
+    }
+
+
+    /// Compute floor(total * tenths / 1000) exactly without overflowing usize.
+    pub(crate) fn allowed_changes(self, total: usize) -> usize {
+        let p = usize::from(self.coverage_tenths);
+        (total / 1000) * p + ((total % 1000) * p) / 1000
+    }
+
+
+    /// Report the immutable boundary policy without claiming a measured effect.
+    pub(crate) fn description(self) -> String {
+        format!(
+            "all RGB deltas >{}; joint coverage >{}.{:01}%",
+            self.rgb_tolerance,
+            self.coverage_tenths / 10,
+            self.coverage_tenths % 10
+        )
+    }
+}
+
+
 /// Immutable parameters captured when a Step Once or Multi-Step run begins.
 ///
 /// Keeping one snapshot prevents live UI edits from changing animation timing
