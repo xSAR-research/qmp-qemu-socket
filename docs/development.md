@@ -1,5 +1,11 @@
 # Development conventions
 
+## Qualified 2.9.176 — Coral entry and RESET preview
+
+Coral rank recognition now uses an independently retained black Four corner within the unchanged 13-rank calibration. Boards headers match one coherent existing background appearance. RESET shows WAITING and requests one token-correlated read-only preview while retaining STOP, inventory, logs and historical diagnostics.
+
+All six controller gates passed, including 1697 tests with zero failed, ignored or filtered, plus aligned locked check/release/protected help. The 56 xSAR inputs and package0.9.1 are unchanged; prior sixteen-gate library qualification remains cached. Fresh guest acceptance is pending. [Verification](Verification-2.9.176.md).
+
 ## Current 2.9.174 delivery
 
 2.9.174 corrects native Boards challenge-header recognition using the union of
@@ -17,7 +23,7 @@ The 56 unchanged xSAR inputs retain cached sixteen-gate qualification (303 full
 tests, 14 default tests and two Miri tests); xSAR remains modified/unreleased 0.9.1.
 User profiles and CPU/hardening configuration are preserved. Evidence: `/home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/pyramid-challenge-174-proposal-9yca399e`.
 
-[Verification](Verification-2.9.174.md).
+[Verification](../Evidence/release-verification/Verification-2.9.174.md).
 
 ## Retained 2.9.173 delivery
 
@@ -54,7 +60,7 @@ live acceptance remains pending.
 
 All six controller gates pass, including 1683 include-ignored tests with zero failures/ignored/filtered (149.37 seconds). Aligned locked check, native release and protected --help pass. Library qualification is PASSED (Cached): 56 unchanged inputs, 303 full tests, 14 default tests and two focused Miri checks.
 
-[Verification](Verification-2.9.173.md).
+[Verification](../Evidence/release-verification/Verification-2.9.173.md).
 
 ## Retained 2.9.172 delivery
 
@@ -82,7 +88,7 @@ staging, commit or push was performed. Fresh guest acceptance remains pending.
 
 All six controller gates pass, including 1678 include-ignored tests with zero failures/ignored/filtered (154.10 seconds). Aligned locked check, native release and protected --help pass. Library qualification is PASSED (Cached): 56 unchanged inputs, 303 full tests, 14 default tests and two focused Miri checks.
 
-[Verification](Verification-2.9.172.md).
+[Verification](../Evidence/release-verification/Verification-2.9.172.md).
 
 ## 2.9.171 qualified tolerance correction
 
@@ -115,7 +121,7 @@ standard/Coral guest Recon, restoration and broader theme acceptance remain pend
 
 All six controller gates pass, including **1,675 include-ignored tests**, zero failed, ignored or filtered; test time 149.57 seconds. Aligned locked check, release and protected --help pass. xSAR remains the unchanged modified/unreleased 0.9.1 path dependency; its sixteen-gate receipt (303 full tests, 14 default tests, feature checks and two focused Miri checks) is cached over 56 unchanged library inputs.
 
-[Verification](Verification-2.9.171.md).
+[Verification](../Evidence/release-verification/Verification-2.9.171.md).
 
 ## 2.9.170 qualified quarter comparison
 
@@ -200,7 +206,7 @@ appearance uses the shared predicate, while one acknowledged click still hands
 off to fresh Recon. Challenge completion, terminal/final-apex and restoration
 proofs remain explicit semantic exceptions. Colour change alone grants no input.
 
-[Receipt](Verification-2.9.168.md).
+[Receipt](../Evidence/release-verification/Verification-2.9.168.md).
 
 ## Retained earlier development
 
@@ -221,7 +227,7 @@ remains pending.
 Only the four approved package manifest/lock files changed after qualification;
 901 other sealed inputs remained identical. The path dependency remains local,
 not a Git pin. Both aligned locked checks and release builds pass. The help
-branch exits before image cleanup or GUI startup. [Verification](Verification-2.9.167.md)
+branch exits before image cleanup or GUI startup. [Verification](../Evidence/release-verification/Verification-2.9.167.md)
 records the preserved packaging assertion and authoritative Cargo artifact IDs.
 
 ## Retained development records
@@ -253,7 +259,7 @@ The accepted schema-1 export remains unchanged. Explicit conversion reads it
 through xSAR, writes to a distinct no-overwrite destination and preserves its
 original producer/source/restoration metadata. That conversion does not execute
 a new scan or grant input authority. Console intake and search remain separate.
-See [the v2.2.0 delivery record](release-v2.2.0.md).
+See [the v2.2.0 delivery record](../History/documentation-index.md#item-fbda618d2c15b509b436).
 
 ## Historical reconnaissance slice: v2.1.0
 
@@ -305,7 +311,7 @@ below its unchanged MSRV. Required implementation checks remain locked check,
 tests, strict private rustdoc, Clippy and release build, with feature coverage
 for the crate and explicit include-ignored host evidence for the application.
 
-See [v2.0.11 implementation and evidence](release-v2.0.11.md).
+See [v2.0.11 implementation and evidence](../History/documentation-index.md#item-acb084196d46f392b9aa).
 
 ## Historical v2.0.0 candidate 2 conventions
 
@@ -516,7 +522,7 @@ commands and failures; no old validation run establishes this candidate's result
 The supplied-frame cursor simulation is supporting analysis, not a recovered
 runtime PNG or native Rust execution. Rust/Cargo are absent here; native build,
 tests, Clippy and live QMP remain pending Beast verification. See
-[candidate 4 evidence and limits](spider-v1.4.0-candidate-4.md).
+[candidate 4 evidence and limits](../History/documentation-index.md#item-27084918f0c4779a5077).
 
 
 ## Historical candidate verification notes

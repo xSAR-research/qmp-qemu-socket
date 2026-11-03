@@ -20,8 +20,8 @@ and 87 cream/Retro observations remain covered. Quality/ambiguity limits, comple
 scene/modal proof, STOP/context, fresh probes and no uncertain replay remain intact.
 The separate Boards/Perfect final-proof case remains deferred.
 
-See [verification](Verification-2.9.149.md) and the
-[fresh live-test brief](Live-Test-2.9.149.md). Earlier release sections are
+See [verification](../Evidence/release-verification/Verification-2.9.149.md) and the
+[fresh live-test brief](../History/documentation-index.md#item-4409cfdb64de9b458209). Earlier release sections are
 retained evidence and do not establish 149 guest acceptance.
 
 ## Retained correction — 2.9.148 / xSAR 0.9.0; host qualified
@@ -38,7 +38,7 @@ worker, dependency or timing policy changes are included.
 
 Host result: 1478 full tests, zero failures/ignored/filtered, 747 sealed inputs and all six required gates passed. Fresh Beast/Charlie acceptance remains pending.
 The 19 matrix cases and 14 milestone states remain unchanged. See
-[148 verification](Verification-2.9.148.md) and [148 manual checks](Live-Test-2.9.148.md).
+[148 verification](../Evidence/release-verification/Verification-2.9.148.md) and [148 manual checks](../History/documentation-index.md#item-012863df9e1e5ed2433a).
 
 ## Retained 2.9.147 candidate ownership
 
@@ -74,8 +74,8 @@ acquires, plans and executes according to its mode. The source audit found no
 artificial post-completion sleep, so no timing edit is required. The mandatory
 1000 ms UndoAll/OK settle and two original-board restoration frames remain within
 Recon. Native-v23 identity, stock-paper and temporal REDEAL policies remain intact.
-147 passed all six host gates (1476 full tests, 747 sealed inputs). Artifact/source identity is recorded in verification; fresh guest acceptance remains pending. See [verification](Verification-2.9.147.md) and
-[manual checks](Live-Test-2.9.147.md). Retained 146 ownership/evidence follows.
+147 passed all six host gates (1476 full tests, 747 sealed inputs). Artifact/source identity is recorded in verification; fresh guest acceptance remains pending. See [verification](../Evidence/release-verification/Verification-2.9.147.md) and
+[manual checks](../History/documentation-index.md#item-f5e4edebcac0d1661d55). Retained 146 ownership/evidence follows.
 
 ## Retained 2.9.146 candidate ownership
 
@@ -100,7 +100,7 @@ recognition and renderer checks remain separate from fresh Beast acceptance.
 The 145 stock threshold, whole-action permits, STOP/context, fresh probes,
 exact-position verification and uncertain-input non-replay remain required.
 The automatic cleared-board-to-RECON handoff remains open. See
-[146 verification](Verification-2.9.146.md) and [manual checks](Live-Test-2.9.146.md).
+[146 verification](../Evidence/release-verification/Verification-2.9.146.md) and [manual checks](../History/documentation-index.md#item-549091f1e8d38e344c4f).
 
 ## Retained combined 2.9.137 ownership
 
@@ -120,7 +120,7 @@ EXIT/native close/SIGINT/SIGTERM latch a monotonic app/worker shutdown request,
 refuse new gameplay, retire queued work and poll the join without blocking egui.
 The worker finishes existing transaction/release-only recovery. Signal handlers
 only set the atomic request; UI polling is cooperative, not instantaneous.
-SIGKILL cannot be handled. See [current verification](Verification-2.9.137.md);
+SIGKILL cannot be handled. See [current verification](../Evidence/release-verification/Verification-2.9.137.md);
 older delivery summaries below do not qualify the combined candidate.
 
 Current development builds combine **v2.2.2-candidate.8** controls and GAME WIN
@@ -277,7 +277,7 @@ changes, disconnect, shutdown and failures discard it; a failed operation is
 not retried. Each request still acquires a fresh full-screen observation.
 xSAR validates response identities, geometry and lengths before reconstructing
 opaque RGBA in memory. Explicit `QMP_CAPTURE_WIRE=v3` and `v2` retain one-frame
-connections for comparison. See the [combined capture contract](capture-combined-candidate13.md).
+connections for comparison. See the [combined capture contract](../History/documentation-index.md#item-48faeace9a3dd39dd842).
 Ordinary capture creates no temporary PNG and performs no
 PNG encoding unless `--image` is enabled. QMP probing and input remain separate.
 TCP errors stop capture without falling back to QMP. `QMP_CAPTURE_BACKEND=qmp`
@@ -533,7 +533,7 @@ An ordinary replacement additionally needs a unique calibrated face seam and
 independent recipient print. The geometry descriptor authorises no input.
 Aligned print/paper/material evidence feeds `source_replaced` only; ordinary
 complete effect, completion and shared controller authority remain unchanged.
-See [candidate 3](klondike-v1.2.6-candidate-3.md).
+See [candidate 3](../History/documentation-index.md#item-d124b7eea079f9387c6a).
 
 The recorded deeper destination guide has a separate positive-felt continuation
 rule for complete single cards. It requires formerly neutral paper, opposed
@@ -552,7 +552,7 @@ new neutral card seam selects receiving geometry before artwork is compared.
 This witness supplies `source_replaced` only; the previous full effect remains
 unverified. The shared controller then uses the fresh canonical target under its
 existing action budget, STOP and non-replay rules. See
-[candidate 4](klondike-v1.2.6-candidate-4.md).
+[candidate 4](../History/documentation-index.md#item-d060865a57d4cc35f660).
 
 
 The Pro Level Up artwork is a separate complete terminal-layout signature. It
@@ -658,7 +658,7 @@ the live detector. Retired card-effect tests use a named test-only historical
 classifier for their original full-source measurements, without contributing
 input authority to the application. Candidate 10's known-win terminal sequence,
 Pyramid D shortcut and TriPeaks delayed recovery remain unchanged. See
-[candidate 11](klondike-v1.2.6-candidate-11.md).
+[candidate 11](../History/documentation-index.md#item-7bbba68c73cb63770f9d).
 
 
 ## Free Cell approved Solver-led slice
@@ -735,4 +735,4 @@ Play, each once from a fresh ready frame. OK and New Game are alternative
 post-score branches; both-ready ambiguity stops. Only local control evidence
 is used after win entry. Spider Play uses the measured +100 px position; fresh
 board capture and the editable deal wait precede needed Solver activation.
-See [Spider candidate 4 notes](spider-v1.4.0-candidate-4.md).
+See [Spider candidate 4 notes](../History/documentation-index.md#item-27084918f0c4779a5077).

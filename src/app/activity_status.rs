@@ -29,7 +29,15 @@ pub(super) fn header<R>(
         worker: app.worker_state,
         owner: app.active_run,
         phase: app.pyramid_workflow.activity_phase(&context),
-        failure: app.pyramid_workflow.details_visible(&context),
+        failure: app.pyramid_workflow.details_visible(&context)
+            && !app
+                .reset_preview
+                .as_ref()
+                .is_some_and(|refresh| refresh.context == context && app.active_run.is_none()),
+        reset_preview_pending: app
+            .reset_preview
+            .as_ref()
+            .is_some_and(|refresh| refresh.context == context && refresh.pending()),
         pause: app.worker.pause_state(),
         stopping: app.stop_requested,
         exiting: app.exiting,
@@ -49,6 +57,8 @@ struct Evidence {
     phase: Option<PyramidPhase>,
     /// Current context's failure, including a refusal before worker dispatch.
     failure: bool,
+    /// An admitted RESET is waiting for its correlated read-only frame.
+    reset_preview_pending: bool,
     /// Actual checkpoint acknowledgement, independent of the event queue.
     pause: Option<pyramid_pause::Snapshot>,
     /// Existing STOP latch; presentation never clears it.
@@ -72,6 +82,9 @@ impl Evidence {
         }
         if self.failure {
             return Status::Error;
+        }
+        if self.reset_preview_pending {
+            return Status::Waiting;
         }
         if self.stopping || self.pause.is_some_and(|pause| pause.acknowledged) {
             return Status::Waiting;
@@ -115,6 +128,7 @@ mod tests {
             owner: Some(ActiveRun::PyramidSession),
             phase: Some(PyramidPhase::Reconnaissance),
             failure: false,
+            reset_preview_pending: false,
             pause: None,
             stopping: false,
             exiting: false,
@@ -171,5 +185,48 @@ mod tests {
         state.failure = true;
         state.stopping = true;
         assert_eq!(state.status(), badge::Status::Error);
+    }
+}
+
+
+#[cfg(test)]
+mod reset_tests {
+    use super::*;
+
+    /// Retained error acknowledgement does not grant a route owner or remove STOP.
+    fn evidence(worker: WorkerState, failure: bool, pending: bool) -> Evidence {
+        Evidence {
+            worker,
+            owner: None,
+            phase: Some(PyramidPhase::Execution),
+            failure,
+            reset_preview_pending: pending,
+            pause: None,
+            stopping: true,
+            exiting: false,
+            choosing: false,
+        }
+    }
+
+
+    /// RESET is WAITING while capturing and after success; genuine new failures stay ERROR.
+    #[test]
+    fn reset_176_badge_waits_for_preview_and_reports_new_failure() {
+        assert_eq!(
+            evidence(WorkerState::Connecting, false, true).status(),
+            badge::Status::Waiting
+        );
+        assert_eq!(
+            evidence(WorkerState::Ready, false, false).status(),
+            badge::Status::Waiting
+        );
+        assert_eq!(
+            evidence(WorkerState::Error, false, false).status(),
+            badge::Status::Error
+        );
+        assert_eq!(
+            evidence(WorkerState::Connecting, true, true).status(),
+            badge::Status::Error
+        );
     }
 }

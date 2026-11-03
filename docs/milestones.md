@@ -1,6 +1,22 @@
 # Milestone Tracker & Baseline Receipt — qmp-qemu-socket
 
-## 1. Active Baseline Receipt — 2.9.174
+## Qualified 2.9.176 — Coral entry and RESET preview
+
+Coral rank recognition now uses an independently retained black Four corner within the unchanged 13-rank calibration. Boards headers match one coherent existing background appearance. RESET shows WAITING and requests one token-correlated read-only preview while retaining STOP, inventory, logs and historical diagnostics.
+
+All six controller gates passed, including 1697 tests with zero failed, ignored or filtered, plus aligned locked check/release/protected help. The 56 xSAR inputs and package0.9.1 are unchanged; prior sixteen-gate library qualification remains cached. Fresh guest acceptance is pending. [Verification](Verification-2.9.176.md).
+
+## Active Baseline Receipt — 2.9.175
+
+RF00 reconciles the published application and xSAR identities and records method-specific regression evidence. RF09 consolidates the five existing final-clear alternatives into one private NativeIo helper used by both computed-route callers. Lazy precedence, initial challenge binding, final error provenance, caller guards, source proofs, completion meaning and input/capture behaviour are preserved.
+
+All six application gates passed, including 1687 tests (zero failed, ignored or filtered), plus aligned locked check/release/protected help. The current preserved Cargo feature/lock configuration is now covered by this qualification. The 56 unchanged xSAR inputs retain their cached qualification; xSAR remains 0.9.1. No guest actions, installation, staging, commit or push were performed.
+
+Baseline_HEAD_SHA: `5d3b13d6695cc6e1d878d8391fc578ac780e2be8`. xSAR revision: `c4a9b839ece3668b8d46ca00676ae05c34a97943`.
+
+[Verification](Verification-2.9.175.md).
+
+## Retained 2.9.174 baseline receipt
 
 2.9.174 corrects native Boards challenge-header recognition using the union of
 the five existing validated Boards literal ink supports, restricted to independently
@@ -19,7 +35,7 @@ User profiles and CPU/hardening configuration are preserved. Evidence: `/home/ch
 
 Protected executable SHA256: `37cb60771f807c6adff064a5aa0fd2de37368a5adbae4734b7924a75113e2d96`.
 
-[Verification](Verification-2.9.174.md).
+[Verification](../Evidence/release-verification/Verification-2.9.174.md).
 
 ## Retained 2.9.173 baseline receipt
 
@@ -58,7 +74,7 @@ All six controller gates pass, including 1683 include-ignored tests with zero fa
 
 Protected executable SHA256: `8a54c7a7ae3f06eb6b6b4e0d7843a49cfaa72c8e01885e364665f087eda2537a`.
 
-[Verification](Verification-2.9.173.md).
+[Verification](../Evidence/release-verification/Verification-2.9.173.md).
 
 ## Retained 2.9.172 baseline receipt
 
@@ -88,7 +104,7 @@ All six controller gates pass, including 1678 include-ignored tests with zero fa
 
 Protected executable SHA256: `59097363173a592be47f85e22ff0ca7415089c3ddba8fc30858cb9e7d7b68d80`.
 
-[Verification](Verification-2.9.172.md).
+[Verification](../Evidence/release-verification/Verification-2.9.172.md).
 
 ## Retained 2.9.171 baseline receipt
 
@@ -132,7 +148,7 @@ artwork comparisons, not natural temporal transitions. Suitable retained evidenc
 for four other Coral picture-card suit pairs is still unavailable. Fresh complete
 standard/Coral guest Recon, restoration and broader theme acceptance remain pending.
 
-[Verification](Verification-2.9.171.md).
+[Verification](../Evidence/release-verification/Verification-2.9.171.md).
 
 ## Retained 2.9.170 baseline receipt
 
@@ -293,7 +309,7 @@ any active original session log in place.
 Evaluate any threshold change separately with Charlie; this delivery preserves
 all under-threshold refusals. Preserve earlier diagnostics and the active log.
 Fresh live theme/action acceptance and the existing Continuous/Recon issues
-remain separate. [Verification](Verification-2.9.168.md).
+remain separate. [Verification](../Evidence/release-verification/Verification-2.9.168.md).
 
 ### Possible futures
 
@@ -340,7 +356,7 @@ The new full-crop exact 7|5 proof resolves the retained final slot 25 refusal
 without changing any older helper, reference, material predicate or threshold.
 The complete pending-after state removes original indices 21/23/25/26 and
 requires DL9C/DRKH, every remaining identity and the supported scene. Nine new
-tests and 44 retained focused tests pass. [Verification](Verification-2.9.166.md)
+tests and 44 retained focused tests pass. [Verification](../Evidence/release-verification/Verification-2.9.166.md)
 records the first red result, corrected translation-test scope and full gates.
 
 ### Separate improvement ideas and live gaps
@@ -384,7 +400,7 @@ A third complete exact crop fixes only 7&#124;2. Both whole positions now verify
 Ten new tests cover all three crops, complete originals, partial/full material,
 all RGB corners/centre, shifts, actual other-slot bounds, identities/piles and
 scene/layout. The 34 retained 162-164 focused regressions also pass. Independent
-review reports NO REMAINING FINDINGS. [Verification](Verification-2.9.165.md).
+review reports NO REMAINING FINDINGS. [Verification](../Evidence/release-verification/Verification-2.9.165.md).
 
 ### Separate improvement ideas and live gaps
 
@@ -406,7 +422,7 @@ Free Cell, input replay or timing change is included.
 | Baseline parent | 58aa2882fb0c4ff3aa0d71ae49de0871545b86e3 | Existing history retained |
 | Porcelain state | Exact NUL-separated state in current checkpoint | Uncommitted source/docs; inherited .gitignore preserved |
 | xSAR | 0.9.0 @ d20dca8ad2320dcbbf869e22b35a2583317d4569 | 52 inputs unchanged; 296 tests / three Miri PASSED (Cached) |
-| Host qualification | 1633 pass / 0 failed, ignored, measured, filtered / 876 seals / six gates | Actual new gates in [verification](Verification-2.9.164.md) |
+| Host qualification | 1633 pass / 0 failed, ignored, measured, filtered / 876 seals / six gates | Actual new gates in [verification](../Evidence/release-verification/Verification-2.9.164.md) |
 | Version-only alignment | Own Cargo.toml/Cargo.lock 2.9.163 to 2.9.164 | Check/release/help pass; other 874 inputs identical |
 | Protected executable | /home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/pyramid-coral-objective-164-20261029-fvp9nijq/native/qmp-qemu-socket-2.9.164 | SHA-256 5bd44ed9e700746762e54220b717691b66b1676721d66da50c52ef9130a1b1f0 |
 | Current state/sentinel | /home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/pyramid-coral-objective-164-20261029-fvp9nijq/destination-state.json | Exact command in [handoff](handoff.md) |
@@ -438,7 +454,7 @@ functional/safety issues; its test findings were corrected and focused checks
 passed. Four repository histories, indices, siblings and unrelated changes are
 preserved. No guest input, capture, install, staging, commit or push occurred.
 The previous 163 receipt is preserved in this delivery's originals and
-[verification](Verification-2.9.163.md).
+[verification](../Evidence/release-verification/Verification-2.9.163.md).
 
 ### Separate improvement ideas
 
@@ -460,7 +476,7 @@ route preference.
 | Baseline parent | 58aa2882fb0c4ff3aa0d71ae49de0871545b86e3 | Existing history retained |
 | Porcelain state | Exact NUL-separated state in current checkpoint | Uncommitted source/docs; inherited .gitignore preserved |
 | xSAR | 0.9.0 @ d20dca8ad2320dcbbf869e22b35a2583317d4569 | 52 inputs unchanged; 296 tests / three Miri PASSED (Cached) |
-| Host qualification | 1606 pass / 0 failed, ignored, measured, filtered / 862 seals / six gates | Actual new gates in [verification](Verification-2.9.162.md) |
+| Host qualification | 1606 pass / 0 failed, ignored, measured, filtered / 862 seals / six gates | Actual new gates in [verification](../Evidence/release-verification/Verification-2.9.162.md) |
 | Version-only alignment | Own Cargo.toml/Cargo.lock 2.9.161 to 2.9.162 | Check/release/help pass; other 860 inputs identical |
 | Protected executable | /home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/pyramid-coral-162-20261028-15yvu03j/native/qmp-qemu-socket-2.9.162 | SHA-256 5b0a9860d8d446f31ac91325ff725d4b0414c866b227a68268c3d843c2f6505c |
 | Current state/sentinel | /home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/scoring-target-doc-20261029-ye0fumdt/destination-state.json | Exact command in [handoff](handoff.md) |
@@ -532,7 +548,7 @@ occurred in this task.
 | Baseline parent | 58aa2882fb0c4ff3aa0d71ae49de0871545b86e3 | Existing history retained |
 | Porcelain state | Exact NUL-separated state in current checkpoint | Qualified uncommitted source/docs; inherited .gitignore preserved |
 | xSAR | 0.9.0 @ d20dca8ad2320dcbbf869e22b35a2583317d4569 | All 52 inputs unchanged; 296 tests / three Miri cached |
-| Host qualification | 1593 pass / 0 failed, ignored, filtered / 856 seals / six gates | Actual new gates in [verification](Verification-2.9.161.md) |
+| Host qualification | 1593 pass / 0 failed, ignored, filtered / 856 seals / six gates | Actual new gates in [verification](../Evidence/release-verification/Verification-2.9.161.md) |
 | Version-only alignment | Own Cargo.toml/Cargo.lock 2.9.160 to 2.9.161 | Check/release/help pass; other 854 inputs identical |
 | Protected executable | /home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/pyramid-coral-161-20261028-nitmucjf/native/qmp-qemu-socket-2.9.161 | SHA-256 81b242b5d501e141bf2dc41980144cee7593478fe9045ac0c12d0b3868954d7c |
 | Current state/sentinel | /home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/pyramid-coral-161-20261028-nitmucjf/destination-state.json | Exact command in [handoff](handoff.md) |
@@ -568,7 +584,7 @@ remain separate from this bounded correction; no speculative margin is added.
 | Baseline_HEAD_SHA | dcb92241aac491d917431b2ddcb851284f71898a | Published 159; preserved dirty tree and empty index |
 | Baseline parent | 58aa2882fb0c4ff3aa0d71ae49de0871545b86e3 | Published 156 history retained |
 | xSAR | 0.9.0 @ d20dca8ad2320dcbbf869e22b35a2583317d4569 | 52 unchanged inputs; 296 tests / three Miri cached |
-| Host qualification | 1587 pass / 0 failed, ignored, filtered / 850 seals / six gates | Actual gates in [verification](Verification-2.9.160.md) |
+| Host qualification | 1587 pass / 0 failed, ignored, filtered / 850 seals / six gates | Actual gates in [verification](../Evidence/release-verification/Verification-2.9.160.md) |
 | Version-only alignment | Own Cargo.toml/Cargo.lock 2.9.159 to 2.9.160 | Check/release/help pass; other 848 inputs identical |
 | Protected executable | /home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/pyramid-effect-159-20261028-mhgd526b/application-160/native/qmp-qemu-socket-2.9.160 | SHA-256 f295528f67b0b002d583a0123b8acb14d4b5afac73bcea762e49b4e4c7c9b932 |
 | Current state/sentinel | /home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/pyramid-effect-159-20261028-mhgd526b/application-160/destination-state.json | Exact command in [handoff](handoff.md) |
@@ -635,7 +651,7 @@ Historical paths in dated records remain provenance; use the archive locator.
 ### 2.9.159 measured artwork and complete normal-header correction
 
 The 158 sentinel verified before edits. Nine regressions and all six host gates
-pass. [Verification](Verification-2.9.159.md) records the complete fixed-slot RGB
+pass. [Verification](../Evidence/release-verification/Verification-2.9.159.md) records the complete fixed-slot RGB
 proof, the unchanged ordinal/header/footer contract, original failures, bounded
 negative tests, actual gate results and live limitations. No generic paper,
 aged-material, hue, shape or card-identity threshold was raised. Current RUN,
@@ -668,7 +684,7 @@ milestone authority; no live acceptance was inferred from host tests.
 ### 2.9.158 bounded card recognition and same-frame diagnostics
 
 The 157 sentinel verified before edits. Fifteen regressions and all six host gates
-pass. [Verification](Verification-2.9.158.md) records the measured Classic Spade,
+pass. [Verification](../Evidence/release-verification/Verification-2.9.158.md) records the measured Classic Spade,
 complete Underwater family, thirteen training versus 46 within-source held-out
 corners, native mock limits, pre-correction failures and actual gate results.
 No existing-family quality/gap threshold or input policy was relaxed. Entry and
@@ -689,7 +705,7 @@ ready after testing.
 
 The original 156 sentinel verified before edits. Ten focused regressions and all
 six host gates pass. Only the approved own-package version fields changed after
-qualification. [Verification](Verification-2.9.157.md) records actual native
+qualification. [Verification](../Evidence/release-verification/Verification-2.9.157.md) records actual native
 frames, pre-correction failures, synthetic mock boundaries, full results and guest
 checks. The new reserve is normal-only, cannot renew and commits no unpaired
 board. Complete acquisition history chooses one Undo All attempt; the existing
@@ -796,14 +812,14 @@ remain preserved. The later request 9 report is recorded separately in section 5
 
 The automatic NEW GAME and manual START failures shared a complete normal-header appearance refusal. Two pixels differed by 13 against the existing per-channel limit of 12; the complete New footer passed. Fresh TCP captures and complete card observations were verified. The correction retains an additional complete 160 by 32 ordinal-one RGB appearance and every pixel/channel check at the original limits. Coherent appearances for the same count share one identity; conflicting counts still refuse. The 151 bounded Pending/Ready pair, strict normal footer, exclusive piles, fresh entry and fresh guarded Recon remain unchanged. No timing, control, threshold, crop, glyph, dependency, API, concurrency or xSAR policy changes are introduced.
 
-Four new regressions cover both actual refusals, same-count aliases/conflicting counts, missing full patches, production automatic Pending then Ready/Ready with exactly three expected control presses, and input-free manual entry with STOP/context revocation. The 94 original test bodies remain unchanged. [Verification](Verification-2.9.153.md) and [live brief](Live-Test-2.9.153.md) record scope and limits. Complete source/log/review/metadata/promotion/sentinel records are under /home/charlie/Documents/Pyramid/Validation/pyramid-normal-entry-20261026. Charlie subsequently authorised signed-push and publishing xSAR first. The consumer retains its existing relative path dependency and seven features, with the exact xSAR commit recorded above; this promotion changes no source or version. No additional increment is authorised.
+Four new regressions cover both actual refusals, same-count aliases/conflicting counts, missing full patches, production automatic Pending then Ready/Ready with exactly three expected control presses, and input-free manual entry with STOP/context revocation. The 94 original test bodies remain unchanged. [Verification](../Evidence/release-verification/Verification-2.9.153.md) and [live brief](../History/documentation-index.md#item-a7ed5be414ed1a31dab8) record scope and limits. Complete source/log/review/metadata/promotion/sentinel records are under /home/charlie/Documents/Pyramid/Validation/pyramid-normal-entry-20261026. Charlie subsequently authorised signed-push and publishing xSAR first. The consumer retains its existing relative path dependency and seven features, with the exact xSAR commit recorded above; this promotion changes no source or version. No additional increment is authorised.
 
 ## 2. Retained 2.9.149 Release Qualification
 
 All six gates passed with 1483 tests and 753 seals. The 52 xSAR inputs remain
 unchanged; its 296-test qualification is PASSED (Cached). The approved version-only
 update then passed locked check and native release/help. See
-[the full results and limits](Verification-2.9.149.md).
+[the full results and limits](../Evidence/release-verification/Verification-2.9.149.md).
 
 The independent aged-absence finding was repaired and the full suite rerun;
 the earlier 1482-test pass does not qualify 149. The approved protected GUI launched
@@ -818,20 +834,20 @@ Each row of the master implementation schedule is an agreed **minor** milestone 
 
 | Version | xSAR | Host Tests / Seals | Status | Scope & Verification Reference (in `docs/`) |
 | :--- | :--- | :--- | :--- | :--- |
-| **2.9.156** |0.9.0 |1549 tests /821 seals | PUBLISHED; GUEST FAILURE OPEN | Guarded Pyramid recognition/completion and ASCII objective label ([verification](Verification-2.9.156.md)); operator main @ 58aa288; Request 2 transition refusal retained. |
-| **2.9.154** |0.9.0 |1531 tests /791 seals | HOST QUALIFIED; VERSION ALIGNED | Klondike complete-caption OK, current Failure Details and Pyramid QMP ownership release ([verification](Verification-2.9.154.md)); guest acceptance pending. |
-| **2.9.153** |0.9.0 |1522 tests /782 seals | PUBLISHED; RETAINED HOST QUALIFICATION | Complete normal-one header appearance ([verification](Verification-2.9.153.md)); actual later reports retained separately. |
-| **2.9.152** |0.9.0 |1518 tests /775 seals | HOST QUALIFIED; VERSION ALIGNED | Coherent final absence and lower-material veto ([verification](Verification-2.9.152.md)). |
-| **2.9.151** |0.9.0 |1512 tests /773 seals | RETAINED HOST QUALIFICATION | Bounded post-Play settling/fresh pair ([verification](Verification-2.9.151.md)). |
-| **2.9.150** | 0.9.0 | 1504 tests / 770 seals | ACCEPTED; VERSION ALIGNED | Code fixes and Track B; post-approval locked check/release/help passed ([verification](Verification-Track-B-150.md)). Fresh 150 guest verification is separate. |
-| **2.9.149** | 0.9.0 | 1483 tests / 753 seals | ACCEPTED WITH OPEN FIXES | Bounded Wild West material/glyphs and aged absence veto ([verification](Verification-2.9.149.md)); current Track A acceptance in section 6. |
-| **`2.9.148`** | `0.9.0` | `1478` tests / `747` seals | ACCEPTED IN TRACK A | Top-left heading, wrapping options, right-hand **SOLVING** badge, full-width controls/status/preview ([Verification-2.9.148.md](Verification-2.9.148.md), [Live-Test-2.9.148.md](Live-Test-2.9.148.md)). |
-| **`2.9.147`** | `0.9.0` | `1476` tests / `747` seals | ACCEPTED IN TRACK A WITH OPEN FIXES | Receipt-bound normal Pyramid `GAME WIN` reward/counting → optional `LevelUp OK` → `New Game` → `Play` chain; bound challenge kind/target/Kings policy; cooperative `Switch to Maximum card matches` reusing authenticated RECON; verified zero artificial post-RECON delay ([Verification-2.9.147.md](Verification-2.9.147.md), [Live-Test-2.9.147.md](Live-Test-2.9.147.md)). |
-| **`2.9.146`** | `0.9.0` | `1449` tests / `743` seals | `RETAINED EVIDENCE` | Bundled `native-v23` private `native_corner_ink_v1` rank/suit ink reader on white/cream cards (`11` reader tests, `87` visible cards, `423` Classic observations, `13` Retro exemplars / `16` held-outs) + fixed `240x80` activity badge ([Verification-2.9.146.md](Verification-2.9.146.md), [Live-Test-2.9.146.md](Live-Test-2.9.146.md)). |
-| **`2.9.145`** | `0.9.0` | `1436` tests / `731` seals | `RETAINED EVIDENCE` | `DL`/`DR` stock emptiness via light-paper coverage (`139x187` footprint, RGB `>= 180`, `>= 45%` nonempty, `8.41` percentage-point margin above `53.410534%` selected `K♥` minimum) ([Verification-2.9.145.md](Verification-2.9.145.md), [Live-Test-2.9.145.md](Live-Test-2.9.145.md)). |
-| **`2.9.144`** | `0.9.0` | `1434` tests / `729` seals | `RETAINED EVIDENCE` | Occupied-RIGHT temporal `REDEAL` correction and protected launch ([Verification-2.9.144.md](Verification-2.9.144.md)). |
-| **`2.9.143`** | `0.9.0` | `1432` tests / `726` seals | `RETAINED EVIDENCE` | Bounded mixed-legend correction; run 9 stock-position refusal preserved separately ([Verification-2.9.143.md](Verification-2.9.143.md)). |
-| **`2.9.139`** | `0.9.0` | `1420` tests / `710` seals (`296` xSAR) | `RETAINED EVIDENCE` | Cooperative `PAUSE`/`CONTINUE` across A* `RECON`/`SEARCH`/`GAMEPLAY`, retained popup geometry, `Continuous`/`Shortest route`/`Challenge` defaults, idle `RESET`, and `REDEAL` `48x63` @ `(936,792)` delta check ([Verification-2.9.139.md](Verification-2.9.139.md), [Live-Test-2.9.139.md](Live-Test-2.9.139.md)). |
+| **2.9.156** |0.9.0 |1549 tests /821 seals | PUBLISHED; GUEST FAILURE OPEN | Guarded Pyramid recognition/completion and ASCII objective label ([verification](../Evidence/release-verification/Verification-2.9.156.md)); operator main @ 58aa288; Request 2 transition refusal retained. |
+| **2.9.154** |0.9.0 |1531 tests /791 seals | HOST QUALIFIED; VERSION ALIGNED | Klondike complete-caption OK, current Failure Details and Pyramid QMP ownership release ([verification](../Evidence/release-verification/Verification-2.9.154.md)); guest acceptance pending. |
+| **2.9.153** |0.9.0 |1522 tests /782 seals | PUBLISHED; RETAINED HOST QUALIFICATION | Complete normal-one header appearance ([verification](../Evidence/release-verification/Verification-2.9.153.md)); actual later reports retained separately. |
+| **2.9.152** |0.9.0 |1518 tests /775 seals | HOST QUALIFIED; VERSION ALIGNED | Coherent final absence and lower-material veto ([verification](../Evidence/release-verification/Verification-2.9.152.md)). |
+| **2.9.151** |0.9.0 |1512 tests /773 seals | RETAINED HOST QUALIFICATION | Bounded post-Play settling/fresh pair ([verification](../Evidence/release-verification/Verification-2.9.151.md)). |
+| **2.9.150** | 0.9.0 | 1504 tests / 770 seals | ACCEPTED; VERSION ALIGNED | Code fixes and Track B; post-approval locked check/release/help passed ([verification](../Evidence/release-verification/Verification-Track-B-150.md)). Fresh 150 guest verification is separate. |
+| **2.9.149** | 0.9.0 | 1483 tests / 753 seals | ACCEPTED WITH OPEN FIXES | Bounded Wild West material/glyphs and aged absence veto ([verification](../Evidence/release-verification/Verification-2.9.149.md)); current Track A acceptance in section 6. |
+| **`2.9.148`** | `0.9.0` | `1478` tests / `747` seals | ACCEPTED IN TRACK A | Top-left heading, wrapping options, right-hand **SOLVING** badge, full-width controls/status/preview ([Verification-2.9.148.md](../Evidence/release-verification/Verification-2.9.148.md), [Live-Test-2.9.148.md](../History/documentation-index.md#item-012863df9e1e5ed2433a)). |
+| **`2.9.147`** | `0.9.0` | `1476` tests / `747` seals | ACCEPTED IN TRACK A WITH OPEN FIXES | Receipt-bound normal Pyramid `GAME WIN` reward/counting → optional `LevelUp OK` → `New Game` → `Play` chain; bound challenge kind/target/Kings policy; cooperative `Switch to Maximum card matches` reusing authenticated RECON; verified zero artificial post-RECON delay ([Verification-2.9.147.md](../Evidence/release-verification/Verification-2.9.147.md), [Live-Test-2.9.147.md](../History/documentation-index.md#item-f5e4edebcac0d1661d55)). |
+| **`2.9.146`** | `0.9.0` | `1449` tests / `743` seals | `RETAINED EVIDENCE` | Bundled `native-v23` private `native_corner_ink_v1` rank/suit ink reader on white/cream cards (`11` reader tests, `87` visible cards, `423` Classic observations, `13` Retro exemplars / `16` held-outs) + fixed `240x80` activity badge ([Verification-2.9.146.md](../Evidence/release-verification/Verification-2.9.146.md), [Live-Test-2.9.146.md](../History/documentation-index.md#item-549091f1e8d38e344c4f)). |
+| **`2.9.145`** | `0.9.0` | `1436` tests / `731` seals | `RETAINED EVIDENCE` | `DL`/`DR` stock emptiness via light-paper coverage (`139x187` footprint, RGB `>= 180`, `>= 45%` nonempty, `8.41` percentage-point margin above `53.410534%` selected `K♥` minimum) ([Verification-2.9.145.md](../Evidence/release-verification/Verification-2.9.145.md), [Live-Test-2.9.145.md](../History/documentation-index.md#item-ba8c9d42e1199b84f7fc)). |
+| **`2.9.144`** | `0.9.0` | `1434` tests / `729` seals | `RETAINED EVIDENCE` | Occupied-RIGHT temporal `REDEAL` correction and protected launch ([Verification-2.9.144.md](../Evidence/release-verification/Verification-2.9.144.md)). |
+| **`2.9.143`** | `0.9.0` | `1432` tests / `726` seals | `RETAINED EVIDENCE` | Bounded mixed-legend correction; run 9 stock-position refusal preserved separately ([Verification-2.9.143.md](../Evidence/release-verification/Verification-2.9.143.md)). |
+| **`2.9.139`** | `0.9.0` | `1420` tests / `710` seals (`296` xSAR) | `RETAINED EVIDENCE` | Cooperative `PAUSE`/`CONTINUE` across A* `RECON`/`SEARCH`/`GAMEPLAY`, retained popup geometry, `Continuous`/`Shortest route`/`Challenge` defaults, idle `RESET`, and `REDEAL` `48x63` @ `(936,792)` delta check ([Verification-2.9.139.md](../Evidence/release-verification/Verification-2.9.139.md), [Live-Test-2.9.139.md](../History/documentation-index.md#item-cfa1dc553dda294f4e2b)). |
 
 ---
 
@@ -925,7 +941,7 @@ This closes the selected live-acceptance and promotion-readiness track in
 [Codex-Goal.md](Codex-Goal.md). The decision covers the 147 functional checks,
 148 presentation checks and verified provenance of the running 149 baseline.
 
-The [acceptance record](Track-A-Acceptance-2.9.149.md) separates Charlie's decision
+The [acceptance record](../History/documentation-index.md#item-3c6503c6107bf43745af) separates Charlie's decision
 from saved log observations, cached host checks and unobserved live variants.
 The failed normal run did not reach the complete GAME WIN chain. It remains a
 known fix, rather than a newly claimed successful run. The old 22-item evidence
@@ -943,13 +959,13 @@ guest verification remains separate; original evidence is retained.
 
 | ID | Failure and current finding | Evidence | Next scope |
 | :--- | :--- | :--- | :--- |
-| **FIX-01** | 149 normal Continuous board 2/3 stops after an acknowledged action: the unchanged Boards 2/3 header passes, but a flying-card shadow occludes the New footer, producing unknown progress and a fatal guard rejection. The saved run verified 20 actions and acknowledged 23 gestures. | [149 inspection](/home/charlie/Documents/Pyramid/Validation/normal-board2-header-149-20261026-wux200nf/inspection.json); related [145 footer evidence](Verification-2.9.146.md). | Implemented/host verified: typed Pending, no effect commitment or next input; same two-second window and strict source/contradiction/STOP/context/transport rules. |
+| **FIX-01** | 149 normal Continuous board 2/3 stops after an acknowledged action: the unchanged Boards 2/3 header passes, but a flying-card shadow occludes the New footer, producing unknown progress and a fatal guard rejection. The saved run verified 20 actions and acknowledged 23 gestures. | [149 inspection](/home/charlie/Documents/Pyramid/Validation/normal-board2-header-149-20261026-wux200nf/inspection.json); related [145 footer evidence](../Evidence/release-verification/Verification-2.9.146.md). | Implemented/host verified: typed Pending, no effect commitment or next input; same two-second window and strict source/contradiction/STOP/context/transport rules. |
 | **FIX-02** | 149 Card challenge run 3 reaches the REDEAL stage but the measured region remains unchanged (0/3024 changed pixels); no click is authorised. The retained earlier slot-21 mismatch is not an established final cause. | [retained packet](/home/charlie/Documents/Pyramid/Validation/track-a-acceptance-20261026-z69tqa5a/evidence/pyramid-error-1792936148487-3675217-1); Track A saved session. | Bounded/host verified: actual no-widget/zero-deal endpoint is a partial stop only after independent exact exhausted-stock proof; otherwise the existing position refusal remains. No click, future-allowance or challenge-success claim. |
 | **FIX-03** | 149 Score challenge run 4 expires its ordinary effect window after 56 verified actions and 75 acknowledged gestures. The saved first unmatched scene[0] reason is not a proven final root cause. | [retained packet](/home/charlie/Documents/Pyramid/Validation/track-a-acceptance-20261026-z69tqa5a/evidence/pyramid-error-1792937048206-3675217-2). | Implemented/host verified: saved frame is Challenge Complete/Loading at actual Score 2015/1900. A coherent bound appearance now retires card input without control authority. |
 | **FIX-04** | Separate 149 entry refusals: the original non-Wild-West frame is Boards cleared 0/2 and its literal glyph fringe was misclassified as background. Two later normal frames have no ordinal and correctly withhold standard-game identity. They do not share an assumed theme or cause. | [original background report](/home/charlie/Documents/Pyramid/Validation/background-theme-entry-149-20261025); [later entry packets](/home/charlie/Documents/Pyramid/Validation/track-a-acceptance-20261026-z69tqa5a/followup-1/later-entry-refusals.json). | Implemented/bounded: original background Boards 0/2 uses existing literal foreground union with unchanged RGB/word limits. Two separate normal frames lack ordinal and remain unknown; no new input authority. |
-| **FIX-05** | The retained 147 Boards/Perfect final-proof refusal: the bound counter advances 1/3 to 2/3 and final absence bands pass, but the exhausted LEFT-X exception invokes ordinary occupancy obscured by Perfect, then demands an absent DRAW scene. | [actual-reader confirmation](/home/charlie/Documents/Pyramid/Validation/boards-final-outcome-147-20261025/exact-reader-confirmation.json); [148 record](Verification-2.9.148.md). | Implemented/host verified: compose existing final absence proof with exact LEFT-X/RIGHT KD, without ordinary-tableau recheck or tolerance weakening. |
+| **FIX-05** | The retained 147 Boards/Perfect final-proof refusal: the bound counter advances 1/3 to 2/3 and final absence bands pass, but the exhausted LEFT-X exception invokes ordinary occupancy obscured by Perfect, then demands an absent DRAW scene. | [actual-reader confirmation](/home/charlie/Documents/Pyramid/Validation/boards-final-outcome-147-20261025/exact-reader-confirmation.json); [148 record](../Evidence/release-verification/Verification-2.9.148.md). | Implemented/host verified: compose existing final absence proof with exact LEFT-X/RIGHT KD, without ordinary-tableau recheck or tolerance weakening. |
 | **FIX-06** | Spider Uncertain stops reopened an old Klondike Failure Details record. | [saved report](/home/charlie/Documents/Pyramid/Validation/spider-game-win-149-20261025-l8afc0jx/inspection.json). | Implemented/host verified: contextual source-owned game/settings/error/worker times replace stale details. Original terminal-caption visual cause remains unproved; control refusal unchanged. |
-| **FIX-07** |151 normal third-clear delivered 67 actions/86 ACK, verified 66 effects; Perfect crossed7|5 lower band. GAME WIN/XP skip never entered. | [saved originals](/home/charlie/Documents/Pyramid/Validation/normal-game-win-151-20261025-tzqc8voi); [reproduction/adapter proof](Verification-2.9.152.md). | Implemented/host verified152: coherent28upper bands plus original material veto; unchanged guards/piles/receipt. Fresh152 guest trial pending. |
+| **FIX-07** |151 normal third-clear delivered 67 actions/86 ACK, verified 66 effects; Perfect crossed7|5 lower band. GAME WIN/XP skip never entered. | [saved originals](/home/charlie/Documents/Pyramid/Validation/normal-game-win-151-20261025-tzqc8voi); [reproduction/adapter proof](../Evidence/release-verification/Verification-2.9.152.md). | Implemented/host verified152: coherent28upper bands plus original material veto; unchanged guards/piles/receipt. Fresh152 guest trial pending. |
 
 ## 8. Promotion readiness
 
@@ -966,8 +982,8 @@ push, registry publication or installation is authorised here.
 Charlie selected implementation (m09727/m09728). B1 remains delivered in 149;
 B2 football is covered by actual-reader regressions; B3 normal/challenge handoff and
 FIX-01 through FIX-06 are implemented or bounded above. B4 retains run 9 occupied-RIGHT
-and stock refusal contracts. See [qualification](Verification-Track-B-150.md) and
-[live brief](Live-Test-Track-B-150.md). Charlie accepted the results and approved
+and stock refusal contracts. See [qualification](../Evidence/release-verification/Verification-Track-B-150.md) and
+[live brief](../History/documentation-index.md#item-bec4cac4d9a26f91944c). Charlie accepted the results and approved
 2.9.150 (m10399). Manifest, lock entry, changelog and protected native release are
 aligned. The post-alignment locked check, release and help passed; the implementation
 retains the 1504-test qualification with 768 unchanged compiler inputs and only two
@@ -981,7 +997,7 @@ After GAME WIN / Play, supported dealing can remain Pending within the existing 
 
 2.9.151 is host qualified under the explicit151 goal (m10618/m10619/m10655): 1512 tests, zero failed/ignored/filtered,773 sealed inputs and six gates passed. Only the two own-package version fields then changed; aligned locked native check, release and help passed. xSAR0.9.0/all 52 inputs are unchanged;296 tests / 3 Miri remain cached. Protected binary SHA-256: `3fb544a8a56f98395c89c974c189e33c8e8bdb4c02f52535c1eebc1fa8dd8ab6`. Fresh151 guest acceptance is pending. No agent GUI launch or guest input occurred.
 
-[Verification](Verification-2.9.151.md), [live brief](Live-Test-2.9.151.md), [complete25-case checklist](Acceptance-Tests-2.9.151.md).
+[Verification](../Evidence/release-verification/Verification-2.9.151.md), [live brief](../History/documentation-index.md#item-a66d0c8d592c9c8b9d7b), [complete25-case checklist](Acceptance-Tests-2.9.151.md).
 
 Both150 incidents used fresh TCP captures during dealing: session9/request479/frame7360 at+779.685s after Play+778.586s; session10/request488/frame7848 at+1277.125s after Play+1276.011s. The first readiness check aborted before Recon, with unknown rank/suit or incomplete-board rejection. Both unchanged original PNGs are retained; complete follow-ups in host tests are labelled compositions, not original animation traces.
 
@@ -993,7 +1009,7 @@ The earlier150 Queens12/12 Challenge Complete timeout remains a separate undiagn
 
 The retained normal third-board clear was refused because moving Perfect glow crossed the lower absence band at 7|5. Bundled colour-independent normal recognition retains the original complete layout first, then may prove one coherent layout of all 28 existing upper bands. The alternative also vetoes card material in every original band and full clearance, preserving the three retained flying-card refusals. Replayed empty tableau, complete normal header/footer, scene/modal/DRAW roles, exact exclusive piles, final-action phase, whole-action ACK boundary, STOP/context and the same two-second window remain required. No per-slot mixing, threshold/crop/bank changes or ACK-only restart is admitted.
 
-[Verification](Verification-2.9.152.md), [live brief](Live-Test-2.9.152.md), retained [complete 25-case checklist](Acceptance-Tests-2.9.151.md).
+[Verification](../Evidence/release-verification/Verification-2.9.152.md), [live brief](../History/documentation-index.md#item-6b88494d43a85c63975c), retained [complete 25-case checklist](Acceptance-Tests-2.9.151.md).
 
 Original failed reproduction, exact source/review seals and protected151 are retained. Current sentinel/audit/promotion are linked from handoff.md; no original67-action route is invented.
 

@@ -2585,6 +2585,104 @@ mod tripeaks_reward_qmp_regressions {
     };
 
 
+    /// RESET captures once after STOP without input, prediction or epoch changes.
+    #[test]
+    #[ignore = "requires local AF_UNIX sockets"]
+    fn reset_176_preview_captures_once_without_input_after_stop() {
+        let _capture_backend = TestCaptureBackend::legacy_qmp();
+        let expected = decode_png(REWARD_PNG).unwrap();
+        let directory = SocketDirectory(std::env::temp_dir().join(format!(
+            "pyramid-reset-qmp-{}-{}",
+            std::process::id(),
+            NEXT_REWARD_SOCKET.fetch_add(1, Ordering::Relaxed)
+        )));
+        fs::create_dir(&directory.0).unwrap();
+        let socket = directory.0.join("qmp.sock");
+        let listener = UnixListener::bind(&socket).unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let pngs = MockPngs {
+            initial_png: REWARD_PNG.to_vec(),
+            recovered_png: Vec::new(),
+            unsupported_png: REWARD_PNG.to_vec(),
+            nonempty_png: Vec::new(),
+            new_game_png: Vec::new(),
+            play_png: Vec::new(),
+            bare_gold_png: Vec::new(),
+            confirmation_clean_png: Vec::new(),
+            pending_level_up_png: Vec::new(),
+        };
+        let cancel = Arc::new(AtomicBool::new(true));
+        let server_cancel = Arc::clone(&cancel);
+        let server =
+            thread::spawn(move || serve(listener, pngs, Scenario::UnknownOnly, server_cancel));
+        let context =
+            ControllerContext::new(socket, GameMode::Pyramid, SolvingStrategy::ShortestPath, 9);
+        let latest_frame = LatestFrameSlot::default();
+        latest_frame
+            .reconnaissance
+            .select(&context, &cancel)
+            .unwrap();
+        let epoch = latest_frame.reconnaissance.epoch().unwrap();
+        let (events, receiver) = mpsc::channel();
+        let sink = WorkerEventSink {
+            events,
+            latest_frame: latest_frame.clone(),
+            capture_context: Mutex::new(None),
+        };
+        let (tx, rx) = mpsc::channel();
+        tx.send(WorkerCommand::CaptureResetPreview {
+            context: context.clone(),
+            request_id: 41,
+        })
+        .unwrap();
+        tx.send(WorkerCommand::Shutdown).unwrap();
+        run_worker(
+            rx,
+            sink,
+            Arc::clone(&cancel),
+            Arc::new(AtomicBool::new(false)),
+        );
+        let wire = server.join().unwrap();
+        assert_eq!(wire.connections, 1);
+        assert_eq!(
+            wire.events,
+            [WireEvent::Probe, WireEvent::Capture(CaptureKind::Initial)]
+        );
+        assert!(cancel.load(Ordering::Acquire));
+        assert_eq!(latest_frame.reconnaissance.epoch().unwrap(), epoch);
+        let notifications: Vec<_> = receiver.try_iter().collect();
+        assert!(
+            notifications
+                .iter()
+                .all(|e| e.context == Some(context.clone()))
+        );
+        assert_eq!(
+            notifications
+                .iter()
+                .filter(|e| matches!(&e.event, WorkerEvent::ResetPreviewFinished { .. }))
+                .count(),
+            1
+        );
+        assert!(notifications.iter().any(|e| matches!(
+            &e.event,
+            WorkerEvent::ResetPreviewFinished {
+                request_id: 41,
+                result: Ok(())
+            }
+        )));
+        let latest = latest_frame.take().unwrap();
+        assert_eq!(latest.reset_request_id, Some(41));
+        assert_eq!(latest.context, Some(context));
+        assert!(latest.prediction.is_none());
+        assert!(!latest.diagnostic);
+        assert_eq!(
+            (latest.frame.width, latest.frame.height, latest.frame.stride),
+            (expected.width, expected.height, expected.stride)
+        );
+        assert_eq!(latest.frame.pixels, expected.pixels);
+    }
+
+
     /// Original native capture; no reconstructed terminal artwork is used.
     const REWARD_PNG: &[u8] = include_bytes!("../../tests/fixtures/tripeaks-TP01.png");
     /// Original native Level Up capture used for direct terminal authority.
@@ -6420,4 +6518,124 @@ fn native_150_spider_stop_publishes_current_source_failure() {
         failure.error,
         spider_execution::validate_operation_limit(settings.operation_limit()).unwrap_err()
     );
+}
+
+
+/// The RESET dispatch cannot clear STOP, reset progress or change acquisition epoch.
+#[test]
+fn reset_176_dispatch_is_one_read_only_command_preserving_stop() {
+    let (tx, rx) = mpsc::channel();
+    let (_, events) = mpsc::channel();
+    let cancel = Arc::new(AtomicBool::new(true));
+    let latest_frame = LatestFrameSlot::default();
+    let context = ControllerContext::new(
+        PathBuf::from("/no-reset.sock"),
+        GameMode::Pyramid,
+        SolvingStrategy::ShortestPath,
+        9,
+    );
+    latest_frame
+        .reconnaissance
+        .select(&context, &cancel)
+        .unwrap();
+    let epoch = latest_frame.reconnaissance.epoch().unwrap();
+    let mut handle = WorkerHandle {
+        command_tx: tx,
+        event_rx: events,
+        latest_frame,
+        join: None,
+        cancel_requested: Arc::clone(&cancel),
+        shutdown_requested: Arc::new(AtomicBool::new(false)),
+    };
+    handle.capture_reset_preview(context.clone(), 41).unwrap();
+    assert!(
+        matches!(rx.try_recv().unwrap(),WorkerCommand::CaptureResetPreview{context:received,request_id:41} if received==context)
+    );
+    assert!(rx.try_recv().is_err());
+    assert!(cancel.load(Ordering::Acquire));
+    assert_eq!(handle.latest_frame.reconnaissance.epoch().unwrap(), epoch);
+    handle.shutdown_requested.store(true, Ordering::Release);
+    assert!(handle.capture_reset_preview(context.clone(), 42).is_err());
+    assert!(rx.try_recv().is_err());
+    handle.shutdown_requested.store(false, Ordering::Release);
+    drop(rx);
+    assert!(handle.capture_reset_preview(context, 43).is_err());
+    handle.join = None;
+}
+
+
+/// Invalid RESET selection fails before opening a socket or publishing an input-bearing event.
+#[test]
+fn reset_176_invalid_context_has_only_correlated_error_and_no_frame() {
+    let (tx, rx) = mpsc::channel();
+    let (events, receiver) = mpsc::channel();
+    let latest = LatestFrameSlot::default();
+    let sink = WorkerEventSink {
+        events,
+        latest_frame: latest.clone(),
+        capture_context: Mutex::new(None),
+    };
+    let context = ControllerContext::new(
+        PathBuf::from("/nonexistent-reset.sock"),
+        GameMode::TriPeaks,
+        SolvingStrategy::ShortestPath,
+        9,
+    );
+    tx.send(WorkerCommand::CaptureResetPreview {
+        context: context.clone(),
+        request_id: 42,
+    })
+    .unwrap();
+    tx.send(WorkerCommand::Shutdown).unwrap();
+    let cancel = Arc::new(AtomicBool::new(true));
+    run_worker(
+        rx,
+        sink,
+        Arc::clone(&cancel),
+        Arc::new(AtomicBool::new(false)),
+    );
+    let notices: Vec<_> = receiver.try_iter().collect();
+    assert_eq!(notices.len(), 1);
+    assert_eq!(notices[0].context, Some(context));
+    assert!(
+        matches!(&notices[0].event,WorkerEvent::ResetPreviewFinished{request_id:42,result:Err(error)} if error.contains("Pyramid"))
+    );
+    assert!(latest.take().is_none());
+    assert!(cancel.load(Ordering::Acquire));
+}
+
+
+/// Tagged RESET frames share bounded coalescing and ordinary pixels cannot inherit a token.
+#[test]
+fn reset_176_mailbox_keeps_newest_frame_token_and_context() {
+    let slot = LatestFrameSlot::default();
+    let context = ControllerContext::new(
+        PathBuf::from("/reset.sock"),
+        GameMode::Pyramid,
+        SolvingStrategy::ShortestPath,
+        9,
+    );
+    for id in [40, 41] {
+        slot.publish_tagged(
+            row_observation(PredictedAction::NoHighlight, None).frame,
+            None,
+            false,
+            false,
+            Some(context.clone()),
+            Some(id),
+        );
+    }
+    let newest = slot.take().unwrap();
+    assert_eq!(newest.reset_request_id, Some(41));
+    assert_eq!(newest.coalesced_frames, 1);
+    assert_eq!(newest.context, Some(context));
+    assert!(slot.take().is_none());
+    slot.publish(
+        row_observation(PredictedAction::NoHighlight, None).frame,
+        None,
+        false,
+        false,
+        None,
+    );
+    assert_eq!(slot.take().unwrap().reset_request_id, None);
 }

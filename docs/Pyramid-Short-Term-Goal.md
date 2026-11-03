@@ -17,7 +17,7 @@ The 56 unchanged xSAR inputs retain cached sixteen-gate qualification (303 full
 tests, 14 default tests and two Miri tests); xSAR remains modified/unreleased 0.9.1.
 User profiles and CPU/hardening configuration are preserved. Evidence: `/home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/pyramid-challenge-174-proposal-9yca399e`.
 
-[Verification](Verification-2.9.174.md).
+[Verification](../Evidence/release-verification/Verification-2.9.174.md).
 
 ## Retained 2.9.173 delivery
 
@@ -54,7 +54,7 @@ live acceptance remains pending.
 
 All six controller gates pass, including 1683 include-ignored tests with zero failures/ignored/filtered (149.37 seconds). Aligned locked check, native release and protected --help pass. Library qualification is PASSED (Cached): 56 unchanged inputs, 303 full tests, 14 default tests and two focused Miri checks.
 
-[Verification](Verification-2.9.173.md).
+[Verification](../Evidence/release-verification/Verification-2.9.173.md).
 
 ## Retained 2.9.172 delivery
 
@@ -82,7 +82,7 @@ staging, commit or push was performed. Fresh guest acceptance remains pending.
 
 All six controller gates pass, including 1678 include-ignored tests with zero failures/ignored/filtered (154.10 seconds). Aligned locked check, native release and protected --help pass. Library qualification is PASSED (Cached): 56 unchanged inputs, 303 full tests, 14 default tests and two focused Miri checks.
 
-[Verification](Verification-2.9.172.md).
+[Verification](../Evidence/release-verification/Verification-2.9.172.md).
 
 ## Retained 2.9.171 receipt
 
@@ -115,7 +115,7 @@ standard/Coral guest Recon, restoration and broader theme acceptance remain pend
 
 All six controller gates pass, including **1,675 include-ignored tests**, zero failed, ignored or filtered; test time 149.57 seconds. Aligned locked check, release and protected --help pass. xSAR remains the unchanged modified/unreleased 0.9.1 path dependency; its sixteen-gate receipt (303 full tests, 14 default tests, feature checks and two focused Miri checks) is cached over 56 unchanged library inputs.
 
-[Verification](Verification-2.9.171.md).
+[Verification](../Evidence/release-verification/Verification-2.9.171.md).
 
 ## Retained 2.9.170 receipt
 
@@ -176,7 +176,7 @@ path dependency; its 16-gate receipt (303 full tests, 14 default tests, feature
 checks and two focused Miri checks) is PASSED (Cached). User Cargo profiles
 and CPU configuration are preserved. No install or guest launch was performed.
 
-All thirteen standing outcomes remain below; [verification](Verification-2.9.169.md).
+All thirteen standing outcomes remain below; [verification](../Evidence/release-verification/Verification-2.9.169.md).
 
 ## Retained 2.9.168 receipt
 
@@ -206,7 +206,7 @@ claimed. No guest input, new capture, install, staging, commit, push or publicat
 was performed. Preserve GAME WIN images before controller startup and leave
 any active original session log in place.
 
-All thirteen standing outcomes remain below. [Verification](Verification-2.9.168.md), [handoff](handoff.md).
+All thirteen standing outcomes remain below. [Verification](../Evidence/release-verification/Verification-2.9.168.md), [handoff](handoff.md).
 
 ## Retained 2.9.167 goal receipt
 
@@ -231,7 +231,7 @@ No guest input, new capture, installation, staging, commit, push or publication
 was performed for this delivery. Preserve GAME WIN images before another
 controller startup and leave any active original session log in place.
 
-All thirteen standing outcomes remain below. See [verification](Verification-2.9.167.md),
+All thirteen standing outcomes remain below. See [verification](../Evidence/release-verification/Verification-2.9.167.md),
 [handoff](handoff.md), and [live acceptance](Pyramid-Acceptance-Before-3.0.0.md).
 
 ## Retained 2.9.166 goal receipt
@@ -247,7 +247,7 @@ policy remain. Fresh Coral guest acceptance, future appearance coverage and the
 Continuous retraction remain open; all thirteen standing outcomes remain.
 
 RECON no-advancement is separate and unresolved; no timing/input change is
-included. [Verification](Verification-2.9.166.md), [handoff](handoff.md), and
+included. [Verification](../Evidence/release-verification/Verification-2.9.166.md), [handoff](handoff.md), and
 [acceptance checklist](Pyramid-Acceptance-Before-3.0.0.md) retain the boundaries.
 
 ## Retained 2.9.165 goal receipt
@@ -262,7 +262,7 @@ pending-after positions verify offline. All old limits/proofs and input/STOP
 boundaries remain. Fresh Coral guest acceptance, future appearance coverage and
 the Continuous retraction remain open; all thirteen standing outcomes remain.
 
-Use [verification](Verification-2.9.165.md), [milestones](milestones.md),
+Use [verification](../Evidence/release-verification/Verification-2.9.165.md), [milestones](milestones.md),
 [handoff](handoff.md) and [acceptance checklist](Pyramid-Acceptance-Before-3.0.0.md).
 
 ## Retained 2.9.164 goal receipt
@@ -279,7 +279,7 @@ defaults and later idle choice remain. No King/projection/scoring algorithm is
 included. Fresh guest acceptance remains pending; the Continuous retraction and
 all thirteen standing outcomes remain in force.
 
-Use [current verification](Verification-2.9.164.md),
+Use [current verification](../Evidence/release-verification/Verification-2.9.164.md),
 [milestones](milestones.md), [handoff](handoff.md) and the
 [pre-3.0.0 checklist](Pyramid-Acceptance-Before-3.0.0.md) for current state.
 
@@ -294,7 +294,7 @@ manifest, receipt or still-open live acceptance above.
 
 The automatic NEW GAME and manual START failures shared a complete normal-header appearance refusal. Two pixels differed by 13 against the existing per-channel limit of 12; the complete New footer passed. Fresh TCP captures and complete card observations were verified. The correction retains an additional complete 160 by 32 ordinal-one RGB appearance and every pixel/channel check at the original limits. Coherent appearances for the same count share one identity; conflicting counts still refuse. The 151 bounded Pending/Ready pair, strict normal footer, exclusive piles, fresh entry and fresh guarded Recon remain unchanged. No timing, control, threshold, crop, glyph, dependency, API, concurrency or xSAR policy changes are introduced.
 
-[Verification](Verification-2.9.153.md), [priority live brief](Live-Test-2.9.153.md), retained [full 25-case checklist](Acceptance-Tests-2.9.151.md). All 13 standing outcomes, original 19 case rows and master schedule tables remain retained. Track A stays closed with open fixes; no new guest pass or further version authority is inferred.
+[Verification](../Evidence/release-verification/Verification-2.9.153.md), [priority live brief](../History/documentation-index.md#item-a7ed5be414ed1a31dab8), retained [full 25-case checklist](Acceptance-Tests-2.9.151.md). All 13 standing outcomes, original 19 case rows and master schedule tables remain retained. Track A stays closed with open fixes; no new guest pass or further version authority is inferred.
 
 ## Retained 2.9.152 delivery context
 
@@ -304,7 +304,7 @@ The following statements are dated evidence; the current receipt above governs t
 
 The retained normal third-board clear was refused because moving Perfect glow crossed the lower absence band at 7|5. Bundled colour-independent normal recognition retains the original complete layout first, then may prove one coherent layout of all 28 existing upper bands. The alternative also vetoes card material in every original band and full clearance, preserving the three retained flying-card refusals. Replayed empty tableau, complete normal header/footer, scene/modal/DRAW roles, exact exclusive piles, final-action phase, whole-action ACK boundary, STOP/context and the same two-second window remain required. No per-slot mixing, threshold/crop/bank changes or ACK-only restart is admitted.
 
-[Verification](Verification-2.9.152.md), [live brief](Live-Test-2.9.152.md), retained [complete 25-case checklist](Acceptance-Tests-2.9.151.md).
+[Verification](../Evidence/release-verification/Verification-2.9.152.md), [live brief](../History/documentation-index.md#item-6b88494d43a85c63975c), retained [complete 25-case checklist](Acceptance-Tests-2.9.151.md).
 
 The retained150 context below preserves all original case and milestone table rows. Older pending/executed statements are dated proof, not fresh152 guest results. All 13 standing outcomes remain unchanged.
 
@@ -325,8 +325,8 @@ The correction covers Pending normal effects, distinct paired normal/challenge
 board handoffs, exhausted-stock partial stopping, bound Score Loading completion,
 Boards/Perfect final proof, background Boards entry and source-owned Spider failures.
 Actual football regressions pass the existing reader without changing glyph limits.
-See [verification](Verification-Track-B-150.md), the
-[live brief](Live-Test-Track-B-150.md) and [FIX results](milestones.md#7-fix-list--carried-forward-from-accepted-track-a).
+See [verification](../Evidence/release-verification/Verification-Track-B-150.md), the
+[live brief](../History/documentation-index.md#item-bec4cac4d9a26f91944c) and [FIX results](milestones.md#7-fix-list--carried-forward-from-accepted-track-a).
 
 Track A remains CLOSED — ACCEPTED WITH OPEN FIXES. Track B and the selected code
 fixes are accepted; fresh 150 guest verification has not been recorded. The native
@@ -337,7 +337,7 @@ schedule observations retain their separate scope and evidence.
 
 The bounded Wild West aged-paper correction is host qualified: 1483 application
 tests, 753 sealed inputs and all six required gates passed. Charlie has accepted
-Track A with open fixes. The [acceptance record](Track-A-Acceptance-2.9.149.md)
+Track A with open fixes. The [acceptance record](../History/documentation-index.md#item-3c6503c6107bf43745af)
 and [FIX list](milestones.md#7-fix-list--carried-forward-from-accepted-track-a)
 record the decision, retained evidence and remaining failures.
 
@@ -355,8 +355,8 @@ and 87 cream/Retro observations remain covered. Quality/ambiguity limits, comple
 scene/modal proof, STOP/context, fresh probes and no uncertain replay remain intact.
 Boards/Perfect was deferred in 149; its accepted 150 correction is recorded above.
 
-See [verification](Verification-2.9.149.md) and the
-[fresh live-test brief](Live-Test-2.9.149.md). Earlier release sections are
+See [verification](../Evidence/release-verification/Verification-2.9.149.md) and the
+[fresh live-test brief](../History/documentation-index.md#item-4409cfdb64de9b458209). Earlier release sections are
 retained evidence; their earlier pending labels describe those snapshots. Current
 Track A acceptance is recorded above, separately from individual test results.
 
@@ -374,7 +374,7 @@ worker, dependency or timing policy changes are included.
 
 Host result: 1478 full tests, zero failures/ignored/filtered, 747 sealed inputs and all six required gates passed. Fresh Beast/Charlie acceptance remains pending.
 The 19 matrix cases and 14 milestone states remain unchanged. See
-[148 verification](Verification-2.9.148.md) and [148 manual checks](Live-Test-2.9.148.md).
+[148 verification](../Evidence/release-verification/Verification-2.9.148.md) and [148 manual checks](../History/documentation-index.md#item-012863df9e1e5ed2433a).
 
 ## Retained correction — 2.9.147 / xSAR 0.9.0; host qualified
 
@@ -413,8 +413,8 @@ and capture work must not be described as an intentional post-RECON delay.
 
 All six 147 host gates passed: 1476 full tests, 747 sealed inputs and native release/help. The protected executable is `/home/charlie/Documents/Pyramid/Validation/pyramid-normal-win-20261025/native/qmp-qemu-socket-2.9.147` (SHA-256 `5d8d6617370898d924a47f26fe5c0caee055e0906e6e5a66d16bfac7cafc4eb9`). Running-process provenance is recorded separately in verification when launched. xSAR remains 0.9.0; fresh Beast/Charlie acceptance and the 19 matrix/14 milestone states remain unchanged.
 
-See [147 verification](Verification-2.9.147.md) and
-[147 manual checks](Live-Test-2.9.147.md). Retained 146 evidence follows.
+See [147 verification](../Evidence/release-verification/Verification-2.9.147.md) and
+[147 manual checks](../History/documentation-index.md#item-f5e4edebcac0d1661d55). Retained 146 evidence follows.
 
 ## Retained correction — 2.9.146 / xSAR 0.9.0; host qualified
 
@@ -443,8 +443,8 @@ remains pending. The 145 stock rule (45% coverage, RGB floor 180), temporal REDE
 STOP/context and legal-position guards remain; automatic board-to-RECON handoff is
 still a separate open item. No matrix or milestone acceptance is added.
 
-See [146 verification](Verification-2.9.146.md) and
-[146 manual checks](Live-Test-2.9.146.md). Retained 145 qualification follows.
+See [146 verification](../Evidence/release-verification/Verification-2.9.146.md) and
+[146 manual checks](../History/documentation-index.md#item-549091f1e8d38e344c4f). Retained 145 qualification follows.
 
 ## Retained correction — 2.9.145 / xSAR 0.9.0
 
@@ -470,16 +470,16 @@ refusals and automatic cleared-board-to-RECON handoff remain open. The temporal
 REDEAL correction and all input, STOP/context and legal-position checks are retained.
 No timing, glyph threshold, dependency or public API changes are included.
 
-See [145 verification](Verification-2.9.145.md) and
-[145 manual checks](Live-Test-2.9.145.md). No milestone acceptance is added.
+See [145 verification](../Evidence/release-verification/Verification-2.9.145.md) and
+[145 manual checks](../History/documentation-index.md#item-ba8c9d42e1199b84f7fc). No milestone acceptance is added.
 
 ## Retained 2.9.144
 
-144 passed 1434 full tests with 729 sealed inputs. Its occupied-RIGHT temporal REDEAL correction, protected artifact and launch remain recorded in [144 verification](Verification-2.9.144.md).
+144 passed 1434 full tests with 729 sealed inputs. Its occupied-RIGHT temporal REDEAL correction, protected artifact and launch remain recorded in [144 verification](../Evidence/release-verification/Verification-2.9.144.md).
 
 ## Retained 2.9.143 / xSAR 0.9.0; host qualified
 
-143 passed 1432 full application tests, zero failed/ignored/filtered, all six gates and native help, with 726 sealed inputs. Its bounded mixed-legend correction and protected launch remain recorded in [143 verification](Verification-2.9.143.md). The new run 9 stock-position refusal is preserved separately; no milestone acceptance is added by this correction.
+143 passed 1432 full application tests, zero failed/ignored/filtered, all six gates and native help, with 726 sealed inputs. Its bounded mixed-legend correction and protected launch remain recorded in [143 verification](../Evidence/release-verification/Verification-2.9.143.md). The new run 9 stock-position refusal is preserved separately; no milestone acceptance is added by this correction.
 
 ## Retained 2.9.139 / xSAR 0.9.0; host qualification
 
@@ -493,7 +493,7 @@ substantive later appearance, with exact position, legal stock, probe and STOP g
 No icon, numeral or caption template grants that click. An unreadable challenge header
 may receive bounded read-only effect retries; source evidence remains positive-only.
 Computer Vision/HALO timing and input-free actual Challenge Complete handoff are preserved.
-See [139 verification](Verification-2.9.139.md) and [139 manual checks](Live-Test-2.9.139.md).
+See [139 verification](../Evidence/release-verification/Verification-2.9.139.md) and [139 manual checks](../History/documentation-index.md#item-cfa1dc553dda294f4e2b).
 No new milestone or live outcome is accepted by this delivery.
 
 ## Required outcomes
@@ -552,7 +552,7 @@ No new milestone or live outcome is accepted by this delivery.
 
 ## Qualification and acceptance
 
-147 is host qualified: 1476 full tests, 747 sealed inputs, all six required gates and native release/help passed. Artifact/source identity is recorded in [147 verification](Verification-2.9.147.md); running provenance and fresh acceptance remain separate.
+147 is host qualified: 1476 full tests, 747 sealed inputs, all six required gates and native release/help passed. Artifact/source identity is recorded in [147 verification](../Evidence/release-verification/Verification-2.9.147.md); running provenance and fresh acceptance remain separate.
 Retained 146 qualification is 1449 full tests/743 seals, and retained 145 is 1436/731.
 Neither qualifies changed 147 sources. xSAR 0.9.0 and prior Miri remain retained evidence.
 
@@ -560,7 +560,7 @@ After the owning process qualifies and protects the 147 executable, verify its a
 running identity before fresh Beast acceptance. Use a fresh acquisition/route; preserve
 first-failure evidence and never resume a consumed or uncertain action. Exercise the
 reward flow, immutable challenge identity, explicit objective switch and direct completed
-RECON handoff in [147 manual checks](Live-Test-2.9.147.md). All 19 matrix identities/states
+RECON handoff in [147 manual checks](../History/documentation-index.md#item-f5e4edebcac0d1661d55). All 19 matrix identities/states
 and all 14 milestone states remain unchanged pending the existing acceptance contract.
 
 The observed 136 REDEAL→Recon→Shortest chains and 146 saved recognition/badge checks

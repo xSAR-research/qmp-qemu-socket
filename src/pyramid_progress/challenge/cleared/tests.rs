@@ -348,3 +348,61 @@ fn native_174_boards_entry_keeps_words_banner_and_counter() {
         );
     }
 }
+
+
+/// A whole existing background explains the new header; negative space remains mandatory.
+#[test]
+fn native_176_boards_entry_requires_one_coherent_background() {
+    let source = native(include_bytes!(
+        "../../../../tests/fixtures/pyramid-recognition-176/coral-entry.png"
+    ));
+    assert!(observe_boards(source.as_view().unwrap()).unwrap());
+    assert_eq!(
+        crate::pyramid_progress::observe_challenge(&source),
+        Ok(crate::pyramid_progress::ChallengeProgress::new(
+            ChallengeKind::Boards,
+            0,
+            4
+        ))
+    );
+    for (x, y) in [(851, 59), (877, 63), (921, 63), (945, 48)] {
+        let mut corrupted = source.clone();
+        let mut rgb = corrupted.as_view().unwrap().pixel_rgb(x, y).unwrap();
+        rgb[0] = rgb[0].saturating_add(40);
+        paint(&mut corrupted, PixelRect::new(x, y, 1, 1), rgb);
+        assert!(
+            !observe_boards(corrupted.as_view().unwrap()).unwrap(),
+            "{x},{y}"
+        );
+        assert_eq!(
+            crate::pyramid_progress::observe_challenge(&corrupted),
+            Ok(None),
+            "{x},{y}"
+        );
+    }
+    for (word, x) in [(&COMPLETE_BOARDS, 841), (&CLEARED, 922)] {
+        for &(dx, dy) in word.anchors {
+            let mut missing = source.clone();
+            paint(
+                &mut missing,
+                PixelRect::new(x + dx - 3, SEARCH.y + dy - 3, 7, 7),
+                [161, 102, 6],
+            );
+            assert_eq!(
+                crate::pyramid_progress::observe_challenge(&missing),
+                Ok(None)
+            );
+        }
+    }
+    for bounds in [
+        PixelRect::new(1038, 48, 72, 32),
+        PixelRect::new(814, 41, 292, 7),
+    ] {
+        let mut missing = source.clone();
+        paint(&mut missing, bounds, [0; 3]);
+        assert_eq!(
+            crate::pyramid_progress::observe_challenge(&missing),
+            Ok(None)
+        );
+    }
+}

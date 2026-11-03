@@ -37,7 +37,7 @@ Stable 109 SHA-256 `0d6dc51bb7a292606ff81ef6c534898aef4ca7129c18a9d070cb7d88727a
 passed native parity/help. Final documentation/preservation audit passed for
 9 documents, 165 local links and 26 review paths.
 
-See [verification](../../../../docs/Verification-2.6.109.md) and
+See [verification](../../../../Evidence/release-verification/Verification-2.6.109.md) and
 [profile policy](../../../../docs/pyramid-recon-profile.md). This fixture is
 recognition evidence only; fresh complete same-session acquisition/restoration
 is required before route input. Manual/Single board and disabled Continuous

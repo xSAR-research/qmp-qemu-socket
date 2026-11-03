@@ -61,7 +61,7 @@ reader as accepting it, alter the old fixture, or claim the new frozen outcome
 before actual Rust measurement; the initial raw policy already failed its prospective test. Full ROI negative space, exclusive colour/paper at
 the winning shift and strict label-gap bounds remain mandatory.
 
-[Verification](../../../../docs/Verification-2.6.110.md) records actual Rust/
+[Verification](../../../../Evidence/release-verification/Verification-2.6.110.md) records actual Rust/
 corpus/frozen results and separate them from review/exposed/holdout provenance.
 [Profile contract](../../../../docs/pyramid-recon-profile.md) defines versioned
 semantics. Offline recognition never proves unseen stock, completed acquisition,

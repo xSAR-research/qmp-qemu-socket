@@ -51,6 +51,6 @@ independently legal route or a live success. No fixture mints a restored receipt
 permits retry/resume or authorises guest input. Preserve the original refusal.
 
 See [profile details](../../../../docs/pyramid-recon-profile.md),
-[verification](../../../../docs/Verification-2.5.107.md) and
-[fresh live-test brief](../../../../docs/Live-Test-2.5.107.md). The broader approved
+[verification](../../../../Evidence/release-verification/Verification-2.5.107.md) and
+[fresh live-test brief](../../../../History/documentation-index.md#item-f19792b3177ae0b1dade). The broader approved
 timing, completion, mode and search-statistics work remains outside native-v9.

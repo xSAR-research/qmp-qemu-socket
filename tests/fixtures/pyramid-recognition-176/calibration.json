@@ -1,0 +1,48 @@
+{
+  "schema": 1,
+  "source_sha256": "d2dd67cb840f5bcc41cbf0dcf0741a6af0361b574ac033d04a626630ecfea908",
+  "dimensions": [
+    1920,
+    1080
+  ],
+  "labels_source": "manual visual reading; no elimination",
+  "tableau": [
+    "9C",
+    "AC",
+    "2H",
+    "KS",
+    "10H",
+    "8H",
+    "7D",
+    "4C",
+    "2S",
+    "KD",
+    "6C",
+    "10C",
+    "8S",
+    "QC",
+    "9S",
+    "7C",
+    "AS",
+    "8C",
+    "9D",
+    "10S",
+    "3D",
+    "6D",
+    "AH",
+    "AD",
+    "5D",
+    "QH",
+    "3H",
+    "10D"
+  ],
+  "left": "3S",
+  "right": null,
+  "replacement_source": "pyramid-recognition-158/underwater-three-nine.png",
+  "replacement_slot": "6|5",
+  "replacement_origin": [
+    1191,
+    378
+  ],
+  "thresholds_changed": false
+}

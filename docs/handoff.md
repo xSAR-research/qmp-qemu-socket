@@ -1,62 +1,29 @@
-# Active handoff — qualified 2.9.174 / unchanged xSAR 0.9.1
+# Active handoff — qualified 2.9.176 / unchanged xSAR 0.9.1
 
-2.9.174 corrects native Boards challenge-header recognition using the union of
-the five existing validated Boards literal ink supports, restricted to independently
-proven complete word spans. All reference geometries and lengths are checked before
-indexing. RGB tolerance 9, blue floor 6, word distance, letter cores, banner anchors,
-boundaries and counter parsing remain unchanged. No new reference bank or dilation
-is introduced. Score/Card recognition and input authority are unchanged.
+Coral rank recognition now uses an independently retained black Four corner within the unchanged 13-rank calibration. Boards headers match one coherent existing background appearance. RESET shows WAITING and requests one token-correlated read-only preview while retaining STOP, inventory, logs and historical diagnostics.
 
-The six controller gates passed, including 1687 tests with zero failures,
-ignored or filtered tests. Qualification sealed 942 inputs; after qualification only
-the application's manifest/lock version pair changed from 2.9.173 to 2.9.174,
-leaving 940 inputs identical. Aligned locked check, release and protected help passed.
-The 56 unchanged xSAR inputs retain cached sixteen-gate qualification (303 full
-tests, 14 default tests and two Miri tests); xSAR remains modified/unreleased 0.9.1.
-User profiles and CPU/hardening configuration are preserved. Evidence: `/home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/pyramid-challenge-174-proposal-9yca399e`.
+All six controller gates passed, including 1697 tests with zero failed, ignored or filtered, plus aligned locked check/release/protected help. The 56 xSAR inputs and package0.9.1 are unchanged; prior sixteen-gate library qualification remains cached. Fresh guest acceptance is pending.
 
-Charlie explicitly accepted the automatic post-173 metadata updates and
-continuing 174. baseline-state.json preserves the accepted two changed sealed files
-(Tree Ring SQLite and TriggerTree read telemetry), eight recall receipts and SQLite
-sidecars. All 939 prior compiler inputs, 17 documents and four repository histories,
-indices and tracked diffs matched before application. The prior 173 sentinel's
-HANDOFF REGRESSION remains historical. No metadata was deleted or broadly ignored.
-The two transient SQLite sidecars subsequently became absent; the main store and
-all eight receipt hashes remain exact. The last observed WAL was empty. The exact
-absence and unchanged store are recorded in sqlite-sidecar-audit.json and sealed
-by the new checkpoint; their disappearance cause is not established.
+## Evidence and authority
 
-## Current documentation and evidence relocation
+Charlie approved the reader correction, requested RESET behaviour and build176, then executable and staging instructions. No guest input, new live capture, installation, staging, commit, push or sibling edit was performed. The original failed175 entry packet is retained. All prior user profiles, CPU/hardening settings, archived evidence and unrelated changes are preserved. Historical automatic-metadata sentinel failures are retained, not relabelled.
 
-The approved housekeeping moved the retained scoring note into
-[docs/scoring-target.md](scoring-target.md), installed the editable
-[refactoring task list](refactoring-work-tasks.md), and moved the preserved local
-archive into the ignored repository `Evidence/` directory. No refactor was
-implemented. The task-list contents are excluded from long-term memory and
-search indexing.
+The baseline accepts only six successful automatic recall receipts; their exact contents are sealed. The prior archive destination receipt remains byte-identical. Evidence and History stay private, ignored and untracked. The editable work-list is untouched and has not been indexed or captured.
 
-Historical archive JSON/scripts are byte-identical. The active verifier remaps
-only the exact former Evidence-root prefix and checks the new current snapshot.
-The old 174 verifier and its qualified snapshot are retained unchanged; running
-it directly still refers to historical absolute paths. Existing Cargo feature/lock
-changes and automatic metadata are preserved in the relocation snapshot, and are
-not newly qualified. No build, version increment, guest action, staging or push
-was performed. See [relocation details](evidence-relocation.md).
+## Destination sentinel
 
-## Destination Sentinel
-
-Run exactly once before further edits:
+Run once before further edits:
 
 ```sh
-python3 /home/charlie/repo/RUST/qmp-qemu-socket/Evidence/repository-docs/housekeeping-20261101/verify-relocation.py
+python3 /home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/pyramid-coral-reset-176-20261103-eh9ggbea/verify-destination.py
 ```
 
-Require HANDOFF VERIFIED or report the exact discrepancy. Preserve receipts.
-Protected executable: /home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/pyramid-challenge-174-proposal-9yca399e/native/qmp-qemu-socket-2.9.174; SHA256 37cb60771f807c6adff064a5aa0fd2de37368a5adbae4734b7924a75113e2d96; mode 0700.
-[Verification](Verification-2.9.174.md) records scope and evidence.
+Require HANDOFF VERIFIED, otherwise report the exact discrepancy before changes. New lifecycle receipts may require a bounded reconciliation; never delete them to manufacture a match.
 
-Fresh guest acceptance is pending. The retained standard-theme 0/3 frame is an
-offline regression, including actual v23 Native::observe and paired_entry
-classification; it is not a fresh capture or a complete live RECON/play run.
-Startup deletes the fixed images directory; preserve existing evidence first.
-No installation, guest input/captures, staging, commit, push or sibling edits occurred.
+## Protected executable
+
+```sh
+/home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/pyramid-coral-reset-176-20261103-eh9ggbea/native/qmp-qemu-socket-2.9.176 --image
+```
+
+SHA256 `4eb89ddffdd2bb95f3903d338bc5719797502391bf122471afc50496028f3ded`; mode0700. Normal startup resets the fixed image directory; preserve evidence first. Protected --help was checked before cleanup/GUI. [Verification](Verification-2.9.176.md).

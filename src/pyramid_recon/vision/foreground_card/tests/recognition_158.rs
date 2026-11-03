@@ -183,7 +183,7 @@ fn native_158_underwater_references_are_complete_original_pixels() {
         (false, 9),
         (false, 10),
         (true, 16),
-        (false, 2),
+        (true, 19),
         (false, 21),
         (false, 22),
         (false, 1),
@@ -352,4 +352,56 @@ fn native_158_measured_spade_preserves_five_seven_and_ten_clubs() {
             .unwrap(),
         Some(Card::new(Rank::Seven, Suit::Clubs))
     );
+}
+
+
+/// The unchanged Request21 board must read every manual identity, not just its old first refusal.
+#[test]
+fn native_176_coral_entry_reads_complete_manual_board() {
+    let bytes =
+        include_bytes!("../../../../../tests/fixtures/pyramid-recognition-176/coral-entry.png");
+    let frame = decode_png(bytes).unwrap();
+    let vision = super::super::super::ReconVision::bundled_native_v23().unwrap();
+    let ReconScene::Board(board) = vision.observe(&frame).unwrap() else {
+        panic!("complete board")
+    };
+    let expected = [
+        (Rank::Nine, Suit::Clubs),
+        (Rank::Ace, Suit::Clubs),
+        (Rank::Two, Suit::Hearts),
+        (Rank::King, Suit::Spades),
+        (Rank::Ten, Suit::Hearts),
+        (Rank::Eight, Suit::Hearts),
+        (Rank::Seven, Suit::Diamonds),
+        (Rank::Four, Suit::Clubs),
+        (Rank::Two, Suit::Spades),
+        (Rank::King, Suit::Diamonds),
+        (Rank::Six, Suit::Clubs),
+        (Rank::Ten, Suit::Clubs),
+        (Rank::Eight, Suit::Spades),
+        (Rank::Queen, Suit::Clubs),
+        (Rank::Nine, Suit::Spades),
+        (Rank::Seven, Suit::Clubs),
+        (Rank::Ace, Suit::Spades),
+        (Rank::Eight, Suit::Clubs),
+        (Rank::Nine, Suit::Diamonds),
+        (Rank::Ten, Suit::Spades),
+        (Rank::Three, Suit::Diamonds),
+        (Rank::Six, Suit::Diamonds),
+        (Rank::Ace, Suit::Hearts),
+        (Rank::Ace, Suit::Diamonds),
+        (Rank::Five, Suit::Diamonds),
+        (Rank::Queen, Suit::Hearts),
+        (Rank::Three, Suit::Hearts),
+        (Rank::Ten, Suit::Diamonds),
+    ]
+    .map(|(rank, suit)| Card::new(rank, suit));
+    assert_eq!(board.tableau, expected);
+    assert_eq!(board.tableau[6], Card::new(Rank::Seven, Suit::Diamonds));
+    assert_eq!(board.tableau[7], Card::new(Rank::Four, Suit::Clubs));
+    assert_eq!(
+        board.left,
+        StockFace::Card(Card::new(Rank::Three, Suit::Spades))
+    );
+    assert_eq!(board.right, StockFace::Empty);
 }

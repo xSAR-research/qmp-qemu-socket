@@ -58,6 +58,7 @@ mod search_log;
 
 use partial::confirm_partial_action;
 use thiserror::Error;
+use xsar::games::cards::Card;
 use xsar::{
     games::pyramid::{
         CompleteDeal, TABLEAU_LEN,
@@ -1972,6 +1973,47 @@ impl NativeIo<'_> {
     }
 
 
+    /// Try the five existing semantic clear proofs in their original lazy order.
+    ///
+    /// This performs recognition only. Callers retain phase, position, frame and
+    /// challenge-completion guards and decide how the result authorises progress.
+    ///
+    /// # Errors
+    /// Returns the normal-clear refusal without an initial challenge binding, or
+    /// the final bound-challenge refusal when every permitted alternative fails.
+    fn verify_final_clear_alternatives(
+        &self,
+        frame: &CapturedFrame,
+        tableau: &[Option<Card>; TABLEAU_LEN],
+        left: Option<Card>,
+        right: Option<Card>,
+    ) -> Result<(), String> {
+        self.execution_vision
+            .verify_final_clear(frame, tableau, left, right)
+            .or_else(|_| {
+                self.execution_vision
+                    .verify_normal_final_clear(frame, tableau, left, right)
+            })
+            .or_else(|error| {
+                if let Some(initial) = self.challenge_initial {
+                    self.execution_vision
+                        .verify_board_count_final_clear(frame, tableau, left, right, initial)
+                        .or_else(|_| {
+                            self.execution_vision.verify_board_count_target_clear(
+                                frame, tableau, left, right, initial,
+                            )
+                        })
+                        .or_else(|_| {
+                            self.execution_vision
+                                .verify_challenge_final_clear(frame, tableau, left, right, initial)
+                        })
+                } else {
+                    Err(error)
+                }
+            })
+    }
+
+
     /// Classify fresh native pixels; ordinary frames remain memory-only diagnostics.
     fn observe_checked(
         &mut self,
@@ -2091,34 +2133,7 @@ impl NativeIo<'_> {
                     .verify_position(&frame, &tableau, left, right)
                     .or_else(|ordinary_error| {
                         if final_effect && state.is_goal() {
-                            self.execution_vision
-                                .verify_final_clear(&frame, &tableau, left, right)
-                                .or_else(|_| {
-                                    self.execution_vision
-                                        .verify_normal_final_clear(&frame, &tableau, left, right)
-                                })
-                                .or_else(|error| {
-                                    if let Some(initial) = self.challenge_initial {
-                                        self.execution_vision
-                                            .verify_board_count_final_clear(
-                                                &frame, &tableau, left, right, initial,
-                                            )
-                                            .or_else(|_| {
-                                                self.execution_vision
-                                                    .verify_board_count_target_clear(
-                                                        &frame, &tableau, left, right, initial,
-                                                    )
-                                            })
-                                            .or_else(|_| {
-                                                self.execution_vision
-                                                    .verify_challenge_final_clear(
-                                                        &frame, &tableau, left, right, initial,
-                                                    )
-                                            })
-                                    } else {
-                                        Err(error)
-                                    }
-                                })
+                            self.verify_final_clear_alternatives(&frame, &tableau, left, right)
                                 .map_err(|alternative_error| format!("{ordinary_error}; final-clear alternatives refused: {alternative_error}"))
                         } else {
                             Err(ordinary_error)
@@ -2417,30 +2432,7 @@ impl RouteIo for NativeIo<'_> {
         let (tableau, left, right) = expected(&self.plan.acquisition.deal, state)?;
         let clear = matched
             && self
-                .execution_vision
-                .verify_final_clear(frame, &tableau, left, right)
-                .or_else(|_| {
-                    self.execution_vision
-                        .verify_normal_final_clear(frame, &tableau, left, right)
-                })
-                .or_else(|error| {
-                    if let Some(initial) = self.challenge_initial {
-                        self.execution_vision
-                            .verify_board_count_final_clear(frame, &tableau, left, right, initial)
-                            .or_else(|_| {
-                                self.execution_vision.verify_board_count_target_clear(
-                                    frame, &tableau, left, right, initial,
-                                )
-                            })
-                            .or_else(|_| {
-                                self.execution_vision.verify_challenge_final_clear(
-                                    frame, &tableau, left, right, initial,
-                                )
-                            })
-                    } else {
-                        Err(error)
-                    }
-                })
+                .verify_final_clear_alternatives(frame, &tableau, left, right)
                 .is_ok();
         let completion =
             self.final_confirmation

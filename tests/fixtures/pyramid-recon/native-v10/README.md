@@ -3,7 +3,7 @@
 This immutable evidence set supports the approved exact clubs-suit append in
 both reader banks. It does not authenticate a restored acquisition or authorise
 input. Required host checks passed: 1,043 app tests, zero failed/ignored. Actual results are
-in [Verification-2.6.108.md](../../../../docs/Verification-2.6.108.md).
+in [Verification-2.6.108.md](../../../../Evidence/release-verification/Verification-2.6.108.md).
 
 | File | Bytes | SHA-256 |
 | --- | ---: | --- |

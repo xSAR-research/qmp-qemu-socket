@@ -1,8 +1,8 @@
 # Full Codex-goal acceptance checklist — 2.9.151
 
-Canonical goal: [Codex-Goal.md](Codex-Goal.md). Covers all 13 standing outcomes, retained TracksA/B and151. Earlier Track A/Track B acceptance remains recorded; all rows below are future151 operator checks, not new live passes. See [verification](Verification-2.9.151.md) for host proof and composed-fixture limits.
+Canonical goal: [Codex-Goal.md](Codex-Goal.md). Covers all 13 standing outcomes, retained TracksA/B and151. Earlier Track A/Track B acceptance remains recorded; all rows below are future151 operator checks, not new live passes. See [verification](../Evidence/release-verification/Verification-2.9.151.md) for host proof and composed-fixture limits.
 
-Start C01–C03, then cover remaining cases on suitable games. Use the guarded `--image` command in [the live brief](Live-Test-2.9.151.md). Record Pass/Fail/Not observed, session/run, capture IDs, export/packet paths and notes in the private results template accompanying the bundle. An unobserved required situation is not a pass.
+Start C01–C03, then cover remaining cases on suitable games. Use the guarded `--image` command in [the live brief](../History/documentation-index.md#item-a66d0c8d592c9c8b9d7b). Record Pass/Fail/Not observed, session/run, capture IDs, export/packet paths and notes in the private results template accompanying the bundle. An unobserved required situation is not a pass.
 
 ## C01 — Automatic normal GAME WIN to next Recon
 

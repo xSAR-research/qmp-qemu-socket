@@ -219,6 +219,13 @@ enum WorkerCommand {
         /// Immutable socket, game and strategy selection for this request.
         context: ControllerContext,
     },
+    /// Capture one input-free RESET preview without changing progress or cancellation.
+    CaptureResetPreview {
+        /// Immutable controller selection.
+        context: ControllerContext,
+        /// Correlation identity owned by the requesting UI.
+        request_id: u64,
+    },
     /// Capture original PNG bytes and decoded pixels for manual saving.
     PrepareSnapshot {
         /// Immutable socket, game and strategy selection for this request.
@@ -297,6 +304,13 @@ pub struct WorkerRunFailure {
 
 /// Small ordered notifications sent from the worker to the UI.
 pub enum WorkerEvent {
+    /// Ordered completion of a RESET-only read-only preview.
+    ResetPreviewFinished {
+        /// UI request identity; never an input permit.
+        request_id: u64,
+        /// Capture/layout result, independent of the coalesced frame delivery.
+        result: Result<(), String>,
+    },
     /// Inspection-only failure packet, published before the corresponding finished event.
     PyramidDiagnostic(PyramidDiagnostic),
     /// Advisory phase progress; ownership remains with the complete session.
@@ -405,6 +419,8 @@ pub enum WorkerEvent {
 
 /// Latest advisory or diagnostic preview transferred through the bounded frame slot.
 pub struct LatestWorkerFrame {
+    /// RESET token, absent for ordinary advisory/diagnostic publications.
+    pub reset_request_id: Option<u64>,
     /// Full decoded capture for display.
     pub frame: CapturedFrame,
     /// Advisory target; diagnostic frames carry no action authority.
@@ -422,6 +438,8 @@ pub struct LatestWorkerFrame {
 
 /// Single pending preview retained until the UI consumes or replaces it.
 struct PendingWorkerFrame {
+    /// RESET token belonging to these exact pixels.
+    reset_request_id: Option<u64>,
     /// Decoded image retained for the preview.
     frame: CapturedFrame,
     /// Advisory target attached to this frame.
@@ -507,6 +525,20 @@ impl LatestFrameSlot {
         diagnostic: bool,
         context: Option<ControllerContext>,
     ) {
+        self.publish_tagged(frame, prediction, log_prediction, diagnostic, context, None);
+    }
+
+
+    /// Publish correlated RESET pixels through the same single-frame mailbox.
+    fn publish_tagged(
+        &self,
+        frame: CapturedFrame,
+        prediction: Option<PredictedAction>,
+        log_prediction: bool,
+        diagnostic: bool,
+        context: Option<ControllerContext>,
+        reset_request_id: Option<u64>,
+    ) {
         // Preview frames are advisory. Replacing a stale pending frame keeps
         // an occluded or sleeping UI from accumulating full-resolution images.
         let mut state = self
@@ -518,6 +550,7 @@ impl LatestFrameSlot {
         if state
             .pending
             .replace(PendingWorkerFrame {
+                reset_request_id,
                 frame,
                 prediction,
                 log_prediction,
@@ -540,6 +573,7 @@ impl LatestFrameSlot {
         let pending = state.pending.take()?;
         let coalesced_frames = std::mem::take(&mut state.coalesced_frames);
         Some(LatestWorkerFrame {
+            reset_request_id: pending.reset_request_id,
             frame: pending.frame,
             prediction: pending.prediction,
             log_prediction: pending.log_prediction,
@@ -981,6 +1015,23 @@ impl WorkerHandle {
             .send(WorkerCommand::CaptureFrame { context })
             .map_err(|error| format!("QMP worker is unavailable: {error}"))
     }
+
+    /// Queue exactly one raw RESET preview while preserving cancellation and acquisition.
+    pub fn capture_reset_preview(
+        &self,
+        context: ControllerContext,
+        request_id: u64,
+    ) -> Result<(), String> {
+        self.check_accepting_requests()?;
+        context.validate()?;
+        self.command_tx
+            .send(WorkerCommand::CaptureResetPreview {
+                context,
+                request_id,
+            })
+            .map_err(|error| format!("Worker RESET preview dispatch failed: {error}"))
+    }
+
 
 
     /// Queue a fresh capture whose original PNG and decoded preview share `request_id`.
@@ -1445,6 +1496,13 @@ fn run_worker(
                     },
                 );
             }
+            WorkerCommand::CaptureResetPreview { context, request_id } => {
+                event_tx.set_capture_context(Some(context.clone()));
+                let result = capture_preparation_frame(&context, &event_tx).map(|frame| {
+                    event_tx.latest_frame.publish_tagged(frame, None, false, false, Some(context.clone()), Some(request_id));
+                });
+                let _ = event_tx.send_for_context(Some(context), WorkerEvent::ResetPreviewFinished { request_id, result });
+            }
             WorkerCommand::CaptureFrame { context } => {
                 event_tx.set_capture_context(Some(context.clone()));
                 reset_scan_state_for_context(
@@ -1651,6 +1709,23 @@ fn ensure_strategy_input_authorised(strategy: SolvingStrategy) -> Result<(), Str
 
 
 /// Capture and publish raw Pyramid preparation pixels without any gameplay analysis.
+/// Capture supported storage/layout only; no recognition, progress change or input authority.
+fn capture_preparation_frame(
+    context: &ControllerContext,
+    event_tx: &WorkerEventSink,
+) -> Result<CapturedFrame, String> {
+    context.validate()?;
+    let (mut qmp, probe) = connect_and_probe(&context.socket_path)?;
+    if !probe.is_running() {
+        return Err("Preparation capture refused because the VM is not running".to_owned());
+    }
+    let (frame, _) = capture_screen(&mut qmp, &context.socket_path, event_tx)?;
+    preparation_prediction(&frame)?;
+    Ok(frame)
+}
+
+
+/// Publish one raw preparation frame and its ordinary capture status.
 fn run_preparation_capture(context: &ControllerContext, event_tx: &WorkerEventSink) {
 
 

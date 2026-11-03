@@ -125,8 +125,8 @@ none measures independent general accuracy. Saved visible evidence proves
 neither unseen stock, complete acquisition, restoration, fresh receipt nor
 guest acceptance.
 
-[Verification](../../../../docs/Verification-2.6.111.md) owns exact host results
-and the closed review scope. [Operator brief](../../../../docs/Live-Test-2.6.111.md)
+[Verification](../../../../Evidence/release-verification/Verification-2.6.111.md) owns exact host results
+and the closed review scope. [Operator brief](../../../../History/documentation-index.md#item-5375153a9425dc69a640)
 requires a fresh same-session acquisition for a live trial. The work root is
 `/home/charlie/tmp/pyramid-diamond-v13-validation-ugnvhgv9`. The protected
 `release/qmp-qemu-socket-2.6.111` is 12,733,440 bytes/mode 0555, exact native

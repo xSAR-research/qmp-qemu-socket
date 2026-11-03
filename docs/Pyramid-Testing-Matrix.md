@@ -4,7 +4,7 @@
 
 The automatic NEW GAME and manual START failures shared a complete normal-header appearance refusal. Two pixels differed by 13 against the existing per-channel limit of 12; the complete New footer passed. Fresh TCP captures and complete card observations were verified. The correction retains an additional complete 160 by 32 ordinal-one RGB appearance and every pixel/channel check at the original limits. Coherent appearances for the same count share one identity; conflicting counts still refuse. The 151 bounded Pending/Ready pair, strict normal footer, exclusive piles, fresh entry and fresh guarded Recon remain unchanged. No timing, control, threshold, crop, glyph, dependency, API, concurrency or xSAR policy changes are introduced.
 
-[Verification](Verification-2.9.153.md), [priority live brief](Live-Test-2.9.153.md), retained [full 25-case checklist](Acceptance-Tests-2.9.151.md). All 13 standing outcomes, original 19 case rows and master schedule tables remain retained. Track A stays closed with open fixes; no new guest pass or further version authority is inferred.
+[Verification](../Evidence/release-verification/Verification-2.9.153.md), [priority live brief](../History/documentation-index.md#item-a7ed5be414ed1a31dab8), retained [full 25-case checklist](Acceptance-Tests-2.9.151.md). All 13 standing outcomes, original 19 case rows and master schedule tables remain retained. Track A stays closed with open fixes; no new guest pass or further version authority is inferred.
 
 ## Retained 2.9.152 delivery context
 
@@ -14,7 +14,7 @@ The following statements are dated evidence; the current receipt above governs t
 
 The retained normal third-board clear was refused because moving Perfect glow crossed the lower absence band at 7|5. Bundled colour-independent normal recognition retains the original complete layout first, then may prove one coherent layout of all 28 existing upper bands. The alternative also vetoes card material in every original band and full clearance, preserving the three retained flying-card refusals. Replayed empty tableau, complete normal header/footer, scene/modal/DRAW roles, exact exclusive piles, final-action phase, whole-action ACK boundary, STOP/context and the same two-second window remain required. No per-slot mixing, threshold/crop/bank changes or ACK-only restart is admitted.
 
-[Verification](Verification-2.9.152.md), [live brief](Live-Test-2.9.152.md), retained [complete 25-case checklist](Acceptance-Tests-2.9.151.md).
+[Verification](../Evidence/release-verification/Verification-2.9.152.md), [live brief](../History/documentation-index.md#item-6b88494d43a85c63975c), retained [complete 25-case checklist](Acceptance-Tests-2.9.151.md).
 
 The retained150 context below preserves all original case and milestone table rows. Older pending/executed statements are dated proof, not fresh152 guest results. All 13 standing outcomes remain unchanged.
 
@@ -35,8 +35,8 @@ The correction covers Pending normal effects, distinct paired normal/challenge
 board handoffs, exhausted-stock partial stopping, bound Score Loading completion,
 Boards/Perfect final proof, background Boards entry and source-owned Spider failures.
 Actual football regressions pass the existing reader without changing glyph limits.
-See [verification](Verification-Track-B-150.md), the
-[live brief](Live-Test-Track-B-150.md) and [FIX results](milestones.md#7-fix-list--carried-forward-from-accepted-track-a).
+See [verification](../Evidence/release-verification/Verification-Track-B-150.md), the
+[live brief](../History/documentation-index.md#item-bec4cac4d9a26f91944c) and [FIX results](milestones.md#7-fix-list--carried-forward-from-accepted-track-a).
 
 Track A remains CLOSED — ACCEPTED WITH OPEN FIXES. Track B and the selected code
 fixes are accepted; fresh 150 guest verification has not been recorded. The native
@@ -47,7 +47,7 @@ schedule observations retain their separate scope and evidence.
 
 The bounded Wild West aged-paper correction is host qualified: 1483 application
 tests, 753 sealed inputs and all six required gates passed. Charlie has accepted
-Track A with open fixes. The [acceptance record](Track-A-Acceptance-2.9.149.md)
+Track A with open fixes. The [acceptance record](../History/documentation-index.md#item-3c6503c6107bf43745af)
 and [FIX list](milestones.md#7-fix-list--carried-forward-from-accepted-track-a)
 record the decision, retained evidence and remaining failures. The 19 case rows
 below retain their execution evidence; acceptance does not invent test passes.
@@ -66,8 +66,8 @@ and 87 cream/Retro observations remain covered. Quality/ambiguity limits, comple
 scene/modal proof, STOP/context, fresh probes and no uncertain replay remain intact.
 Boards/Perfect was deferred in 149; its accepted 150 correction is recorded above.
 
-See [verification](Verification-2.9.149.md) and the
-[fresh live-test brief](Live-Test-2.9.149.md). Earlier release sections are
+See [verification](../Evidence/release-verification/Verification-2.9.149.md) and the
+[fresh live-test brief](../History/documentation-index.md#item-4409cfdb64de9b458209). Earlier release sections are
 retained evidence; their earlier pending labels describe those snapshots. Current
 Track A acceptance is recorded above, separately from individual test results.
 
@@ -85,7 +85,7 @@ worker, dependency or timing policy changes are included.
 
 Host result: 1478 full tests, zero failures/ignored/filtered, 747 sealed inputs and all six required gates passed. Fresh Beast/Charlie acceptance remains pending.
 The 19 matrix cases and 14 milestone states remain unchanged. See
-[148 verification](Verification-2.9.148.md) and [148 manual checks](Live-Test-2.9.148.md).
+[148 verification](../Evidence/release-verification/Verification-2.9.148.md) and [148 manual checks](../History/documentation-index.md#item-012863df9e1e5ed2433a).
 
 ## Retained correction — 2.9.147 / xSAR 0.9.0; host qualified
 
@@ -124,8 +124,8 @@ and capture work must not be described as an intentional post-RECON delay.
 
 All six 147 host gates passed: 1476 full tests, 747 sealed inputs and native release/help. The protected executable is `/home/charlie/Documents/Pyramid/Validation/pyramid-normal-win-20261025/native/qmp-qemu-socket-2.9.147` (SHA-256 `5d8d6617370898d924a47f26fe5c0caee055e0906e6e5a66d16bfac7cafc4eb9`). Running-process provenance is recorded separately in verification when launched. xSAR remains 0.9.0; fresh Beast/Charlie acceptance and the 19 matrix/14 milestone states remain unchanged.
 
-See [147 verification](Verification-2.9.147.md) and
-[147 manual checks](Live-Test-2.9.147.md). Retained 146 evidence follows.
+See [147 verification](../Evidence/release-verification/Verification-2.9.147.md) and
+[147 manual checks](../History/documentation-index.md#item-f5e4edebcac0d1661d55). Retained 146 evidence follows.
 
 ## Retained correction — 2.9.146 / xSAR 0.9.0; host qualified
 
@@ -154,8 +154,8 @@ remains pending. The 145 stock rule (45% coverage, RGB floor 180), temporal REDE
 STOP/context and legal-position guards remain; automatic board-to-RECON handoff is
 still a separate open item. No matrix or milestone acceptance is added.
 
-See [146 verification](Verification-2.9.146.md) and
-[146 manual checks](Live-Test-2.9.146.md). Retained 145 qualification follows.
+See [146 verification](../Evidence/release-verification/Verification-2.9.146.md) and
+[146 manual checks](../History/documentation-index.md#item-549091f1e8d38e344c4f). Retained 145 qualification follows.
 
 ## Retained correction — 2.9.145 / xSAR 0.9.0
 
@@ -181,16 +181,16 @@ refusals and automatic cleared-board-to-RECON handoff remain open. The temporal
 REDEAL correction and all input, STOP/context and legal-position checks are retained.
 No timing, glyph threshold, dependency or public API changes are included.
 
-See [145 verification](Verification-2.9.145.md) and
-[145 manual checks](Live-Test-2.9.145.md). No milestone acceptance is added.
+See [145 verification](../Evidence/release-verification/Verification-2.9.145.md) and
+[145 manual checks](../History/documentation-index.md#item-ba8c9d42e1199b84f7fc). No milestone acceptance is added.
 
 ## Retained 2.9.144
 
-144 passed 1434 full tests with 729 sealed inputs. Its occupied-RIGHT temporal REDEAL correction, protected artifact and launch remain recorded in [144 verification](Verification-2.9.144.md).
+144 passed 1434 full tests with 729 sealed inputs. Its occupied-RIGHT temporal REDEAL correction, protected artifact and launch remain recorded in [144 verification](../Evidence/release-verification/Verification-2.9.144.md).
 
 ## Retained 2.9.143 / xSAR 0.9.0; host qualified
 
-143 passed 1432 full application tests, zero failed/ignored/filtered, all six gates and native help, with 726 sealed inputs. Its bounded mixed-legend correction and protected launch remain recorded in [143 verification](Verification-2.9.143.md). The new run 9 stock-position refusal is preserved separately; no milestone acceptance is added by this correction.
+143 passed 1432 full application tests, zero failed/ignored/filtered, all six gates and native help, with 726 sealed inputs. Its bounded mixed-legend correction and protected launch remain recorded in [143 verification](../Evidence/release-verification/Verification-2.9.143.md). The new run 9 stock-position refusal is preserved separately; no milestone acceptance is added by this correction.
 
 ## Retained 2.9.139 / xSAR 0.9.0; host qualification
 
@@ -204,7 +204,7 @@ substantive later appearance, with exact position, legal stock, probe and STOP g
 No icon, numeral or caption template grants that click. An unreadable challenge header
 may receive bounded read-only effect retries; source evidence remains positive-only.
 Computer Vision/HALO timing and input-free actual Challenge Complete handoff are preserved.
-See [139 verification](Verification-2.9.139.md) and [139 manual checks](Live-Test-2.9.139.md).
+See [139 verification](../Evidence/release-verification/Verification-2.9.139.md) and [139 manual checks](../History/documentation-index.md#item-cfa1dc553dda294f4e2b).
 No new milestone or live outcome is accepted by this delivery.
 
 ## Retained 2.9.138 correction; host qualified, fresh acceptance pending
@@ -220,14 +220,14 @@ A fresh acquisition and route are required after operator UNDO ALL.
 2.9.138 passed **1404 full tests**, zero failed/ignored/filtered, all six required
 gates and native help, with **698 sealed inputs**. Native executable SHA-256:
 `b90ea73cf1e3c9acccdec9af67ec0c4a5210e88e25befcc3f53dca6db2279b64`. Fresh Beast and Charlie acceptance remain pending.
-See [verification](Verification-2.9.138.md) and
-[manual checks](Live-Test-2.9.138.md). No milestone acceptance is added.
+See [verification](../Evidence/release-verification/Verification-2.9.138.md) and
+[manual checks](../History/documentation-index.md#item-ad0f01d06bca5da9dc60). No milestone acceptance is added.
 
 
 Current combined 2.9.137 host qualification passed (1401 tests, 695 sealed inputs);
 fresh acceptance remains pending. The older
 timing-only 1376-test artifact and 136 live outcomes remain retained evidence; see
-[combined verification](Verification-2.9.137.md). Existing case identities and
+[combined verification](../Evidence/release-verification/Verification-2.9.137.md). Existing case identities and
 acceptance states below are unchanged.
 
 ### Current correction regression checks

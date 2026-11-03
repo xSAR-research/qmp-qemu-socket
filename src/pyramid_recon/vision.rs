@@ -653,10 +653,19 @@ impl ReconVision {
                 .recognise(view, origin)
                 .map_err(|error| format!("tableau slot {index}: {error}"))?
                 .ok_or_else(|| {
-                    format!(
+                    let mut details = format!(
                         "unknown rank/suit at tableau slot {index}; accepted identities=0; {}",
                         self.tableau_reader.failure_details(view, origin)
-                    )
+                    );
+                    if self.tableau_reader.foreground.is_some() {
+                        let location = (1_usize..=7).find_map(|row| {
+                            let first = row * (row - 1) / 2;
+                            (index >= first && index < first + row)
+                                .then(|| format!("{row}|{}", index - first + 1))
+                        }).unwrap_or_else(|| "invalid location".to_owned());
+                        details.push_str(&format!("; tableau location {location} (slot {index}, zero-based)"));
+                    }
+                    details
                 })?;
         }
 

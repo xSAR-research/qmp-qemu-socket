@@ -65,8 +65,8 @@ and 87 cream/Retro observations remain covered. Quality/ambiguity limits, comple
 scene/modal proof, STOP/context, fresh probes and no uncertain replay remain intact.
 The separate Boards/Perfect final-proof case remains deferred.
 
-See [verification](Verification-2.9.149.md) and the
-[fresh live-test brief](Live-Test-2.9.149.md). Earlier release sections are
+See [verification](../Evidence/release-verification/Verification-2.9.149.md) and the
+[fresh live-test brief](../History/documentation-index.md#item-4409cfdb64de9b458209). Earlier release sections are
 retained evidence and do not establish 149 guest acceptance.
 
 ## Retained correction — 2.9.148 / xSAR 0.9.0; host qualified
@@ -83,7 +83,7 @@ worker, dependency or timing policy changes are included.
 
 Host result: 1478 full tests, zero failures/ignored/filtered, 747 sealed inputs and all six required gates passed. Fresh Beast/Charlie acceptance remains pending.
 The 19 matrix cases and 14 milestone states remain unchanged. See
-[148 verification](Verification-2.9.148.md) and [148 manual checks](Live-Test-2.9.148.md).
+[148 verification](../Evidence/release-verification/Verification-2.9.148.md) and [148 manual checks](../History/documentation-index.md#item-012863df9e1e5ed2433a).
 
 ## Retained 2.9.147 candidate: bound completion and challenge identity
 
@@ -108,14 +108,14 @@ deal/receipt/bytes without capture or Recon. It changes no card/profile calibrat
 and proves no Shortest no-win result. A source audit found completed-RECON handoffs
 already direct; the mandatory 1000 ms acknowledged-OK settle and both restoration
 frames stay inside Recon. No new timings or fresh guest acceptance are claimed.
-147 passed all six host gates (1476 full tests, 747 sealed inputs); see [verification](Verification-2.9.147.md)
-and [manual checks](Live-Test-2.9.147.md). Retained 146 evidence follows.
+147 passed all six host gates (1476 full tests, 747 sealed inputs); see [verification](../Evidence/release-verification/Verification-2.9.147.md)
+and [manual checks](../History/documentation-index.md#item-f5e4edebcac0d1661d55). Retained 146 evidence follows.
 
 ## Retained 2.9.146 candidate: native-v23 complete corner identity
 
 Host qualification passed (1449 tests and 743 sealed inputs); fresh Beast/Charlie
 acceptance remains pending. The named
-private policy is `native_corner_ink_v1`; see [146 verification](Verification-2.9.146.md).
+private policy is `native_corner_ink_v1`; see [146 verification](../Evidence/release-verification/Verification-2.9.146.md).
 Only the bundled native-v23 constructor enables it. A serialized profile, custom
 JSON identifier or earlier constructor cannot opt in. Frozen/custom comparison
 policies and their retained evidence are unchanged.
@@ -175,7 +175,7 @@ negative space, exclusive piles, modal veto and exact replay remain required.
 The genuine Xbox intact image, actual Classic Boards header and actual Twos exhausted
 control are distinct originals. Hue recolours and successor/occlusion frames are
 labelled synthetic. Near-white artwork, broad smooth occlusion and unobserved Xbox
-states are not universal-theme evidence. See [combined verification](Verification-2.9.137.md).
+states are not universal-theme evidence. See [combined verification](../Evidence/release-verification/Verification-2.9.137.md).
 Computer Vision and HALO detection/timing are unchanged.
 
 ## Retained delivery — 2.9.127, host qualified; fresh Beast was pending
@@ -194,7 +194,7 @@ Automatic partial/no-card continuations count actual acknowledged RECYCLEs again
 
 The new bundled-only native capability recognises the measured **1 deal left** and **0 deals left** captions. Only the complete enabled one-deal control grants a click. Two-deal and absent-caption variants remain unsupported and stop safely. File/custom profiles cannot opt in through an identifier. Ordinary native-v22 recognition and glyph limits are unchanged. Variable backgrounds and idle CPU remain outside this goal.
 
-[Verification](Verification-2.9.127.md), [fresh Beast brief](Live-Test-2.9.127.md), [selected goal](Pyramid-Current-Goal.md), [testing matrix](Pyramid-Testing-Matrix.md).
+[Verification](../Evidence/release-verification/Verification-2.9.127.md), [fresh Beast brief](../History/documentation-index.md#item-c61aeb6b918074108598), [selected goal](Pyramid-Current-Goal.md), [testing matrix](Pyramid-Testing-Matrix.md).
 
 ## Retained history — earlier state and proposals
 
@@ -243,7 +243,7 @@ target** for this goal. M14 DRAW/REDEAL, variable backgrounds and idle CPU stay
 outside this goal. M01–M09 remain accepted; M10 Awaiting verification, M11 Planned,
 M12 In progress and M13/M14 Planned. No milestone acceptance is inferred here.
 
-[126 verification](Verification-2.8.126.md), [fresh Beast brief](Live-Test-2.8.126.md), [selected goal](Pyramid-Current-Goal.md).
+[126 verification](../Evidence/release-verification/Verification-2.8.126.md), [fresh Beast brief](../History/documentation-index.md#item-510ca789547d11c43a12), [selected goal](Pyramid-Current-Goal.md).
 
 ## Retained 125 qualification and historical scope
 
@@ -296,7 +296,7 @@ evidence; its failed endpoint and the new offline regression pass are not fresh
 M11 Planned, M12 In progress, M13/M14 Planned. Additional active rank labels,
 variable backgrounds and idle CPU remain separate backlog.
 
-[125 verification](Verification-2.8.125.md), [Beast brief](Live-Test-2.8.125.md) and [current goal](Pyramid-Current-Goal.md).
+[125 verification](../Evidence/release-verification/Verification-2.8.125.md), [Beast brief](../History/documentation-index.md#item-f389f0d40f408028b6ee) and [current goal](Pyramid-Current-Goal.md).
 
 ## Retained 123 and earlier evidence
 
@@ -314,7 +314,7 @@ The final two-second ACK window, 200ms interval, STOP/context/fatal guards, capt
 
 **The selected goal is incomplete; automatic continuation is blocked pending fresh Beast verification.** Fresh protected 2.8.123 Beast verification remains pending for Boards, Score, Twos, Fours, Sevens and the unmet-target board transition. Old native PNGs, offline transports and synthetic compositions are not fresh acceptance. M10 remains Awaiting verification; M11 Planned; M12 In progress; M13 and M14 Planned. Additional ranks, partial DRAW/REDEAL, variable backgrounds and idle CPU remain separate backlog.
 
-[123 verification](Verification-2.8.123.md) and [fresh Beast brief](Live-Test-2.8.123.md).
+[123 verification](../Evidence/release-verification/Verification-2.8.123.md) and [fresh Beast brief](../History/documentation-index.md#item-b2e09a095a6e9d4b7fc5).
 
 ## Retained earlier evidence
 
@@ -326,7 +326,7 @@ Native-v19 explicitly enables a final-only intermediate Boards proof. The produc
 
 Protected app **2.8.122**, native profile **v19**: `/home/charlie/Documents/Pyramid/Validation/challenge-board-transition-20261021/release/qmp-qemu-socket-2.8.122`; 13461712 bytes, mode 0555; SHA-256 `7ea7b0bf48e747a0f295985222cf99c0585a89135e7c507e2f13a79c386d4e73`. The protected and Cargo-selected native binaries match. Version 122 is the next correction build after qualified 121, with no new milestone/minor or sibling version increment.
 
-Fresh 122 live acceptance is pending. See [verification](Verification-2.8.122.md) and [live brief](Live-Test-2.8.122.md). Search STOP policy, final observation bounds and M14 deferral remain as recorded.
+Fresh 122 live acceptance is pending. See [verification](../Evidence/release-verification/Verification-2.8.122.md) and [live brief](../History/documentation-index.md#item-422e3b54228d55931298). Search STOP policy, final observation bounds and M14 deferral remain as recorded.
 
 Schema 2 adds optional `board.board_count_final_clear: true`, admitted only alongside the existing final_clear profile. False/implicit/schema-1 capability and all invalid bindings refuse. Removing that flag and restoring profile_id decodes exactly to v18; no old samples, thresholds or frame checks changed.
 
@@ -362,7 +362,7 @@ their qualified 289/80 tests and six feature rows 14/55/25/67/57/99 are retained
 not rerun. Fresh Beast acceptance remains pending. M01–M09 remain accepted,
 M10 is Awaiting verification and M11 is Planned.
 
-Read [Verification120](Verification-2.8.120.md) and [LiveTest120](Live-Test-2.8.120.md).
+Read [Verification120](../Evidence/release-verification/Verification-2.8.120.md) and [LiveTest120](../History/documentation-index.md#item-578853f7494237c2ad65).
 <!-- qualification120:end -->
 
 <!-- qualification118:start -->
@@ -381,8 +381,8 @@ restart authority. Full required host scope and protected release passed: app
 feature configurations. Native/protected artifacts match. Final documentation/
 preservation audit passed: 12 documents, 309 local links, 40 review paths and unchanged
 exercised inputs. Fresh guest acceptance is pending.
-See [Verification-2.7.118](Verification-2.7.118.md) and
-[Live-Test-2.7.118](Live-Test-2.7.118.md). Older blocks are retained history.
+See [Verification-2.7.118](../Evidence/release-verification/Verification-2.7.118.md) and
+[Live-Test-2.7.118](../History/documentation-index.md#item-a345e587c200b7722a48). Older blocks are retained history.
 <!-- qualification118:end -->
 
 <!-- qualification117:start -->
@@ -407,7 +407,7 @@ Live acceptance remains pending. Final documentation/preservation audit record:
 `/home/charlie/tmp/pyramid-final-clear-validation-99xkhzgy/final-audit.json`.
 Continuous remains disabled: actual normal Boards: 2 of 3 / 3 of 3 references are
 missing. Challenge extension, alternate-theme support and idle-CPU diagnosis remain
-open. See the [verification record](Verification-2.6.117.md).
+open. See the [verification record](../Evidence/release-verification/Verification-2.6.117.md).
 <!-- qualification117:end -->
 
 Required host checks, the native release and protected 115 executable have
@@ -417,7 +417,7 @@ telemetry refusal `Reviewed operational bytes changed: .trigger-tree/history.jso
 Original failure evidence remains retained; no Cargo command was repeated.
 Root's final documentation/link/preservation audit passed. Fresh live
 acceptance has not been performed; Continuous remains disabled and the full goal
-remains incomplete. See the [verification record](Verification-2.6.115.md).
+remains incomplete. See the [verification record](../Evidence/release-verification/Verification-2.6.115.md).
 
 ## Current source — native-v16, app 2.6.115, host verified
 
@@ -445,7 +445,7 @@ parsed v15 profile. All ten v15 assets remain unchanged. Removing v15's two
 optional fields and restoring its ID reproduces the complete v14 profile.
 See [v15 provenance](../tests/fixtures/pyramid-recon/native-v15/README.md),
 [v16 provenance](../tests/fixtures/pyramid-recon/native-v16/README.md) and
-[115 verification](Verification-2.6.115.md). App115 has passed the required host, artifact and sealed preservation checks;
+[115 verification](../Evidence/release-verification/Verification-2.6.115.md). App115 has passed the required host, artifact and sealed preservation checks;
 current run 0001 passed 1,199 tests, zero failed/ignored, locked check, strict
 private docs, Clippy and scoped formatting. Release, protected-artifact and sealed preservation checks passed; the final documentation audit passed.
 
@@ -537,8 +537,8 @@ under SysProf and remains unresolved; this correction contains no CPU fix.
 xSAR 0.6.102, console 0.8.4, indices and protected stable 107–112 remain frozen.
 No guest/GUI/input, installation, process replacement or promotion is performed.
 
-See [verification](Verification-2.6.113.md) and
-[operator brief](Live-Test-2.6.113.md).
+See [verification](../Evidence/release-verification/Verification-2.6.113.md) and
+[operator brief](../History/documentation-index.md#item-61dd87f1c54f41337a71).
 
 Native-v14 profile is 832,593 bytes/SHA-256
 `2e1c1cc7135dc8f5310396bba52473ba53c6ad4eb4b99b3b0b1631eac57ea9f9`;
@@ -615,9 +615,9 @@ that instant only. Preserve evidence before startup clears images, then close
 the old app deliberately before the operator launches 2.6.111. No guest/GUI/
 input/install/promotion or process control is performed by this correction.
 
-See [verification](Verification-2.6.111.md),
+See [verification](../Evidence/release-verification/Verification-2.6.111.md),
 [fixture provenance](../tests/fixtures/pyramid-recon/native-v13/README.md) and
-[operator brief](Live-Test-2.6.111.md).
+[operator brief](../History/documentation-index.md#item-5375153a9425dc69a640).
 
 ## Retained host profile — native-v12 schema 2 graded reader
 
@@ -670,7 +670,7 @@ input diagnostics. A graded winning witness must independently pass paper and
 exclusive colour at its own shift, then rank/suit agreement and suit identity.
 Fixed schema 2 keys/integers are strict; File/schema 1 never falls back or silently
 migrates. [Fixture lineage](../tests/fixtures/pyramid-recon/native-v12/README.md)
-and [verification](Verification-2.6.110.md) retain calibration/exposed/prospective
+and [verification](../Evidence/release-verification/Verification-2.6.110.md) retain calibration/exposed/prospective
 roles and actual results when measured. Fresh complete same-session acquisition
 and restoration remain mandatory before route input; no live authority follows
 from corpus labels or a successful parser.
@@ -717,7 +717,7 @@ Python review reports 29/29 visible per bank and 104 historical glyphs retained;
 those remain separately attributed review measurements. Actual production
 Rust filter 9/0/0 and full 1,052/0/0 app tests passed; no guest proof is implied. Fresh complete
 same-session acquisition remains mandatory. See [fixture](../tests/fixtures/pyramid-recon/native-v11/README.md)
-and [verification](Verification-2.6.109.md). Current Manual/Single board and
+and [verification](../Evidence/release-verification/Verification-2.6.109.md). Current Manual/Single board and
 unavailable Continuous are unchanged; no broader completion claim follows.
 
 ## Retained host profile — native-v10 exact highlighted-clubs variant
@@ -745,7 +745,7 @@ is not uncertain. The latest frame contains LEFT A♠ and RIGHT 2♣. It proves 
 unseen stock, restoration, live receipt or complete route input. Keep the
 original failure unchanged; fresh acquisition is mandatory before execution.
 [Fixture provenance](../tests/fixtures/pyramid-recon/native-v10/README.md) and
-[verification](Verification-2.6.108.md) distinguish exact retained evidence from
+[verification](../Evidence/release-verification/Verification-2.6.108.md) distinguish exact retained evidence from
 synthetic refusal tests and pending live acceptance.
 
 ## Historical correction — 2.5.107, host-verified native-v9 King variant
@@ -776,9 +776,9 @@ retains exact hashes/crop provenance. Nine focused production-reader/negative/
 provenance checks passed and overlap the full 977-test suite, zero failed/ignored.
 Required host checks and stable artifact verification passed; the first test-only
 compile failure remains recorded in
-[Verification-2.5.107.md](Verification-2.5.107.md). Fresh live acquisition and
+[Verification-2.5.107.md](../Evidence/release-verification/Verification-2.5.107.md). Fresh live acquisition and
 restoration remain separate, as described in
-[Live-Test-2.5.107.md](Live-Test-2.5.107.md). No unseen stock inventory or receipt
+[Live-Test-2.5.107.md](../History/documentation-index.md#item-f19792b3177ae0b1dade). No unseen stock inventory or receipt
 is inferred from the retained single board image. The separately approved timing,
 completion, automation-mode and search-statistics work is not part of native-v9.
 
@@ -832,10 +832,10 @@ bounds are native origin plus extent. These diagnostics explain refusal without
 changing the supported-scene decision or granting a fallback input path.
 
 The [v8 fixture record](../tests/fixtures/pyramid-recon/native-v8/README.md)
-retains provenance and limitations. See [Verification-2.5.104.md](Verification-2.5.104.md)
-and [Live-Test-2.5.104.md](Live-Test-2.5.104.md) for completed host checks, exact
+retains provenance and limitations. See [Verification-2.5.104.md](../Evidence/release-verification/Verification-2.5.104.md)
+and [Live-Test-2.5.104.md](../History/documentation-index.md#item-e16ac0c5af6266e23439) for completed host checks, exact
 artifact identity and pending corrected-build Beast acceptance.
-The prior [2.5.103 record](Verification-2.5.103.md) remains historical evidence
+The prior [2.5.103 record](../Evidence/release-verification/Verification-2.5.103.md) remains historical evidence
 for Solver-independent recognition and automatic setup, not this correction.
 
 ## Scope and evidence boundary
@@ -879,14 +879,14 @@ and CLASSIC BLUE artwork. Its profile declaration is not proof that those
 conditions hold: the calibrated scene patches must discriminate them in pixels.
 
 The first live attempts exposed partial-next-row text in two chart-signature
-crops. The [Gate 3 correction record](pyramid-recon-gate3-correction.md) documents
+crops. The [Gate 3 correction record](../History/documentation-index.md#item-15ec452f32e3903312b6) documents
 the two retained original failure captures, narrower complete-row crops and
 unchanged tolerances. The corrected profile ID is
 `pyramid-native-1920-classic-blue-v2`; its JSON schema remains version 1.
 Offline recognition of those captures is not live acquisition/restoration.
 
 The subsequent live run completed the 28+24 inventory but refused the Undo All
-modal. The [modal correction record](pyramid-recon-modal-correction.md) records
+modal. The [modal correction record](../History/documentation-index.md#item-8c29ceac1a8701e66018) records
 the previous profile, `pyramid-native-1920-classic-blue-v3`: exact unchanged modal
 RGB/crops/masks with measured title/body/Cancel/OK tolerances 9/10/9/8. Panel and
 both backdrops remain at 4. The previous uniform 4 was insufficient for those
@@ -895,7 +895,7 @@ negative/boundary checks; it neither enables generic OK nor resumes a failed run
 
 The repeated modal refusal is addressed by the retained bundled
 `pyramid-native-1920-classic-blue-v4`, described in the
-[stable-text correction record](pyramid-recon-stable-text-correction.md).
+[stable-text correction record](../History/documentation-index.md#item-92bacd1ec93d0d124730).
 Only four text masks and the ID change from v3. Each mask retains exact pure-ink
 centres OR samples whose original 3x3 neighbourhood has every channel range
 at most 16, including a one-pixel halo outside the ROI. RGB/crops/tolerances stay
@@ -978,7 +978,7 @@ The prepared v7 profile is 806,442 bytes, SHA-256
 The locked check, 10 focused v7 regressions, all 876 tests including ignored
 tests, strict private docs, Clippy and standalone new-module formatting passed.
 Native release, executable `--help` and final preservation checks passed in
-[Verification-2.4.101.md](Verification-2.4.101.md). The fixture's
+[Verification-2.4.101.md](../Evidence/release-verification/Verification-2.4.101.md). The fixture's
 [README](../tests/fixtures/pyramid-recon/native-v7/README.md) separates original
 PNG, crop and profile identities. A fresh live v7 complete acquisition/restoration
 and M09 console/game comparison remain pending Charlie. Final checks found no
@@ -1427,4 +1427,4 @@ card identities and exact pile observations are unchanged.
 
 Both originals calibrate this finite proof; no independent third rendering or
 fresh guest acceptance is claimed. [References and negative tests](../tests/fixtures/pyramid-recognition-160/README.md)
-and [actual host qualification](Verification-2.9.160.md) preserve those limits.
+and [actual host qualification](../Evidence/release-verification/Verification-2.9.160.md) preserve those limits.

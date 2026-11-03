@@ -20,4 +20,4 @@ No glyph threshold, bank, alignment, colour or ambiguity policy changed.
 Tests use grey/erased/title-damaged/retained-apex derivatives solely for refusal.
 The capture-adapter normal-header composition is synthetic and supplies no missing
 normal ordinal calibration, guest receipt or live acceptance. Perfect never supplies
-challenge-completion or restart authority. See [verification](../../../../docs/Verification-2.6.117.md).
+challenge-completion or restart authority. See [verification](../../../../Evidence/release-verification/Verification-2.6.117.md).

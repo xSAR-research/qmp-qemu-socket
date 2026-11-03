@@ -9,6 +9,7 @@ mod diagnostics;
 mod log_window;
 mod pyramid_defaults;
 mod pyramid_workflow;
+mod reset_preview;
 mod window_chrome;
 
 #[cfg(test)]
@@ -488,6 +489,10 @@ pub struct QmpQemuSocketApp {
     strategy_choice_pending: bool,
     /// Selection generation rejects results from an earlier switch or socket.
     context_generation: u64,
+    /// Last allocated RESET-only preview identity.
+    reset_preview_serial: u64,
+    /// Correlated read-only refresh and acknowledgement of retained old errors.
+    reset_preview: Option<reset_preview::ResetPreview>,
     /// Bounded operator inputs and single-use consent for the separate reconnaissance command.
     reconnaissance_form: ReconnaissanceForm,
     /// Last completed reconnaissance report, independent of generic worker status messages.
@@ -622,10 +627,12 @@ pub struct QmpQemuSocketApp {
 impl QmpQemuSocketApp {
     /// Request cooperative STOP once; all application close paths share this operation.
     pub(super) fn request_exit(&mut self) {
+        self.reset_preview = None;
         if self.exiting {
             return;
         }
         self.exiting = true;
+        self.reset_preview = None;
         self.stop_requested = true;
         self.shutdown.request();
         self.reconnaissance_form.confirmed_context = None;
@@ -676,6 +683,8 @@ impl QmpQemuSocketApp {
             solving_strategy: SolvingStrategy::ComputerVision,
             strategy_choice_pending: true,
             context_generation: 0,
+            reset_preview_serial: 0,
+            reset_preview: None,
             reconnaissance_form,
             reconnaissance_report: None,
             computed_route_form,
@@ -899,6 +908,13 @@ impl QmpQemuSocketApp {
     /// inspection-only even when their pixels and predictions are displayed.
     fn poll_worker(&mut self, context: &egui::Context) {
         let selected_context = self.current_preview_context();
+        if self
+            .reset_preview
+            .as_ref()
+            .is_some_and(|refresh| refresh.context != selected_context)
+        {
+            self.reset_preview = None;
+        }
         self.pyramid_workflow.bind(&selected_context);
         let events: Vec<_> = self.worker.try_events().collect();
 
@@ -921,7 +937,27 @@ impl QmpQemuSocketApp {
             }
 
 
+            if self.reset_preview.as_ref().is_some_and(|refresh| refresh.pending())
+                && matches!(&tagged.event, WorkerEvent::State(_) | WorkerEvent::Status(_)) {
+                if let WorkerEvent::Status(message) = tagged.event { self.push_log_at(elapsed, message); }
+                continue;
+            }
             match tagged.event {
+                WorkerEvent::ResetPreviewFinished { request_id, result } => {
+                    if !self.reset_preview.as_ref().is_some_and(|refresh| refresh.pending() && refresh.accepts(request_id, tagged.context.as_ref())) { continue; }
+                    match result {
+                        Ok(()) => {
+                            if let Some(refresh) = &mut self.reset_preview { refresh.finish(); }
+                            self.worker_state = if self.reset_preview.as_ref().is_some_and(|refresh| refresh.pending()) { WorkerState::Connecting } else { WorkerState::Ready };
+                            self.current_status = "Waiting".to_owned();
+                        }
+                        Err(error) => {
+                            self.reset_preview = None;
+                            self.worker_state = WorkerState::Error;
+                            self.pyramid_ui_failure(PyramidPhase::Reconnaissance, error);
+                        }
+                    }
+                }
                 WorkerEvent::Log(message) => self.push_log_at(elapsed, message),
                 WorkerEvent::RunFailure(failure) => {
                     self.failure_window
@@ -952,11 +988,14 @@ impl QmpQemuSocketApp {
                 WorkerEvent::PyramidDiagnostic(diagnostic) => {
                     let selected = self.current_preview_context();
                     let new_failure = !self.pyramid_workflow.details_visible(&selected);
+                    let same_update = self.pyramid_workflow.same_failure_update(&diagnostic);
+                    let reset_pending = self.reset_preview.as_ref().is_some_and(|refresh| refresh.pending());
                     if self.pyramid_workflow.receive(
                         diagnostic,
                         &selected,
                         self.computed_route_form.active_run_id,
                     ) {
+                        if !same_update && !reset_pending { self.reset_preview = None; }
                         self.retain_pyramid_failure(new_failure);
                     } else {
                         self.push_log(
@@ -1356,7 +1395,10 @@ impl QmpQemuSocketApp {
             }
 
 
-            if latest.context == Some(self.current_preview_context())
+            let reset_matches = latest.reset_request_id.is_some_and(|id| self.reset_preview.as_ref().is_some_and(|refresh| refresh.accepts(id, latest.context.as_ref())));
+            let reset_pending = self.reset_preview.as_ref().is_some_and(|refresh| refresh.pending());
+            let eligible = if latest.reset_request_id.is_some() { reset_matches } else { !reset_pending };
+            if eligible && latest.context == Some(self.current_preview_context())
                 && worker_frame_is_displayable(self.worker_state, latest.diagnostic)
             {
                 self.install_frame(
@@ -1368,6 +1410,18 @@ impl QmpQemuSocketApp {
                 );
 
 
+                if reset_matches {
+                    if self.capture_texture.is_some() {
+                        if let Some(refresh) = &mut self.reset_preview {
+                            refresh.install();
+                            if !refresh.pending() { self.worker_state = WorkerState::Ready; }
+                        }
+                    } else {
+                        self.reset_preview = None;
+                        self.worker_state = WorkerState::Error;
+                        self.pyramid_ui_failure(PyramidPhase::Reconnaissance, "RESET preview layout was rejected".to_owned());
+                    }
+                }
                 if latest.diagnostic && self.capture_texture.is_some() {
                     self.diagnostic_preview = true;
                     self.prediction = None;
@@ -1470,6 +1524,7 @@ impl QmpQemuSocketApp {
         {
             return;
         }
+        self.reset_preview = None;
         self.invalidate_preview();
         self.worker_state = WorkerState::Connecting;
         self.current_status = "Screengrab".to_owned();
@@ -1926,6 +1981,13 @@ impl QmpQemuSocketApp {
             SolvingStrategy::ComputerVision => self.computer_vision_game_mode,
         };
         let selected_context = self.current_preview_context();
+        if self
+            .reset_preview
+            .as_ref()
+            .is_some_and(|refresh| refresh.context != selected_context)
+        {
+            self.reset_preview = None;
+        }
         self.pyramid_workflow.bind(&selected_context);
         self.invalidate_preview();
         self.snapshot_request_id = self.snapshot_request_id.wrapping_add(1);
@@ -2176,7 +2238,8 @@ impl QmpQemuSocketApp {
 
 
                     if bevel_button(ui, "STOP", STATE_RED, false, true).clicked() {
-                        self.stop_requested = true;
+                        self.reset_preview = None;
+                self.stop_requested = true;
                         self.pyramid_workflow.retire_observed();
                         self.reconnaissance_form.confirmed_context = None;
                         self.computed_route_form.revoke_acquisition();

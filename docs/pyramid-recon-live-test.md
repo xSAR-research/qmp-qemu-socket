@@ -2,7 +2,7 @@
 
 > Historical operator brief for the dated 2.2.0 delivery. Its versions,
 > dependency/profile selection, manual-field instructions and positive Solver-OFF
-> wording are superseded by the [2.5.103 live brief](Live-Test-2.5.103.md) and
+> wording are superseded by the [2.5.103 live brief](../History/documentation-index.md#item-f4cd9d8bcf8822f219bf) and
 > [current profile contract](pyramid-recon-profile.md). Current setup uses bundled
 > exact v7, automatic editable evidence names and successful-export handover to
 > Calculate. Consent remains explicit, Solver must not be engaged, and an
@@ -95,8 +95,8 @@ succeeds, and the application refuses an existing destination.
 ## 4. Successful scan
 
 Use the corrected native profile `pyramid-native-1920-classic-blue-v4` described
-in the [stable-text correction record](pyramid-recon-stable-text-correction.md), retaining
-the earlier [chart correction](pyramid-recon-gate3-correction.md). The same
+in the [stable-text correction record](../History/documentation-index.md#item-92bacd1ec93d0d124730), retaining
+the earlier [chart correction](../History/documentation-index.md#item-15ec452f32e3903312b6). The same
 profile pathname is loaded anew before each reconnaissance operation; no restart
 is needed solely for this data correction. After editing any form field, tick
 the untouched-board confirmation again. Failed-attempt diagnostic directories

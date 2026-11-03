@@ -4,8 +4,8 @@
 > setup and positive Solver-OFF descriptions below record the dated 2.2.0
 > delivery; they do not describe current 2.5.103 operation. Use the
 > [current profile contract](pyramid-recon-profile.md),
-> [2.5.103 verification](Verification-2.5.103.md) and
-> [current live brief](Live-Test-2.5.103.md). Current operation bundles exact v7
+> [2.5.103 verification](../Evidence/release-verification/Verification-2.5.103.md) and
+> [current live brief](../History/documentation-index.md#item-f4cd9d8bcf8822f219bf). Current operation bundles exact v7
 > calibration, supplies editable evidence names and hands a successful export
 > to Calculate automatically. Legacy `solver_off` data is validated and discarded;
 > explicit foreground/no-interference/Solver-not-engaged consent remains required,
@@ -23,7 +23,7 @@ K=13) and `suit`. Suit remains essential to acquisition identity and complete-de
 validation even when a later game's matching rule ignores it. Mapping and codec
 live in xSAR; no local serializer or rank-value table is duplicated here.
 The native calibration profile remains schema 1/v4; it is not the deal schema.
-See [the schema-2 delivery record](release-v2.2.0.md).
+See [the schema-2 delivery record](../History/documentation-index.md#item-fbda618d2c15b509b436).
 
 The following paragraphs retain the initial reconnaissance implementation base:
 

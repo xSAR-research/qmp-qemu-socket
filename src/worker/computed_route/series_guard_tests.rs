@@ -984,6 +984,34 @@ fn native_perfect_final_clear_retains_phase_exact_piles_and_series_guard() {
                     expected(&io.plan.acquisition.deal, state).unwrap();
                 assert_eq!(tableau, [None; 28]);
                 assert_eq!((actual_left, actual_right), (None, right));
+                // Existing rejected animation proves the last error still comes
+                // from the permitted final alternative, without extra I/O.
+                let animation = decode_png(
+                    &fs::read(root.join("final-animation-empty-stock.png")).unwrap(),
+                )
+                .unwrap();
+                assert_eq!(
+                    io.verify_final_clear_alternatives(
+                        &animation, &tableau, actual_left, actual_right,
+                    )
+                    .unwrap_err(),
+                    "no normal final-clear calibration"
+                );
+                let initial = io.challenge_initial;
+                io.challenge_initial = Some(
+                    crate::pyramid_progress::ChallengeProgress::new(
+                        crate::pyramid_progress::ChallengeKind::Score, 0, 1400,
+                    )
+                    .unwrap(),
+                );
+                assert_eq!(
+                    io.verify_final_clear_alternatives(
+                        &animation, &tableau, actual_left, actual_right,
+                    )
+                    .unwrap_err(),
+                    "no bound challenge final-clear calibration"
+                );
+                io.challenge_initial = initial;
                 assert!(
                     !io.observe(state, false).unwrap(),
                     "ordinary phase retains original strict evidence"

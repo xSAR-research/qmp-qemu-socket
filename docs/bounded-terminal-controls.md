@@ -80,7 +80,7 @@ prohibition on acknowledged or uncertain input replay remain unchanged.
 
 Fixture provenance and the offline/live evidence boundary are recorded in
 `tests/fixtures/klondike-level841-20261026/README.md` and
-[the proposed verification record](Verification-2.9.154.md).
+[the proposed verification record](../Evidence/release-verification/Verification-2.9.154.md).
 
 ## Context and retries
 

@@ -21,3 +21,6 @@ AGENTS.md
 
 # Preserved local validation evidence; never publish to GitHub.
 /Evidence/
+
+# Private archive payload; contains preserved Evidence.
+/History/

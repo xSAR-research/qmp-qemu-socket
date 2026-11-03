@@ -246,8 +246,11 @@ pub(super) fn observe_boards(view: FrameView<'_>) -> Result<bool, String> {
             return Err("Inconsistent native Boards literal samples".to_owned());
         }
     }
+    // A single complete native appearance must explain every retained background pixel.
+    // Candidates are eliminated across the whole canvas; references never mix per pixel.
+    let mut coherent = [true; super::templates::LABELS.len()];
     let mut selected = 0_usize;
-    for (index, expected) in pixels.iter().enumerate() {
+    for (index, _) in pixels.iter().enumerate() {
         let x = reference.patch.bounds.x
             + u32::try_from(index % width).map_err(|_| "Boards background x overflow")?;
         let y = reference.patch.bounds.y
@@ -281,16 +284,30 @@ pub(super) fn observe_boards(view: FrameView<'_>) -> Result<bool, String> {
         let actual = view
             .pixel_rgb(x, y)
             .ok_or("Boards background outside frame")?;
-        if actual
-            .into_iter()
-            .zip(*expected)
-            .any(|(actual, expected)| actual.abs_diff(expected) > LABEL_TOLERANCE)
-        {
-            return Ok(false);
+        let start = blue_index
+            .checked_sub(2)
+            .ok_or("Boards RGB index underflow")?;
+        for (candidate, label) in coherent.iter_mut().zip(super::templates::LABELS.iter()) {
+            if label.kind != super::ChallengeKind::Boards {
+                continue;
+            }
+            let expected = label
+                .patch
+                .rgb
+                .get(start..=blue_index)
+                .ok_or("Incomplete native Boards background sample")?;
+            *candidate &= actual
+                .into_iter()
+                .zip(expected.iter().copied())
+                .all(|(actual, expected)| actual.abs_diff(expected) <= LABEL_TOLERANCE);
         }
         selected += 1;
     }
-    Ok(selected > 0)
+    Ok(selected > 0
+        && coherent
+            .into_iter()
+            .zip(super::templates::LABELS.iter())
+            .any(|(matched, label)| matched && label.kind == super::ChallengeKind::Boards))
 }
 
 

@@ -74,11 +74,11 @@ The focused current checks cover exact old-v7 refusal, selected/restored product
 recognition and exact route-state comparison, default/file equivalence, exact
 scene-index/bounds diagnostics, complete modal refusal, missing/corrupted patch
 and tolerance boundaries, and unchanged old profile/card definitions. Actual
-results must be read from [Verification-2.5.104.md](../../../../docs/Verification-2.5.104.md),
+results must be read from [Verification-2.5.104.md](../../../../Evidence/release-verification/Verification-2.5.104.md),
 not inferred from fixture presence or historical passing totals.
 
 This fixture grants no current input authority, session receipt or plan resume.
 The interrupted plan is consumed. Use a fresh untouched board and successful
 same-session acquisition before Calculate and separately confirmed Execute.
-The [operator brief](../../../../docs/Live-Test-2.5.104.md) defines that later trial;
+The [operator brief](../../../../History/documentation-index.md#item-e16ac0c5af6266e23439) defines that later trial;
 one tableau clear is separate from daily/regular whole-game completion.

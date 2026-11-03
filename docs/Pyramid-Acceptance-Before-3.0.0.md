@@ -17,7 +17,7 @@ The 56 unchanged xSAR inputs retain cached sixteen-gate qualification (303 full
 tests, 14 default tests and two Miri tests); xSAR remains modified/unreleased 0.9.1.
 User profiles and CPU/hardening configuration are preserved. Evidence: `/home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/pyramid-challenge-174-proposal-9yca399e`.
 
-[Verification](Verification-2.9.174.md).
+[Verification](../Evidence/release-verification/Verification-2.9.174.md).
 
 ## Retained 2.9.173 delivery
 
@@ -54,7 +54,7 @@ live acceptance remains pending.
 
 All six controller gates pass, including 1683 include-ignored tests with zero failures/ignored/filtered (149.37 seconds). Aligned locked check, native release and protected --help pass. Library qualification is PASSED (Cached): 56 unchanged inputs, 303 full tests, 14 default tests and two focused Miri checks.
 
-[Verification](Verification-2.9.173.md).
+[Verification](../Evidence/release-verification/Verification-2.9.173.md).
 
 ## Retained 2.9.172 delivery
 
@@ -82,7 +82,7 @@ staging, commit or push was performed. Fresh guest acceptance remains pending.
 
 All six controller gates pass, including 1678 include-ignored tests with zero failures/ignored/filtered (154.10 seconds). Aligned locked check, native release and protected --help pass. Library qualification is PASSED (Cached): 56 unchanged inputs, 303 full tests, 14 default tests and two focused Miri checks.
 
-[Verification](Verification-2.9.172.md).
+[Verification](../Evidence/release-verification/Verification-2.9.172.md).
 
 ## Retained 2.9.171 acceptance
 
@@ -115,7 +115,7 @@ standard/Coral guest Recon, restoration and broader theme acceptance remain pend
 
 All six controller gates pass, including **1,675 include-ignored tests**, zero failed, ignored or filtered; test time 149.57 seconds. Aligned locked check, release and protected --help pass. xSAR remains the unchanged modified/unreleased 0.9.1 path dependency; its sixteen-gate receipt (303 full tests, 14 default tests, feature checks and two focused Miri checks) is cached over 56 unchanged library inputs.
 
-[Verification](Verification-2.9.171.md).
+[Verification](../Evidence/release-verification/Verification-2.9.171.md).
 
 ## Retained 2.9.170 acceptance
 
@@ -213,7 +213,7 @@ claimed. No guest input, new capture, install, staging, commit, push or publicat
 was performed. Preserve GAME WIN images before controller startup and leave
 any active original session log in place.
 
-[Host verification](Verification-2.9.168.md).
+[Host verification](../Evidence/release-verification/Verification-2.9.168.md).
 
 ## Retained 2.9.167 acceptance
 
@@ -242,7 +242,7 @@ No guest input, new capture, installation, staging, commit, push or publication
 was performed for this delivery. Preserve GAME WIN images before another
 controller startup and leave any active original session log in place.
 
-[Host verification and protected executable](Verification-2.9.167.md).
+[Host verification and protected executable](../Evidence/release-verification/Verification-2.9.167.md).
 
 ## Retained acceptance records
 
@@ -253,7 +253,7 @@ and all original milestone outcomes remain where not independently accepted.
 
 ## 2.9.166 live acceptance still required
 
-[Verification](Verification-2.9.166.md) records 1,652 host tests and complete
+[Verification](../Evidence/release-verification/Verification-2.9.166.md) records 1,652 host tests and complete
 retained-position verification with an exact additional 7|5 crop. A fresh run
 must prove actual recognition/effects and any applicable completion/transition
 outcomes. Calibration success proves neither rendering cause nor future coverage.
@@ -272,7 +272,7 @@ not independently accepted.
 
 ## 2.9.165 live acceptance still required
 
-[Verification](Verification-2.9.165.md) records 1,643 host tests and two complete
+[Verification](../Evidence/release-verification/Verification-2.9.165.md) records 1,643 host tests and two complete
 retained positions, with exact additional crops at 7|1, 7|2 and 7|6. A fresh run must
 verify subsequent guarded actions, declared completion/continuation, distinct
 challenge kinds, normal objective persistence and later idle selection.
@@ -296,7 +296,7 @@ does not prove that a later test failed.
 
 ## 2.9.164 live acceptance still required
 
-The [164 verification](Verification-2.9.164.md) records 1,633 passing host tests,
+The [164 verification](../Evidence/release-verification/Verification-2.9.164.md) records 1,633 passing host tests,
 not a fresh guest pass. Verify the fixed 7|1 Coral effect on a new run, plus:
 
 - Score/Card RECON selects Maximum; Board RECON selects Shortest.

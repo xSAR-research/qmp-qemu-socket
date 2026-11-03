@@ -1,5 +1,11 @@
 # Pyramid target calibration — 1.0.1 candidate
 
+## Qualified 2.9.176 — Coral entry and RESET preview
+
+Coral rank recognition now uses an independently retained black Four corner within the unchanged 13-rank calibration. Boards headers match one coherent existing background appearance. RESET shows WAITING and requests one token-correlated read-only preview while retaining STOP, inventory, logs and historical diagnostics.
+
+All six controller gates passed, including 1697 tests with zero failed, ignored or filtered, plus aligned locked check/release/protected help. The 56 xSAR inputs and package0.9.1 are unchanged; prior sixteen-gate library qualification remains cached. Fresh guest acceptance is pending. [Verification](Verification-2.9.176.md).
+
 Date: 2026-09-26. Request: [Issue #1](https://github.com/xSAR-research/qmp-qemu-socket/issues/1).
 Overlay request: [Issue #3](https://github.com/xSAR-research/qmp-qemu-socket/issues/3).
 Base: `a13e538871795d790b1d63939d089e0a22ba7f67` (1.0.0).

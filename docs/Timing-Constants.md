@@ -20,8 +20,8 @@ and 87 cream/Retro observations remain covered. Quality/ambiguity limits, comple
 scene/modal proof, STOP/context, fresh probes and no uncertain replay remain intact.
 The separate Boards/Perfect final-proof case remains deferred.
 
-See [verification](Verification-2.9.149.md) and the
-[fresh live-test brief](Live-Test-2.9.149.md). Earlier release sections are
+See [verification](../Evidence/release-verification/Verification-2.9.149.md) and the
+[fresh live-test brief](../History/documentation-index.md#item-4409cfdb64de9b458209). Earlier release sections are
 retained evidence and do not establish 149 guest acceptance.
 
 ## Retained correction — 2.9.148 / xSAR 0.9.0; host qualified
@@ -38,7 +38,7 @@ worker, dependency or timing policy changes are included.
 
 Host result: 1478 full tests, zero failures/ignored/filtered, 747 sealed inputs and all six required gates passed. Fresh Beast/Charlie acceptance remains pending.
 The 19 matrix cases and 14 milestone states remain unchanged. See
-[148 verification](Verification-2.9.148.md) and [148 manual checks](Live-Test-2.9.148.md).
+[148 verification](../Evidence/release-verification/Verification-2.9.148.md) and [148 manual checks](../History/documentation-index.md#item-012863df9e1e5ed2433a).
 
 ## Retained 2.9.147 candidate: direct completed-RECON handoff
 
@@ -60,11 +60,11 @@ authenticated RECON; Maximum keeps its uncapped weighted search with no completi
 time guarantee. Receipt/publication, search, fresh probes and capture latency are
 real work, separate from intentional waits. The source audit is not a new timing
 measurement or guest acceptance. 147 passed all six host gates (1476 full tests, 747 sealed inputs); see
-[verification](Verification-2.9.147.md) and [manual checks](Live-Test-2.9.147.md).
+[verification](../Evidence/release-verification/Verification-2.9.147.md) and [manual checks](../History/documentation-index.md#item-f5e4edebcac0d1661d55).
 
 ## Retained 2.9.146 candidate: display-only halo timing
 
-Full 146 host qualification passed (1449 tests, 743 sealed inputs); see [verification](Verification-2.9.146.md).
+Full 146 host qualification passed (1449 tests, 743 sealed inputs); see [verification](../Evidence/release-verification/Verification-2.9.146.md).
 Gameplay waits, cancellation slices, effect deadlines and capture budgets retain
 their existing values. The activity badge adds display-only timing in
 `src/app/activity_status/badge.rs`; it neither sleeps nor starts a worker.
@@ -80,18 +80,18 @@ their existing values. The activity badge adds display-only timing in
 Independent inert render review passed 20 cases; this is not guest timing evidence.
 The following qualified145 and older timing records remain historical evidence.
 
-Retained 145 is host qualified (1436 full tests): [stock-paper correction](Verification-2.9.145.md). No timing, deadline or capture-budget values change. The separate final-confirmation handoff remains open.
+Retained 145 is host qualified (1436 full tests): [stock-paper correction](../Evidence/release-verification/Verification-2.9.145.md). No timing, deadline or capture-budget values change. The separate final-confirmation handoff remains open.
 
-Retained 144 is host qualified (1434 full tests): [temporal RIGHT correction](Verification-2.9.144.md). No timing, deadline or capture-budget values change. The separate run 8 final-confirmation timeout remains open.
+Retained 144 is host qualified (1434 full tests): [temporal RIGHT correction](../Evidence/release-verification/Verification-2.9.144.md). No timing, deadline or capture-budget values change. The separate run 8 final-confirmation timeout remains open.
 
-Retained 140 is host qualified (1422 full tests): [session-guard qualification](Verification-2.9.140.md).
+Retained 140 is host qualified (1422 full tests): [session-guard qualification](../Evidence/release-verification/Verification-2.9.140.md).
 No timing, deadline or capture-budget values change in this correction.
 
-Retained 139 is host qualified (1420 full tests): [qualification and pause accounting](Verification-2.9.139.md).
+Retained 139 is host qualified (1420 full tests): [qualification and pause accounting](../Evidence/release-verification/Verification-2.9.139.md).
 Intentional acknowledged suspension is excluded from A* active deadlines/statistics;
 ordinary effect windows and MOVE/CV timings are unchanged. The older catalogue follows.
 
-Retained 138 correction: [2.9.138 empty-circle verification](Verification-2.9.138.md).
+Retained 138 correction: [2.9.138 empty-circle verification](../Evidence/release-verification/Verification-2.9.138.md).
 Its stock-position change adds no timing changes. The combined 2.9.137 timing and
 UI qualification below is retained evidence; 2.9.138 independently passed 1404 tests
 and all six host gates with 698 seals. Fresh acceptance remains pending.
@@ -114,7 +114,7 @@ Current corrections are authoritative where their roles differ:
 
 Computed MATCH/KING observe immediately; no two-second fixed card sleep remains.
 Residual RECYCLE and Recon retain their separate 500 ms policy. Final and REDEAL
-policies stay independent. See [combined evidence](Verification-2.9.137.md).
+policies stay independent. See [combined evidence](../Evidence/release-verification/Verification-2.9.137.md).
 
 ## Retained timing catalogue
 
@@ -257,5 +257,5 @@ Definitions are in `qemu-screen-grab-server/src/parameters.rs`. Values below inc
 
 ## Verification
 
-See [Verification-2.9.145.md](Verification-2.9.145.md) for the current stock-paper correction; it changes no timing values. Retain [Verification-2.9.137.md](Verification-2.9.137.md) as historical timing evidence.
-The original refactor's [Verification-2.9.134.md](Verification-2.9.134.md) records its actual owning-package tests, feature checks, preserved source/fixture hashes and host/live boundaries. No guest actions, installation or process replacement are part of this refactor.
+See [Verification-2.9.145.md](../Evidence/release-verification/Verification-2.9.145.md) for the current stock-paper correction; it changes no timing values. Retain [Verification-2.9.137.md](../Evidence/release-verification/Verification-2.9.137.md) as historical timing evidence.
+The original refactor's [Verification-2.9.134.md](../Evidence/release-verification/Verification-2.9.134.md) records its actual owning-package tests, feature checks, preserved source/fixture hashes and host/live boundaries. No guest actions, installation or process replacement are part of this refactor.

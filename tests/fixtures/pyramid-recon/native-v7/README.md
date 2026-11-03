@@ -20,7 +20,7 @@ It extends the retained v6 profile, SHA-256
 The prepared profile is **806,442 bytes**, SHA-256
 `9517ce85382ec0c977e735c79871c1e2f8110b7265343dc1140ac45d506e3e08`.
 Completed host results and the release hash are in
-[Verification-2.4.101.md](../../../../docs/Verification-2.4.101.md).
+[Verification-2.4.101.md](../../../../Evidence/release-verification/Verification-2.4.101.md).
 `provenance.json` records crop sources and measured held-out results;
 `INCOMPLETE.json` retains the first refusal. Historical
 v4/v5/v6 fixture files remain unchanged.

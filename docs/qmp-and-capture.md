@@ -12,7 +12,7 @@ roles preserve exact identities and native coordinates; CV/HALO is unchanged.
 
 App shutdown retires gameplay and waits for existing transport release recovery;
 it adds no cleanup clicks or forced transport close. See
-[combined verification](Verification-2.9.137.md) for qualification/acceptance status.
+[combined verification](../Evidence/release-verification/Verification-2.9.137.md) for qualification/acceptance status.
 
 Version 2.0.0 candidate 2 imports the reusable transport from xsar's optional
 Unix `qmp` feature. Its application adapter selects the existing timing
@@ -80,8 +80,8 @@ If a retained peer has cleanly closed before a request starts, xSAR discards
 that socket and its identities, then makes one bounded fresh connection for
 the new request. Unsolicited bytes and socket errors still fail. A peer closing
 after the preflight can still cause a safe failure; sending is never replayed.
-See the [idle EOF repair](capture-idle-eof-candidate14.md).
-See the [combined capture contract](capture-combined-candidate13.md) for limits,
+See the [idle EOF repair](../History/documentation-index.md#item-8645e99f2402a3c6cd0c).
+See the [combined capture contract](../History/documentation-index.md#item-48faeace9a3dd39dd842) for limits,
 separate timings, compatibility and operator verification.
 
 Ordinary TCP capture requests no PNG and creates no temporary file. With
@@ -374,7 +374,7 @@ finite runs stop at a win, while continuous 0 may deal a new board and activate
 inactive Solver after its separate start wait. The source-click park adds one
 movement-only command; capture encoding, temporary-file policy and exact-byte
 snapshot saving remain unchanged. Candidate 3's two local OK locations and all
-terminal click points remain. See [candidate 4 notes](spider-v1.4.0-candidate-4.md).
+terminal click points remain. See [candidate 4 notes](../History/documentation-index.md#item-27084918f0c4779a5077).
 
 
 ## Historical Klondike correction notes

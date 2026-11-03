@@ -175,7 +175,7 @@ new captures are 6/7. Spatial coverage is deliberately narrower: the excluded
 next-row fragments are no longer constraints. Independent K, 9 and 4 erasure,
 selected-edge channel limits, excluded-strip mutations and the other mandatory
 scene/control signatures are tested with the actual bundled profile. See the
-[Gate 3 correction record](../../../docs/pyramid-recon-gate3-correction.md).
+[Gate 3 correction record](../../../History/documentation-index.md#item-15ec452f32e3903312b6).
 
 The next live scan recognised all 28 tableau and 24 ordered stock identities,
 then refused the Undo All dialog before OK. Its two modal observations have
@@ -187,7 +187,7 @@ Panel/backdrop tolerances remain 4. Wider bounds apply to every selected pixel,
 not only observed text edges; exact boundary, missing-component, derived text
 substitution and existing other-game native-scene negatives test that trade-off.
 No native near-identical non-Undo confirmation has been supplied. See the
-[modal correction record](../../../docs/pyramid-recon-modal-correction.md).
+[modal correction record](../../../History/documentation-index.md#item-8c29ceac1a8701e66018).
 
 The repeated scan still refused ten Cancel/OK pixels exceeding v3 limits by one.
 Bundled `pyramid-native-1920-classic-blue-v4` instead changes only the four text
@@ -197,7 +197,7 @@ outside the ROI. RGB, ROIs and tolerances remain unchanged. All seven components
 remain required, but excluded samples are unconstrained: this is a documented
 acceptance widening, not full OCR. Fixed rule/count/hash, retained ink, negative
 space and selected-channel boundary tests accompany the change. See the
-[stable-text correction record](../../../docs/pyramid-recon-stable-text-correction.md).
+[stable-text correction record](../../../History/documentation-index.md#item-92bacd1ec93d0d124730).
 
 ## v6 native glyph variants
 

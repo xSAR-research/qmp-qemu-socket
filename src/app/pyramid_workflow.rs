@@ -623,6 +623,12 @@ impl PyramidWorkflow {
     }
 
 
+    /// Identify a late persistence update without acknowledging any new failure.
+    pub(super) fn same_failure_update(&self, incoming: &PyramidDiagnostic) -> bool {
+        super::reset_preview::same_failure_update(self.diagnostic.as_ref(), incoming)
+    }
+
+
     /// Accept matching advisory diagnostics without changing run ownership or permits.
     pub(super) fn receive(
         &mut self,
@@ -964,6 +970,7 @@ impl QmpQemuSocketApp {
     /// Persistence failures are displayed once and never reported recursively. This
     /// command grants no capture, QMP connection or guest-input authority.
     pub(super) fn pyramid_ui_failure(&mut self, phase: PyramidPhase, error: String) {
+        self.reset_preview = None;
         let context = self.current_preview_context();
         self.pyramid_workflow.bind(&context);
         self.pyramid_workflow.phase = Some(phase);
@@ -1191,7 +1198,8 @@ impl QmpQemuSocketApp {
                 let stop_enabled = (self.active_run.is_some() || self.worker_state.is_busy())
                     && !self.stop_requested;
                 if bevel_button(ui, "STOP", STATE_RED, false, stop_enabled).clicked() {
-                    self.stop_requested = true;
+                    self.reset_preview = None;
+                self.stop_requested = true;
                     self.pyramid_workflow.retire_observed();
                     self.reconnaissance_form.confirmed_context = None;
                     self.computed_route_form.revoke_acquisition();
@@ -1309,8 +1317,21 @@ impl QmpQemuSocketApp {
         if let Err(error) = self.worker.discard_pyramid_plan() {
             self.pyramid_ui_failure(PyramidPhase::Planning, error);
         } else {
-            self.current_status =
-                "Pyramid defaults restored; current inventory retained".to_owned();
+            let Some(request_id) = self.reset_preview_serial.checked_add(1) else {
+                self.pyramid_ui_failure(PyramidPhase::Reconnaissance, "RESET preview request identity exhausted".to_owned());
+                return;
+            };
+            self.reset_preview_serial = request_id;
+            let _ = self.worker.take_latest_frame();
+            self.invalidate_preview();
+            self.reset_preview = Some(super::reset_preview::ResetPreview::new(request_id, context.clone()));
+            self.worker_state = WorkerState::Connecting;
+            self.current_status = "Waiting".to_owned();
+            if let Err(error) = self.worker.capture_reset_preview(context, request_id) {
+                self.reset_preview = None;
+                self.worker_state = WorkerState::Error;
+                self.pyramid_ui_failure(PyramidPhase::Reconnaissance, error);
+            }
         }
     }
 

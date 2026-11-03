@@ -2461,3 +2461,27 @@ fn native_174_observe_retained_entry_is_boards_challenge() {
     );
     assert!(standard_progress(Entry::Challenge(expected)).is_err());
 }
+
+
+/// The original Coral entry must qualify through the current production classifier.
+#[test]
+fn native_176_coral_entry_is_a_bound_boards_challenge() {
+    let mut fixture = Fixture::new();
+    fixture.request.reconnaissance.profile = ReconProfileSource::BundledNativeV23;
+    let adapter = fixture.adapter();
+    let observation = adapter
+        .observe(&native(include_bytes!(
+            "../../../tests/fixtures/pyramid-recognition-176/coral-entry.png"
+        )))
+        .unwrap();
+    let expected =
+        ChallengeProgress::new(crate::pyramid_progress::ChallengeKind::Boards, 0, 4).unwrap();
+    assert!(
+        matches!(&observation, NativeObservation::Challenge { progress, .. } if *progress == expected),
+        "{observation:?}"
+    );
+    assert_eq!(
+        paired_entry(&observation, &observation),
+        Some(Entry::Challenge(expected))
+    );
+}

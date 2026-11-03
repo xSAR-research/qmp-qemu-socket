@@ -91,7 +91,7 @@ under SysProf and remains unresolved; this correction contains no CPU fix.
 xSAR 0.6.102, console 0.8.4, indices and protected stable 107–112 remain frozen.
 No guest/GUI/input, installation, process replacement or promotion is performed.
 
-[Verification](../../../../docs/Verification-2.6.113.md) owns exact commands,
+[Verification](../../../../Evidence/release-verification/Verification-2.6.113.md) owns exact commands,
 results, artifacts, runtime boundary and complete correction review paths.
-[Live test](../../../../docs/Live-Test-2.6.113.md) requires fresh acquisition,
+[Live test](../../../../History/documentation-index.md#item-61dd87f1c54f41337a71) requires fresh acquisition,
 restoration and current authority before a later operator trial.
