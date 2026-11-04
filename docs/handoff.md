@@ -1,29 +1,41 @@
-# Active handoff — qualified 2.9.176 / unchanged xSAR 0.9.1
+# Active handoff — qualified 2.9.177 / unchanged xSAR 0.9.1
 
-Coral rank recognition now uses an independently retained black Four corner within the unchanged 13-rank calibration. Boards headers match one coherent existing background appearance. RESET shows WAITING and requests one token-correlated read-only preview while retaining STOP, inventory, logs and historical diagnostics.
+Private refactoring separates original-source disappearance from board-position verification, separates input-free route planning from once-only execution requests, isolates three identity-bound Pyramid completion handlers and centralises common UI STOP revocation. Existing proof order, input permissions, observation budgets, failure outcomes, context binding and RESET correlation are preserved.
 
-All six controller gates passed, including 1697 tests with zero failed, ignored or filtered, plus aligned locked check/release/protected help. The 56 xSAR inputs and package0.9.1 are unchanged; prior sixteen-gate library qualification remains cached. Fresh guest acceptance is pending.
+All six controller gates passed, including 1697 tests with zero failed, ignored or filtered, plus aligned locked check/release/protected help. The 56 xSAR inputs and package0.9.1 are unchanged; prior sixteen-gate library qualification remains cached. No fresh guest acceptance was performed.
 
-## Evidence and authority
+## Authority and preserved baseline
 
-Charlie approved the reader correction, requested RESET behaviour and build176, then executable and staging instructions. No guest input, new live capture, installation, staging, commit, push or sibling edit was performed. The original failed175 entry packet is retained. All prior user profiles, CPU/hardening settings, archived evidence and unrelated changes are preserved. Historical automatic-metadata sentinel failures are retained, not relabelled.
+Charlie authorised achievable planned refactoring and a protected2.9.177 executable.
+This delivery completes RF08, RF06-A and RF04. Broader Solver, terminal, mailbox,
+recognition-bank and test-layout work remains deferred behind the existing ROI stop line.
+The editable work-list differs only in13 completion checkboxes; its contents have
+not been indexed or captured. No dependency, public API, profile, CPU configuration,
+recognition, capture policy, game rule or sibling source changed.
 
-The baseline accepts only six successful automatic recall receipts; their exact contents are sealed. The prior archive destination receipt remains byte-identical. Evidence and History stay private, ignored and untracked. The editable work-list is untouched and has not been indexed or captured.
+The published176 baseline was reconciled byte for byte:946 compiler inputs,
+135 documents and440 evidence pins matched. The earlier old verifier HEAD mismatch
+remains historical. Four repository histories, indices and unrelated changes are
+preserved; existing server Cargo.lock changes remain owned by Charlie.
+Private Evidence/History remain ignored and untracked. Any exact lifecycle delta
+is recorded in the private audit; never delete receipts to manufacture a match.
 
 ## Destination sentinel
 
 Run once before further edits:
 
 ```sh
-python3 /home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/pyramid-coral-reset-176-20261103-eh9ggbea/verify-destination.py
+python3 /home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/refactor-177-20261104-qu2x3ban/verify-destination.py
 ```
 
-Require HANDOFF VERIFIED, otherwise report the exact discrepancy before changes. New lifecycle receipts may require a bounded reconciliation; never delete them to manufacture a match.
+Require HANDOFF VERIFIED or report the exact discrepancy before changes.
 
 ## Protected executable
 
 ```sh
-/home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/pyramid-coral-reset-176-20261103-eh9ggbea/native/qmp-qemu-socket-2.9.176 --image
+/home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/refactor-177-20261104-qu2x3ban/native/qmp-qemu-socket-2.9.177 --image
 ```
 
-SHA256 `4eb89ddffdd2bb95f3903d338bc5719797502391bf122471afc50496028f3ded`; mode0700. Normal startup resets the fixed image directory; preserve evidence first. Protected --help was checked before cleanup/GUI. [Verification](Verification-2.9.176.md).
+SHA256 `f061e760dc73d21c63696c0ea6b317f820f4a8a6a1457b2cfb6cb7f795729372`;mode0700. Not installed or run against the guest.
+Normal startup resets the fixed image directory; preserve evidence first.
+[Verification](Verification-2.9.177.md).

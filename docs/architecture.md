@@ -1,5 +1,11 @@
 # Architecture and control flow
 
+## Qualified 2.9.177 — A* flow and STOP refactoring
+
+Private refactoring separates original-source disappearance from board-position verification, separates input-free route planning from once-only execution requests, isolates three identity-bound Pyramid completion handlers and centralises common UI STOP revocation. Existing proof order, input permissions, observation budgets, failure outcomes, context binding and RESET correlation are preserved.
+
+All six controller gates passed, including 1697 tests with zero failed, ignored or filtered, plus aligned locked check/release/protected help. The 56 xSAR inputs and package0.9.1 are unchanged; prior sixteen-gate library qualification remains cached. No fresh guest acceptance was performed. [Verification](Verification-2.9.177.md).
+
 ## Current correction — 2.9.149 / xSAR 0.9.0
 
 The bounded Wild West aged-paper correction is host qualified: 1483 application

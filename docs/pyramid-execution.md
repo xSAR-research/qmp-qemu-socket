@@ -1,5 +1,21 @@
 # Pyramid calibration and guarded execution
 
+## Current request and proof ownership — 2.9.177
+
+| Boundary | Owner and retained contract |
+| --- | --- |
+| Acquire / RECON | The separately authorised reconnaissance controller recognises the inventory and proves original-board restoration before export. A preview alone grants no acquisition or input authority. |
+| Plan / replay | `app/pyramid_requests.rs::dispatch_route_planning` validates the current acquisition before reserving the run ID. The worker and xSAR own search, independent replay and route validation; this request sends no guest input. |
+| Prepare / execute | `dispatch_route_execution` resolves the current confirmed plan before consuming request consent. The adapter consumes its single-use permit; changed context, STOP or uncertain delivery revoke further input and resume authority. |
+| Observe | `NativeIo::observe_source_disappearance` handles an existing source transition. `verify_board_position` handles the reachable pre-transition board path and its lazy stock proof. SourceTransition starts absent and persists once installed; this refactor never retires it. |
+| Commit / complete | `classify_observation` keeps staging, fatal frame guards, first-failure retention, temporal commit/reject, challenge checks and source-proof publication in their original order. Semantic final-clear alternatives remain distinct from source disappearance. |
+| Retire / continue | Three private completion handlers reuse `complete_route` and `complete_session`; context filtering, RESET token/frame correlation and preview installation remain in the poller. Callers retain their different STOP failure handling. |
+
+These are current Pyramid adapter boundaries, not a claim that its board or
+reconnaissance model implements Free Cell. Free Cell rule/state/acquisition design
+remains separate. Source clicks, observations, pauses, recovery allowances and
+continuous Solver controllers have not changed. [Verification](Verification-2.9.177.md).
+
 ## Current 2.9.174 delivery
 
 2.9.174 corrects native Boards challenge-header recognition using the union of

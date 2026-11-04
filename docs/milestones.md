@@ -1,5 +1,11 @@
 # Milestone Tracker & Baseline Receipt — qmp-qemu-socket
 
+## Qualified 2.9.177 — A* flow and STOP refactoring
+
+Private refactoring separates original-source disappearance from board-position verification, separates input-free route planning from once-only execution requests, isolates three identity-bound Pyramid completion handlers and centralises common UI STOP revocation. Existing proof order, input permissions, observation budgets, failure outcomes, context binding and RESET correlation are preserved.
+
+All six controller gates passed, including 1697 tests with zero failed, ignored or filtered, plus aligned locked check/release/protected help. The 56 xSAR inputs and package0.9.1 are unchanged; prior sixteen-gate library qualification remains cached. No fresh guest acceptance was performed. [Verification](Verification-2.9.177.md).
+
 ## Qualified 2.9.176 — Coral entry and RESET preview
 
 Coral rank recognition now uses an independently retained black Four corner within the unchanged 13-rank calibration. Boards headers match one coherent existing background appearance. RESET shows WAITING and requests one token-correlated read-only preview while retaining STOP, inventory, logs and historical diagnostics.

@@ -8,6 +8,7 @@ mod activity_status;
 mod diagnostics;
 mod log_window;
 mod pyramid_defaults;
+mod pyramid_requests;
 mod pyramid_workflow;
 mod reset_preview;
 mod window_chrome;
@@ -1207,62 +1208,8 @@ impl QmpQemuSocketApp {
                         ));
                     }
                 }
-                WorkerEvent::PyramidSessionProgress(progress) => {
-                    let selected = self.current_preview_context();
-                    if self.pyramid_workflow.receive_session_progress(
-                        &progress,
-                        &selected,
-                        self.active_run,
-                        self.computed_route_form.active_run_id,
-                    ) {
-                        self.current_status = progress.message;
-                    } else {
-                        self.push_log(
-                            "Ignored Pyramid session progress from an earlier request or board.",
-                        );
-                    }
-                }
-                WorkerEvent::PyramidSessionFinished(completion) => {
-                    let selected = self.current_preview_context();
-                    let phase = self
-                        .pyramid_workflow
-                        .phase()
-                        .unwrap_or(PyramidPhase::Execution);
-                    if !pyramid_workflow::complete_session(
-                        &mut self.pyramid_workflow,
-                        &mut self.computed_route_form,
-                        &mut self.active_run,
-                        &mut self.worker_state,
-                        &completion,
-                        &selected,
-                        self.stop_requested,
-                    ) {
-                        self.push_log(format!(
-                            "Ignored Pyramid session completion for inactive request {}.",
-                            completion.run_id
-                        ));
-                        continue;
-                    }
-                    if let Err(error) = &completion.result
-                        && !self.pyramid_workflow.details_visible(&selected)
-                    {
-                        self.pyramid_ui_failure(phase, error.clone());
-                    }
-                    self.current_status = if completion.result.is_err() {
-                        "Pyramid session stopped — inspect the board"
-                    } else if self.stop_requested {
-                        "Pyramid session finished after STOP — no resume"
-                    } else {
-                        "Pyramid session finished"
-                    }
-                    .to_owned();
-                    if let Some(report) = self.computed_route_form.report.clone() {
-                        self.push_log(report);
-                    }
-                    if self.worker_state == WorkerState::Detached {
-                        self.stop_requested = false;
-                    }
-                }
+                WorkerEvent::PyramidSessionProgress(progress) => self.apply_pyramid_session_progress(progress),
+                WorkerEvent::PyramidSessionFinished(completion) => self.apply_pyramid_session_finished(completion),
                 WorkerEvent::ReconnaissanceFinished {
                     result,
                     default_method,
@@ -1325,55 +1272,7 @@ impl QmpQemuSocketApp {
                     run_id,
                     plan_id,
                     result,
-                } => {
-                    let selected = self.current_preview_context();
-                    let phase = self
-                        .pyramid_workflow
-                        .phase()
-                        .unwrap_or(PyramidPhase::Execution);
-                    if !pyramid_workflow::complete_route(
-                        &mut self.computed_route_form,
-                        &mut self.active_run,
-                        &mut self.worker_state,
-                        pyramid_workflow::RouteCompletion {
-                            retained_recon,
-                            context: selected,
-                            run_id,
-                            plan_id,
-                            result: &result,
-                            stopped: self.stop_requested,
-                        },
-                    ) {
-                        self.push_log(format!(
-                            "Ignored computed-route completion for inactive request {run_id}."
-                        ));
-                        continue;
-                    }
-                    self.pyramid_workflow.finish_search();
-                    if let Err(error) = &result
-                        && !self
-                            .pyramid_workflow
-                            .details_visible(&self.current_preview_context())
-                    {
-                        self.pyramid_ui_failure(phase, error.clone());
-                    }
-                    self.current_status = if result.is_err() {
-                        "Computed route stopped — inspect the board"
-                    } else if self.computed_route_form.plan.is_some() {
-                        "Route planned — press Solve board when ready"
-                    } else if self.stop_requested {
-                        "Computed route finished after STOP — route revoked"
-                    } else {
-                        "Computed route execution finished"
-                    }
-                    .to_owned();
-                    if let Some(report) = self.computed_route_form.report.clone() {
-                        self.push_log(report);
-                    }
-                    if self.worker_state == WorkerState::Detached {
-                        self.stop_requested = false;
-                    }
-                }
+                } => self.apply_computed_route_finished(retained_recon, run_id, plan_id, result),
             }
         }
 
@@ -1871,92 +1770,6 @@ impl QmpQemuSocketApp {
     }
 
 
-    /// Queue a distinct calculation or consume one explicitly confirmed route.
-    ///
-    /// Existing run/capture/snapshot/STOP gates apply to both requests. Calculation
-    /// reads only the selected document; execution authority stays in the worker's
-    /// successful same-session acquisition. Channel failures leave no UI plan.
-    fn dispatch_computed_route(&mut self, execute: bool) {
-        let context = self.current_preview_context();
-        let phase = if execute {
-            PyramidPhase::Execution
-        } else {
-            PyramidPhase::Planning
-        };
-        if !reconnaissance_controls_enabled(
-            &context,
-            self.strategy_choice_pending,
-            self.active_run,
-            self.worker_state,
-            self.stop_requested,
-            self.show_snapshot_dialog,
-            self.snapshot_capture_pending,
-        ) {
-            self.computed_route_form.confirmed_context = None;
-            self.push_log("Computed route refused: wait for an idle Pyramid Shortest path worker, closed snapshot review and completed STOP.");
-            return;
-        }
-        let plan_id = if execute {
-            match self.computed_route_form.execution_plan(&context) {
-                Ok(id) => Some(id),
-                Err(error) => {
-                    self.pyramid_ui_failure(phase, error.to_owned());
-                    return;
-                }
-            }
-        } else {
-            if !self.computed_route_form.calculation_ready(&context) {
-                self.pyramid_ui_failure(phase, "Complete a successful restored acquisition in this context first, then select its exact exported JSON pathname.".to_owned());
-                return;
-            }
-            None
-        };
-        let run_id = match self.computed_route_form.begin_request() {
-            Ok(id) => id,
-            Err(error) => {
-                self.pyramid_ui_failure(phase, error.to_owned());
-                return;
-            }
-        };
-        self.active_run = Some(ActiveRun::ComputedRoute);
-        if execute {
-            self.computed_route_form.revoke_acquisition();
-        } else {
-            self.pyramid_workflow.begin_planning(&context, run_id);
-        }
-        self.worker_state = WorkerState::Validating;
-        self.current_status = if execute {
-            "Checking computed route before execution"
-        } else {
-            "Calculating route without guest input"
-        }
-        .to_owned();
-        self.invalidate_preview();
-        let queued = if let Some(plan_id) = plan_id {
-            self.push_log("Computed Pyramid route execution requested with Solver not engaged (unavailable is allowed) and foreground/no-interference confirmation. The finite route stops on uncertain delivery or unverified effect; a failed run cannot resume.");
-            self.worker.execute_route(context, run_id, plan_id, true)
-        } else {
-            self.push_log("Pyramid route calculation requested without guest input. The selected document must match the successful same-session restored acquisition byte for byte.");
-            self.worker.calculate_route_with_goal(
-                context,
-                run_id,
-                PathBuf::from(&self.computed_route_form.deal_path),
-                self.pyramid_workflow.route_goal(),
-            )
-        };
-        if let Err(error) = queued {
-            self.computed_route_form.active_run_id = None;
-            self.computed_route_form.revoke_acquisition();
-            self.active_run = None;
-            self.worker_state = WorkerState::Error;
-            self.current_status = "Computed route dispatch failed".to_owned();
-            let report = format!("Computed route request was not accepted: {error}");
-            self.computed_route_form.report = Some(report.clone());
-            self.pyramid_ui_failure(phase, report);
-        }
-    }
-
-
     /// Select a controller only while idle, revoke old authority and capture fresh pixels.
     fn select_strategy(&mut self, strategy: SolvingStrategy) {
         if !controls_are_mutable(self.active_run, self.worker_state, self.stop_requested)
@@ -2237,16 +2050,8 @@ impl QmpQemuSocketApp {
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
 
 
-                    if bevel_button(ui, "STOP", STATE_RED, false, true).clicked() {
-                        self.reset_preview = None;
-                self.stop_requested = true;
-                        self.pyramid_workflow.retire_observed();
-                        self.reconnaissance_form.confirmed_context = None;
-                        self.computed_route_form.revoke_acquisition();
-                        self.current_status = "Stopping…".to_owned();
-
-
-                        if let Err(error) = self.worker.disconnect(self.current_preview_context()) {
+                    if bevel_button(ui, "STOP", STATE_RED, false, true).clicked()
+                        && let Err(error) = self.request_stop() {
 
 
                             if !matches!(self.active_run, Some(ActiveRun::Reconnaissance | ActiveRun::ComputedRoute | ActiveRun::PyramidSession)) {
@@ -2256,7 +2061,6 @@ impl QmpQemuSocketApp {
                             self.current_status = "Stop request failed".to_owned();
                             self.push_log(error);
                         }
-                    }
                 });
             }
         });

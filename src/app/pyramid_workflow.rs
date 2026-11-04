@@ -1038,13 +1038,13 @@ impl QmpQemuSocketApp {
                 self.dispatch_reconnaissance();
                 self.reconnaissance_form.confirmed_context = None;
             }
-            PyramidPhase::Planning => self.dispatch_computed_route(false),
+            PyramidPhase::Planning => self.dispatch_route_planning(),
             PyramidPhase::Execution => {
                 if let Err(error) = arm_solve(&mut self.computed_route_form, &context) {
                     self.pyramid_ui_failure(phase, error.to_owned());
                     return;
                 }
-                self.dispatch_computed_route(true);
+                self.dispatch_route_execution();
                 self.computed_route_form.confirmed_context = None;
             }
         }
@@ -1197,14 +1197,8 @@ impl QmpQemuSocketApp {
                 if bevel_button(ui, "EXIT", STATE_RED, false, true).clicked() { self.request_exit(); }
                 let stop_enabled = (self.active_run.is_some() || self.worker_state.is_busy())
                     && !self.stop_requested;
-                if bevel_button(ui, "STOP", STATE_RED, false, stop_enabled).clicked() {
-                    self.reset_preview = None;
-                self.stop_requested = true;
-                    self.pyramid_workflow.retire_observed();
-                    self.reconnaissance_form.confirmed_context = None;
-                    self.computed_route_form.revoke_acquisition();
-                    self.current_status = "Stopping…".to_owned();
-                    if let Err(error) = self.worker.disconnect(self.current_preview_context()) {
+                if bevel_button(ui, "STOP", STATE_RED, false, stop_enabled).clicked()
+                        && let Err(error) = self.request_stop() {
                         self.worker_state = WorkerState::Error;
                         self.current_status = "Stop request failed".to_owned();
                         let phase = self
@@ -1213,7 +1207,6 @@ impl QmpQemuSocketApp {
                             .unwrap_or(PyramidPhase::Reconnaissance);
                         self.pyramid_ui_failure(phase, format!("STOP dispatch failed: {error}"));
                     }
-                }
                 if bevel_button(ui, "RESET", SETUP_BLUE, false, self.pyramid_reset_enabled(context)).clicked() {
                     self.reset_pyramid_preferences();
                 }

@@ -2062,6 +2062,69 @@ impl NativeIo<'_> {
     }
 
 
+    /// Observe original-source disappearance without changing the transition lifetime.
+    fn observe_source_disappearance(
+        &mut self,
+        frame: &CapturedFrame,
+    ) -> Option<Result<bool, String>> {
+        self.source_transition
+            .as_mut()
+            .map(|transition| transition.observe(&self.execution_vision, frame, self.captures))
+    }
+
+
+    /// Verify the board-mode position before its same-action stock effect proof.
+    ///
+    /// Temporal staging and commit, frame guards and completion authority stay with the caller.
+    fn verify_board_position(
+        &self,
+        frame: &CapturedFrame,
+        state: SearchState,
+        final_effect: bool,
+        tableau: &[Option<Card>; TABLEAU_LEN],
+        stock: (Option<Card>, Option<Card>),
+    ) -> Result<(), String> {
+        let (left, right) = stock;
+        // A winning trace can exhaust LEFT before its last match and subsequent King.
+        // This proves only the exact position; the optional REDEAL point is discarded.
+        let winning_stock_boundary = matches!(self.plan.objective, RouteObjective::Clear)
+            && !final_effect
+            && !state.is_goal()
+            && left.is_none();
+        {
+            if state.is_goal() && !final_effect {
+                return Err("Replayed empty tableau requires the final-effect phase".to_owned());
+            }
+            if self.stock_continuation || winning_stock_boundary {
+                let appeared = self
+                    .redeal_before
+                    .as_ref()
+                    .map(|before| before.appeared(frame, self.effect_settings))
+                    .transpose()?
+                    .unwrap_or(false);
+                self.execution_vision
+                    .verify_temporal_stock_position(frame, tableau, left, right, appeared)
+            } else {
+                self.execution_vision
+            .verify_position(frame, tableau, left, right)
+            .or_else(|ordinary_error| {
+                if final_effect && state.is_goal() {
+                    self.verify_final_clear_alternatives(frame, tableau, left, right)
+                        .map_err(|alternative_error| format!("{ordinary_error}; final-clear alternatives refused: {alternative_error}"))
+                } else {
+                    Err(ordinary_error)
+                }
+            })
+            }
+        }?;
+        self.stock_effect
+            .as_ref()
+            .map_or(Ok(()), |(before, changed)| {
+                before.verify_with_settings(frame, *changed, self.effect_settings)
+            })
+    }
+
+
     /// Classify one already retained frame without another capture or input attempt.
     /// The caller binds all errors to these pixels while preserving first-failure evidence.
     fn classify_observation(
@@ -2086,18 +2149,9 @@ impl NativeIo<'_> {
             return Ok(false);
         }
         let (tableau, left, right) = expected(&self.plan.acquisition.deal, state)?;
-        // A winning trace can exhaust LEFT before its last match and subsequent King.
-        // This proves only the exact position; the optional REDEAL point is discarded.
-        let winning_stock_boundary = matches!(self.plan.objective, RouteObjective::Clear)
-            && !final_effect
-            && !state.is_goal()
-            && left.is_none();
-        let source_mode = self.source_transition.is_some();
-        let disappearance = if let Some(transition) = &mut self.source_transition {
-            transition.observe(&self.execution_vision, &frame, self.captures)
-        } else {
-            Ok(false)
-        };
+        let source_observation = self.observe_source_disappearance(&frame);
+        let source_mode = source_observation.is_some();
+        let disappearance = source_observation.unwrap_or(Ok(false));
         let removal = if source_mode {
             Ok(crate::pyramid_recon::vision::removal::RemovalCandidate {
                 proof: self.removals.proof(),
@@ -2116,33 +2170,8 @@ impl NativeIo<'_> {
             disappearance.as_ref().map_err(Clone::clone).map(|_| ())
         } else {
             removal.as_ref().map_err(Clone::clone).and_then(|_| {
-            if state.is_goal() && !final_effect {
-                return Err("Replayed empty tableau requires the final-effect phase".to_owned());
-            }
-            if self.stock_continuation || winning_stock_boundary {
-                let appeared = self
-                    .redeal_before
-                    .as_ref()
-                    .map(|before| before.appeared(&frame, self.effect_settings))
-                    .transpose()?
-                    .unwrap_or(false);
-                self.execution_vision
-                    .verify_temporal_stock_position(&frame, &tableau, left, right, appeared)
-            } else {
-                self.execution_vision
-                    .verify_position(&frame, &tableau, left, right)
-                    .or_else(|ordinary_error| {
-                        if final_effect && state.is_goal() {
-                            self.verify_final_clear_alternatives(&frame, &tableau, left, right)
-                                .map_err(|alternative_error| format!("{ordinary_error}; final-clear alternatives refused: {alternative_error}"))
-                        } else {
-                            Err(ordinary_error)
-                        }
-                    })
-            }
-        }).and_then(|()| {
-            self.stock_effect.as_ref().map_or(Ok(()), |(before,changed)| before.verify_with_settings(&frame,*changed,self.effect_settings))
-        })
+                self.verify_board_position(&frame, state, final_effect, &tableau, (left, right))
+            })
         };
         // A header refusal is fatal, rather than an unmatched position that could
         // be reclassified as a new board or terminal after the final gesture.

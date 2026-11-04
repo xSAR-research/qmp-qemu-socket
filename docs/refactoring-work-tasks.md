@@ -129,16 +129,16 @@ Gemini 4. Owners: src/worker/computed_route.rs and
 src/pyramid_recon/vision/source_transition.rs; existing removal-history owner is
 src/pyramid_recon/vision/removal.rs.
 
-- [ ] Map actual source_transition creation, lifetime and reachable None/Some
+- [x] Map actual source_transition creation, lifetime and reachable None/Some
   branches. Audit stage/commit reachability separately; do not label it dead code.
-- [ ] Separate source-disappearance observation from board-position observation
+- [x] Separate source-disappearance observation from board-position observation
   with explicit private helpers and documented inputs/results.
-- [ ] Keep common fatal frame checks, first-failure retention, bound challenge
+- [x] Keep common fatal frame checks, first-failure retention, bound challenge
   progress and source-proof publication in one visible, ordered common path.
-- [ ] Preserve expected original source identity before once-only input and two
+- [x] Preserve expected original source identity before once-only input and two
   successive fresh post-action checks; different card or None is accepted only
   for the already-issued action, not as proof of the next action's source.
-- [ ] Preserve next-source readiness, same-frame pairs, resets, independent live
+- [x] Preserve next-source readiness, same-frame pairs, resets, independent live
   position knowledge and separate semantic completion.
 
 Done when: source, position and completion proofs can be followed independently,
@@ -150,15 +150,15 @@ Gemini 2 (event handling) and the original RF06. Owners: src/app.rs,
 src/app/pyramid_workflow.rs, src/worker/computed_route.rs,
 src/worker/pyramid_reconnaissance.rs and src/worker/pyramid_session.rs.
 
-- [ ] Document current ownership and transitions: acquire/RECON, validate/restore,
+- [x] Document current ownership and transitions: acquire/RECON, validate/restore,
   plan, independently replay, prepare permit, execute/observe, retire/continue.
-- [ ] Give planning and execution distinct private entrypoints instead of the
+- [x] Give planning and execution distinct private entrypoints instead of the
   current boolean dispatch parameter; planning remains input-free.
-- [ ] Reuse typed commands and complete_route/complete_session reducers. Preserve
+- [x] Reuse typed commands and complete_route/complete_session reducers. Preserve
   acquisition identity, run IDs, generation/context binding and permit consumption.
-- [ ] Isolate only A*-relevant event application needed for understandable phase
+- [x] Isolate only A*-relevant event application needed for understandable phase
   transitions; preserve stale-log versus stale-state handling and pending gates.
-- [ ] Keep STOP, pause, search controls, failure reporting and terminal outcomes
+- [x] Keep STOP, pause, search controls, failure reporting and terminal outcomes
   observable at the current boundaries. No shared mutable global session state.
 
 Done when: the current Pyramid A* lifecycle is clear enough to design the next
@@ -168,11 +168,11 @@ game adapter, without claiming that Pyramid's board or RECON types fit Free Cell
 
 Original RF04. Owners: src/app.rs and src/app/pyramid_workflow.rs.
 
-- [ ] Share STOP latching, observed-state retirement, RECON-consent/acquisition
+- [x] Share STOP latching, observed-state retirement, RECON-consent/acquisition
   revocation and disconnect dispatch behind one private owner.
-- [ ] Preserve caller-specific error reporting, active-run ownership, late-event
+- [x] Preserve caller-specific error reporting, active-run ownership, late-event
   filtering and cooperative shutdown.
-- [ ] Check both method tracks, both STOP views, disconnect failures, late/duplicate
+- [x] Check both method tracks, both STOP views, disconnect failures, late/duplicate
   completion and method/game/context changes. No post-STOP restoration or cleanup.
 
 Done when: both views preserve the same outcomes and input revocation as before.
