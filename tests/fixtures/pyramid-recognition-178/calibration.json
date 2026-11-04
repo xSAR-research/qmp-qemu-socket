@@ -1,0 +1,62 @@
+{
+  "scope": "Unchanged retained177 failure frames; offline regression, never live input authority",
+  "sources": {
+    "coral-entry.png": "7d2287ff51d0be90bc24336e7673bdb96d681ec3138a064e1ff80db437eefbdf",
+    "coral-transition.png": "d65e95a7378caedc5f56d41cb26d911be7a69556c67fd389a0dea1d3bfe368b0"
+  },
+  "tableau_manual_fixed_row_order": [
+    "2S",
+    "3H",
+    "7C",
+    "5H",
+    "KC",
+    "8C",
+    "JD",
+    "KH",
+    "9S",
+    "6D",
+    "QD",
+    "AS",
+    "JH",
+    "2H",
+    "8S",
+    "7S",
+    "9D",
+    "AC",
+    "3S",
+    "6H",
+    "5S",
+    "9H",
+    "5C",
+    "6S",
+    "4D",
+    "5D",
+    "KD",
+    "9C"
+  ],
+  "left": "KS",
+  "right": null,
+  "challenge": {
+    "kind": "Boards",
+    "current": 1,
+    "target": 2
+  },
+  "supplement_source": {
+    "fixture": "../pyramid-recognition-158/underwater.png",
+    "source_sha256": "013bce0fe1a82109aeb38edb30f6d1fb739ef0c33f5c4dd447093e9a9a972821",
+    "rank": "5",
+    "suit": "diamonds",
+    "location": "6|5",
+    "origin": [
+      1191,
+      378
+    ],
+    "corner": [
+      1194,
+      382,
+      31,
+      49
+    ],
+    "corner_sha256": "14c195be7c32e4fe7a4b576379cb54f9c14fd252fc06b3e525b72cbff4718721"
+  }
+}

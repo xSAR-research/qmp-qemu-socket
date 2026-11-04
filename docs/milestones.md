@@ -1,5 +1,11 @@
 # Milestone Tracker & Baseline Receipt — qmp-qemu-socket
 
+## Qualified 2.9.178 — additive Coral Diamonds recognition
+
+One bounded Underwater Diamonds suit supplement is decoded from the byte-original retained Five of Diamonds at 6|5. All thirteen original rank corners and every previous suit variant remain unchanged. The supplement must already match the complete original family as Five and Diamonds before only its suit glyph is appended. Quality, gap, colour, geometry and ambiguity rules remain unchanged.
+
+All six controller gates passed, including 1703 tests with zero failed, ignored, measured or filtered, plus aligned locked check/release/protected help. The 56 xSAR inputs and package 0.9.1 are unchanged; its sixteen-gate qualification remains cached. Saved-frame recognition is offline evidence; fresh guest acceptance of this revision remains pending. [Verification](Verification-2.9.178.md).
+
 ## Qualified 2.9.177 — A* flow and STOP refactoring
 
 Private refactoring separates original-source disappearance from board-position verification, separates input-free route planning from once-only execution requests, isolates three identity-bound Pyramid completion handlers and centralises common UI STOP revocation. Existing proof order, input permissions, observation budgets, failure outcomes, context binding and RESET correlation are preserved.

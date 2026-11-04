@@ -2485,3 +2485,35 @@ fn native_176_coral_entry_is_a_bound_boards_challenge() {
         Some(Entry::Challenge(expected))
     );
 }
+
+
+/// Saved entry and next-board frames agree through the production v23 classifier.
+#[test]
+fn native_178_coral_entry_and_transition_are_the_same_supported_challenge() {
+    let mut fixture = Fixture::new();
+    fixture.request.reconnaissance.profile = ReconProfileSource::BundledNativeV23;
+    let adapter = fixture.adapter();
+    let entry = adapter
+        .observe(&native(include_bytes!(
+            "../../../tests/fixtures/pyramid-recognition-178/coral-entry.png"
+        )))
+        .unwrap();
+    let transition = adapter
+        .observe(&native(include_bytes!(
+            "../../../tests/fixtures/pyramid-recognition-178/coral-transition.png"
+        )))
+        .unwrap();
+    let expected = ChallengeProgress::new(ChallengeKind::Boards, 1, 2).unwrap();
+    assert!(
+        matches!(&entry, NativeObservation::Challenge { progress, .. } if *progress == expected),
+        "{entry:?}"
+    );
+    assert!(
+        matches!(&transition, NativeObservation::Challenge { progress, .. } if *progress == expected),
+        "{transition:?}"
+    );
+    assert_eq!(
+        paired_entry(&entry, &transition),
+        Some(Entry::Challenge(expected))
+    );
+}

@@ -1,5 +1,11 @@
 # Pyramid target calibration — 1.0.1 candidate
 
+## Qualified 2.9.178 — additive Coral Diamonds recognition
+
+One bounded Underwater Diamonds suit supplement is decoded from the byte-original retained Five of Diamonds at 6|5. All thirteen original rank corners and every previous suit variant remain unchanged. The supplement must already match the complete original family as Five and Diamonds before only its suit glyph is appended. Quality, gap, colour, geometry and ambiguity rules remain unchanged.
+
+All six controller gates passed, including 1703 tests with zero failed, ignored, measured or filtered, plus aligned locked check/release/protected help. The 56 xSAR inputs and package 0.9.1 are unchanged; its sixteen-gate qualification remains cached. Saved-frame recognition is offline evidence; fresh guest acceptance of this revision remains pending. [Verification](Verification-2.9.178.md).
+
 ## Qualified 2.9.176 — Coral entry and RESET preview
 
 Coral rank recognition now uses an independently retained black Four corner within the unchanged 13-rank calibration. Boards headers match one coherent existing background appearance. RESET shows WAITING and requests one token-correlated read-only preview while retaining STOP, inventory, logs and historical diagnostics.

@@ -1064,12 +1064,95 @@ fn complete_family(text: &str, family: &str, western: bool) -> Result<Family, St
 
 /// Load all thirteen native Underwater ranks and all four measured suits.
 fn underwater_family() -> Result<Family, String> {
-    complete_family_with_ink(
-        include_str!("../../../assets/pyramid-glyphs/underwater-corners-v1.json"),
-        "Underwater",
-        false,
-        InkPolicy::Sepia,
-    )
+    underwater_family_from_json(include_str!(
+        "../../../assets/pyramid-glyphs/underwater-corners-v1.json"
+    ))
+}
+
+
+/// One independent retained Diamond appearance extends suits without replacing ranks.
+const MAX_UNDERWATER_SUIT_VARIANTS: usize = 1;
+
+
+/// Validate optional suit-only calibration against the original complete Underwater family.
+fn underwater_family_from_json(text: &str) -> Result<Family, String> {
+    let mut family = complete_family_with_ink(text, "Underwater", false, InkPolicy::Sepia)?;
+    let data: serde_json::Value = serde_json::from_str(text).map_err(|error| error.to_string())?;
+    let Some(entries) = data.get("suit_variants") else {
+        return Ok(family);
+    };
+    let entries = entries
+        .as_array()
+        .ok_or_else(|| "Underwater suit variants must be an array".to_owned())?;
+    if entries.len() > MAX_UNDERWATER_SUIT_VARIANTS {
+        return Err("Underwater suit variants exceed their measured budget".to_owned());
+    }
+    for entry in entries {
+        if entry.as_object().is_none_or(|fields| fields.len() != 3)
+            || entry["rank"] != "5"
+            || entry["suit"] != "diamonds"
+        {
+            return Err(
+                "Underwater suit variant must declare its measured Five/Diamonds".to_owned(),
+            );
+        }
+        let rgb = entry["rgb"]
+            .as_str()
+            .ok_or_else(|| "Underwater suit variant RGB corner missing".to_owned())?;
+        if rgb.len() != CORNER_WIDTH * CORNER_HEIGHT * 6 {
+            return Err("Underwater suit variant RGB corner size mismatch".to_owned());
+        }
+        let bytes = rgb
+            .as_bytes()
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|[high, low]| Ok(super::hex(*high)? * 16 + super::hex(*low)?))
+            .collect::<Result<Vec<u8>, String>>()?;
+        let mut corners = corners_with_ink(
+            bytes.as_chunks::<3>().0,
+            None,
+            Some(UNDERWATER_SEPARATOR),
+            false,
+            InkPolicy::Sepia,
+        )
+        .into_iter();
+        let corner = corners
+            .next()
+            .ok_or_else(|| "Underwater suit variant lacks complete printed glyphs".to_owned())?;
+        if corners.next().is_some() || !corner.whole_separator || corner.colour != Colour::Red {
+            return Err("Underwater suit variant lacks one complete red corner".to_owned());
+        }
+        let rank = matching_label_with_tolerance(
+            &corner.rank,
+            &family.ranks,
+            RANK_ERROR,
+            RANK_GAP,
+            family.native_tolerance(),
+        );
+        let suit = matching_label_with_tolerance(
+            &corner.suit,
+            &family.suit_bank(&corner, rank),
+            SUIT_ERROR,
+            SUIT_GAP,
+            family.native_tolerance(),
+        );
+        if rank != Some(Rank::Five) || suit != Some(Suit::Diamonds) {
+            return Err(
+                "Underwater suit variant contradicts its existing family identity".to_owned(),
+            );
+        }
+        let (_, variants) = family
+            .suits
+            .iter_mut()
+            .find(|(label, _)| *label == Suit::Diamonds)
+            .ok_or_else(|| "Underwater Diamond bank incomplete".to_owned())?;
+        if variants.contains(&corner.suit) {
+            return Err("Duplicate Underwater suit variant".to_owned());
+        }
+        variants.push(corner.suit);
+    }
+    Ok(family)
 }
 
 

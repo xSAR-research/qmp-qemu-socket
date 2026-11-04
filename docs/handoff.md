@@ -1,41 +1,45 @@
-# Active handoff — qualified 2.9.177 / unchanged xSAR 0.9.1
+# Active handoff — qualified 2.9.178 / unchanged xSAR 0.9.1
 
-Private refactoring separates original-source disappearance from board-position verification, separates input-free route planning from once-only execution requests, isolates three identity-bound Pyramid completion handlers and centralises common UI STOP revocation. Existing proof order, input permissions, observation budgets, failure outcomes, context binding and RESET correlation are preserved.
+One bounded Underwater Diamonds suit supplement is decoded from the byte-original retained Five of Diamonds at 6|5. All thirteen original rank corners and every previous suit variant remain unchanged. The supplement must already match the complete original family as Five and Diamonds before only its suit glyph is appended. Quality, gap, colour, geometry and ambiguity rules remain unchanged.
 
-All six controller gates passed, including 1697 tests with zero failed, ignored or filtered, plus aligned locked check/release/protected help. The 56 xSAR inputs and package0.9.1 are unchanged; prior sixteen-gate library qualification remains cached. No fresh guest acceptance was performed.
+All six controller gates passed, including 1703 tests with zero failed, ignored, measured or filtered, plus aligned locked check/release/protected help. The 56 xSAR inputs and package 0.9.1 are unchanged; its sixteen-gate qualification remains cached. Saved-frame recognition is offline evidence; fresh guest acceptance of this revision remains pending.
 
-## Authority and preserved baseline
+## Destination Sentinel
 
-Charlie authorised achievable planned refactoring and a protected2.9.177 executable.
-This delivery completes RF08, RF06-A and RF04. Broader Solver, terminal, mailbox,
-recognition-bank and test-layout work remains deferred behind the existing ROI stop line.
-The editable work-list differs only in13 completion checkboxes; its contents have
-not been indexed or captured. No dependency, public API, profile, CPU configuration,
-recognition, capture policy, game rule or sibling source changed.
+Run exactly once before further edits:
 
-The published176 baseline was reconciled byte for byte:946 compiler inputs,
-135 documents and440 evidence pins matched. The earlier old verifier HEAD mismatch
-remains historical. Four repository histories, indices and unrelated changes are
-preserved; existing server Cargo.lock changes remain owned by Charlie.
-Private Evidence/History remain ignored and untracked. Any exact lifecycle delta
-is recorded in the private audit; never delete receipts to manufacture a match.
+    python3 /home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/pyramid-diamond-178-20261104-hu88ojh8/verify-destination.py
 
-## Destination sentinel
+Require HANDOFF VERIFIED or report the exact discrepancy. This verifier seals the
+published starting histories, preserved indices/unrelated work, current input and
+document hashes, prior evidence and protected executable. It rejects optimisation
+that disables assertions. Git patch identities are hashes, avoiding persistence
+of editable task-list hunks. Evidence and History remain ignored and untracked.
 
-Run once before further edits:
+## Qualification and provenance
 
-```sh
-python3 /home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/refactor-177-20261104-qu2x3ban/verify-destination.py
-```
+[Verification](Verification-2.9.178.md) records the six source gates, aligned
+checks, retained positive/negative coverage and exact independent review.
+[Case](../Evidence/Pyramid/Validation/pyramid-diamond-178-20261104-hu88ojh8/destination-state.json) is the current destination receipt.
+[Owned paths](../Evidence/Pyramid/Validation/pyramid-diamond-178-20261104-hu88ojh8/owned-paths.txt) identifies the complete change scope.
 
-Require HANDOFF VERIFIED or report the exact discrepancy before changes.
+The complete saved entry and transition frames each recognise all 28 manually
+labelled tableau cards, LEFT King of Spades, RIGHT empty, and Boards 1/2 through
+production v23 Native/paired_entry. They are retained frames, not fresh captures
+or full live RECON/restoration/play acceptance. No input/capture/STOP/replay,
+source-disappearance or completion policy changed.
 
-## Protected executable
+The bounded published-177 baseline reconciliation preserves the previous failed
+HEAD check as history, records two absent transient SQLite sidecars and exact
+startup receipt additions, and does not relabel that check as verified.
+Baseline_HEAD_SHA: 390310066c6b394ac329b6372c11b189a0404517
+Parent: 8ea6d5c559c2b4d6d1c96c1dcf83ed128e778e53
 
-```sh
-/home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/refactor-177-20261104-qu2x3ban/native/qmp-qemu-socket-2.9.177 --image
-```
+## Executable
 
-SHA256 `f061e760dc73d21c63696c0ea6b317f820f4a8a6a1457b2cfb6cb7f795729372`;mode0700. Not installed or run against the guest.
-Normal startup resets the fixed image directory; preserve evidence first.
-[Verification](Verification-2.9.177.md).
+    /home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/pyramid-diamond-178-20261104-hu88ojh8/native/qmp-qemu-socket-2.9.178 --image
+
+SHA256 81a7cd4ce47ad5be2698eb7a98aff05e89bf5402810e92d3065680850b887cab; 12581648 bytes; mode 0700.
+
+No installation, new guest capture/input, staging, commit, push or sibling edit
+was performed. The editable refactoring work-list remains byte-identical.
