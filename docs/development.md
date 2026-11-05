@@ -1,5 +1,11 @@
 # Development conventions
 
+## Qualified 2.9.179 — foundation source HALOs
+
+Free Cell now checks all four foundation stacks for a complete closed solid source HALO after its existing CELL and lowest-PLAY priorities. The measured native slots use checked one-click mapping. Dashed destinations and incomplete sources remain refused. Klondike already scanned all four foundations; its production detector and controller remain unchanged, with stronger coordinate/invalid-column regression coverage.
+
+All six application gates passed, including 1708 tests with zero failed, ignored, measured or filtered, followed by aligned locked check, release and protected help. The 56 unchanged xSAR inputs retain cached sixteen-gate qualification. Foundation source tests translate retained native source pixels; no new Free Cell foundation-source screenshot or fresh guest acceptance is claimed. [Verification](Verification-2.9.179.md). The editable [gameplay function catalogue](gameplay-function-work-tasks.md) is a planning deliverable; its proposed composition module has not been implemented.
+
 ## Qualified 2.9.178 — additive Coral Diamonds recognition
 
 One bounded Underwater Diamonds suit supplement is decoded from the byte-original retained Five of Diamonds at 6|5. All thirteen original rank corners and every previous suit variant remain unchanged. The supplement must already match the complete original family as Five and Diamonds before only its suit glyph is appended. Quality, gap, colour, geometry and ambiguity rules remain unchanged.

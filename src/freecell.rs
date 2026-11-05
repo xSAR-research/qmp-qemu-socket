@@ -4,7 +4,8 @@
 //! solid source outline is actionable; dark dashed destination guides are not.
 //! Every frame is classified independently, so stack compression, expansion and
 //! repeated source positions do not require card recognition or effect proofs.
-//! SUIT piles, Draw, Recycle and Solve are not Free Cell input targets.
+//! Complete solid foundation sources are considered after CELL and PLAY sources.
+//! Dashed SUIT destinations, Draw, Recycle and Solve never authorise input.
 
 use std::fmt;
 
@@ -26,6 +27,10 @@ const CELL_X: [u32; 4] = [166, 358, 551, 743];
 
 /// Native card-face origins for the eight play columns, left to right.
 const PLAY_X: [u32; 8] = [218, 410, 603, 795, 988, 1_180, 1_373, 1_565];
+
+
+/// Native foundation face origins measured from FC01/FC02/FC05/FC08.
+const FOUNDATION_X: [u32; 4] = [1_041, 1_233, 1_425, 1_618];
 
 
 /// Measured face width; the exterior outline is read only outside this width.
@@ -97,6 +102,11 @@ pub enum FreeCellTarget {
         /// Native left-to-right cell number, in `1..=4`.
         column: u8,
     },
+    /// One complete solid source in a one-based upper-right SUIT stack.
+    Foundation {
+        /// Native left-to-right foundation number, in `1..=4`.
+        column: u8,
+    },
     /// One contiguous highlighted PLAY block, including a multi-card run.
     Play {
         /// Native left-to-right column number, in `1..=8`.
@@ -118,6 +128,7 @@ impl fmt::Display for FreeCellTarget {
 
         match self {
             Self::Cell { column } => write!(formatter, "CELL {column}"),
+            Self::Foundation { column } => write!(formatter, "SUIT {column}"),
             Self::Play { column, top, bottom } =>
                 write!(formatter, "PLAY {column}, rows {top}..{bottom}"),
         }
@@ -359,6 +370,11 @@ pub fn canonical_action(target: FreeCellTarget) -> Option<GuidedAction> {
             let x = CELL_X[usize::from(column - 1)];
             (x, 203, PixelRect::new(x, 112, CARD_WIDTH, 182))
         }
+        FreeCellTarget::Foundation { column } => {
+            let index = usize::from(column.checked_sub(1)?);
+            let x = *FOUNDATION_X.get(index)?;
+            (x, 203, PixelRect::new(x, 112, CARD_WIDTH, 182))
+        }
         FreeCellTarget::Play { column, top, bottom }
 
 
@@ -388,8 +404,8 @@ pub fn canonical_action(target: FreeCellTarget) -> Option<GuidedAction> {
 }
 
 
-/// Check CELL1-4 first, then the lowest PLAY source with left-to-right tie-breaks.
-/// Each invocation uses only this frame; SUIT positions are never searched.
+/// Check CELL1-4, then the lowest PLAY source, then complete SUIT1-4 sources.
+/// Each invocation uses only this frame, retaining left-to-right tie-breaks.
 pub fn analyse(frame: &CapturedFrame) -> Result<FrameAnalysis, HaloDetectionError> {
     let mut selected = None;
 
@@ -428,6 +444,21 @@ pub fn analyse(frame: &CapturedFrame) -> Result<FrameAnalysis, HaloDetectionErro
                 }
             }
         }
+
+
+        if selected.is_none() {
+
+
+            for (index, x) in FOUNDATION_X.into_iter().enumerate() {
+
+
+                if find_source(frame, x, 100, 310).is_some() {
+                    let column = u8::try_from(index).ok().and_then(|value| value.checked_add(1));
+                    selected = column.map(|column| FreeCellTarget::Foundation { column });
+                    break;
+                }
+            }
+        }
     }
 
     Ok(FrameAnalysis {
@@ -436,6 +467,31 @@ pub fn analyse(frame: &CapturedFrame) -> Result<FrameAnalysis, HaloDetectionErro
         observed_rows: None,
         top_row_face_up_count: 0,
     })
+}
+
+
+/// Translate the genuine FC05 CELL2 source into a measured foundation slot.
+/// This controlled derivative is not an observed native SUIT-source screenshot.
+#[cfg(test)]
+pub(crate) fn translated_foundation_fixture(column: u8) -> CapturedFrame {
+    let original =
+        crate::capture::decode_png(include_bytes!("../tests/fixtures/freecell-FC05.png")).unwrap();
+    let mut frame =
+        crate::capture::decode_png(include_bytes!("../tests/fixtures/freecell-FC02.png")).unwrap();
+    let x = FOUNDATION_X[usize::from(column - 1)];
+    for y in 580..798 {
+        for px in 1_363..1_521 {
+            let offset = y * frame.stride + px * 4;
+            frame.pixels[offset..offset + 4].copy_from_slice(&[20, 120, 75, 255]);
+        }
+    }
+    for row in 0..210 {
+        let source = (100 + row) * original.stride + 348 * 4;
+        let target = (100 + row) * frame.stride + (x as usize - 10) * 4;
+        frame.pixels[target..target + 158 * 4]
+            .copy_from_slice(&original.pixels[source..source + 158 * 4]);
+    }
+    frame
 }
 
 
@@ -599,7 +655,7 @@ mod tests {
     }
 
 
-    /// Destinations, SUIT outlines and toolbar pixels never become source input.
+    /// Dashed destinations, incomplete sources and toolbar pixels never authorise input.
     #[test]
     fn destination_guides_and_unknown_clipped_sources_are_not_actions() {
 
@@ -613,15 +669,123 @@ mod tests {
 
         let mut frame = fixture(2);
         paint(&mut frame, PixelRect::new(PLAY_X[6] - 10, 580, CARD_WIDTH + 21, 218), [20, 120, 75]);
-        paint_source(&mut frame, 1_041, 102, 305);
-        assert_eq!(analyse(&frame).unwrap().prediction, PredictedAction::NoHighlight,
-            "SUIT has no Free Cell source scan");
         paint_source(&mut frame, PLAY_X[1], 800, 1_001);
         assert_eq!(analyse(&frame).unwrap().prediction, PredictedAction::NoHighlight,
             "rails without visible card paper cannot invent a clipped click");
         paint(&mut frame, PixelRect::new(0, TOOLBAR_TOP, 1_920, 1_080 - TOOLBAR_TOP), [255, 255, 255]);
         assert_eq!(analyse(&frame).unwrap().prediction, PredictedAction::NoHighlight,
             "toolbar pixels are outside source authority");
+    }
+
+
+    /// Translated native sources cover every foundation with exact one-click geometry.
+    #[test]
+    fn foundation_179_sources_have_checked_geometry_and_preserve_priority() {
+        for column in 1..=4 {
+            let mut frame = translated_foundation_fixture(column);
+            let target = FreeCellTarget::Foundation { column };
+            let expected = canonical_action(target).unwrap();
+            let x = FOUNDATION_X[usize::from(column - 1)];
+            assert_eq!(
+                analyse(&frame).unwrap().prediction,
+                PredictedAction::Action(expected)
+            );
+            assert_eq!(
+                expected.operation(),
+                InputOperation::Click(PixelPoint::new((x + 68) as i32, 203))
+            );
+            assert_eq!(expected.effect_bounds(), PixelRect::new(x, 112, 137, 182));
+            assert_eq!(expected.minimum_changed_pixels(), 0);
+            paint_source(&mut frame, PLAY_X[0], 500, 850);
+            assert_eq!(
+                analyse(&frame).unwrap().prediction,
+                PredictedAction::Action(
+                    canonical_action(FreeCellTarget::Play {
+                        column: 1,
+                        top: 500,
+                        bottom: 850
+                    })
+                    .unwrap()
+                )
+            );
+            paint_source(&mut frame, CELL_X[0], 102, 305);
+            assert_eq!(
+                analyse(&frame).unwrap().prediction,
+                PredictedAction::Action(
+                    canonical_action(FreeCellTarget::Cell { column: 1 }).unwrap()
+                )
+            );
+        }
+        let mut frame = translated_foundation_fixture(2);
+        paint_source(&mut frame, FOUNDATION_X[0], 102, 305);
+        assert_eq!(
+            analyse(&frame).unwrap().prediction,
+            PredictedAction::Action(
+                canonical_action(FreeCellTarget::Foundation { column: 1 }).unwrap()
+            )
+        );
+    }
+
+
+    /// Genuine dashed SUIT destinations remain non-actions after removing native PLAY sources.
+    #[test]
+    fn foundation_179_native_dashed_destinations_remain_non_actions() {
+        for code in [2, 14, 21] {
+            let mut frame = fixture(code);
+            paint(
+                &mut frame,
+                PixelRect::new(200, 350, 1_518, TOOLBAR_TOP - 350),
+                [20, 100, 75],
+            );
+            assert!(is_gameplay_scene(&frame).unwrap());
+            assert!(solver_active(&frame).unwrap());
+            assert_eq!(
+                analyse(&frame).unwrap().prediction,
+                PredictedAction::NoHighlight,
+                "FC{code:02}"
+            );
+        }
+    }
+
+
+    /// Each complete source needs both rails, both closures, supported scene and active Solver.
+    #[test]
+    fn foundation_179_incomplete_dashed_and_inactive_sources_refuse() {
+        for column in 1..=4 {
+            let frame = translated_foundation_fixture(column);
+            let x = FOUNDATION_X[usize::from(column - 1)];
+            let bounds = find_source(&frame, x, 100, 310).unwrap();
+            for region in [
+                PixelRect::new(x - 10, 100, CARD_WIDTH + 21, 22),
+                PixelRect::new(
+                    x - 10,
+                    bounds.bottom() - 22,
+                    CARD_WIDTH + 21,
+                    332 - bounds.bottom(),
+                ),
+                PixelRect::new(x - 10, 100, 10, 210),
+                PixelRect::new(x + CARD_WIDTH, 100, 11, 210),
+            ] {
+                let mut damaged = frame.clone();
+                paint(&mut damaged, region, [20, 120, 75]);
+                assert_eq!(
+                    analyse(&damaged).unwrap().prediction,
+                    PredictedAction::NoHighlight,
+                    "SUIT{column} {region:?}"
+                );
+            }
+            let mut inactive = frame.clone();
+            let off = fixture(1);
+            for y in 34..93 {
+                let start = y * inactive.stride + 824 * 4;
+                inactive.pixels[start..start + 272 * 4]
+                    .copy_from_slice(&off.pixels[start..start + 272 * 4]);
+            }
+            assert_eq!(
+                analyse(&inactive).unwrap().prediction,
+                PredictedAction::NoHighlight
+            );
+        }
     }
 
 
@@ -796,6 +960,8 @@ mod tests {
         for target in [
             FreeCellTarget::Cell { column: 0 },
             FreeCellTarget::Cell { column: 5 },
+            FreeCellTarget::Foundation { column: 0 },
+            FreeCellTarget::Foundation { column: 5 },
             FreeCellTarget::Play { column: 0, top: 400, bottom: 600 },
             FreeCellTarget::Play { column: 9, top: 400, bottom: 600 },
             FreeCellTarget::Play { column: 1, top: 300, bottom: 600 },

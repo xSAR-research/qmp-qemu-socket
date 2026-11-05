@@ -55,8 +55,11 @@ source bottoms whose last crossbar is row946, giving exclusive end947. Rounded
 rails terminate before that crossbar; the complete outline supplies authority
 without depending on the clipped paper probe.
 
-SUIT cards are not sources in this guest Free Cell contract. There is no Draw,
-Recycle or Solve action. Eligible cards can automatically move to SUIT; absent
+Version 2.9.179 also checks the four foundation stacks after CELL and PLAY.
+Only a complete closed solid source outline authorises one foundation click;
+dashed SUIT destination guides remain ignored. Measured foundation origins are
+1041, 1233, 1425 and 1618 at native Y112, with centre clicks at Y203.
+There is no Draw, Recycle or Solve action. Eligible cards can automatically move to SUIT; absent
 HALOs therefore require bounded fresh observations, never speculative input.
 
 The detector uses broad warm-gold relationships and outline geometry to separate
@@ -111,3 +114,13 @@ Only the expected local OK word and body are aligned together; level, medal,
 fireworks, modal frame and completed cards do not gate readiness. An isolated
 OK still does not establish a game win. Spider retains its offsets 0/-19.
 These captures establish local readiness, not live terminal-click success.
+
+## Foundation source coverage in 2.9.179
+
+FC01/FC02/FC05/FC08 establish native foundation geometry. All-four source and
+controller tests translate the unchanged FC05 CELL2 solid-HALO patch into those
+positions in memory. These are explicitly synthetic source appearances; none of
+FC01–FC23 records a genuine Free Cell foundation-source HALO. Native dashed SUIT
+guides remain negative evidence. The controller tests cover foundation-to-PLAY
+continuation, STOP and uncertain delivery without adding card-effect gates. Fresh
+live acceptance of the rare foundation recommendation remains pending.

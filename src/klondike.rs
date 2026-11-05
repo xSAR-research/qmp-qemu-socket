@@ -4353,7 +4353,11 @@ mod tests {
         for column in 1..=4 {
             let mut frame = active_without_highlight();
             add_upper_source(&mut frame, 894 + COLUMN_PITCH * u32::from(column - 1));
-            assert_eq!(action(&frame).target, ActionTarget::Klondike(KlondikeTarget::Foundation { column }));
+            let selected = action(&frame);
+            let x = 894 + COLUMN_PITCH * u32::from(column - 1);
+            assert_eq!(selected.target, ActionTarget::Klondike(KlondikeTarget::Foundation { column }));
+            assert_eq!(selected.operation(), InputOperation::Click(PixelPoint::new((x + 66) as i32, 199)));
+            assert_eq!(selected.effect_bounds(), PixelRect::new(x, 112, 132, 175));
             add_upper_source(&mut frame, 614);
             assert_eq!(action(&frame).target, ActionTarget::Klondike(KlondikeTarget::Waste { offset: 2 }));
         }
@@ -4389,6 +4393,7 @@ mod tests {
         assert!(!is_gameplay_scene(&overlay).unwrap());
         assert_eq!(analyse(&overlay).unwrap().prediction, PredictedAction::NoHighlight);
         assert!(canonical_action(KlondikeTarget::Waste { offset: 3 }).is_none());
+        assert!(canonical_action(KlondikeTarget::Foundation { column: 0 }).is_none());
         assert!(canonical_action(KlondikeTarget::Foundation { column: 5 }).is_none());
         assert!(canonical_action(KlondikeTarget::Tableau { column: 1, top: 1, bottom: u16::MAX }).is_none());
         assert!(find_solid_card_source(&fixture(2), PixelRect::new(0, 100, 132, 200)).is_err());

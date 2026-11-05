@@ -1,5 +1,11 @@
 # Architecture and control flow
 
+## Qualified 2.9.179 — foundation source HALOs
+
+Free Cell now checks all four foundation stacks for a complete closed solid source HALO after its existing CELL and lowest-PLAY priorities. The measured native slots use checked one-click mapping. Dashed destinations and incomplete sources remain refused. Klondike already scanned all four foundations; its production detector and controller remain unchanged, with stronger coordinate/invalid-column regression coverage.
+
+All six application gates passed, including 1708 tests with zero failed, ignored, measured or filtered, followed by aligned locked check, release and protected help. The 56 unchanged xSAR inputs retain cached sixteen-gate qualification. Foundation source tests translate retained native source pixels; no new Free Cell foundation-source screenshot or fresh guest acceptance is claimed. [Verification](Verification-2.9.179.md). The editable [gameplay function catalogue](gameplay-function-work-tasks.md) is a planning deliverable; its proposed composition module has not been implemented.
+
 ## Qualified 2.9.177 — A* flow and STOP refactoring
 
 Private refactoring separates original-source disappearance from board-position verification, separates input-free route planning from once-only execution requests, isolates three identity-bound Pyramid completion handlers and centralises common UI STOP revocation. Existing proof order, input permissions, observation budgets, failure outcomes, context binding and RESET correlation are preserved.

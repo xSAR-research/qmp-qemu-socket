@@ -243,7 +243,7 @@ fn drive_run(
     validate_operation_limit(settings.operation_limit())?;
     let delays = settings.animation_delays();
     send_log(event_tx, format!(
-        "Free Cell fresh-HALO execution: game-start delay={} ms, action/automatic-transfer settle={} ms, no-HALO observation={} ms, delayed allowance={}. Inactive Solver receives one start delay and fresh capture before activation. Active no-HALO gameplay receives one delayed input-free observation before one refresh; activation and refresh share one reserve per unresolved context. One source click consumes one action; Solver and terminal clicks do not. No card identity, pixel difference, SUIT input, Draw, Recycle or Solve is used. Continuous 0 may restart one-board games through Score, optional Level Up OK, New Game and Play. After score skip, exactly one ready local OK or New Game control selects the next stage; a missing pair receives three normal observations, and an ambiguous pair stops without input. On observation three, a settled-size OK awaiting current-glyph geometry confirmation, an interrupted preceding glyph, or a first settled-size body without a current glyph may reserve one final fresh 200 ms OK confirmation. That frame must independently provide exact-black ink and matching settled geometry. New Game and Play remain limited to three observations; no control input is replayed.",
+        "Free Cell fresh-HALO execution: game-start delay={} ms, action/automatic-transfer settle={} ms, no-HALO observation={} ms, delayed allowance={}. Inactive Solver receives one start delay and fresh capture before activation. Active no-HALO gameplay receives one delayed input-free observation before one refresh; activation and refresh share one reserve per unresolved context. One source click consumes one action; Solver and terminal clicks do not. No card identity or pixel difference is required. Complete foundation source HALOs use one click; Draw, Recycle and Solve are not used. Continuous 0 may restart one-board games through Score, optional Level Up OK, New Game and Play. After score skip, exactly one ready local OK or New Game control selects the next stage; a missing pair receives three normal observations, and an ambiguous pair stops without input. On observation three, a settled-size OK awaiting current-glyph geometry confirmation, an interrupted preceding glyph, or a first settled-size body without a current glyph may reserve one final fresh 200 ms OK confirmation. That frame must independently provide exact-black ink and matching settled geometry. New Game and Play remain limited to three observations; no control input is replayed.",
         delays.freecell_game_start.as_millis(), delays.freecell_settle.as_millis(), delays.freecell_reobserve.as_millis(), settings.freecell_observation_limit(),
     ));
     capture_latest(io, latest, event_tx, cancel_requested)?;
@@ -985,6 +985,55 @@ mod tests {
             assert_eq!(run(&mut io, 1, 3, &mut None), Ok(RunOutcome::Completed(1)), "FC{number:02}");
             assert_eq!(io.sources.len(), 1);
             assert_eq!(io.solver_clicks, 0);
+        }
+    }
+
+
+    /// A translated native foundation source continues to a fresh native PLAY HALO.
+    #[test]
+    fn foundation_179_continues_from_each_foundation_without_effect_gate() {
+        for column in 1..=4 {
+            let cancel = AtomicBool::new(false);
+            let mut io = fake(
+                vec![
+                    freecell::translated_foundation_fixture(column),
+                    fixture(2),
+                    fixture(3),
+                ],
+                &cancel,
+            );
+            assert_eq!(run(&mut io, 2, 3, &mut None), Ok(RunOutcome::Completed(2)));
+            assert_eq!(io.captures, 3);
+            assert_eq!(io.sources.len(), 2);
+            assert!(matches!(io.sources[0], PredictedAction::Action(action)
+                if action.target == ActionTarget::FreeCell(freecell::FreeCellTarget::Foundation { column })));
+            assert_eq!(
+                io.sources[1],
+                freecell::analyse(&fixture(2)).unwrap().prediction
+            );
+            assert_eq!(
+                io.waits,
+                [AnimationSettleDelays::default().freecell_settle; 2]
+            );
+            assert_eq!(io.solver_clicks, 0);
+            assert!(io.controls.is_empty());
+        }
+    }
+
+
+    /// Foundation input keeps STOP and uncertain-delivery no-replay boundaries.
+    #[test]
+    fn foundation_179_stop_and_uncertainty_do_not_replay() {
+        for fault in [Fault::StopAtProbe, Fault::Source] {
+            let cancel = AtomicBool::new(false);
+            let mut io = fake(vec![freecell::translated_foundation_fixture(1)], &cancel);
+            io.fault = fault;
+            assert!(run(&mut io, 1, 3, &mut None).is_err());
+            assert_eq!(io.captures, 1);
+            assert_eq!(io.sources.len(), usize::from(fault == Fault::Source));
+            assert!(io.waits.is_empty());
+            assert_eq!(io.solver_clicks, 0);
+            assert!(io.controls.is_empty());
         }
     }
 
