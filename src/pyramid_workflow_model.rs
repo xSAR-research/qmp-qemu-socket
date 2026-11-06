@@ -257,6 +257,18 @@ pub struct SessionProgress {
 }
 
 
+/// Causal completion classification; a late STOP never reclassifies a genuine failure.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum RunTermination {
+    /// The requested finite work completed normally.
+    Completed,
+    /// Operator STOP was the failing boundary and every attempted gesture was acknowledged.
+    OperatorStopped,
+    /// A genuine refusal or uncertain input requires inspection.
+    Failed,
+}
+
+
 /// The sole automatic-session event permitted to release its UI ownership.
 #[derive(Clone, Debug)]
 pub struct SessionCompletion {
@@ -264,6 +276,8 @@ pub struct SessionCompletion {
     pub(crate) context: ControllerContext,
     /// Session identity that must still be outstanding in the UI.
     pub(crate) run_id: u64,
+    /// Typed causal completion, never inferred from diagnostic text or final STOP state.
+    pub(crate) termination: RunTermination,
     /// Actual final report or original error; neither result permits resume.
     pub(crate) result: Result<String, String>,
 }

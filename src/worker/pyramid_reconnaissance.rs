@@ -38,7 +38,7 @@ use crate::{
 };
 
 use super::{
-    WorkerEvent, WorkerEventSink, WorkerState, cancellable_wait, capture_screen_with_png,
+    WorkerEvent, WorkerEventSink, WorkerState, cancellable_wait,
     publish_pyramid_failure, send_log, send_state, send_status, validate_probe,
 };
 
@@ -72,6 +72,20 @@ struct ReconControlState {
     epoch: u64,
     /// Exhaustion permanently refuses fresh authority instead of reusing an epoch.
     epoch_exhausted: bool,
+    /// Explicit operator STOP for this exact context, never shutdown or selection drift.
+    operator_stop: Option<(ControllerContext, u64)>,
+}
+
+
+/// Causal authority refusal; presentation must not infer this from the final STOP latch.
+#[derive(Debug, thiserror::Error)]
+pub(super) enum AuthorityError {
+    /// A deliberate STOP revoked the same reserved controller.
+    #[error("STOP or changed context revoked reconnaissance; no further input is permitted")]
+    OperatorStop,
+    /// Any other authority refusal retains its original diagnostic.
+    #[error("{0}")]
+    Refused(String),
 }
 
 
@@ -101,6 +115,7 @@ impl ReconControl {
             return Err("Controller epoch exhausted; restart required".to_owned());
         }
         if state.requested.as_ref() != Some(context) {
+            state.operator_stop = None;
             match state.epoch.checked_add(1) {
                 Some(epoch) => state.epoch = epoch,
                 None => {
@@ -152,6 +167,7 @@ impl ReconControl {
         }
         state.active = true;
         state.revoked = false;
+        state.operator_stop = None;
         cancel.store(false, Ordering::Release);
         let result = send();
 
@@ -195,11 +211,30 @@ impl ReconControl {
 
     /// Make STOP monotonic for the reserved scan, even if another request arrives.
     pub(super) fn stop(&self, context: Option<&ControllerContext>, cancel: &AtomicBool) {
+        self.revoke(context, cancel, false);
+    }
+
+
+    /// Revoke operator authority before waking parked work, preserving prior unrelated refusal.
+    pub(super) fn operator_stop(&self, context: &ControllerContext, cancel: &AtomicBool) {
+        self.revoke(Some(context), cancel, true);
+    }
+
+
+    /// Record the cause under the same lock as monotonic revocation.
+    fn revoke(&self, context: Option<&ControllerContext>, cancel: &AtomicBool, operator: bool) {
         let state = self.state.lock();
         cancel.store(true, Ordering::Release);
 
 
         if let Ok(mut state) = state {
+            if !operator {
+                state.operator_stop = None;
+            } else if !state.revoked && state.active && !state.epoch_exhausted
+                && state.requested.as_ref() == context
+            {
+                state.operator_stop = context.cloned().map(|context| (context, state.epoch));
+            }
             state.revoked = true;
             match state.epoch.checked_add(1) {
                 Some(epoch) => state.epoch = epoch,
@@ -220,22 +255,55 @@ impl ReconControl {
         context: &ControllerContext,
         cancel: &AtomicBool,
     ) -> Result<(), String> {
+        self.check_active_causal(context, cancel).map_err(|error| error.to_string())
+    }
+
+
+    /// Preserve operator cancellation only at the failing authority boundary.
+    pub(super) fn check_active_causal(
+        &self,
+        context: &ControllerContext,
+        cancel: &AtomicBool,
+    ) -> Result<(), AuthorityError> {
+        self.check_receipt_causal(context, cancel, None)
+    }
+
+
+    /// Check active ownership and an optional receipt epoch in the same locked snapshot.
+    pub(super) fn check_receipt_causal(
+        &self,
+        context: &ControllerContext,
+        cancel: &AtomicBool,
+        epoch: Option<u64>,
+    ) -> Result<(), AuthorityError> {
         let state = self
             .state
             .lock()
-            .map_err(|_| "Reconnaissance request lock is poisoned".to_owned())?;
+            .map_err(|_| AuthorityError::Refused("Reconnaissance request lock is poisoned".to_owned()))?;
 
 
         if cancel.load(Ordering::Acquire) || state.revoked || state.epoch_exhausted {
-            return Err(
+            if !state.epoch_exhausted && state.active && state.requested.as_ref() == Some(context)
+                && let Some((stopped_context, stopped_epoch)) = &state.operator_stop
+                && stopped_context == context
+            {
+                if epoch.is_some_and(|epoch| epoch != *stopped_epoch) {
+                    return Err(AuthorityError::Refused("Acquisition receipt is stale; prepare and acquire a restored deal again".to_owned()));
+                }
+                return Err(AuthorityError::OperatorStop);
+            }
+            return Err(AuthorityError::Refused(
                 "STOP or changed context revoked reconnaissance; no further input is permitted"
                     .to_owned(),
-            );
+            ));
         }
 
 
         if !state.active || state.requested.as_ref() != Some(context) {
-            return Err("Reconnaissance no longer owns the selected controller context".to_owned());
+            return Err(AuthorityError::Refused("Reconnaissance no longer owns the selected controller context".to_owned()));
+        }
+        if epoch.is_some_and(|epoch| epoch != state.epoch) {
+            return Err(AuthorityError::Refused("Acquisition receipt is stale; prepare and acquire a restored deal again".to_owned()));
         }
         Ok(())
     }
@@ -293,6 +361,7 @@ pub(super) fn run(
     events: &WorkerEventSink,
     cancel: &AtomicBool,
 ) {
+    let stop_trace = super::pyramid_stop::StopTrace::default();
     let result = run_phase(
         context,
         request,
@@ -300,6 +369,7 @@ pub(super) fn run(
         cancel,
         ReconRunOwner::Manual,
         None,
+        &stop_trace,
     );
     let default_method = result.as_ref().ok().and_then(|path| {
         let method =
@@ -308,6 +378,7 @@ pub(super) fn run(
             super::computed_route::acquisition_observed(context, path, events, cancel).ok()?;
         Some((context.clone(), method, observed))
     });
+    let termination = stop_trace.termination(result.is_err(), true);
     events.latest_frame.reconnaissance.finish();
 
 
@@ -326,7 +397,7 @@ pub(super) fn run(
             );
         }
         Err(error) => {
-            send_state(events, WorkerState::Uncertain);
+            send_state(events, if termination == crate::pyramid_workflow_model::RunTermination::OperatorStopped { WorkerState::Ready } else { WorkerState::Uncertain });
             send_status(
                 events,
                 "Pyramid reconnaissance stopped — inspect diagnostics".to_owned(),
@@ -340,6 +411,7 @@ pub(super) fn run(
         }
     }
     let _ = events.send(WorkerEvent::ReconnaissanceFinished {
+        termination,
         result,
         default_method,
     });
@@ -425,6 +497,7 @@ impl StartingGuard<'_> {
 /// caller owns STOP/context checks between phases and eventual reservation release.
 /// Errors retain the original first-failure diagnostics with parent-session and
 /// board identity; no extra capture, transport operation or retry is introduced.
+#[cfg(test)]
 pub(super) fn run_owned(
     context: &ControllerContext,
     request: &ReconRequest,
@@ -432,6 +505,20 @@ pub(super) fn run_owned(
     board_generation: u64,
     events: &WorkerEventSink,
     cancel: &AtomicBool,
+) -> Result<PathBuf, String> {
+    run_owned_causal(context, request, run_id, board_generation, events, cancel, &super::pyramid_stop::StopTrace::default())
+}
+
+
+/// Preserve the exact failing authority cause for the owning run.
+pub(super) fn run_owned_causal(
+    context: &ControllerContext,
+    request: &ReconRequest,
+    run_id: u64,
+    board_generation: u64,
+    events: &WorkerEventSink,
+    cancel: &AtomicBool,
+    stop_trace: &super::pyramid_stop::StopTrace,
 ) -> Result<PathBuf, String> {
     run_phase(
         context,
@@ -443,6 +530,7 @@ pub(super) fn run_owned(
             board_generation,
         },
         None,
+        stop_trace,
     )
 }
 
@@ -458,6 +546,7 @@ pub(super) fn run_owned(
 ///
 /// Returns the existing acquisition/transport/publication error or the first
 /// starting-tableau, initial-pile or header mismatch, with normal diagnostics.
+#[cfg(test)]
 pub(super) fn run_owned_with_starting_guard(
     context: &ControllerContext,
     request: &ReconRequest,
@@ -466,6 +555,22 @@ pub(super) fn run_owned_with_starting_guard(
     guard: StartingGuard<'_>,
     events: &WorkerEventSink,
     cancel: &AtomicBool,
+) -> Result<PathBuf, String> {
+    run_owned_with_starting_guard_causal(context, request, run_id, board_generation, guard, events, cancel, &super::pyramid_stop::StopTrace::default())
+}
+
+
+/// Preserve the exact failing authority cause for the owning run.
+#[expect(clippy::too_many_arguments, reason = "Existing ownership parameters plus run-local cancellation provenance")]
+pub(super) fn run_owned_with_starting_guard_causal(
+    context: &ControllerContext,
+    request: &ReconRequest,
+    run_id: u64,
+    board_generation: u64,
+    guard: StartingGuard<'_>,
+    events: &WorkerEventSink,
+    cancel: &AtomicBool,
+    stop_trace: &super::pyramid_stop::StopTrace,
 ) -> Result<PathBuf, String> {
     run_phase(
         context,
@@ -477,6 +582,7 @@ pub(super) fn run_owned_with_starting_guard(
             board_generation,
         },
         Some(guard),
+        stop_trace,
     )
 }
 
@@ -489,6 +595,7 @@ fn run_phase(
     cancel: &AtomicBool,
     owner: ReconRunOwner,
     starting_guard: Option<StartingGuard<'_>>,
+    stop_trace: &super::pyramid_stop::StopTrace,
 ) -> Result<PathBuf, String> {
     send_state(events, WorkerState::Validating);
     let mut details = serde_json::json!({
@@ -518,8 +625,10 @@ fn run_phase(
         cancel,
         &mut details,
         starting_guard,
+        stop_trace,
     );
-    if let Err(error) = &result {
+    if let Err(error) = &result
+        && stop_trace.termination(true, true) != crate::pyramid_workflow_model::RunTermination::OperatorStopped {
         let count = |name: &str| details.get(name).and_then(serde_json::Value::as_u64).and_then(|n| usize::try_from(n).ok()).unwrap_or(0);
         let acknowledged = |name: &str| details.get(name).and_then(serde_json::Value::as_bool).unwrap_or(false);
         let substage = if count("confirmation_attempted") != 0 {
@@ -579,12 +688,13 @@ fn run_checked(
     cancel: &AtomicBool,
     details: &mut serde_json::Value,
     starting_guard: Option<StartingGuard<'_>>,
+    stop_trace: &super::pyramid_stop::StopTrace,
 ) -> Result<PathBuf, String> {
     let control = &events.latest_frame.reconnaissance;
     validate_request(context, request)?;
-    control.check_active(context, cancel)?;
+    stop_trace.check(control, context, cancel)?;
     let vision = load_vision(request)?;
-    control.check_active(context, cancel)?;
+    stop_trace.check(control, context, cancel)?;
     let source = match &request.profile {
         ReconProfileSource::BundledNativeV23 => {
             "BundledNativeV23 (colour-independent Classic A* reader)".to_owned()
@@ -629,11 +739,11 @@ fn run_checked(
     let mut failure_progress = None;
     let mut receipt_vision = None;
     let result = (|| {
-        control.check_active(context, cancel)?;
+        stop_trace.check(control, context, cancel)?;
         send_state(events, WorkerState::Connecting);
         let mut qmp = QmpClient::connect(&context.socket_path)
             .map_err(|error| format!("Reconnaissance QMP connection failed: {error}"))?;
-        control.check_active(context, cancel)?;
+        stop_trace.check(control, context, cancel)?;
         let mut io = QmpReconIo {
             qmp: &mut qmp,
             context,
@@ -647,6 +757,7 @@ fn run_checked(
             captures: &mut captures,
             publication: &mut publication,
             starting_guard,
+            stop_trace,
             latest_stock: None,
             pending_stock: None,
         };
@@ -716,11 +827,16 @@ fn run_checked(
     }
 
 
+    if ledger.delivery_failed || ledger.draws_attempted != ledger.draws_acknowledged
+        || ledger.undo_attempted != usize::from(ledger.undo_acknowledged)
+        || ledger.confirm_attempted != usize::from(ledger.confirm_acknowledged) {
+        stop_trace.adopt(crate::pyramid_workflow_model::RunTermination::Failed);
+    }
     match (result, evidence) {
         (Ok(deal), Ok(())) if publication == Some(PublicationStatus::Published) => {
             let vision = receipt_vision.ok_or("Missing successful acquisition calibration")?;
             let (progress, default_method, observed) = receipt_metadata?;
-            super::computed_route::record_acquisition(
+            super::computed_route::record_acquisition_causal(
                 context,
                 events,
                 cancel,
@@ -730,6 +846,7 @@ fn run_checked(
                 progress,
                 default_method,
                 observed,
+                stop_trace,
             )?;
             Ok(output)
         }
@@ -742,6 +859,7 @@ fn run_checked(
             diagnostics.directory
         )),
         (result, Err(error)) => {
+            stop_trace.adopt(crate::pyramid_workflow_model::RunTermination::Failed);
             let original = result
                 .err()
                 .unwrap_or_else(|| "Acquisition and restoration succeeded".to_owned());
@@ -777,6 +895,7 @@ struct InputLedger {
 
 
 /// Consume a probe and one bounded operation reservation before attempting QMP delivery.
+#[cfg(test)]
 fn deliver_guarded_input(
     control: &ReconControl,
     context: &ControllerContext,
@@ -785,7 +904,21 @@ fn deliver_guarded_input(
     input: ReconInput,
     deliver: impl FnOnce(ReconInput) -> Result<(), String>,
 ) -> Result<(), String> {
-    control.check_active(context, cancel)?;
+    deliver_guarded_input_causal(control, context, cancel, ledger, input, &super::pyramid_stop::StopTrace::default(), deliver)
+}
+
+
+/// Consume a probe while retaining the exact failing cancellation cause.
+fn deliver_guarded_input_causal(
+    control: &ReconControl,
+    context: &ControllerContext,
+    cancel: &AtomicBool,
+    ledger: &mut InputLedger,
+    input: ReconInput,
+    stop_trace: &super::pyramid_stop::StopTrace,
+    deliver: impl FnOnce(ReconInput) -> Result<(), String>,
+) -> Result<(), String> {
+    stop_trace.check(control, context, cancel)?;
 
 
     if ledger.delivery_failed {
@@ -826,7 +959,7 @@ fn deliver_guarded_input(
         return Err("Reconnaissance input budget exhausted; no retry is authorised".to_owned());
     }
     *count += 1;
-    control.check_active(context, cancel)?;
+    stop_trace.check(control, context, cancel)?;
     ledger.delivery_failed = true;
     deliver(input)?;
     ledger.delivery_failed = false;
@@ -837,12 +970,14 @@ fn deliver_guarded_input(
         ReconInput::UndoAll(_) => ledger.undo_acknowledged = true,
         ReconInput::Confirm(_) => ledger.confirm_acknowledged = true,
     }
-    control.check_active(context, cancel)
+    stop_trace.check(control, context, cancel)
 }
 
 
 /// Worker-thread-only adapter; immutable context and loaded vision survive the whole scan.
 struct QmpReconIo<'a> {
+    /// Causal authority shared with the owning session.
+    stop_trace: &'a super::pyramid_stop::StopTrace,
     /// Existing application transport, with crate-owned release-only recovery.
     qmp: &'a mut QmpClient,
     /// Socket, mode, strategy and generation approved for this scan.
@@ -909,7 +1044,7 @@ impl ReconIo for QmpReconIo<'_> {
             .latest_frame
             .pause
             .checkpoint(super::pyramid_pause::Phase::Recon, || {
-                self.control.check_active(self.context, self.cancel)
+                self.stop_trace.check(self.control, self.context, self.cancel)
             })?;
         if !paused.is_zero() {
             self.ledger.probed = false;
@@ -922,7 +1057,7 @@ impl ReconIo for QmpReconIo<'_> {
 
     /// Check the queued request identity rather than relying on dispatch-time selection.
     fn check_active(&self) -> Result<(), String> {
-        self.control.check_active(self.context, self.cancel)
+        self.stop_trace.check(self.control, self.context, self.cancel)
     }
 
 
@@ -938,7 +1073,7 @@ impl ReconIo for QmpReconIo<'_> {
         *self.captures += 1;
         send_state(self.events, WorkerState::Capturing);
         let (frame, png, _) =
-            capture_screen_with_png(self.qmp, &self.context.socket_path, self.events)?;
+            super::capture_screen_with_png_causal(self.qmp, &self.context.socket_path, self.events).map_err(|error| self.stop_trace.capture_error(error, self.control, self.context, self.cancel))?;
         // Only an already acknowledged OK permits the measured pressed-button
         // appearance to be recognised as a known stale modal. The pure controller
         // then waits for restoration; this does not grant another OK attempt.
@@ -952,10 +1087,10 @@ impl ReconIo for QmpReconIo<'_> {
             // The result is held until the same decoded frame reaches the preview.
             let guarded = (|| {
                 self.diagnostics.record_capture(png)?;
-                self.check_active()?;
                 let scene = recognition?;
                 guard.validate(&frame, &scene, self.ledger.draws_attempted)?;
                 self.record_stock_effect(&frame,&scene)?;
+                self.check_active()?;
                 Ok(scene)
             })();
             self.events.publish_diagnostic_frame(frame);
@@ -967,8 +1102,9 @@ impl ReconIo for QmpReconIo<'_> {
         });
         self.events.publish_diagnostic_frame(frame);
         self.diagnostics.record_capture(png)?;
+        let scene = recognition?;
         self.check_active()?;
-        recognition
+        Ok(scene)
     }
 
 
@@ -1006,12 +1142,13 @@ impl ReconIo for QmpReconIo<'_> {
         }
         let qmp = &mut self.qmp;
         let events = self.events;
-        deliver_guarded_input(
+        deliver_guarded_input_causal(
             self.control,
             self.context,
             self.cancel,
             self.ledger,
             input,
+            self.stop_trace,
             |input| {
                 send_state(events, WorkerState::Acting);
                 let result = match input {
@@ -1032,6 +1169,7 @@ impl ReconIo for QmpReconIo<'_> {
         self.ledger.probed = false;
         send_state(self.events, WorkerState::Verifying);
         cancellable_wait(duration, self.cancel).map_err(|_| {
+            let _ = self.stop_trace.check(self.control, self.context, self.cancel);
             "STOP during reconnaissance settling; no cleanup input is permitted".to_owned()
         })?;
         self.check_active()
@@ -1616,6 +1754,62 @@ mod tests {
             .queue_reconnaissance(&context, &cancel, || Ok(()))
             .unwrap();
         (control, context, cancel)
+    }
+
+
+    /// Repeated operator STOP retains the valid receipt's pre-revocation epoch.
+    #[test]
+    fn stop_183_valid_receipt_retains_operator_cause() {
+        let (control, context, cancel) = active_control();
+        let epoch = control.epoch().unwrap();
+        control.operator_stop(&context, &cancel);
+        control.operator_stop(&context, &cancel);
+        assert!(matches!(control.check_receipt_causal(&context, &cancel, Some(epoch)), Err(AuthorityError::OperatorStop)));
+        control.finish();
+        assert!(matches!(control.check_active_causal(&context, &cancel), Err(AuthorityError::Refused(_))));
+    }
+
+
+    /// A receipt stale before STOP, context drift and shutdown remain genuine refusals.
+    #[test]
+    fn stop_183_stale_context_and_shutdown_never_become_operator_stop() {
+        let (control, context, cancel) = active_control();
+        let stale_epoch = control.epoch().unwrap();
+        control.finish();
+        control.stop(Some(&context), &cancel);
+        control.queue_reconnaissance(&context, &cancel, || Ok(())).unwrap();
+        control.operator_stop(&context, &cancel);
+        assert!(matches!(control.check_receipt_causal(&context, &cancel, Some(stale_epoch)), Err(AuthorityError::Refused(_))));
+        let (control, context, cancel) = active_control();
+        control.stop(None, &cancel);
+        assert!(matches!(control.check_active_causal(&context, &cancel), Err(AuthorityError::Refused(_))));
+        let (control, context, cancel) = active_control();
+        let mut other = context.clone(); other.generation += 1;
+        control.select(&other, &cancel).unwrap();
+        control.operator_stop(&context, &cancel);
+        assert!(matches!(control.check_active_causal(&context, &cancel), Err(AuthorityError::Refused(_))));
+    }
+
+
+    /// Known TCP cancellation is deliberate; real capture errors and uncertainty dominate STOP.
+    #[test]
+    fn stop_183_causal_trace_keeps_real_failure_and_unbalanced_delivery() {
+        use crate::worker::pyramid_stop::{CaptureFailure, StopTrace};
+        use crate::pyramid_workflow_model::RunTermination;
+        let (control, context, cancel) = active_control();
+        control.operator_stop(&context, &cancel);
+        let trace = StopTrace::default();
+        assert_eq!(trace.capture_error(CaptureFailure { message: "cancelled".to_owned(), cancelled: true }, &control, &context, &cancel), "cancelled");
+        assert_eq!(trace.termination(true, true), RunTermination::OperatorStopped);
+        assert_eq!(trace.termination(true, false), RunTermination::Failed);
+        assert_eq!(trace.termination(false, false), RunTermination::Failed);
+        assert_eq!(trace.capture_error(CaptureFailure::from("PNG decode failed".to_owned()), &control, &context, &cancel), "PNG decode failed");
+        assert_eq!(trace.termination(true, true), RunTermination::Failed);
+        let trace = StopTrace::default();
+        trace.adopt(RunTermination::Failed);
+        assert!(trace.check(&control, &context, &cancel).is_err());
+        assert_eq!(trace.termination(true, true), RunTermination::Failed);
+        assert_eq!(StopTrace::default().termination(false, true), RunTermination::Completed);
     }
 
 

@@ -27,6 +27,9 @@ use crate::{
 #[path = "klondike_terminal.rs"]
 pub(crate) mod terminal;
 
+/// Inspection-only scene probe counts; never used to authorise gameplay.
+pub(crate) mod scene_diagnostics;
+
 
 /// Measured card-face width; changing fan overlap does not change card width.
 const CARD_WIDTH: u32 = 132;
@@ -454,7 +457,7 @@ fn fraction_at_least(
 }
 
 
-/// Require the measured seven-column/four-foundation layout and open felt gutters.
+/// Require the measured seven-column layout and open felt gutters.
 /// Both lower inter-column probes use measured clear seven-pixel felt cores,
 /// retaining 196 pixels each and 95% support. Wider sampling catches K62/K47
 /// or K82/K84 source shadows. The column-five/six core also excludes the
@@ -483,16 +486,9 @@ pub fn is_gameplay_scene(frame: &CapturedFrame) -> Result<bool, HaloDetectionErr
             700,
         )
     }).count();
-    let foundation_edges = (0..4).filter(|column| {
-        fraction_at_least(
-            frame,
-            PixelRect::new(894 + COLUMN_PITCH * column + 20, UPPER_Y, 92, 6),
-            is_slot_edge,
-            700,
-        )
-    }).count();
-
-    Ok(tableau_edges >= 5 && foundation_edges >= 3)
+    // Foundation HALOs and destination guides are legitimate gameplay content.
+    // Board-scene authority uses independent felt gutters and PLAY edges only.
+    Ok(tableau_edges >= 5)
 }
 
 
@@ -7204,7 +7200,7 @@ mod tests {
 
 
     /// An intact source cannot repair any occluded independent gutter or the
-    /// missing seven-column/four-foundation scene context of an unknown modal.
+    /// missing seven-column context; foundation decoration remains advisory.
     #[test]
     fn lower_gap_probe_preserves_other_independent_scene_guards() {
         let original = fixture(62);
@@ -7233,8 +7229,9 @@ mod tests {
             for column in 0..columns {
                 paint(&mut occluded, PixelRect::new(first + COLUMN_PITCH * column + 20, y, 92, 6), [0, 0, 0]);
             }
-            assert!(!is_gameplay_scene(&occluded).unwrap());
-            assert_eq!(analyse(&occluded).unwrap().prediction, PredictedAction::NoHighlight);
+            assert_eq!(is_gameplay_scene(&occluded).unwrap(), foundation);
+            let expected = if foundation { analyse(&original).unwrap().prediction } else { PredictedAction::NoHighlight };
+            assert_eq!(analyse(&occluded).unwrap().prediction, expected);
         }
     }
 
@@ -8046,14 +8043,22 @@ mod tests {
 
         for bounds in [PixelRect::new(160, 310, 16, 16), PixelRect::new(1_730, 310, 16, 16),
             PixelRect::new(874, 710, 7, 28), PixelRect::new(1_208, 840, 7, 28),
-            PixelRect::new(410, TABLEAU_Y, 92 + 2 * COLUMN_PITCH, 6),
-            PixelRect::new(914, UPPER_Y, 92 + COLUMN_PITCH, 6)]
+            PixelRect::new(410, TABLEAU_Y, 92 + 2 * COLUMN_PITCH, 6)]
         {
             let mut damaged = native.clone();
             paint(&mut damaged, bounds, [0, 0, 0]);
             assert!(!is_gameplay_scene(&damaged).unwrap(), "missing context {bounds:?}");
             assert_eq!(analyse(&damaged).unwrap().prediction, PredictedAction::NoHighlight);
         }
+
+
+        let mut foundation_decoration = native.clone();
+        paint(
+            &mut foundation_decoration,
+            PixelRect::new(914, UPPER_Y, 92 + COLUMN_PITCH, 6),
+            [0, 0, 0],
+        );
+        assert!(is_gameplay_scene(&foundation_decoration).unwrap());
 
 
         for rgb in [[200, 70, 50], [200, 69, 121], [149, 60, 50]] {

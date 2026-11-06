@@ -217,6 +217,8 @@ impl Gate {
                 return Ok(false);
             }
             if state.aborted {
+                drop(state);
+                check()?;
                 return Err("A* pause authority was cancelled".to_owned());
             }
             state.phase = Some(phase);
@@ -234,6 +236,8 @@ impl Gate {
                 }
                 state = self.state.lock().map_err(|_| "Pause state is poisoned")?;
                 if state.aborted || state.phase.is_none() {
+                    drop(state);
+                    check()?;
                     return Err("A* pause authority was cancelled".to_owned());
                 }
                 if !state.requested {

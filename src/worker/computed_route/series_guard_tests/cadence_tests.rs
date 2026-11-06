@@ -6,6 +6,164 @@
 use super::*;
 
 
+/// Keep byte-original native stock faces for synthetic tableau-only readiness actions.
+///
+/// The accepted first two pairs do not change either pile. Legacy sparse synthetic
+/// stock glyphs are not native foreground evidence, so restore both complete
+/// original pile rectangles and reject any rules state that changed their identity.
+fn readiness_state_180(deal: &CompleteDeal, state: SearchState) -> CapturedFrame {
+    let (_, initial_left, initial_right) = expected(deal, SearchState::initial()).unwrap();
+    let (_, left, right) = expected(deal, state).unwrap();
+    assert_eq!((left, right), (initial_left, initial_right));
+    let original = decode_png(START).unwrap();
+    let mut frame = synthetic_state(deal, state);
+    for target in [crate::pyramid::LEFT_TARGET, crate::pyramid::RIGHT_TARGET] {
+        let bounds = target.bounds;
+        frame.as_view().unwrap().checked_bounds(bounds).unwrap();
+        original.as_view().unwrap().checked_bounds(bounds).unwrap();
+        for y in bounds.y..bounds.bottom() {
+            let offset = y as usize * frame.stride + bounds.x as usize * 4;
+            let bytes = bounds.width as usize * 4;
+            frame.pixels[offset..offset + bytes]
+                .copy_from_slice(&original.pixels[offset..offset + bytes]);
+        }
+    }
+    frame
+}
+
+
+/// Copy only the retained busy stock anchor into a labelled synthetic cadence frame.
+fn stock_anchor_unready_180(mut frame: CapturedFrame) -> CapturedFrame {
+    let retained = decode_png(include_bytes!(
+        "../../../../tests/fixtures/pyramid-readiness-180/stock-anchor-occluded.png"
+    ))
+    .unwrap();
+    for y in 695..745 {
+        let offset = (y * 1920 + 931) * 4;
+        frame.pixels[offset..offset + 60 * 4]
+            .copy_from_slice(&retained.pixels[offset..offset + 60 * 4]);
+    }
+    frame
+}
+
+
+/// A stock-anchor interruption spends existing INITIAL checks and needs fresh supported recovery.
+#[test]
+fn readiness_180_stock_anchor_recovers_before_next_pair_without_early_input() {
+    let deal = original_deal();
+    let actions = accepted_actions();
+    let initial = SearchState::initial();
+    let middle = rules::apply(&deal, initial, actions[0]).unwrap();
+    let last = rules::apply(&deal, middle, actions[1]).unwrap();
+    let middle_frame = readiness_state_180(&deal, middle);
+    let final_frame = readiness_state_180(&deal, last);
+    let InputOperation::Click(point) = operations(actions[1]).unwrap()[0] else {
+        panic!("expected MATCH");
+    };
+    let slot = crate::pyramid::PYRAMID_TARGETS
+        .iter()
+        .find(|target| target.click_point == point)
+        .unwrap();
+    let mut obscured = middle_frame.clone();
+    paint(
+        &mut obscured,
+        PixelRect::new(slot.bounds.x + 3, slot.bounds.y + 4, 31, 49),
+        [30, 95, 65],
+    );
+    let evidence = adapter_with_progress(
+        vec![
+            readiness_state_180(&deal, initial),
+            obscured.clone(),
+            obscured.clone(),
+            stock_anchor_unready_180(obscured),
+            middle_frame.clone(),
+            middle_frame,
+            final_frame.clone(),
+            final_frame,
+        ],
+        None,
+        |plan| {
+            plan.acquisition.vision =
+                crate::pyramid_recon::vision::ReconVision::bundled_native_v23().unwrap();
+            plan.trace = replay::replay(&deal, &actions[..2], false).unwrap();
+            plan.objective = RouteObjective::Removal {
+                removed: 4,
+                proof: PartialProof::Bounded(xsar::search::SearchStop::ExpansionLimit),
+            };
+        },
+        2,
+        |io| {
+            let result = drive(io.plan, io);
+            (result, io.failure_progress.clone())
+        },
+    );
+    assert!(evidence.result.0.is_ok(), "{:?}", evidence.result.0);
+    assert_eq!(evidence.captures, 8);
+    assert_eq!(
+        (evidence.counts.attempted, evidence.counts.acknowledged),
+        (4, 4)
+    );
+    assert_eq!(evidence.result.1.initial_checks, 4);
+    assert_eq!(evidence.result.1.fresh_retries, 3);
+    assert_eq!(evidence.wire.unused_frames, 0);
+    let captures_before_input: Vec<_> = evidence
+        .wire
+        .commands
+        .iter()
+        .enumerate()
+        .filter(|(_, command)| command.as_str() == "input-send-event")
+        .map(|(index, _)| {
+            evidence.wire.commands[..index]
+                .iter()
+                .filter(|command| command.as_str() == "screendump")
+                .count()
+        })
+        .collect();
+    assert_eq!(captures_before_input, [1, 1, 1, 1, 1, 1, 6, 6, 6, 6, 6, 6]);
+}
+
+
+/// Persistent stock-anchor motion exhausts the same six checks without any gesture.
+#[test]
+fn readiness_180_six_stock_anchor_misses_authorise_no_input() {
+    let deal = original_deal();
+    let unready = stock_anchor_unready_180(readiness_state_180(&deal, SearchState::initial()));
+    let evidence = adapter_with_progress(
+        vec![unready; ORDINARY_OBSERVATIONS],
+        None,
+        |plan| {
+            plan.acquisition.vision =
+                crate::pyramid_recon::vision::ReconVision::bundled_native_v23().unwrap()
+        },
+        0,
+        |io| {
+            let result = drive(io.plan, io);
+            (
+                result,
+                io.failure_progress.clone(),
+                io.source_proof.is_none(),
+                io.action_permit.is_none(),
+            )
+        },
+    );
+    assert!(evidence.result.0.is_err());
+    assert_eq!(evidence.captures, ORDINARY_OBSERVATIONS);
+    assert_eq!(
+        (evidence.counts.attempted, evidence.counts.acknowledged),
+        (0, 0)
+    );
+    assert_eq!(evidence.result.1.initial_checks, ORDINARY_OBSERVATIONS);
+    assert_eq!(evidence.result.1.fresh_retries, ORDINARY_OBSERVATIONS);
+    assert_eq!(
+        evidence.result.1.sources,
+        ["Source identities not read: current stock/Draw scene anchor is not ready"]
+    );
+    assert!(evidence.result.2 && evidence.result.3);
+    assert!(evidence.wire.events.is_empty());
+    assert_eq!(evidence.wire.unused_frames, 0);
+}
+
+
 /// Parse the complete unchanged original used by the independent accepted route.
 fn original_deal() -> CompleteDeal {
     xsar::pyramid_json::read_from(
@@ -193,9 +351,9 @@ fn check_two_actions_with_live_settings(
     let position_frames: Vec<_> = [initial, middle, last]
         .into_iter()
         .map(|state| {
-            let mut frame=synthetic_state(&deal,state);
-            if matches!(actions,[RecordedAction::Move,RecordedAction::Move]) {
-                decorate_synthetic_stock(&mut frame,&deal,state);
+            let mut frame = synthetic_state(&deal, state);
+            if matches!(actions, [RecordedAction::Move, RecordedAction::Move]) {
+                decorate_synthetic_stock(&mut frame, &deal, state);
             }
             frame
         })
@@ -231,18 +389,26 @@ fn check_two_actions_with_live_settings(
             io.observe_source(initial).unwrap(),
             EffectObservation::Position(true)
         ));
-        let first_settings=crate::parameters::PyramidEffectSettings::default();
-        let next_settings=crate::parameters::PyramidEffectSettings::new(9,85).unwrap();
-        let pending_edit=crate::parameters::PyramidEffectSettings::new(255,1000).unwrap();
+        let first_settings = crate::parameters::PyramidEffectSettings::default();
+        let next_settings = crate::parameters::PyramidEffectSettings::new(9, 85).unwrap();
+        let pending_edit = crate::parameters::PyramidEffectSettings::new(255, 1000).unwrap();
         io.begin_transition(initial, middle, &first).unwrap();
-        if live { io.events.latest_frame.set_effect_settings(pending_edit); }
-        assert_eq!(io.effect_settings,first_settings);
+        if live {
+            io.events.latest_frame.set_effect_settings(pending_edit);
+        }
+        assert_eq!(io.effect_settings, first_settings);
         for &operation in &first {
             io.deliver(operation, initial).unwrap();
         }
         for observation in 0..first_observations {
-            let observed=io.observe_effect(middle, false).unwrap();
-            assert!(matches!(observed, EffectObservation::Position(ready) if ready == (observation + 1 == first_observations)),"{:?}",io.latest_observation.as_ref().and_then(|x|x.mismatch.as_ref()));
+            let observed = io.observe_effect(middle, false).unwrap();
+            assert!(
+                matches!(observed, EffectObservation::Position(ready) if ready == (observation + 1 == first_observations)),
+                "{:?}",
+                io.latest_observation
+                    .as_ref()
+                    .and_then(|x| x.mismatch.as_ref())
+            );
         }
         assert_eq!(io.captures, 1 + first_observations);
         assert!(matches!(
@@ -250,25 +416,33 @@ fn check_two_actions_with_live_settings(
             EffectObservation::Position(true)
         ));
         assert_eq!(
-            io.captures, 1 + first_observations,
+            io.captures,
+            1 + first_observations,
             "previous effect is the next source; no recapture"
         );
-        if live { io.events.latest_frame.set_effect_settings(next_settings); }
+        if live {
+            io.events.latest_frame.set_effect_settings(next_settings);
+        }
         io.begin_transition(middle, last, &second).unwrap();
         if live {
-            assert_eq!(io.effect_settings,first_settings);
+            assert_eq!(io.effect_settings, first_settings);
             io.events.latest_frame.set_effect_settings(pending_edit);
         }
         for &operation in &second {
             io.deliver(operation, middle).unwrap();
         }
         for observation in 0..second_observations {
-            assert!(matches!(io.observe_effect(last, false).unwrap(), EffectObservation::Position(ready) if ready == (observation + 1 == second_observations)));
+            assert!(
+                matches!(io.observe_effect(last, false).unwrap(), EffectObservation::Position(ready) if ready == (observation + 1 == second_observations))
+            );
         }
         if live {
-            assert_eq!(io.effect_settings,first_settings, "card actions do not freeze RGB settings");
+            assert_eq!(
+                io.effect_settings, first_settings,
+                "card actions do not freeze RGB settings"
+            );
             io.freeze_effect_settings("REDEAL fixture boundary");
-            assert_eq!(io.effect_settings,pending_edit);
+            assert_eq!(io.effect_settings, pending_edit);
         }
     });
     assert_eq!(
@@ -368,42 +542,49 @@ fn source_172_native_stock_only_match_and_king_require_two_identity_checks() {
         let mut source = synthetic_state(&deal, before);
         let mut result = synthetic_state(&deal, after);
         if accepted {
-            decorate_synthetic_stock(&mut source,&deal,before);
-            decorate_synthetic_stock(&mut result,&deal,after);
+            decorate_synthetic_stock(&mut source, &deal, before);
+            decorate_synthetic_stock(&mut result, &deal, after);
         }
         let gestures = operations(action).unwrap();
-        let evidence = adapter(vec![source.clone(), source, result.clone(), result], None, |io| {
-            assert!(matches!(
-                io.observe_source(before).unwrap(),
-                EffectObservation::Position(true)
-            ));
-            let frozen = crate::parameters::PyramidEffectSettings::new(26, 100).unwrap();
-            io.events.latest_frame.set_effect_settings(frozen);
-            io.begin_transition(before, after, &gestures).unwrap();
-            io.events.latest_frame.set_effect_settings(
-                crate::parameters::PyramidEffectSettings::new(255, 999).unwrap(),
-            );
-            assert_ne!(io.effect_settings, frozen);
-            assert!(io.source_transition.is_some());
-            for &operation in &gestures {
-                io.deliver(operation, before).unwrap();
-            }
-            assert!(matches!(
-                io.observe_effect(after, false).unwrap(),
-                EffectObservation::Position(false)
-            ));
-            assert!(io.source_proof.is_none());
-            assert!(io.source_transition.is_some());
-            assert!(
-                matches!(io.observe_effect(after, false).unwrap(), EffectObservation::Position(ready) if !ready),
-                "{action:?}: {:?}",
-                io.latest_observation
-                    .as_ref()
-                    .and_then(|o| o.mismatch.as_ref())
-            );
-            assert!(matches!(io.observe_effect(after,false).unwrap(),EffectObservation::Position(true)));
-            assert!(io.source_proof.is_some());
-        });
+        let evidence = adapter(
+            vec![source.clone(), source, result.clone(), result],
+            None,
+            |io| {
+                assert!(matches!(
+                    io.observe_source(before).unwrap(),
+                    EffectObservation::Position(true)
+                ));
+                let frozen = crate::parameters::PyramidEffectSettings::new(26, 100).unwrap();
+                io.events.latest_frame.set_effect_settings(frozen);
+                io.begin_transition(before, after, &gestures).unwrap();
+                io.events.latest_frame.set_effect_settings(
+                    crate::parameters::PyramidEffectSettings::new(255, 999).unwrap(),
+                );
+                assert_ne!(io.effect_settings, frozen);
+                assert!(io.source_transition.is_some());
+                for &operation in &gestures {
+                    io.deliver(operation, before).unwrap();
+                }
+                assert!(matches!(
+                    io.observe_effect(after, false).unwrap(),
+                    EffectObservation::Position(false)
+                ));
+                assert!(io.source_proof.is_none());
+                assert!(io.source_transition.is_some());
+                assert!(
+                    matches!(io.observe_effect(after, false).unwrap(), EffectObservation::Position(ready) if !ready),
+                    "{action:?}: {:?}",
+                    io.latest_observation
+                        .as_ref()
+                        .and_then(|o| o.mismatch.as_ref())
+                );
+                assert!(matches!(
+                    io.observe_effect(after, false).unwrap(),
+                    EffectObservation::Position(true)
+                ));
+                assert!(io.source_proof.is_some());
+            },
+        );
         assert_eq!(
             (
                 evidence.captures,
@@ -1164,7 +1345,6 @@ fn native_150_pending_source_never_authorises_input() {
 }
 
 
-
 /// Native policy admits only qualified normal boards one/two and never stock continuation.
 #[test]
 #[ignore = "requires local AF_UNIX sockets"]
@@ -1196,7 +1376,6 @@ fn native_150_normal_read_only_handoff_excludes_third_and_manual() {
         (0, 0, 0)
     );
 }
-
 
 
 /// A perpetually occluded normal effect expires at the existing deadline after one action only.
@@ -1443,4 +1622,105 @@ fn readiness_173_unsupported_fresh_frame_is_counted_without_retry_or_input() {
     assert_eq!(evidence.captures, 2);
     assert_eq!(evidence.counts.attempted, 0);
     assert_eq!(evidence.wire.unused_frames, 0);
+}
+
+
+/// A persistent old transition cannot suppress the independent INITIAL header guard.
+#[test]
+fn readiness_180_busy_anchor_keeps_pending_error_and_changed_headers_fatal() {
+    use std::cell::Cell;
+
+    for refusal in 0..3 {
+        let deal = original_deal();
+        let actions = accepted_actions();
+        let initial = SearchState::initial();
+        let middle = rules::apply(&deal, initial, actions[0]).unwrap();
+        let last = rules::apply(&deal, middle, actions[1]).unwrap();
+        let middle_frame = readiness_state_180(&deal, middle);
+        let mut busy = stock_anchor_unready_180(middle_frame.clone());
+        if refusal == 2 {
+            busy = drift(busy, HEADER);
+        }
+        let calls = Cell::new(0);
+        let guard = |frame: &CapturedFrame, phase| {
+            if phase != FrameGuardPhase::Source {
+                return Ok(FrameGuardOutcome::Ready);
+            }
+            calls.set(calls.get() + 1);
+            if calls.get() == 1 {
+                return Ok(FrameGuardOutcome::Ready);
+            }
+            match refusal {
+                0 => Ok(FrameGuardOutcome::Pending),
+                1 => Err("sentinel independent INITIAL guard refusal".to_owned()),
+                _ => require_normal_one(frame, phase),
+            }
+        };
+        let evidence = adapter_with_setup(
+            vec![
+                readiness_state_180(&deal, initial),
+                middle_frame.clone(),
+                middle_frame,
+                busy,
+            ],
+            Some(&guard),
+            |plan| {
+                plan.acquisition.vision =
+                    crate::pyramid_recon::vision::ReconVision::bundled_native_v23().unwrap()
+            },
+            |io| {
+                assert!(
+                    matches!(
+                        io.observe_source(initial).unwrap(),
+                        EffectObservation::Position(true)
+                    ),
+                    "{:?}",
+                    io.latest_observation
+                        .as_ref()
+                        .and_then(|observation| observation.mismatch.as_ref())
+                );
+                let first = operations(actions[0]).unwrap();
+                io.begin_transition(initial, middle, &first).unwrap();
+                for operation in first {
+                    io.deliver(operation, initial).unwrap();
+                }
+                assert!(matches!(
+                    io.observe_effect(middle, false).unwrap(),
+                    EffectObservation::Position(false)
+                ));
+                assert!(matches!(
+                    io.observe_effect(middle, false).unwrap(),
+                    EffectObservation::Position(true)
+                ));
+                assert_eq!(io.source_transition.as_ref().unwrap().confirmations(), 2);
+                io.source_proof = None;
+                let error = io
+                    .observe_action_source(middle, last)
+                    .err()
+                    .expect("independent Source guard refusal");
+                assert!(io.ready_transition.is_none());
+                assert!(io.source_proof.is_none());
+                assert!(io.action_permit.is_none());
+                assert!(!io.position_matches);
+                assert_eq!(io.source_transition.as_ref().unwrap().confirmations(), 0);
+                error
+            },
+        );
+        let expected = [
+            "source header is pending",
+            "sentinel independent INITIAL guard refusal",
+            "normal series header/footer changed",
+        ][refusal];
+        assert!(evidence.result.contains(expected), "{}", evidence.result);
+        assert_eq!(calls.get(), 2);
+        assert_eq!(
+            (
+                evidence.captures,
+                evidence.counts.attempted,
+                evidence.counts.acknowledged
+            ),
+            (4, 2, 2)
+        );
+        assert_eq!(evidence.wire.unused_frames, 0);
+    }
 }

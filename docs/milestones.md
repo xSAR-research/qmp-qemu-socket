@@ -1,5 +1,84 @@
 # Milestone Tracker & Baseline Receipt — qmp-qemu-socket
 
+## Active baseline receipt — 3.0.2
+
+Baseline_HEAD_SHA: 30dc3835eca3adcc8d7f997df398fc569f5c918c
+Baseline_PARENT_SHA: 0d2eb0fb6352473fbb31b28e39b74991076d4daa
+
+Removes the invalid Klondike SUIT/foundation scene requirement. Four felt gutters and at least five of seven PLAY top-edge probes remain mandatory; source HALO, Solver banner, fresh VM/pointer probes, STOP and no-replay rules retain their separate authority. Both byte-original incident frames now reach SUIT 3 at (1296,199). The other four GAME TYPE scene checks have no equivalent SUIT gate.
+
+Extended `SINGLE_STEP` JSON telemetry is written only to the complete session log for the explicit **Single step** button. Multiple Steps, including a budget of one, remain untraced. It records existing capture identities/probe counts/classification and attempted/acknowledged transport operations, without extra captures, retries or visible-panel noise. Existing failure packets remain independent and enabled.
+
+All six source gates passed, including 1,758 tests with no failures, ignored or filtered tests; six focused regressions passed. Approved version-only alignment passed locked check, release and bounded help. Source/aligned sets contain 996 inputs, with 994 unchanged after the two Cargo version edits. No fresh guest execution is claimed.
+
+Run from this repository root: `cargo run --release`. No secondary executable copy was created. See [verification](Verification-3.0.2.md) and [telemetry contract](klondike-failure-telemetry.md).
+
+User goal m13299 authorises this build. xSAR remains 0.10.0 at c4a9b839ece3668b8d46ca00676ae05c34a97943, with its recorded dirty path-dependency state preserved; the path is not a Git pin. Free Cell RECON/export remains 3.0.0 functionality; A* remains deferred to 3.1.0. No Free Cell foundation-return rule was inferred or changed.
+
+## Retained baseline receipt — 3.0.1
+
+Baseline_HEAD_SHA: 30dc3835eca3adcc8d7f997df398fc569f5c918c
+
+Baseline_PARENT_SHA: 0d2eb0fb6352473fbb31b28e39b74991076d4daa
+
+Approved by Charlie before the Codex restart (m12442). Six host source gates passed, including 1753 tests with no failures/ignored/filtered; aligned locked check, release and bounded help passed. xSAR remains 0.10.0. [Verification](Verification-3.0.1.md), [telemetry](klondike-failure-telemetry.md). The rare Klondike refusal is not yet explained or fixed; reproduce with exact evidence. Free Cell remains read-only RECON/export at 3.0.0 feature scope, with A* deferred to 3.1.0.
+
+## Active 3.0.0 — read-only Free Cell RECON/export
+
+Baseline_HEAD_SHA: `30dc3835eca3adcc8d7f997df398fc569f5c918c`. Parent_HEAD_SHA: `0d2eb0fb6352473fbb31b28e39b74991076d4daa`. Path dependency xSAR 0.10.0 at HEAD `c4a9b839ece3668b8d46ca00676ae05c34a97943` includes the recorded uncommitted release changes.
+
+3.0.0 adds independent read-only Free Cell RECON/export. One explicit request acquires one fresh native TCPv3 frame, requires eight PLAY columns [7,7,7,7,6,6,6,6], four positively empty CELLs/four SUITs and 52 unique recognised rank-and-suit identities, then publishes bounded JSON without overwrite. Unsupported, incomplete or ambiguous evidence refuses export. Free Cell A* planning is deferred to 3.1.0.
+
+Retained source qualification: xSAR 20 gates/311 full tests; controller six gates/1,748 full tests. Approved version alignment passed locked checks for xSAR, controller and console, the console tests, controller release and bounded help. Only five authorised manifests/locks changed after qualification: 987 sealed inputs, 982 unchanged. No secondary executable, guest/GUI action, installation or Git publication occurred.
+
+Native acceptance remains pending: FC01/FC13 are evaluation originals, not blind threshold hold-outs; native PLAY-bottom Two, authentic dealing/unsupported-scale/artwork negatives and fresh operator-checked guest RECON/export remain unverified. Foundation Twos establish typography only. Source/socket tests do not establish live acceptance or completion of all Block 1 acceptance rows. Numeric scope approved by Charlie for RECON 3.0.0 and later A* 3.1.0; library/lock approval is recorded separately. See [RECON contract](free-cell-block-1-recon.md) and [verification](Verification-3.0.0.md).
+
+## Retained 2.9.183 — Cooperative STOP and fresh preview
+
+The accepted STOP correction is qualified as **2.9.183**. A causally recorded operator cancellation shows Waiting and admits one token/context-correlated raw preview after matching run ownership retires. Genuine failures, stale authority, shutdown and uncertain delivery retain Error. STOP stays latched; failed or stopped plans cannot resume. Existing failure history is retained.
+
+Run from `/home/charlie/repo/RUST/qmp-qemu-socket`:
+
+```sh
+cargo run --release
+```
+
+The normal Cargo target is used; no secondary executable copy was created. All six source gates passed, including **1,736 tests** with zero failed, ignored or filtered; 11 focused STOP regressions passed. After Charlie's explicit milestone/version approval, aligned locked check, release and direct `--help` passed. Fresh guest STOP/preview acceptance remains pending. See [verification](Verification-2.9.183.md) and [game operations](game-operations.md).
+
+Baseline_HEAD_SHA: `30dc3835eca3adcc8d7f997df398fc569f5c918c`. Parent_HEAD_SHA: `0d2eb0fb6352473fbb31b28e39b74991076d4daa`.
+
+Pre-v3.0.0 readiness: STOP source qualification is complete; live acceptance and Charlie's ongoing game-operations testing remain explicit. The next FreeCell scope needs approval. Existing designs sequence complete 52-card RECON/export, A* shortest-route planning/replay, best effort and guarded live execution. Any combined v3.0.0 scope must preserve those acceptance gates. Canonical state comparison must check exact card sequences rather than rely on hash equality alone; the heuristic must be proved admissible for its chosen deliberate/automatic-move cost. See [Block 1 plan](free-cell-block-1-plan.md) and [target blocks](free-cell-target-blocks.md). No FreeCell A* implementation is claimed by 2.9.183.
+
+## Retained Baseline Receipt — 2.9.182
+
+GAME WIN image recording is now enabled by default. Run `cargo run --release` from the repository root; use `cargo run --release -- --no-image` to opt out. The former `--image` flag is rejected. Startup retains the existing fixed image-directory reset in both modes; help and invalid arguments return before that reset.
+
+All six source gates passed, including 1725 tests with zero failures, ignored, measured or filtered tests. The approved version-only alignment then passed locked check, release and protected help. Of 961 sealed inputs, 959 remained identical after alignment; the 56 xSAR inputs are unchanged. [Verification](Verification-2.9.182.md); [image policy](game-win-images.md).
+
+Baseline_HEAD_SHA: `30dc3835eca3adcc8d7f997df398fc569f5c918c`
+
+Baseline_PARENT_SHA: `0d2eb0fb6352473fbb31b28e39b74991076d4daa`
+
+Four repository histories/indices and unrelated changes are preserved in the [destination state](/home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/image-default-182-_ipeg1nj/destination-state.json). xSAR remains modified, unreleased `0.9.1`; no sibling promotion is implied.
+
+## Retained Baseline Receipt — 2.9.181
+
+Added a private reusable game-operation layer for fresh native capture, guarded mouse/key input, pure card and option recognition, and bounded semantic Undo protocols. Pyramid Recon now uses its shared Undo All protocol with the existing capture, wait, confirmation, STOP and publication sequence preserved.
+
+All six application gates passed, including 1725 tests with zero failed, ignored, measured or filtered, followed by the approved 2.9.181 locked check, release and protected help. The 56 unchanged xSAR inputs retain cached qualification. Fresh live guest acceptance remains pending. [Verification](Verification-2.9.181.md); [operation contracts](game-operations.md).
+
+Baseline_HEAD_SHA: `30dc3835eca3adcc8d7f997df398fc569f5c918c`
+
+Baseline_PARENT_SHA: `0d2eb0fb6352473fbb31b28e39b74991076d4daa`
+
+The preserved dirty porcelain state is recorded in the [destination state](/home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/game-operations-181-jdwow79z/destination-state.json). xSAR remains modified, unreleased `0.9.1`, with 56 unchanged dependency inputs. No sibling promotion is implied.
+
+## Qualified 2.9.180 — foundation verification and INITIAL readiness
+
+Verified the existing four-SUIT foundation source handling in Free Cell and Klondike. Pyramid INITIAL source checking now waits for the bundled native stock/Draw scene anchor within its existing six-check budget. All static scene, legend, layout, modal, header and original-source checks must pass on the supported frame before input; POST remains strict.
+
+All six application gates passed, including 1713 tests with zero failed, ignored, measured or filtered, followed by aligned locked check, release and protected help. Five new readiness regressions and eight existing foundation checks passed. The 56 unchanged xSAR inputs retain cached sixteen-gate qualification. Fresh live guest acceptance remains pending. [Verification](Verification-2.9.180.md).
+
 ## Qualified 2.9.179 — foundation source HALOs
 
 Free Cell now checks all four foundation stacks for a complete closed solid source HALO after its existing CELL and lowest-PLAY priorities. The measured native slots use checked one-click mapping. Dashed destinations and incomplete sources remain refused. Klondike already scanned all four foundations; its production detector and controller remain unchanged, with stronger coordinate/invalid-column regression coverage.
@@ -24,7 +103,7 @@ Coral rank recognition now uses an independently retained black Four corner with
 
 All six controller gates passed, including 1697 tests with zero failed, ignored or filtered, plus aligned locked check/release/protected help. The 56 xSAR inputs and package0.9.1 are unchanged; prior sixteen-gate library qualification remains cached. Fresh guest acceptance is pending. [Verification](Verification-2.9.176.md).
 
-## Active Baseline Receipt — 2.9.175
+## Retained Baseline Receipt — 2.9.175
 
 RF00 reconciles the published application and xSAR identities and records method-specific regression evidence. RF09 consolidates the five existing final-clear alternatives into one private NativeIo helper used by both computed-route callers. Lazy precedence, initial challenge binding, final error provenance, caller guards, source proofs, completion meaning and input/capture behaviour are preserved.
 

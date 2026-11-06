@@ -132,7 +132,7 @@ impl QmpQemuSocketApp {
             .pyramid_workflow
             .phase()
             .unwrap_or(PyramidPhase::Execution);
-        if !pyramid_workflow::complete_session(
+        let accepted = pyramid_workflow::complete_session(
             &mut self.pyramid_workflow,
             &mut self.computed_route_form,
             &mut self.active_run,
@@ -140,13 +140,19 @@ impl QmpQemuSocketApp {
             &completion,
             &selected,
             self.stop_requested,
-        ) {
+        );
+        if !accepted {
             self.push_log(format!(
                 "Ignored Pyramid session completion for inactive request {}.",
                 completion.run_id
             ));
             return;
         }
+        if super::reset_preview::dispatch_completion(accepted, completion.termination, || {
+            self.current_status = "Waiting".to_owned();
+            if let Some(report) = self.computed_route_form.report.clone() { self.push_log(report); }
+            self.begin_stop_preview(selected.clone());
+        }) == super::reset_preview::CompletionDispatch::StopPreview { return; }
         if let Err(error) = &completion.result
             && !self.pyramid_workflow.details_visible(&selected)
         {
@@ -176,31 +182,39 @@ impl QmpQemuSocketApp {
         run_id: u64,
         plan_id: Option<u64>,
         result: Result<String, String>,
+        termination: crate::pyramid_workflow_model::RunTermination,
     ) {
         let selected = self.current_preview_context();
         let phase = self
             .pyramid_workflow
             .phase()
             .unwrap_or(PyramidPhase::Execution);
-        if !pyramid_workflow::complete_route(
+        let accepted = pyramid_workflow::complete_route(
             &mut self.computed_route_form,
             &mut self.active_run,
             &mut self.worker_state,
             pyramid_workflow::RouteCompletion {
                 retained_recon,
-                context: selected,
+                termination,
+                context: selected.clone(),
                 run_id,
                 plan_id,
                 result: &result,
                 stopped: self.stop_requested,
             },
-        ) {
+        );
+        if !accepted {
             self.push_log(format!(
                 "Ignored computed-route completion for inactive request {run_id}."
             ));
             return;
         }
         self.pyramid_workflow.finish_search();
+        if super::reset_preview::dispatch_completion(accepted, termination, || {
+            self.current_status = "Waiting".to_owned();
+            if let Some(report) = self.computed_route_form.report.clone() { self.push_log(report); }
+            self.begin_stop_preview(selected.clone());
+        }) == super::reset_preview::CompletionDispatch::StopPreview { return; }
         if let Err(error) = &result
             && !self
                 .pyramid_workflow
@@ -223,6 +237,30 @@ impl QmpQemuSocketApp {
         }
         if self.worker_state == WorkerState::Detached {
             self.stop_requested = false;
+        }
+    }
+
+
+    /// Queue one raw preview behind the already queued Disconnect, retaining STOP and history.
+    pub(super) fn begin_stop_preview(&mut self, context: ControllerContext) {
+        if self.exiting || self.active_run.is_some() || self.current_preview_context() != context {
+            return;
+        }
+        let Some(request_id) = self.reset_preview_serial.checked_add(1) else {
+            self.worker_state = WorkerState::Error;
+            self.pyramid_ui_failure(PyramidPhase::Reconnaissance, "STOP preview request identity exhausted".to_owned());
+            return;
+        };
+        self.reset_preview_serial = request_id;
+        let _ = self.worker.take_latest_frame();
+        self.invalidate_preview();
+        self.stop_requested = true;
+        self.reset_preview = Some(super::reset_preview::ResetPreview::after_stop(request_id, context.clone(), self.worker_state));
+        self.worker_state = WorkerState::Connecting;
+        if let Err(error) = self.worker.capture_reset_preview(context, request_id) {
+            self.reset_preview = None;
+            self.worker_state = WorkerState::Error;
+            self.pyramid_ui_failure(PyramidPhase::Reconnaissance, error);
         }
     }
 

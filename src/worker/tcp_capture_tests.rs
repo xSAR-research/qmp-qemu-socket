@@ -354,6 +354,8 @@ enum V3Reply {
     NonNative,
     /// Hold a partially sent payload until the receiving run requests STOP.
     WaitForStop(Arc<AtomicBool>),
+    /// Deliberate operator STOP while a real transport payload is incomplete.
+    WaitForOperatorStop(Arc<AtomicBool>, pyramid_reconnaissance::ReconControl, ControllerContext),
 }
 
 
@@ -429,6 +431,17 @@ fn v3_server(sessions: Vec<Vec<V3Reply>>) -> (String, ServerJoin) {
                         stream.write_all(&small.to_bytes()).unwrap();
                         stream.write_all(&[17, 3, 251]).unwrap();
                     }
+                    V3Reply::WaitForOperatorStop(cancel, control, context) => {
+                        stream.write_all(&header.to_bytes()).unwrap();
+                        stream.write_all(&[1, 2]).unwrap();
+                        control.operator_stop(&context, &cancel);
+                        let mut byte = [0];
+                        match stream.read(&mut byte) {
+                            Ok(0) => {}
+                            Err(error) if error.kind() == ErrorKind::ConnectionReset => {}
+                            result => panic!("cancelled operator capture must discard session: {result:?}"),
+                        }
+                    }
                     V3Reply::WaitForStop(cancel) => {
                         stream.write_all(&header.to_bytes()).unwrap();
                         stream.write_all(&[1, 2]).unwrap();
@@ -470,8 +483,41 @@ fn persistent_v3_reuses_connection_for_routine_and_manual_full_capture() {
     let (mut qmp, qmp_server) = qmp_pair(&root);
     let (events, receiver) = sink();
     let socket = root.0.join("qmp.sock");
-    let (retained, _) = capture_screen(&mut qmp, &socket, &events).unwrap();
-    let (manual, png, _) = capture_screen_with_png(&mut qmp, &socket, &events).unwrap();
+    let (retained, first_timing) = capture_screen(&mut qmp, &socket, &events).unwrap();
+    let (manual, png, second_timing) = capture_screen_with_png(&mut qmp, &socket, &events).unwrap();
+    let first_identity = first_timing.identity.expect("same-response TCP identity");
+    let second_identity = second_timing
+        .identity
+        .expect("manual same-response identity");
+    assert_eq!(
+        (
+            first_identity.protocol_version,
+            first_identity.session_id,
+            first_identity.request_id,
+            first_identity.frame_id,
+            first_identity.display_generation,
+            first_identity.reused_connection
+        ),
+        (3, 1, 1, 1, 7, false)
+    );
+    assert_eq!(
+        (
+            second_identity.protocol_version,
+            second_identity.session_id,
+            second_identity.request_id,
+            second_identity.frame_id,
+            second_identity.display_generation,
+            second_identity.reused_connection
+        ),
+        (3, 1, 2, 2, 7, true)
+    );
+    let mut total = first_timing;
+    total.add_assign(second_timing);
+    assert_eq!(total.captures, 2);
+    assert!(
+        total.identity.is_none(),
+        "aggregate cannot name either captured frame"
+    );
     assert_frame(&retained, &first);
     assert_frame(&manual, &second);
     assert_frame(&decode_png(&png).unwrap(), &second);
@@ -647,6 +693,51 @@ fn v3_guarded_stop_discards_partial_payload_and_manual_capture_can_reconnect() {
 }
 
 
+/// Real typed TCP cancellation differs from a protocol error followed by a late STOP.
+#[test]
+fn stop_183_tcp_cancellation_and_protocol_failure_keep_distinct_causes() {
+    use crate::pyramid_workflow_model::RunTermination;
+    for operator_cancel in [true, false] {
+        let root = TestDirectory::new();
+        let _diagnostics = DiagnosticsRestore::install(None);
+        let cancel = Arc::new(AtomicBool::new(false));
+        let (events, _receiver) = sink();
+        let context = ControllerContext::new(root.0.join("qmp.sock"),
+            GameMode::Pyramid, SolvingStrategy::ShortestPath, 4);
+        let control = &events.latest_frame.reconnaissance;
+        control.select(&context, &cancel).unwrap();
+        control.queue_reconnaissance(&context, &cancel, || Ok(())).unwrap();
+        let expected = coloured_frame();
+        let reply = if operator_cancel {
+            V3Reply::WaitForOperatorStop(Arc::clone(&cancel), control.clone(), context.clone())
+        } else { V3Reply::WrongOrientation };
+        let (address, tcp) = v3_server(vec![vec![reply], vec![V3Reply::Frame(expected.clone())]]);
+        let _backend = TestCaptureBackend::tcp_mode(address, CaptureMode::PersistentBgrV3);
+        let (mut qmp, qmp_server) = qmp_pair(&root);
+        let socket = root.0.join("qmp.sock");
+        let trace = pyramid_stop::StopTrace::default();
+        {
+            let _cancel_scope = tcp_capture::CancellationScope::install(Arc::clone(&cancel));
+            let failure = capture_screen_causal(&mut qmp, &socket, &events).expect_err("incomplete or invalid TCP response");
+            assert_eq!(failure.cancelled, operator_cancel);
+            if !operator_cancel { control.operator_stop(&context, &cancel); }
+            let message = trace.capture_error(failure, control, &context, &cancel);
+            assert!(message.starts_with("TCP capture failed:"));
+            assert_eq!(trace.termination(true, true), if operator_cancel {
+                RunTermination::OperatorStopped
+            } else { RunTermination::Failed });
+        }
+        // A later explicit raw preview gets fresh pixels without clearing STOP.
+        let (fresh, _) = capture_screen(&mut qmp, &socket, &events).unwrap();
+        assert_frame(&fresh, &expected);
+        assert!(cancel.load(Ordering::Acquire));
+        drop(qmp);
+        assert_eq!(qmp_server.finish(), 1);
+        assert_eq!(tcp.finish(), 2);
+    }
+}
+
+
 /// The explicit one-shot v3 mode retains BGR8 framing while reconnecting for each capture.
 #[test]
 fn one_shot_v3_opens_distinct_sessions() {
@@ -668,4 +759,198 @@ fn one_shot_v3_opens_distinct_sessions() {
     drop(qmp);
     assert_eq!(qmp_server.finish(), 1);
     assert_eq!(tcp.finish(), 2);
+}
+
+
+/// The real v3 acquisition exports its sole frame; failures retain those pixels without another request.
+#[test]
+fn freecell_300_tcp_recon_exports_one_frame_and_retains_refusals() {
+    use super::freecell_reconnaissance::{Request, run_checked};
+    for malformed in [false, true] {
+        let root = TestDirectory::new();
+        let _diagnostics = DiagnosticsRestore::install(None);
+        let mut original =
+            decode_png(include_bytes!("../../tests/fixtures/freecell-FC01.png")).unwrap();
+        if malformed {
+            for y in 338..361 {
+                let first = y * original.stride + 220 * 4;
+                original.pixels[first..first + 26 * 4].fill(255);
+            }
+        }
+        let (address, tcp) = v3_server(vec![vec![V3Reply::Frame(original.clone())]]);
+        let _backend = TestCaptureBackend::tcp_mode(address, CaptureMode::PersistentBgrV3);
+        let (events, _receiver) = sink();
+        let _capture_scope = tcp_capture::WorkerCaptureScope::install(&events);
+        let context = ControllerContext::new(
+            root.0.join("qmp.sock"),
+            GameMode::FreeCell,
+            SolvingStrategy::ShortestPath,
+            41,
+        );
+        let cancel = Arc::new(AtomicBool::new(false));
+        let _cancel_scope = tcp_capture::CancellationScope::install(Arc::clone(&cancel));
+        events.set_capture_context(Some(context.clone()));
+        events
+            .latest_frame
+            .reconnaissance
+            .select(&context, &cancel)
+            .unwrap();
+        events
+            .latest_frame
+            .reconnaissance
+            .queue_reconnaissance(&context, &cancel, || Ok(()))
+            .unwrap();
+        let request = Request {
+            destination: root.0.join("- exact Free Cell ü.json"),
+            deal_id: "native-one-frame".to_owned(),
+        };
+        let trace = pyramid_stop::StopTrace::default();
+        let result = run_checked(&context, &request, &events, &cancel, &trace);
+        let latest = events
+            .latest_frame
+            .take()
+            .expect("same acquired diagnostic frame");
+        assert_frame(&latest.frame, &original);
+        assert!(latest.prediction.is_none() && latest.diagnostic);
+        assert_eq!(latest.context, Some(context));
+        if malformed {
+            assert!(result.is_err());
+            assert!(!request.destination.exists());
+        } else {
+            assert_eq!(result.unwrap().destination, request.destination);
+            let exported =
+                xsar::freecell_json::from_slice(&fs::read(&request.destination).unwrap()).unwrap();
+            let expected = crate::freecell_recon::recognise(
+                &original,
+                xsar::games::freecell::Metadata::new(
+                    "native-one-frame",
+                    "native-freecell-v1",
+                    "single-frame-tcp-v3",
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            assert_eq!(exported, expected);
+        }
+        drop(_capture_scope);
+        assert_eq!(tcp.finish(), 1);
+    }
+}
+
+/// Unsupported transport and an already requested STOP refuse before opening any socket.
+#[test]
+fn freecell_300_backend_and_stopped_owner_cannot_acquire_or_publish() {
+    use super::freecell_reconnaissance::{Request, run_checked};
+    let root = TestDirectory::new();
+    let (events, _receiver) = sink();
+    let context = ControllerContext::new(
+        root.0.join("no-qmp.sock"),
+        GameMode::FreeCell,
+        SolvingStrategy::ShortestPath,
+        42,
+    );
+    let cancel = AtomicBool::new(false);
+    events
+        .latest_frame
+        .reconnaissance
+        .select(&context, &cancel)
+        .unwrap();
+    events
+        .latest_frame
+        .reconnaissance
+        .queue_reconnaissance(&context, &cancel, || Ok(()))
+        .unwrap();
+    let request = Request {
+        destination: root.0.join("refused.json"),
+        deal_id: "refused".to_owned(),
+    };
+    {
+        let _backend = TestCaptureBackend::legacy_qmp();
+        assert!(
+            run_checked(
+                &context,
+                &request,
+                &events,
+                &cancel,
+                &pyramid_stop::StopTrace::default()
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("no fallback")
+        );
+    }
+    {
+        let _backend =
+            TestCaptureBackend::tcp_mode("127.0.0.1:1".to_owned(), CaptureMode::LegacyV2);
+        assert!(
+            run_checked(
+                &context,
+                &request,
+                &events,
+                &cancel,
+                &pyramid_stop::StopTrace::default()
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("no fallback")
+        );
+    }
+    {
+        let _backend = TestCaptureBackend::tcp_mode("127.0.0.1:1".to_owned(), CaptureMode::BgrV3);
+        events
+            .latest_frame
+            .reconnaissance
+            .operator_stop(&context, &cancel);
+        let trace = pyramid_stop::StopTrace::default();
+        assert!(run_checked(&context, &request, &events, &cancel, &trace).is_err());
+        assert_eq!(
+            trace.termination(true, true),
+            crate::pyramid_workflow_model::RunTermination::OperatorStopped
+        );
+    }
+    assert!(events.latest_frame.take().is_none());
+    assert!(!request.destination.exists());
+}
+
+/// A real partial-payload STOP yields no export or retry while retaining typed cancellation.
+#[test]
+fn freecell_300_tcp_operator_stop_refuses_publication() {
+    use super::freecell_reconnaissance::{Request, run_checked};
+    let root = TestDirectory::new();
+    let (events, _receiver) = sink();
+    let _capture_scope = tcp_capture::WorkerCaptureScope::install(&events);
+    let context = ControllerContext::new(
+        root.0.join("qmp.sock"),
+        GameMode::FreeCell,
+        SolvingStrategy::ShortestPath,
+        43,
+    );
+    let cancel = Arc::new(AtomicBool::new(false));
+    let control = &events.latest_frame.reconnaissance;
+    control.select(&context, &cancel).unwrap();
+    control
+        .queue_reconnaissance(&context, &cancel, || Ok(()))
+        .unwrap();
+    let (address, tcp) = v3_server(vec![vec![V3Reply::WaitForOperatorStop(
+        Arc::clone(&cancel),
+        control.clone(),
+        context.clone(),
+    )]]);
+    let _backend = TestCaptureBackend::tcp_mode(address, CaptureMode::PersistentBgrV3);
+    let _cancel_scope = tcp_capture::CancellationScope::install(Arc::clone(&cancel));
+    events.set_capture_context(Some(context.clone()));
+    let request = Request {
+        destination: root.0.join("cancelled.json"),
+        deal_id: "cancelled".to_owned(),
+    };
+    let trace = pyramid_stop::StopTrace::default();
+    assert!(run_checked(&context, &request, &events, &cancel, &trace).is_err());
+    assert_eq!(
+        trace.termination(true, true),
+        crate::pyramid_workflow_model::RunTermination::OperatorStopped
+    );
+    assert!(!request.destination.exists());
+    assert!(events.latest_frame.take().is_none());
+    drop(_capture_scope);
+    assert_eq!(tcp.finish(), 1);
 }

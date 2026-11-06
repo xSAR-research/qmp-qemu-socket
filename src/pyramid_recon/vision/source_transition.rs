@@ -4,6 +4,16 @@ use super::*;
 use crate::pyramid::PyramidTargetKind;
 
 
+/// INITIAL-only readiness distinguishes a busy stock anchor from fatal scene failures.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SourceSceneReadiness {
+    /// Every required supported gameplay role matches.
+    Ready,
+    /// Only the dynamic stock/Draw role is not yet readable; input remains forbidden.
+    StockAnchorUnready,
+}
+
+
 /// One verified original identity at its exact calibrated location.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct SourceCard {
@@ -68,7 +78,15 @@ impl SourceTransition {
                 PyramidTargetKind::Right => "DR".to_owned(),
                 _ => return Err("invalid source location".to_owned()),
             };
-            reads.push(format!("{location}: expected {:?} of {:?}; observed {}",source.card.rank(),source.card.suit(),actual.map_or_else(|| "undetermined".to_owned(), |card| format!("{:?} of {:?}",card.rank(),card.suit()))));
+            reads.push(format!(
+                "{location}: expected {:?} of {:?}; observed {}",
+                source.card.rank(),
+                source.card.suit(),
+                actual.map_or_else(
+                    || "undetermined".to_owned(),
+                    |card| format!("{:?} of {:?}", card.rank(), card.suit())
+                )
+            ));
         }
         Ok((
             ready.then_some(Self {
@@ -129,8 +147,21 @@ impl SourceTransition {
 
 
 impl ReconVision {
-    /// Validate native layout and supported gameplay, without reading replacement cards.
+    /// Keep ordinary source and POST callers strict even while INITIAL may wait.
     pub(crate) fn verify_source_scene(&self, frame: &CapturedFrame) -> Result<(), String> {
+        require(
+            self.source_scene_readiness(frame)? == SourceSceneReadiness::Ready,
+            &format!("source board scene[{EXECUTION_EMPTY_STOCK_SCENE_INDEX}] mismatch"),
+        )
+    }
+
+
+    /// Validate every static role and classify only native dynamic-stock unready evidence.
+    /// Layout, modal, legend and all other scene-role errors remain fatal.
+    pub(crate) fn source_scene_readiness(
+        &self,
+        frame: &CapturedFrame,
+    ) -> Result<SourceSceneReadiness, String> {
         require(
             frame.width == 1920 && frame.height == 1080,
             "source verification requires native 1920x1080",
@@ -143,16 +174,23 @@ impl ReconVision {
         let empty_stock = self.matches_execution_empty_stock(view, None, None)?
             || self.matches_native_empty_stock(view, None, None)?
             || self.source_exhausted_stock_scene(view)?;
+        let mut stock_unready = false;
         for (index, pattern) in self.board.scene.iter().enumerate() {
             if empty_stock && index == EXECUTION_EMPTY_STOCK_SCENE_INDEX {
                 continue;
             }
-            require(
-                self.native_scene_anchor(view, index, pattern)?,
-                &format!("source board scene[{index}] mismatch"),
-            )?;
+            let matches = self.native_scene_anchor(view, index, pattern)?;
+            if !matches && self.colour_independent && index == EXECUTION_EMPTY_STOCK_SCENE_INDEX {
+                stock_unready = true;
+            } else {
+                require(matches, &format!("source board scene[{index}] mismatch"))?;
+            }
         }
-        Ok(())
+        Ok(if stock_unready {
+            SourceSceneReadiness::StockAnchorUnready
+        } else {
+            SourceSceneReadiness::Ready
+        })
     }
 
 
@@ -206,6 +244,105 @@ impl ReconVision {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+
+    /// The retained refusal is waitable only through the typed INITIAL scene query.
+    #[test]
+    fn readiness_180_retained_stock_anchor_keeps_strict_source_and_post_refusal() {
+        let vision = ReconVision::bundled_native_v23().unwrap();
+        let retained = frame("pyramid-readiness-180/stock-anchor-occluded.png");
+        assert_eq!(
+            vision.source_scene_readiness(&retained).unwrap(),
+            SourceSceneReadiness::StockAnchorUnready
+        );
+        assert_eq!(
+            vision.verify_source_scene(&retained).unwrap_err(),
+            "source board scene[2] mismatch"
+        );
+        let source = SourceCard {
+            location: PyramidTargetKind::Left,
+            card: Card::new(Rank::Eight, Suit::Spades),
+        };
+        assert!(SourceTransition::prepare(&vision, &retained, vec![source], 1).is_err());
+        assert!(SourceTransition::begin(&vision, &retained, vec![source], 1).is_err());
+        assert!(vision.draw_source(&retained).is_err());
+        assert!(
+            ReconVision::bundled_native_v22()
+                .unwrap()
+                .source_scene_readiness(&retained)
+                .is_err()
+        );
+
+        let after = frame("pyramid-recognition-168/green/last-observed.png");
+        let before = supported_source(
+            &vision,
+            frame("pyramid-recognition-168/green/first-unmatched.png"),
+            &after,
+        );
+        let mut transition = SourceTransition::begin(
+            &vision,
+            &before,
+            vec![SourceCard {
+                card: Card::new(Rank::Six, Suit::Hearts),
+                ..source
+            }],
+            0,
+        )
+        .unwrap();
+        assert!(!transition.observe(&vision, &after, 1).unwrap());
+        assert!(transition.observe(&vision, &retained, 2).is_err());
+        assert_eq!(transition.confirmations(), 0);
+        assert!(!transition.observe(&vision, &after, 3).unwrap());
+        assert!(transition.observe(&vision, &after, 4).unwrap());
+    }
+
+
+    /// A busy stock role never hides simultaneous static, legend, modal or layout failure.
+    #[test]
+    fn readiness_180_stock_wait_does_not_absorb_fatal_scene_failures() {
+        let vision = ReconVision::bundled_native_v23().unwrap();
+        let retained = frame("pyramid-readiness-180/stock-anchor-occluded.png");
+        for bounds in vision
+            .board
+            .scene
+            .iter()
+            .take(2)
+            .map(|pattern| pattern.bounds)
+            .chain(crate::pyramid::WHITE_SCENE_PROBES)
+        {
+            let mut bad = retained.clone();
+            let colour = if bounds.x == 1796 {
+                [255; 4]
+            } else {
+                [0, 0, 0, 255]
+            };
+            for y in bounds.y..bounds.y + bounds.height {
+                for x in bounds.x..bounds.x + bounds.width {
+                    let offset = usize::try_from(y * bad.width + x).unwrap() * 4;
+                    bad.pixels[offset..offset + 4].copy_from_slice(&colour);
+                }
+            }
+            assert!(vision.source_scene_readiness(&bad).is_err(), "{bounds:?}");
+        }
+        let mut bad = retained.clone();
+        bad.width = 1;
+        assert!(vision.source_scene_readiness(&bad).is_err());
+        let mut bad = retained;
+        bad.pixels.pop();
+        assert!(vision.source_scene_readiness(&bad).is_err());
+        let modal = frame("pyramid-recon/originals/undo-all-confirmation.png");
+        assert!(
+            vision
+                .dialog_matches(modal.as_view().unwrap(), true)
+                .unwrap()
+        );
+        assert!(
+            vision
+                .source_scene_readiness(&modal)
+                .unwrap_err()
+                .contains("Undo All dialog")
+        );
+    }
 
 
     /// Reuse byte-original captures as offline observations, never as live freshness proof.
@@ -367,5 +504,4 @@ mod tests {
         assert!(!transition.observe(&vision, &after, 1).unwrap());
         assert!(transition.observe(&vision, &after, 2).unwrap());
     }
-
 }

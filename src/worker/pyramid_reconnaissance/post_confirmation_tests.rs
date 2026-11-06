@@ -491,6 +491,7 @@ fn episode(frames: Vec<Vec<u8>>, run_core: bool, fault: Fault) -> Episode {
     let receipt_vision;
     {
         let mut native = QmpReconIo {
+            stop_trace: &super::super::pyramid_stop::StopTrace::default(),
             qmp: &mut qmp,
             context: &context,
             control,

@@ -1356,6 +1356,8 @@ pub struct StepRunSettings {
     freecell_observation_limit: usize,
     /// Delayed input-free Spider captures permitted for one unresolved context.
     spider_observation_limit: usize,
+    /// Explicit Single step button intent; never inferred from the operation budget.
+    single_step_diagnostics: bool,
 }
 
 
@@ -1369,7 +1371,21 @@ impl StepRunSettings {
             operation_limit,
             freecell_observation_limit: FREECELL_DEFAULT_OBSERVATION_LIMIT,
             spider_observation_limit: SPIDER_DEFAULT_OBSERVATION_LIMIT,
+            single_step_diagnostics: false,
         }
+    }
+
+
+    /// Freeze explicit Single step intent without changing operation limits or input authority.
+    pub const fn with_single_step_diagnostics(mut self, enabled: bool) -> Self {
+        self.single_step_diagnostics = enabled;
+        self
+    }
+
+
+    /// Whether this request originated from the Single step button.
+    pub const fn single_step_diagnostics(self) -> bool {
+        self.single_step_diagnostics
     }
 
 

@@ -226,6 +226,8 @@ impl Fixture {
     /// Construct the production adapter with the current bundled calibration and no receipt.
     fn adapter(&self) -> Native<'_> {
         Native {
+            stop_trace: Default::default(),
+            phase_error: None,
             context: &self.context,
             request: &self.request,
             events: &self.events,

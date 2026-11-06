@@ -263,12 +263,12 @@ fn log_measurement(events: &WorkerEventSink, mode: CaptureMode, timing: &TcpCapt
 }
 
 
-/// Acquire once through the retained xSAR client; errors drop its session without retry.
-pub(super) fn capture(
+/// Acquire once without erasing the protocol's explicit cancellation discriminator.
+pub(super) fn capture_causal(
     address: &str,
     mode: CaptureMode,
     events: &WorkerEventSink,
-) -> Result<(CapturedFrame, CaptureTiming), String> {
+) -> Result<(CapturedFrame, CaptureTiming), super::pyramid_stop::CaptureFailure> {
     let context = events
         .capture_context
         .lock()
@@ -294,7 +294,10 @@ pub(super) fn capture(
         let (tcp_frame, tcp_timing) = entry
             .client
             .capture_full_cancellable(cancel.as_deref().unwrap_or(&inactive_cancel))
-            .map_err(|error| format!("TCP capture failed: {error}"))?;
+            .map_err(|error| super::pyramid_stop::CaptureFailure {
+                cancelled: matches!(error, xsar::tcp::TcpCaptureError::Cancelled),
+                message: format!("TCP capture failed: {error}"),
+            })?;
         let frame = CapturedFrame {
             width: tcp_frame.width,
             height: tcp_frame.height,
@@ -316,7 +319,15 @@ pub(super) fn capture(
                 }
             });
             let timing = CaptureTiming {
-                captures: 1,
+            identity: Some(super::CaptureIdentity {
+                protocol_version: measured.metadata.protocol_version,
+                session_id: measured.metadata.session_id,
+                request_id: measured.metadata.request_id,
+                frame_id: measured.metadata.frame_id,
+                display_generation: measured.metadata.display_generation,
+                reused_connection: measured.metadata.reused_connection,
+            }),
+            captures: 1,
                 screendump: Duration::from_secs_f64(
                     (measured.connect_ms + measured.request_ms) / 1000.0,
                 ),

@@ -494,6 +494,7 @@ fn adapter_with_progress<T>(
     let peer = thread::spawn(move || serve(listener, peer_directory, pngs));
     let qmp = QmpClient::connect(&context.socket_path).unwrap();
     let mut io = NativeIo {
+        stop_trace: &crate::worker::pyramid_stop::StopTrace::default(),
             execution_vision: plan.acquisition.vision.for_temporal_execution(),
             source_transition: None,
             ready_transition: None,
@@ -631,6 +632,7 @@ fn native_challenge_terminal_releases_from_one_source_frame_without_card_mismatc
             proof,
             io.events,
             io.cancel,
+            None,
         )
         .unwrap();
         assert!(
@@ -732,6 +734,39 @@ fn guarded_native_delivery_refuses_series_drift_before_first_gesture() {
         assert_eq!(evidence.latest.unwrap().pixels, frame.pixels);
         assert_eq!(evidence.wire.unused_frames, 0);
     }
+}
+
+
+/// A fatal guard result wins when operator revocation occurs inside that same guard.
+#[test]
+#[ignore = "requires local AF_UNIX sockets"]
+fn stop_183_fatal_guard_is_not_softened_by_late_operator_stop() {
+    use crate::pyramid_workflow_model::RunTermination;
+    let authority = std::cell::RefCell::new(None::<(
+        crate::worker::pyramid_reconnaissance::ReconControl, ControllerContext)>);
+    let guard_cancel = AtomicBool::new(false);
+    let guard = |_frame: &CapturedFrame, _phase: FrameGuardPhase| {
+        let authority = authority.borrow();
+        let (control, context) = authority.as_ref().expect("installed native authority");
+        control.operator_stop(context, &guard_cancel);
+        Err("real fatal frame guard".to_owned())
+    };
+    let frame = synthetic_start();
+    let evidence = adapter(vec![frame.clone()], Some(&guard), |io| {
+        *authority.borrow_mut() = Some((io.events.latest_frame.reconnaissance.clone(), io.context.clone()));
+        let result = io.observe_source(SearchState::initial());
+        assert!(result.err().expect("genuine guard refusal").contains("real fatal frame guard"));
+        assert_eq!(io.stop_trace.termination(true, true), RunTermination::Failed);
+        assert!(io.action_permit.is_none() && io.source_proof.is_none());
+    });
+    assert_eq!((evidence.counts.attempted, evidence.counts.acknowledged, evidence.captures), (0, 0, 1));
+    assert!(guard_cancel.load(std::sync::atomic::Ordering::Acquire));
+    assert!(evidence.wire.events.is_empty());
+    assert_eq!(evidence.wire.unused_frames, 0);
+    let (reason, first) = evidence.first.expect("fatal guard evidence retained");
+    assert!(reason.contains("real fatal frame guard"));
+    assert_eq!(first.pixels, frame.pixels);
+    assert_eq!(evidence.latest.unwrap().pixels, frame.pixels);
 }
 
 

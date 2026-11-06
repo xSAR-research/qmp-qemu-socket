@@ -1,5 +1,61 @@
 # Changelog
 
+## 3.0.2
+
+Removes the invalid Klondike SUIT/foundation scene requirement. Four felt gutters and at least five of seven PLAY top-edge probes remain mandatory; source HALO, Solver banner, fresh VM/pointer probes, STOP and no-replay rules retain their separate authority. Both byte-original incident frames now reach SUIT 3 at (1296,199). The other four GAME TYPE scene checks have no equivalent SUIT gate.
+
+Extended `SINGLE_STEP` JSON telemetry is written only to the complete session log for the explicit **Single step** button. Multiple Steps, including a budget of one, remain untraced. It records existing capture identities/probe counts/classification and attempted/acknowledged transport operations, without extra captures, retries or visible-panel noise. Existing failure packets remain independent and enabled.
+
+All six source gates passed, including 1,758 tests with no failures, ignored or filtered tests; six focused regressions passed. Approved version-only alignment passed locked check, release and bounded help. Source/aligned sets contain 996 inputs, with 994 unchanged after the two Cargo version edits. No fresh guest execution is claimed.
+
+Run from this repository root: `cargo run --release`. No secondary executable copy was created. See [verification](docs/Verification-3.0.2.md) and [telemetry contract](docs/klondike-failure-telemetry.md).
+
+## 3.0.1
+
+3.0.1 adds exact Klondike failure telemetry. It saves the first classified scene rejection and final stopping frame already acquired by the worker, with all fifteen probe counts, same-response TCP identities and attempted/acknowledged input. Scene decisions, thresholds, input, STOP and observation budgets are unchanged. No extra capture is taken.
+
+Run from the repository base with `cargo run --release`. [Verification](docs/Verification-3.0.1.md) · [Telemetry and reproduction](docs/klondike-failure-telemetry.md).
+
+## 3.0.0 — Free Cell RECON/export
+
+3.0.0 adds independent read-only Free Cell RECON/export. One explicit request acquires one fresh native TCPv3 frame, requires eight PLAY columns [7,7,7,7,6,6,6,6], four positively empty CELLs/four SUITs and 52 unique recognised rank-and-suit identities, then publishes bounded JSON without overwrite. Unsupported, incomplete or ambiguous evidence refuses export. Free Cell A* planning is deferred to 3.1.0.
+
+Adds xSAR 0.10.0 checked physical models, strict schema-1 codec and shared private no-overwrite publication while preserving the public Pyramid codec. Dedicated request/context ownership and STOP checks retain the acquired diagnostic pixels without recapture.
+
+Retained source qualification: xSAR 20 gates/311 full tests; controller six gates/1,748 full tests. Approved version alignment passed locked checks for xSAR, controller and console, the console tests, controller release and bounded help. Only five authorised manifests/locks changed after qualification: 987 sealed inputs, 982 unchanged. No secondary executable, guest/GUI action, installation or Git publication occurred.
+
+Native acceptance remains pending: FC01/FC13 are evaluation originals, not blind threshold hold-outs; native PLAY-bottom Two, authentic dealing/unsupported-scale/artwork negatives and fresh operator-checked guest RECON/export remain unverified. Foundation Twos establish typography only. Source/socket tests do not establish live acceptance or completion of all Block 1 acceptance rows. See [RECON contract](docs/free-cell-block-1-recon.md) and [verification](docs/Verification-3.0.0.md).
+
+## 2.9.183 — Cooperative STOP and fresh preview
+
+The accepted STOP correction is qualified as **2.9.183**. A causally recorded operator cancellation shows Waiting and admits one token/context-correlated raw preview after matching run ownership retires. Genuine failures, stale authority, shutdown and uncertain delivery retain Error. STOP stays latched; failed or stopped plans cannot resume. Existing failure history is retained.
+
+Run from `/home/charlie/repo/RUST/qmp-qemu-socket`:
+
+```sh
+cargo run --release
+```
+
+The normal Cargo target is used; no secondary executable copy was created. All six source gates passed, including **1,736 tests** with zero failed, ignored or filtered; 11 focused STOP regressions passed. After Charlie's explicit milestone/version approval, aligned locked check, release and direct `--help` passed. Fresh guest STOP/preview acceptance remains pending. See [verification](docs/Verification-2.9.183.md) and [game operations](docs/game-operations.md).
+
+## Qualified 2.9.182 — images enabled by default
+
+GAME WIN image recording is now enabled by default. Run `cargo run --release` from the repository root; use `cargo run --release -- --no-image` to opt out. The former `--image` flag is rejected. Startup retains the existing fixed image-directory reset in both modes; help and invalid arguments return before that reset.
+
+All six source gates passed, including 1725 tests with zero failures, ignored, measured or filtered tests. The approved version-only alignment then passed locked check, release and protected help. Of 961 sealed inputs, 959 remained identical after alignment; the 56 xSAR inputs are unchanged. [Verification](docs/Verification-2.9.182.md); [image policy](docs/game-win-images.md).
+
+## Qualified 2.9.181 — reusable game operations
+
+Added a private reusable game-operation layer for fresh native capture, guarded mouse/key input, pure card and option recognition, and bounded semantic Undo protocols. Pyramid Recon now uses its shared Undo All protocol with the existing capture, wait, confirmation, STOP and publication sequence preserved.
+
+All six application gates passed, including 1725 tests with zero failed, ignored, measured or filtered, followed by the approved 2.9.181 locked check, release and protected help. The 56 unchanged xSAR inputs retain cached qualification. Fresh live guest acceptance remains pending. [Verification](docs/Verification-2.9.181.md); [operation contracts](docs/game-operations.md).
+
+## Qualified 2.9.180 — foundation verification and INITIAL readiness
+
+Verified the existing four-SUIT foundation source handling in Free Cell and Klondike. Pyramid INITIAL source checking now waits for the bundled native stock/Draw scene anchor within its existing six-check budget. All static scene, legend, layout, modal, header and original-source checks must pass on the supported frame before input; POST remains strict.
+
+All six application gates passed, including 1713 tests with zero failed, ignored, measured or filtered, followed by aligned locked check, release and protected help. Five new readiness regressions and eight existing foundation checks passed. The 56 unchanged xSAR inputs retain cached sixteen-gate qualification. Fresh live guest acceptance remains pending. [Verification](docs/Verification-2.9.180.md).
+
 ## Qualified 2.9.179 — foundation source HALOs
 
 Free Cell now checks all four foundation stacks for a complete closed solid source HALO after its existing CELL and lowest-PLAY priorities. The measured native slots use checked one-click mapping. Dashed destinations and incomplete sources remain refused. Klondike already scanned all four foundations; its production detector and controller remain unchanged, with stronger coordinate/invalid-column regression coverage.

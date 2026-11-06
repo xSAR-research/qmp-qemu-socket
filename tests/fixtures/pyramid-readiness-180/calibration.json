@@ -1,0 +1,13 @@
+{
+  "source": "retained 2.9.179 failure capture52",
+  "source_sha256": "69ef31197eb63ef5154cba445c175404794fd74bbd004b18352e28ff6e640229",
+  "scene_bounds": [
+    931,
+    695,
+    60,
+    50
+  ],
+  "extra_white": 51,
+  "missing_white": 0,
+  "new_guest_capture": false
+}

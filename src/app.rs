@@ -6,6 +6,7 @@
 
 mod activity_status;
 mod diagnostics;
+mod freecell_recon;
 mod log_window;
 mod pyramid_defaults;
 mod pyramid_requests;
@@ -112,6 +113,8 @@ enum ActiveRun {
     MultiStep,
     /// A separate scan/restoration/export operation, released only by its finished event.
     Reconnaissance,
+    /// Independent one-frame read-only Free Cell acquisition/export.
+    FreeCellRecon,
     /// Separate input-free route calculation or finite execution with a matching run token.
     ComputedRoute,
     /// One automatic Pyramid session retained through acquisition, planning and restart.
@@ -492,6 +495,10 @@ pub struct QmpQemuSocketApp {
     context_generation: u64,
     /// Last allocated RESET-only preview identity.
     reset_preview_serial: u64,
+    /// Dedicated one-frame request identity and STOP diagnostic retention.
+    freecell_recon_state: freecell_recon::FreeCellReconState,
+    /// Optional exact output spelling; empty uses a unique generated destination.
+    freecell_export_path: String,
     /// Correlated read-only refresh and acknowledgement of retained old errors.
     reset_preview: Option<reset_preview::ResetPreview>,
     /// Bounded operator inputs and single-use consent for the separate reconnaissance command.
@@ -685,6 +692,8 @@ impl QmpQemuSocketApp {
             strategy_choice_pending: true,
             context_generation: 0,
             reset_preview_serial: 0,
+            freecell_recon_state: freecell_recon::FreeCellReconState::default(),
+            freecell_export_path: String::new(),
             reset_preview: None,
             reconnaissance_form,
             reconnaissance_report: None,
@@ -771,9 +780,9 @@ impl QmpQemuSocketApp {
         }
         app.push_log(format!("QMP socket candidate: {}", app.qmp_socket_path));
         if let Some(directory) = diagnostics.directory {
-            app.push_log(format!("--image enabled: saving only GAME WIN entry and subsequent captures through verified new-game readiness in {}. PNG filenames use the same startup elapsed clock as worker logs; ordinary gameplay captures are not saved.", directory.display()));
+            app.push_log(format!("GAME WIN image recording enabled by default: saving only entry and subsequent captures through verified new-game readiness in {}. PNG filenames use the same startup elapsed clock as worker logs; ordinary gameplay captures are not saved.", directory.display()));
         } else {
-            app.push_log("GAME WIN image recording disabled; /home/charlie/tmp/images was removed at startup.");
+            app.push_log("GAME WIN image recording disabled by --no-image; /home/charlie/tmp/images was removed at startup.");
         }
         app.push_log("Choose a solving strategy before connecting or capturing. The first capture after selection is one-shot and read-only.");
         app.push_log("The preview retains only the latest worker frame; stale full-resolution previews are coalesced while the UI is asleep or occluded.");
@@ -812,6 +821,22 @@ impl QmpQemuSocketApp {
             ));
         }
         self.push_visible_log_line(line);
+    }
+
+
+    /// Persist extended telemetry without adding it to the visible log panel.
+    fn push_session_telemetry_at(&mut self, elapsed: Duration, message: String) {
+        let line = format!("[+{:08.3}s] {message}", elapsed.as_secs_f64());
+        if let Some(error) = self
+            .session_log
+            .as_mut()
+            .and_then(|log| log.append(&line).err())
+        {
+            self.session_log = None;
+            self.push_visible_log_line(format!(
+                "WARNING: Single step session telemetry write failed ({error})."
+            ));
+        }
     }
 
 
@@ -931,15 +956,16 @@ impl QmpQemuSocketApp {
                 &self.current_preview_context(),
                 self.strategy_choice_pending,
             ) {
-                if let WorkerEvent::Log(message) = tagged.event {
-                    self.push_log_at(elapsed, format!("Earlier request: {message}"));
+                match tagged.event {
+                    WorkerEvent::Log(message) => self.push_log_at(elapsed, format!("Earlier request: {message}")),
+                    WorkerEvent::SessionTelemetry(message) => self.push_session_telemetry_at(elapsed, message),
+                    _ => {}
                 }
                 continue;
             }
 
 
-            if self.reset_preview.as_ref().is_some_and(|refresh| refresh.pending())
-                && matches!(&tagged.event, WorkerEvent::State(_) | WorkerEvent::Status(_)) {
+            if self.reset_preview.as_mut().is_some_and(|refresh| refresh.suppress_event(&tagged.event)) {
                 if let WorkerEvent::Status(message) = tagged.event { self.push_log_at(elapsed, message); }
                 continue;
             }
@@ -949,7 +975,7 @@ impl QmpQemuSocketApp {
                     match result {
                         Ok(()) => {
                             if let Some(refresh) = &mut self.reset_preview { refresh.finish(); }
-                            self.worker_state = if self.reset_preview.as_ref().is_some_and(|refresh| refresh.pending()) { WorkerState::Connecting } else { WorkerState::Ready };
+                            if let Some(refresh) = &self.reset_preview { self.worker_state = refresh.worker_state(); }
                             self.current_status = "Waiting".to_owned();
                         }
                         Err(error) => {
@@ -960,6 +986,7 @@ impl QmpQemuSocketApp {
                     }
                 }
                 WorkerEvent::Log(message) => self.push_log_at(elapsed, message),
+                WorkerEvent::SessionTelemetry(message) => self.push_session_telemetry_at(elapsed, message),
                 WorkerEvent::RunFailure(failure) => {
                     self.failure_window
                         .worker_run(&failure, tagged.context.as_ref(), elapsed);
@@ -996,7 +1023,11 @@ impl QmpQemuSocketApp {
                         &selected,
                         self.computed_route_form.active_run_id,
                     ) {
-                        if !same_update && !reset_pending { self.reset_preview = None; }
+                        if !same_update && (!reset_pending || self.reset_preview.as_ref().is_some_and(|refresh| !refresh.acknowledges_failure)) {
+                            let keep_stop_refresh = self.reset_preview.as_mut().is_some_and(reset_preview::ResetPreview::preserve_new_failure);
+                            if !keep_stop_refresh { self.reset_preview = None; }
+                            self.worker_state = WorkerState::Error;
+                        }
                         self.retain_pyramid_failure(new_failure);
                     } else {
                         self.push_log(
@@ -1068,11 +1099,14 @@ impl QmpQemuSocketApp {
                                 ActiveRun::Reconnaissance
                                     | ActiveRun::ComputedRoute
                                     | ActiveRun::PyramidSession
+                                    | ActiveRun::FreeCellRecon
                             )
                         ) {
                             self.stop_requested = false;
                         }
-                        self.invalidate_preview();
+                        if !self.freecell_recon_state.retain_after_detach(&self.current_preview_context()) {
+                            self.invalidate_preview();
+                        }
                     }
                     self.active_run = active_run_after_worker_state(self.active_run, state);
 
@@ -1183,6 +1217,7 @@ impl QmpQemuSocketApp {
                             ActiveRun::Reconnaissance
                                 | ActiveRun::ComputedRoute
                                 | ActiveRun::PyramidSession
+                                    | ActiveRun::FreeCellRecon
                         )
                     ) {
                         self.push_log("Ignored a gameplay completion while waiting for the separate guarded request to finish.");
@@ -1211,6 +1246,7 @@ impl QmpQemuSocketApp {
                 WorkerEvent::PyramidSessionProgress(progress) => self.apply_pyramid_session_progress(progress),
                 WorkerEvent::PyramidSessionFinished(completion) => self.apply_pyramid_session_finished(completion),
                 WorkerEvent::ReconnaissanceFinished {
+                    termination,
                     result,
                     default_method,
                 } => {
@@ -1227,6 +1263,12 @@ impl QmpQemuSocketApp {
                     .to_owned();
                     self.active_run = None;
                     self.reconnaissance_form.confirmed_context = None;
+                    if reset_preview::dispatch_completion(true, termination, || {
+                        self.computed_route_form.revoke_acquisition();
+                        self.current_status = "Waiting".to_owned();
+                        self.push_log(report.clone());
+                        self.begin_stop_preview(self.current_preview_context());
+                    }) == reset_preview::CompletionDispatch::StopPreview { continue; }
                     if let Ok(path) = &result {
                         if !self.stop_requested {
                             let selected = self.current_preview_context();
@@ -1267,12 +1309,26 @@ impl QmpQemuSocketApp {
                         self.stop_requested = false;
                     }
                 }
+                WorkerEvent::FreeCellReconFinished { request_id, termination, result } => {
+                    let current_context=self.current_preview_context();
+                    if self.active_run != Some(ActiveRun::FreeCellRecon) || !self.freecell_recon_state.finish(&current_context, request_id, termination) {
+                        self.push_log("Ignored stale Free Cell RECON completion");
+                        continue;
+                    }
+                    self.active_run = None;
+                    match result {
+                        Ok(report) => { self.worker_state=WorkerState::Ready; self.current_status=format!("Free Cell: 52 cards exported to {}",report.destination.display()); self.push_log(self.current_status.clone()); }
+                        Err(error) if termination==crate::pyramid_workflow_model::RunTermination::OperatorStopped => {self.worker_state=WorkerState::Ready;self.current_status="Waiting".to_owned();self.push_log(error);}
+                        Err(error) => {self.worker_state=WorkerState::Uncertain;self.current_status=format!("Free Cell RECON refused: {error}");self.push_log(self.current_status.clone());}
+                    }
+                }
                 WorkerEvent::ComputedRouteFinished {
                     retained_recon,
+                    termination,
                     run_id,
                     plan_id,
                     result,
-                } => self.apply_computed_route_finished(retained_recon, run_id, plan_id, result),
+                } => self.apply_computed_route_finished(retained_recon, run_id, plan_id, result, termination),
             }
         }
 
@@ -1298,7 +1354,7 @@ impl QmpQemuSocketApp {
             let reset_pending = self.reset_preview.as_ref().is_some_and(|refresh| refresh.pending());
             let eligible = if latest.reset_request_id.is_some() { reset_matches } else { !reset_pending };
             if eligible && latest.context == Some(self.current_preview_context())
-                && worker_frame_is_displayable(self.worker_state, latest.diagnostic)
+                && (reset_matches || worker_frame_is_displayable(self.worker_state, latest.diagnostic))
             {
                 self.install_frame(
                     context,
@@ -1313,7 +1369,7 @@ impl QmpQemuSocketApp {
                     if self.capture_texture.is_some() {
                         if let Some(refresh) = &mut self.reset_preview {
                             refresh.install();
-                            if !refresh.pending() { self.worker_state = WorkerState::Ready; }
+                            self.worker_state = refresh.worker_state();
                         }
                     } else {
                         self.reset_preview = None;
@@ -1404,6 +1460,7 @@ impl QmpQemuSocketApp {
 
     /// Drops displayed pixels, prediction and source context so they cannot authorise input.
     fn invalidate_preview(&mut self) {
+        self.freecell_recon_state.clear_preview();
         self.capture_texture = None;
         self.captured_dimensions = None;
         self.preview_context = None;
@@ -1628,9 +1685,9 @@ impl QmpQemuSocketApp {
 
 
         let operation_limit = normalise_operation_limit(self.game_mode, operation_limit);
-        let settings = StepRunSettings::new(animation_delays, operation_limit)
+        let settings = step_settings_for_owner(StepRunSettings::new(animation_delays, operation_limit)
             .with_freecell_observation_limit(self.freecell_observation_limit)
-            .with_spider_observation_limit(self.spider_observation_limit);
+            .with_spider_observation_limit(self.spider_observation_limit), active_run);
 
 
         let request_scope = if settings.is_unbounded()
@@ -1790,7 +1847,7 @@ impl QmpQemuSocketApp {
         self.computed_route_form.revoke_acquisition();
         self.computed_route_form.report = None;
         self.game_mode = match strategy {
-            SolvingStrategy::ShortestPath => GameMode::Pyramid,
+            SolvingStrategy::ShortestPath => if self.game_mode==GameMode::FreeCell {GameMode::FreeCell}else{GameMode::Pyramid},
             SolvingStrategy::ComputerVision => self.computer_vision_game_mode,
         };
         let selected_context = self.current_preview_context();
@@ -1829,9 +1886,56 @@ impl QmpQemuSocketApp {
         {
             self.pyramid_ui_failure(PyramidPhase::Reconnaissance, error);
         }
-        self.request_capture("Strategy selected");
+        if !(self.solving_strategy == SolvingStrategy::ShortestPath
+            && self.game_mode == GameMode::FreeCell)
+        {
+            self.request_capture("Strategy selected");
+        }
     }
 
+
+    /// Explicit one-frame export; selection and preview never dispatch this workflow.
+    fn request_freecell_recon(&mut self) {
+        if !controls_are_mutable(self.active_run, self.worker_state, self.stop_requested)
+            || self.show_snapshot_dialog
+            || self.shutdown.requested()
+        {
+            return;
+        }
+        let context = self.current_preview_context();
+        let request_id = match self.freecell_recon_state.reserve(context.clone()) {
+            Ok(id) => id,
+            Err(error) => {
+                self.worker_state = WorkerState::Error;
+                self.current_status = error.to_owned();
+                return;
+            }
+        };
+        let deal_id = format!("freecell-{}-{request_id}", std::process::id());
+        let destination = if self.freecell_export_path.is_empty() {
+            PathBuf::from(format!("/home/charlie/tmp/{deal_id}.json"))
+        } else {
+            PathBuf::from(&self.freecell_export_path)
+        };
+        match self
+            .worker
+            .reconnoitre_freecell(context, request_id, destination, deal_id)
+        {
+            Ok(()) => {
+                self.active_run = Some(ActiveRun::FreeCellRecon);
+                self.stop_requested = false;
+                self.invalidate_preview();
+                self.worker_state = WorkerState::Connecting;
+                self.current_status = "Free Cell: acquiring one read-only frame".into();
+            }
+            Err(error) => {
+                self.freecell_recon_state.dispatch_failed();
+                self.worker_state = WorkerState::Error;
+                self.current_status = error;
+                self.push_log(self.current_status.clone());
+            }
+        }
+    }
 
     /// Offer both startup strategies before any socket connection or automatic capture.
     fn startup_choices(&mut self, ui: &mut egui::Ui) {
@@ -1916,13 +2020,13 @@ impl QmpQemuSocketApp {
 
 
             if app.solving_strategy == SolvingStrategy::ShortestPath {
-                ui.strong("Pyramid · Capture / reconnaissance / computed route");
-                ui.label("Capture controls remain read-only. Use the separate reconnaissance, input-free calculation and confirmed computed-route execution controls below.");
+                ui.strong(if app.game_mode==GameMode::FreeCell {"Free Cell · read-only RECON / export"} else {"Pyramid · Capture / reconnaissance / computed route"});
+                ui.label(if app.game_mode==GameMode::FreeCell {"RECON acquires one TCP v3 frame and exports all 52 directly read identities. A* is planned for v3.1.0; input is disabled."} else {"Capture controls remain read-only. Use the separate reconnaissance, input-free calculation and confirmed computed-route execution controls below."});
             }
             ui.horizontal_wrapped(|ui| {
                 ui.label("Game Type");
                 let previous_mode = app.game_mode;
-                ui.add_enabled_ui(controls_enabled && app.solving_strategy.permits_input(), |ui| {
+                ui.add_enabled_ui(controls_enabled, |ui| {
                     let style = ui.style_mut();
                     style.visuals.widgets.inactive.bg_fill = SETUP_BLUE;
                     style.visuals.widgets.hovered.bg_fill = SETUP_BLUE.gamma_multiply(1.2);
@@ -1933,6 +2037,7 @@ impl QmpQemuSocketApp {
 
 
                             for mode in GameMode::AVAILABLE {
+                                if app.solving_strategy==SolvingStrategy::ShortestPath && !matches!(mode,GameMode::Pyramid|GameMode::FreeCell){continue;}
                                 ui.selectable_value(&mut app.game_mode, mode, egui::RichText::new(mode.label()).strong());
                             }
                         });
@@ -1940,7 +2045,7 @@ impl QmpQemuSocketApp {
 
 
                 if app.game_mode != previous_mode {
-                    app.computer_vision_game_mode = app.game_mode;
+                    if app.solving_strategy==SolvingStrategy::ComputerVision { app.computer_vision_game_mode = app.game_mode; }
                     app.context_generation = app.context_generation.wrapping_add(1);
                     app.reconnaissance_form.confirmed_context = None;
                     app.reconnaissance_report = None;
@@ -1962,11 +2067,13 @@ impl QmpQemuSocketApp {
 
                     match app.worker.reset_progress(app.current_preview_context()) {
                         Ok(()) => {
+                            let independent_freecell = app.solving_strategy == SolvingStrategy::ShortestPath && app.game_mode == GameMode::FreeCell;
+                            let next = if independent_freecell { "Select RECON / Export 52 to acquire a frame" } else { "Capturing a fresh read-only frame" };
                             app.push_log(format!(
-                                "Game Type changed to {}; prior prediction and advisory progress were cleared. Capturing a fresh read-only frame; guest input events=0.",
+                                "Game Type changed to {}; prior prediction and advisory progress were cleared. {next}; guest input events=0.",
                                 app.game_mode,
                             ));
-                            app.request_capture("Game Type changed");
+                            if !independent_freecell {app.request_capture("Game Type changed");}
                         }
                         Err(error) => {
                             app.worker_state = WorkerState::Error;
@@ -1992,6 +2099,12 @@ impl QmpQemuSocketApp {
             }
 
 
+            if self.solving_strategy==SolvingStrategy::ShortestPath && self.game_mode==GameMode::FreeCell {
+                ui.add_enabled(controls_enabled, egui::TextEdit::singleline(&mut self.freecell_export_path).hint_text("Export path (blank = unique)").desired_width(240.0));
+                if bevel_button(ui,"RECON / Export 52 cards",SETUP_BLUE,false,controls_enabled).clicked() {
+                    self.request_freecell_recon();
+                }
+            }
             if bevel_button(ui, "Track", SETUP_BLUE, self.show_coordinates, controls_enabled).clicked() {
                 self.show_coordinates = !self.show_coordinates;
 
@@ -2054,7 +2167,7 @@ impl QmpQemuSocketApp {
                         && let Err(error) = self.request_stop() {
 
 
-                            if !matches!(self.active_run, Some(ActiveRun::Reconnaissance | ActiveRun::ComputedRoute | ActiveRun::PyramidSession)) {
+                            if !matches!(self.active_run, Some(ActiveRun::Reconnaissance | ActiveRun::FreeCellRecon | ActiveRun::ComputedRoute | ActiveRun::PyramidSession)) {
                                 self.active_run = None;
                             }
                             self.worker_state = WorkerState::Error;
@@ -3338,7 +3451,7 @@ fn active_run_after_worker_state(
 ) -> Option<ActiveRun> {
     if !matches!(
         active_run,
-        Some(ActiveRun::Reconnaissance | ActiveRun::ComputedRoute | ActiveRun::PyramidSession)
+        Some(ActiveRun::Reconnaissance | ActiveRun::FreeCellRecon | ActiveRun::ComputedRoute | ActiveRun::PyramidSession)
     ) && matches!(
         state,
         WorkerState::Detached | WorkerState::Ready | WorkerState::Uncertain | WorkerState::Error
@@ -4085,11 +4198,34 @@ fn paint_crosshair(painter: &egui::Painter, canvas: Rect, point: PixelPoint) {
 }
 
 
+/// Freeze explicit button intent independently of the selected operation budget.
+fn step_settings_for_owner(settings: StepRunSettings, owner: ActiveRun) -> StepRunSettings {
+    settings.with_single_step_diagnostics(owner == ActiveRun::StepOnce)
+}
+
+
 #[cfg(test)]
 mod tests {
     //! UI policy and coordinate-mapping regressions independent of a live window.
 
     use super::*;
+
+
+    /// A one-operation Multiple Steps run must not acquire Single step telemetry.
+    #[test]
+    fn single_step_302_button_intent_is_independent_of_budget() {
+        let settings = StepRunSettings::new(AnimationSettleDelays::default(), 1);
+        assert!(!settings.single_step_diagnostics());
+        assert!(step_settings_for_owner(settings, ActiveRun::StepOnce).single_step_diagnostics());
+        assert!(!step_settings_for_owner(settings, ActiveRun::MultiStep).single_step_diagnostics());
+        assert!(
+            !step_settings_for_owner(
+                settings.with_single_step_diagnostics(true),
+                ActiveRun::MultiStep
+            )
+            .single_step_diagnostics()
+        );
+    }
 
 
     /// Constructs a translated canvas at nominal size to exercise coordinate conversions.

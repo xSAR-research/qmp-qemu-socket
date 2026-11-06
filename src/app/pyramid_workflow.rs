@@ -822,6 +822,8 @@ pub(super) struct RouteCompletion<'a> {
     pub(super) result: &'a Result<String, String>,
     /// STOP was requested before this completion was handled.
     pub(super) stopped: bool,
+    /// Causal worker outcome; deliberate STOP is independent of a late UI latch.
+    pub(super) termination: crate::pyramid_workflow_model::RunTermination,
 }
 
 
@@ -842,6 +844,7 @@ pub(super) fn complete_route(
         plan_id,
         result,
         stopped,
+        termination,
     } = completion;
     if !form.accepts_finished(*owner, run_id) {
         return false;
@@ -852,7 +855,9 @@ pub(super) fn complete_route(
     }
     *owner = None;
     if *state != WorkerState::Detached {
-        *state = if result.is_err() || stopped {
+        *state = if termination == crate::pyramid_workflow_model::RunTermination::OperatorStopped {
+            if matches!(*state, WorkerState::Error | WorkerState::Uncertain) { *state } else { WorkerState::Ready }
+        } else if result.is_err() || stopped {
             WorkerState::Uncertain
         } else {
             WorkerState::Ready
@@ -897,7 +902,9 @@ pub(super) fn complete_session(
     workflow.finish_search();
     *owner = None;
     if *state != WorkerState::Detached {
-        *state = if completion.result.is_err() || stopped {
+        *state = if completion.termination == crate::pyramid_workflow_model::RunTermination::OperatorStopped {
+            if matches!(*state, WorkerState::Error | WorkerState::Uncertain) { *state } else { WorkerState::Ready }
+        } else if completion.result.is_err() || stopped {
             WorkerState::Uncertain
         } else {
             WorkerState::Ready

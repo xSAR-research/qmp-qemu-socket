@@ -404,6 +404,7 @@ fn run_fixture_with_appearance(
     });
     let qmp = QmpClient::connect(&context.socket_path).unwrap();
     let mut io = NativeIo {
+        stop_trace: &crate::worker::pyramid_stop::StopTrace::default(),
  execution_vision: plan.acquisition.vision.for_temporal_execution(),
  source_transition: None,
             ready_transition: None,

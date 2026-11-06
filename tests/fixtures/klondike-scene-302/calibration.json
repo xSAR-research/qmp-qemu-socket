@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "source_packet": "klondike-error-1793947870577-1145737-7-0",
+  "source_sha256": {
+    "first-rejected.png": "854ee8a7ad2246d2627caf37db71e66d41828689d87cd5f887a2c4bf705e6d08",
+    "last-observed.png": "c259c5fb3c604735a7dd7ba37339345248bb17dd760bd07b77c8529d0994db61",
+    "state.json": "aac75f648e750663ece8dc5ca915cf9674ef4db27376286e07fe5b554cad5dc1"
+  },
+  "dimensions": [
+    1920,
+    1080
+  ],
+  "manual_source": "SUIT 3 Ace Diamonds",
+  "manual_destination": "SUIT 4 empty dashed guide",
+  "old_foundation_counts": [
+    552,
+    552,
+    368,
+    0
+  ],
+  "foundations_required_for_scene": false,
+  "evidence": "byte-original runtime failure frames; no new capture or pixel modification"
+}

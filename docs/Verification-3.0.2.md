@@ -1,0 +1,21 @@
+# Verification — qmp-qemu-socket 3.0.2
+
+Removes the invalid Klondike SUIT/foundation scene requirement. Four felt gutters and at least five of seven PLAY top-edge probes remain mandatory; source HALO, Solver banner, fresh VM/pointer probes, STOP and no-replay rules retain their separate authority. Both byte-original incident frames now reach SUIT 3 at (1296,199). The other four GAME TYPE scene checks have no equivalent SUIT gate.
+
+Extended `SINGLE_STEP` JSON telemetry is written only to the complete session log for the explicit **Single step** button. Multiple Steps, including a budget of one, remain untraced. It records existing capture identities/probe counts/classification and attempted/acknowledged transport operations, without extra captures, retries or visible-panel noise. Existing failure packets remain independent and enabled.
+
+All six source gates passed, including 1,758 tests with no failures, ignored or filtered tests; six focused regressions passed. Approved version-only alignment passed locked check, release and bounded help. Source/aligned sets contain 996 inputs, with 994 unchanged after the two Cargo version edits. No fresh guest execution is claimed.
+
+Run from this repository root: `cargo run --release`. No secondary executable copy was created. See [verification](Verification-3.0.2.md) and [telemetry contract](klondike-failure-telemetry.md).
+
+## Exact release evidence
+
+Normal mutable Cargo executable: `/home/charlie/repo/RUST/qmp-qemu-socket/target/x86_64-unknown-linux-gnu/release/qmp-qemu-socket`; 16233120 bytes; SHA256 `b8d8b3260749bbeb97a20065f4acfa4cfbe53bf1d83c0919b11247047c8b417b`. Package 3.0.2, xSAR 0.10.0. The six source gates used nightly, `--locked --offline --package qmp-qemu-socket --target x86_64-unknown-linux-gnu --all-features`, strict private rustdoc, Clippy and full tests with `--include-ignored`. Existing local socket tests demonstrate unchanged wire order/counts with tracing on/off; they are not fresh guest acceptance.
+
+Source seal: `9a0acfe0bd28d525d95c6aa226ad82a52ce5af4e4311d5f1207387b839afe7af`. [Source receipt](/home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Klondike/Validation/klondike-scene-302-kszlr13h/qualification-app.json). [Aligned receipt](/home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Klondike/Validation/klondike-scene-302-kszlr13h/aligned-qualification.json). [Destination state](/home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Klondike/Validation/klondike-scene-302-kszlr13h/destination-state.json). Run the destination verifier with the independent state SHA256 supplied in the final delivery, not an untrusted digest derived from a replacement receipt.
+
+The failed first suite retained two historical assertions that required the removed SUIT gate. Only those tests were corrected; production logic was unchanged. The failed alignment preflight and [external server observation](/home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Klondike/Validation/klondike-scene-302-kszlr13h/external-server-observation.json) are preserved. During separate server work, only its observed Cargo.toml content and working patch changed; index/HEAD/status and three other pinned files matched. This release did not edit the server. Unrecorded pre-existing untracked sibling bytes are not retrospectively attested. All 2,307 prior evidence pins and the audited unchanged Tree Ring store remain preserved. Both current sidecars are measured and pinned as present, superseding only their prior literal-absence assertions; the baseline record is retained unchanged. No earlier-sidecar byte preservation, memory logical-equivalence or rendering-cause claim is made.
+
+## Code Analysis
+
+The removed check depended on legitimate source/destination decoration. Felt/PLAY layout, positive source/banner and pre-input probes still refuse unsupported input. Telemetry is private, request-scoped on the existing worker, lazily formats when enabled, preserves typed errors and never retries input. Capture identities belong to their actual response; aggregate timing is identity-free. No unsafe, dependency, thread or sibling API changes. Live reproduction and Microsoft Free Cell foundation-return legality remain unverified; this build changes no Free Cell gameplay rule.

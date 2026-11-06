@@ -17,6 +17,14 @@ use crate::{
 pub use xsar::qmp::{QmpError, QmpProbe};
 
 
+/// Explicit supported application keys, mapped to QEMU qcodes without parsing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SupportedKey {
+    /// Existing Draw shortcut; other keys require an explicit application contract.
+    Draw,
+}
+
+
 /// Application client using shared transport with the existing input settings.
 pub struct QmpClient {
     /// Shared protocol client; no independent transport copy exists here.
@@ -41,13 +49,21 @@ impl QmpClient {
 
     /// Freshly read QEMU running state and its active absolute pointer.
     pub fn probe(&mut self) -> Result<QmpProbe, QmpError> {
-        self.transport.probe()
+        crate::single_step_telemetry::operation(
+            "probe",
+            || serde_json::json!({}),
+            || self.transport.probe(),
+        )
     }
 
 
     /// Ask QEMU to write a PNG to an absolute, UTF-8, NUL-free path.
     pub fn screendump_png(&mut self, output_path: &Path) -> Result<(), QmpError> {
-        self.transport.screendump_png(output_path)
+        crate::single_step_telemetry::operation(
+            "screendump",
+            || serde_json::json!({"path": output_path}),
+            || self.transport.screendump_png(output_path),
+        )
     }
 
 
@@ -58,18 +74,21 @@ impl QmpClient {
         width: u32,
         height: u32,
     ) -> Result<(), QmpError> {
-        self.transport.move_pointer(point, width, height)
+        crate::single_step_telemetry::operation(
+            "pointer",
+            || serde_json::json!({"x": point.x, "y": point.y, "width": width, "height": height}),
+            || self.transport.move_pointer(point, width, height),
+        )
     }
 
 
     /// Send one normal-duration click without replaying uncertain input.
-    pub fn click(
-        &mut self,
-        point: PixelPoint,
-        width: u32,
-        height: u32,
-    ) -> Result<(), QmpError> {
-        self.transport.click(point, width, height)
+    pub fn click(&mut self, point: PixelPoint, width: u32, height: u32) -> Result<(), QmpError> {
+        crate::single_step_telemetry::operation(
+            "click",
+            || serde_json::json!({"x": point.x, "y": point.y, "width": width, "height": height}),
+            || self.transport.click(point, width, height),
+        )
     }
 
 
@@ -81,12 +100,29 @@ impl QmpClient {
         height: u32,
         hold: Duration,
     ) -> Result<(), QmpError> {
-        self.transport.click_with_hold(point, width, height, hold)
+        crate::single_step_telemetry::operation(
+            "click-with-hold",
+            || serde_json::json!({"x": point.x, "y": point.y, "width": width, "height": height, "hold_ms": hold.as_millis()}),
+            || self.transport.click_with_hold(point, width, height, hold),
+        )
     }
 
 
     /// Map the application Draw action to the crate's neutral qcode API.
     pub fn press_draw_key(&mut self) -> Result<(), QmpError> {
-        self.transport.press_key("d", KEY_HOLD)
+        self.press_key(SupportedKey::Draw)
+    }
+
+
+    /// Send one supported key with the existing hold and release-only recovery.
+    pub(crate) fn press_key(&mut self, key: SupportedKey) -> Result<(), QmpError> {
+        let qcode = match key {
+            SupportedKey::Draw => "d",
+        };
+        crate::single_step_telemetry::operation(
+            "key",
+            || serde_json::json!({"qcode": qcode, "hold_ms": KEY_HOLD.as_millis()}),
+            || self.transport.press_key(qcode, KEY_HOLD),
+        )
     }
 }

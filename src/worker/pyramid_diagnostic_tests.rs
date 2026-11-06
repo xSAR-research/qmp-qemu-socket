@@ -369,6 +369,7 @@ fn calculation_refusal_packet_precedes_matching_finish_and_preserves_original_er
     assert_eq!(diagnostic.error, ERROR);
     let WorkerEvent::ComputedRouteFinished {
         retained_recon: _,
+        termination: _,
         run_id,
         plan_id,
         result,

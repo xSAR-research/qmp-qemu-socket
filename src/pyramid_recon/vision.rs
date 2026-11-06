@@ -658,12 +658,16 @@ impl ReconVision {
                         self.tableau_reader.failure_details(view, origin)
                     );
                     if self.tableau_reader.foreground.is_some() {
-                        let location = (1_usize..=7).find_map(|row| {
-                            let first = row * (row - 1) / 2;
-                            (index >= first && index < first + row)
-                                .then(|| format!("{row}|{}", index - first + 1))
-                        }).unwrap_or_else(|| "invalid location".to_owned());
-                        details.push_str(&format!("; tableau location {location} (slot {index}, zero-based)"));
+                        let location = (1_usize..=7)
+                            .find_map(|row| {
+                                let first = row * (row - 1) / 2;
+                                (index >= first && index < first + row)
+                                    .then(|| format!("{row}|{}", index - first + 1))
+                            })
+                            .unwrap_or_else(|| "invalid location".to_owned());
+                        details.push_str(&format!(
+                            "; tableau location {location} (slot {index}, zero-based)"
+                        ));
                     }
                     details
                 })?;
@@ -800,8 +804,14 @@ impl ReconVision {
                 }
             } else {
                 if let Some(proof) = self.temporal_removed {
-                    require(proof.contains(index), &format!("execution slot {index} lacks temporal removal evidence"))?;
-                    require(self.tableau_reader.recognise(view, origin)?.is_none(), &format!("execution removed slot {index} contains a recognised card"))?;
+                    require(
+                        proof.contains(index),
+                        &format!("execution slot {index} lacks temporal removal evidence"),
+                    )?;
+                    require(
+                        self.tableau_reader.recognise(view, origin)?.is_none(),
+                        &format!("execution removed slot {index} contains a recognised card"),
+                    )?;
                     continue;
                 }
                 let (row, column) = xsar::games::pyramid::planning::tableau_coordinates(index)
@@ -812,7 +822,8 @@ impl ReconVision {
                 };
                 let slot = kind.slot_index().ok_or("invalid execution absence slot")?;
                 require(
-                    occupancy.as_ref().and_then(|occupancy| occupancy.get(slot)) == Some(&crate::pyramid::FaceEvidence::Absent),
+                    occupancy.as_ref().and_then(|occupancy| occupancy.get(slot))
+                        == Some(&crate::pyramid::FaceEvidence::Absent),
                     &format!("execution slot {index} lacks positive absence"),
                 )?;
             }
@@ -860,6 +871,56 @@ impl ReconVision {
                 && self.stock_face(view, RIGHT_BOUNDS, &self.board.right_empty)?
                     == StockFace::Empty,
         )
+    }
+
+
+    /// Read one checked location without requiring identities at unrelated positions.
+    ///
+    /// Strict native source scene/modal guards remain mandatory. Tableau failure
+    /// is Unreadable, never Empty; stock emptiness requires exclusive positive proof.
+    pub(crate) fn read_operation_card(
+        &self,
+        frame: &CapturedFrame,
+        location: xsar::games::pyramid::planning::Location,
+    ) -> Result<crate::game_operations::CardRead, crate::game_operations::OperationError> {
+        use crate::game_operations::{CardRead, OperationError};
+        use xsar::games::pyramid::planning::Location;
+        self.verify_source_scene(frame)
+            .map_err(OperationError::Recognition)?;
+        let view = frame
+            .as_view()
+            .map_err(|e| OperationError::Invalid(e.to_string()))?;
+        if let Location::Tableau(tableau) = location {
+            let origin = TABLEAU_ORIGINS
+                .get(tableau.index())
+                .copied()
+                .ok_or_else(|| {
+                    OperationError::Invalid("invalid original tableau location".to_owned())
+                })?;
+            return self
+                .tableau_reader
+                .recognise(view, origin)
+                .map(|card| card.map_or(CardRead::Unreadable, CardRead::Card))
+                .map_err(OperationError::Recognition);
+        }
+        let (bounds, empty) = match location {
+            Location::DL => (LEFT_BOUNDS, &self.board.left_empty),
+            Location::DR => (RIGHT_BOUNDS, &self.board.right_empty),
+            _ => return Err(OperationError::Invalid("invalid card location".to_owned())),
+        };
+        let card = self
+            .stock_reader
+            .recognise(view, (bounds.x, bounds.y))
+            .map_err(OperationError::Recognition)?;
+        let empty = self
+            .native_empty(view, bounds, empty)
+            .map_err(OperationError::Recognition)?;
+        Ok(match (card, empty) {
+            (Some(card), false) => CardRead::Card(card),
+            (None, true) => CardRead::Empty,
+            (Some(_), true) => CardRead::Ambiguous,
+            (None, false) => CardRead::Unreadable,
+        })
     }
 
 

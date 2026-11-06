@@ -659,6 +659,7 @@ fn matching_terminal_completion_reconciles_busy_badge_and_consumes_run() {
             &mut owner,
             &mut state,
             RouteCompletion {
+                termination: if succeeds { crate::pyramid_workflow_model::RunTermination::Completed } else { crate::pyramid_workflow_model::RunTermination::Failed },
                 retained_recon: false,
                 context: context.clone(),
                 run_id: id,
@@ -700,6 +701,7 @@ fn unmatched_terminal_completion_preserves_run_busy_state_and_plan() {
             &mut owner,
             &mut state,
             RouteCompletion {
+                termination: crate::pyramid_workflow_model::RunTermination::Failed,
                 retained_recon: false,
                 context: context.clone(),
                 run_id: incoming,
@@ -879,6 +881,7 @@ fn automatic_completion_then_manual_recon_preserves_export_and_prepares_new_name
         let run_id = route.begin_request().expect("automatic request identity");
         workflow.begin_session(&selected, run_id, serde_json::json!({}));
         let completion = SessionCompletion {
+            termination: crate::pyramid_workflow_model::RunTermination::Completed,
             context: selected.clone(),
             run_id,
             result: if succeeds {
@@ -1129,6 +1132,7 @@ fn final_automatic_statistics_precede_phase_and_survive_session_finish() {
         assert_eq!(displayed.stats, final_update.stats);
     }
     let completion = SessionCompletion {
+            termination: crate::pyramid_workflow_model::RunTermination::Completed,
         context: context.clone(),
         run_id: id,
         result: Ok("single board complete".to_owned()),
@@ -1277,6 +1281,7 @@ fn automatic_completion_is_identity_bound_and_preserves_stop_and_detached_states
         let mut owner = Some(ActiveRun::PyramidSession);
         let mut state = initial;
         let mut completion = SessionCompletion {
+            termination: if succeeds { crate::pyramid_workflow_model::RunTermination::Completed } else { crate::pyramid_workflow_model::RunTermination::Failed },
             context: context.clone(),
             run_id: id + 1,
             result: if succeeds {
@@ -1367,6 +1372,7 @@ fn failed_session_releases_optional_recon_and_new_start_in_same_context() {
     let mut owner = Some(ActiveRun::PyramidSession);
     let mut state = WorkerState::Capturing;
     let completion = SessionCompletion {
+            termination: crate::pyramid_workflow_model::RunTermination::Completed,
         context: context.clone(),
         run_id: id,
         result: Err("retained first failure".to_owned()),
@@ -1658,5 +1664,62 @@ fn maximum_pending_is_cleared_on_each_display_retirement() {
             _ => workflow.begin(&selected, PyramidPhase::Execution, serde_json::json!({})),
         }
         assert!(!workflow.maximum_pending());
+    }
+}
+
+
+/// Stale and duplicate cancellations cannot dispatch another STOP preview.
+#[test]
+fn stop_183_session_dispatches_one_preview_after_matching_owner_retires() {
+    use super::reset_preview::{dispatch_completion, CompletionDispatch, ResetPreview};
+    use crate::pyramid_workflow_model::RunTermination;
+    for initial in [WorkerState::Acting, WorkerState::Detached, WorkerState::Error, WorkerState::Uncertain] {
+        let selected = context();
+        let mut form = acquired_route(&selected);
+        let id = form.begin_request().unwrap();
+        let mut workflow = PyramidWorkflow::default();
+        workflow.begin_session(&selected, id, serde_json::json!({}));
+        let mut owner = Some(ActiveRun::PyramidSession);
+        let mut state = initial;
+        let mut queued = Vec::new();
+        let mut preview = None;
+        for (incoming, expected) in [(id+1, CompletionDispatch::Ignored), (id, CompletionDispatch::StopPreview), (id, CompletionDispatch::Ignored)] {
+            let completion = SessionCompletion { context: selected.clone(), run_id: incoming, termination: RunTermination::OperatorStopped, result: Err("Operator STOP".to_owned()) };
+            let accepted = complete_session(&mut workflow, &mut form, &mut owner, &mut state, &completion, &selected, true);
+            assert_eq!(dispatch_completion(accepted, completion.termination, || {
+                assert!(owner.is_none() && form.active_run_id.is_none());
+                preview = Some(ResetPreview::after_stop(41, selected.clone(), state));
+                queued.push((selected.clone(),41));
+            }), expected);
+        }
+        assert_eq!(queued, [(selected.clone(),41)]);
+        assert!(form.plan.is_none() && form.acquired_context.is_none() && form.confirmed_context.is_none());
+        assert!(!workflow.details_visible(&selected));
+        let mut refresh = preview.unwrap(); refresh.finish(); refresh.install();
+        assert_eq!(refresh.worker_state(), if matches!(initial, WorkerState::Error | WorkerState::Uncertain) { WorkerState::Error } else { WorkerState::Ready });
+    }
+}
+
+
+/// Route cancellation has the same single-dispatch and genuine-error preservation boundary.
+#[test]
+fn stop_183_route_dispatches_once_and_failed_late_stop_retains_error() {
+    use super::reset_preview::{dispatch_completion, CompletionDispatch};
+    use crate::pyramid_workflow_model::RunTermination;
+    for termination in [RunTermination::OperatorStopped, RunTermination::Failed] {
+        let selected = context();
+        let mut form = acquired_route(&selected);
+        let id = form.begin_request().unwrap();
+        let mut owner = Some(ActiveRun::ComputedRoute);
+        let mut state = WorkerState::Validating;
+        let result = Err("stopped or real failure".to_owned());
+        let mut queued = 0;
+        for incoming in [id+1,id,id] {
+            let accepted = complete_route(&mut form,&mut owner,&mut state,RouteCompletion { retained_recon:false, context:selected.clone(),run_id:incoming,plan_id:None,result:&result,stopped:true,termination });
+            let disposition = dispatch_completion(accepted,termination,|| { assert!(owner.is_none() && form.active_run_id.is_none()); queued+=1; });
+            if incoming==id+1 { assert_eq!(disposition, CompletionDispatch::Ignored); }
+        }
+        assert_eq!(queued, usize::from(termination==RunTermination::OperatorStopped));
+        assert_eq!(state, if termination==RunTermination::OperatorStopped {WorkerState::Ready} else {WorkerState::Uncertain});
     }
 }

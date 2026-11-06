@@ -1,4 +1,4 @@
-//! Optional original-PNG recording for worker-owned GAME WIN sequences.
+//! Default-enabled original-PNG recording for worker-owned GAME WIN sequences.
 //!
 //! Startup resets only the fixed diagnostics directory. The worker supplies the
 //! existing capture bytes and their startup-relative capture-completion time;
@@ -35,17 +35,18 @@ pub(crate) enum StartupOptions {
 
 /// Parse arguments excluding the executable name, validating every argument.
 ///
-/// Help does not bypass invalid or duplicated arguments. Call startup reset
+/// Recording is enabled unless `--no-image` is supplied. Help does not bypass
+/// invalid or duplicated arguments. Call startup reset
 /// only after this function has returned a successful `Run` decision.
 pub(crate) fn parse_args(
     args: impl IntoIterator<Item = OsString>,
 ) -> Result<StartupOptions, String> {
-    let mut images = false;
+    let mut images = true;
     let mut help = false;
     for argument in args {
         match argument.to_str() {
-            Some("--image") if !images => images = true,
-            Some("--image") => return Err("Duplicate startup option --image.".to_owned()),
+            Some("--no-image") if images => images = false,
+            Some("--no-image") => return Err("Duplicate startup option --no-image.".to_owned()),
             Some("--help" | "-h") if !help => help = true,
             Some("--help" | "-h") => return Err("Duplicate startup help option.".to_owned()),
             _ => return Err(format!("Unsupported startup argument {argument:?}; use --help.")),
@@ -362,9 +363,15 @@ mod tests {
     /// Defaults and supported help/image combinations produce explicit startup decisions.
     #[test]
     fn startup_options_accept_only_supported_intents() {
-        assert_eq!(parse_args(arguments(&[])), Ok(StartupOptions::Run { images: false }));
-        assert_eq!(parse_args(arguments(&["--image"])), Ok(StartupOptions::Run { images: true }));
-        for flags in [["--help", "--image"], ["--image", "-h"]] {
+        assert_eq!(
+            parse_args(arguments(&[])),
+            Ok(StartupOptions::Run { images: true })
+        );
+        assert_eq!(
+            parse_args(arguments(&["--no-image"])),
+            Ok(StartupOptions::Run { images: false })
+        );
+        for flags in [["--help", "--no-image"], ["--no-image", "-h"]] {
             assert_eq!(parse_args(arguments(&flags)), Ok(StartupOptions::Help));
         }
         assert_eq!(parse_args(arguments(&["-h"])), Ok(StartupOptions::Help));
@@ -375,8 +382,13 @@ mod tests {
     #[test]
     fn startup_options_reject_invalid_arguments_even_after_help() {
         for flags in [
-            vec!["--image", "--image"], vec!["--help", "-h"],
-            vec!["--help", "--unknown"], vec!["--images"], vec!["image"],
+            vec!["--no-image", "--no-image"],
+            vec!["--help", "-h"],
+            vec!["--help", "--unknown"],
+            vec!["--help", "--no-image", "--no-image"],
+            vec!["--image"],
+            vec!["--images"],
+            vec!["image"],
         ] {
             assert!(parse_args(arguments(&flags)).is_err(), "{flags:?}");
         }

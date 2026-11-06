@@ -22,19 +22,19 @@ use crate::{
 
 
 /// Native card-face origins for the four temporary cells, left to right.
-const CELL_X: [u32; 4] = [166, 358, 551, 743];
+pub(crate) const CELL_X: [u32; 4] = [166, 358, 551, 743];
 
 
 /// Native card-face origins for the eight play columns, left to right.
-const PLAY_X: [u32; 8] = [218, 410, 603, 795, 988, 1_180, 1_373, 1_565];
+pub(crate) const PLAY_X: [u32; 8] = [218, 410, 603, 795, 988, 1_180, 1_373, 1_565];
 
 
 /// Native foundation face origins measured from FC01/FC02/FC05/FC08.
-const FOUNDATION_X: [u32; 4] = [1_041, 1_233, 1_425, 1_618];
+pub(crate) const FOUNDATION_X: [u32; 4] = [1_041, 1_233, 1_425, 1_618];
 
 
 /// Measured face width; the exterior outline is read only outside this width.
-const CARD_WIDTH: u32 = 137;
+pub(crate) const CARD_WIDTH: u32 = 137;
 
 
 /// Earliest source outline above the initial first play card at row 331.

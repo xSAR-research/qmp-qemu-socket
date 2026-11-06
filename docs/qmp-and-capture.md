@@ -84,10 +84,11 @@ See the [idle EOF repair](../History/documentation-index.md#item-8645e99f2402a3c
 See the [combined capture contract](../History/documentation-index.md#item-48faeace9a3dd39dd842) for limits,
 separate timings, compatibility and operator verification.
 
-Ordinary TCP capture requests no PNG and creates no temporary file. With
-`--image`, the worker encodes and caches the same captured frame before
-recognition so later GAME WIN entry evidence remains available. Recording
-writes only within the existing GAME WIN scope; no extra screen grab is made.
+Ordinary TCP capture requests no PNG from the server and creates no temporary
+file. By default, the worker encodes and caches the same captured frame before
+recognition so later GAME WIN entry evidence remains available. `--no-image`
+disables this recording and its additional cache. Recording writes only within
+the existing GAME WIN scope; no extra screen grab is made.
 See [GAME WIN diagnostics](game-win-images.md).
 
 Gameplay uses one initial planning frame and one result frame per ordinary

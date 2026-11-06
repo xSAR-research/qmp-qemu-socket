@@ -214,6 +214,57 @@ struct Runner<'adapter, Adapter> {
 }
 
 
+/// Borrow the existing Runner so all authority, capture and ledger checks stay owned.
+struct RestorationIo<'runner, 'adapter, Adapter>(&'runner mut Runner<'adapter, Adapter>);
+
+
+impl<Adapter: ReconIo> crate::game_operations::restoration::UndoAllIo
+    for RestorationIo<'_, '_, Adapter>
+{
+    type Board = BoardObservation;
+
+    fn observe(
+        &mut self,
+    ) -> Result<
+        crate::game_operations::restoration::UndoScene<Self::Board>,
+        crate::game_operations::OperationError,
+    > {
+        use crate::game_operations::{OperationError, restoration::UndoScene};
+        self.0
+            .capture()
+            .map(|scene| match scene {
+                ReconScene::Board(board) => UndoScene::Board(board),
+                ReconScene::UndoConfirmation { ok } => UndoScene::Confirmation { ok },
+                ReconScene::Unknown => UndoScene::Unknown,
+            })
+            .map_err(OperationError::Adapter)
+    }
+
+    fn input(
+        &mut self,
+        input: crate::game_operations::restoration::UndoInput,
+    ) -> Result<(), crate::game_operations::OperationError> {
+        use crate::game_operations::{OperationError, restoration::UndoInput};
+        let input = match input {
+            UndoInput::UndoAll(point) => ReconInput::UndoAll(point),
+            UndoInput::Confirm(point) => ReconInput::Confirm(point),
+            UndoInput::UndoLast(_) => {
+                return Err(OperationError::Unsupported(
+                    "Pyramid Recon has no single-Undo adapter".to_owned(),
+                ));
+            }
+        };
+        self.0.perform(input).map_err(OperationError::Adapter)
+    }
+
+    fn settle(&mut self) -> Result<(), crate::game_operations::OperationError> {
+        self.0
+            .settle()
+            .map_err(crate::game_operations::OperationError::Adapter)
+    }
+}
+
+
 impl<Adapter: ReconIo> Runner<'_, Adapter> {
 
 
@@ -374,8 +425,14 @@ impl<Adapter: ReconIo> Runner<'_, Adapter> {
                 continue;
             }
             source_checks += 1;
-            if observed.left == StockFace::Empty { empty_observations += 1; } else { empty_observations = 0; }
-            if source_checks < 2 { continue; }
+            if observed.left == StockFace::Empty {
+                empty_observations += 1;
+            } else {
+                empty_observations = 0;
+            }
+            if source_checks < 2 {
+                continue;
+            }
 
 
             if paired {
@@ -483,79 +540,16 @@ impl<Adapter: ReconIo> Runner<'_, Adapter> {
         self.io.progress(
             "Recon inventory complete: 28 tableau + 24 ordered stock; LEFT positively empty twice; 24 draws acknowledged; one calibrated Undo All attempt, toolbar icon advisory",
         );
-        self.perform(ReconInput::UndoAll(SHARED_UNDO_ALL_CONTROL.click_point))?;
-        let mut confirmation_target = None;
-
-
-        for observation in 0..MAX_OBSERVATIONS {
-            match self.capture()? {
-                ReconScene::UndoConfirmation { ok } => {
-                    confirmation_target = Some(ok);
-                    break;
-                }
-                ReconScene::Board(observed) if same_arrangement(&current, &observed) => {}
-                _ => {
-                    return Err(
-                        "Unexpected scene after Undo All; confirmation input withheld".to_owned(),
-                    );
-                }
-            }
-
-
-            if observation + 1 < MAX_OBSERVATIONS {
-                self.settle()?;
-            }
-        }
-        let ok = confirmation_target.ok_or_else(|| {
-            "Undo All confirmation did not appear within the observation budget".to_owned()
-        })?;
-
-
-        if !matches!(self.capture()?, ReconScene::UndoConfirmation { ok: fresh } if fresh == ok) {
-            return Err(
-                "Undo All confirmation signature changed before OK; input withheld".to_owned(),
-            );
-        }
-        self.perform(ReconInput::Confirm(ok))?;
-        // Confirmation ACK proves delivery; allow the modal to settle before observing restoration.
-        self.settle()?;
-        let mut restored_observations = 0;
-
-
-        for observation in 0..MAX_OBSERVATIONS {
-            match self.capture()? {
-                ReconScene::Board(observed) if same_arrangement(&initial, &observed) => {
-                    restored_observations += 1;
-
-
-                    if restored_observations == 2 {
-                        self.progress.restored = true;
-                        break;
-                    }
-                }
-                ReconScene::Board(observed) if same_arrangement(&current, &observed) => {
-                    restored_observations = 0;
-                }
-                ReconScene::UndoConfirmation { ok: fresh } if fresh == ok => {
-                    restored_observations = 0;
-                }
-                _ => {
-                    return Err(
-                        "Unexpected scene while verifying original-board restoration".to_owned(),
-                    );
-                }
-            }
-
-
-            if restored_observations == 0 && observation + 1 < MAX_OBSERVATIONS {
-                self.settle()?;
-            }
-        }
-
-
-        if !self.progress.restored {
-            return Err("OK delivery did not prove original-board restoration twice; no complete JSON published".to_owned());
-        }
+        crate::game_operations::restoration::undo_all(
+            &mut RestorationIo(self),
+            &initial,
+            &current,
+            SHARED_UNDO_ALL_CONTROL.click_point,
+            same_arrangement,
+            MAX_OBSERVATIONS,
+        )
+        .map_err(|error| error.to_string())?;
+        self.progress.restored = true;
         let stock: [Card; 24] = self
             .progress
             .stock
@@ -963,8 +957,11 @@ mod tests {
                 resumed.left = StockFace::Card(deck()[29]);
             }
             let next = observation(StockFace::Card(deck()[29]), StockFace::Card(deck()[28]));
-            let mut adapter =
-                FakeIo::new(vec![ReconScene::Board(resumed), ReconScene::Board(next.clone()), ReconScene::Board(next)]);
+            let mut adapter = FakeIo::new(vec![
+                ReconScene::Board(resumed),
+                ReconScene::Board(next.clone()),
+                ReconScene::Board(next),
+            ]);
             adapter.pause_durations.push_back(MAX_DURATION);
             // Simulate elapsed wall time without sleeping or weakening active().
             let started = Instant::now()

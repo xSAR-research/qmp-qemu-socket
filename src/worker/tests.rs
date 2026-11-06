@@ -1098,6 +1098,66 @@ fn preparation_execution_command_has_no_connection_capture_or_input_events() {
 }
 
 
+/// Telemetry closes on an early command refusal and never leaks to a one-step multi-run.
+#[test]
+fn single_step_302_worker_trace_is_scoped_to_explicit_request() {
+    let (command_tx, command_rx) = mpsc::channel();
+    let (events, receiver) = mpsc::channel();
+    let latest_frame = LatestFrameSlot::default();
+    let sink = WorkerEventSink {
+        events,
+        latest_frame: latest_frame.clone(),
+        capture_context: Mutex::new(None),
+    };
+    for (generation, single) in [(31, true), (32, false)] {
+        let context = ControllerContext::new(
+            PathBuf::from("/nonexistent-single-step-telemetry/qmp.sock"),
+            GameMode::Pyramid,
+            SolvingStrategy::ShortestPath,
+            generation,
+        );
+        command_tx
+            .send(WorkerCommand::ExecuteSteps {
+                context,
+                approved_prediction: PredictedAction::NoHighlight,
+                settings: Box::new(
+                    StepRunSettings::new(crate::parameters::AnimationSettleDelays::default(), 1)
+                        .with_single_step_diagnostics(single),
+                ),
+            })
+            .expect("queue bounded invalid execution without transport");
+    }
+    command_tx
+        .send(WorkerCommand::Shutdown)
+        .expect("queue shutdown");
+    run_worker(
+        command_rx,
+        sink,
+        Arc::new(AtomicBool::new(true)),
+        Arc::new(AtomicBool::new(false)),
+    );
+    let notifications: Vec<_> = receiver.try_iter().collect();
+    let telemetry: Vec<_> = notifications
+        .iter()
+        .filter_map(|event| match &event.event {
+            WorkerEvent::SessionTelemetry(message) => Some((event, message)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(telemetry.len(), 3, "begin, request and end only");
+    assert!(
+        telemetry
+            .iter()
+            .all(|(event, _)| event.context.as_ref().unwrap().generation == 31)
+    );
+    assert!(telemetry.first().unwrap().1.contains("begin"));
+    assert!(telemetry.last().unwrap().1.contains("end"));
+    assert!(!notifications.iter().any(|event| matches!(&event.event,
+        WorkerEvent::Log(message) if message.contains("SINGLE_STEP"))));
+    assert!(latest_frame.take().is_none());
+}
+
+
 /// Free Cell blank frames cannot inherit a progress bar or another mode's scene authority.
 #[test]
 fn freecell_native_capture_rejects_unknown_scene_and_malformed_storage() {
@@ -2583,6 +2643,214 @@ mod tripeaks_reward_qmp_regressions {
         sync::atomic::AtomicU64,
         thread,
     };
+
+
+    /// Real transport retains capture, frame guard, fresh probe and typed input order.
+    #[test]
+    #[ignore = "requires local AF_UNIX sockets"]
+    fn operations_native_capture_click_and_key_are_single_use() {
+        operations_native_transport(false, false);
+    }
+
+
+    /// STOP raised by the fresh probe prevents every pointer, button and key event.
+    #[test]
+    #[ignore = "requires local AF_UNIX sockets"]
+    fn operations_native_probe_stop_withholds_all_input() {
+        operations_native_transport(true, false);
+    }
+
+
+    /// Extended telemetry observes the same native capture, probe, click and key calls.
+    #[test]
+    #[ignore = "requires local AF_UNIX sockets"]
+    fn single_step_302_native_transport_trace_does_not_add_operations() {
+        operations_native_transport(false, true);
+    }
+
+
+    /// Exercise the production adapter against one bounded local QMP peer.
+    fn operations_native_transport(stop_after_probe: bool, trace_enabled: bool) {
+        use crate::game_operations::{Input, OperationError, Session};
+        use crate::qmp::SupportedKey;
+        let _capture_backend = TestCaptureBackend::legacy_qmp();
+        let directory = SocketDirectory(std::env::temp_dir().join(format!(
+            "game-operations-qmp-{}-{}",
+            std::process::id(),
+            NEXT_REWARD_SOCKET.fetch_add(1, Ordering::Relaxed)
+        )));
+        fs::create_dir(&directory.0).unwrap();
+        let socket = directory.0.join("qmp.sock");
+        let listener = UnixListener::bind(&socket).unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let order = Arc::new(Mutex::new(Vec::<&'static str>::new()));
+        let server_order = Arc::clone(&order);
+        let cancel = Arc::new(AtomicBool::new(false));
+        let server_cancel = Arc::clone(&cancel);
+        let server = thread::spawn(move || {
+            let mut stream = accept(&listener);
+            stream
+                .set_read_timeout(Some(Duration::from_secs(15)))
+                .unwrap();
+            let mut reader = BufReader::new(stream.try_clone().unwrap());
+            packet(
+                &mut stream,
+                json!({"QMP": {"version": {"qemu": {"major": 11, "minor": 0, "micro": 0}}, "capabilities": []}}),
+            );
+            let mut inputs = Vec::new();
+            loop {
+                let mut line = String::new();
+                if reader.read_line(&mut line).unwrap() == 0 {
+                    break;
+                }
+                let request: Value = serde_json::from_str(&line).unwrap();
+                let id = request["id"].as_u64().unwrap();
+                match request["execute"].as_str().unwrap() {
+                    "qmp_capabilities" => ack(&mut stream, id),
+                    "screendump" => {
+                        server_order.lock().unwrap().push("capture");
+                        assert_eq!(request["arguments"]["format"], "png");
+                        fs::write(
+                            request["arguments"]["filename"].as_str().unwrap(),
+                            REWARD_PNG,
+                        )
+                        .unwrap();
+                        ack(&mut stream, id);
+                    }
+                    "query-status" => {
+                        server_order.lock().unwrap().push("status");
+                        packet(
+                            &mut stream,
+                            json!({"return": {"running": true, "status": "running"}, "id": id}),
+                        );
+                    }
+                    "query-mice" => {
+                        server_order.lock().unwrap().push("mice");
+                        if stop_after_probe {
+                            server_cancel.store(true, Ordering::Release);
+                        }
+                        packet(
+                            &mut stream,
+                            json!({"return": [{"name": "QEMU HID Tablet", "index": 0, "current": true, "absolute": true}], "id": id}),
+                        );
+                    }
+                    "input-send-event" => {
+                        server_order.lock().unwrap().push("input");
+                        inputs.push(request["arguments"]["events"].clone());
+                        ack(&mut stream, id);
+                    }
+                    other => panic!("unexpected operation QMP command: {other}"),
+                }
+            }
+            inputs
+        });
+        let (events, _receiver) = mpsc::channel();
+        let sink = WorkerEventSink {
+            events,
+            latest_frame: LatestFrameSlot::default(),
+            capture_context: Mutex::new(None),
+        };
+        let expected = decode_png(REWARD_PNG).unwrap();
+        let point = PixelPoint::new(863, 862);
+        let mut qmp = QmpClient::connect(&socket).unwrap();
+        let guard_order = Arc::clone(&order);
+        let io = super::super::game_operations::NativeOperations {
+            qmp: &mut qmp,
+            socket: &socket,
+            events: &sink,
+            cancel: &cancel,
+            active: || Ok(()),
+            guard: |frame: &CapturedFrame, _input: Input| {
+                assert_eq!(frame.pixels, expected.pixels);
+                guard_order.lock().unwrap().push("guard");
+                Ok(())
+            },
+            last_timing: None,
+        };
+        let telemetry = Arc::new(Mutex::new(Vec::new()));
+        let sink = Arc::clone(&telemetry);
+        let scope = crate::single_step_telemetry::Scope::install(trace_enabled, move |line| {
+            sink.lock().unwrap().push(line);
+        });
+        let mut operations = Session::new(io);
+        operations.screen_capture().unwrap();
+        if stop_after_probe {
+            assert!(matches!(
+                operations.mouse_left_click(point),
+                Err(OperationError::Cancelled)
+            ));
+        } else {
+            assert_eq!(operations.mouse_left_click(point).unwrap().frame_serial, 1);
+            assert!(matches!(
+                operations.mouse_left_click(point),
+                Err(OperationError::Invalid(_))
+            ));
+            operations.screen_capture().unwrap();
+            assert_eq!(
+                operations
+                    .send_key_stroke(SupportedKey::Draw)
+                    .unwrap()
+                    .frame_serial,
+                2
+            );
+            assert!(matches!(
+                operations.send_key_stroke(SupportedKey::Draw),
+                Err(OperationError::Invalid(_))
+            ));
+        }
+        drop(operations);
+        drop(scope);
+        let lines = telemetry.lock().unwrap();
+        if trace_enabled {
+            for operation in ["screendump", "probe", "click", "key"] {
+                assert!(
+                    lines
+                        .iter()
+                        .any(|line| line.contains(&format!("\"operation\":\"{operation}\""))),
+                    "missing {operation}"
+                );
+            }
+            assert_eq!(
+                lines
+                    .iter()
+                    .filter(|line| line.contains("\"event\":\"capture\""))
+                    .count(),
+                2
+            );
+            assert!(lines.iter().any(|line| line.contains("\"event\":\"end\"")));
+        } else {
+            assert!(lines.is_empty());
+        }
+        drop(lines);
+        drop(qmp);
+        let inputs = server.join().unwrap();
+        if stop_after_probe {
+            assert_eq!(
+                *order.lock().unwrap(),
+                ["capture", "guard", "status", "mice"]
+            );
+            assert!(inputs.is_empty());
+        } else {
+            assert_eq!(
+                *order.lock().unwrap(),
+                [
+                    "capture", "guard", "status", "mice", "input", "input", "input", "capture",
+                    "guard", "status", "mice", "input", "input"
+                ]
+            );
+            let mapped = wire_point(point);
+            assert_eq!(
+                inputs,
+                [
+                    json!([{"type":"abs", "data":{"axis":"x", "value":mapped.0}}, {"type":"abs", "data":{"axis":"y", "value":mapped.1}}]),
+                    json!([{"type":"btn", "data":{"button":"left", "down":true}}]),
+                    json!([{"type":"btn", "data":{"button":"left", "down":false}}]),
+                    json!([{"type":"key", "data":{"down":true, "key":{"type":"qcode", "data":"d"}}}]),
+                    json!([{"type":"key", "data":{"down":false, "key":{"type":"qcode", "data":"d"}}}]),
+                ]
+            );
+        }
+    }
 
 
     /// RESET captures once after STOP without input, prediction or epoch changes.

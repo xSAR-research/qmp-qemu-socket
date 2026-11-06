@@ -494,6 +494,7 @@ fn restored_boundary(
     let mut qmp = QmpClient::connect(&context.socket_path).map_err(|error| error.to_string())?;
     let result = {
         let mut io = QmpReconIo {
+            stop_trace: &super::super::pyramid_stop::StopTrace::default(),
             qmp: &mut qmp,
             context,
             control: &events.latest_frame.reconnaissance,
@@ -540,6 +541,7 @@ fn joint_baseline_boundary(
     let mut qmp = QmpClient::connect(&context.socket_path).map_err(|e| e.to_string())?;
     let result = {
         let mut io = QmpReconIo {
+            stop_trace: &super::super::pyramid_stop::StopTrace::default(),
             qmp: &mut qmp,
             context,
             control: &events.latest_frame.reconnaissance,

@@ -1,5 +1,13 @@
 # Free Cell Block 1 implementation plan — T=0s RECON
 
+## Current implementation status — 3.0.0
+
+Charlie approved RECON-only 3.0.0, with A* deferred to 3.1.0, and subsequently approved xSAR 0.10.0 plus the three lock updates. The implementation and host qualification below now exist; this banner supersedes older procedural text saying implementation awaits approval. Design and acceptance invariants below remain in force.
+
+Retained source qualification: xSAR 20 gates/311 full tests; controller six gates/1,748 full tests. Approved version alignment passed locked checks for xSAR, controller and console, the console tests, controller release and bounded help. Only five authorised manifests/locks changed after qualification: 987 sealed inputs, 982 unchanged. No secondary executable, guest/GUI action, installation or Git publication occurred.
+
+Native acceptance remains pending: FC01/FC13 are evaluation originals, not blind threshold hold-outs; native PLAY-bottom Two, authentic dealing/unsupported-scale/artwork negatives and fresh operator-checked guest RECON/export remain unverified. Foundation Twos establish typography only. Source/socket tests do not establish live acceptance or completion of all Block 1 acceptance rows. See [RECON contract](free-cell-block-1-recon.md) and [verification](Verification-3.0.0.md).
+
 Status: planning artefact for review. Implementation has not started.
 
 Charlie has approved **v3.0.0 as the first Free Cell build**. This document does not change a manifest or create a qualifying build. Approval to implement Block 1 remains a separate gate.

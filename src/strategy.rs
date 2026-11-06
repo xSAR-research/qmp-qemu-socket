@@ -8,7 +8,7 @@ use crate::game::GameMode;
 /// User-selected controller; independent preparation does not grant general input.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SolvingStrategy {
-    /// Read-only Pyramid preparation; reconnaissance uses separate explicit authority.
+    /// Independent Pyramid preparation and read-only Free Cell RECON; no ordinary input authority.
     ShortestPath,
     /// Existing guest Solver/HALO controllers for all five game types.
     #[default]
@@ -36,7 +36,7 @@ impl SolvingStrategy {
     pub const fn description(self) -> &'static str {
         match self {
             Self::ShortestPath => {
-                "Calculate a bounded route for a same-session restored Pyramid deal, then execute one tableau with observed effects. Interrupted execution requires inspection and fresh acquisition."
+                "Prepare and execute independently verified Pyramid routes, or read and export a Free Cell starting deal. Free Cell route search and execution are unavailable in this release."
             }
             Self::ComputerVision => {
                 "Follow the game's built-in Solver highlights using screen captures and QMP input."
@@ -87,10 +87,10 @@ impl ControllerContext {
 
     /// Reject unsupported strategy/game combinations before connection or input.
     pub fn validate(&self) -> Result<(), String> {
-
-
-        if self.strategy == SolvingStrategy::ShortestPath && self.game_mode != GameMode::Pyramid {
-            return Err("Independent preparation currently supports Pyramid only".to_owned());
+        if self.strategy == SolvingStrategy::ShortestPath
+            && !matches!(self.game_mode, GameMode::Pyramid | GameMode::FreeCell)
+        {
+            return Err("Independent preparation currently supports Pyramid and read-only Free Cell RECON only".to_owned());
         }
         Ok(())
     }
@@ -106,7 +106,7 @@ mod tests {
 
     /// Preparation stays Pyramid-only and cannot grant guest-input authority.
     #[test]
-    fn preparation_is_pyramid_only_and_never_input_authority() {
+    fn preparation_is_pyramid_or_freecell_and_never_input_authority() {
         assert!(!SolvingStrategy::ShortestPath.permits_input());
         assert!(SolvingStrategy::ComputerVision.permits_input());
 
@@ -118,7 +118,7 @@ mod tests {
                 SolvingStrategy::ShortestPath,
                 1,
             );
-            assert_eq!(independent.validate().is_ok(), game == GameMode::Pyramid);
+            assert_eq!(independent.validate().is_ok(), matches!(game, GameMode::Pyramid | GameMode::FreeCell));
             let vision = ControllerContext::new(
                 independent.socket_path,
                 game,

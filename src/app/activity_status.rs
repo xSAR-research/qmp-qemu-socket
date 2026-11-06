@@ -29,11 +29,16 @@ pub(super) fn header<R>(
         worker: app.worker_state,
         owner: app.active_run,
         phase: app.pyramid_workflow.activity_phase(&context),
-        failure: app.pyramid_workflow.details_visible(&context)
-            && !app
-                .reset_preview
-                .as_ref()
-                .is_some_and(|refresh| refresh.context == context && app.active_run.is_none()),
+        failure: app
+            .reset_preview
+            .as_ref()
+            .is_some_and(|refresh| refresh.context == context && refresh.preserves_failure)
+            || app.pyramid_workflow.details_visible(&context)
+                && !app.reset_preview.as_ref().is_some_and(|refresh| {
+                    refresh.acknowledges_failure
+                        && refresh.context == context
+                        && app.active_run.is_none()
+                }),
         reset_preview_pending: app
             .reset_preview
             .as_ref()
@@ -100,7 +105,7 @@ impl Evidence {
             };
         }
         match self.owner {
-            Some(ActiveRun::Reconnaissance) => Status::Recon,
+            Some(ActiveRun::Reconnaissance | ActiveRun::FreeCellRecon) => Status::Recon,
             Some(ActiveRun::StepOnce | ActiveRun::MultiStep) => Status::Solve,
             Some(ActiveRun::ComputedRoute | ActiveRun::PyramidSession) => match self.phase {
                 Some(PyramidPhase::Reconnaissance) => Status::Recon,

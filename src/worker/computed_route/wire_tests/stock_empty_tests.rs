@@ -278,6 +278,7 @@ fn run_stock_empty_tail(
         })
         .sum();
     let mut io = NativeIo {
+        stop_trace: &crate::worker::pyramid_stop::StopTrace::default(),
  execution_vision: plan.acquisition.vision.for_temporal_execution(),
  source_transition: None,
             ready_transition: None,

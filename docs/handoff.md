@@ -1,46 +1,32 @@
-# Active handoff — qualified 2.9.179 / unchanged xSAR 0.9.1
+# Active handoff — qmp-qemu-socket 3.0.2
 
-Free Cell now checks all four foundation stacks for a complete closed solid source HALO after its existing CELL and lowest-PLAY priorities. The measured native slots use checked one-click mapping. Dashed destinations and incomplete sources remain refused. Klondike already scanned all four foundations; its production detector and controller remain unchanged, with stronger coordinate/invalid-column regression coverage.
+Approved goal m13299 completed: Klondike SUIT scene-gate correction, cross-game scene audit and explicit Single step extended session-file telemetry. xSAR remains 0.10.0; Free Cell A* remains deferred to 3.1.0. Guest confirmation of this correction is pending.
 
-All six application gates passed, including 1708 tests with zero failed, ignored, measured or filtered, followed by aligned locked check, release and protected help. The 56 unchanged xSAR inputs retain cached sixteen-gate qualification. Foundation source tests translate retained native source pixels; no new Free Cell foundation-source screenshot or fresh guest acceptance is claimed.
+Baseline_HEAD_SHA: 30dc3835eca3adcc8d7f997df398fc569f5c918c
+Baseline_PARENT_SHA: 0d2eb0fb6352473fbb31b28e39b74991076d4daa
 
-## Current scope and next work
+## Run
 
-The user-authorised foundation correction is complete. The editable
-[gameplay function catalogue](gameplay-function-work-tasks.md) is ready for review;
-it proposes future capture/input/card/control/Undo/exploration functions and is
-not an implemented general solver module. Keep its contents and the existing
-refactoring task-list contents out of long-term memory and search indexes.
+From `/home/charlie/repo/RUST/qmp-qemu-socket`:
+
+```sh
+cargo run --release
+```
+
+GAME WIN storage is on by default; `cargo run --release -- --no-image` opts out only from that recording. Failure packets remain enabled; no secondary executable was created. Normal binary SHA256 `b8d8b3260749bbeb97a20065f4acfa4cfbe53bf1d83c0919b11247047c8b417b`, 16233120 bytes. Rebuilding this mutable target invalidates that artifact identity.
 
 ## Destination sentinel
 
-Run once before further edits, from the canonical application checkout:
+Use the independent SHA256 supplied in the final delivery/checkpoint:
 
-    python3 /home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/foundation-cv-179-20261104-7grs5lnu/verify-destination.py
+```sh
+python3 /home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Klondike/Validation/klondike-scene-302-kszlr13h/verify-destination.py --state-sha256 <trusted-delivery-state-sha256>
+```
 
-Require HANDOFF VERIFIED, or preserve the exact HANDOFF REGRESSION and investigate
-the bounded discrepancy. The prior178 published-HEAD mismatch remains historical;
-current publication/lifecycle reconciliation is recorded in the baseline. Do not
-delete receipts or broadly ignore changes. [State](../Evidence/Pyramid/Validation/foundation-cv-179-20261104-7grs5lnu/destination-state.json).
+The [destination receipt](/home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Klondike/Validation/klondike-scene-302-kszlr13h/destination-state.json) pins 996 compiler inputs, all current documentation/evidence, exact four-repository HEAD/index/patch/status and observed server files. A mismatch is `HANDOFF REGRESSION`, not a cached pass. Preserve historical sentinels and exact discrepancies; automatic post-checkpoint metadata must be measured narrowly. Do not reset, overwrite evidence or broadly ignore memory paths. The server has independent staged/unstaged work; preserve it unchanged from the pinned observed snapshot.
 
-## Retained baseline
+## Evidence and next action
 
-Baseline_HEAD_SHA: 0d2eb0fb6352473fbb31b28e39b74991076d4daa
-Parent: 390310066c6b394ac329b6372c11b189a0404517
+1,758 full source tests, six focused regressions, all six gates and aligned check/release/help passed. [Verification](Verification-3.0.2.md), [telemetry contract](klondike-failure-telemetry.md), [publication commands](/home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Klondike/Validation/klondike-scene-302-kszlr13h/COMMIT-PUSH.md). Current xSAR path-dependency revision c4a9b839ece3668b8d46ca00676ae05c34a97943 and dirty state are recorded, not a Git pin. Original incident PNGs, failed suite/preflight and prior 3.0.1 release evidence remain preserved. No guest input, GUI startup, extra capture, staging, commit or push was performed for release verification.
 
-The source gate covered 952 paired inputs; only own Cargo manifest/lock changed
-178→179 afterward, leaving950 unchanged. All56xSAR input hashes match the cached
-library qualification. The server's existing Cargo.lock change, all four histories,
-indices and unrelated changes are preserved. Evidence/ and History/ remain private,
-ignored and untracked. Git patches are sealed as hashes to avoid retaining editable
-draft excerpts. [Verification](Verification-2.9.179.md) and
-[owned paths](../Evidence/Pyramid/Validation/foundation-cv-179-20261104-7grs5lnu/owned-paths.txt) record scope and evidence.
-
-## Executable
-
-    /home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Pyramid/Validation/foundation-cv-179-20261104-7grs5lnu/native/qmp-qemu-socket-2.9.179 --image
-
-SHA256 bddc724fd860516b402470f9de3d2171079f1c81ab31d2a48d7f2170d7ec54f1; 12583520 bytes; mode0700.
-
-No installation, new guest input/capture, staging, commit, push or sibling edit was
-performed. Fresh live acceptance of the rare foundation recommendation is pending.
+Charlie can relaunch the controller, reproduce using Single step and inspect `SINGLE_STEP` records in the normal complete session log. Multiple Steps with one operation remains untraced. The agent must not perform that live test without authority. Microsoft Free Cell foundation-return legality is unverified and no policy change was made. Git promotion remains Charlie-owned; use only the prepared explicit application paths and review each sibling independently.

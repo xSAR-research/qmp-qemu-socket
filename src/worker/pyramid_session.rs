@@ -7,7 +7,7 @@
 
 use super::{
     WorkerEvent, WorkerEventSink, WorkerState, analyse_captured_frame, cancellable_wait,
-    capture_screen, computed_route, post_game, publish_pyramid_failure, pyramid_reconnaissance,
+    capture_screen_causal, computed_route, post_game, publish_pyramid_failure, pyramid_reconnaissance,
     send_log, send_state, send_status,
 };
 use crate::{
@@ -504,6 +504,10 @@ fn drive_no_challenge(io: &mut impl Pipeline) -> Result<String, String> {
 
 /// Complete native state for one immutable request and its one active reservation.
 struct Native<'a> {
+    /// Cause belongs to this session, never to a later shared STOP state.
+    stop_trace: super::pyramid_stop::StopTrace,
+    /// A failed phase boundary outranks any later shared STOP update.
+    phase_error: Option<String>,
     /// Context whose authority is checked at every boundary.
     context: &'a ControllerContext,
     /// Explicit start consent and fixed method/profile choices.
@@ -620,7 +624,7 @@ impl Native<'_> {
             .as_ref()
             .ok_or("Missing acquisition for challenge default")?;
         if let Some(method) =
-            computed_route::acquisition_default(self.context, path, self.events, self.cancel)?
+            computed_route::acquisition_default_causal(self.context, path, self.events, self.cancel, &self.stop_trace)?
         {
             self.method = method;
             send_log(
@@ -639,7 +643,8 @@ impl Native<'_> {
     fn capture(&mut self, qmp: &mut QmpClient) -> Result<CapturedFrame, String> {
         self.check()?;
         send_state(self.events, WorkerState::Capturing);
-        let (frame, _) = capture_screen(qmp, &self.context.socket_path, self.events)?;
+        let (frame, _) = capture_screen_causal(qmp, &self.context.socket_path, self.events)
+            .map_err(|error| self.stop_trace.capture_error(error, &self.events.latest_frame.reconnaissance, self.context, self.cancel))?;
         self.latest = Some(frame.clone());
         self.events.publish_diagnostic_frame(frame.clone());
         self.check()?;
@@ -658,7 +663,10 @@ impl Native<'_> {
     fn wait(&self) -> Result<(), String> {
         self.check()?;
         cancellable_wait(crate::parameters::PYRAMID_REOBSERVE_DELAY, self.cancel)
-            .map_err(|_| "STOP during automatic transition; no cleanup input".to_owned())?;
+            .map_err(|_| {
+                let _ = self.check();
+                "STOP during automatic transition; no cleanup input".to_owned()
+            })?;
         self.check()
     }
 
@@ -903,7 +911,7 @@ impl Native<'_> {
                 .as_ref()
                 .ok_or("Missing retained Recon path")?;
             let (_, bound) =
-                computed_route::reuse_metadata(self.context, path, self.events, self.cancel)?;
+                computed_route::reuse_metadata_causal(self.context, path, self.events, self.cancel, &self.stop_trace)?;
             if bound != self.challenge_progress {
                 return Err("Retained Recon challenge requirement differs from fresh entry; no input authorised".to_owned());
             }
@@ -971,17 +979,15 @@ impl Pipeline for Native<'_> {
             .latest
             .as_ref()
             .ok_or("Missing bound challenge completion frame")?;
-        post_game::finish_pyramid_challenge(self.context, frame, proof, self.events, self.cancel)?;
+        post_game::finish_pyramid_challenge(self.context, frame, proof, self.events, self.cancel, Some(post_game::RestartAuthority { context: self.context, trace: &self.stop_trace }))?;
         self.check()?;
         Ok(proof)
     }
 
 
     fn check(&self) -> Result<(), String> {
-        self.events
-            .latest_frame
-            .reconnaissance
-            .check_active(self.context, self.cancel)
+        if let Some(error) = &self.phase_error { return Err(error.clone()); }
+        self.stop_trace.check(&self.events.latest_frame.reconnaissance, self.context, self.cancel)
     }
 
 
@@ -1005,6 +1011,9 @@ impl Pipeline for Native<'_> {
                 .pause
                 .checkpoint(pause_phase, || self.check())
         {
+            if self.stop_trace.termination(true, true) != crate::pyramid_workflow_model::RunTermination::OperatorStopped {
+                self.phase_error = Some(error.message.clone());
+            }
             self.cancel
                 .store(true, std::sync::atomic::Ordering::Release);
             send_log(self.events, error.message);
@@ -1060,7 +1069,7 @@ impl Pipeline for Native<'_> {
         }
         if let Some(path) = self.reuse_acquisition.as_ref() {
             let (vision, progress) =
-                computed_route::reuse_metadata(self.context, path, self.events, self.cancel)?;
+                computed_route::reuse_metadata_causal(self.context, path, self.events, self.cancel, &self.stop_trace)?;
             self.vision = Some(vision);
             self.challenge_progress = progress;
         } else {
@@ -1107,7 +1116,7 @@ impl Pipeline for Native<'_> {
             && let Some(path) = self.reuse_acquisition.take()
         {
             let (vision, _) =
-                computed_route::reuse_metadata(self.context, &path, self.events, self.cancel)?;
+                computed_route::reuse_metadata_causal(self.context, &path, self.events, self.cancel, &self.stop_trace)?;
             self.vision = Some(vision);
             self.output = Some(path);
             self.starting = None;
@@ -1118,12 +1127,11 @@ impl Pipeline for Native<'_> {
             );
             self.apply_acquisition_default(false)?;
             self.publish_observed(
-                computed_route::acquisition_observed(
+                computed_route::acquisition_observed_causal(
                     self.context,
                     self.output.as_ref().ok_or("Missing reused acquisition")?,
                     self.events,
-                    self.cancel,
-                )?,
+                    self.cancel, &self.stop_trace)?,
                 "authenticated reused Recon",
             );
             return Ok(());
@@ -1161,7 +1169,7 @@ impl Pipeline for Native<'_> {
         };
         let result = if let Some(position) = no_challenge_start {
             let header = |_: &CapturedFrame| Ok(());
-            pyramid_reconnaissance::run_owned_with_starting_guard(
+            pyramid_reconnaissance::run_owned_with_starting_guard_causal(
                 self.context,
                 &request,
                 self.request.run_id,
@@ -1173,6 +1181,7 @@ impl Pipeline for Native<'_> {
                 },
                 self.events,
                 self.cancel,
+                &self.stop_trace,
             )
         } else if let Some(witness) = challenge_witness {
             let header = |_: &CapturedFrame| Ok(());
@@ -1183,7 +1192,7 @@ impl Pipeline for Native<'_> {
                     crate::pyramid_workflow_model::ObservedGame::Challenge { kings: true, .. }
                 ),
             };
-            pyramid_reconnaissance::run_owned_with_starting_guard(
+            pyramid_reconnaissance::run_owned_with_starting_guard_causal(
                 self.context,
                 &request,
                 self.request.run_id,
@@ -1195,6 +1204,7 @@ impl Pipeline for Native<'_> {
                 },
                 self.events,
                 self.cancel,
+                &self.stop_trace,
             )
         } else if let Some(witness) = witness {
             let header = |frame: &CapturedFrame| {
@@ -1213,7 +1223,7 @@ impl Pipeline for Native<'_> {
                 header: &header,
                 challenge: None,
             };
-            pyramid_reconnaissance::run_owned_with_starting_guard(
+            pyramid_reconnaissance::run_owned_with_starting_guard_causal(
                 self.context,
                 &request,
                 self.request.run_id,
@@ -1221,26 +1231,29 @@ impl Pipeline for Native<'_> {
                 guard,
                 self.events,
                 self.cancel,
+                &self.stop_trace,
             )
         } else {
-            pyramid_reconnaissance::run_owned(
+            pyramid_reconnaissance::run_owned_causal(
                 self.context,
                 &request,
                 self.request.run_id,
                 generation,
                 self.events,
                 self.cancel,
+                &self.stop_trace,
             )
         };
         self.failure_saved = result.is_err();
         self.output = Some(result?);
         self.apply_acquisition_default(true)?;
         self.publish_observed(
-            computed_route::acquisition_observed(
+            computed_route::acquisition_observed_causal(
                 self.context,
                 self.output.as_ref().ok_or("Missing restored acquisition")?,
                 self.events,
                 self.cancel,
+                &self.stop_trace,
             )?,
             "authenticated restored Recon",
         );
@@ -1253,7 +1266,7 @@ impl Pipeline for Native<'_> {
             .output
             .as_ref()
             .ok_or("No current published acquisition")?;
-        let result = computed_route::calculate_owned_with_policy(
+        let result = computed_route::calculate_owned_causal(
             self.context,
             self.request.run_id,
             output,
@@ -1262,6 +1275,7 @@ impl Pipeline for Native<'_> {
             self.events,
             self.cancel,
             self.request.stop_condition == StopCondition::NoChallenge,
+            &self.stop_trace,
         );
         self.failure_saved = result.is_err();
         let report = result?;
@@ -1275,63 +1289,28 @@ impl Pipeline for Native<'_> {
     fn execute(&mut self, generation: u64) -> Result<BoardCompletion, String> {
         self.starting = None;
         self.restart_entry = None;
-        let result = if self.request.mode == WorkflowMode::Continuous
-            && self.request.stop_condition == StopCondition::ChallengeTarget
-        {
-            self.challenge_progress.ok_or(
-                "Continuous challenge execution lacks its bound requirement; no input authorised",
-            )?;
-            computed_route::execute_session(
-                self.context,
-                self.request.run_id,
-                generation,
-                computed_route::ExecutionPolicy::Continuous,
-                None,
-                self.events,
-                self.cancel,
-            )
-        } else if self.request.mode == WorkflowMode::Continuous
-            && self.request.stop_condition == StopCondition::NoChallenge
-        {
-            computed_route::execute_session(
-                self.context,
-                self.request.run_id,
-                generation,
-                computed_route::ExecutionPolicy::NoChallenge,
-                None,
-                self.events,
-                self.cancel,
-            )
-        } else if self.request.mode == WorkflowMode::Continuous {
-            let progress = self.series.ok_or(
-                "Continuous execution has no qualified current series witness; no input authorised",
-            )?;
-            let header =
-                |frame: &CapturedFrame, phase| guard_normal_progress(frame, phase, progress);
-            computed_route::execute_owned_with_frame_guard(
-                self.context,
-                self.request.run_id,
-                self.request.run_id,
-                true,
-                generation,
-                &header,
-                computed_route::ExecutionPolicy::NormalSeries(progress),
-                self.events,
-                self.cancel,
-            )
+        let policy = if self.request.mode != WorkflowMode::Continuous {
+            computed_route::ExecutionPolicy::Standard
+        } else if self.request.stop_condition == StopCondition::ChallengeTarget {
+            self.challenge_progress.ok_or("Continuous challenge execution lacks its bound requirement; no input authorised")?;
+            computed_route::ExecutionPolicy::Continuous
+        } else if self.request.stop_condition == StopCondition::NoChallenge {
+            computed_route::ExecutionPolicy::NoChallenge
         } else {
-            computed_route::execute_owned(
-                self.context,
-                self.request.run_id,
-                self.request.run_id,
-                true,
-                generation,
-                self.events,
-                self.cancel,
-            )
+            computed_route::ExecutionPolicy::NormalSeries(self.series.ok_or("Continuous execution has no qualified current series witness; no input authorised")?)
         };
+        let header = |frame: &CapturedFrame, phase| match self.series {
+            Some(progress) => guard_normal_progress(frame, phase, progress),
+            None => Err("Continuous execution lacks its qualified series witness".to_owned()),
+        };
+        let guard: Option<&computed_route::FrameGuard<'_>> =
+            if matches!(policy, computed_route::ExecutionPolicy::NormalSeries(_)) { Some(&header) } else { None };
+        let result = computed_route::execute_session_causal(self.context, self.request.run_id, generation, policy, guard, self.events, self.cancel);
         self.failure_saved = result.is_err();
-        let report = result?;
+        let report = result.map_err(|failure| {
+            self.stop_trace.adopt(failure.termination);
+            failure.message
+        })?;
         if let Some(progress) = report.challenge_progress {
             self.challenge_progress = Some(progress);
         }
@@ -1513,7 +1492,7 @@ impl Pipeline for Native<'_> {
                 self.cancel,
                 vision,
                 &mut self.latest,
-            ),
+             Some(post_game::RestartAuthority { context: self.context, trace: &self.stop_trace })),
             None => post_game::run_independent_pyramid_restart_retaining_frame(
                 &mut qmp,
                 &self.context.socket_path,
@@ -1524,7 +1503,7 @@ impl Pipeline for Native<'_> {
                 self.cancel,
                 vision,
                 &mut self.latest,
-            ),
+             Some(post_game::RestartAuthority { context: self.context, trace: &self.stop_trace })),
         };
         let outcome = outcome?;
         self.check()?;
@@ -1555,6 +1534,8 @@ pub(super) fn run(
     cancel: &AtomicBool,
 ) {
     let mut io = Native {
+        stop_trace: Default::default(),
+        phase_error: None,
         context,
         request,
         events,
@@ -1600,7 +1581,9 @@ pub(super) fn run(
     } else {
         drive(request.mode, &mut io)
     };
+    let mut termination = io.stop_trace.termination(result.is_err(), true);
     if let Err(error) = &result
+        && termination != crate::pyramid_workflow_model::RunTermination::OperatorStopped
         && !io.failure_saved
     {
         let phase = match io.phase {
@@ -1631,13 +1614,14 @@ pub(super) fn run(
     match events.latest_frame.computed_route.lock() {
         Ok(mut store) => *store = computed_route::Store::default(),
         Err(_) => {
-            result = Err("Session receipt retirement lock poisoned; restart required".to_owned())
+            result = Err("Session receipt retirement lock poisoned; restart required".to_owned());
+            termination = crate::pyramid_workflow_model::RunTermination::Failed;
         }
     }
     events.latest_frame.reconnaissance.finish();
     send_state(
         events,
-        if result.is_ok() {
+        if result.is_ok() || termination == crate::pyramid_workflow_model::RunTermination::OperatorStopped {
             WorkerState::Ready
         } else {
             WorkerState::Uncertain
@@ -1652,6 +1636,7 @@ pub(super) fn run(
     let _ = events.send(WorkerEvent::PyramidSessionFinished(SessionCompletion {
         context: context.clone(),
         run_id: request.run_id,
+        termination,
         result,
     }));
 }

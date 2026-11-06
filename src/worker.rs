@@ -8,6 +8,8 @@
 mod computed_route;
 mod control_search;
 mod freecell_execution;
+mod freecell_reconnaissance;
+mod game_operations;
 #[cfg(test)]
 mod image_recording_tests;
 mod initial_recovery;
@@ -18,6 +20,7 @@ pub(crate) mod pyramid_pause;
 mod pyramid_reconnaissance;
 pub(crate) mod pyramid_search_control;
 mod pyramid_session;
+mod pyramid_stop;
 mod spider_execution;
 mod tcp_capture;
 #[cfg(test)]
@@ -214,6 +217,15 @@ enum WorkerCommand {
         /// Bounded inspection-only fields supplied by the UI.
         details: serde_json::Value,
     },
+    /// Acquire and export exactly one supported native Free Cell initial frame.
+    ReconnoitreFreeCell {
+        /// Immutable controller selection reserved for this acquisition.
+        context: ControllerContext,
+        /// Checked UI correlation identity; never a search or input permit.
+        request_id: u64,
+        /// Exact export destination and bounded descriptive deal identity.
+        request: freecell_reconnaissance::Request,
+    },
     /// Capture and analyse a read-only advisory preview.
     CaptureFrame {
         /// Immutable socket, game and strategy selection for this request.
@@ -304,6 +316,15 @@ pub struct WorkerRunFailure {
 
 /// Small ordered notifications sent from the worker to the UI.
 pub enum WorkerEvent {
+    /// Correlated completion of the independent read-only Free Cell workflow.
+    FreeCellReconFinished {
+        /// Checked identity of the acquisition that has released its reservation.
+        request_id: u64,
+        /// Causal completion category, retaining genuine failures over late STOP.
+        termination: crate::pyramid_workflow_model::RunTermination,
+        /// Export result or first refusal, independent of retained diagnostic pixels.
+        result: Result<freecell_reconnaissance::Report, String>,
+    },
     /// Ordered completion of a RESET-only read-only preview.
     ResetPreviewFinished {
         /// UI request identity; never an input permit.
@@ -319,12 +340,16 @@ pub enum WorkerEvent {
     PyramidSessionFinished(SessionCompletion),
     /// Detailed diagnostic text for visible and session logs.
     Log(String),
+    /// Extended Single step evidence persisted only in the private session log.
+    SessionTelemetry(String),
     /// Source-owned stop details, tagged with the original request context and failure time.
     RunFailure(WorkerRunFailure),
     /// Concise current-operation text for the status area.
     Status(String),
     /// Reconnaissance ended; only success identifies a published complete deal.
     ReconnaissanceFinished {
+        /// Causal cancellation remains distinct from a genuine acquisition failure.
+        termination: crate::pyramid_workflow_model::RunTermination,
         /// Published path or a diagnostic failure, with no automatic input retry.
         result: Result<PathBuf, String>,
         /// Advisory current-board default from authenticated restored native evidence.
@@ -336,6 +361,8 @@ pub enum WorkerEvent {
     },
     /// One calculation or execution ended; run IDs prevent late same-context release.
     ComputedRouteFinished {
+        /// Causal completion; operator cancellation is distinct from failure.
+        termination: crate::pyramid_workflow_model::RunTermination,
         /// Input-free planning kept the sole Recon receipt without a card route.
         retained_recon: bool,
         /// Request identity reserved by the UI.
@@ -1003,6 +1030,39 @@ impl WorkerHandle {
 
     /// Queue one read-only capture for the immutable controller context.
     ///
+    /// Reserve one explicit Free Cell acquisition; no search or input receipt is minted.
+    pub fn reconnoitre_freecell(
+        &self,
+        context: ControllerContext,
+        request_id: u64,
+        destination: PathBuf,
+        deal_id: String,
+    ) -> Result<(), String> {
+        self.check_accepting_requests()?;
+        context.validate()?;
+        let request = freecell_reconnaissance::Request {
+            destination,
+            deal_id,
+        };
+        request.validate(&context)?;
+        self.latest_frame
+            .reconnaissance
+            .select(&context, &self.cancel_requested)?;
+        self.latest_frame.reconnaissance.queue_reconnaissance(
+            &context,
+            &self.cancel_requested,
+            || {
+                self.command_tx
+                    .send(WorkerCommand::ReconnoitreFreeCell {
+                        context: context.clone(),
+                        request_id,
+                        request,
+                    })
+                    .map_err(|e| format!("QMP worker is unavailable: {e}"))
+            },
+        )
+    }
+
     /// Returns an error if the worker command channel has closed.
     pub fn capture_frame(&self, context: ControllerContext) -> Result<(), String> {
         self.check_accepting_requests()?;
@@ -1340,12 +1400,10 @@ impl WorkerHandle {
     ///
     /// Returns an error if the worker channel has closed; QEMU remains running.
     pub fn disconnect(&self, context: ControllerContext) -> Result<(), String> {
+        self.latest_frame.reconnaissance.operator_stop(&context, &self.cancel_requested);
         self.latest_frame.pause.abort();
         self.latest_frame.search_control.abort();
         // Requests that the worker return to its detached state.
-        self.latest_frame
-            .reconnaissance
-            .stop(Some(&context), &self.cancel_requested);
         self.latest_frame.clear_planning_progress();
         self.command_tx
             .send(WorkerCommand::Disconnect(context))
@@ -1496,12 +1554,30 @@ fn run_worker(
                     },
                 );
             }
-            WorkerCommand::CaptureResetPreview { context, request_id } => {
+            WorkerCommand::CaptureResetPreview {
+                context,
+                request_id,
+            } => {
                 event_tx.set_capture_context(Some(context.clone()));
                 let result = capture_preparation_frame(&context, &event_tx).map(|frame| {
-                    event_tx.latest_frame.publish_tagged(frame, None, false, false, Some(context.clone()), Some(request_id));
+                    event_tx.latest_frame.publish_tagged(
+                        frame,
+                        None,
+                        false,
+                        false,
+                        Some(context.clone()),
+                        Some(request_id),
+                    );
                 });
-                let _ = event_tx.send_for_context(Some(context), WorkerEvent::ResetPreviewFinished { request_id, result });
+                let _ = event_tx.send_for_context(
+                    Some(context),
+                    WorkerEvent::ResetPreviewFinished { request_id, result },
+                );
+            }
+            WorkerCommand::ReconnoitreFreeCell { context, request_id, request } => {
+                let _capture_scope = tcp_capture::CancellationScope::install(Arc::clone(&cancel_requested));
+                event_tx.set_capture_context(Some(context.clone()));
+                freecell_reconnaissance::run(&context, request_id, &request, &event_tx, &cancel_requested);
             }
             WorkerCommand::CaptureFrame { context } => {
                 event_tx.set_capture_context(Some(context.clone()));
@@ -1548,6 +1624,22 @@ fn run_worker(
                 approved_prediction,
                 settings,
             } => {
+                let telemetry_events = event_tx.events.clone();
+                let telemetry_context = context.clone();
+                let _single_step_telemetry = crate::single_step_telemetry::Scope::install(
+                    settings.single_step_diagnostics(),
+                    move |message| {
+                        let _ = telemetry_events.send(ContextualWorkerEvent {
+                            context: Some(telemetry_context.clone()),
+                            emitted_at: worker_elapsed(),
+                            event: WorkerEvent::SessionTelemetry(message),
+                        });
+                    },
+                );
+                crate::single_step_telemetry::record(|| serde_json::json!({
+                    "event": "request", "context": format!("{context:?}"),
+                    "settings": format!("{settings:?}"), "approved_preview": format!("{approved_prediction:?}")
+                }));
                 let _capture_cancel =
                     tcp_capture::CancellationScope::install(Arc::clone(&cancel_requested));
                 event_tx.set_capture_context(Some(context.clone()));
@@ -1727,6 +1819,11 @@ fn capture_preparation_frame(
 
 /// Publish one raw preparation frame and its ordinary capture status.
 fn run_preparation_capture(context: &ControllerContext, event_tx: &WorkerEventSink) {
+    if context.game_mode == GameMode::FreeCell {
+        freecell_reconnaissance::preview(context, event_tx);
+        return;
+    }
+
 
 
     if let Err(error) = context.validate() {
@@ -2388,9 +2485,29 @@ fn wait_or_stop(
 }
 
 
-/// Per-stage wall times for TCP capture or explicit legacy QMP acquisition.
+/// Validated identifiers copied directly from the same TCP response as its pixels.
+#[derive(Clone, Copy, Debug)]
+struct CaptureIdentity {
+    /// Wire protocol version; legacy QMP has no identity.
+    protocol_version: u8,
+    /// Server session identity.
+    session_id: u64,
+    /// Client request identity.
+    request_id: u64,
+    /// Server frame identity.
+    frame_id: u64,
+    /// Validated display generation.
+    display_generation: u64,
+    /// Whether this capture reused its transport connection.
+    reused_connection: bool,
+}
+
+
+/// Measurements for one capture or an explicitly identity-free aggregate.
 #[derive(Clone, Copy, Debug, Default)]
 struct CaptureTiming {
+    /// Same-operation transport identity; absent for QMP or aggregate timings.
+    identity: Option<CaptureIdentity>,
     /// Number of fresh frames acquired.
     captures: usize,
     /// Time reserving private temporary capture paths.
@@ -2413,6 +2530,7 @@ impl CaptureTiming {
 
     /// Accumulate capture counts and per-stage durations from another capture measurement.
     fn add_assign(&mut self, other: Self) {
+        self.identity = None;
         self.captures = self.captures.saturating_add(other.captures);
         self.reserve += other.reserve;
         self.screendump += other.screendump;
@@ -2475,6 +2593,7 @@ impl RunProfile {
             halo_operations: 0,
             totals: ActionProfile {
                 capture: CaptureTiming {
+                    identity: None,
                     captures: 0,
                     reserve: Duration::ZERO,
                     screendump: Duration::ZERO,
@@ -3091,7 +3210,16 @@ fn execute_guarded_action(
                 before_series,
                 plan,
                 kind,
-                sources: pyramid_sources.ok_or_else(|| action_failure(action_started, profile, WorkerState::Ready, "Missing Pyramid source proof".to_owned(), None, FailureFramePhase::PreAction))?,
+                sources: pyramid_sources.ok_or_else(|| {
+                    action_failure(
+                        action_started,
+                        profile,
+                        WorkerState::Ready,
+                        "Missing Pyramid source proof".to_owned(),
+                        None,
+                        FailureFramePhase::PreAction,
+                    )
+                })?,
                 action_started,
                 profile,
             },
@@ -4543,22 +4671,78 @@ fn log_tcp_capture_timing(
 }
 
 
+/// Log existing full-frame evidence only inside explicit Single step telemetry scope.
+fn log_single_step_capture(frame: &CapturedFrame, timing: CaptureTiming) {
+    crate::single_step_telemetry::record(|| {
+        serde_json::json!({
+            "event": "capture", "layout": [frame.width, frame.height, frame.stride],
+            "transport": timing.identity.map(|id| serde_json::json!({
+                "protocol_version": id.protocol_version, "session_id": id.session_id,
+                "request_id": id.request_id, "frame_id": id.frame_id,
+                "display_generation": id.display_generation, "reused_connection": id.reused_connection
+            })),
+            "timings_ms": {"request": timing.screendump.as_secs_f64()*1000.0,
+                "read": timing.file_read.as_secs_f64()*1000.0, "decode": timing.decode.as_secs_f64()*1000.0},
+            "klondike_scene": crate::klondike::scene_diagnostics::inspect(frame)
+                .map(|report| report.value()).map_err(|error| error.to_string())
+        })
+    });
+}
+
+
 /// Acquire a frame without PNG work unless GAME WIN entry/sequence recording is enabled.
 fn capture_screen(
     qmp: &mut QmpClient,
     socket_path: &Path,
     event_tx: &WorkerEventSink,
 ) -> Result<(CapturedFrame, CaptureTiming), String> {
+    capture_screen_causal(qmp, socket_path, event_tx).map_err(|error| error.message)
+}
+
+
+/// Record the result of the same TCP acquisition, including its exact typed failure.
+fn capture_tcp_with_single_step_diagnostics(
+    address: &str,
+    mode: CaptureMode,
+    event_tx: &WorkerEventSink,
+) -> Result<(CapturedFrame, CaptureTiming, Option<Duration>), pyramid_stop::CaptureFailure> {
+    crate::single_step_telemetry::record(|| {
+        serde_json::json!({
+            "event": "capture-attempt", "backend": "TCP", "mode": format!("{mode:?}"),
+        })
+    });
+    let result = tcp_capture::capture_causal(address, mode, event_tx);
+    let captured_at = worker_elapsed();
+    crate::single_step_telemetry::record(|| {
+        serde_json::json!({
+            "event": "capture-result", "completed": result.is_ok(),
+            "error": result.as_ref().err().map(|error| &error.message),
+            "cancelled": result.as_ref().err().map(|error| error.cancelled),
+        })
+    });
+    if let Ok((frame, timing)) = &result {
+        log_single_step_capture(frame, *timing);
+    }
+    result.map(|(frame, timing)| (frame, timing, captured_at))
+}
+
+
+/// Share acquisition and recording without flattening a typed transport cancellation.
+fn capture_screen_causal(
+    qmp: &mut QmpClient,
+    socket_path: &Path,
+    event_tx: &WorkerEventSink,
+) -> Result<(CapturedFrame, CaptureTiming), pyramid_stop::CaptureFailure> {
     match selected_capture_backend()? {
         CaptureBackend::LegacyQmp => {
             let (frame, _png, timing) =
                 capture_screen_with_png_legacy_qmp(qmp, socket_path, event_tx)?;
+            log_single_step_capture(&frame, timing);
             Ok((frame, timing))
         }
         CaptureBackend::Tcp { address, mode } => {
             let requested_at = worker_elapsed();
-            let (frame, mut timing) = tcp_capture::capture(&address, mode, event_tx)?;
-            let captured_at = worker_elapsed();
+            let (frame, mut timing, captured_at) = capture_tcp_with_single_step_diagnostics(&address, mode, event_tx)?;
             if game_win_images_enabled() {
                 let png = encode_captured_png(&frame, &mut timing)?;
                 record_game_win_png(&png, captured_at, event_tx)?;
@@ -4576,12 +4760,25 @@ fn capture_screen_with_png(
     socket_path: &Path,
     event_tx: &WorkerEventSink,
 ) -> Result<(CapturedFrame, Vec<u8>, CaptureTiming), String> {
+    capture_screen_with_png_causal(qmp, socket_path, event_tx).map_err(|error| error.message)
+}
+
+
+/// Retain transport cancellation while encoding the same single captured frame.
+fn capture_screen_with_png_causal(
+    qmp: &mut QmpClient,
+    socket_path: &Path,
+    event_tx: &WorkerEventSink,
+) -> Result<(CapturedFrame, Vec<u8>, CaptureTiming), pyramid_stop::CaptureFailure> {
     match selected_capture_backend()? {
-        CaptureBackend::LegacyQmp => capture_screen_with_png_legacy_qmp(qmp, socket_path, event_tx),
+        CaptureBackend::LegacyQmp => {
+            let (frame, png, timing) = capture_screen_with_png_legacy_qmp(qmp, socket_path, event_tx)?;
+            log_single_step_capture(&frame, timing);
+            Ok((frame, png, timing))
+        },
         CaptureBackend::Tcp { address, mode } => {
             let requested_at = worker_elapsed();
-            let (frame, mut timing) = tcp_capture::capture(&address, mode, event_tx)?;
-            let captured_at = worker_elapsed();
+            let (frame, mut timing, captured_at) = capture_tcp_with_single_step_diagnostics(&address, mode, event_tx)?;
             let png = encode_captured_png(&frame, &mut timing)?;
             record_game_win_png(&png, captured_at, event_tx)?;
             log_tcp_capture_timing(event_tx, requested_at, captured_at, timing);

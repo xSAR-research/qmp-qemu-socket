@@ -1,5 +1,17 @@
 # Pyramid calibration and guarded execution
 
+## Qualified 2.9.181 — reusable game operations
+
+Added a private reusable game-operation layer for fresh native capture, guarded mouse/key input, pure card and option recognition, and bounded semantic Undo protocols. Pyramid Recon now uses its shared Undo All protocol with the existing capture, wait, confirmation, STOP and publication sequence preserved.
+
+All six application gates passed, including 1725 tests with zero failed, ignored, measured or filtered, followed by the approved 2.9.181 locked check, release and protected help. The 56 unchanged xSAR inputs retain cached qualification. Fresh live guest acceptance remains pending. [Verification](Verification-2.9.181.md); [operation contracts](game-operations.md).
+
+## Qualified 2.9.180 — foundation verification and INITIAL readiness
+
+Verified the existing four-SUIT foundation source handling in Free Cell and Klondike. Pyramid INITIAL source checking now waits for the bundled native stock/Draw scene anchor within its existing six-check budget. All static scene, legend, layout, modal, header and original-source checks must pass on the supported frame before input; POST remains strict.
+
+All six application gates passed, including 1713 tests with zero failed, ignored, measured or filtered, followed by aligned locked check, release and protected help. Five new readiness regressions and eight existing foundation checks passed. The 56 unchanged xSAR inputs retain cached sixteen-gate qualification. Fresh live guest acceptance remains pending. [Verification](Verification-2.9.180.md).
+
 ## Current request and proof ownership — 2.9.177
 
 | Boundary | Owner and retained contract |

@@ -12,6 +12,34 @@ use xsar::games::cards::Card;
 mod challenges;
 
 
+/// Returned budget/invariant failures outrank late STOP; usable and cancelled results still check authority.
+#[test]
+fn stop_183_completed_search_failure_preserves_policy_and_replacement_boundary() {
+    use xsar::search::{SearchStats, SearchStop};
+    for reason in [SearchStop::MemoryLimit, SearchStop::AllocationFailure, SearchStop::InternalInvariant] {
+        let outcome = BestEffortOutcome::Stopped { reason, stats: SearchStats::default() };
+        assert!(completed_search_failure(&outcome, true, false));
+        assert!(completed_search_failure(&outcome, false, false));
+    }
+    let cancelled = BestEffortOutcome::Stopped {
+        reason: SearchStop::Cancelled, stats: SearchStats::default(),
+    };
+    assert!(!completed_search_failure(&cancelled, true, false));
+    let partial = |actions, score, proof| BestEffortOutcome::Partial {
+        actions, score, proof, stats: SearchStats::default(),
+    };
+    let beneficial = partial(vec![RecordedAction::Move], 1, PartialProof::Bounded(SearchStop::TimeLimit));
+    assert!(completed_search_failure(&beneficial, true, false));
+    assert!(completed_search_failure(&beneficial, false, true));
+    assert!(!completed_search_failure(&beneficial, false, false));
+    assert!(completed_search_failure(&partial(Vec::new(), 0, PartialProof::Bounded(SearchStop::TimeLimit)), false, false));
+    assert!(!completed_search_failure(&partial(Vec::new(), 0, PartialProof::Exhaustive), false, false));
+    assert!(!completed_search_failure(&BestEffortOutcome::Solved {
+        actions: Vec::new(), minimum_proven: true, stats: SearchStats::default(),
+    }, true, false));
+}
+
+
 /// Interrupted search must not tell the operator that a winning route cannot exist.
 #[test]
 fn no_route_diagnostic_requires_exhaustive_proof() {

@@ -19,6 +19,8 @@
 //! Strong, incomplete Solve artwork defers lower tableau/foundation input through
 //! at most three input-free observations. It never weakens Solve click authority.
 
+mod diagnostics;
+
 use std::{path::Path, sync::atomic::{AtomicBool, Ordering}, time::{Duration, Instant}};
 
 use super::{
@@ -175,6 +177,8 @@ struct QmpKlondikeIo<'a> {
     cancel_requested: &'a AtomicBool,
     /// Bounded UI output and complete session log for scene and input diagnostics.
     event_tx: &'a WorkerEventSink,
+    /// Fixed first-rejected evidence and same-capture metadata.
+    diagnostics: &'a mut diagnostics::RunDiagnostics,
 }
 
 
@@ -184,9 +188,30 @@ impl KlondikeIo for QmpKlondikeIo<'_> {
     fn capture(&mut self) -> Result<CaptureResult, String> {
         require_running(self.cancel_requested)?;
         let started = Instant::now();
-        let (frame, timing) = capture_screen(self.qmp, self.socket_path, self.event_tx)?;
+        let (frame, mut timing) = capture_screen(self.qmp, self.socket_path, self.event_tx)?;
         self.event_tx.publish_diagnostic_frame(frame.clone());
+        let detection_started = Instant::now();
         let result = classify_captured_result(frame, self.scan_state, self.cancel_requested);
+        timing.detection = detection_started.elapsed();
+        crate::single_step_telemetry::record(|| match &result {
+            CaptureResult::Classified(observation) => serde_json::json!({
+                "event": "klondike-classification", "gameplay_scene": observation.gameplay_scene,
+                "prediction": format!("{:?}", observation.prediction)
+            }),
+            CaptureResult::Diagnostic { .. } => {
+                serde_json::json!({"event": "klondike-classification", "classified": false})
+            }
+        });
+        match &result {
+            CaptureResult::Classified(observation) => self.diagnostics.capture(
+                &observation.frame,
+                timing,
+                Some(observation.gameplay_scene),
+            ),
+            CaptureResult::Diagnostic { frame, .. } => {
+                self.diagnostics.capture(frame, timing, None)
+            }
+        }
         send_log(self.event_tx, format!(
             "PROFILE Klondike observation: acquisition and classification={:.1} ms; request={:.1} ms, receive/read={:.1} ms, convert/decode={:.1} ms, png-encode={:.1} ms.",
             milliseconds(started.elapsed()), milliseconds(timing.screendump), milliseconds(timing.file_read), milliseconds(timing.decode), milliseconds(timing.png_encode),
@@ -210,7 +235,8 @@ impl KlondikeIo for QmpKlondikeIo<'_> {
 
     fn capture_diagnostic(&mut self) -> Result<CapturedFrame, String> {
         require_running(self.cancel_requested)?;
-        capture_screen(self.qmp, self.socket_path, self.event_tx).map(|(frame, _timing)| {
+        capture_screen(self.qmp, self.socket_path, self.event_tx).map(|(frame, timing)| {
+            self.diagnostics.capture(&frame, timing, None);
             self.event_tx.publish_diagnostic_frame(frame.clone());
             frame
         })
@@ -240,7 +266,9 @@ impl KlondikeIo for QmpKlondikeIo<'_> {
 
     fn input(&mut self, plan: StepPlan) -> Result<(), String> {
         let started = Instant::now();
+        self.diagnostics.attempt(format!("Gameplay {plan:?}"));
         let result = execute_planned_input(self.qmp, plan, self.cancel_requested);
+        self.diagnostics.acknowledged(result.is_ok());
         send_log(self.event_tx, format!(
             "PROFILE Klondike input: {:.1} ms through QMP response handling; acknowledged={}; guest effect requires the next observation.",
             milliseconds(started.elapsed()), result.is_ok(),
@@ -251,12 +279,16 @@ impl KlondikeIo for QmpKlondikeIo<'_> {
 
     fn solver(&mut self) -> Result<(), String> {
         require_running(self.cancel_requested)?;
-        self.qmp.click_with_hold(
+        self.diagnostics
+            .attempt("Solver activation/refresh".to_owned());
+        let result = self.qmp.click_with_hold(
             klondike::SOLVER_CLICK,
             NOMINAL_FRAME_WIDTH,
             NOMINAL_FRAME_HEIGHT,
             SOLVER_MOUSE_HOLD,
-        ).map_err(|error| format!("Klondike Solver input is uncertain: {error}; no retry is permitted"))
+        ).map_err(|error| format!("Klondike Solver input is uncertain: {error}; no retry is permitted"));
+        self.diagnostics.acknowledged(result.is_ok());
+        result
     }
 
 
@@ -278,14 +310,22 @@ impl KlondikeIo for QmpKlondikeIo<'_> {
     }
 
 
-    fn terminal_input(&mut self, stage: klondike::terminal::TerminalStage, point: PixelPoint) -> Result<(), String> {
+    fn terminal_input(
+        &mut self,
+        stage: klondike::terminal::TerminalStage,
+        point: PixelPoint,
+    ) -> Result<(), String> {
         require_running(self.cancel_requested)?;
         if point == PixelPoint::new(0, 0) {
             return Err("Klondike refuses a no-match (0,0) control coordinate".to_owned());
         }
-        self.qmp.click_with_hold(
+        self.diagnostics
+            .attempt(format!("Terminal {stage}: {point:?}"));
+        let result = self.qmp.click_with_hold(
             point, NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT, stage.mouse_hold(),
-        ).map_err(|error| format!("Klondike {stage} input outcome is uncertain: {error}; no retry is permitted"))
+        ).map_err(|error| format!("Klondike {stage} input outcome is uncertain: {error}; no retry is permitted"));
+        self.diagnostics.acknowledged(result.is_ok());
+        result
     }
 
 
@@ -340,6 +380,12 @@ pub(super) fn run_klondike_steps(
     cancel_requested: &AtomicBool,
 ) {
     let started_at = super::worker_elapsed();
+    let context = event_tx
+        .capture_context
+        .lock()
+        .ok()
+        .and_then(|value| value.clone());
+    let mut diagnostics = diagnostics::RunDiagnostics::new();
     let mut latest = None;
     let mut input_attempted = false;
     let result = (|| {
@@ -349,7 +395,14 @@ pub(super) fn run_klondike_steps(
         let (mut qmp, probe) = connect_and_probe(socket_path)?;
         validate_probe(&probe)?;
         send_log(event_tx, probe.summary());
-        let mut io = QmpKlondikeIo { qmp: &mut qmp, socket_path, scan_state, cancel_requested, event_tx };
+        let mut io = QmpKlondikeIo {
+            qmp: &mut qmp,
+            socket_path,
+            scan_state,
+            cancel_requested,
+            event_tx,
+            diagnostics: &mut diagnostics,
+        };
         drive_run(
             &mut io, approved_prediction, settings, event_tx, cancel_requested,
             &mut latest, &mut input_attempted,
@@ -396,6 +449,11 @@ pub(super) fn run_klondike_steps(
             send_log(event_tx, format!("Klondike Solve requested once after {previous_verified} independently verified gameplay action(s) and {previous_halo} fresh-evidence continuations. Completion was not established within the bounded read-only observations; the latest result is diagnostic only. No further guest input was sent."));
         }
         Err(error) => {
+            match diagnostics.persist(latest.as_ref().map(|o| &o.frame), context.as_ref(), settings, started_at, &error) {
+                Ok(path) => send_log(event_tx, format!("Klondike exact failure packet: {}", path.display())),
+                Err(persistence) => send_log(event_tx, format!("Klondike telemetry persistence failed; original refusal retained: {persistence}")),
+            }
+
 
 
             if let Some(observation) = latest {

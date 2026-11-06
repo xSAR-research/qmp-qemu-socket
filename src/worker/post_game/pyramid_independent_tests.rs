@@ -484,7 +484,7 @@ fn run_with_entry_revocation(
     let mut qmp = QmpClient::connect(&socket).expect("actual local QMP handshake");
     let result = match entry {
         TestRestartEntry::Challenge(proof) => {
-            finish_pyramid_challenge(&completion_context, &initial.frame, proof, &sink, &cancel)
+            finish_pyramid_challenge(&completion_context, &initial.frame, proof, &sink, &cancel, None)
                 .map(|()| PostGameOutcome::Completed)
         }
         TestRestartEntry::Independent => run_independent_pyramid_restart_retaining_frame(
@@ -497,7 +497,7 @@ fn run_with_entry_revocation(
             &cancel,
             &vision,
             &mut latest_frame,
-        ),
+         None),
         TestRestartEntry::ComputerVision | TestRestartEntry::ComputerVisionNormal => {
             run_post_game_restart(
                 &mut qmp,
@@ -523,7 +523,7 @@ fn run_with_entry_revocation(
                 &cancel,
                 &vision,
                 &mut latest_frame,
-            )
+             None)
         }
         TestRestartEntry::WitnessedUncertain => run_witnessed_pyramid_restart_retaining_frame(
             &mut qmp,
@@ -536,7 +536,7 @@ fn run_with_entry_revocation(
             &cancel,
             &vision,
             &mut latest_frame,
-        ),
+         None),
     }
     .map(|outcome| matches!(outcome, PostGameOutcome::Restarted(_)));
     drop(qmp);

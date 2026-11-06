@@ -100,6 +100,13 @@ pub(super) fn analyse_frame(
     } else {
         (PredictedAction::NoHighlight, None)
     };
+    crate::single_step_telemetry::record(|| {
+        serde_json::json!({
+            "event": "classification", "game": format!("{:?}", scan_state.mode()),
+            "gameplay_scene": gameplay_scene, "prediction": format!("{prediction:?}"),
+            "observed_rows": format!("{observed_rows:?}"),
+        })
+    });
     Ok(FrameClassification { prediction, observed_rows, gameplay_scene, game_progress })
 }
 

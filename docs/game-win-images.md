@@ -1,14 +1,20 @@
 # GAME WIN image diagnostics
 
-Start the built controller with:
+Start the controller from the repository root with image storage enabled:
 
 ```zsh
-./target/release/qmp-qemu-socket --image
+cargo run --release
 ```
 
-Every actual application start removes `/home/charlie/tmp/images`. With `--image`,
-the application recreates this private directory (0700). Without the flag, it
-leaves the directory absent and records no diagnostic PNGs. `--help` and invalid
+To disable GAME WIN image storage:
+
+```zsh
+cargo run --release -- --no-image
+```
+
+Every actual application start removes `/home/charlie/tmp/images`. By default,
+the application recreates this private directory (0700). With `--no-image`, it
+leaves the directory absent and records no GAME WIN PNGs. `--help` and invalid
 arguments do not start the application or reset the directory. An unexpected
 symlink or non-directory at the exact image path is refused before opening the UI.
 
@@ -83,4 +89,4 @@ belongs to the captured frame preceding it; no additional capture is requested
 by the visual check. See [Level Up readiness](level-up-readiness.md).
 
 Copy the image directory and corresponding session log before the next launch,
-because either a launch with `--image` or one without it removes the old images.
+because both default startup and `--no-image` remove the old images.
