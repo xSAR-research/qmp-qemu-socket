@@ -106,7 +106,10 @@ impl Evidence {
         }
         match self.owner {
             Some(ActiveRun::Reconnaissance | ActiveRun::FreeCellRecon) => Status::Recon,
-            Some(ActiveRun::StepOnce | ActiveRun::MultiStep) => Status::Solve,
+            Some(ActiveRun::StepOnce | ActiveRun::MultiStep | ActiveRun::FreeCellRoute) => {
+                Status::Solve
+            }
+            Some(ActiveRun::FreeCellCalculation) => Status::Route,
             Some(ActiveRun::ComputedRoute | ActiveRun::PyramidSession) => match self.phase {
                 Some(PyramidPhase::Reconnaissance) => Status::Recon,
                 Some(PyramidPhase::Planning) => Status::Route,

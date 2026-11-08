@@ -856,7 +856,11 @@ pub(super) fn complete_route(
     *owner = None;
     if *state != WorkerState::Detached {
         *state = if termination == crate::pyramid_workflow_model::RunTermination::OperatorStopped {
-            if matches!(*state, WorkerState::Error | WorkerState::Uncertain) { *state } else { WorkerState::Ready }
+            if matches!(*state, WorkerState::Error | WorkerState::Uncertain) {
+                *state
+            } else {
+                WorkerState::Ready
+            }
         } else if result.is_err() || stopped {
             WorkerState::Uncertain
         } else {
@@ -902,8 +906,14 @@ pub(super) fn complete_session(
     workflow.finish_search();
     *owner = None;
     if *state != WorkerState::Detached {
-        *state = if completion.termination == crate::pyramid_workflow_model::RunTermination::OperatorStopped {
-            if matches!(*state, WorkerState::Error | WorkerState::Uncertain) { *state } else { WorkerState::Ready }
+        *state = if completion.termination
+            == crate::pyramid_workflow_model::RunTermination::OperatorStopped
+        {
+            if matches!(*state, WorkerState::Error | WorkerState::Uncertain) {
+                *state
+            } else {
+                WorkerState::Ready
+            }
         } else if completion.result.is_err() || stopped {
             WorkerState::Uncertain
         } else {
@@ -1196,24 +1206,91 @@ impl QmpQemuSocketApp {
     }
 
 
+    /// Keep STOP/EXIT visible across all A* games without changing controller authority.
+    fn independent_stop_exit(&mut self, ui: &mut egui::Ui) {
+        if bevel_button(ui, "EXIT", STATE_RED, false, true).clicked() {
+            self.request_exit();
+        }
+        let stop_enabled =
+            (self.active_run.is_some() || self.worker_state.is_busy()) && !self.stop_requested;
+        if bevel_button(ui, "STOP", STATE_RED, false, stop_enabled).clicked()
+            && let Err(error) = self.request_stop()
+        {
+            self.worker_state = WorkerState::Error;
+            self.current_status = "Stop request failed".to_owned();
+            let phase = self
+                .pyramid_workflow
+                .phase
+                .unwrap_or(PyramidPhase::Reconnaissance);
+            if self.game_mode == GameMode::Pyramid {
+                self.pyramid_ui_failure(phase, format!("STOP dispatch failed: {error}"));
+            } else {
+                self.failure_window.general(
+                    "STOP dispatch",
+                    &error,
+                    serde_json::json!({"game":self.game_mode.label()}),
+                );
+            }
+        }
+    }
+
+
+    /// Render supported Free Cell preparation/playback or an explicit unsupported A* state.
+    fn independent_game_body(&mut self, ui: &mut egui::Ui, idle: bool) {
+        ui.horizontal(|ui| {
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                self.independent_stop_exit(ui);
+                ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
+                    if bevel_button(ui, "LOG", SETUP_BLUE, false, true).clicked() {
+                        self.show_output = true;
+                    }
+                    if bevel_button(
+                        ui,
+                        "FAILURE DETAILS",
+                        SETUP_BLUE,
+                        false,
+                        self.failure_window.available(),
+                    )
+                    .clicked()
+                    {
+                        self.failure_window.reopen();
+                    }
+                });
+            });
+        });
+        if self.game_mode == GameMode::FreeCell {
+            ui.label("Free Cell · offline calculation and guarded physical route playback");
+            ui.horizontal_wrapped(|ui| {
+                ui.add_enabled(
+                    idle,
+                    egui::TextEdit::singleline(&mut self.freecell_export_path)
+                        .hint_text("Export path (blank = unique)")
+                        .desired_width(240.0),
+                );
+                if bevel_button(ui, "RECON / Export 52 cards", SETUP_BLUE, false, idle).clicked() {
+                    self.request_freecell_recon();
+                }
+            });
+            self.freecell_calculation_controls(ui);
+            self.freecell_route_controls(ui);
+        } else {
+            ui.label(format!(
+                "A* not implemented for {}; RECON, calculation and playback are unavailable.",
+                self.game_mode
+            ));
+        }
+        ui.label(&self.current_status);
+        ui.separator();
+        self.preview(ui);
+    }
+
+
     /// Keep logical actions in one row; narrow windows scroll only the left controls.
     /// STOP and EXIT remain visible at the right and never wait on worker I/O.
     fn pyramid_control_row(&mut self, ui: &mut egui::Ui, context: &ControllerContext, idle: bool) {
         ui.horizontal(|ui| {
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if bevel_button(ui, "EXIT", STATE_RED, false, true).clicked() { self.request_exit(); }
-                let stop_enabled = (self.active_run.is_some() || self.worker_state.is_busy())
-                    && !self.stop_requested;
-                if bevel_button(ui, "STOP", STATE_RED, false, stop_enabled).clicked()
-                        && let Err(error) = self.request_stop() {
-                        self.worker_state = WorkerState::Error;
-                        self.current_status = "Stop request failed".to_owned();
-                        let phase = self
-                            .pyramid_workflow
-                            .phase
-                            .unwrap_or(PyramidPhase::Reconnaissance);
-                        self.pyramid_ui_failure(phase, format!("STOP dispatch failed: {error}"));
-                    }
+                self.independent_stop_exit(ui);
                 if bevel_button(ui, "RESET", SETUP_BLUE, false, self.pyramid_reset_enabled(context)).clicked() {
                     self.reset_pyramid_preferences();
                 }
@@ -1318,13 +1395,19 @@ impl QmpQemuSocketApp {
             self.pyramid_ui_failure(PyramidPhase::Planning, error);
         } else {
             let Some(request_id) = self.reset_preview_serial.checked_add(1) else {
-                self.pyramid_ui_failure(PyramidPhase::Reconnaissance, "RESET preview request identity exhausted".to_owned());
+                self.pyramid_ui_failure(
+                    PyramidPhase::Reconnaissance,
+                    "RESET preview request identity exhausted".to_owned(),
+                );
                 return;
             };
             self.reset_preview_serial = request_id;
             let _ = self.worker.take_latest_frame();
             self.invalidate_preview();
-            self.reset_preview = Some(super::reset_preview::ResetPreview::new(request_id, context.clone()));
+            self.reset_preview = Some(super::reset_preview::ResetPreview::new(
+                request_id,
+                context.clone(),
+            ));
             self.worker_state = WorkerState::Connecting;
             self.current_status = "Waiting".to_owned();
             if let Err(error) = self.worker.capture_reset_preview(context, request_id) {
@@ -1342,7 +1425,19 @@ impl QmpQemuSocketApp {
     /// operational controls and the preview remain outside this constrained width.
     fn pyramid_selection_header(&mut self, ui: &mut egui::Ui, idle: bool) {
         ui.horizontal_wrapped(|ui| {
-            ui.heading("Pyramid");
+            let mut game = self.game_mode;
+            ui.add_enabled_ui(idle, |ui| {
+                egui::ComboBox::from_id_salt("independent-game-type")
+                    .selected_text(game.label())
+                    .show_ui(ui, |ui| {
+                        for mode in GameMode::AVAILABLE {
+                            ui.selectable_value(&mut game, mode, mode.label());
+                        }
+                    });
+            });
+            if game != self.game_mode {
+                self.select_game_mode(game);
+            }
             let mut selected = self.solving_strategy;
             ui.add_enabled_ui(idle, |ui| {
                 egui::ComboBox::from_id_salt("pyramid-strategy")
@@ -1356,7 +1451,6 @@ impl QmpQemuSocketApp {
             if selected != self.solving_strategy {
                 self.select_strategy(selected);
             }
-
         });
         if !self.uses_pyramid_workflow() {
             return;
@@ -1393,20 +1487,18 @@ impl QmpQemuSocketApp {
     /// Show mode-specific explicit actions, concise progress, STOP and the preview.
     pub(super) fn pyramid_workflow_screen(&mut self, ui: &mut egui::Ui) {
         let context = self.current_preview_context();
-        self.pyramid_workflow.bind(&context);
-        let idle = reconnaissance_controls_enabled(
-            &context,
-            self.strategy_choice_pending,
-            self.active_run,
-            self.worker_state,
-            self.stop_requested,
-            self.show_snapshot_dialog,
-            self.snapshot_capture_pending,
-        );
+        if self.game_mode == GameMode::Pyramid {
+            self.pyramid_workflow.bind(&context);
+        }
+        let idle = !self.strategy_choice_pending
+            && controls_are_mutable(self.active_run, self.worker_state, self.stop_requested)
+            && !self.show_snapshot_dialog
+            && !self.snapshot_capture_pending;
         activity_status::header(self, ui, |app, ui| {
             app.pyramid_selection_header(ui, idle);
         });
         if !self.uses_pyramid_workflow() {
+            self.independent_game_body(ui, idle);
             return;
         }
         let context = self.current_preview_context();

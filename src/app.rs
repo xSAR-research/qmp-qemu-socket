@@ -6,7 +6,9 @@
 
 mod activity_status;
 mod diagnostics;
+mod freecell_calculation;
 mod freecell_recon;
+mod freecell_route;
 mod log_window;
 mod pyramid_defaults;
 mod pyramid_requests;
@@ -107,6 +109,10 @@ const RECON_DEAL_ID_MAX_BYTES: usize = 64;
 /// UI ownership of a dispatched run until worker completion or cancellation arrives.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ActiveRun {
+    /// Dedicated offline Free Cell calculation, retired only by its exact result.
+    FreeCellCalculation,
+    /// Explicit independent source/destination route playback.
+    FreeCellRoute,
     /// One user-approved input and its resulting observation.
     StepOnce,
     /// A bounded or continuous sequence using accepted result frames.
@@ -301,8 +307,6 @@ impl Default for ReconnaissanceForm {
 
 
 impl ReconnaissanceForm {
-
-
     /// Initialise automatic fields, retaining a visible error if naming is unavailable.
     ///
     /// Only the generator's bounded metadata probes occur; no evidence file is created.
@@ -405,8 +409,6 @@ impl ReconnaissanceForm {
     ///
     /// The worker separately validates the profile, scene, destination and every input.
     fn validate(&self, context: &ControllerContext) -> Result<(), &'static str> {
-
-
         if !self.use_bundled_profile && !reconnaissance_path_is_valid(&self.profile_path) {
             return Err(
                 "Provide a native profile path: 1–4096 UTF-8 bytes, without control characters.",
@@ -499,6 +501,10 @@ pub struct QmpQemuSocketApp {
     freecell_recon_state: freecell_recon::FreeCellReconState,
     /// Optional exact output spelling; empty uses a unique generated destination.
     freecell_export_path: String,
+    /// Independent offline source/calculation state; grants no guest authority.
+    freecell_calculation: freecell_calculation::Calculation,
+    /// Distinct playback identity and semantic progress, never a HALO run.
+    freecell_playback: freecell_route::Playback,
     /// Correlated read-only refresh and acknowledgement of retained old errors.
     reset_preview: Option<reset_preview::ResetPreview>,
     /// Bounded operator inputs and single-use consent for the separate reconnaissance command.
@@ -694,6 +700,8 @@ impl QmpQemuSocketApp {
             reset_preview_serial: 0,
             freecell_recon_state: freecell_recon::FreeCellReconState::default(),
             freecell_export_path: String::new(),
+            freecell_calculation: freecell_calculation::Calculation::default(),
+            freecell_playback: Default::default(),
             reset_preview: None,
             reconnaissance_form,
             reconnaissance_report: None,
@@ -842,8 +850,6 @@ impl QmpQemuSocketApp {
 
     /// Retains the newest line while evicting enough old lines to respect `MAX_LOG_LINES`.
     fn push_visible_log_line(&mut self, line: String) {
-
-
         if self.log_lines.len() >= MAX_LOG_LINES {
             let remove_count = self.log_lines.len() + 1 - MAX_LOG_LINES;
             self.log_lines.drain(0..remove_count);
@@ -882,8 +888,6 @@ impl QmpQemuSocketApp {
     ///
     /// A failed read of an existing file is reported rather than silently truncating output.
     fn complete_output(&mut self) -> Result<String, String> {
-
-
         match self.session_log.as_mut() {
             Some(log) => log
                 .complete_text()
@@ -957,25 +961,43 @@ impl QmpQemuSocketApp {
                 self.strategy_choice_pending,
             ) {
                 match tagged.event {
-                    WorkerEvent::Log(message) => self.push_log_at(elapsed, format!("Earlier request: {message}")),
-                    WorkerEvent::SessionTelemetry(message) => self.push_session_telemetry_at(elapsed, message),
+                    WorkerEvent::Log(message) => {
+                        self.push_log_at(elapsed, format!("Earlier request: {message}"))
+                    }
+                    WorkerEvent::SessionTelemetry(message) => {
+                        self.push_session_telemetry_at(elapsed, message)
+                    }
                     _ => {}
                 }
                 continue;
             }
 
 
-            if self.reset_preview.as_mut().is_some_and(|refresh| refresh.suppress_event(&tagged.event)) {
-                if let WorkerEvent::Status(message) = tagged.event { self.push_log_at(elapsed, message); }
+            if self
+                .reset_preview
+                .as_mut()
+                .is_some_and(|refresh| refresh.suppress_event(&tagged.event))
+            {
+                if let WorkerEvent::Status(message) = tagged.event {
+                    self.push_log_at(elapsed, message);
+                }
                 continue;
             }
             match tagged.event {
                 WorkerEvent::ResetPreviewFinished { request_id, result } => {
-                    if !self.reset_preview.as_ref().is_some_and(|refresh| refresh.pending() && refresh.accepts(request_id, tagged.context.as_ref())) { continue; }
+                    if !self.reset_preview.as_ref().is_some_and(|refresh| {
+                        refresh.pending() && refresh.accepts(request_id, tagged.context.as_ref())
+                    }) {
+                        continue;
+                    }
                     match result {
                         Ok(()) => {
-                            if let Some(refresh) = &mut self.reset_preview { refresh.finish(); }
-                            if let Some(refresh) = &self.reset_preview { self.worker_state = refresh.worker_state(); }
+                            if let Some(refresh) = &mut self.reset_preview {
+                                refresh.finish();
+                            }
+                            if let Some(refresh) = &self.reset_preview {
+                                self.worker_state = refresh.worker_state();
+                            }
                             self.current_status = "Waiting".to_owned();
                         }
                         Err(error) => {
@@ -986,7 +1008,9 @@ impl QmpQemuSocketApp {
                     }
                 }
                 WorkerEvent::Log(message) => self.push_log_at(elapsed, message),
-                WorkerEvent::SessionTelemetry(message) => self.push_session_telemetry_at(elapsed, message),
+                WorkerEvent::SessionTelemetry(message) => {
+                    self.push_session_telemetry_at(elapsed, message)
+                }
                 WorkerEvent::RunFailure(failure) => {
                     self.failure_window
                         .worker_run(&failure, tagged.context.as_ref(), elapsed);
@@ -1017,15 +1041,29 @@ impl QmpQemuSocketApp {
                     let selected = self.current_preview_context();
                     let new_failure = !self.pyramid_workflow.details_visible(&selected);
                     let same_update = self.pyramid_workflow.same_failure_update(&diagnostic);
-                    let reset_pending = self.reset_preview.as_ref().is_some_and(|refresh| refresh.pending());
+                    let reset_pending = self
+                        .reset_preview
+                        .as_ref()
+                        .is_some_and(|refresh| refresh.pending());
                     if self.pyramid_workflow.receive(
                         diagnostic,
                         &selected,
                         self.computed_route_form.active_run_id,
                     ) {
-                        if !same_update && (!reset_pending || self.reset_preview.as_ref().is_some_and(|refresh| !refresh.acknowledges_failure)) {
-                            let keep_stop_refresh = self.reset_preview.as_mut().is_some_and(reset_preview::ResetPreview::preserve_new_failure);
-                            if !keep_stop_refresh { self.reset_preview = None; }
+                        if !same_update
+                            && (!reset_pending
+                                || self
+                                    .reset_preview
+                                    .as_ref()
+                                    .is_some_and(|refresh| !refresh.acknowledges_failure))
+                        {
+                            let keep_stop_refresh = self
+                                .reset_preview
+                                .as_mut()
+                                .is_some_and(reset_preview::ResetPreview::preserve_new_failure);
+                            if !keep_stop_refresh {
+                                self.reset_preview = None;
+                            }
                             self.worker_state = WorkerState::Error;
                         }
                         self.retain_pyramid_failure(new_failure);
@@ -1042,8 +1080,6 @@ impl QmpQemuSocketApp {
                     png,
                     prediction,
                 } => {
-
-
                     if self.show_snapshot_dialog
                         && request_id == self.snapshot_request_id
                         && capture_context == self.current_preview_context()
@@ -1072,8 +1108,6 @@ impl QmpQemuSocketApp {
                     }
                 }
                 WorkerEvent::SnapshotPreparationFailed { request_id, error } => {
-
-
                     if self.show_snapshot_dialog && request_id == self.snapshot_request_id {
                         self.snapshot_capture_pending = false;
                         self.snapshot_error = Some(error);
@@ -1099,12 +1133,19 @@ impl QmpQemuSocketApp {
                                 ActiveRun::Reconnaissance
                                     | ActiveRun::ComputedRoute
                                     | ActiveRun::PyramidSession
+                                    | ActiveRun::FreeCellCalculation
+                                    | ActiveRun::FreeCellRoute
                                     | ActiveRun::FreeCellRecon
                             )
                         ) {
                             self.stop_requested = false;
                         }
-                        if !self.freecell_recon_state.retain_after_detach(&self.current_preview_context()) {
+                        if !self
+                            .freecell_recon_state
+                            .retain_after_detach(&self.current_preview_context())
+                            && self.freecell_playback.retained.as_ref()
+                                != Some(&self.current_preview_context())
+                        {
                             self.invalidate_preview();
                         }
                     }
@@ -1158,8 +1199,6 @@ impl QmpQemuSocketApp {
                     ));
                 }
                 WorkerEvent::KlondikeGameCompleted => {
-
-
                     if self.game_mode == GameMode::Klondike {
                         self.push_log("One-board Klondike game completed and the next Draw 1 Solver board was freshly verified ready.");
                         self.roll_visible_output_after_completed_game();
@@ -1170,8 +1209,6 @@ impl QmpQemuSocketApp {
                     }
                 }
                 WorkerEvent::FreeCellGameCompleted => {
-
-
                     if self.game_mode == GameMode::FreeCell {
                         self.push_log("One-board Free Cell GAME WIN recognised. The worker log records whether the run stopped or completed the ordered restart.");
                         self.roll_visible_output_after_completed_game();
@@ -1182,8 +1219,6 @@ impl QmpQemuSocketApp {
                     }
                 }
                 WorkerEvent::SpiderGameCompleted => {
-
-
                     if self.game_mode == GameMode::Spider {
                         self.push_log("One-board Spider GAME WIN recognised. The worker log records whether the run stopped or completed the ordered restart.");
                         self.roll_visible_output_after_completed_game();
@@ -1217,7 +1252,9 @@ impl QmpQemuSocketApp {
                             ActiveRun::Reconnaissance
                                 | ActiveRun::ComputedRoute
                                 | ActiveRun::PyramidSession
-                                    | ActiveRun::FreeCellRecon
+                                | ActiveRun::FreeCellCalculation
+                                | ActiveRun::FreeCellRoute
+                                | ActiveRun::FreeCellRecon
                         )
                     ) {
                         self.push_log("Ignored a gameplay completion while waiting for the separate guarded request to finish.");
@@ -1243,8 +1280,12 @@ impl QmpQemuSocketApp {
                         ));
                     }
                 }
-                WorkerEvent::PyramidSessionProgress(progress) => self.apply_pyramid_session_progress(progress),
-                WorkerEvent::PyramidSessionFinished(completion) => self.apply_pyramid_session_finished(completion),
+                WorkerEvent::PyramidSessionProgress(progress) => {
+                    self.apply_pyramid_session_progress(progress)
+                }
+                WorkerEvent::PyramidSessionFinished(completion) => {
+                    self.apply_pyramid_session_finished(completion)
+                }
                 WorkerEvent::ReconnaissanceFinished {
                     termination,
                     result,
@@ -1268,7 +1309,10 @@ impl QmpQemuSocketApp {
                         self.current_status = "Waiting".to_owned();
                         self.push_log(report.clone());
                         self.begin_stop_preview(self.current_preview_context());
-                    }) == reset_preview::CompletionDispatch::StopPreview { continue; }
+                    }) == reset_preview::CompletionDispatch::StopPreview
+                    {
+                        continue;
+                    }
                     if let Ok(path) = &result {
                         if !self.stop_requested {
                             let selected = self.current_preview_context();
@@ -1277,8 +1321,9 @@ impl QmpQemuSocketApp {
                             if let Some((_, _, observed)) = &advisory {
                                 self.pyramid_workflow.apply_observed(*observed);
                             }
-                            self.pyramid_workflow
-                                .apply_acquisition_default(advisory.and_then(|(_, method, _)| method));
+                            self.pyramid_workflow.apply_acquisition_default(
+                                advisory.and_then(|(_, method, _)| method),
+                            );
                         }
                         let acquisition_context = self.current_preview_context();
                         if let Err(error) = self
@@ -1309,9 +1354,19 @@ impl QmpQemuSocketApp {
                         self.stop_requested = false;
                     }
                 }
-                WorkerEvent::FreeCellReconFinished { request_id, termination, result } => {
-                    let current_context=self.current_preview_context();
-                    if self.active_run != Some(ActiveRun::FreeCellRecon) || !self.freecell_recon_state.finish(&current_context, request_id, termination) {
+                WorkerEvent::FreeCellReconFinished {
+                    request_id,
+                    termination,
+                    result,
+                } => {
+                    let current_context = self.current_preview_context();
+                    if self.active_run != Some(ActiveRun::FreeCellRecon)
+                        || !self.freecell_recon_state.finish(
+                            &current_context,
+                            request_id,
+                            termination,
+                        )
+                    {
                         self.push_log("Ignored stale Free Cell RECON completion");
                         continue;
                     }
@@ -1322,17 +1377,37 @@ impl QmpQemuSocketApp {
                         Err(error) => {self.worker_state=WorkerState::Uncertain;self.current_status=format!("Free Cell RECON refused: {error}");self.push_log(self.current_status.clone());}
                     }
                 }
+                WorkerEvent::FreeCellRouteFinished {
+                    plan,
+                    run_id,
+                    result,
+                    termination,
+                } => self.freecell_route_finished(plan, run_id, result, termination),
+                WorkerEvent::FreeCellCalculationFinished { identity, result } => {
+                    self.freecell_calculation_finished(identity, result)
+                }
+                WorkerEvent::FreeCellSourcesListed { directory, result } => {
+                    self.freecell_calculation.sources(directory, result)
+                }
                 WorkerEvent::ComputedRouteFinished {
                     retained_recon,
                     termination,
                     run_id,
                     plan_id,
                     result,
-                } => self.apply_computed_route_finished(retained_recon, run_id, plan_id, result, termination),
+                } => self.apply_computed_route_finished(
+                    retained_recon,
+                    run_id,
+                    plan_id,
+                    result,
+                    termination,
+                ),
             }
         }
 
 
+        self.receive_freecell_calculation_progress();
+        self.receive_freecell_route_progress();
         if let Some(progress) = self.worker.take_pyramid_planning_progress() {
             let selected = self.current_preview_context();
             self.pyramid_workflow.receive_planning(progress, &selected);
@@ -1340,8 +1415,6 @@ impl QmpQemuSocketApp {
 
 
         if let Some(latest) = self.worker.take_latest_frame() {
-
-
             if latest.coalesced_frames > 0 {
                 self.push_log(format!(
                     "Preview backlog bounded: {} stale full-resolution frame(s) were coalesced; only the newest frame was retained.",
@@ -1350,11 +1423,24 @@ impl QmpQemuSocketApp {
             }
 
 
-            let reset_matches = latest.reset_request_id.is_some_and(|id| self.reset_preview.as_ref().is_some_and(|refresh| refresh.accepts(id, latest.context.as_ref())));
-            let reset_pending = self.reset_preview.as_ref().is_some_and(|refresh| refresh.pending());
-            let eligible = if latest.reset_request_id.is_some() { reset_matches } else { !reset_pending };
-            if eligible && latest.context == Some(self.current_preview_context())
-                && (reset_matches || worker_frame_is_displayable(self.worker_state, latest.diagnostic))
+            let reset_matches = latest.reset_request_id.is_some_and(|id| {
+                self.reset_preview
+                    .as_ref()
+                    .is_some_and(|refresh| refresh.accepts(id, latest.context.as_ref()))
+            });
+            let reset_pending = self
+                .reset_preview
+                .as_ref()
+                .is_some_and(|refresh| refresh.pending());
+            let eligible = if latest.reset_request_id.is_some() {
+                reset_matches
+            } else {
+                !reset_pending
+            };
+            if eligible
+                && latest.context == Some(self.current_preview_context())
+                && (reset_matches
+                    || worker_frame_is_displayable(self.worker_state, latest.diagnostic))
             {
                 self.install_frame(
                     context,
@@ -1374,7 +1460,10 @@ impl QmpQemuSocketApp {
                     } else {
                         self.reset_preview = None;
                         self.worker_state = WorkerState::Error;
-                        self.pyramid_ui_failure(PyramidPhase::Reconnaissance, "RESET preview layout was rejected".to_owned());
+                        self.pyramid_ui_failure(
+                            PyramidPhase::Reconnaissance,
+                            "RESET preview layout was rejected".to_owned(),
+                        );
                     }
                 }
                 if latest.diagnostic && self.capture_texture.is_some() {
@@ -1461,6 +1550,7 @@ impl QmpQemuSocketApp {
     /// Drops displayed pixels, prediction and source context so they cannot authorise input.
     fn invalidate_preview(&mut self) {
         self.freecell_recon_state.clear_preview();
+        self.freecell_playback.retained = None;
         self.capture_texture = None;
         self.captured_dimensions = None;
         self.preview_context = None;
@@ -1551,8 +1641,6 @@ impl QmpQemuSocketApp {
     /// A successful save installs its decoded frame in the main preview. A failed
     /// reservation or write retains the bytes and reports the error for a later retry.
     fn save_prepared_snapshot(&mut self, context: &egui::Context) {
-
-
         if self.snapshot_capture_pending
             || !controls_are_mutable(self.active_run, self.worker_state, self.stop_requested)
             || self.snapshot_context.as_ref() != Some(&self.current_preview_context())
@@ -1685,9 +1773,12 @@ impl QmpQemuSocketApp {
 
 
         let operation_limit = normalise_operation_limit(self.game_mode, operation_limit);
-        let settings = step_settings_for_owner(StepRunSettings::new(animation_delays, operation_limit)
-            .with_freecell_observation_limit(self.freecell_observation_limit)
-            .with_spider_observation_limit(self.spider_observation_limit), active_run);
+        let settings = step_settings_for_owner(
+            StepRunSettings::new(animation_delays, operation_limit)
+                .with_freecell_observation_limit(self.freecell_observation_limit)
+                .with_spider_observation_limit(self.spider_observation_limit),
+            active_run,
+        );
 
 
         let request_scope = if settings.is_unbounded()
@@ -1753,8 +1844,6 @@ impl QmpQemuSocketApp {
 
     /// Return the selected mode's operation budget without changing other modes.
     fn selected_multi_step_actions(&self) -> usize {
-
-
         match self.game_mode {
             GameMode::Klondike => {
                 normalise_operation_limit(self.game_mode, self.klondike_multi_step_actions)
@@ -1846,8 +1935,9 @@ impl QmpQemuSocketApp {
         self.reconnaissance_report = None;
         self.computed_route_form.revoke_acquisition();
         self.computed_route_form.report = None;
+        self.revoke_freecell_playback();
         self.game_mode = match strategy {
-            SolvingStrategy::ShortestPath => if self.game_mode==GameMode::FreeCell {GameMode::FreeCell}else{GameMode::Pyramid},
+            SolvingStrategy::ShortestPath => self.game_mode,
             SolvingStrategy::ComputerVision => self.computer_vision_game_mode,
         };
         let selected_context = self.current_preview_context();
@@ -1872,6 +1962,14 @@ impl QmpQemuSocketApp {
         ));
 
 
+        if strategy == SolvingStrategy::ShortestPath {
+            self.current_status = match self.game_mode {
+                GameMode::Pyramid => "Pyramid — explicit reconnaissance required".into(),
+                GameMode::FreeCell => "Free Cell — explicit RECON or offline calculation".into(),
+                mode => format!("A* not implemented for {mode}; input disabled"),
+            };
+            return;
+        }
         if let Err(error) = self.worker.reset_progress(self.current_preview_context()) {
             self.worker_state = WorkerState::Error;
             if self.uses_pyramid_workflow() {
@@ -1886,9 +1984,7 @@ impl QmpQemuSocketApp {
         {
             self.pyramid_ui_failure(PyramidPhase::Reconnaissance, error);
         }
-        if !(self.solving_strategy == SolvingStrategy::ShortestPath
-            && self.game_mode == GameMode::FreeCell)
-        {
+        if self.solving_strategy == SolvingStrategy::ComputerVision {
             self.request_capture("Strategy selected");
         }
     }
@@ -1975,6 +2071,71 @@ impl QmpQemuSocketApp {
     }
 
 
+    /// Apply the same invalidation to every game selector, without independent-mode I/O.
+    fn select_game_mode(&mut self, mode: GameMode) {
+        if mode == self.game_mode {
+            return;
+        }
+        self.game_mode = mode;
+        if self.solving_strategy == SolvingStrategy::ComputerVision {
+            self.computer_vision_game_mode = self.game_mode;
+        }
+        self.pyramid_workflow.retire_observed();
+        self.context_generation = self.context_generation.wrapping_add(1);
+        self.reconnaissance_form.confirmed_context = None;
+        self.reconnaissance_report = None;
+        self.computed_route_form.revoke_acquisition();
+        self.computed_route_form.report = None;
+        self.revoke_freecell_playback();
+        self.invalidate_preview();
+        self.current_board = 1;
+        self.board_position_established = false;
+        self.boards_per_game = self.game_mode.profile().boards_per_game;
+
+
+        self.current_status = if self.game_mode.calibration_only() {
+            format!("{} calibration — input disabled", self.game_mode)
+        } else {
+            "Ready — capture required".to_owned()
+        };
+
+
+        if self.solving_strategy == SolvingStrategy::ShortestPath {
+            self.current_status = match self.game_mode {
+                GameMode::Pyramid => "Pyramid — explicit reconnaissance required".into(),
+                GameMode::FreeCell => "Free Cell — explicit RECON or offline calculation".into(),
+                mode => format!("A* not implemented for {mode}; input disabled"),
+            };
+            return;
+        }
+        match self.worker.reset_progress(self.current_preview_context()) {
+            Ok(()) => {
+                let independent_freecell = self.solving_strategy == SolvingStrategy::ShortestPath
+                    && self.game_mode == GameMode::FreeCell;
+                let next = if independent_freecell {
+                    "Select RECON / Export 52 to acquire a frame"
+                } else {
+                    "Capturing a fresh read-only frame"
+                };
+                self.push_log(format!(
+                                "Game Type changed to {}; prior prediction and advisory progress were cleared. {next}; guest input events=0.",
+                                self.game_mode,
+                            ));
+                if !independent_freecell {
+                    self.request_capture("Game Type changed");
+                }
+            }
+            Err(error) => {
+                self.worker_state = WorkerState::Error;
+                self.current_status = "Mode change failed".to_owned();
+                self.push_log(format!(
+                    "Game Type changed locally, but worker progress reset failed: {error}"
+                ));
+            }
+        }
+    }
+
+
     /// Draws mode, capture and execution controls with run-state gating.
     ///
     /// Mode or socket changes invalidate the previous preview before it can authorise input.
@@ -1999,8 +2160,6 @@ impl QmpQemuSocketApp {
                     egui::ComboBox::from_id_salt("solving-strategy")
                         .selected_text(app.solving_strategy.label())
                         .show_ui(ui, |ui| {
-
-
                             for strategy in SolvingStrategy::AVAILABLE {
                                 ui.selectable_value(
                                     &mut selected_strategy,
@@ -2020,8 +2179,12 @@ impl QmpQemuSocketApp {
 
 
             if app.solving_strategy == SolvingStrategy::ShortestPath {
-                ui.strong(if app.game_mode==GameMode::FreeCell {"Free Cell · read-only RECON / export"} else {"Pyramid · Capture / reconnaissance / computed route"});
-                ui.label(if app.game_mode==GameMode::FreeCell {"RECON acquires one TCP v3 frame and exports all 52 directly read identities. A* is planned for v3.1.0; input is disabled."} else {"Capture controls remain read-only. Use the separate reconnaissance, input-free calculation and confirmed computed-route execution controls below."});
+                ui.strong(if app.game_mode == GameMode::FreeCell {
+                    "Free Cell · RECON / calculation / route playback"
+                } else {
+                    "Pyramid · Capture / reconnaissance / computed route"
+                });
+                ui.label(if app.game_mode==GameMode::FreeCell {"RECON exports the initial deal. CALCULATE stays offline; separate playback controls verify the live board before each transfer."} else {"Capture controls remain read-only. Use the separate reconnaissance, input-free calculation and confirmed computed-route execution controls below."});
             }
             ui.horizontal_wrapped(|ui| {
                 ui.label("Game Type");
@@ -2032,57 +2195,28 @@ impl QmpQemuSocketApp {
                     style.visuals.widgets.hovered.bg_fill = SETUP_BLUE.gamma_multiply(1.2);
                     style.visuals.widgets.inactive.fg_stroke.color = Color32::WHITE;
                     egui::ComboBox::from_id_salt("game-mode")
-                        .selected_text(egui::RichText::new(app.game_mode.label()).strong().color(Color32::WHITE))
+                        .selected_text(
+                            egui::RichText::new(app.game_mode.label())
+                                .strong()
+                                .color(Color32::WHITE),
+                        )
                         .show_ui(ui, |ui| {
-
-
                             for mode in GameMode::AVAILABLE {
-                                if app.solving_strategy==SolvingStrategy::ShortestPath && !matches!(mode,GameMode::Pyramid|GameMode::FreeCell){continue;}
-                                ui.selectable_value(&mut app.game_mode, mode, egui::RichText::new(mode.label()).strong());
+                                ui.selectable_value(
+                                    &mut app.game_mode,
+                                    mode,
+                                    egui::RichText::new(mode.label()).strong(),
+                                );
                             }
                         });
                 });
 
 
                 if app.game_mode != previous_mode {
-                    if app.solving_strategy==SolvingStrategy::ComputerVision { app.computer_vision_game_mode = app.game_mode; }
-                    app.context_generation = app.context_generation.wrapping_add(1);
-                    app.reconnaissance_form.confirmed_context = None;
-                    app.reconnaissance_report = None;
-                    app.computed_route_form.revoke_acquisition();
-                    app.computed_route_form.report = None;
-                    app.invalidate_preview();
+                    let selected = app.game_mode;
+                    app.game_mode = previous_mode;
+                    app.select_game_mode(selected);
                     preview_available = false;
-                    app.current_board = 1;
-                    app.board_position_established = false;
-                    app.boards_per_game = app.game_mode.profile().boards_per_game;
-
-
-                    app.current_status = if app.game_mode.calibration_only() {
-                        format!("{} calibration — input disabled", app.game_mode)
-                    } else {
-                        "Ready — capture required".to_owned()
-                    };
-
-
-                    match app.worker.reset_progress(app.current_preview_context()) {
-                        Ok(()) => {
-                            let independent_freecell = app.solving_strategy == SolvingStrategy::ShortestPath && app.game_mode == GameMode::FreeCell;
-                            let next = if independent_freecell { "Select RECON / Export 52 to acquire a frame" } else { "Capturing a fresh read-only frame" };
-                            app.push_log(format!(
-                                "Game Type changed to {}; prior prediction and advisory progress were cleared. {next}; guest input events=0.",
-                                app.game_mode,
-                            ));
-                            if !independent_freecell {app.request_capture("Game Type changed");}
-                        }
-                        Err(error) => {
-                            app.worker_state = WorkerState::Error;
-                            app.current_status = "Mode change failed".to_owned();
-                            app.push_log(format!(
-                                "Game Type changed locally, but worker progress reset failed: {error}"
-                            ));
-                        }
-                    }
                 }
             });
             false
@@ -2104,6 +2238,7 @@ impl QmpQemuSocketApp {
                 if bevel_button(ui,"RECON / Export 52 cards",SETUP_BLUE,false,controls_enabled).clicked() {
                     self.request_freecell_recon();
                 }
+                ui.vertical(|ui| { self.freecell_calculation_controls(ui); self.freecell_route_controls(ui); });
             }
             if bevel_button(ui, "Track", SETUP_BLUE, self.show_coordinates, controls_enabled).clicked() {
                 self.show_coordinates = !self.show_coordinates;
@@ -2167,7 +2302,8 @@ impl QmpQemuSocketApp {
                         && let Err(error) = self.request_stop() {
 
 
-                            if !matches!(self.active_run, Some(ActiveRun::Reconnaissance | ActiveRun::FreeCellRecon | ActiveRun::ComputedRoute | ActiveRun::PyramidSession)) {
+                            if !matches!(self.active_run, Some(ActiveRun::Reconnaissance | ActiveRun::FreeCellRecon | ActiveRun::ComputedRoute | ActiveRun::PyramidSession | ActiveRun::FreeCellCalculation
+                                    | ActiveRun::FreeCellRoute)) {
                                 self.active_run = None;
                             }
                             self.worker_state = WorkerState::Error;
@@ -2251,7 +2387,7 @@ impl QmpQemuSocketApp {
     /// Pointer clicks here log coordinates only; overlays never modify captured
     /// pixels or the PNG bytes retained by the snapshot dialog.
     fn preview(&mut self, ui: &mut egui::Ui) {
-        let simplified = self.uses_pyramid_workflow();
+        let simplified = self.solving_strategy == SolvingStrategy::ShortestPath;
         let technical = !simplified
             || self
                 .pyramid_workflow
@@ -2352,8 +2488,6 @@ impl QmpQemuSocketApp {
 
 
                     if self.game_mode == GameMode::Pyramid {
-
-
                         for target in &PYRAMID_TARGETS {
                             paint_labeled_crosshair(
                                 &painter,
@@ -2389,8 +2523,6 @@ impl QmpQemuSocketApp {
 
 
                 if let Some(point) = pointer {
-
-
                     if self.show_coordinates && technical {
                         paint_crosshair(&painter, canvas, point);
                     }
@@ -2424,8 +2556,6 @@ impl QmpQemuSocketApp {
     fn status_panel(&self, ui: &mut egui::Ui) {
         egui::Frame::group(ui.style()).show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
-
-
                 if self.solving_strategy == SolvingStrategy::ShortestPath {
                     ui.strong("Pyramid · Reconnaissance / computed route");
                 } else if self.game_mode.calibration_only() {
@@ -2492,6 +2622,7 @@ impl QmpQemuSocketApp {
                     self.reconnaissance_report = None;
                     self.computed_route_form.revoke_acquisition();
                     self.computed_route_form.report = None;
+        self.revoke_freecell_playback();
                     self.invalidate_preview();
                     self.current_status = "Socket changed — capture required".to_owned();
                     self.push_log("QMP socket changed locally; prior preview authority was discarded. Capture a fresh read-only frame before input.");
@@ -3076,8 +3207,6 @@ impl QmpQemuSocketApp {
     /// Clipboard insertion strips control characters and honours the character cap;
     /// closing or cancelling releases the retained snapshot through one cleanup path.
     fn snapshot_window(&mut self, context: &egui::Context) {
-
-
         if !self.show_snapshot_dialog {
             return;
         }
@@ -3293,8 +3422,6 @@ impl QmpQemuSocketApp {
 
 
 impl eframe::App for QmpQemuSocketApp {
-
-
     /// Drains worker events and schedules updates without blocking on worker I/O.
     fn logic(&mut self, context: &egui::Context, _frame: &mut eframe::Frame) {
         self.poll_worker(context);
@@ -3339,7 +3466,7 @@ impl eframe::App for QmpQemuSocketApp {
                 });
             } else if self.strategy_choice_pending {
                 self.startup_choices(ui);
-            } else if self.uses_pyramid_workflow() {
+            } else if self.solving_strategy == SolvingStrategy::ShortestPath {
                 self.pyramid_workflow_screen(ui);
             } else {
                 self.top_bar(ui);
@@ -3348,7 +3475,7 @@ impl eframe::App for QmpQemuSocketApp {
                 ui.separator();
                 self.preview(ui);
             }
-            if !self.uses_pyramid_workflow() && !self.exiting {
+            if self.solving_strategy != SolvingStrategy::ShortestPath && !self.exiting {
             ui.add_space(8.0);
             ui.with_layout(Layout::top_down(Align::Center), |ui| {
 
@@ -3369,8 +3496,9 @@ impl eframe::App for QmpQemuSocketApp {
         });
 
         self.output_window(ui.ctx());
+        self.physical_route_window(ui.ctx());
         self.failure_window.show(ui.ctx());
-        if !self.exiting && !self.uses_pyramid_workflow() {
+        if !self.exiting && self.solving_strategy != SolvingStrategy::ShortestPath {
             self.parameters_window(ui.ctx());
             self.snapshot_window(ui.ctx());
         } else if !self.exiting
@@ -3451,7 +3579,14 @@ fn active_run_after_worker_state(
 ) -> Option<ActiveRun> {
     if !matches!(
         active_run,
-        Some(ActiveRun::Reconnaissance | ActiveRun::FreeCellRecon | ActiveRun::ComputedRoute | ActiveRun::PyramidSession)
+        Some(
+            ActiveRun::Reconnaissance
+                | ActiveRun::FreeCellRecon
+                | ActiveRun::ComputedRoute
+                | ActiveRun::PyramidSession
+                | ActiveRun::FreeCellCalculation
+                | ActiveRun::FreeCellRoute
+        )
     ) && matches!(
         state,
         WorkerState::Detached | WorkerState::Ready | WorkerState::Uncertain | WorkerState::Error
@@ -3494,8 +3629,6 @@ fn reconnaissance_path_is_valid(value: &str) -> bool {
 
 /// Preserve the worker's publication evidence, including errors after a completed export.
 fn reconnaissance_result_message(result: &Result<PathBuf, String>, stop_requested: bool) -> String {
-
-
     match result {
         Ok(path) => format!(
             "Pyramid deal exported to {}. The worker verified the complete inventory and original-board restoration.{}",
@@ -3521,8 +3654,6 @@ fn reconnaissance_result_message(result: &Result<PathBuf, String>, stop_requeste
 
 /// Bound finite single-board mode requests while preserving zero as continuous.
 fn normalise_operation_limit(mode: GameMode, requested: usize) -> usize {
-
-
     match mode {
         GameMode::Klondike => requested.min(KLONDIKE_MAX_MULTI_STEP_ACTIONS),
         GameMode::FreeCell => requested.min(FREECELL_MAX_MULTI_STEP_ACTIONS),
@@ -3534,8 +3665,6 @@ fn normalise_operation_limit(mode: GameMode, requested: usize) -> usize {
 
 /// Describe inspection-only pixels without treating an in-progress capture as a failure.
 fn diagnostic_preview_status(state: WorkerState) -> &'static str {
-
-
     if state.is_busy() {
         "Verification in progress; this frame does not authorise another run."
     } else {
@@ -3549,8 +3678,6 @@ fn diagnostic_preview_status(state: WorkerState) -> &'static str {
 /// The caller separately requires a matching mode and socket. Diagnostic frames
 /// have their prediction removed on installation and cannot enable execution.
 fn worker_frame_is_displayable(state: WorkerState, diagnostic: bool) -> bool {
-
-
     match state {
         WorkerState::Error => false,
         WorkerState::Detached | WorkerState::Uncertain => diagnostic,
@@ -3655,8 +3782,6 @@ fn format_rect(rect: PixelRect) -> String {
 /// Returns descriptive errors for invalid buffer layout or checked-size overflow;
 /// row padding is omitted from the separate display buffer.
 fn frame_to_colour_image(frame: &CapturedFrame) -> Result<egui::ColorImage, String> {
-
-
     if !frame.is_layout_valid() {
         return Err("pixel layout is invalid".to_owned());
     }
@@ -3701,8 +3826,6 @@ fn frame_to_colour_image(frame: &CapturedFrame) -> Result<egui::ColorImage, Stri
 
 /// Describes detector evidence for the log without claiming an action was executed.
 fn format_prediction(prediction: PredictedAction) -> String {
-
-
     match prediction {
         PredictedAction::CalibrationOnly { mode } => format!(
             "{mode} calibration capture ready; detector and guest input are disabled pending approved coordinates."
@@ -3825,8 +3948,6 @@ fn prediction_is_actionable(mode: GameMode, prediction: PredictedAction) -> bool
 
 /// Formats a compact target description for request logs, retaining invalid-action warnings.
 fn concise_prediction(prediction: PredictedAction) -> String {
-
-
     match prediction {
         PredictedAction::CalibrationOnly { mode } => format!("{mode} calibration only"),
         PredictedAction::NoHighlight => "no highlight".to_owned(),
@@ -3888,8 +4009,6 @@ fn concise_prediction(prediction: PredictedAction) -> String {
 
 /// Formats the next-action label for the UI, including calibration and ambiguous states.
 fn display_action(prediction: PredictedAction) -> String {
-
-
     match prediction {
         PredictedAction::CalibrationOnly { mode } => format!("{mode} calibration — input disabled"),
         PredictedAction::NoHighlight => "No Solver HALO".to_owned(),
@@ -3946,8 +4065,6 @@ fn display_action(prediction: PredictedAction) -> String {
 
 /// Names a fixed operation limit or the configured continuous-run sentinel.
 fn format_operation_limit(operation_limit: usize) -> String {
-
-
     if operation_limit == UNBOUNDED_MULTI_STEP_ACTIONS {
         "continuous until STOP".to_owned()
     } else {
@@ -3958,8 +4075,6 @@ fn format_operation_limit(operation_limit: usize) -> String {
 
 /// Formats an operation index against its fixed limit or an unbounded denominator.
 fn format_operation_progress(operation_index: usize, operation_limit: usize) -> String {
-
-
     if operation_limit == UNBOUNDED_MULTI_STEP_ACTIONS {
         format!("{operation_index}/unbounded")
     } else {
@@ -4055,8 +4170,6 @@ fn paint_prediction(painter: &egui::Painter, canvas: Rect, prediction: Predicted
             );
         }
         PredictedAction::Action(action) => {
-
-
             let anchor_label = match action.operation() {
                 InputOperation::PressDrawKey => "gold anchor: DRAW (D)",
                 InputOperation::Click(_) => "gold anchor",
@@ -4065,8 +4178,6 @@ fn paint_prediction(painter: &egui::Painter, canvas: Rect, prediction: Predicted
 
 
             if let InputOperation::Click(click_point) = action.operation() {
-
-
                 let label = match action.target {
                     ActionTarget::Bottom { label, .. } => format!("proposed {label}"),
                     ActionTarget::Tableau(position) => {
@@ -4261,8 +4372,6 @@ mod tests {
     /// Checks pixel round trips across fractional and integer host display scales.
     #[test]
     fn native_preview_mapping_round_trips_at_common_wayland_scales() {
-
-
         for scale in [1.0_f32, 1.25, 1.5, 1.75, 2.0] {
             let canvas = Rect::from_min_size(
                 Pos2::new(25.0, 40.0),
@@ -4274,8 +4383,6 @@ mod tests {
 
 
             for x in [0, 1, 60, 842, 1_320, 1_680, 1_919] {
-
-
                 for y in [0, 1, 84, 540, 977, 1_079] {
                     let pixel = PixelPoint::new(x, y);
                     assert_eq!(
@@ -5160,8 +5267,6 @@ mod tests {
 
 
         for game in GameMode::AVAILABLE {
-
-
             for strategy in SolvingStrategy::AVAILABLE {
                 let selection =
                     ControllerContext::new(context.socket_path.clone(), game, strategy, 7);

@@ -1,5 +1,40 @@
 # qmp-qemu-socket
 
+## 3.1.2 — explicit-target drag and consistent A* workspace
+
+Free Cell playback now uses one guarded source-to-destination drag per recorded transfer. The source movement is acknowledged before button-down; held movement and release are sent before collecting their replies. Interrupted or uncertain delivery permits release-only recovery and never replays the transfer. Two fresh semantic endpoint observations, rather than delivery acknowledgements, advance the cursor. CALCULATE remains offline; autoplay policy, Single Step scope and permanent revocation rules remain unchanged.
+
+All A* games use the same activity header, game selector, STOP/EXIT and preview shell. GAME TYPE lists Klondike, Spider, Free Cell, Pyramid and TriPeaks in that order. Unimplemented A* games show an explicit unavailable message and selecting them starts no capture or input. The physical-route inspector opens maximised with LOG-style chrome, Restore and local 10–24 pt text. It borrows the accepted immutable report; source changes/new CALCULATE close it. Failures automatically open FAILURE DETAILS with frozen worker action, phase, cursor, observation, actual candidate refusal and diagnostic paths. Historical first rejection is distinguished from terminal evidence, and persistence/retirement problems do not erase the original cause.
+
+All 38 source commands passed: dependency-free defaults and eleven isolated xSAR features, both owning-package six-gate suites and console check/tests. Full tests: **323 xSAR / 1,789 application / 80 console**, zero failed/ignored/filtered. Fourteen focused application tests include local TCPv3/Unix-QMP peers, immutable failure presentation and actual headless Restore clicks at wide/narrow workspace sizes. Seven aligned commands passed after exactly five approved Cargo version edits; **1,013 of 1,018** compiler inputs stayed identical. xSAR is **0.11.1**, application **3.1.2**, console package unchanged.
+
+Host/retained-frame/local-peer evidence does not establish fresh guest drag effects, autoplay timing or full-route acceptance. Native support remains 1920×1080 CLASSIC BLUE with Solver off and complete supported geometry; toolbar-clipped ten-card columns may refuse. A mismatched or uncertain position stops playback and requires CALCULATE again. No guest actions, installation, executable copy, commit or push were performed for this release.
+
+See [verification](docs/Verification-3.1.2.md) and [playback contract](docs/free-cell-block-4.md).
+
+## 3.1.1 — guarded Free Cell route playback
+
+Adds explicit Free Cell A* route playback from the retained independently replayed complete route. CALCULATE remains offline. Single Step performs at most one deliberate transfer with its leading/trailing automatic transfers; SOLVE remaining route continues from the verified cursor. Fresh physical-board evidence binds the saved original deal before input, and observed semantic effects advance the cursor independently of QMP acknowledgements.
+
+Keep Solver off and choose the policy matching game autoplay: ON observes automatic transfers without clicking them; OFF executes every recorded transfer. The policy freezes at first playback. PAUSE/CONTINUE retain verified work at safe boundaries. STOP, uncertain delivery, failure, or changed source/context/policy revokes playback and requires CALCULATE again. See the [Block 4 playback contract](docs/free-cell-block-4.md).
+
+All six application source gates passed, including 1,789 tests with zero failures, ignored or filtered tests. The 28 focused tests include synthetic board effects and local TCPv3/Unix-QMP peers. App-only version alignment passed locked check, release build and direct help; 1,015 of 1,017 inputs are unchanged across the two Cargo version edits. xSAR stays at 0.11.0 with its existing qualification retained. Fresh operator-checked guest/UI acceptance remains pending; no guest actions were performed during this implementation.
+
+Native support requires 1920×1080 CLASSIC BLUE, Solver off and complete supported card geometry. Hidden identities are carried only from the authenticated original through verified same-run moves; contradictory visible evidence refuses. Complete-face checks can stop on toolbar-clipped ten-card columns. Actual source/destination click semantics, autoplay timing and complete clean native midgame acceptance still need guest validation. See [verification](docs/Verification-3.1.1.md).
+
+
+## 3.1.0 — offline Free Cell complete routes
+
+Adds an offline Free Cell complete-route calculation from a strict saved 52-card deal. The dedicated worker freezes the loaded input, searches without configured memory/time/state/expansion limits, records root and interleaved Horne automatic transfers, and independently replays every transfer before publishing a usable complete route. Foundations are irreversible. Guidance orders the search; no shortest or optimal route is promised.
+
+The UI provides a direct Pyramid/Free Cell selector, JSON file selection, CALCULATE, PAUSE/CONTINUE and CANCEL, actual counters and measured paused duration. Request/context/source-generation fencing rejects stale results. Calculation performs no capture, QMP or guest input; later move execution and partial optimisation remain separate work.
+
+Qualification passed 38 source commands: xSAR dependency-free defaults and eleven isolated optional features, both owning six-gate suites, and the console consumer check/tests. Full tests passed: xSAR 319, controller 1,761, console 80, with zero failures or ignored tests. The unchanged library's 30 passing rows are retained from the first source attempt; the app's narrow Clippy correction is followed by fresh six-gate qualification. The original failure and preimages remain preserved.
+
+Approved five-file version alignment to app 3.1.0/xSAR 0.11.0 passed library/app/console locked checks, console tests, both release builds and direct help. All 1,009 compiler inputs are sealed; 1,004 are identical across version alignment. Console package version remains 0.8.5. No new Miri or fresh guest/GUI acceptance is claimed.
+
+See [verification](docs/Verification-3.1.0.md) and [Block 2 contract](docs/free-cell-block-2.md).
+
 ## 3.0.2 — Klondike scene correction and Single step telemetry
 
 Removes the invalid Klondike SUIT/foundation scene requirement. Four felt gutters and at least five of seven PLAY top-edge probes remain mandatory; source HALO, Solver banner, fresh VM/pointer probes, STOP and no-replay rules retain their separate authority. Both byte-original incident frames now reach SUIT 3 at (1296,199). The other four GAME TYPE scene checks have no equivalent SUIT gate.
@@ -1944,7 +1979,7 @@ Spider scans ten **PLAY** columns, the lower-right **DRAW PILE** and the display
 
 Stock recognition retains measured red support and uses the shared CLASSIC-blue predicate, alongside the existing closed-outline, occupancy, scene and active-Solver guards. Live play across all five game types has been reported successful. Automated CLASSIC-blue Draw fixture coverage remains synthetic; an original native blue Draw fixture has not yet been supplied. The controller may activate an inactive Solver once on a supported board, but does not refresh an active Solver. Missing HALOs and an exhausted stock do not prove completion. One board is one game: finite runs stop at recognised win entry, while continuous mode follows score skip, optional OK, New Game, Spider Play and fresh-board Solver activation through bounded observations.
 
-## Free Cell
+## Free Cell — Computer Vision
 
 Free Cell checks **CELL 1–4** before the lowest supported source in **PLAY 1–8**, with left-to-right ties. One solid highlighted source block receives one bottom-card click, followed by editable settling and a fresh observation. Repeated source positions are valid, and a run extending behind the toolbar is accepted only from its visible source geometry and card paper. Dashed destination guides are not sources. The **SUIT 1–4** piles are display-only for input selection; there is no Draw, Recycle or Solve operation, and no card-back recognition is needed for its face-up layout.
 
@@ -1954,7 +1989,7 @@ Automatic suit transfers can temporarily remove the HALO. An inactive Solver rec
 
 Computer Vision Pyramid uses 31 calibrated targets: **Move/Recycle, Left, Right**, then the 28 tableau cards from the bottom row upward and left to right. Multiple highlights are expected; the first eligible source supplies one operation, allowing the guest Solver to remove a pair or a King. A highlighted Move/Recycle uses `d`, while pile and tableau sources use one click. Unlike the three source-only controllers, Pyramid retains positive effect and card-removal checks. Only a clicked card whose removal is verified becomes consumed; lower controls remain repeatable. A narrowly supported repeated Left/Right pair may continue from fresh HALOs without claiming the preceding effect or advancing completion.
 
-No-HALO startup may reserve one Solver setup only after positive nonempty-board evidence. Ordinary post-action and redeal observations retain their separate bounded policies, and unknown occupancy cannot invent an available card or completed board. Confirmed redeals reset consumed-card state; the shared progress and post-game controller handles the calibrated three-board game flow. Pyramid is also the sole current **Shortest Path** game. Manual retains **1. Recon**, **2. Plan route** and **3. Solve board**; Single board explicitly starts the same guarded phases under one worker owner, then stops. Native Continuous Start is disabled until positive standard-series progress and target evidence exist. Generic preparation remains read-only; technical capture/settings are available after failure. No two-board Daily Challenge series automation is claimed.
+No-HALO startup may reserve one Solver setup only after positive nonempty-board evidence. Ordinary post-action and redeal observations retain their separate bounded policies, and unknown occupancy cannot invent an available card or completed board. Confirmed redeals reset consumed-card state; the shared progress and post-game controller handles the calibrated three-board game flow. Pyramid retains its own **A* Route Solution** workflow; Free Cell has separate offline calculation and explicit guarded playback. Manual retains **1. Recon**, **2. Plan route** and **3. Solve board**; Single board explicitly starts the same guarded phases under one worker owner, then stops. Native Continuous Start is disabled until positive standard-series progress and target evidence exist. Generic preparation remains read-only; technical capture/settings are available after failure. No two-board Daily Challenge series automation is claimed.
 
 ## TriPeaks
 
@@ -1966,7 +2001,9 @@ TriPeaks uses the shared calibrated three-board progress, redeal and post-game f
 
 [Retained DL-first clarification](</home/charlie/Documents/Pyramid/Validation/no-challenge-readiness-20261022/goal-supplement.md>) preserves DL: card details | DR: card details and honest single/exhaustion feedback.
 
-## Current A* controls and popup windows
+## Pyramid A* controls and popup windows
+
+The shared A* shell also hosts Free Cell and the three explicitly unavailable game modes. The following control row is specific to Pyramid.
 
 **START**, **RECON**, cyan **LOG** and orange **ANALYSIS** share the row with
 **PAUSE/CONTINUE**, **RESET**, **STOP** and far-right **EXIT**. ANALYSIS is subdued

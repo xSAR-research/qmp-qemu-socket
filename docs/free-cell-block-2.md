@@ -1,38 +1,25 @@
-## BLOCK 2: A* Shortest Route with Column-Hash Caching, Horne Autoplay & Canonicalization
-Create `src/games/freecell/{rules.rs, search.rs, replay.rs}`.
+# Block 2 — Free Cell complete offline routes (3.1.0)
 
-### Step 2.1: Physical State vs. Canonical Transposition Key
-* **Live State (`FreeCellBoard`):** Must preserve the exact physical column indices (`cascades: [CascadeStack; 8]`) and physical FreeCell indices (`freecells: [Option<Card>; 4]`) so planned moves map to the true screen columns in Block 4.
-  * **Order-Independent Column Hashing (`IncrementalBoardHasher`):**
-  * Compute an order-dependent `u64` hash for each of the 8 columns based on the exact bottom-to-top sequence of cards inside that column (`0` if empty).
-  * When a move transfers a card between `src_col` and `dst_col`, **only recompute the hashes for those 2 columns**.
-  * **State Canonicalization (`TranspositionKey`):**
-  * To collapse symmetrical states in the $A^*$ visited/transposition `HashMap`, build `TranspositionKey`:
-  1. Copy `raw_col_hashes: [u64; 8]` and call `.sort_unstable()`. Because the 8 column hashes are sorted, a stack of cards at Column 0 produces the exact same primary key as the same stack at Column 1..7 ($8! = 40,320$ reduction).
-  2. Copy the 4 FreeCell encoded bytes `[u8; 4]` and call `.sort_unstable()` ($4! = 24$ reduction).
-  3. Include `foundations: [u8; 4]` (indexed by Suit `0..=3`).
-  
-  ### Step 2.2: Horne’s Safe Autoplay Closure
-  After every deliberate move in the search tree, run `apply_horne_autoplay_closure(&mut next_board, &mut auto_moves)` in a loop until no more safe moves exist:
-  * An exposed card $C$ (at the bottom of a Cascade or in a FreeCell) with $\text{rank}(C) == \text{foundations}[C.\text{suit}] + 1$ is automatically moved to its Suit Foundation if:
-  * $\text{rank}(C) \le 2$ (Aces and Twos), **OR**
-  * Both opposite-color Suit Foundations already have rank $\ge \text{rank}(C) - 1$.
-  * Tag these moves with `is_auto: true` and append them to the node's transition log.
-  
-  ### Step 2.3: Symmetry-Pruned Move Generator
-  From any state, generate deliberate legal moves in priority order:
-  1. **Explicit Foundation Moves (`is_auto: false`):** Any exposed Cascade bottom card or FreeCell card where $\text{rank}(C) == \text{foundations}[C.\text{suit}] + 1$ that was *not* already swept by Horne’s rule. *(Critical for uncovering buried cards and for Block 3).*
-  2. **Cascade $\to$ Non-Empty Cascade:** Exposed bottom card $C_{\text{src}}$ onto exposed bottom card $C_{\text{dst}}$ where $\text{color}(C_{\text{src}}) \neq \text{color}(C_{\text{dst}})$ and $\text{rank}(C_{\text{dst}}) == \text{rank}(C_{\text{src}}) + 1$.
-  3. **FreeCell $\to$ Non-Empty Cascade:** Same alternating-color descending rule.
-  4. **Cascade or FreeCell $\to$ Empty Cascade:**
-  * Only target the **first** empty Cascade (`first_empty_col`).
-  * **Never** move a single lone card (`cascade.len() == 1`) from one Cascade into an empty Cascade.
-  5. **Cascade $\to$ Empty FreeCell:**
-  * Only target the **first** empty FreeCell (`first_empty_fc`).
-  
-  ### Step 2.4: Foundation-Depth Heuristic $f(n) = g(n) + h(n)$
-  * **$g(n)$:** Count of deliberate moves from $T=0$ (Horne autoplays have $0$ step cost).
-  * **$h(n)$:**
-  $$h(n) = \left(52 - \sum_{s=0}^{3} \text{foundations}[s]\right) + \sum_{s=0}^{3} \text{buried\_depth}(s)$$
-  where $\text{buried\_depth}(s)$ is the number of cards sitting on top of the next needed card ($\text{foundations}[s] + 1$) for Suit $s$ inside its Cascade.
-  
+This is the approved implemented contract. It supersedes the earlier shortest-route proposal. xSAR owns `games::freecell::{rules,search,replay}` behind `freecell_rules` and `freecell_search`; the application owns offline file selection, job identity, worker control and presentation.
+
+## State and legal moves
+
+The immutable initial deal retains all 52 card identities and physical top-to-bottom column order. Search positions retain eight physical cascades, four cells and fixed Clubs/Diamonds/Hearts/Spades foundation counts. Move records retain actual physical source, destination, card and automatic/deliberate tag.
+
+Only exposed single cards move: PLAY to PLAY, PLAY to empty CELL, CELL to PLAY (including empty PLAY), or exposed PLAY/CELL to its own next-rank foundation. Cascade placement is descending alternating colour; any card may occupy an empty cascade. Foundations are irreversible. There is no multi-card primitive or CELL permutation move. Empty destinations use the first physical empty slot; lone-column relabelling is omitted.
+
+## Exact symmetry and automatic transfers
+
+Equality compares sorted complete ordered column sequences including lengths, sorted cells including empty slots, and fixed suit foundation counts. Incrementally cached column hashes accelerate hashing; a hash collision never establishes equality. Only touched column hashes are refreshed. Immutable search-arena parents preserve physical route coordinates across canonical deduplication and reopening.
+
+Horne autoplay runs at the root and between deliberate moves. A card must be the next rank of its suit, with rank at most two OR both opposite-colour foundations at least rank minus one. Deterministic scan order is PLAY 0..7 then CELL 0..3. Every automatic transfer is recorded separately at zero deliberate cost; deliberate transfers cost one. Unsafe-but-legal explicit foundation moves remain available.
+
+## Search, replay and control
+
+The guided A* ordering uses deliberate cost plus remaining-card/burial guidance. The guidance is not an admissibility proof; only a complete legal route is promised. There are no configured resource cutoffs. Checked arithmetic, fallible allocation, cancellation and actual OS resources still apply. Existing bounded exact and best-effort APIs retain their policies.
+
+Independent replay starts from cloned physical `BoardState`/`Card` data and does not call the packed rules mutation or canonical equality. It checks exposure, every transfer, auto order/tags, capacity, rank/colour/suit and all 52 identities after every move, ending with four complete foundations and empty cells/cascades. Only replay-verified `Solved` exposes a route; exhausted, cancelled and failed outcomes expose no prefix. Replay honours the same pause/cancel checkpoint. Search-finished progress precedes replay and is advisory.
+
+The dedicated serial worker reads the bounded strict document once, freezes the deal, coalesces measured progress and retires its exact context/request/source generation before one completion. PAUSE preserves the frontier; CONTINUE resumes it; CANCEL wakes a paused job. The UI uses authoritative final statistics and virtualises the route, streaming its log without a duplicate line vector. Calculation alone grants no guest-input authority. App 3.1.2 provides separate explicit-target guarded playback of the retained complete route; see [Block 4](free-cell-block-4.md).
+
+See [3.1.0 verification](Verification-3.1.0.md) for independent physical-reference tests, the exported-deal result and all qualification receipts. Read-only native RECON acceptance remains a separate evidence boundary.

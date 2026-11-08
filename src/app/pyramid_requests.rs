@@ -150,9 +150,14 @@ impl QmpQemuSocketApp {
         }
         if super::reset_preview::dispatch_completion(accepted, completion.termination, || {
             self.current_status = "Waiting".to_owned();
-            if let Some(report) = self.computed_route_form.report.clone() { self.push_log(report); }
+            if let Some(report) = self.computed_route_form.report.clone() {
+                self.push_log(report);
+            }
             self.begin_stop_preview(selected.clone());
-        }) == super::reset_preview::CompletionDispatch::StopPreview { return; }
+        }) == super::reset_preview::CompletionDispatch::StopPreview
+        {
+            return;
+        }
         if let Err(error) = &completion.result
             && !self.pyramid_workflow.details_visible(&selected)
         {
@@ -212,9 +217,14 @@ impl QmpQemuSocketApp {
         self.pyramid_workflow.finish_search();
         if super::reset_preview::dispatch_completion(accepted, termination, || {
             self.current_status = "Waiting".to_owned();
-            if let Some(report) = self.computed_route_form.report.clone() { self.push_log(report); }
+            if let Some(report) = self.computed_route_form.report.clone() {
+                self.push_log(report);
+            }
             self.begin_stop_preview(selected.clone());
-        }) == super::reset_preview::CompletionDispatch::StopPreview { return; }
+        }) == super::reset_preview::CompletionDispatch::StopPreview
+        {
+            return;
+        }
         if let Err(error) = &result
             && !self
                 .pyramid_workflow
@@ -248,14 +258,21 @@ impl QmpQemuSocketApp {
         }
         let Some(request_id) = self.reset_preview_serial.checked_add(1) else {
             self.worker_state = WorkerState::Error;
-            self.pyramid_ui_failure(PyramidPhase::Reconnaissance, "STOP preview request identity exhausted".to_owned());
+            self.pyramid_ui_failure(
+                PyramidPhase::Reconnaissance,
+                "STOP preview request identity exhausted".to_owned(),
+            );
             return;
         };
         self.reset_preview_serial = request_id;
         let _ = self.worker.take_latest_frame();
         self.invalidate_preview();
         self.stop_requested = true;
-        self.reset_preview = Some(super::reset_preview::ResetPreview::after_stop(request_id, context.clone(), self.worker_state));
+        self.reset_preview = Some(super::reset_preview::ResetPreview::after_stop(
+            request_id,
+            context.clone(),
+            self.worker_state,
+        ));
         self.worker_state = WorkerState::Connecting;
         if let Err(error) = self.worker.capture_reset_preview(context, request_id) {
             self.reset_preview = None;
@@ -269,12 +286,20 @@ impl QmpQemuSocketApp {
     ///
     /// Caller-owned failure presentation and active-run retirement remain separate.
     pub(super) fn request_stop(&mut self) -> Result<(), String> {
+        if self.active_run == Some(ActiveRun::FreeCellCalculation) {
+            self.worker.cancel_freecell_calculation();
+            self.stop_requested = true;
+            self.current_status = "Cancelling offline calculation…".to_owned();
+            return Ok(());
+        }
         self.reset_preview = None;
         self.stop_requested = true;
         self.pyramid_workflow.retire_observed();
         self.reconnaissance_form.confirmed_context = None;
         self.computed_route_form.revoke_acquisition();
         self.current_status = "Stopping…".to_owned();
-        self.worker.disconnect(self.current_preview_context())
+        let result = self.worker.disconnect(self.current_preview_context());
+        self.revoke_freecell_playback();
+        result
     }
 }

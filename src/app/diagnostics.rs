@@ -73,7 +73,14 @@ impl FailureWindow {
             diagnostic.phase,
             diagnostic.run_id,
             diagnostic.ui_failure_id,
-            format_args!("{}\n\n{}",self.progress.as_ref().map_or_else(|| "Detailed controller stage: unavailable".to_owned(), |progress| progress.display_text()),diagnostic.error),
+            format_args!(
+                "{}\n\n{}",
+                self.progress.as_ref().map_or_else(
+                    || "Detailed controller stage: unavailable".to_owned(),
+                    |progress| progress.display_text()
+                ),
+                diagnostic.error
+            ),
             directory,
             diagnostic.persistence_error.as_deref().unwrap_or("None"),
             serde_json::to_string_pretty(&self.fields)
@@ -120,6 +127,18 @@ impl FailureWindow {
     }
 
 
+    /// Open the immutable Free Cell worker failure, including partial persistence.
+    pub(super) fn freecell_route(&mut self, failure: &crate::worker::freecell_route::Failure) {
+        self.general(
+            "Free Cell route execution",
+            &failure.error,
+            serde_json::json!({
+            "worker":failure.details,"diagnostics_directory":failure.directory,
+            "persistence_error":failure.persistence_error}),
+        );
+    }
+
+
     /// Whether a complete last failure remains available, including after STOP or a new run.
     pub(super) fn available(&self) -> bool {
         !self.text.is_empty()
@@ -141,7 +160,7 @@ impl FailureWindow {
             context,
             window_chrome::WindowAppearance {
                 id: egui::Id::new("failure-owned-chrome-v139"),
-                title: "ANALYSIS",
+                title: "FAILURE DETAILS",
                 colour: egui::Color32::from_rgb(196, 76, 0),
                 default_size: crate::parameters::DETAILS_WINDOW_DEFAULT_SIZE_POINTS.into(),
                 min_size: crate::parameters::DETAILS_WINDOW_MIN_SIZE_POINTS.into(),
@@ -177,7 +196,22 @@ mod tests {
     fn diagnostics_preserve_failure_fields_and_only_open_for_new_identity() {
         let mut window = FailureWindow::default();
         let mut diagnostic = PyramidDiagnostic {
-            progress: Some(crate::pyramid_diagnostics::progress::FailureProgress { stage: crate::pyramid_diagnostics::progress::FailureStage::InitialSource, action: Some(5), total: Some(67), verified_actions: 4, attempted: 5, acknowledged: 5, action_attempted_start: 5, action_acknowledged_start: 5, initial_checks: 6, initial_limit: 6, fresh_retries: 5, reason: Some("expected 9S at 7|7".to_owned()), earlier_observation: Some("old scene mismatch".to_owned()), ..Default::default() }),
+            progress: Some(crate::pyramid_diagnostics::progress::FailureProgress {
+                stage: crate::pyramid_diagnostics::progress::FailureStage::InitialSource,
+                action: Some(5),
+                total: Some(67),
+                verified_actions: 4,
+                attempted: 5,
+                acknowledged: 5,
+                action_attempted_start: 5,
+                action_acknowledged_start: 5,
+                initial_checks: 6,
+                initial_limit: 6,
+                fresh_retries: 5,
+                reason: Some("expected 9S at 7|7".to_owned()),
+                earlier_observation: Some("old scene mismatch".to_owned()),
+                ..Default::default()
+            }),
             context: ControllerContext::new(
                 "/tmp/test.sock".into(),
                 GameMode::Pyramid,
@@ -366,4 +400,40 @@ mod tests {
         assert_eq!(window.text, frozen);
     }
 
+
+    /// Free Cell worker fields replace earlier games and remain copyable after closing.
+    #[test]
+    fn freecell_312_failure_window_freezes_worker_stage_and_packet() {
+        let mut window = FailureWindow::default();
+        window.general(
+            "Old game",
+            "old error",
+            serde_json::json!({"old":"discard"}),
+        );
+        let fields = serde_json::json!({"worker":{"stage":{"phase":"effect","cursor_zero_based":3,
+            "action":{"card":"2H","from":"PLAY 4","to":"CELL 3"}},
+            "last_rejection":{"candidates":[{"cursor":4,"reason":"CELL 3 expected 2H"}]}},
+            "diagnostics_directory":"/tmp/retained-freecell", "persistence_error":"write failed after reservation"});
+        let receipt = crate::worker::freecell_route::Failure {
+            error: "physical endpoint not confirmed".into(),
+            details: fields["worker"].clone(),
+            directory: Some("/tmp/retained-freecell".into()),
+            persistence_error: Some("write failed after reservation".into()),
+        };
+        window.freecell_route(&receipt);
+        assert!(window.open);
+        assert_eq!(window.fields, fields);
+        assert!(
+            window.text.contains("2H")
+                && window.text.contains("PLAY 4")
+                && window.text.contains("CELL 3")
+        );
+        assert!(window.text.contains("write failed after reservation"));
+        assert!(!window.text.contains("old error"));
+        let frozen = window.text.clone();
+        window.open = false;
+        window.reopen();
+        assert!(window.open);
+        assert_eq!(window.text, frozen);
+    }
 }

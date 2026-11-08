@@ -1,32 +1,32 @@
-# Active handoff — qmp-qemu-socket 3.0.2
+# Destination handoff — app 3.1.2 / xSAR 0.11.1
 
-Approved goal m13299 completed: Klondike SUIT scene-gate correction, cross-game scene audit and explicit Single step extended session-file telemetry. xSAR remains 0.10.0; Free Cell A* remains deferred to 3.1.0. Guest confirmation of this correction is pending.
+Baseline_HEAD_SHA: `5fa150a610bbbd2b6718bf87b6730c0b852b41e2`. Baseline_PARENT_SHA: `30dc3835eca3adcc8d7f997df398fc569f5c918c`.
+xSAR HEAD `068105b322830cc254f36a488bb8b370b5213097`, parent `c4a9b839ece3668b8d46ca00676ae05c34a97943`; qualified dirty path dependency. Four histories/indices and unrelated changes, including independent server staged/unstaged work, are preserved. Paths are working trees, not immutable Git pins.
 
-Baseline_HEAD_SHA: 30dc3835eca3adcc8d7f997df398fc569f5c918c
-Baseline_PARENT_SHA: 0d2eb0fb6352473fbb31b28e39b74991076d4daa
+Free Cell playback now uses one guarded source-to-destination drag per recorded transfer. The source movement is acknowledged before button-down; held movement and release are sent before collecting their replies. Interrupted or uncertain delivery permits release-only recovery and never replays the transfer. Two fresh semantic endpoint observations, rather than delivery acknowledgements, advance the cursor. CALCULATE remains offline; autoplay policy, Single Step scope and permanent revocation rules remain unchanged.
 
-## Run
+All A* games use the same activity header, game selector, STOP/EXIT and preview shell. GAME TYPE lists Klondike, Spider, Free Cell, Pyramid and TriPeaks in that order. Unimplemented A* games show an explicit unavailable message and selecting them starts no capture or input. The physical-route inspector opens maximised with LOG-style chrome, Restore and local 10–24 pt text. It borrows the accepted immutable report; source changes/new CALCULATE close it. Failures automatically open FAILURE DETAILS with frozen worker action, phase, cursor, observation, actual candidate refusal and diagnostic paths. Historical first rejection is distinguished from terminal evidence, and persistence/retirement problems do not erase the original cause.
 
-From `/home/charlie/repo/RUST/qmp-qemu-socket`:
+All 38 source commands passed: dependency-free defaults and eleven isolated xSAR features, both owning-package six-gate suites and console check/tests. Full tests: **323 xSAR / 1,789 application / 80 console**, zero failed/ignored/filtered. Fourteen focused application tests include local TCPv3/Unix-QMP peers, immutable failure presentation and actual headless Restore clicks at wide/narrow workspace sizes. Seven aligned commands passed after exactly five approved Cargo version edits; **1,013 of 1,018** compiler inputs stayed identical. xSAR is **0.11.1**, application **3.1.2**, console package unchanged.
+
+Current [verification](Verification-3.1.2.md) records the source/aligned lineage and limitations. Delivery is the normal mutable Cargo target `/home/charlie/repo/RUST/qmp-qemu-socket/target/x86_64-unknown-linux-gnu/release/qmp-qemu-socket` (SHA256 `754f681c88fcd8a790bd5627297b07bc9112d6d03e46680c1bc3113274a136e9`, 16524728 bytes, mode `0o755`), with no secondary copy.
 
 ```sh
 cargo run --release
 ```
 
-GAME WIN storage is on by default; `cargo run --release -- --no-image` opts out only from that recording. Failure packets remain enabled; no secondary executable was created. Normal binary SHA256 `b8d8b3260749bbeb97a20065f4acfa4cfbe53bf1d83c0919b11247047c8b417b`, 16233120 bytes. Rebuilding this mutable target invalidates that artifact identity.
+Opt out of GAME WIN recording with `cargo run --release -- --no-image`. Startup resets `/home/charlie/tmp/images` in both modes; preserve incident evidence first. Help/invalid arguments have no startup filesystem side effects. Failure diagnostics are separate from GAME WIN recording.
 
-## Destination sentinel
+## Destination Sentinel
 
-Use the independent SHA256 supplied in the final delivery/checkpoint:
+Use the independently recorded final destination-state SHA256 supplied at closeout with this exact command, replacing only the placeholder digest:
 
 ```sh
-python3 /home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Klondike/Validation/klondike-scene-302-kszlr13h/verify-destination.py --state-sha256 <trusted-delivery-state-sha256>
+python3 /home/charlie/repo/RUST/qmp-qemu-socket/Evidence/FreeCell/Validation/freecell-route-312-9fxt_n42/verify-destination.py --state-sha256 '<independently-recorded-destination-state-sha256>'
 ```
 
-The [destination receipt](/home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Klondike/Validation/klondike-scene-302-kszlr13h/destination-state.json) pins 996 compiler inputs, all current documentation/evidence, exact four-repository HEAD/index/patch/status and observed server files. A mismatch is `HANDOFF REGRESSION`, not a cached pass. Preserve historical sentinels and exact discrepancies; automatic post-checkpoint metadata must be measured narrowly. Do not reset, overwrite evidence or broadly ignore memory paths. The server has independent staged/unstaged work; preserve it unchanged from the pinned observed snapshot.
+[Destination receipt](/home/charlie/repo/RUST/qmp-qemu-socket/Evidence/FreeCell/Validation/freecell-route-312-9fxt_n42/destination-state.json), [release roots](/home/charlie/repo/RUST/qmp-qemu-socket/Evidence/FreeCell/Validation/freecell-route-312-9fxt_n42/release-root-pins.json) and [promotion path list](/home/charlie/repo/RUST/qmp-qemu-socket/Evidence/FreeCell/Validation/freecell-route-312-9fxt_n42/owned-paths.txt) are local evidence. The receipt pins the verifier, and the externally supplied digest anchors the receipt. Do not accept an unanchored or edited receipt, delete lifecycle artifacts to force success, or rerun old310/311 sentinels as current proof. Later mandatory memory lifecycle activity can change a byte snapshot; inspect exact differences. Current reconciliation preserves old hashes and ten known receipts without claiming logical equivalence. No new session's mutation approval is implied.
 
-## Evidence and next action
+Host/retained-frame/local-peer evidence does not establish fresh guest drag effects, autoplay timing or full-route acceptance. Native support remains 1920×1080 CLASSIC BLUE with Solver off and complete supported geometry; toolbar-clipped ten-card columns may refuse. A mismatched or uncertain position stops playback and requires CALCULATE again. No guest actions, installation, executable copy, commit or push were performed for this release.
 
-1,758 full source tests, six focused regressions, all six gates and aligned check/release/help passed. [Verification](Verification-3.0.2.md), [telemetry contract](klondike-failure-telemetry.md), [publication commands](/home/charlie/repo/RUST/qmp-qemu-socket/Evidence/Klondike/Validation/klondike-scene-302-kszlr13h/COMMIT-PUSH.md). Current xSAR path-dependency revision c4a9b839ece3668b8d46ca00676ae05c34a97943 and dirty state are recorded, not a Git pin. Original incident PNGs, failed suite/preflight and prior 3.0.1 release evidence remain preserved. No guest input, GUI startup, extra capture, staging, commit or push was performed for release verification.
-
-Charlie can relaunch the controller, reproduce using Single step and inspect `SINGLE_STEP` records in the normal complete session log. Multiple Steps with one operation remains untraced. The agent must not perform that live test without authority. Microsoft Free Cell foundation-return legality is unverified and no policy change was made. Git promotion remains Charlie-owned; use only the prepared explicit application paths and review each sibling independently.
+Next operator test: exact original deal/Solver off/matching autoplay; explicit drag, semantic endpoint, repeated Single Step/full route, PAUSE/STOP, error details and shared A* UI. [Publication instructions](/home/charlie/repo/RUST/qmp-qemu-socket/Evidence/FreeCell/Validation/freecell-route-312-9fxt_n42/github-push-instructions.md) are provided without executing Git promotion. Keep restricted editable documents hash-only and preserve independent server work. Prior311 receipts and original incident remain sealed evidence.

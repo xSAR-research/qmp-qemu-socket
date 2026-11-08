@@ -82,6 +82,26 @@ impl QmpClient {
     }
 
 
+    /// Deliver one explicit-target held drag, preserving neutral release-only recovery.
+    pub fn drag<F: FnMut() -> bool>(
+        &mut self,
+        source: PixelPoint,
+        destination: PixelPoint,
+        width: u32,
+        height: u32,
+        permitted: F,
+    ) -> Result<(), QmpError> {
+        crate::single_step_telemetry::operation(
+            "drag",
+            || serde_json::json!({"source":format!("{source:?}"),"destination":format!("{destination:?}")}),
+            || {
+                self.transport
+                    .drag(source, destination, width, height, permitted)
+            },
+        )
+    }
+
+
     /// Send one normal-duration click without replaying uncertain input.
     pub fn click(&mut self, point: PixelPoint, width: u32, height: u32) -> Result<(), QmpError> {
         crate::single_step_telemetry::operation(

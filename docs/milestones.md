@@ -1,6 +1,53 @@
 # Milestone Tracker & Baseline Receipt — qmp-qemu-socket
 
-## Active baseline receipt — 3.0.2
+## Active receipt — 3.1.2 / xSAR 0.11.1
+
+Free Cell playback now uses one guarded source-to-destination drag per recorded transfer. The source movement is acknowledged before button-down; held movement and release are sent before collecting their replies. Interrupted or uncertain delivery permits release-only recovery and never replays the transfer. Two fresh semantic endpoint observations, rather than delivery acknowledgements, advance the cursor. CALCULATE remains offline; autoplay policy, Single Step scope and permanent revocation rules remain unchanged.
+
+All 38 source commands passed: dependency-free defaults and eleven isolated xSAR features, both owning-package six-gate suites and console check/tests. Full tests: **323 xSAR / 1,789 application / 80 console**, zero failed/ignored/filtered. Fourteen focused application tests include local TCPv3/Unix-QMP peers, immutable failure presentation and actual headless Restore clicks at wide/narrow workspace sizes. Seven aligned commands passed after exactly five approved Cargo version edits; **1,013 of 1,018** compiler inputs stayed identical. xSAR is **0.11.1**, application **3.1.2**, console package unchanged.
+
+Baseline_HEAD_SHA: `5fa150a610bbbd2b6718bf87b6730c0b852b41e2`. Baseline_PARENT_SHA: `30dc3835eca3adcc8d7f997df398fc569f5c918c`. xSAR HEAD `068105b322830cc254f36a488bb8b370b5213097`, parent `c4a9b839ece3668b8d46ca00676ae05c34a97943`; path dependency includes the qualified working-tree changes, not an immutable Git pin. All four repository histories and indices, unrelated tracked patches/status and independent server staged/unstaged changes are retained.
+
+Host/retained-frame/local-peer evidence does not establish fresh guest drag effects, autoplay timing or full-route acceptance. Native support remains 1920×1080 CLASSIC BLUE with Solver off and complete supported geometry; toolbar-clipped ten-card columns may refuse. A mismatched or uncertain position stops playback and requires CALCULATE again. No guest actions, installation, executable copy, commit or push were performed for this release.
+
+Current evidence: [Verification-3.1.2.md](Verification-3.1.2.md) and [handoff](handoff.md). Earlier 3.1.1 evidence remains historical below.
+
+## Retained baseline receipt — 3.1.1
+
+Baseline_HEAD_SHA: 5fa150a610bbbd2b6718bf87b6730c0b852b41e2
+Baseline_PARENT_SHA: 30dc3835eca3adcc8d7f997df398fc569f5c918c
+
+Path dependency ../xsar remains 0.11.0 at HEAD 068105b322830cc254f36a488bb8b370b5213097, parent c4a9b839ece3668b8d46ca00676ae05c34a97943, with its pre-existing uncommitted solver changes preserved. All xSAR/compiler inputs and library/console repository state are unchanged by this app-only revision. The server's independent staged/unstaged changes and all four indices/history are preserved. These paths are current working trees, not immutable dependency pins.
+
+Adds explicit Free Cell A* route playback from the retained independently replayed complete route. CALCULATE remains offline. Single Step performs at most one deliberate transfer with its leading/trailing automatic transfers; SOLVE remaining route continues from the verified cursor. Fresh physical-board evidence binds the saved original deal before input, and observed semantic effects advance the cursor independently of QMP acknowledgements.
+
+Keep Solver off and choose the policy matching game autoplay: ON observes automatic transfers without clicking them; OFF executes every recorded transfer. The policy freezes at first playback. PAUSE/CONTINUE retain verified work at safe boundaries. STOP, uncertain delivery, failure, or changed source/context/policy revokes playback and requires CALCULATE again. See the [Block 4 playback contract](free-cell-block-4.md).
+
+All six application source gates passed, including 1,789 tests with zero failures, ignored or filtered tests. The 28 focused tests include synthetic board effects and local TCPv3/Unix-QMP peers. App-only version alignment passed locked check, release build and direct help; 1,015 of 1,017 inputs are unchanged across the two Cargo version edits. xSAR stays at 0.11.0 with its existing qualification retained. Fresh operator-checked guest/UI acceptance remains pending; no guest actions were performed during this implementation.
+
+Native support requires 1920×1080 CLASSIC BLUE, Solver off and complete supported card geometry. Hidden identities are carried only from the authenticated original through verified same-run moves; contradictory visible evidence refuses. Complete-face checks can stop on toolbar-clipped ten-card columns. Actual source/destination click semantics, autoplay timing and complete clean native midgame acceptance still need guest validation. See [verification](Verification-3.1.1.md).
+
+
+## Retained baseline receipt — 3.1.0
+
+Baseline_HEAD_SHA: 5fa150a610bbbd2b6718bf87b6730c0b852b41e2
+Baseline_PARENT_SHA: 30dc3835eca3adcc8d7f997df398fc569f5c918c
+
+xSAR path dependency: ../xsar, version 0.11.0, HEAD 068105b322830cc254f36a488bb8b370b5213097, parent c4a9b839ece3668b8d46ca00676ae05c34a97943; the approved solver changes remain uncommitted. Application changes are also uncommitted; indices and history are preserved. Capture-server staged/unstaged work is preserved.
+
+Adds an offline Free Cell complete-route calculation from a strict saved 52-card deal. The dedicated worker freezes the loaded input, searches without configured memory/time/state/expansion limits, records root and interleaved Horne automatic transfers, and independently replays every transfer before publishing a usable complete route. Foundations are irreversible. Guidance orders the search; no shortest or optimal route is promised.
+
+The UI provides a direct Pyramid/Free Cell selector, JSON file selection, CALCULATE, PAUSE/CONTINUE and CANCEL, actual counters and measured paused duration. Request/context/source-generation fencing rejects stale results. Calculation performs no capture, QMP or guest input; later move execution and partial optimisation remain separate work.
+
+Qualification passed 38 source commands: xSAR dependency-free defaults and eleven isolated optional features, both owning six-gate suites, and the console consumer check/tests. Full tests passed: xSAR 319, controller 1,761, console 80, with zero failures or ignored tests. The unchanged library's 30 passing rows are retained from the first source attempt; the app's narrow Clippy correction is followed by fresh six-gate qualification. The original failure and preimages remain preserved.
+
+Approved five-file version alignment to app 3.1.0/xSAR 0.11.0 passed library/app/console locked checks, console tests, both release builds and direct help. All 1,009 compiler inputs are sealed; 1,004 are identical across version alignment. Console package version remains 0.8.5. No new Miri or fresh guest/GUI acceptance is claimed.
+
+The supplied exported deal `freecell-1251159-1.json` produced 42 deliberate moves + 47 automatic transfers = 89 transfers, independently replayed to all 52 foundation cards. The measured focused run expanded 195,574 states, retained 291,241 states, reached a peak frontier of 76,935 and took 8.55154759 seconds of active search. This is a measured run for this deal, not a general performance guarantee.
+
+See [verification](Verification-3.1.0.md).
+
+## Retained baseline receipt — 3.0.2
 
 Baseline_HEAD_SHA: 30dc3835eca3adcc8d7f997df398fc569f5c918c
 Baseline_PARENT_SHA: 0d2eb0fb6352473fbb31b28e39b74991076d4daa

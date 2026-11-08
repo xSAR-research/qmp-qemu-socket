@@ -49,6 +49,13 @@ pub(super) struct WindowAppearance {
 }
 
 impl WindowChrome {
+    /// Open expanded across the available application content area.
+    pub(super) fn maximise(&mut self) {
+        self.maximised = true;
+        self.collapsed = false;
+    }
+
+
     /// Show a native floating window with a custom painted title and three controls.
     ///
     /// `open` controls only visibility. Closing never clears application data.
@@ -68,6 +75,11 @@ impl WindowChrome {
         let workspace = context.content_rect();
         if !workspace.is_finite() || workspace.width() <= 0.0 || workspace.height() <= 0.0 {
             return None;
+        }
+
+        if self.maximised && self.normal_rect.is_none() {
+            let size = appearance.default_size.min(workspace.size());
+            self.normal_rect = Some(Rect::from_center_size(workspace.center(), size));
         }
 
         let style = context.global_style();
@@ -341,6 +353,115 @@ fn paint_icon(ui: &Ui, rect: Rect, command: Command, state: &WindowChrome, title
         Command::Close => {
             painter.line_segment([rect.left_top(), rect.right_bottom()], stroke);
             painter.line_segment([rect.right_top(), rect.left_bottom()], stroke);
+        }
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+
+    /// Render actual chrome without a platform, worker or guest.
+    fn frame(
+        context: &Context,
+        chrome: &mut WindowChrome,
+        appearance: WindowAppearance,
+        workspace: Rect,
+        events: Vec<egui::Event>,
+    ) -> Rect {
+        let mut open = true;
+        let mut outer = None;
+        context
+            .run_ui(
+                egui::RawInput {
+                    screen_rect: Some(workspace),
+                    events,
+                    ..Default::default()
+                },
+                |ui| {
+                    outer = chrome
+                        .show(ui.ctx(), appearance, &mut open, |ui| {
+                            ui.label("Retained physical route");
+                        })
+                        .map(|shown| shown.response.rect);
+                },
+            )
+            .drop_without_applying_deltas();
+        assert!(open);
+        outer.expect("open window in valid workspace")
+    }
+
+
+    /// Compare rendered rectangles with pixel-rounding allowance.
+    fn close(actual: Rect, expected: Rect) {
+        assert!(
+            (actual.min - expected.min).length() <= 1.0,
+            "origin {actual:?} versus {expected:?}"
+        );
+        assert!(
+            (actual.size() - expected.size()).length() <= 1.0,
+            "size {actual:?} versus {expected:?}"
+        );
+    }
+
+
+    /// First-open maximisation preserves the actual Restore button at both widths.
+    #[test]
+    fn freecell_312_first_open_maximises_and_restore_button_restores() {
+        for size in [egui::vec2(1920.0, 1080.0), egui::vec2(640.0, 900.0)] {
+            let context = Context::default();
+            let workspace = Rect::from_min_size(Pos2::ZERO, size);
+            let appearance = WindowAppearance {
+                id: Id::new("route-312-test"),
+                title: "PHYSICAL ROUTE",
+                colour: Color32::from_rgb(0, 125, 148),
+                default_size: crate::parameters::DETAILS_WINDOW_DEFAULT_SIZE_POINTS.into(),
+                min_size: crate::parameters::DETAILS_WINDOW_MIN_SIZE_POINTS.into(),
+            };
+            let mut chrome = WindowChrome::default();
+            chrome.maximise();
+            for _ in 0..3 {
+                close(
+                    frame(&context, &mut chrome, appearance, workspace, vec![]),
+                    workspace,
+                );
+            }
+            let saved = chrome.normal_rect.unwrap();
+            assert!(saved.width() < workspace.width() || saved.height() < workspace.height());
+            let restore = context
+                .read_response(appearance.id.with(("window-control", 1_u8)))
+                .unwrap()
+                .rect
+                .center();
+            let pointer = |pressed| egui::Event::PointerButton {
+                pos: restore,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: egui::Modifiers::NONE,
+            };
+            frame(
+                &context,
+                &mut chrome,
+                appearance,
+                workspace,
+                vec![egui::Event::PointerMoved(restore), pointer(true)],
+            );
+            frame(
+                &context,
+                &mut chrome,
+                appearance,
+                workspace,
+                vec![pointer(false)],
+            );
+            assert!(!chrome.maximised);
+            for _ in 0..2 {
+                close(
+                    frame(&context, &mut chrome, appearance, workspace, vec![]),
+                    saved,
+                );
+            }
         }
     }
 }

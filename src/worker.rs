@@ -7,8 +7,10 @@
 
 mod computed_route;
 mod control_search;
+pub(crate) mod freecell_calculation;
 mod freecell_execution;
 mod freecell_reconnaissance;
+pub(crate) mod freecell_route;
 mod game_operations;
 #[cfg(test)]
 mod image_recording_tests;
@@ -112,8 +114,6 @@ struct TriPeaksHaloRecovery {
 
 
 impl TriPeaksHaloRecovery {
-
-
     /// Start a new-board observation context after its authorised Solver input.
     fn after_solver() -> Self {
         Self {
@@ -125,8 +125,6 @@ impl TriPeaksHaloRecovery {
 
     /// Schedule observations first, then at most one positively gated refresh.
     fn next_missing_halo(&mut self, gameplay_scene: bool) -> TriPeaksHaloRecoveryStep {
-
-
         if self.delayed_observations < TRIPEAKS_HALO_REOBSERVATION_LIMIT {
             self.delayed_observations += 1;
             return TriPeaksHaloRecoveryStep::Observe {
@@ -173,12 +171,8 @@ pub enum WorkerState {
 
 
 impl WorkerState {
-
-
     /// Return the concise UI label for this worker state.
     pub const fn label(self) -> &'static str {
-
-
         // Returns the concise display label for a worker state.
         match self {
             Self::Detached => "Detached",
@@ -206,6 +200,33 @@ impl WorkerState {
 
 /// Requests serialised by the background worker command loop.
 enum WorkerCommand {
+    /// Enumerate source filenames off the UI thread, with no guest activity.
+    ListFreeCellSources {
+        /// Selected UI context used only to reject stale directory results.
+        context: ControllerContext,
+        /// Exact operator-selected directory to enumerate.
+        directory: PathBuf,
+    },
+    /// Compute only from a validated offline document; no guest authority.
+    CalculateFreeCell {
+        /// Exact UI correlation independent of live RECON.
+        identity: freecell_calculation::Identity,
+        /// Literal input path frozen once on the worker.
+        path: PathBuf,
+        /// Dedicated reservation cancellation, never the gameplay latch.
+        cancel: Arc<AtomicBool>,
+    },
+    /// Run explicit independent source/destination transfers from one frozen candidate.
+    ExecuteFreeCellRoute {
+        /// Exact calculation/source context.
+        plan: freecell_calculation::Identity,
+        /// Separately reserved playback invocation.
+        run_id: u64,
+        /// One deliberate transfer plus observed automatic closure, or the remaining route.
+        single_step: bool,
+        /// Frozen central animation setting.
+        settle: Duration,
+    },
     /// Persist a local Pyramid refusal without connecting, capturing or changing authority.
     RecordPyramidFailure {
         /// Context whose visible fields produced the local refusal.
@@ -316,6 +337,31 @@ pub struct WorkerRunFailure {
 
 /// Small ordered notifications sent from the worker to the UI.
 pub enum WorkerEvent {
+    /// A directory-bound source browser result, unrelated to route authority.
+    FreeCellSourcesListed {
+        /// Directory whose filenames were enumerated.
+        directory: PathBuf,
+        /// Matching source paths or the original enumeration refusal.
+        result: Result<Vec<PathBuf>, String>,
+    },
+    /// One identity-bound offline final result; contains no executable permit.
+    FreeCellCalculationFinished {
+        /// Exact source/request generation.
+        identity: freecell_calculation::Identity,
+        /// Only independently replayed complete output is usable.
+        result: Result<Arc<freecell_calculation::Report>, String>,
+    },
+    /// Exact playback completion; only semantic observations advance its cursor.
+    FreeCellRouteFinished {
+        /// Immutable calculation identity.
+        plan: freecell_calculation::Identity,
+        /// Invocation that still owns retirement.
+        run_id: u64,
+        /// Causal interruption classification, distinct from a later STOP latch.
+        termination: crate::pyramid_workflow_model::RunTermination,
+        /// Final semantic progress or a permanent refusal.
+        result: Result<freecell_route::Progress, Box<freecell_route::Failure>>,
+    },
     /// Correlated completion of the independent read-only Free Cell workflow.
     FreeCellReconFinished {
         /// Checked identity of the acquisition that has released its reservation.
@@ -501,6 +547,10 @@ struct LatestFrameSlot {
     computed_route: Arc<Mutex<computed_route::Store>>,
     /// At most one advisory search snapshot, replaced rather than queued.
     planning_progress: Arc<Mutex<Option<PlanningProgress>>>,
+    /// Independent offline reservation and latest-only advisory progress.
+    freecell_calculation: Arc<freecell_calculation::Control>,
+    /// Independent mutable route cursor, separate from offline calculation and HALO play.
+    freecell_route: Arc<Mutex<freecell_route::Store>>,
     /// Out-of-band control for one serial A* command, independent of preview pixels.
     pause: Arc<pyramid_pause::Gate>,
     /// Exact engine ownership and operator-requested objective replacement.
@@ -527,8 +577,6 @@ impl LatestFrameSlot {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = settings;
     }
-
-
 
 
     /// Clear stale advisory search work without changing input or run authority.
@@ -886,6 +934,8 @@ impl WorkerHandle {
     /// Latch STOP and wake the worker even when a signal already set the shutdown flag.
     /// Existing transactions finish their normal release-only recovery; no cleanup clicks are added.
     pub(crate) fn request_shutdown(&self) {
+        self.latest_frame.freecell_calculation.cancel(None);
+        self.revoke_freecell_route();
         self.latest_frame.pause.abort();
         self.latest_frame.search_control.abort();
         self.shutdown_requested.store(true, Ordering::SeqCst);
@@ -934,10 +984,164 @@ impl WorkerHandle {
     /// Change suspension only for the current epoch; cancellation always wins.
     pub(crate) fn request_pause(&self, epoch: u64, pause: bool) -> Result<(), String> {
         self.check_accepting_requests()?;
-        if self.cancel_requested.load(Ordering::Acquire) {
+        if self.cancel_requested.load(Ordering::Acquire)
+            && !self.latest_frame.freecell_calculation.running()
+        {
             return Err("STOP is latched; Continue cannot restart this work".to_owned());
         }
         self.latest_frame.pause.request(epoch, pause)
+    }
+
+
+    /// Enumerate a selected directory on the existing worker, without guest activity.
+    pub(crate) fn list_freecell_sources(
+        &self,
+        context: ControllerContext,
+        directory: PathBuf,
+    ) -> Result<(), String> {
+        self.check_accepting_requests()?;
+        self.command_tx
+            .send(WorkerCommand::ListFreeCellSources { context, directory })
+            .map_err(|e| format!("Worker unavailable: {e}"))
+    }
+
+
+    /// Queue an offline calculation without RECON, capture-context or guest changes.
+    pub(crate) fn calculate_freecell(
+        &self,
+        context: ControllerContext,
+        request_id: u64,
+        source_generation: u64,
+        path: PathBuf,
+    ) -> Result<(), String> {
+        self.check_accepting_requests()?;
+        context.validate()?;
+        if context.game_mode != GameMode::FreeCell
+            || context.strategy != SolvingStrategy::ShortestPath
+        {
+            return Err("Free Cell independent calculation only".to_owned());
+        }
+        self.revoke_freecell_route();
+        let identity = freecell_calculation::Identity {
+            context,
+            request_id,
+            source_generation,
+        };
+        let cancel = self
+            .latest_frame
+            .freecell_calculation
+            .reserve(identity.clone())?;
+        if let Err(error) = self.command_tx.send(WorkerCommand::CalculateFreeCell {
+            identity: identity.clone(),
+            path,
+            cancel,
+        }) {
+            self.latest_frame
+                .freecell_calculation
+                .cancel(Some(&identity));
+            let _ = self.latest_frame.freecell_calculation.finish(&identity);
+            return Err(format!("Worker unavailable: {error}"));
+        }
+        Ok(())
+    }
+
+
+    /// Wake cancellation immediately, without disconnecting or capturing.
+    pub(crate) fn cancel_freecell_calculation(&self) {
+        self.latest_frame.freecell_calculation.cancel(None);
+        self.revoke_freecell_route();
+        self.latest_frame.pause.wake();
+    }
+
+
+    /// Consume advisory offline progress independently of capture and Pyramid work.
+    pub(crate) fn take_freecell_calculation_progress(
+        &self,
+    ) -> Option<freecell_calculation::Progress> {
+        self.latest_frame.freecell_calculation.take()
+    }
+
+
+    /// Retire an idle candidate; an active invocation keeps ownership until completion.
+    pub(crate) fn revoke_freecell_route(&self) {
+        if let Ok(mut store) = self.latest_frame.freecell_route.lock() {
+            store.revoke();
+        }
+    }
+
+
+    /// Check retained candidate identity without granting live input permission.
+    pub(crate) fn freecell_route_available(&self, plan: &freecell_calculation::Identity) -> bool {
+        self.latest_frame
+            .freecell_route
+            .lock()
+            .is_ok_and(|s| s.available(plan))
+    }
+
+
+    /// Consume coalesced semantic progress separately from ordered completion.
+    pub(crate) fn take_freecell_route_progress(&self) -> Option<freecell_route::Progress> {
+        self.latest_frame
+            .freecell_route
+            .lock()
+            .ok()?
+            .take_progress()
+    }
+
+
+    /// Reserve a distinct live invocation; no transport runs on the UI thread.
+    pub(crate) fn execute_freecell_route(
+        &self,
+        plan: freecell_calculation::Identity,
+        single_step: bool,
+        mode: crate::freecell_route::AutoMode,
+        settle: Duration,
+    ) -> Result<u64, String> {
+        self.check_accepting_requests()?;
+        plan.context.validate()?;
+        if plan.context.game_mode != GameMode::FreeCell
+            || plan.context.strategy != SolvingStrategy::ShortestPath
+        {
+            return Err("Independent Free Cell route only".into());
+        }
+        let run_id = self
+            .latest_frame
+            .freecell_route
+            .lock()
+            .map_err(|_| "Free Cell store poisoned")?
+            .reserve_mode(&plan, mode)?;
+        let queued = (|| {
+            self.latest_frame
+                .reconnaissance
+                .select(&plan.context, &self.cancel_requested)?;
+            self.latest_frame.reconnaissance.queue_reconnaissance(
+                &plan.context,
+                &self.cancel_requested,
+                || {
+                    self.command_tx
+                        .send(WorkerCommand::ExecuteFreeCellRoute {
+                            plan: plan.clone(),
+                            run_id,
+                            single_step,
+                            settle,
+                        })
+                        .map_err(|e| format!("Worker unavailable: {e}"))
+                },
+            )
+        })();
+        if let Err(error) = queued {
+            let retirement = self
+                .latest_frame
+                .freecell_route
+                .lock()
+                .map_err(|_| "Free Cell retirement poisoned".to_owned())
+                .and_then(|mut store| store.reject(&plan, run_id));
+            return Err(match retirement {
+                Ok(()) => error,
+                Err(secondary) => format!("{error}; retirement also failed: {secondary}"),
+            });
+        }
+        Ok(run_id)
     }
 
 
@@ -1091,7 +1295,6 @@ impl WorkerHandle {
             })
             .map_err(|error| format!("Worker RESET preview dispatch failed: {error}"))
     }
-
 
 
     /// Queue a fresh capture whose original PNG and decoded preview share `request_id`.
@@ -1400,7 +1603,10 @@ impl WorkerHandle {
     ///
     /// Returns an error if the worker channel has closed; QEMU remains running.
     pub fn disconnect(&self, context: ControllerContext) -> Result<(), String> {
-        self.latest_frame.reconnaissance.operator_stop(&context, &self.cancel_requested);
+        self.latest_frame
+            .reconnaissance
+            .operator_stop(&context, &self.cancel_requested);
+        self.revoke_freecell_route();
         self.latest_frame.pause.abort();
         self.latest_frame.search_control.abort();
         // Requests that the worker return to its detached state.
@@ -1471,8 +1677,6 @@ impl WorkerHandle {
 
 
 impl Drop for WorkerHandle {
-
-
     /// Request STOP, send shutdown and join the QMP worker before releasing the handle.
     fn drop(&mut self) {
         // Shuts down and joins the worker thread when its handle is released.
@@ -1519,19 +1723,92 @@ fn run_worker(
             WorkerCommand::Reconnoitre { .. } | WorkerCommand::StartPyramidSession { .. } => {
                 Some(pyramid_pause::Phase::Recon)
             }
-            WorkerCommand::CalculateRoute { .. } => Some(pyramid_pause::Phase::Search),
-            WorkerCommand::ExecuteRoute { .. } => Some(pyramid_pause::Phase::Gameplay),
+            WorkerCommand::CalculateRoute { .. } | WorkerCommand::CalculateFreeCell { .. } => {
+                Some(pyramid_pause::Phase::Search)
+            }
+            WorkerCommand::ExecuteRoute { .. } | WorkerCommand::ExecuteFreeCellRoute { .. } => {
+                Some(pyramid_pause::Phase::Gameplay)
+            }
             _ => None,
         };
+        let mut pause_failure = None;
         let _pause_work = phase.and_then(|phase| match event_tx.latest_frame.pause.begin(phase) {
             Ok(work) => Some(work),
             Err(error) => {
                 cancel_requested.store(true, Ordering::Release);
-                send_log(&event_tx, error);
+                send_log(&event_tx, error.clone());
+                pause_failure = Some(error);
                 None
             }
         });
         match command {
+            WorkerCommand::ListFreeCellSources { context, directory } => {
+                let result = (|| {
+                    let entries = std::fs::read_dir(&directory)
+                        .map_err(|e| format!("Source directory: {e}"))?;
+                    let mut paths = Vec::new();
+                    for entry in entries {
+                        if shutdown_requested.load(Ordering::Acquire) {
+                            return Err("Application shutdown".to_owned());
+                        }
+                        let entry = entry.map_err(|e| format!("Source entry: {e}"))?;
+                        let path = entry.path();
+                        if path.extension().is_some_and(|e| e == "json")
+                            && entry
+                                .file_type()
+                                .map_err(|e| format!("Source type: {e}"))?
+                                .is_file()
+                        {
+                            paths.push(path);
+                        }
+                    }
+                    paths.sort();
+                    Ok(paths)
+                })();
+                let _ = event_tx.send_for_context(
+                    Some(context),
+                    WorkerEvent::FreeCellSourcesListed { directory, result },
+                );
+            }
+            WorkerCommand::ExecuteFreeCellRoute {
+                plan,
+                run_id,
+                single_step,
+                settle,
+            } => {
+                if let Some(error) = pause_failure {
+                    freecell_route::reject(plan, run_id, error, &event_tx);
+                } else {
+                    let _capture_cancel =
+                        tcp_capture::CancellationScope::install(Arc::clone(&cancel_requested));
+                    event_tx.set_capture_context(Some(plan.context.clone()));
+                    freecell_route::run(
+                        plan,
+                        run_id,
+                        single_step,
+                        settle,
+                        &event_tx,
+                        &cancel_requested,
+                    );
+                }
+            }
+            WorkerCommand::CalculateFreeCell {
+                identity,
+                path,
+                cancel,
+            } => {
+                if let Some(error) = pause_failure {
+                    freecell_calculation::complete(identity, Err(error), &event_tx);
+                } else {
+                    freecell_calculation::run(
+                        identity,
+                        &path,
+                        &cancel,
+                        &event_tx,
+                        &shutdown_requested,
+                    );
+                }
+            }
             WorkerCommand::RecordPyramidFailure {
                 context,
                 phase,
@@ -1574,10 +1851,21 @@ fn run_worker(
                     WorkerEvent::ResetPreviewFinished { request_id, result },
                 );
             }
-            WorkerCommand::ReconnoitreFreeCell { context, request_id, request } => {
-                let _capture_scope = tcp_capture::CancellationScope::install(Arc::clone(&cancel_requested));
+            WorkerCommand::ReconnoitreFreeCell {
+                context,
+                request_id,
+                request,
+            } => {
+                let _capture_scope =
+                    tcp_capture::CancellationScope::install(Arc::clone(&cancel_requested));
                 event_tx.set_capture_context(Some(context.clone()));
-                freecell_reconnaissance::run(&context, request_id, &request, &event_tx, &cancel_requested);
+                freecell_reconnaissance::run(
+                    &context,
+                    request_id,
+                    &request,
+                    &event_tx,
+                    &cancel_requested,
+                );
             }
             WorkerCommand::CaptureFrame { context } => {
                 event_tx.set_capture_context(Some(context.clone()));
@@ -1636,10 +1924,12 @@ fn run_worker(
                         });
                     },
                 );
-                crate::single_step_telemetry::record(|| serde_json::json!({
-                    "event": "request", "context": format!("{context:?}"),
-                    "settings": format!("{settings:?}"), "approved_preview": format!("{approved_prediction:?}")
-                }));
+                crate::single_step_telemetry::record(|| {
+                    serde_json::json!({
+                        "event": "request", "context": format!("{context:?}"),
+                        "settings": format!("{settings:?}"), "approved_preview": format!("{approved_prediction:?}")
+                    })
+                });
                 let _capture_cancel =
                     tcp_capture::CancellationScope::install(Arc::clone(&cancel_requested));
                 event_tx.set_capture_context(Some(context.clone()));
@@ -1760,8 +2050,6 @@ fn reset_scan_state_for_context(
     scan_state: &mut TableauScanState,
     completed_boards: &mut usize,
 ) {
-
-
     if scan_context.as_ref() != Some(context) {
         *scan_state = TableauScanState::for_mode(context.game_mode);
         *completed_boards = 0;
@@ -1791,8 +2079,6 @@ fn preparation_prediction(frame: &CapturedFrame) -> Result<Option<PredictedActio
 
 /// Refuse the preparation strategy before any input or cancellation state changes.
 fn ensure_strategy_input_authorised(strategy: SolvingStrategy) -> Result<(), String> {
-
-
     if !strategy.permits_input() {
         return Err("Pyramid preparation is read-only. Use the separate reconnaissance and computed-route controls for their guarded workflows; input sent: 0".to_owned());
     }
@@ -1823,7 +2109,6 @@ fn run_preparation_capture(context: &ControllerContext, event_tx: &WorkerEventSi
         freecell_reconnaissance::preview(context, event_tx);
         return;
     }
-
 
 
     if let Err(error) = context.validate() {
@@ -1938,8 +2223,6 @@ fn run_capture(
 
             send_status(
                 event_tx,
-
-
                 if scan_state.mode().calibration_only() {
                     format!("{} calibration capture ready", scan_state.mode())
                 } else {
@@ -2085,8 +2368,6 @@ fn run_execute_steps(
     event_tx: &WorkerEventSink,
     cancel_requested: &AtomicBool,
 ) {
-
-
     if scan_state.mode() == GameMode::Spider {
         spider_execution::run_spider_steps(
             &socket_path,
@@ -2250,8 +2531,6 @@ fn run_execute_steps(
             },
         ) {
             Ok(success) => {
-
-
                 let acceptance = if success.continued_from_halo {
                     run_profile.halo_operations = run_profile.halo_operations.saturating_add(1);
                     "continued from fresh halo"
@@ -2300,8 +2579,6 @@ fn run_execute_steps(
                             "Board counter: {}/{} completed in this solver session{}.",
                             success.completed_boards,
                             boards_per_game,
-
-
                             if success.series_complete {
                                 "; game complete"
                             } else {
@@ -2318,8 +2595,6 @@ fn run_execute_steps(
 
 
                 if success.series_complete {
-
-
                     match post_game::run_post_game_restart(
                         &mut qmp,
                         &socket_path,
@@ -2334,8 +2609,6 @@ fn run_execute_steps(
                         normal_completion,
                     ) {
                         Ok(outcome) => {
-
-
                             let (observation, game_restarted) = match outcome {
                                 post_game::PostGameOutcome::Restarted(observation) => {
                                     (observation, true)
@@ -2359,8 +2632,6 @@ fn run_execute_steps(
                             }
                         }
                         Err(error) => {
-
-
                             let state = if cancel_requested.load(Ordering::Acquire) {
                                 WorkerState::Ready
                             } else {
@@ -2421,8 +2692,6 @@ fn run_execute_steps(
 
 
                 if let Some(observation) = failure.observation {
-
-
                     match failure.frame_phase {
                         FailureFramePhase::PreAction => send_frame(event_tx, observation),
                         FailureFramePhase::PostAction => {
@@ -2453,8 +2722,6 @@ fn reset_completed_series_for_new_run(
     scan_state: &mut TableauScanState,
     completed_boards: &mut usize,
 ) -> bool {
-
-
     if *completed_boards < scan_state.mode().profile().boards_per_game {
         return false;
     }
@@ -2526,8 +2793,6 @@ struct CaptureTiming {
 
 
 impl CaptureTiming {
-
-
     /// Accumulate capture counts and per-stage durations from another capture measurement.
     fn add_assign(&mut self, other: Self) {
         self.identity = None;
@@ -2582,8 +2847,6 @@ struct RunProfile {
 
 
 impl RunProfile {
-
-
     /// Create empty run accounting with the already-measured QMP connection/probe duration.
     const fn new(connect_probe: Duration) -> Self {
         Self {
@@ -2818,8 +3081,6 @@ fn execute_guarded_action(
                 ) {
                     Ok(series) => series,
                     Err(error) => {
-
-
                         let state = if cancel_requested.load(Ordering::Acquire) {
                             WorkerState::Ready
                         } else {
@@ -3450,8 +3711,6 @@ fn execute_guarded_action(
                     "TriPeaks pending-terminal observation is missing a frame".to_owned()
                 })
                 .and_then(|(before, after)| {
-
-
                     if !tripeaks_terminal::last_tableau_context(plan, before)? {
                         return Ok(false);
                     }
@@ -3542,8 +3801,6 @@ fn execute_guarded_action(
 
             let level_up_visible = match no_highlight_observation.as_ref() {
                 Some(observation) => {
-
-
                     match post_game::level_up_overrides_board_progress(
                         board_completion_verified,
                         observation,
@@ -3616,8 +3873,6 @@ fn execute_guarded_action(
 
 
             if completion_check_authorised {
-
-
                 let completion_changed = match before_series
                     .observations
                     .last()
@@ -3872,8 +4127,6 @@ fn execute_guarded_action(
                     }
                 }
                 TriPeaksHaloRecoveryStep::RefreshSolver => {
-
-
                     if cancel_requested.load(Ordering::Acquire) {
                         return Err(action_failure(
                             action_started,
@@ -4070,8 +4323,6 @@ fn execute_guarded_action(
 
 
         if board_completion_verified {
-
-
             let after = match plan_step(after_predictions[0]) {
                 Ok(next_plan) => next_plan.before(),
                 Err(error) => {
@@ -4198,8 +4449,6 @@ fn click_shared_solver(
     qmp: &mut QmpClient,
     cancel_requested: &AtomicBool,
 ) -> Result<Duration, String> {
-
-
     if cancel_requested.load(Ordering::Acquire) {
         return Err(
             "STOP was requested before the Solver click; no Solver input was sent".to_owned(),
@@ -4240,8 +4489,6 @@ fn action_failure(
 
 /// Require a running VM and a current absolute pointer; return the first failed precondition.
 fn validate_probe(probe: &crate::qmp::QmpProbe) -> Result<(), String> {
-
-
     if !probe.is_running() {
         return Err("VM is not running".to_owned());
     }
@@ -4262,8 +4509,6 @@ fn milliseconds(duration: Duration) -> f64 {
 
 /// Render zero as an unbounded run and a positive value as its operation limit.
 fn format_operation_limit(operation_limit: usize) -> String {
-
-
     if operation_limit == 0 {
         "unbounded (until STOP)".to_owned()
     } else {
@@ -4274,8 +4519,6 @@ fn format_operation_limit(operation_limit: usize) -> String {
 
 /// Render the current one-based operation index against a bounded or unbounded limit.
 fn format_operation_progress(operation_index: usize, operation_limit: usize) -> String {
-
-
     if operation_limit == 0 {
         format!("{operation_index}/unbounded")
     } else {
@@ -4297,8 +4540,6 @@ fn log_action_profile(
         event_tx,
         format!(
             "PROFILE action {progress} ({status}): input-attempted={}, captures={}, reserve={:.1} ms, request={:.1} ms, receive/read={:.1} ms, convert/decode={:.1} ms, png-encode={:.1} ms, detection={:.1} ms, validation/effect={:.1} ms, input-wall(inclusive)={:.1} ms, intentional-waits={:.1} ms, total={:.1} ms.",
-
-
             if profile.input_attempted { "yes" } else { "no" },
             profile.capture.captures,
             milliseconds(profile.capture.reserve),
@@ -4365,8 +4606,6 @@ fn reconcile_observation_series(
     scan_state: &mut TableauScanState,
     observations: &[FrameObservation],
 ) -> bool {
-
-
     match observations {
         [single] if !matches!(single.prediction, PredictedAction::Ambiguous { .. }) => {
             scan_state.reconcile_observation(single.observed_rows)
@@ -4448,8 +4687,6 @@ fn connect_and_probe(socket_path: &Path) -> Result<(QmpClient, crate::qmp::QmpPr
 
 /// Reject calibration-only game modes before any guest input can be requested.
 fn ensure_input_authorised(mode: GameMode) -> Result<(), String> {
-
-
     if mode.input_authorised() {
         Ok(())
     } else {
@@ -4742,7 +4979,8 @@ fn capture_screen_causal(
         }
         CaptureBackend::Tcp { address, mode } => {
             let requested_at = worker_elapsed();
-            let (frame, mut timing, captured_at) = capture_tcp_with_single_step_diagnostics(&address, mode, event_tx)?;
+            let (frame, mut timing, captured_at) =
+                capture_tcp_with_single_step_diagnostics(&address, mode, event_tx)?;
             if game_win_images_enabled() {
                 let png = encode_captured_png(&frame, &mut timing)?;
                 record_game_win_png(&png, captured_at, event_tx)?;
@@ -4772,13 +5010,15 @@ fn capture_screen_with_png_causal(
 ) -> Result<(CapturedFrame, Vec<u8>, CaptureTiming), pyramid_stop::CaptureFailure> {
     match selected_capture_backend()? {
         CaptureBackend::LegacyQmp => {
-            let (frame, png, timing) = capture_screen_with_png_legacy_qmp(qmp, socket_path, event_tx)?;
+            let (frame, png, timing) =
+                capture_screen_with_png_legacy_qmp(qmp, socket_path, event_tx)?;
             log_single_step_capture(&frame, timing);
             Ok((frame, png, timing))
-        },
+        }
         CaptureBackend::Tcp { address, mode } => {
             let requested_at = worker_elapsed();
-            let (frame, mut timing, captured_at) = capture_tcp_with_single_step_diagnostics(&address, mode, event_tx)?;
+            let (frame, mut timing, captured_at) =
+                capture_tcp_with_single_step_diagnostics(&address, mode, event_tx)?;
             let png = encode_captured_png(&frame, &mut timing)?;
             record_game_win_png(&png, captured_at, event_tx)?;
             log_tcp_capture_timing(event_tx, requested_at, captured_at, timing);
@@ -4898,8 +5138,6 @@ fn capture_series(
     event_tx: &WorkerEventSink,
     cancel_requested: &AtomicBool,
 ) -> Result<CaptureSeries, String> {
-
-
     if cancel_requested.load(Ordering::Acquire) {
         return Err("STOP was requested before the next capture".to_owned());
     }
@@ -4961,8 +5199,6 @@ fn send_post_action_frame(event_tx: &WorkerEventSink, observation: FrameObservat
 
 /// Describe a predicted target and its input method for detailed diagnostics.
 fn format_prediction_target(prediction: PredictedAction) -> String {
-
-
     match prediction {
         PredictedAction::CalibrationOnly { mode } => format!("{mode} calibration only"),
         PredictedAction::NoHighlight => "no highlight".to_owned(),
@@ -5072,8 +5308,6 @@ fn execute_planned_input(
     plan: StepPlan,
     cancel_requested: &AtomicBool,
 ) -> Result<(), String> {
-
-
     if cancel_requested.load(Ordering::Acquire) {
         return Err("STOP was requested before input".to_owned());
     }
@@ -5102,8 +5336,6 @@ fn cancellable_wait(
 
 
     loop {
-
-
         if cancel_requested.load(Ordering::Acquire) {
             return Err(started.elapsed().min(duration));
         }
@@ -5126,8 +5358,6 @@ struct CaptureArtifact {
 
 
 impl CaptureArtifact {
-
-
     /// Reserve a private regular PNG file beside the QMP socket using exclusive creation.
     ///
     /// Retries name collisions within a fixed budget; returns errors for a missing
@@ -5185,8 +5415,6 @@ impl CaptureArtifact {
 
 
 impl Drop for CaptureArtifact {
-
-
     /// Attempt normal-cleanup removal of the reserved temporary PNG; ignore removal errors.
     fn drop(&mut self) {
         let _ = fs::remove_file(&self.file_name);
@@ -5233,8 +5461,6 @@ fn send_board_progress(
 
 /// Render concise action status while preserving target and input-method meaning.
 fn format_action_status(prediction: PredictedAction) -> String {
-
-
     match prediction {
         PredictedAction::CalibrationOnly { mode } => format!("{mode} calibration — input disabled"),
         PredictedAction::Action(action) => match (action.target, action.operation()) {

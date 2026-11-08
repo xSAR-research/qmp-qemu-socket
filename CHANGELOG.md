@@ -1,5 +1,37 @@
 # Changelog
 
+## 3.1.2
+
+- Replace Free Cell source-only click selection with explicit-target held drag; retain semantic endpoint proof and release-only uncertainty recovery.
+- Keep the A* shell stable across all five ordered game choices; unsupported workflows remain disabled.
+- Automatically display frozen FAILURE DETAILS; add a maximised, resizable physical-route inspector with local LOG-style font control.
+- Qualify against xSAR 0.11.1. All 38 source commands passed: dependency-free defaults and eleven isolated xSAR features, both owning-package six-gate suites and console check/tests. Full tests: **323 xSAR / 1,789 application / 80 console**, zero failed/ignored/filtered. Fourteen focused application tests include local TCPv3/Unix-QMP peers, immutable failure presentation and actual headless Restore clicks at wide/narrow workspace sizes. Seven aligned commands passed after exactly five approved Cargo version edits; **1,013 of 1,018** compiler inputs stayed identical. xSAR is **0.11.1**, application **3.1.2**, console package unchanged.
+
+Host/retained-frame/local-peer evidence does not establish fresh guest drag effects, autoplay timing or full-route acceptance. Native support remains 1920×1080 CLASSIC BLUE with Solver off and complete supported geometry; toolbar-clipped ten-card columns may refuse. A mismatched or uncertain position stops playback and requires CALCULATE again. No guest actions, installation, executable copy, commit or push were performed for this release.
+
+## 3.1.1
+
+Adds explicit Free Cell A* route playback from the retained independently replayed complete route. CALCULATE remains offline. Single Step performs at most one deliberate transfer with its leading/trailing automatic transfers; SOLVE remaining route continues from the verified cursor. Fresh physical-board evidence binds the saved original deal before input, and observed semantic effects advance the cursor independently of QMP acknowledgements.
+
+Keep Solver off and choose the policy matching game autoplay: ON observes automatic transfers without clicking them; OFF executes every recorded transfer. The policy freezes at first playback. PAUSE/CONTINUE retain verified work at safe boundaries. STOP, uncertain delivery, failure, or changed source/context/policy revokes playback and requires CALCULATE again. See the [Block 4 playback contract](docs/free-cell-block-4.md).
+
+All six application source gates passed, including 1,789 tests with zero failures, ignored or filtered tests. The 28 focused tests include synthetic board effects and local TCPv3/Unix-QMP peers. App-only version alignment passed locked check, release build and direct help; 1,015 of 1,017 inputs are unchanged across the two Cargo version edits. xSAR stays at 0.11.0 with its existing qualification retained. Fresh operator-checked guest/UI acceptance remains pending; no guest actions were performed during this implementation.
+
+Native support requires 1920×1080 CLASSIC BLUE, Solver off and complete supported card geometry. Hidden identities are carried only from the authenticated original through verified same-run moves; contradictory visible evidence refuses. Complete-face checks can stop on toolbar-clipped ten-card columns. Actual source/destination click semantics, autoplay timing and complete clean native midgame acceptance still need guest validation. See [verification](docs/Verification-3.1.1.md).
+
+
+## 3.1.0
+
+Adds an offline Free Cell complete-route calculation from a strict saved 52-card deal. The dedicated worker freezes the loaded input, searches without configured memory/time/state/expansion limits, records root and interleaved Horne automatic transfers, and independently replays every transfer before publishing a usable complete route. Foundations are irreversible. Guidance orders the search; no shortest or optimal route is promised.
+
+The UI provides a direct Pyramid/Free Cell selector, JSON file selection, CALCULATE, PAUSE/CONTINUE and CANCEL, actual counters and measured paused duration. Request/context/source-generation fencing rejects stale results. Calculation performs no capture, QMP or guest input; later move execution and partial optimisation remain separate work.
+
+Qualification passed 38 source commands: xSAR dependency-free defaults and eleven isolated optional features, both owning six-gate suites, and the console consumer check/tests. Full tests passed: xSAR 319, controller 1,761, console 80, with zero failures or ignored tests. The unchanged library's 30 passing rows are retained from the first source attempt; the app's narrow Clippy correction is followed by fresh six-gate qualification. The original failure and preimages remain preserved.
+
+Approved five-file version alignment to app 3.1.0/xSAR 0.11.0 passed library/app/console locked checks, console tests, both release builds and direct help. All 1,009 compiler inputs are sealed; 1,004 are identical across version alignment. Console package version remains 0.8.5. No new Miri or fresh guest/GUI acceptance is claimed.
+
+See [verification](docs/Verification-3.1.0.md) and [Block 2 contract](docs/free-cell-block-2.md).
+
 ## 3.0.2
 
 Removes the invalid Klondike SUIT/foundation scene requirement. Four felt gutters and at least five of seven PLAY top-edge probes remain mandatory; source HALO, Solver banner, fresh VM/pointer probes, STOP and no-replay rules retain their separate authority. Both byte-original incident frames now reach SUIT 3 at (1296,199). The other four GAME TYPE scene checks have no equivalent SUIT gate.

@@ -8,7 +8,7 @@ use crate::game::GameMode;
 /// User-selected controller; independent preparation does not grant general input.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SolvingStrategy {
-    /// Independent Pyramid preparation and read-only Free Cell RECON; no ordinary input authority.
+    /// Independent Pyramid and Free Cell workflows; no ordinary input authority.
     ShortestPath,
     /// Existing guest Solver/HALO controllers for all five game types.
     #[default]
@@ -23,8 +23,6 @@ impl SolvingStrategy {
 
     /// Return the requested user-facing strategy name.
     pub const fn label(self) -> &'static str {
-
-
         match self {
             Self::ShortestPath => "A* Route Solution",
             Self::ComputerVision => "Computer Vision solving",
@@ -36,7 +34,7 @@ impl SolvingStrategy {
     pub const fn description(self) -> &'static str {
         match self {
             Self::ShortestPath => {
-                "Prepare and execute independently verified Pyramid routes, or read and export a Free Cell starting deal. Free Cell route search and execution are unavailable in this release."
+                "Prepare and execute independently verified Pyramid or Free Cell routes. Other game types are selectable with A* capabilities explicitly unavailable."
             }
             Self::ComputerVision => {
                 "Follow the game's built-in Solver highlights using screen captures and QMP input."
@@ -67,8 +65,6 @@ pub struct ControllerContext {
 
 
 impl ControllerContext {
-
-
     /// Construct one immutable request identity.
     pub fn new(
         socket_path: PathBuf,
@@ -90,7 +86,9 @@ impl ControllerContext {
         if self.strategy == SolvingStrategy::ShortestPath
             && !matches!(self.game_mode, GameMode::Pyramid | GameMode::FreeCell)
         {
-            return Err("Independent preparation currently supports Pyramid and read-only Free Cell RECON only".to_owned());
+            return Err(
+                "Independent requests currently support Pyramid and Free Cell only".to_owned(),
+            );
         }
         Ok(())
     }
@@ -118,7 +116,10 @@ mod tests {
                 SolvingStrategy::ShortestPath,
                 1,
             );
-            assert_eq!(independent.validate().is_ok(), matches!(game, GameMode::Pyramid | GameMode::FreeCell));
+            assert_eq!(
+                independent.validate().is_ok(),
+                matches!(game, GameMode::Pyramid | GameMode::FreeCell)
+            );
             let vision = ControllerContext::new(
                 independent.socket_path,
                 game,

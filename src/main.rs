@@ -8,6 +8,7 @@ mod cards;
 mod detector;
 mod freecell;
 mod freecell_recon;
+mod freecell_route;
 mod freecell_terminal;
 mod game;
 mod game_operations;

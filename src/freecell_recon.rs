@@ -9,6 +9,8 @@ use xsar::games::{
     freecell::{BoardState, CascadeStack, INITIAL_LENGTHS, InitialDeal, Metadata},
 };
 
+pub(crate) mod position;
+
 /// Identity of this one measured, unscaled native profile.
 pub(crate) const PROFILE: &str = "native-freecell-v1";
 
