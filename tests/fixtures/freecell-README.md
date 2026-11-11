@@ -1,5 +1,121 @@
 # Free Cell native Solver evidence
 
+## Current independent identity and live binding boundary
+
+RECON and live initial binding read all52 fixed physical rank/suit corners with
+the same local contrast, coherent ink, competing-label quality/separation and
+unique-inventory checks. Live binding additionally requires a valid native frame,
+positive Menu/Back controls, Solver exclusion and actual initially empty top
+slots. The caller separately compares the freshly read physical deal with the
+frozen source; a cached deal does not authenticate UNDO ALL or a new board.
+
+Paper colour, gold decoration, complete card borders/rails and lower face
+artwork no longer add gameplay vetoes. Historical edge-envelope measurements
+below remain provenance for retired checks. Tests now require readable identities
+to survive those decorative differences and still refuse damaged, ambiguous,
+mixed-colour or duplicated identities, invalid frames, unsupported controls,
+Solver/real overlays and cancellation. Saved-frame results establish host
+recognition; they do not establish guest input delivery or live acceptance.
+
+## Native sixes incident regression
+
+`freecell-sixes-decorative-20261111.png` is the complete byte-identical
+`last-observed.png` from
+`/home/charlie/tmp/pyramid-error-1794339214682-1138131-2/`. It is3,623,060 bytes,
+1920×1080 RGBA, SHA256
+`3621b103590b6d5b1c5c52fc7d2b9fba48ff6c1f0800f277e9d8336c01bd4d61`.
+The retained image shows “Sixes cleared0/3”, a highlighted6H at PLAY3 depth1,
+and the original initial tableau. Its52 identities were read independently
+from the saved image, in physical top-to-bottom order:
+
+| PLAY | Printed cards |
+|---|---|
+| 1 | 8S,3C,TD,7D,7C,KC,4H |
+| 2 | 8C,9S,5C,JD,9H,KD,4C |
+| 3 | 6H,9D,8H,AD,JS,QD,QH |
+| 4 | 3H,KS,7H,6D,3S,4S,5S |
+| 5 | 9C,6C,5H,TS,TH,TC |
+| 6 | JC,3D,AH,2H,8D,JH |
+| 7 | AS,7S,2D,6S,QC,2S |
+| 8 | QS,2C,AC,5D,KH,4D |
+
+The authentic frame must acquire and freshly bind the same complete physical
+inventory without a new glyph calibration or relaxed identity threshold.
+Explicit synthetic in-memory variants also change a PLAY3 outer decorative
+rail pixel to red237 and238; both retain the same identities and exposed-card
+positions. The original packet remains unchanged.
+
+The additional `freecell-challenge-20261107.png` is a byte-for-byte retained later
+operator screenshot (SHA256
+`5398456b9f949e548241b4f555fafca3f5fcf356d57bd73a7c726a58c8816059`). It shows a
+red “Clear the 9♦” banner and a highlighted card border. It is **not** an original
+failed RECON frame and establishes no cause for those missing original pixels.
+The3.1.3 tests used its objective pixels as unresolved evidence; its original
+highlighted card failed the now-retired strict card-edge geometry check. A separately
+labelled in-memory derivative places only those objective pixels on native FC01
+to verify inventory acquisition and objective retention without claiming captured
+gameplay, recognised challenge semantics or guest acceptance.
+
+## Read-only RECON regressions in 3.1.4
+
+`freecell-challenge-highlight-20261109.png` is the complete byte-identical acquired
+frame from
+`/home/charlie/tmp/pyramid-error-1794150459483-380772-0/first-unmatched.png`.
+It is 3,615,634 bytes, 1920×1080 RGBA, SHA256
+`35dbe33e2e9f05ab593dc0334094cd5acae026e1c5d619d8ec46f3b65adf5636`.
+The original 3.1.3 packet records RECON request 1, TCP protocol 3, session 11,
+transport request 1, frame 1706 and display generation 1. Its first refusal was
+the gold top border of PLAY 2 depth 1. The original packet remains unchanged.
+
+The frame shows a “Clear the 9♦” objective and a highlighted 9♦. These manually
+read identities are fixed physical columns, each listed from top to bottom:
+
+| PLAY | Printed cards |
+|---|---|
+| 1 | TD, 9C, JC, 2S, 9S, KD, KH |
+| 2 | 9D, 2H, 2D, 6H, TH, 8S, 3H |
+| 3 | 5S, JS, JD, KS, JH, 6D, 7C |
+| 4 | QS, 7H, AS, 7S, TC, TS, 7D |
+| 5 | AD, KC, QD, 4C, 5D, AC |
+| 6 | 3D, 8H, 5H, 9H, QH, AH |
+| 7 | 4H, 5C, 2C, 8C, QC, 8D |
+| 8 | 6S, 4S, 4D, 3C, 6C, 3S |
+
+The native highlighted rank and suit crops have a 90th-percentile minimum RGB
+channel value of 233; the dominant bright rank paper is RGB (255,250,233).
+With the existing relative ink contrast and ±1 recrops, the best rank differences
+are 9 = 7 and 5 = 59; the best suit differences are diamonds = 2 and hearts = 53.
+These measurements explain RECON's use of local glyph contrast without a separate
+paper-whiteness veto; rank/suit quality and separation limits and the reference
+glyph bank remain unchanged. Fresh live initial binding now uses that same
+printed identity evidence without a separate card-border veto. An acquired
+challenge retains its objective honestly; acquisition alone grants no input
+authority or recognised challenge semantics.
+
+`freecell-ambiguous-rank-20261109.png` is an explicitly cropped native evidence
+derivative, **not** a complete acquired frame. It retains the 28×25 RGBA rectangle
+at x=604, y=549 from
+`/home/charlie/tmp/pyramid-error-1794149415703-375927-0/first-unmatched.png`,
+whose original SHA256 is
+`98c956b33c957a0a08d75a7c2ec8fb16837185798dddf9d99287f71c95dfd24e`.
+The derivative is 1,374 bytes, SHA256
+`faef5a47ac4f2185d9415b1c145713a2466511e80cd644c7c3465463ff7cb908`.
+It includes every ±1 rank recrop around that original PLAY 3 depth 5 corner.
+An explicitly synthetic in-memory placement onto FC01 preserves the actual
+ambiguous 9 = 34 versus 5 = 50 result. The separation of 16 remains below the
+required 20, so RECON must refuse without completing the card by elimination.
+
+Other 3.1.4 derivatives are made only in memory and are explicitly synthetic:
+changing all pixels outside the objective and the complete rank/suit recrop
+unions must preserve the same acquired deal. Altered top slots, felt, final-face
+borders, below-stack backgrounds and Solver decoration cannot veto read-only
+RECON. Current live binding additionally checks actual scene controls, Solver
+exclusion and initial top-slot occupancy. Readable non-white rank crops and
+decorative border/face changes are positive live-binding and position tests.
+Damage to required glyphs, insufficient contrast, duplicate identities,
+malformed frames and cancellation remain refused. These fixtures qualify host
+recognition and acquisition behaviour, not fresh guest input or live acceptance.
+
 These twenty-one complete PNG files were copied byte-for-byte from Charlie's
 supplied 5–7 October 2026 attachments. He captured them through the application.
 They are not crops, sparse fixtures, OCR products or resized images. Each frame is 1920×1080 RGBA, including the title bar, guest game toolbar
@@ -124,3 +240,125 @@ FC01–FC23 records a genuine Free Cell foundation-source HALO. Native dashed SU
 guides remain negative evidence. The controller tests cover foundation-to-PLAY
 continuation, STOP and uncertain delivery without adding card-effect gates. Fresh
 live acceptance of the rare foundation recommendation remains pending.
+
+
+## Native sevens challenge regression in 3.1.8
+
+`freecell-sevens-halo-20261109.png` is the complete byte-identical saved
+`last-observed.png` from the operator's 3.1.7 execution failure packet
+`/home/charlie/tmp/pyramid-error-1794229477346-672085-5/`.
+It is 3,637,114 bytes, 1920×1080 RGBA, SHA256
+`fef4cdd0a498b4cefb968b07980535d6f7dc6fd5b77052211332dfa196b8face`.
+The failure was before input: attempted 0, acknowledged 0, capture serial 1,
+initial physical binding false. The old `BelowStack` rectangle at
+x=218, y=835, width=137, height=100 intersects the genuine final 7C's glow.
+That rectangle's equality to bundled felt was not card-identity evidence.
+
+The native frame shows “Sevens cleared 0/2” and four highlighted sevens.
+These identities are independently read from the saved pixels, in physical
+column order from top to bottom, without completing inventory by elimination:
+
+| PLAY | Printed cards |
+|---|---|
+| 1 | 4S, KH, 5S, 3H, 7H, 9D, 7C |
+| 2 | 3C, AS, KD, AD, KC, 8C, TH |
+| 3 | 7S, 6C, 7D, TD, JC, 6S, AC |
+| 4 | 5D, 5C, 2H, 4C, 2S, TS, 2C |
+| 5 | JH, JS, 4D, QC, QH, 5H |
+| 6 | AH, 8S, 2D, 3D, 9C, QD |
+| 7 | 4H, TC, QS, 6D, 3S, JD |
+| 8 | 8H, 8D, 9S, KS, 9H, 6H |
+
+The four native gold faces begin at (218,543), (218,650), (603,331) and
+(603,437). The former geometry policy measured their top edges and exposed
+rails, including the final7C lower edge at y=832. Those gold envelopes are
+historical evidence; current binding and position matching use printed glyphs
+without a decorative border or rail veto.
+
+The incident's ordinary ten of hearts has one genuine neutral rail pixel at
+(410,667), RGB (200,218,221), whose channel spread is 21. Complete exposed
+neutral-rail measurements cover 5,386 pixels in this frame; their maximum is
+21, compared with maxima 16 on FC01, 15 on FC13, and 20 on the earlier
+highlighted challenge. The retired rail-only spread bound was21. Current
+positive derivatives establish that a spread22 rail pixel and interrupted
+lower borders cannot veto intact printed rank/suit evidence. Glyph identity
+quality and separation thresholds remain unchanged.
+
+Synthetic derivatives are constructed only in memory. Repainting advisory
+canvas, top-slot interior texture and below-stack areas preserves live binding
+when native control glyphs, actual empty slots and exact printed identities
+remain present. Damaged game controls, Solver, occupied initial slots, extra
+exposed cards and unknown or mixed identities still refuse at their respective
+boundaries. Interrupted native card edges are positive decorative contrasts. Off-card decoration supplies
+no input authority and is not a universal modal detector. The supported native
+card artwork, objective policy, STOP and fresh effect checks remain separate
+requirements. This saved-frame regression establishes host recognition, not a
+fresh guest drag or full-route acceptance.
+
+
+## Native normal6D and highlighted5H regressions in 3.1.10
+
+The original packets were moved into `/home/charlie/tmp/_HOLDER_/`; the retained
+filenames below preserve their captured bytes and independently supplied digests.
+Neither original packet is changed.
+
+| Fixture | Captured source | Bytes | SHA256 |
+|---|---|---:|---|
+| `freecell-normal-six-20261110.png` | `pyramid-error-1794300141350-832580-2/first-unmatched.png` | 3,649,494 | `b5fab09b41f9b6fe5e1bd6b1034390741958c5dd439a476f28f99c3b05fff7c1` |
+| `freecell-gold-five-heart-20261110.png` | `pyramid-error-1794302014997-832580-6/last-observed.png` | 3,698,608 | `858731b6214a7049f1ec310a2e90f001eeb872966e761f9dbd89c65874d6262e` |
+
+Both are complete 1920×1080 RGBA native frames. The first shows an ordinary
+Expert board; the second shows the “Clear the 5♥” challenge and its highlighted
+5H at PLAY1 depth2. Printed identities were read independently from the saved
+pixels, in original top-to-bottom column order:
+
+| PLAY | Normal board | Highlighted5H challenge |
+|---|---|---|
+| 1 | QH, TD, 9D, JC, 2H, JH, 5S | 5D, 5H, 7H, 8H, KS, 3H, KC |
+| 2 | 7S, AS, 8C, KH, AH, QS, QC | 6D, TC, TS, AD, 6C, 6H, QH |
+| 3 | 4H, KC, 3S, 9S, 5H, 7H, 4C | QC, TH, 5C, 7S, 4D, JD, QS |
+| 4 | 5C, 9C, 4D, TS, 4S, 7C, KD | 7D, 9C, 8S, 2C, 4S, AS, JS |
+| 5 | TC, 6C, KS, 8S, JD, AD | 3S, 9H, QD, 5S, 2D, JH |
+| 6 | 2S, 9H, 3D, 8D, 2C, 7D | 7C, 9D, 8C, KD, KH, 2S |
+| 7 | TH, AC, 6S, QD, 8H, 6D | JC, 9S, 6S, 4H, 3D, 8D |
+| 8 | 3C, 3H, 6H, 5D, JS, 2D | AH, 2H, 4C, 3C, TD, AC |
+
+`freecell-normal-six-rank-corner-20261110.png` is an explicitly cropped native
+calibration derivative, not a complete captured frame or a held-out rank test.
+Its exact source rectangle is x=1373, y=597, width=30, height=48 in the normal
+fixture above. It is 2,422 bytes, SHA256
+`6c938d555b40d529f38a951e0cd1d54bf82dc36fffb5b4c3ebf8915f46e81c46`.
+The complete rank rectangle inside it is x=2, y=7, width=26, height=23, and is
+independently labelled6 from the printed6D. Only this rank is added to the bank.
+Its supplementary template repeats the original FC13's6D suit bitmap exactly;
+the derivative's suit supplies no additional suit calibration.
+
+The original44-strip bank scores the actual normal6D as6=21 versus5=40, a gap
+of19 below the unchanged20 requirement. The added native appearance scores6=0
+versus5=40. It competes with every distinct same-colour rank; it grants no
+expected-card shortcut or inventory inference. The earlier ambiguous9D remains
+9=34 versus5=50 and must still refuse. Rank48/20 and suit16/12 bounds, relative
+contrast, colour coherence, complete crops, ±1 recrops and unique52 inventory
+remain unchanged. The normal frame's6D is calibration evidence. The separate
+5H challenge and retained FC05/FC08/FC14/FC18/FC20/FC21 native faces exercise
+the augmented bank independently of that new rank sample; these are host
+recognition checks, not guest input evidence.
+
+For the native5H at (218,384), all121 required top pixels measure
+R243..253/G206..209/B8..60. Its37 required left-rail pixels measure
+R249..252/G209..210/B7..32, and its37 right-rail pixels measure
+R219..253/G201..208/B12..124. Exactly19 right-rail pixels have red219; the
+first is (354,406), RGB (219,201,122). The retired right-role red minimum
+changed from220 to219. Those numbers explain the earlier geometry calibration;
+current acceptance does not depend on these decorative edge envelopes.
+Red218 and interrupted top/left/right derivatives are now positive contrasts
+when printed glyphs and actual slot evidence remain readable.
+
+Synthetic derivatives are made only in memory and labelled by their tests:
+erased/unknown/mixed glyphs, a native black suit beside an unchanged red rank,
+duplicated printed identities, occluded identity corners and the retained
+ambiguous rank remain negative cases. Decorative5H top/rail changes no longer
+veto printed identities. Complete acquisition and fresh initial binding still
+check all52 printed cards using local contrast; an objective or HALO never
+supplies identity or input authority. These saved-frame
+regressions do not establish fresh live gameplay, drag delivery or route success.

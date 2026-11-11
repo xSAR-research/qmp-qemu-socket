@@ -9,6 +9,7 @@ mod diagnostics;
 mod freecell_calculation;
 mod freecell_recon;
 mod freecell_route;
+mod freecell_telemetry;
 mod log_window;
 mod pyramid_defaults;
 mod pyramid_requests;
@@ -814,7 +815,13 @@ impl QmpQemuSocketApp {
 
     /// Retain a source timestamp so delayed UI polling cannot change worker chronology.
     fn push_log_at(&mut self, elapsed: Duration, message: impl Into<String>) {
-        let line = format!("[+{:08.3}s] {}", elapsed.as_secs_f64(), message.into());
+        let message = message.into();
+        self.trace_freecell_ui_at(
+            elapsed,
+            "application-log",
+            serde_json::json!({"message":message}),
+        );
+        let line = format!("[+{:08.3}s] {}", elapsed.as_secs_f64(), message);
         let session_error = self
             .session_log
             .as_mut()
@@ -842,9 +849,26 @@ impl QmpQemuSocketApp {
         {
             self.session_log = None;
             self.push_visible_log_line(format!(
-                "WARNING: Single step session telemetry write failed ({error})."
+                "WARNING: session telemetry write failed ({error})."
             ));
         }
+    }
+
+
+    /// Persist wire provenance and show the exact packet once, without UI trace recursion.
+    fn push_qmp_wire_log_at(&mut self, elapsed: Duration, metadata: &str, packet_line: &str) {
+        let (line, error) = qmp_wire_log_record(elapsed, metadata, packet_line, |line| {
+            self.session_log
+                .as_mut()
+                .map_or(Ok(()), |log| log.append(line))
+        });
+        if let Some(error) = error {
+            self.session_log = None;
+            self.push_visible_log_line(format!(
+                "WARNING: QMP session log write failed ({error}); retaining the packet in the visible panel only."
+            ));
+        }
+        self.push_visible_log_line(line);
     }
 
 
@@ -967,6 +991,10 @@ impl QmpQemuSocketApp {
                     WorkerEvent::SessionTelemetry(message) => {
                         self.push_session_telemetry_at(elapsed, message)
                     }
+                    WorkerEvent::QmpWireLog {
+                        metadata,
+                        packet_line,
+                    } => self.push_qmp_wire_log_at(elapsed, &metadata, &packet_line),
                     _ => {}
                 }
                 continue;
@@ -1011,6 +1039,10 @@ impl QmpQemuSocketApp {
                 WorkerEvent::SessionTelemetry(message) => {
                     self.push_session_telemetry_at(elapsed, message)
                 }
+                WorkerEvent::QmpWireLog {
+                    metadata,
+                    packet_line,
+                } => self.push_qmp_wire_log_at(elapsed, &metadata, &packet_line),
                 WorkerEvent::RunFailure(failure) => {
                     self.failure_window
                         .worker_run(&failure, tagged.context.as_ref(), elapsed);
@@ -1081,6 +1113,7 @@ impl QmpQemuSocketApp {
                     prediction,
                 } => {
                     if self.show_snapshot_dialog
+                        && self.snapshot_capture_pending
                         && request_id == self.snapshot_request_id
                         && capture_context == self.current_preview_context()
                     {
@@ -1101,6 +1134,8 @@ impl QmpQemuSocketApp {
                                 self.snapshot_error = None;
                             }
                             Err(error) => {
+                                self.freecell_auxiliary_failure("Free Cell snapshot preview", &error,
+                                    serde_json::json!({"request_id":request_id,"stage":"decode UI pixels"}));
                                 self.snapshot_error =
                                     Some(format!("Could not preview the captured PNG: {error}"));
                             }
@@ -1108,8 +1143,13 @@ impl QmpQemuSocketApp {
                     }
                 }
                 WorkerEvent::SnapshotPreparationFailed { request_id, error } => {
-                    if self.show_snapshot_dialog && request_id == self.snapshot_request_id {
+                    if self.show_snapshot_dialog
+                        && self.snapshot_capture_pending
+                        && request_id == self.snapshot_request_id
+                    {
                         self.snapshot_capture_pending = false;
+                        self.freecell_auxiliary_failure("Free Cell snapshot acquisition", &error,
+                            serde_json::json!({"request_id":request_id,"stage":"capture/PNG preparation"}));
                         self.snapshot_error = Some(error);
                     }
                 }
@@ -1356,6 +1396,7 @@ impl QmpQemuSocketApp {
                 }
                 WorkerEvent::FreeCellReconFinished {
                     request_id,
+                    frame,
                     termination,
                     result,
                 } => {
@@ -1367,14 +1408,66 @@ impl QmpQemuSocketApp {
                             termination,
                         )
                     {
+                        self.trace_freecell_ui(
+                            "recon-result-rejected",
+                            serde_json::json!({
+                            "request_id":request_id,"termination":format!("{termination:?}"),
+                            "reason":"stale or mismatched RECON completion"}),
+                        );
                         self.push_log("Ignored stale Free Cell RECON completion");
                         continue;
                     }
+                    self.trace_freecell_ui(
+                        "recon-result-accepted",
+                        serde_json::json!({
+                        "request_id":request_id,"termination":format!("{termination:?}"),
+                        "capture":frame.as_ref().map(|frame|serde_json::json!({
+                            "width":frame.width,"height":frame.height,"stride":frame.stride,
+                            "format":format!("{:?}",frame.format)}))}),
+                    );
                     self.active_run = None;
+                    if let Some(frame) = frame {
+                        self.install_frame(context, frame, None, false, Some(current_context));
+                        self.diagnostic_preview = self.capture_texture.is_some();
+                    }
                     match result {
-                        Ok(report) => { self.worker_state=WorkerState::Ready; self.current_status=format!("Free Cell: 52 cards exported to {}",report.destination.display()); self.push_log(self.current_status.clone()); }
-                        Err(error) if termination==crate::pyramid_workflow_model::RunTermination::OperatorStopped => {self.worker_state=WorkerState::Ready;self.current_status="Waiting".to_owned();self.push_log(error);}
-                        Err(error) => {self.worker_state=WorkerState::Uncertain;self.current_status=format!("Free Cell RECON refused: {error}");self.push_log(self.current_status.clone());}
+                        Ok(report) => {
+                            self.select_freecell_published_source(request_id, &report.destination);
+                            self.trace_freecell_ui("recon-published", serde_json::json!({
+                                "request_id":request_id,"destination":report.destination,
+                                "capture":report.capture,
+                                "objective":report.objective,"acquisition_directory":report.acquisition_directory,
+                                "evidence_error":report.persistence_error}));
+                            self.worker_state=WorkerState::Ready;
+                            self.current_status=format!("Free Cell: 52 cards exported to {} · {}",report.destination.display(),report.objective);
+                            self.push_log(self.current_status.clone());
+                            if let Some(directory) = report.acquisition_directory {
+                                self.push_log(format!("Same-frame objective evidence: {}",directory.display()));
+                            }
+                            if let Some(error) = report.persistence_error {
+                                self.failure_window.general("Free Cell RECON evidence", &error,
+                                    serde_json::json!({"request_id":request_id,"published_destination":report.destination,
+                                        "publication":"published", "primary_result":"RECON succeeded"}));
+                                self.push_log(format!("Free Cell RECON exported; evidence persistence: {error}"));
+                            }
+                        }
+                        Err(failure) if termination==crate::pyramid_workflow_model::RunTermination::OperatorStopped => {
+                            self.trace_freecell_ui("recon-stopped", serde_json::json!({
+                                "request_id":request_id,"error":failure.error,"details":failure.details,
+                                "evidence_directory":failure.directory,"evidence_error":failure.persistence_error}));
+                            self.worker_state=WorkerState::Ready;
+                            self.current_status="Waiting".to_owned();
+                            self.push_log(failure.error);
+                        }
+                        Err(failure) => {
+                            self.trace_freecell_ui("recon-failed", serde_json::json!({
+                                "request_id":request_id,"error":failure.error,"details":failure.details,
+                                "evidence_directory":failure.directory,"evidence_error":failure.persistence_error}));
+                            self.worker_state=WorkerState::Uncertain;
+                            self.current_status=format!("Free Cell RECON refused: {}",failure.error);
+                            self.failure_window.freecell_recon(&failure);
+                            self.push_log(self.current_status.clone());
+                        }
                     }
                 }
                 WorkerEvent::FreeCellRouteFinished {
@@ -1386,9 +1479,11 @@ impl QmpQemuSocketApp {
                 WorkerEvent::FreeCellCalculationFinished { identity, result } => {
                     self.freecell_calculation_finished(identity, result)
                 }
-                WorkerEvent::FreeCellSourcesListed { directory, result } => {
-                    self.freecell_calculation.sources(directory, result)
-                }
+                WorkerEvent::FreeCellSourcesListed {
+                    request_id,
+                    directory,
+                    result,
+                } => self.freecell_sources_listed(request_id, directory, result),
                 WorkerEvent::ComputedRouteFinished {
                     retained_recon,
                     termination,
@@ -1436,6 +1531,9 @@ impl QmpQemuSocketApp {
                 reset_matches
             } else {
                 !reset_pending
+                    && !self
+                        .freecell_recon_state
+                        .owns_preview(&self.current_preview_context())
             };
             if eligible
                 && latest.context == Some(self.current_preview_context())
@@ -1517,6 +1615,8 @@ impl QmpQemuSocketApp {
             Err(error) => {
                 self.worker_state = WorkerState::Error;
                 self.invalidate_preview();
+                self.freecell_auxiliary_failure("Free Cell image control", &error,
+                    serde_json::json!({"stage":"install frame","width":dimensions.0,"height":dimensions.1}));
                 self.push_log(format!("Captured frame rejected by the UI: {error}"));
             }
         }
@@ -1587,6 +1687,11 @@ impl QmpQemuSocketApp {
             if self.uses_pyramid_workflow() {
                 self.pyramid_ui_failure(PyramidPhase::Reconnaissance, error);
             } else {
+                self.freecell_auxiliary_failure(
+                    "Free Cell capture dispatch",
+                    &error,
+                    serde_json::json!({"source":source,"stage":"dispatch"}),
+                );
                 self.push_log(error);
             }
         }
@@ -1605,7 +1710,13 @@ impl QmpQemuSocketApp {
         {
             return;
         }
-        self.snapshot_request_id = self.snapshot_request_id.wrapping_add(1);
+        let Some(request_id) = self.snapshot_request_id.checked_add(1) else {
+            self.freecell_auxiliary_failure("Free Cell snapshot request", "Snapshot request identity exhausted",
+                serde_json::json!({"request_id":self.snapshot_request_id,"stage":"reserve request"}));
+            self.snapshot_error = Some("Snapshot request identity exhausted".to_owned());
+            return;
+        };
+        self.snapshot_request_id = request_id;
         self.snapshot_png = None;
         self.snapshot_frame = None;
         self.snapshot_prediction = None;
@@ -1629,6 +1740,11 @@ impl QmpQemuSocketApp {
         {
             self.worker_state = WorkerState::Error;
             self.snapshot_capture_pending = false;
+            self.freecell_auxiliary_failure(
+                "Free Cell snapshot dispatch",
+                &error,
+                serde_json::json!({"request_id":self.snapshot_request_id,"stage":"dispatch"}),
+            );
             self.snapshot_error = Some(error.clone());
             self.current_status = "Snapshot capture failed".to_owned();
             self.push_log(error);
@@ -1646,12 +1762,22 @@ impl QmpQemuSocketApp {
             || self.snapshot_context.as_ref() != Some(&self.current_preview_context())
             || self.snapshot_texture.is_none()
         {
+            self.freecell_auxiliary_failure(
+                "Free Cell snapshot save",
+                "Capture is not ready for this game and socket.",
+                serde_json::json!({"request_id":self.snapshot_request_id,"stage":"save readiness"}),
+            );
             self.snapshot_error = Some("Capture is not ready for this game and socket.".to_owned());
             return;
         }
 
 
         let Some(png) = self.snapshot_png.as_ref() else {
+            self.freecell_auxiliary_failure(
+                "Free Cell snapshot save",
+                "No captured PNG is available to save.",
+                serde_json::json!({"request_id":self.snapshot_request_id,"stage":"retained PNG"}),
+            );
             self.snapshot_error = Some("No captured PNG is available to save.".to_owned());
             return;
         };
@@ -1679,6 +1805,9 @@ impl QmpQemuSocketApp {
                 self.close_snapshot_dialog();
             }
             Err(error) => {
+                self.freecell_auxiliary_failure("Free Cell snapshot save", &error,
+                    serde_json::json!({"request_id":self.snapshot_request_id,"stage":"no-overwrite PNG publication",
+                        "snapshot_label":self.snapshot_label,"captured_png_bytes":png_len}));
                 self.snapshot_error = Some(error.clone());
                 self.current_status = "Snapshot save failed".to_owned();
                 self.push_log(format!(
@@ -1937,7 +2066,7 @@ impl QmpQemuSocketApp {
         self.computed_route_form.report = None;
         self.revoke_freecell_playback();
         self.game_mode = match strategy {
-            SolvingStrategy::ShortestPath => self.game_mode,
+            SolvingStrategy::ShortestPath => GameMode::FreeCell,
             SolvingStrategy::ComputerVision => self.computer_vision_game_mode,
         };
         let selected_context = self.current_preview_context();
@@ -2002,8 +2131,15 @@ impl QmpQemuSocketApp {
         let request_id = match self.freecell_recon_state.reserve(context.clone()) {
             Ok(id) => id,
             Err(error) => {
+                self.trace_freecell_ui(
+                    "recon-request-refused",
+                    serde_json::json!({
+                    "error":error,"destination":self.freecell_export_path}),
+                );
                 self.worker_state = WorkerState::Error;
                 self.current_status = error.to_owned();
+                self.failure_window.general("Free Cell RECON request", error,
+                    serde_json::json!({"context":format!("{context:#?}"), "export_path":self.freecell_export_path}));
                 return;
             }
         };
@@ -2013,20 +2149,36 @@ impl QmpQemuSocketApp {
         } else {
             PathBuf::from(&self.freecell_export_path)
         };
-        match self
-            .worker
-            .reconnoitre_freecell(context, request_id, destination, deal_id)
-        {
+        self.trace_freecell_ui(
+            "recon-dispatch",
+            serde_json::json!({
+            "request_id":request_id,"context":format!("{context:?}"),
+            "destination":destination,"deal_id":deal_id}),
+        );
+        self.invalidate_preview();
+        match self.worker.reconnoitre_freecell(
+            context.clone(),
+            request_id,
+            destination.clone(),
+            deal_id.clone(),
+        ) {
             Ok(()) => {
                 self.active_run = Some(ActiveRun::FreeCellRecon);
                 self.stop_requested = false;
-                self.invalidate_preview();
                 self.worker_state = WorkerState::Connecting;
                 self.current_status = "Free Cell: acquiring one read-only frame".into();
             }
             Err(error) => {
+                self.trace_freecell_ui("recon-dispatch-failed", serde_json::json!({
+                    "request_id":request_id,"error":error,"destination":destination,"deal_id":deal_id}));
                 self.freecell_recon_state.dispatch_failed();
                 self.worker_state = WorkerState::Error;
+                self.failure_window.general(
+                    "Free Cell RECON dispatch",
+                    &error,
+                    serde_json::json!({"request_id":request_id, "context":format!("{context:#?}"),
+                        "destination":destination,"deal_id":deal_id,"capture_acquired":false}),
+                );
                 self.current_status = error;
                 self.push_log(self.current_status.clone());
             }
@@ -2224,7 +2376,7 @@ impl QmpQemuSocketApp {
         if strategy_changed {
             return;
         }
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             if bevel_button(ui, "Capture Frame", SETUP_BLUE, false, controls_enabled)
                 .on_hover_text("Capture and analyse one frame; send no guest input")
                 .clicked()
@@ -2233,13 +2385,6 @@ impl QmpQemuSocketApp {
             }
 
 
-            if self.solving_strategy==SolvingStrategy::ShortestPath && self.game_mode==GameMode::FreeCell {
-                ui.add_enabled(controls_enabled, egui::TextEdit::singleline(&mut self.freecell_export_path).hint_text("Export path (blank = unique)").desired_width(240.0));
-                if bevel_button(ui,"RECON / Export 52 cards",SETUP_BLUE,false,controls_enabled).clicked() {
-                    self.request_freecell_recon();
-                }
-                ui.vertical(|ui| { self.freecell_calculation_controls(ui); self.freecell_route_controls(ui); });
-            }
             if bevel_button(ui, "Track", SETUP_BLUE, self.show_coordinates, controls_enabled).clicked() {
                 self.show_coordinates = !self.show_coordinates;
 
@@ -2313,6 +2458,37 @@ impl QmpQemuSocketApp {
                 });
             }
         });
+        if self.solving_strategy == SolvingStrategy::ShortestPath
+            && self.game_mode == GameMode::FreeCell
+        {
+            freecell_control_group(ui, "Initial deal acquisition", |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    ui.add_enabled(
+                        controls_enabled,
+                        egui::TextEdit::singleline(&mut self.freecell_export_path)
+                            .hint_text("Export path (blank = unique)")
+                            .desired_width(ui.available_width().min(330.0)),
+                    );
+                    if bevel_button(
+                        ui,
+                        "RECON / Export 52 cards",
+                        SETUP_BLUE,
+                        false,
+                        controls_enabled,
+                    )
+                    .clicked()
+                    {
+                        self.request_freecell_recon();
+                    }
+                });
+            });
+            freecell_control_group(ui, "Offline route calculation", |ui| {
+                self.freecell_calculation_controls(ui);
+            });
+            freecell_control_group(ui, "Live route playback", |ui| {
+                self.freecell_route_controls(ui);
+            });
+        }
         ui.horizontal(|ui| {
 
 
@@ -3443,6 +3619,7 @@ impl eframe::App for QmpQemuSocketApp {
                     self.close_ready = true;
                 }
                 Err(error) => {
+                    self.poll_worker(context);
                     self.push_log(error);
                     self.close_ready = true;
                 }
@@ -3509,6 +3686,22 @@ impl eframe::App for QmpQemuSocketApp {
             self.snapshot_window(ui.ctx());
         }
     }
+}
+
+
+/// Align one Free Cell workflow stage with the available control area.
+///
+/// Stage bodies choose wrapping rows for controls and ordinary wrapping for output.
+fn freecell_control_group<R>(
+    ui: &mut egui::Ui,
+    title: &str,
+    contents: impl FnOnce(&mut egui::Ui) -> R,
+) -> egui::InnerResponse<R> {
+    ui.group(|ui| {
+        ui.set_width(ui.available_width());
+        ui.strong(title);
+        contents(ui)
+    })
 }
 
 
@@ -3660,6 +3853,27 @@ fn normalise_operation_limit(mode: GameMode, requested: usize) -> usize {
         GameMode::Spider => requested.min(SPIDER_MAX_MULTI_STEP_ACTIONS),
         _ => requested,
     }
+}
+
+
+/// Append wire provenance and an unescaped packet to the existing session sink.
+///
+/// Returns the visible packet line even if either append fails. The caller owns
+/// the visible tail and disables a failed session sink; no generic UI tracing runs.
+fn qmp_wire_log_record<F>(
+    elapsed: Duration,
+    metadata: &str,
+    packet_line: &str,
+    mut append: F,
+) -> (String, Option<std::io::Error>)
+where
+    F: FnMut(&str) -> std::io::Result<()>,
+{
+    let prefix = format!("[+{:08.3}s]", elapsed.as_secs_f64());
+    let metadata = format!("{prefix} {metadata}");
+    let packet_line = format!("{prefix} {packet_line}");
+    let error = append(&metadata).and_then(|()| append(&packet_line)).err();
+    (packet_line, error)
 }
 
 
@@ -4316,6 +4530,87 @@ fn step_settings_for_owner(settings: StepRunSettings, owner: ActiveRun) -> StepR
 
 
 #[cfg(test)]
+mod freecell_layout_tests {
+    //! Headless geometry checks for the actual workflow-stage container.
+
+    use super::*;
+
+
+    /// Stage containers share a left edge and wrap controls inside narrow and wide views.
+    #[test]
+    fn freecell_313_workflow_stage_controls_stay_aligned() {
+        for width in [640.0, 840.0, 1_920.0] {
+            let context = egui::Context::default();
+            let workspace = Rect::from_min_size(Pos2::ZERO, egui::vec2(width, 1_080.0));
+            for _ in 0..2 {
+                let mut groups = Vec::new();
+                let mut controls = Vec::new();
+                context
+                    .run_ui(
+                        egui::RawInput {
+                            screen_rect: Some(workspace),
+                            ..Default::default()
+                        },
+                        |ui| {
+                            for title in [
+                                "Initial deal acquisition",
+                                "Offline route calculation",
+                                "Live route playback",
+                            ] {
+                                groups.push(
+                                    freecell_control_group(ui, title, |ui| {
+                                        ui.horizontal_wrapped(|ui| {
+                                            for label in [
+                                                "RECON / Export 52 cards",
+                                                "CALCULATE",
+                                                "SOLVE remaining route",
+                                                "Inspect physical route",
+                                            ] {
+                                                controls.push(
+                                                    bevel_button(
+                                                        ui,
+                                                        label,
+                                                        SETUP_BLUE,
+                                                        false,
+                                                        false,
+                                                    )
+                                                    .rect,
+                                                );
+                                            }
+                                        });
+                                        ui.label("The original deal must match. Each step verifies the resulting physical board; unsupported or obscured positions stop playback.");
+                                    })
+                                    .response
+                                    .rect,
+                                );
+                            }
+                        },
+                    )
+                    .drop_without_applying_deltas();
+                let left = groups.first().unwrap().left();
+                for group in &groups {
+                    assert!((group.left() - left).abs() < 1.0, "{width}: {groups:?}");
+                    assert!(
+                        group.right() <= workspace.right() + 1.0,
+                        "{width}: {group:?}"
+                    );
+                }
+                for pair in groups.windows(2) {
+                    assert!(pair[0].bottom() < pair[1].top(), "{width}: {groups:?}");
+                }
+                for control in controls {
+                    assert!(
+                        groups.iter().any(|group| group.contains_rect(control)),
+                        "{width}: {control:?} outside {groups:?}"
+                    );
+                }
+            }
+        }
+    }
+}
+
+
+#[cfg(test)]
 mod tests {
     //! UI policy and coordinate-mapping regressions independent of a live window.
 
@@ -4662,6 +4957,70 @@ mod tests {
         assert!(
             format_prediction(solve).contains("terminal flow requires continuous Multi-Step 0")
         );
+    }
+
+
+    /// Each sink gets one unchanged packet; richer metadata never embeds a second copy.
+    #[test]
+    fn qmp_wire_317_raw_packet_is_readable_once_in_each_sink() {
+        let packet =
+            r#"{"id":9, "execute":"screendump","arguments":{"filename":"C:\\tmp\\a\"b.ppm"}}"#;
+        let metadata = r#"QMP_WIRE {"sequence":7,"connection_id":2,"connection_kind":"release-recovery","qmp_id":9,"owner":{"request_id":42,"context":{"generation":8}},"detail":{"event":"write-attempt"}}"#;
+        let packet_line =
+            format!("QMP_TX sequence=7 connection=2/release-recovery qmp_id=9 attempted\n{packet}");
+        let mut private = Vec::new();
+        let (visible, error) = qmp_wire_log_record(
+            Duration::from_micros(1_234_567),
+            metadata,
+            &packet_line,
+            |line| {
+                private.push(line.to_owned());
+                Ok(())
+            },
+        );
+        assert!(error.is_none());
+        assert_eq!(private.len(), 2);
+        assert_eq!(private[1], visible);
+        let complete = private.join("\n");
+        assert_eq!(complete.matches(packet).count(), 1);
+        assert_eq!(visible.matches(packet).count(), 1);
+        assert_eq!(visible.lines().last(), Some(packet));
+        assert!(private[0].starts_with("[+0001.235s] QMP_WIRE "));
+        assert!(visible.contains("connection=2/release-recovery"));
+        assert!(!complete.contains("FREE_CELL"));
+        assert!(!private[0].contains("screendump"));
+    }
+
+
+    /// A failed private sink preserves the exact packet for the visible fallback.
+    #[test]
+    fn qmp_wire_317_private_write_failure_preserves_visible_packet() {
+        let packet = r#"{"execute":"qmp_capabilities","id":1}"#;
+        let packet_line =
+            format!("QMP_TX sequence=1 connection=1/primary qmp_id=1 attempted\n{packet}");
+        for failure_at in [1, 2] {
+            let mut attempts = 0;
+            let (visible, error) = qmp_wire_log_record(
+                Duration::from_secs(3),
+                "QMP_WIRE metadata",
+                &packet_line,
+                |_| {
+                    attempts += 1;
+                    if attempts == failure_at {
+                        Err(std::io::Error::other("original session append failure"))
+                    } else {
+                        Ok(())
+                    }
+                },
+            );
+            assert_eq!(attempts, failure_at);
+            assert_eq!(
+                error.unwrap().to_string(),
+                "original session append failure"
+            );
+            assert_eq!(visible.matches(packet).count(), 1);
+            assert_eq!(visible.lines().last(), Some(packet));
+        }
     }
 
 

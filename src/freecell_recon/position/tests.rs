@@ -1,9 +1,11 @@
-//! Retained native geometry and physical-binding refusals; no guest operations.
+//! Native printed-corner location, scoped physical identity and empty-slot refusals.
+//! Compositions below are synthetic regression fixtures, never guest-run evidence.
+
 use super::*;
-use xsar::games::freecell::rules::{RecordedMove, card_id};
+use xsar::games::freecell::rules::RecordedMove;
 
 
-/// Copy retained pixels after checking both rectangles and their byte ranges.
+/// Copy retained native pixels after checking source and destination rectangles.
 fn native_blit(
     destination: &mut CapturedFrame,
     source: &CapturedFrame,
@@ -16,18 +18,10 @@ fn native_blit(
         .unwrap()
         .checked_bounds(PixelRect::new(to.0, to.1, from.width, from.height))
         .unwrap();
-    let index = |frame: &CapturedFrame, x: u32, y: u32| {
-        usize::try_from(y)
-            .unwrap()
-            .checked_mul(frame.stride)
-            .unwrap()
-            .checked_add(usize::try_from(x).unwrap().checked_mul(4).unwrap())
-            .unwrap()
-    };
-    let bytes = usize::try_from(from.width).unwrap().checked_mul(4).unwrap();
-    for row in 0..from.height {
-        let a = index(source, from.x, from.y.checked_add(row).unwrap());
-        let b = index(destination, to.0, to.1.checked_add(row).unwrap());
+    for row in 0..from.height as usize {
+        let a = (from.y as usize + row) * source.stride + from.x as usize * 4;
+        let b = (to.1 as usize + row) * destination.stride + to.0 as usize * 4;
+        let bytes = from.width as usize * 4;
         destination
             .pixels
             .get_mut(b..b + bytes)
@@ -37,7 +31,19 @@ fn native_blit(
 }
 
 
-/// Establish complete independent initial evidence before deriving legal midgame history.
+/// Paint a bounded synthetic region while preserving the source frame's storage.
+fn paint(frame: &mut CapturedFrame, rect: PixelRect, rgb: [u8; 3]) {
+    frame.as_view().unwrap().checked_bounds(rect).unwrap();
+    for y in rect.y..rect.y + rect.height {
+        for x in rect.x..rect.x + rect.width {
+            let offset = y as usize * frame.stride + x as usize * 4;
+            frame.pixels[offset..offset + 3].copy_from_slice(&rgb);
+        }
+    }
+}
+
+
+/// Bind every initial identity independently before deriving legal physical history.
 fn initial_position(frame: &CapturedFrame) -> Position {
     Position::initial(
         &super::super::recognise(
@@ -49,204 +55,51 @@ fn initial_position(frame: &CapturedFrame) -> Position {
 }
 
 
-/// Synthetic native-pixel AC transfer, not captured gameplay or auto timing proof.
-#[test]
-fn freecell_311_synthetic_foundation_and_structural_refusals() {
-    let original = decode_png(REFERENCE).unwrap();
-    let initial = initial_position(&original);
-    let expected = initial
-        .apply(RecordedMove {
-            card_id: card_id(label("AC").unwrap()),
-            from: Pile::Cascade(0),
-            to: Pile::Foundation(0),
-            is_auto: false,
-        })
-        .unwrap();
-    let heldout = decode_png(include_bytes!("../../../tests/fixtures/freecell-FC18.png")).unwrap();
-    let donor = PixelRect::new(50, 597, 143, 350);
-    assert!(all(&original, donor, felt).unwrap());
-    let mut composed = original.clone();
-    native_blit(&mut composed, &original, donor, (215, 597));
-    native_blit(
-        &mut composed,
-        &heldout,
-        PixelRect::new(410, 543, 137, 183),
-        (218, 597),
-    );
-    native_blit(
-        &mut composed,
-        &original,
-        PixelRect::new(218, 650, 137, 183),
-        (1233, 112),
-    );
-    let geometry = verify(&composed, &expected, &mut || Ok(())).unwrap();
-    assert_eq!(
-        geometry.point(Pile::Cascade(0)).unwrap(),
-        PixelPoint::new(286, 677)
-    );
-    assert_eq!(
-        geometry.point(Pile::Foundation(0)).unwrap(),
-        PixelPoint::new(1301, 203)
-    );
-    assert!(verify(&composed, &initial, &mut || Ok(())).is_err());
-    assert!(verify(&original, &expected, &mut || Ok(())).is_err());
-    let mut wrong = composed.clone();
-    native_blit(
-        &mut wrong,
-        &heldout,
-        PixelRect::new(1373, 543, 137, 183),
-        (218, 597),
-    );
-    assert!(verify(&wrong, &expected, &mut || Ok(())).is_err());
-    native_blit(
-        &mut composed,
-        &original,
-        PixelRect::new(50, 404, 1, 3),
-        (218, 404),
-    );
-    assert_eq!(seams(&composed, PLAY_X[0]).unwrap().len(), 6);
+/// Require the click to stay within the authenticated native rank corner.
+fn assert_corner(point: PixelPoint, x: u32, top: u32) {
+    assert_eq!(point.x, (x + 15) as i32);
     assert!(
-        verify(&composed, &expected, &mut || Ok(()))
-            .unwrap_err()
-            .contains("interrupted rail")
+        ((top + 18) as i32..=(top + 23) as i32).contains(&point.y),
+        "{point:?}"
     );
 }
 
 
-/// Synthetic legal KS-to-CELL composition preserves every other physical pile.
+/// Authentic incident frames freshly identify exposed cards without complete-face evidence.
 #[test]
-fn freecell_311_synthetic_occupied_cell() {
-    let original = decode_png(REFERENCE).unwrap();
-    let initial = initial_position(&original);
-    let expected = initial
-        .apply(RecordedMove {
-            card_id: card_id(label("KS").unwrap()),
-            from: Pile::Cascade(7),
-            to: Pile::Cell(0),
-            is_auto: false,
-        })
-        .unwrap();
-    let heldout = decode_png(include_bytes!("../../../tests/fixtures/freecell-FC17.png")).unwrap();
-    let donor = PixelRect::new(50, 543, 143, 404);
-    assert!(all(&original, donor, felt).unwrap());
-    let mut composed = original.clone();
-    native_blit(&mut composed, &original, donor, (1562, 543));
-    native_blit(
-        &mut composed,
-        &heldout,
-        PixelRect::new(1041, 112, 137, 183),
-        (1565, 543),
-    );
-    native_blit(
-        &mut composed,
-        &original,
-        PixelRect::new(1565, 597, 137, 183),
-        (166, 112),
-    );
-    let geometry = verify(&composed, &expected, &mut || Ok(())).unwrap();
-    assert_eq!(
-        geometry.point(Pile::Cascade(7)).unwrap(),
-        PixelPoint::new(1633, 623)
-    );
-    assert_eq!(
-        geometry.point(Pile::Cell(0)).unwrap(),
-        PixelPoint::new(234, 203)
-    );
-    assert!(verify(&composed, &initial, &mut || Ok(())).is_err());
-}
-
-
-/// Native30px strip must observe its complete centre rank and printed colour.
-#[test]
-fn freecell_311_native_thirty_pixel_rank_is_observed() {
-    let templates = bank(&decode_png(REFERENCE).unwrap()).unwrap();
-    let frame = decode_png(include_bytes!("../../../tests/fixtures/freecell-FC14.png")).unwrap();
-    identity(
-        &frame,
-        &templates,
-        603,
-        418,
-        card_id(label("8S").unwrap()),
-        30,
-    )
-    .unwrap();
-    for wrong in ["7S", "8H"] {
-        assert!(
-            identity(
-                &frame,
-                &templates,
-                603,
-                418,
-                card_id(label(wrong).unwrap()),
-                30
-            )
-            .is_err()
-        );
-    }
-}
-
-
-/// Native occupied cells and four foundations compete full printed identities.
-#[test]
-fn freecell_311_native_occupied_tops_reject_contradictions() {
-    let templates = bank(&decode_png(REFERENCE).unwrap()).unwrap();
-    let frame = decode_png(include_bytes!("../../../tests/fixtures/freecell-FC17.png")).unwrap();
-    for (x, code) in [
-        (358, "KC"),
-        (551, "6S"),
-        (743, "KS"),
-        (1041, "3H"),
-        (1233, "5C"),
-        (1425, "2D"),
-        (1618, "5S"),
+fn freecell_314_native_normal_and_gold_positions_use_printed_corners() {
+    for (png, column, top) in [
+        (REFERENCE, 0, 650),
+        (
+            include_bytes!("../../../tests/fixtures/freecell-FC01.png").as_slice(),
+            0,
+            650,
+        ),
+        (
+            include_bytes!("../../../tests/fixtures/freecell-normal-six-20261110.png").as_slice(),
+            6,
+            597,
+        ),
+        (
+            include_bytes!("../../../tests/fixtures/freecell-gold-five-heart-20261110.png")
+                .as_slice(),
+            0,
+            650,
+        ),
+        (
+            include_bytes!("../../../tests/fixtures/freecell-challenge-highlight-20261109.png")
+                .as_slice(),
+            1,
+            650,
+        ),
     ] {
-        occupied_top(&frame, &templates, x, card_id(label(code).unwrap())).unwrap();
-    }
-    for (x, wrong) in [(358, "KS"), (1041, "3D"), (551, "6H")] {
-        assert!(occupied_top(&frame, &templates, x, card_id(label(wrong).unwrap())).is_err());
-    }
-}
-
-
-/// Unknown material below a genuine empty outline remains unsupported.
-#[test]
-fn freecell_311_unknown_material_below_empty_refuses() {
-    let reference = decode_png(REFERENCE).unwrap();
-    let mut frame =
-        decode_png(include_bytes!("../../../tests/fixtures/freecell-FC05.png")).unwrap();
-    let x = PLAY_X[7];
-    empty_play(&frame, x).unwrap();
-    native_blit(
-        &mut frame,
-        &reference,
-        PixelRect::new(226, 331, 4, 4),
-        (x + 40, 700),
-    );
-    assert!(seams(&frame, x).unwrap().is_empty());
-    assert!(
-        empty_play(&frame, x)
-            .unwrap_err()
-            .contains("below empty PLAY")
-    );
-}
-
-
-/// Independently recognise the complete retained frame before establishing history.
-#[test]
-fn freecell_311_initial_physical_binding_and_geometry() {
-    for png in [
-        REFERENCE,
-        include_bytes!("../../../tests/fixtures/freecell-FC01.png").as_slice(),
-    ] {
-        let frame = decode_png(png).unwrap();
-        let deal =
-            super::super::recognise(&frame, Metadata::new("test", PROFILE, "native").unwrap())
-                .unwrap();
-        let position = Position::initial(&deal);
-        let geometry = verify(&frame, &position, &mut || Ok(())).unwrap();
-        assert_eq!(
-            geometry.point(Pile::Cascade(0)).unwrap(),
-            PixelPoint::new(286, 730)
+        let native = decode_png(png).unwrap();
+        let expected = initial_position(&native);
+        let geometry = verify(&native, &expected, &mut || Ok(())).unwrap();
+        assert_corner(
+            geometry.point(Pile::Cascade(column)).unwrap(),
+            PLAY_X[column as usize],
+            top,
         );
         assert_eq!(
             geometry.point(Pile::Foundation(0)).unwrap(),
@@ -257,24 +110,348 @@ fn freecell_311_initial_physical_binding_and_geometry() {
             PixelPoint::new(1109, 203)
         );
         assert!(geometry.point(Pile::Cell(4)).is_err());
-        let mut columns = deal.board().cascades().clone();
-        columns.swap(0, 1);
-        let moved = InitialDeal::new(
-            BoardState::new(columns, [None; 4], [0; 4]).unwrap(),
-            deal.metadata().clone(),
-        )
-        .unwrap();
-        // Position equality is canonical, yet physical live binding must refuse.
-        assert_eq!(position, Position::initial(&moved));
-        assert!(verify(&frame, &Position::initial(&moved), &mut || Ok(())).is_err());
-        assert!(verify(&frame, &position, &mut || Err("STOP".to_owned())).is_err());
     }
 }
 
 
-/// Absence of a seam cannot replace a positive empty-column proof.
+/// Queen descenders occupy the final rank-crop rows; they are never a quiet gutter.
 #[test]
-fn freecell_311_native_empty_columns_and_dashed_pointer_refusals() {
+fn freecell_314_native_queen_tail_cannot_hide_the_exposed_corner() {
+    let templates = bank(&decode_png(REFERENCE).unwrap()).unwrap();
+    for (png, x) in [
+        (
+            include_bytes!("../../../tests/fixtures/freecell-FC01.png").as_slice(),
+            795,
+        ),
+        (
+            include_bytes!("../../../tests/fixtures/freecell-sixes-decorative-20261111.png")
+                .as_slice(),
+            603,
+        ),
+    ] {
+        let native = decode_png(png).unwrap();
+        assert_eq!(
+            observed_identity(&native, &templates, x, 650).unwrap(),
+            card_id(label("QH").unwrap())
+        );
+        assert!(corner_candidate(&native, x, 650).unwrap());
+        assert_corner(
+            occupied_play(
+                &native,
+                &templates,
+                x,
+                card_id(label("QH").unwrap()),
+                &mut || Ok(()),
+            )
+            .unwrap(),
+            x,
+            650,
+        );
+    }
+}
+
+
+/// A one-channel decorative rail difference cannot veto an independently read exposed card.
+#[test]
+fn freecell_314_decorative_top_rail_and_full_face_pixels_are_advisory() {
+    let native = decode_png(include_bytes!(
+        "../../../tests/fixtures/freecell-gold-five-heart-20261110.png"
+    ))
+    .unwrap();
+    let expected = initial_position(&native);
+    for (rect, rgb) in [
+        (PixelRect::new(218, 392, 1, 37), [237, 210, 50]),
+        (PixelRect::new(354, 392, 1, 37), [218, 201, 122]),
+        (PixelRect::new(226, 384, 121, 1), [23, 41, 73]),
+        (PixelRect::new(226, 832, 121, 1), [23, 41, 73]),
+        (PixelRect::new(218, 700, 1, 100), [23, 41, 73]),
+        (PixelRect::new(250, 710, 70, 90), [23, 41, 73]),
+    ] {
+        let mut changed = native.clone();
+        paint(&mut changed, rect, rgb);
+        let geometry = verify(&changed, &expected, &mut || Ok(()))
+            .unwrap_or_else(|cause| panic!("decorative change {rect:?} {rgb:?}: {cause}"));
+        assert_corner(geometry.point(Pile::Cascade(0)).unwrap(), 218, 650);
+    }
+}
+
+
+/// Only requested exposed piles supply this operation's geometry or refusal authority.
+#[test]
+fn freecell_314_scoped_proof_ignores_unrelated_card_but_checks_its_own_source() {
+    let native = decode_png(REFERENCE).unwrap();
+    let expected = initial_position(&native);
+    let mut unrelated = native.clone();
+    paint(
+        &mut unrelated,
+        PixelRect::new(1566, 603, 28, 25),
+        [255, 255, 255],
+    );
+    let geometry = verify_piles(
+        &unrelated,
+        &expected,
+        &[Pile::Cascade(0), Pile::Cell(0)],
+        &mut || Ok(()),
+    )
+    .unwrap();
+    assert_corner(geometry.point(Pile::Cascade(0)).unwrap(), 218, 650);
+    assert!(geometry.point(Pile::Cascade(7)).is_err());
+    assert!(verify(&unrelated, &expected, &mut || Ok(())).is_err());
+    assert!(verify_piles(&unrelated, &expected, &[Pile::Cascade(7)], &mut || Ok(())).is_err());
+    assert!(verify_piles(&native, &expected, &[Pile::Cascade(8)], &mut || Ok(())).is_err());
+}
+
+
+/// Hidden prefixes remain owned by RECON52/history, even when a visible old corner changes.
+#[test]
+fn freecell_314_hidden_identity_is_not_recounted_or_compared_to_history() {
+    let native = decode_png(REFERENCE).unwrap();
+    let expected = initial_position(&native);
+    let mut changed = native.clone();
+    native_blit(
+        &mut changed,
+        &native,
+        PixelRect::new(410, 331, 30, 48),
+        (218, 331),
+    );
+    verify_piles(&changed, &expected, &[Pile::Cascade(0)], &mut || Ok(())).unwrap();
+    assert!(
+        super::super::recognise(
+            &changed,
+            Metadata::new("test", PROFILE, "synthetic").unwrap()
+        )
+        .is_err()
+    );
+}
+
+
+/// Missing, mixed-colour, wrong and ambiguous exposed labels cannot be completed by expectation.
+#[test]
+fn freecell_314_exposed_glyph_failures_remain_refusals() {
+    let native = decode_png(REFERENCE).unwrap();
+    let expected = initial_position(&native);
+    let ambiguous = decode_png(include_bytes!(
+        "../../../tests/fixtures/freecell-ambiguous-rank-20261109.png"
+    ))
+    .unwrap();
+    let mut missing_rank = native.clone();
+    paint(
+        &mut missing_rank,
+        PixelRect::new(219, 656, 28, 25),
+        [255, 255, 255],
+    );
+    let mut missing_suit = native.clone();
+    paint(
+        &mut missing_suit,
+        PixelRect::new(222, 679, 20, 18),
+        [255, 255, 255],
+    );
+    let mut missing_both = native.clone();
+    paint(
+        &mut missing_both,
+        PixelRect::new(219, 656, 28, 41),
+        [255, 255, 255],
+    );
+    let mut wrong = native.clone();
+    native_blit(
+        &mut wrong,
+        &native,
+        PixelRect::new(1565, 597, 30, 48),
+        (218, 650),
+    );
+    let mut mixed = native.clone();
+    native_blit(
+        &mut mixed,
+        &native,
+        PixelRect::new(414, 360, 20, 18),
+        (222, 679),
+    );
+    let mut uncertain = native.clone();
+    native_blit(
+        &mut uncertain,
+        &ambiguous,
+        PixelRect::new(0, 0, 28, 25),
+        (219, 656),
+    );
+    for (name, frame) in [
+        ("rank", missing_rank),
+        ("suit", missing_suit),
+        ("both", missing_both),
+        ("wrong", wrong),
+        ("mixed", mixed),
+        ("ambiguous", uncertain),
+    ] {
+        assert!(
+            verify_piles(&frame, &expected, &[Pile::Cascade(0)], &mut || Ok(())).is_err(),
+            "{name}"
+        );
+    }
+}
+
+
+/// A lower uncertain corner cannot be skipped in favour of a matching upper card.
+#[test]
+fn freecell_314_unknown_lower_corner_and_duplicate_identity_refuse() {
+    let native = decode_png(REFERENCE).unwrap();
+    let expected = initial_position(&native);
+    let ambiguous = decode_png(include_bytes!(
+        "../../../tests/fixtures/freecell-ambiguous-rank-20261109.png"
+    ))
+    .unwrap();
+    let mut duplicate = native.clone();
+    native_blit(
+        &mut duplicate,
+        &native,
+        PixelRect::new(218, 650, 30, 48),
+        (218, 850),
+    );
+    assert!(
+        verify_piles(&duplicate, &expected, &[Pile::Cascade(0)], &mut || Ok(()))
+            .unwrap_err()
+            .contains("Duplicate")
+    );
+    let mut lower = duplicate.clone();
+    native_blit(
+        &mut lower,
+        &ambiguous,
+        PixelRect::new(0, 0, 28, 25),
+        (219, 856),
+    );
+    assert!(
+        verify_piles(&lower, &expected, &[Pile::Cascade(0)], &mut || Ok(()))
+            .unwrap_err()
+            .contains("Unreadable")
+    );
+    let mut missing_rank = duplicate.clone();
+    paint(
+        &mut missing_rank,
+        PixelRect::new(219, 856, 28, 25),
+        [255, 255, 255],
+    );
+    let mut missing_suit = duplicate.clone();
+    paint(
+        &mut missing_suit,
+        PixelRect::new(222, 879, 20, 18),
+        [255, 255, 255],
+    );
+    let mut mixed = duplicate.clone();
+    native_blit(
+        &mut mixed,
+        &native,
+        PixelRect::new(414, 360, 20, 18),
+        (222, 879),
+    );
+    let mut partial = duplicate;
+    paint(
+        &mut partial,
+        PixelRect::new(222, 879, 20, 5),
+        [255, 255, 255],
+    );
+    for (name, frame) in [
+        ("missing lower rank", missing_rank),
+        ("missing lower suit", missing_suit),
+        ("mixed lower ink", mixed),
+        ("partial lower suit", partial),
+    ] {
+        assert!(
+            verify_piles(&frame, &expected, &[Pile::Cascade(0)], &mut || Ok(())).is_err(),
+            "{name}"
+        );
+    }
+}
+
+
+/// The locator follows nonuniform native compression and the highlighted final5S corner.
+/// FC14's Solver scene remains unsupported for input; this test exercises pixels only.
+#[test]
+fn freecell_314_nonuniform_native_fan_has_no_hidden_count_or_full_face_requirement() {
+    let native = decode_png(include_bytes!("../../../tests/fixtures/freecell-FC14.png")).unwrap();
+    let templates = bank(&decode_png(REFERENCE).unwrap()).unwrap();
+    let observed = corners(&native, &templates, 603, &mut || Ok(())).unwrap();
+    let known: Vec<_> = observed
+        .iter()
+        .filter_map(|c| c.id.map(|id| (c.top(), id)))
+        .collect();
+    assert!(
+        known
+            .iter()
+            .any(|(top, id)| (688..=692).contains(top) && *id == card_id(label("7S").unwrap()))
+    );
+    assert!(
+        known.len() < 12,
+        "compressed hidden suits are not counted: {known:?}"
+    );
+    let point = occupied_play(
+        &native,
+        &templates,
+        603,
+        card_id(label("5S").unwrap()),
+        &mut || Ok(()),
+    )
+    .unwrap();
+    assert_corner(point, 603, 795);
+    assert!(
+        occupied_play(
+            &native,
+            &templates,
+            603,
+            card_id(label("6D").unwrap()),
+            &mut || Ok(())
+        )
+        .is_err()
+    );
+}
+
+
+/// A long column's final readable printed corner need not expose its lower face.
+#[test]
+fn freecell_314_low_corner_stays_above_toolbar_without_proving_a_card_body() {
+    let original = decode_png(REFERENCE).unwrap();
+    let templates = bank(&original).unwrap();
+    let mut composed = original.clone();
+    native_blit(
+        &mut composed,
+        &original,
+        PixelRect::new(218, 650, 30, 48),
+        (218, 898),
+    );
+    paint(
+        &mut composed,
+        PixelRect::new(219, 656, 28, 41),
+        [255, 255, 255],
+    );
+    assert_corner(
+        occupied_play(
+            &composed,
+            &templates,
+            218,
+            card_id(label("AC").unwrap()),
+            &mut || Ok(()),
+        )
+        .unwrap(),
+        218,
+        898,
+    );
+}
+
+
+/// Positive empty outlines and absence of card paper are retained only for actual emptiness.
+#[test]
+fn freecell_314_empty_slots_keep_positive_absence_and_occupancy_refusals() {
+    let reference = decode_png(REFERENCE).unwrap();
+    for x in CELL_X.into_iter().chain(FOUNDATION_X) {
+        empty_top(&reference, x).unwrap();
+        let mut broken = reference.clone();
+        paint(&mut broken, PixelRect::new(x + 30, 113, 4, 3), [30, 80, 40]);
+        assert!(empty_top(&broken, x).is_err());
+        let mut occupied = reference.clone();
+        paint(
+            &mut occupied,
+            PixelRect::new(x + 40, 150, 4, 4),
+            [255, 255, 255],
+        );
+        assert!(empty_top(&occupied, x).is_err());
+    }
     for (png, column) in [
         (
             include_bytes!("../../../tests/fixtures/freecell-FC05.png").as_slice(),
@@ -289,24 +466,131 @@ fn freecell_311_native_empty_columns_and_dashed_pointer_refusals() {
             3,
         ),
     ] {
-        let frame = decode_png(png).unwrap();
-        let x = PLAY_X[column];
-        assert!(seams(&frame, x).unwrap().is_empty());
-        empty_play(&frame, x).unwrap();
+        let native = decode_png(png).unwrap();
+        empty_play(&native, PLAY_X[column]).unwrap();
+        let mut broken = native.clone();
+        paint(
+            &mut broken,
+            PixelRect::new(PLAY_X[column] + 30, 332, 4, 3),
+            [30, 80, 40],
+        );
+        assert!(empty_play(&broken, PLAY_X[column]).is_err());
     }
-    let frame = decode_png(include_bytes!("../../../tests/fixtures/freecell-FC17.png")).unwrap();
-    assert!(empty_play(&frame, PLAY_X[4]).is_err());
-    let frame = decode_png(REFERENCE).unwrap();
-    assert!(empty_play(&frame, PLAY_X[0]).is_err());
+    assert!(empty_play(&reference, PLAY_X[0]).is_err());
+    let dashed = decode_png(include_bytes!("../../../tests/fixtures/freecell-FC17.png")).unwrap();
+    assert!(empty_play(&dashed, PLAY_X[4]).is_err());
 }
 
 
-/// Compressed native seams are measured, without pretending hidden suits are readable.
+/// Occupied CELL/foundation corners compete all labels without card rail/full-face gates.
 #[test]
-fn freecell_311_nonuniform_native_fan_is_measured() {
-    let frame = decode_png(include_bytes!("../../../tests/fixtures/freecell-FC14.png")).unwrap();
-    assert_eq!(
-        seams(&frame, PLAY_X[2]).unwrap(),
-        [331, 360, 389, 418, 448, 477, 530, 583, 636, 689, 742]
+fn freecell_314_occupied_upper_slots_keep_exact_physical_identities() {
+    let templates = bank(&decode_png(REFERENCE).unwrap()).unwrap();
+    let native = decode_png(include_bytes!("../../../tests/fixtures/freecell-FC17.png")).unwrap();
+    for (x, code) in [
+        (358, "KC"),
+        (551, "6S"),
+        (743, "KS"),
+        (1041, "3H"),
+        (1233, "5C"),
+        (1425, "2D"),
+        (1618, "5S"),
+    ] {
+        let point = occupied_top(&native, &templates, x, card_id(label(code).unwrap())).unwrap();
+        assert!((x as i32 + 14..=x as i32 + 15).contains(&point.x));
+        assert_eq!(point.y, 132);
+    }
+    for (x, code) in [(358, "KS"), (1041, "3D"), (551, "6H")] {
+        assert!(occupied_top(&native, &templates, x, card_id(label(code).unwrap())).is_err());
+    }
+    let mut broken = native.clone();
+    paint(&mut broken, PixelRect::new(358, 120, 1, 160), [23, 41, 73]);
+    occupied_top(&broken, &templates, 358, card_id(label("KC").unwrap())).unwrap();
+}
+
+
+/// Synthetic legal AC transfer proves only actual changed physical endpoints.
+#[test]
+fn freecell_314_synthetic_foundation_transfer_refuses_parent_and_wrong_top() {
+    let original = decode_png(REFERENCE).unwrap();
+    let initial = initial_position(&original);
+    let expected = initial
+        .apply(RecordedMove {
+            card_id: card_id(label("AC").unwrap()),
+            from: Pile::Cascade(0),
+            to: Pile::Foundation(0),
+            is_auto: false,
+        })
+        .unwrap();
+    let heldout = decode_png(include_bytes!("../../../tests/fixtures/freecell-FC18.png")).unwrap();
+    let mut composed = original.clone();
+    native_blit(
+        &mut composed,
+        &original,
+        PixelRect::new(50, 597, 143, 350),
+        (215, 597),
     );
+    native_blit(
+        &mut composed,
+        &heldout,
+        PixelRect::new(410, 543, 137, 183),
+        (218, 597),
+    );
+    native_blit(
+        &mut composed,
+        &original,
+        PixelRect::new(218, 650, 137, 183),
+        (1233, 112),
+    );
+    let piles = [Pile::Cascade(0), Pile::Foundation(0)];
+    let geometry = verify_piles(&composed, &expected, &piles, &mut || Ok(())).unwrap();
+    assert_corner(geometry.point(Pile::Cascade(0)).unwrap(), 218, 597);
+    assert_eq!(
+        geometry.point(Pile::Foundation(0)).unwrap(),
+        PixelPoint::new(1248, 132)
+    );
+    assert!(verify_piles(&composed, &initial, &piles, &mut || Ok(())).is_err());
+    assert!(verify_piles(&original, &expected, &piles, &mut || Ok(())).is_err());
+    native_blit(
+        &mut composed,
+        &heldout,
+        PixelRect::new(1373, 543, 30, 48),
+        (218, 597),
+    );
+    assert!(verify_piles(&composed, &expected, &piles, &mut || Ok(())).is_err());
+}
+
+
+/// Cancellation remains observable while scanning; unsupported native scenes still refuse.
+#[test]
+fn freecell_314_cancellation_bounds_and_scene_guards_remain_active() {
+    let native = decode_png(REFERENCE).unwrap();
+    let expected = initial_position(&native);
+    assert!(
+        verify(&native, &expected, &mut || Err("STOP".into()))
+            .unwrap_err()
+            .contains("STOP")
+    );
+    let mut checks = 0;
+    let error = verify_piles(&native, &expected, &[Pile::Cascade(0)], &mut || {
+        checks += 1;
+        if checks >= 15 {
+            Err("STOP during scan".into())
+        } else {
+            Ok(())
+        }
+    })
+    .unwrap_err();
+    assert!(error.contains("STOP during scan"));
+    assert_eq!(checks, 15);
+    for png in [
+        include_bytes!("../../../tests/fixtures/freecell-FC02.png").as_slice(),
+        include_bytes!("../../../tests/fixtures/freecell-FC09.png").as_slice(),
+        include_bytes!("../../../tests/fixtures/freecell-FC12.png").as_slice(),
+    ] {
+        assert!(verify(&decode_png(png).unwrap(), &expected, &mut || Ok(())).is_err());
+    }
+    let mut malformed = native;
+    malformed.width = 1919;
+    assert!(verify(&malformed, &expected, &mut || Ok(())).is_err());
 }

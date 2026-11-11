@@ -286,10 +286,19 @@ impl QmpQemuSocketApp {
     ///
     /// Caller-owned failure presentation and active-run retirement remain separate.
     pub(super) fn request_stop(&mut self) -> Result<(), String> {
+        self.trace_freecell_ui("STOP-request", serde_json::json!({
+            "owner":format!("{:?}",self.active_run), "stop_already_requested":self.stop_requested,
+        }));
         if self.active_run == Some(ActiveRun::FreeCellCalculation) {
             self.worker.cancel_freecell_calculation();
             self.stop_requested = true;
             self.current_status = "Cancelling offline calculation…".to_owned();
+            self.trace_freecell_ui(
+                "STOP-result",
+                serde_json::json!({
+                    "requested":true,"kind":"offline cancellation","guest_input_attempted":false,
+                }),
+            );
             return Ok(());
         }
         self.reset_preview = None;
@@ -300,6 +309,13 @@ impl QmpQemuSocketApp {
         self.current_status = "Stopping…".to_owned();
         let result = self.worker.disconnect(self.current_preview_context());
         self.revoke_freecell_playback();
+        self.trace_freecell_ui(
+            "STOP-result",
+            serde_json::json!({
+                "queued":result.is_ok(),"error":result.as_ref().err(),
+                "authority_revoked":true,"guest_effect_proved":false,
+            }),
+        );
         result
     }
 }

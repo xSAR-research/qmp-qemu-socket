@@ -8,7 +8,7 @@ use std::{
     cell::{Cell, RefCell},
     io::Read,
 };
-use xsar::games::freecell::search::{Outcome, Progress as SearchProgress};
+use xsar::games::freecell::search::{BestEffortOutcome as Outcome, Progress as SearchProgress};
 
 
 /// Exact UI correlation, unrelated to acquisition/execution authority.
@@ -35,7 +35,7 @@ pub(crate) struct Progress {
 }
 
 
-/// Frozen source identity and typed complete/no-route result.
+/// Frozen source identity and typed complete, exhaustive-partial or unusable result.
 #[derive(Debug)]
 pub(crate) struct Report {
     /// Exact pathname used, never a live acquisition receipt.
@@ -44,7 +44,7 @@ pub(crate) struct Report {
     pub deal: xsar::games::freecell::InitialDeal,
     /// Original loaded bytes, bounded by the codec and never reread during search.
     pub bytes: Vec<u8>,
-    /// Only Solved contains a replay-verified complete route.
+    /// Solved is complete; Partial is independently replayed and exhaustively maximal.
     pub outcome: Outcome,
     /// Actual completed intentional suspension for the whole calculation.
     pub paused: Duration,
@@ -185,13 +185,23 @@ pub(super) fn run(
             control.check(&identity)
         };
         active().map_err(|e| e.to_string())?;
+        crate::single_step_telemetry::record(
+            || serde_json::json!({"event":"calculation-source-open", "path":path.display().to_string()}),
+        );
         let file = std::fs::File::open(path).map_err(|e| format!("Free Cell source open: {e}"))?;
         let mut bytes = Vec::new();
         std::io::Read::take(file, (xsar::freecell_json::MAX_DOCUMENT_BYTES + 1) as u64)
             .read_to_end(&mut bytes)
             .map_err(|e| format!("Free Cell source read: {e}"))?;
+        crate::single_step_telemetry::record(
+            || serde_json::json!({"event":"calculation-source-read", "bytes":bytes.len(), "maximum_bytes":xsar::freecell_json::MAX_DOCUMENT_BYTES}),
+        );
         let deal = xsar::freecell_json::from_slice(&bytes)
             .map_err(|e| format!("Invalid Free Cell input: {e}"))?;
+        crate::single_step_telemetry::record(
+            || serde_json::json!({"event":"calculation-source-parsed", "deal_id":deal.metadata().deal_id(), "objective":crate::freecell_recon::objective::from_metadata(deal.metadata()).label()}),
+        );
+        crate::freecell_recon::objective::require_acquired(deal.metadata())?;
         active().map_err(|e| e.to_string())?;
         let checkpoint_error = RefCell::new(None);
         let paused_total = Cell::new(Duration::ZERO);
@@ -231,13 +241,19 @@ pub(super) fn run(
             paused
         };
         let mut progress = |search| {
+            crate::single_step_telemetry::record(
+                || serde_json::json!({"event":"calculation-progress", "progress":format!("{search:?}"), "paused_ms":paused_total.get().as_millis()}),
+            );
             control.publish(Progress {
                 identity: identity.clone(),
                 search,
                 paused: paused_total.get(),
             })
         };
-        let mut outcome = xsar::games::freecell::search::solve_with_control(
+        crate::single_step_telemetry::record(
+            || serde_json::json!({"event":"calculation-search-start", "objective":"complete board first; exhaustive maximum foundations if impossible", "input_frozen":true, "independent_replay_required":true}),
+        );
+        let mut outcome = xsar::games::freecell::search::solve_best_effort_with_control(
             &deal,
             cancel,
             Some(&mut progress),
@@ -256,6 +272,9 @@ pub(super) fn run(
                 Err(error) => return Err(error.to_string()),
             }
         }
+        crate::single_step_telemetry::record(
+            || serde_json::json!({"event":"calculation-search-finished", "outcome":match &outcome {Outcome::Solved{..}=>"solved and independently replayed", Outcome::Partial{..}=>"exhaustive maximum independently replayed", Outcome::Failed{..}=>"failed", Outcome::Cancelled(_)=>"cancelled"}, "stats":format!("{:?}", stats(&outcome)), "route_available":matches!(&outcome,Outcome::Solved{..}|Outcome::Partial{foundation_cards:1..=51,..})}),
+        );
         Ok(Report {
             path: path.to_owned(),
             deal,
@@ -272,8 +291,8 @@ pub(super) fn run(
 pub(crate) fn stats(outcome: &Outcome) -> xsar::search::SearchStats {
     match outcome {
         Outcome::Solved { stats, .. }
+        | Outcome::Partial { stats, .. }
         | Outcome::Failed { stats, .. }
-        | Outcome::Exhausted(stats)
         | Outcome::Cancelled(stats) => *stats,
     }
 }
@@ -285,27 +304,88 @@ pub(super) fn complete(
     result: Result<Report, String>,
     events: &WorkerEventSink,
 ) {
-    // Retirement and candidate retention share the calculation reservation lock.
-    // Cancellation takes this lock before revoking the Store, so it cannot be lost
-    // between final offline validation and candidate publication.
+    complete_with_preparation(identity, result, events, freecell_route::Prepared::new);
+}
+
+
+/// Remove executable outcomes before publication without masking an original failure.
+fn cancel_executable(report: &mut Arc<Report>) -> Result<(), String> {
+    if matches!(
+        &report.outcome,
+        Outcome::Solved { .. } | Outcome::Partial { .. }
+    ) {
+        let counters = stats(&report.outcome);
+        // Only this completion owns the unpublished report after its prepared
+        // candidate is dropped; no UI/event or route permit has seen this Arc.
+        Arc::get_mut(report)
+            .ok_or("Free Cell report shared before cancellation retirement")?
+            .outcome = Outcome::Cancelled(counters);
+    }
+    Ok(())
+}
+
+
+/// Prepare without locks, then atomically fence/cancel/retire the exact publication.
+///
+/// The private validator seam lets tests exercise real cancellation while both
+/// mutexes are available, without timing races or changing the production path.
+fn complete_with_preparation(
+    identity: Identity,
+    result: Result<Report, String>,
+    events: &WorkerEventSink,
+    prepare: impl FnOnce(
+        Identity,
+        Arc<Report>,
+        &AtomicBool,
+    ) -> Result<freecell_route::Prepared, freecell_route::PreparationError>,
+) {
     let result = (|| {
+        let cancel = {
+            let active = events
+                .latest_frame
+                .freecell_calculation
+                .active
+                .lock()
+                .map_err(|_| "Free Cell calculation retirement poisoned")?;
+            let Some((owner, cancel)) = active.as_ref() else {
+                return Err("Free Cell calculation owner retired".into());
+            };
+            if owner != &identity {
+                return Err("Stale Free Cell calculation completion".into());
+            }
+            Arc::clone(cancel)
+        };
+        // Defensive replay and all route-length work use the actual request's
+        // cancellation flag outside both authority locks.
+        let mut prepared = None;
+        let result = result.map(Arc::new).and_then(|mut report| {
+            match prepare(identity.clone(), Arc::clone(&report), &cancel) {
+                Ok(candidate) => prepared = Some(candidate),
+                Err(freecell_route::PreparationError::Cancelled) => cancel_executable(&mut report)?,
+                Err(freecell_route::PreparationError::Failed(error)) => return Err(error),
+            }
+            Ok(report)
+        });
+        // Final cancellation and O(1) candidate installation still share the
+        // original reservation lock, so cancellation cannot be lost at publication.
         let mut active = events
             .latest_frame
             .freecell_calculation
             .active
             .lock()
             .map_err(|_| "Free Cell calculation retirement poisoned")?;
-        let Some((owner, cancel)) = active.as_ref() else {
+        let Some((owner, current_cancel)) = active.as_ref() else {
             return Err("Free Cell calculation owner retired".into());
         };
-        if owner != &identity {
+        if owner != &identity || !Arc::ptr_eq(current_cancel, &cancel) {
             return Err("Stale Free Cell calculation completion".into());
         }
-        let result = result.map(|mut report| {
-            if cancel.load(Ordering::Acquire) && matches!(&report.outcome, Outcome::Solved { .. }) {
-                report.outcome = Outcome::Cancelled(stats(&report.outcome));
+        let result = result.and_then(|mut report| {
+            if cancel.load(Ordering::Acquire) {
+                prepared = None;
+                cancel_executable(&mut report)?;
             }
-            Arc::new(report)
+            Ok(report)
         });
         *active = None;
         result.and_then(|report| {
@@ -314,10 +394,13 @@ pub(super) fn complete(
                 .freecell_route
                 .lock()
                 .map_err(|_| "Free Cell route store poisoned")?
-                .prepare(identity.clone(), Arc::clone(&report))?;
+                .install(prepared)?;
             Ok(report)
         })
     })();
+    crate::single_step_telemetry::record(
+        || serde_json::json!({"event":"calculation-completion", "request_id":identity.request_id, "source_generation":identity.source_generation, "error":result.as_ref().err()}),
+    );
     let _ = events.send_for_context(
         Some(identity.context.clone()),
         WorkerEvent::FreeCellCalculationFinished { identity, result },
@@ -332,6 +415,230 @@ mod tests {
         cards::{Card, Rank},
         freecell::{BoardState, CascadeStack, FOUNDATION_SUITS, InitialDeal, Metadata},
     };
+
+
+    /// Legal closed prefix at the trusted domain/consumer seam, not a maximum-search proof.
+    fn partial_completion_report() -> Report {
+        let original = automatic_deal();
+        let columns = std::array::from_fn(|column| {
+            let mut cards: Vec<_> = original.board().cascades()[column].iter().collect();
+            if column < 3 {
+                cards.reverse();
+            }
+            CascadeStack::from_cards(cards).unwrap()
+        });
+        let deal = InitialDeal::new(
+            BoardState::new(columns, [None; 4], [0; 4]).unwrap(),
+            original.metadata().clone(),
+        )
+        .unwrap();
+        let mut position = xsar::games::freecell::rules::Position::initial(&deal);
+        let mut moves = Vec::new();
+        while let Some(action) = position.automatic() {
+            position = position.apply(action).unwrap();
+            moves.push(action);
+        }
+        let replay = xsar::games::freecell::replay::verify_prefix_with_control(
+            &deal,
+            &moves,
+            &AtomicBool::new(false),
+        )
+        .unwrap();
+        assert!(
+            !moves.is_empty()
+                && replay
+                    .endpoint
+                    .foundations()
+                    .iter()
+                    .copied()
+                    .map(u32::from)
+                    .sum::<u32>()
+                    < 52
+        );
+        Report {
+            path: PathBuf::from("partial-retirement.json"),
+            deal,
+            bytes: Vec::new(),
+            paused: Duration::ZERO,
+            outcome: Outcome::Partial {
+                moves: moves.into_boxed_slice(),
+                stats: Default::default(),
+                deliberate_moves: replay.deliberate,
+                automatic_moves: replay.automatic,
+                foundation_cards: replay
+                    .endpoint
+                    .foundations()
+                    .iter()
+                    .copied()
+                    .map(u32::from)
+                    .sum::<u32>(),
+            },
+        }
+    }
+
+
+    /// Freeze one explicit source/context owner without any actual file or transport.
+    fn completion_identity() -> Identity {
+        Identity {
+            context: ControllerContext::new(
+                PathBuf::from("/nonexistent/315-cancel.sock"),
+                GameMode::FreeCell,
+                SolvingStrategy::ShortestPath,
+                315,
+            ),
+            request_id: 315,
+            source_generation: 1,
+        }
+    }
+
+
+    /// Actual cancellation can acquire both locks before/after defensive replay and wins publication.
+    #[test]
+    fn freecell_315_completion_replay_is_outside_locks_and_final_cancel_wins() {
+        for cancel_before_replay in [true, false] {
+            let identity = completion_identity();
+            let latest = LatestFrameSlot::default();
+            let cancellation = latest
+                .freecell_calculation
+                .reserve(identity.clone())
+                .unwrap();
+            let (events, receiver) = mpsc::channel();
+            let sink = WorkerEventSink {
+                events,
+                latest_frame: latest.clone(),
+                capture_context: Mutex::new(None),
+            };
+            complete_with_preparation(
+                identity.clone(),
+                Ok(partial_completion_report()),
+                &sink,
+                |plan, report, cancel| {
+                    assert!(
+                        latest.freecell_calculation.active.try_lock().is_ok(),
+                        "replay holds cancellation lock"
+                    );
+                    assert!(
+                        latest.freecell_route.try_lock().is_ok(),
+                        "replay holds route lock"
+                    );
+                    assert!(
+                        std::ptr::eq(cancel, cancellation.as_ref()),
+                        "wrong request cancellation token"
+                    );
+                    if cancel_before_replay {
+                        latest.freecell_calculation.cancel(Some(&plan));
+                    }
+                    let prepared = freecell_route::Prepared::new(plan.clone(), report, cancel);
+                    if !cancel_before_replay {
+                        latest.freecell_calculation.cancel(Some(&plan));
+                    }
+                    prepared
+                },
+            );
+            let WorkerEvent::FreeCellCalculationFinished { result, .. } =
+                receiver.try_recv().unwrap().event
+            else {
+                panic!("calculation completion only")
+            };
+            assert!(matches!(result.unwrap().outcome, Outcome::Cancelled(_)));
+            assert!(!latest.freecell_route.lock().unwrap().available(&identity));
+            assert!(latest.freecell_calculation.active.lock().unwrap().is_none());
+            assert!(receiver.try_recv().is_err() && latest.take().is_none());
+        }
+    }
+
+
+    /// Even a repeated identity cannot publish through a replacement request's token.
+    #[test]
+    fn freecell_315_completion_rechecks_actual_reservation_after_validation() {
+        let identity = completion_identity();
+        let latest = LatestFrameSlot::default();
+        let original = latest
+            .freecell_calculation
+            .reserve(identity.clone())
+            .unwrap();
+        let (events, receiver) = mpsc::channel();
+        let sink = WorkerEventSink {
+            events,
+            latest_frame: latest.clone(),
+            capture_context: Mutex::new(None),
+        };
+        complete_with_preparation(
+            identity.clone(),
+            Ok(partial_completion_report()),
+            &sink,
+            |plan, report, cancel| {
+                let prepared = freecell_route::Prepared::new(plan.clone(), report, cancel)?;
+                latest.freecell_calculation.finish(&plan).unwrap();
+                let replacement = latest.freecell_calculation.reserve(plan).unwrap();
+                assert!(!Arc::ptr_eq(&original, &replacement));
+                Ok(prepared)
+            },
+        );
+        let WorkerEvent::FreeCellCalculationFinished { result, .. } =
+            receiver.try_recv().unwrap().event
+        else {
+            panic!("calculation completion only")
+        };
+        assert!(
+            result
+                .unwrap_err()
+                .contains("Stale Free Cell calculation completion")
+        );
+        assert!(latest.freecell_calculation.running());
+        assert!(!latest.freecell_route.lock().unwrap().available(&identity));
+        latest.freecell_calculation.finish(&identity).unwrap();
+    }
+
+
+    /// Original loading/domain failures stay original when cancellation is also requested.
+    #[test]
+    fn freecell_315_completion_cancel_does_not_mask_original_failure() {
+        for failed_report in [false, true] {
+            let identity = completion_identity();
+            let latest = LatestFrameSlot::default();
+            latest
+                .freecell_calculation
+                .reserve(identity.clone())
+                .unwrap();
+            latest.freecell_calculation.cancel(Some(&identity));
+            let (events, receiver) = mpsc::channel();
+            let sink = WorkerEventSink {
+                events,
+                latest_frame: latest.clone(),
+                capture_context: Mutex::new(None),
+            };
+            let error = "original source read failed";
+            let incoming = if failed_report {
+                let mut report = partial_completion_report();
+                report.outcome = Outcome::Failed {
+                    stats: Default::default(),
+                    failure: xsar::games::freecell::search::Failure::Replay(
+                        xsar::games::freecell::replay::ReplayError {
+                            step: 7,
+                            kind: xsar::games::freecell::replay::ReplayFailure::Illegal,
+                        },
+                    ),
+                };
+                Ok(report)
+            } else {
+                Err(error.to_owned())
+            };
+            complete(identity.clone(), incoming, &sink);
+            let WorkerEvent::FreeCellCalculationFinished { result, .. } =
+                receiver.try_recv().unwrap().event
+            else {
+                panic!("calculation completion only")
+            };
+            if failed_report {
+                assert!(matches!(result.unwrap().outcome, Outcome::Failed { .. }));
+            } else {
+                assert_eq!(result.unwrap_err(), error);
+            }
+            assert!(!latest.freecell_route.lock().unwrap().available(&identity));
+            assert!(latest.freecell_calculation.active.lock().unwrap().is_none());
+        }
+    }
 
 
     /// Complete synthetic initial deal whose entire route is automatic.
@@ -353,9 +660,94 @@ mod tests {
                 [0; 4],
             )
             .unwrap(),
-            Metadata::new("worker-offline", "synthetic", "unit").unwrap(),
+            Metadata::new(
+                "worker-offline",
+                "synthetic",
+                crate::freecell_recon::objective::FULL_BOARD_SOURCE,
+            )
+            .unwrap(),
         )
         .unwrap()
+    }
+
+
+    /// Unresolved acquired sources solve offline; legacy sources retain no route or frame.
+    #[test]
+    fn freecell_315_offline_objective_provenance_has_no_guest_effect() {
+        let original = automatic_deal();
+        for (index, source) in ["unit", "single-frame-tcp-v3;objective=unresolved"]
+            .into_iter()
+            .enumerate()
+        {
+            let path = std::env::temp_dir().join(format!(
+                "freecell-objective-{}-{index}.json",
+                std::process::id()
+            ));
+            let deal = InitialDeal::new(
+                original.board().clone(),
+                Metadata::new("test", "synthetic", source).unwrap(),
+            )
+            .unwrap();
+            let bytes = xsar::freecell_json::to_vec(&deal).unwrap();
+            let mut file = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&path)
+                .unwrap();
+            std::io::Write::write_all(&mut file, &bytes).unwrap();
+            drop(file);
+            let identity = Identity {
+                context: ControllerContext::new(
+                    PathBuf::from("/nonexistent-offline/no-qmp.sock"),
+                    GameMode::FreeCell,
+                    SolvingStrategy::ShortestPath,
+                    1,
+                ),
+                request_id: index as u64 + 1,
+                source_generation: 1,
+            };
+            let latest = LatestFrameSlot::default();
+            let cancel = latest
+                .freecell_calculation
+                .reserve(identity.clone())
+                .unwrap();
+            let (sender, receiver) = mpsc::channel();
+            let events = WorkerEventSink {
+                events: sender,
+                latest_frame: latest.clone(),
+                capture_context: Mutex::new(None),
+            };
+            run(
+                identity.clone(),
+                &path,
+                &cancel,
+                &events,
+                &AtomicBool::new(false),
+            );
+            let event = receiver.recv_timeout(Duration::from_secs(1)).unwrap();
+            let WorkerEvent::FreeCellCalculationFinished {
+                identity: actual,
+                result,
+            } = event.event
+            else {
+                panic!("only calculation completion permitted")
+            };
+            assert_eq!(actual, identity);
+            if index == 0 {
+                assert!(result.unwrap_err().contains("objective"));
+                assert!(latest.freecell_calculation.take().is_none());
+                assert!(!latest.freecell_route.lock().unwrap().available(&identity));
+            } else {
+                let report = result.unwrap();
+                assert_eq!(report.bytes, bytes);
+                assert_eq!(report.deal, deal);
+                assert!(matches!(&report.outcome, Outcome::Solved { .. }));
+                assert!(latest.freecell_route.lock().unwrap().available(&identity));
+            }
+            assert!(latest.take().is_none());
+            assert!(receiver.try_recv().is_err());
+            std::fs::remove_file(path).unwrap();
+        }
     }
 
 

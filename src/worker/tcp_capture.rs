@@ -269,13 +269,18 @@ pub(super) fn capture_causal(
     mode: CaptureMode,
     events: &WorkerEventSink,
 ) -> Result<(CapturedFrame, CaptureTiming), super::pyramid_stop::CaptureFailure> {
+    crate::single_step_telemetry::record_freecell(|| {
+        serde_json::json!({
+            "event":"image-request", "backend":"TCP", "address":address, "mode":format!("{mode:?}")
+        })
+    });
     let context = events
         .capture_context
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .clone();
     let cancel = CANCELLATION.with(|slot| slot.borrow().clone());
-    let result = CLIENT.with(|slot| {
+    let result: Result<_, super::pyramid_stop::CaptureFailure> = CLIENT.with(|slot| {
         let mut cached = slot.borrow_mut();
         if cached.as_ref().is_none_or(|entry| {
             entry.address != address || entry.mode != mode || entry.context != context
@@ -319,15 +324,15 @@ pub(super) fn capture_causal(
                 }
             });
             let timing = CaptureTiming {
-            identity: Some(super::CaptureIdentity {
-                protocol_version: measured.metadata.protocol_version,
-                session_id: measured.metadata.session_id,
-                request_id: measured.metadata.request_id,
-                frame_id: measured.metadata.frame_id,
-                display_generation: measured.metadata.display_generation,
-                reused_connection: measured.metadata.reused_connection,
-            }),
-            captures: 1,
+                identity: Some(super::CaptureIdentity {
+                    protocol_version: measured.metadata.protocol_version,
+                    session_id: measured.metadata.session_id,
+                    request_id: measured.metadata.request_id,
+                    frame_id: measured.metadata.frame_id,
+                    display_generation: measured.metadata.display_generation,
+                    reused_connection: measured.metadata.reused_connection,
+                }),
+                captures: 1,
                 screendump: Duration::from_secs_f64(
                     (measured.connect_ms + measured.request_ms) / 1000.0,
                 ),
@@ -339,9 +344,25 @@ pub(super) fn capture_causal(
                 ),
                 ..CaptureTiming::default()
             };
+            crate::single_step_telemetry::record_freecell(|| {
+                serde_json::json!({
+                    "event":"image-response", "completed":true,
+                    "layout":[frame.width,frame.height,frame.stride],
+                    "protocol_version":measured.metadata.protocol_version,
+                    "session_id":measured.metadata.session_id,"request_id":measured.metadata.request_id,
+                    "frame_id":measured.metadata.frame_id,"display_generation":measured.metadata.display_generation,
+                    "reused_connection":measured.metadata.reused_connection,"total_ms":measured.total_ms
+                })
+            });
             Ok((frame, timing))
         }
         Err(error) => {
+            crate::single_step_telemetry::record_freecell(|| {
+                serde_json::json!({
+                    "event":"image-response", "completed":false,
+                    "cancelled":error.cancelled,"error":error.message
+                })
+            });
             CLIENT.with(|slot| *slot.borrow_mut() = None);
             STATISTICS.with(|slot| {
                 let mut statistics = slot.borrow_mut();

@@ -1,4 +1,4 @@
-//! Strict read-only recognition of measured native Free Cell initial deals.
+//! Fixed-position Free Cell identity extraction and live initial-board binding.
 //! Physical columns and depths are never sorted or inferred from the remaining deck.
 use crate::{
     capture::{CapturedFrame, decode_png},
@@ -9,6 +9,7 @@ use xsar::games::{
     freecell::{BoardState, CascadeStack, INITIAL_LENGTHS, InitialDeal, Metadata},
 };
 
+pub(crate) mod objective;
 pub(crate) mod position;
 
 /// Identity of this one measured, unscaled native profile.
@@ -19,10 +20,8 @@ pub(crate) const PROFILE: &str = "native-freecell-v1";
 pub(crate) enum FailureKind {
     /// Native storage, dimensions or crop are invalid.
     InvalidFrame,
-    /// Header or excluded scene material does not match this profile.
+    /// A required game control or excluded Solver state does not match this profile.
     UnsupportedScene,
-    /// A required top, bottom or side boundary is absent.
-    InitialGeometry,
     /// A top slot lacks its complete positive empty signature.
     TopSlotNotEmpty,
     /// No label meets absolute evidence quality.
@@ -80,16 +79,10 @@ pub(crate) enum Region {
     Frame,
     /// Stable Solver-off header.
     Header,
+    /// Variable objective pixels, retained separately from scene and card identity.
+    Objective,
     /// Complete positive empty top slot.
     TopSlot,
-    /// Required exposed-card top edge.
-    TopEdge,
-    /// Required complete final-face bottom edge.
-    BottomEdge,
-    /// Continuous outer final-face rails.
-    SideEdges,
-    /// Absence of extra cards below the expected stack.
-    BelowStack,
     /// Complete rank crop.
     Rank,
     /// Complete suit crop.
@@ -126,6 +119,13 @@ fn failure(
     kind: FailureKind,
     cause: impl Into<String>,
 ) -> RecognitionError {
+    crate::single_step_telemetry::record(|| {
+        serde_json::json!({
+            "event":"recognition-refusal", "profile":PROFILE, "place":place.to_string(),
+            "region":format!("{region:?}"), "bounds":bounds.map(|r|[r.x,r.y,r.width,r.height]),
+            "kind":format!("{kind:?}"),
+        })
+    });
     RecognitionError {
         profile: PROFILE,
         place,
@@ -142,6 +142,9 @@ fn checkpoint(
     place: Place,
     region: Region,
 ) -> Result<(), RecognitionError> {
+    crate::single_step_telemetry::record(
+        || serde_json::json!({"event":"recognition-stage", "place":place.to_string(), "region":format!("{region:?}")}),
+    );
     check().map_err(|cause| failure(place, region, None, FailureKind::Revoked, cause))
 }
 
@@ -159,6 +162,22 @@ struct MatchFailure {
 
 /// Independently labelled native calibration appearance; no capture is performed here.
 const REFERENCE: &[u8] = include_bytes!("../tests/fixtures/freecell-FC13.png");
+
+
+/// Native6D corner at (1373,597) from the retained normal-board3.1.9 refusal.
+/// This explicitly cropped30×48 derivative supplies one additional rank appearance only.
+const SIX_RANK_CORNER: &[u8] =
+    include_bytes!("../tests/fixtures/freecell-normal-six-rank-corner-20261110.png");
+
+
+/// Complete Menu and Back glyph bounds from the retained native game controls.
+/// Their printed shape supplies scene evidence; arbitrary felt, objective and score pixels do not.
+const NATIVE_CONTROL_REGIONS: [crate::geometry::PixelRect; 2] = [
+    crate::geometry::PixelRect::new(20, 46, 24, 22),
+    crate::geometry::PixelRect::new(90, 46, 27, 25),
+];
+
+
 /// Measured top-border origins, including native pixel rounding.
 const ROW_Y: [u32; 7] = [331, 384, 437, 490, 543, 597, 650];
 /// Manually read calibration labels in physical column/depth order.
@@ -179,15 +198,50 @@ struct Glyph {
     /// Independently observed red print; false denotes black print.
     red: bool,
 }
-/// Labelled same-print native template; only exposed strips train this bank.
+
+
+/// Paper evidence permitted at a glyph crop; this never grants live input authority.
+#[derive(Clone, Copy)]
+enum PaperPolicy {
+    /// Preserve calibrated native white paper for independently labelled reference banks.
+    StrictWhite,
+    /// Use local contrast, coherent ink and unchanged shape acceptance for observed identities.
+    ReadOnlyRecon,
+}
+
+
+/// Labelled native template; the supplementary full-face rank retains an original strip's suit.
 struct Template {
-    /// Manually labelled identity of the original native reference strip.
+    /// Manually labelled identity of this native reference appearance.
     card: Card,
-    /// Rank evidence extracted from that same complete strip.
+    /// Complete printed rank from a labelled native strip or supplementary corner.
     rank: Glyph,
-    /// Suit evidence extracted from that same complete strip.
+    /// Complete original-strip suit evidence, unchanged by the additional rank appearance.
     suit: Glyph,
 }
+
+
+/// Add one independently labelled native6 rank while preserving the original suit competition.
+/// The small suit bitmap is copied exactly from the existing6D calibration, never retrained.
+fn append_native_six_rank(bank: &mut Vec<Template>) -> Result<(), String> {
+    let card = label("6D")?;
+    let suit = bank
+        .iter()
+        .find(|template| template.card == card)
+        .map(|template| Glyph {
+            ink: template.suit.ink.clone(),
+            red: template.suit.red,
+        })
+        .ok_or("Original6D suit calibration unavailable")?;
+    let corner = decode_png(SIX_RANK_CORNER).map_err(|e| e.to_string())?;
+    bank.push(Template {
+        card,
+        rank: glyph(&corner, 0, 0, true)?,
+        suit,
+    });
+    Ok(())
+}
+
 
 /// Parse bounded bundled provenance; this is never used to infer an observed identity.
 fn label(code: &str) -> Result<Card, String> {
@@ -207,6 +261,18 @@ fn label(code: &str) -> Result<Card, String> {
 }
 /// Read one complete measured glyph and require native paper and coherent red/black ink.
 fn glyph(frame: &CapturedFrame, x: u32, y: u32, rank: bool) -> Result<Glyph, String> {
+    glyph_with_policy(frame, x, y, rank, PaperPolicy::StrictWhite)
+}
+
+
+/// Read one bounded glyph using measured local contrast and coherent ink for observed cards.
+fn glyph_with_policy(
+    frame: &CapturedFrame,
+    x: u32,
+    y: u32,
+    rank: bool,
+    policy: PaperPolicy,
+) -> Result<Glyph, String> {
     let view = frame.as_view().map_err(|e| e.to_string())?;
     let (dx, dy, w, h) = if rank {
         (2, 7, 26, 23)
@@ -236,8 +302,16 @@ fn glyph(frame: &CapturedFrame, x: u32, y: u32, rank: bool) -> Result<Glyph, Str
     }
     paper.sort_unstable();
     let p = *paper.get(paper.len() * 9 / 10).ok_or("Empty glyph")?;
-    if p < 245 || red.max(black) < 70 || red.min(black) > 10 {
-        return Err("Unsupported paper, missing or mixed-colour Free Cell glyph".into());
+    if (matches!(policy, PaperPolicy::StrictWhite) && p < 245)
+        || red.max(black) < 70
+        || red.min(black) > 10
+    {
+        return Err(match policy {
+            PaperPolicy::StrictWhite => {
+                "Unsupported paper, missing or mixed-colour Free Cell glyph".into()
+            }
+            PaperPolicy::ReadOnlyRecon => "Missing or mixed-colour Free Cell glyph".into(),
+        });
     }
     Ok(Glyph {
         ink: pixels
@@ -247,9 +321,24 @@ fn glyph(frame: &CapturedFrame, x: u32, y: u32, rank: bool) -> Result<Glyph, Str
         red: red > black,
     })
 }
-/// Re-crop complete RGB rectangles at bounded native offsets; never pad ink masks.
+
+
+/// Re-crop complete reference RGB rectangles at bounded native offsets; never pad ink masks.
+#[cfg(test)]
 fn glyph_variants(frame: &CapturedFrame, x: u32, y: u32, rank: bool) -> Result<Vec<Glyph>, String> {
-    let centre = glyph(frame, x, y, rank)?;
+    glyph_variants_with_policy(frame, x, y, rank, PaperPolicy::StrictWhite)
+}
+
+
+/// Preserve native integer offset variants under an explicit crop paper policy.
+fn glyph_variants_with_policy(
+    frame: &CapturedFrame,
+    x: u32,
+    y: u32,
+    rank: bool,
+    paper: PaperPolicy,
+) -> Result<Vec<Glyph>, String> {
+    let centre = glyph_with_policy(frame, x, y, rank, paper)?;
     let red = centre.red;
     let mut variants = vec![centre];
     for dy in -1_i32..=1 {
@@ -263,7 +352,7 @@ fn glyph_variants(frame: &CapturedFrame, x: u32, y: u32, rank: bool) -> Result<V
             let Some(yy) = y.checked_add_signed(dy) else {
                 continue;
             };
-            if let Ok(candidate) = glyph(frame, xx, yy, rank)
+            if let Ok(candidate) = glyph_with_policy(frame, xx, yy, rank, paper)
                 && candidate.red == red
             {
                 variants.push(candidate);
@@ -272,6 +361,8 @@ fn glyph_variants(frame: &CapturedFrame, x: u32, y: u32, rank: bool) -> Result<V
     }
     Ok(variants)
 }
+
+
 /// Compare every actual pixel of two equally sized native glyph rectangles.
 fn distance(actual: &Glyph, reference: &Glyph) -> usize {
     actual
@@ -330,15 +421,18 @@ fn identify<T: Copy + Eq>(
     }
     Ok(best.0)
 }
-/// Require one complete native scene rectangle; alpha never supplies evidence.
-fn same_region(
+/// Recognise a native control's complete bright-ink shape, independent of its dark background RGB.
+/// A filled rectangle or missing/occluded glyph cannot substitute for the retained control.
+fn control_signature(
     frame: &CapturedFrame,
     reference: &CapturedFrame,
     rect: crate::geometry::PixelRect,
-    place: Place,
-    region: Region,
-    kind: FailureKind,
 ) -> Result<(), RecognitionError> {
+    let place = Place::Scene;
+    let region = Region::Header;
+    crate::single_step_telemetry::record(
+        || serde_json::json!({"event":"recognition-region", "place":place.to_string(), "region":format!("{region:?}"), "bounds":[rect.x,rect.y,rect.width,rect.height], "stage":"begin"}),
+    );
     let bad = |cause: String| failure(place, region, Some(rect), FailureKind::InvalidFrame, cause);
     let view = frame.as_view().map_err(|e| bad(e.to_string()))?;
     let expected = reference.as_view().map_err(|e| bad(e.to_string()))?;
@@ -348,26 +442,32 @@ fn same_region(
         .map_err(|e| bad(e.to_string()))?;
     for y in rect.y..rect.y + rect.height {
         for x in rect.x..rect.x + rect.width {
-            if view.pixel_rgb(x, y) != expected.pixel_rgb(x, y) {
+            let ink =
+                |pixel: Option<[u8; 3]>| pixel.is_some_and(|[r, g, b]| r.min(g).min(b) >= 245);
+            if ink(view.pixel_rgb(x, y)) != ink(expected.pixel_rgb(x, y)) {
                 return Err(failure(
                     place,
                     region,
                     Some(rect),
-                    kind,
-                    "Native scene signature differs",
+                    FailureKind::UnsupportedScene,
+                    "Native game-control shape differs",
                 ));
             }
         }
     }
+    crate::single_step_telemetry::record(
+        || serde_json::json!({"event":"recognition-region", "place":place.to_string(), "region":format!("{region:?}"), "bounds":[rect.x,rect.y,rect.width,rect.height], "stage":"passed"}),
+    );
     Ok(())
 }
 
-/// Require stable header, eight positive empty slots and exclusion of extra rows.
-fn scene(
+
+/// Require positive native game controls and Solver exclusion, independently of canvas RGB.
+fn supported_scene(
     frame: &CapturedFrame,
     reference: &CapturedFrame,
     check: &mut impl FnMut() -> Result<(), String>,
-) -> Result<(), RecognitionError> {
+) -> Result<objective::Objective, RecognitionError> {
     use crate::geometry::PixelRect;
     crate::game_operations::validate_native_frame(frame).map_err(|e| {
         failure(
@@ -378,146 +478,74 @@ fn scene(
             e.to_string(),
         )
     })?;
+    for rect in NATIVE_CONTROL_REGIONS {
+        checkpoint(check, Place::Scene, Region::Header)?;
+        control_signature(frame, reference, rect)?;
+    }
     checkpoint(check, Place::Scene, Region::Header)?;
-    same_region(
-        frame,
-        reference,
-        PixelRect::new(825, 36, 270, 50),
-        Place::Scene,
-        Region::Header,
-        FailureKind::UnsupportedScene,
-    )?;
-    for (slot, x) in CELL_X.into_iter().enumerate() {
-        let place = Place::Cell(slot);
-        checkpoint(check, place, Region::TopSlot)?;
-        same_region(
-            frame,
-            reference,
-            PixelRect::new(x, 112, CARD_WIDTH, 182),
-            place,
-            Region::TopSlot,
-            FailureKind::TopSlotNotEmpty,
-        )?;
-    }
-    for (slot, x) in FOUNDATION_X.into_iter().enumerate() {
-        let place = Place::Foundation(slot);
-        checkpoint(check, place, Region::TopSlot)?;
-        same_region(
-            frame,
-            reference,
-            PixelRect::new(x, 112, CARD_WIDTH, 182),
-            place,
-            Region::TopSlot,
-            FailureKind::TopSlotNotEmpty,
-        )?;
-    }
-    for (column, (x, n)) in PLAY_X.into_iter().zip(INITIAL_LENGTHS).enumerate() {
-        let y = if n == 7 { 835 } else { 782 };
-        let place = Place::Cascade {
-            column,
-            depth: n - 1,
-        };
-        checkpoint(check, place, Region::BelowStack)?;
-        same_region(
-            frame,
-            reference,
-            PixelRect::new(x, y, CARD_WIDTH, 935 - y),
-            place,
-            Region::BelowStack,
-            FailureKind::InitialGeometry,
-        )?;
-    }
-    Ok(())
-}
-
-/// Prove the final face's lower border and continuous outer rails without comparing artwork.
-fn final_face(
-    frame: &CapturedFrame,
-    x: u32,
-    y: u32,
-    column: usize,
-    depth: usize,
-) -> Result<(), RecognitionError> {
-    use crate::geometry::PixelRect;
-    let place = Place::Cascade { column, depth };
-    let bottom = if depth == 6 { 832 } else { 779 };
-    let view = frame.as_view().map_err(|e| {
+    let solver = crate::freecell::solver_active(frame).map_err(|e| {
         failure(
-            place,
-            Region::SideEdges,
+            Place::Scene,
+            Region::Header,
             None,
             FailureKind::InvalidFrame,
             e.to_string(),
         )
     })?;
-    let rect = PixelRect::new(x + 8, bottom, 121, 1);
-    view.checked_bounds(rect).map_err(|e| {
-        failure(
-            place,
-            Region::BottomEdge,
-            Some(rect),
-            FailureKind::InvalidFrame,
-            e.to_string(),
-        )
-    })?;
-    for xx in x + 8..x + 129 {
-        let [r, g, b] = view.pixel_rgb(xx, bottom).ok_or_else(|| {
+    crate::single_step_telemetry::record(
+        || serde_json::json!({"event":"recognition-region", "region":"Solver banner", "active":solver, "stage":if solver {"failed"} else {"passed"}}),
+    );
+    if solver {
+        return Err(failure(
+            Place::Scene,
+            Region::Header,
+            Some(PixelRect::new(825, 36, 270, 50)),
+            FailureKind::UnsupportedScene,
+            "Solver overlay is active; live Free Cell binding requires Solver off",
+        ));
+    }
+    objective::observe(frame, reference)
+}
+
+
+/// Require native game controls, Solver exclusion and all eight initially empty top slots.
+/// Printed tableau identities are read separately without decorative card geometry checks.
+fn scene(
+    frame: &CapturedFrame,
+    reference: &CapturedFrame,
+    check: &mut impl FnMut() -> Result<(), String>,
+) -> Result<objective::Objective, RecognitionError> {
+    use crate::geometry::PixelRect;
+    let objective = supported_scene(frame, reference, check)?;
+    for (slot, x) in CELL_X.into_iter().enumerate() {
+        let place = Place::Cell(slot);
+        checkpoint(check, place, Region::TopSlot)?;
+        position::empty_top(frame, x).map_err(|cause| {
             failure(
                 place,
-                Region::BottomEdge,
-                Some(rect),
-                FailureKind::InvalidFrame,
-                "Missing bottom pixel",
+                Region::TopSlot,
+                Some(PixelRect::new(x, 112, CARD_WIDTH, 182)),
+                FailureKind::TopSlotNotEmpty,
+                cause,
             )
         })?;
-        if r.min(g).min(b) < 100 || r.max(g).max(b) > 240 || r.max(g).max(b) - r.min(g).min(b) > 10
-        {
-            return Err(failure(
+    }
+    for (slot, x) in FOUNDATION_X.into_iter().enumerate() {
+        let place = Place::Foundation(slot);
+        checkpoint(check, place, Region::TopSlot)?;
+        position::empty_top(frame, x).map_err(|cause| {
+            failure(
                 place,
-                Region::BottomEdge,
-                Some(rect),
-                FailureKind::InitialGeometry,
-                "Complete native lower border is absent",
-            ));
-        }
+                Region::TopSlot,
+                Some(PixelRect::new(x, 112, CARD_WIDTH, 182)),
+                FailureKind::TopSlotNotEmpty,
+                cause,
+            )
+        })?;
     }
-    let rails = PixelRect::new(x, y + 8, CARD_WIDTH, bottom - y - 15);
-    view.checked_bounds(rails).map_err(|e| {
-        failure(
-            place,
-            Region::SideEdges,
-            Some(rails),
-            FailureKind::InvalidFrame,
-            e.to_string(),
-        )
-    })?;
-    for yy in y + 8..=bottom - 8 {
-        for xx in [x, x + CARD_WIDTH - 1] {
-            let [r, g, b] = view.pixel_rgb(xx, yy).ok_or_else(|| {
-                failure(
-                    place,
-                    Region::SideEdges,
-                    Some(rails),
-                    FailureKind::InvalidFrame,
-                    "Missing outer rail",
-                )
-            })?;
-            if r.min(g).min(b) < 100
-                || r.max(g).max(b) > 240
-                || r.max(g).max(b) - r.min(g).min(b) > 20
-            {
-                return Err(failure(
-                    place,
-                    Region::SideEdges,
-                    Some(rails),
-                    FailureKind::InitialGeometry,
-                    "Complete native outer rail is absent",
-                ));
-            }
-        }
-    }
-    Ok(())
+    Ok(objective)
 }
+
 
 /// Recognise supplied pixels without a cancellation owner (offline evidence/tests).
 #[cfg(test)]
@@ -528,26 +556,83 @@ pub(crate) fn recognise(
     recognise_checked(frame, metadata, &mut || Ok(()))
 }
 
-/// Recognise exactly52 printed identities with cancellation between bounded units.
+
+/// Attribute an invalid bundled calibration or metadata contract without changing its cause.
+fn calibration(cause: String) -> RecognitionError {
+    failure(
+        Place::Scene,
+        Region::Calibration,
+        None,
+        FailureKind::Calibration,
+        cause,
+    )
+}
+
+
+/// Read exactly 52 fixed printed identities and the objective ROI from supplied native pixels.
+///
+/// No surrounding scene, slot, border, rail, below-stack or Solver evidence is inspected.
+/// Crop paper uses local contrast and coherent ink; shape thresholds and inventory stay strict.
 /// The callback never captures or supplies identities; no input, I/O or deck elimination occurs.
+///
+/// # Errors
+/// Returns the first structured frame/crop, calibration, unreadable or ambiguous glyph,
+/// ink-colour, unique-inventory or cancellation failure. Objective content is retained honestly.
 pub(crate) fn recognise_checked(
     frame: &CapturedFrame,
     metadata: Metadata,
     check: &mut impl FnMut() -> Result<(), String>,
 ) -> Result<InitialDeal, RecognitionError> {
-    use crate::geometry::PixelRect;
-    let calibration = |cause: String| {
+    checkpoint(check, Place::Scene, Region::Frame)?;
+    crate::game_operations::validate_native_frame(frame).map_err(|e| {
         failure(
             Place::Scene,
-            Region::Calibration,
+            Region::Frame,
             None,
-            FailureKind::Calibration,
-            cause,
+            FailureKind::InvalidFrame,
+            e.to_string(),
         )
-    };
+    })?;
+    let reference = decode_png(REFERENCE).map_err(|e| calibration(e.to_string()))?;
+    checkpoint(check, Place::Scene, Region::Objective)?;
+    let objective = objective::observe(frame, &reference)?;
+    read_identities(frame, &reference, metadata, objective, check)
+}
+
+
+/// Bind an initial native board using fresh scene evidence and all52 independently read cards.
+///
+/// Positive game controls, Solver exclusion and empty top slots establish the initial scene.
+/// Every fixed printed identity uses the same local contrast, coherent ink, shape competition
+/// and unique inventory checks as read-only RECON. Card paper, decoration, borders, rails and
+/// final-face artwork do not decide identity or add a separate gameplay veto. This inspects
+/// only the supplied pixels and performs no I/O; the caller compares the frozen physical deal.
+///
+/// # Errors
+/// Returns the original scene, slot, glyph, inventory, calibration or cancellation refusal.
+/// Fresh context, input probes and subsequent effect proof remain the caller's responsibility.
+pub(crate) fn recognise_playback_initial_checked(
+    frame: &CapturedFrame,
+    metadata: Metadata,
+    check: &mut impl FnMut() -> Result<(), String>,
+) -> Result<InitialDeal, RecognitionError> {
     checkpoint(check, Place::Scene, Region::Frame)?;
     let reference = decode_png(REFERENCE).map_err(|e| calibration(e.to_string()))?;
-    scene(frame, &reference, check)?;
+    let objective = scene(frame, &reference, check)?;
+    read_identities(frame, &reference, metadata, objective, check)
+}
+
+
+/// Independently read every fixed physical rank/suit crop and require an exact unique inventory.
+fn read_identities(
+    frame: &CapturedFrame,
+    reference: &CapturedFrame,
+    metadata: Metadata,
+    objective: objective::Objective,
+    check: &mut impl FnMut() -> Result<(), String>,
+) -> Result<InitialDeal, RecognitionError> {
+    use crate::geometry::PixelRect;
+    let metadata = objective::metadata(&metadata, objective).map_err(calibration)?;
     let mut bank = Vec::new();
     for (column, (&x, labels)) in PLAY_X.iter().zip(LABELS).enumerate() {
         for (depth, code) in labels.iter().enumerate().take(
@@ -563,57 +648,23 @@ pub(crate) fn recognise_checked(
                 .ok_or_else(|| calibration("Invalid calibration depth".into()))?;
             bank.push(Template {
                 card: label(code).map_err(calibration)?,
-                rank: glyph(&reference, x, y, true).map_err(calibration)?,
-                suit: glyph(&reference, x, y, false).map_err(calibration)?,
+                rank: glyph(reference, x, y, true).map_err(calibration)?,
+                suit: glyph(reference, x, y, false).map_err(calibration)?,
             });
         }
     }
+    append_native_six_rank(&mut bank).map_err(calibration)?;
     let mut stacks: [CascadeStack; 8] = std::array::from_fn(|_| CascadeStack::default());
     for (column, (&x, &n)) in PLAY_X.iter().zip(INITIAL_LENGTHS.iter()).enumerate() {
         for depth in 0..n {
             let place = Place::Cascade { column, depth };
-            checkpoint(check, place, Region::TopEdge)?;
             let y = *ROW_Y
                 .get(depth)
                 .ok_or_else(|| calibration("Invalid physical depth".into()))?;
-            let rect = PixelRect::new(x + 8, y, 121, 1);
-            let view = frame.as_view().map_err(|e| {
-                failure(
-                    place,
-                    Region::Frame,
-                    None,
-                    FailureKind::InvalidFrame,
-                    e.to_string(),
-                )
-            })?;
-            for xx in x + 8..x + 129 {
-                let [r, g, b] = view.pixel_rgb(xx, y).ok_or_else(|| {
-                    failure(
-                        place,
-                        Region::TopEdge,
-                        Some(rect),
-                        FailureKind::InvalidFrame,
-                        "Missing card border",
-                    )
-                })?;
-                if r.min(g).min(b) < 180
-                    || r.max(g).max(b) > 240
-                    || r.max(g).max(b) - r.min(g).min(b) > 10
-                {
-                    return Err(failure(
-                        place,
-                        Region::TopEdge,
-                        Some(rect),
-                        FailureKind::InitialGeometry,
-                        "Required native card top border is absent",
-                    ));
-                }
-            }
-            if depth + 1 == n {
-                final_face(frame, x, y, column, depth)?;
-            }
+            let variants =
+                |rank| glyph_variants_with_policy(frame, x, y, rank, PaperPolicy::ReadOnlyRecon);
             checkpoint(check, place, Region::Rank)?;
-            let ranks = glyph_variants(frame, x, y, true).map_err(|e| {
+            let ranks = variants(true).map_err(|e| {
                 failure(
                     place,
                     Region::Rank,
@@ -633,7 +684,7 @@ pub(crate) fn recognise_checked(
                     )
                 })?;
             checkpoint(check, place, Region::Suit)?;
-            let suits = glyph_variants(frame, x, y, false).map_err(|e| {
+            let suits = variants(false).map_err(|e| {
                 failure(
                     place,
                     Region::Suit,
@@ -661,6 +712,9 @@ pub(crate) fn recognise_checked(
                         e.to_string(),
                     )
                 })?;
+            crate::single_step_telemetry::record(
+                || serde_json::json!({"event":"recognition-identity", "place":place.to_string(), "rank":rank.as_str(), "suit":suit.to_string(), "stage":"passed"}),
+            );
             stacks
                 .get_mut(column)
                 .ok_or_else(|| calibration("Invalid cascade".into()))?

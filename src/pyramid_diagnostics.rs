@@ -418,6 +418,13 @@ fn diagnostic(
     directory: Option<PathBuf>,
     persistence_error: Option<String>,
 ) -> PyramidDiagnostic {
+    crate::single_step_telemetry::record_freecell(|| {
+        serde_json::json!({
+            "event":"evidence-packet-result","phase":format!("{:?}",evidence.phase),
+            "run_id":evidence.run_id,"ui_failure_id":ui_failure_id,"original_error":evidence.error,
+            "directory":directory,"persistence_error":persistence_error
+        })
+    });
     PyramidDiagnostic {
         progress: evidence.progress.cloned(),
         context: evidence.context.clone(),
@@ -487,6 +494,11 @@ fn record_bytes(
     writer: ArtifactWriter,
     warnings: &mut Vec<String>,
 ) -> (Value, bool) {
+    crate::single_step_telemetry::record_freecell(|| {
+        serde_json::json!({
+            "event":"evidence-file-request","path":directory.join(name),"bytes":bytes.len(),"limit":limit
+        })
+    });
     if bytes.len() > limit {
         warn(
             warnings,
@@ -495,11 +507,24 @@ fn record_bytes(
         return (refused(name), false);
     }
     match writer(&directory.join(name), bytes, limit) {
-        Ok(()) => (
-            json!({ "file": name, "status": "written", "bytes": bytes.len() }),
-            true,
-        ),
+        Ok(()) => {
+            crate::single_step_telemetry::record_freecell(|| {
+                serde_json::json!({
+                    "event":"evidence-file-response","path":directory.join(name),"completed":true,"bytes":bytes.len()
+                })
+            });
+            (
+                json!({ "file": name, "status": "written", "bytes": bytes.len() }),
+                true,
+            )
+        }
         Err(error) => {
+            crate::single_step_telemetry::record_freecell(|| {
+                serde_json::json!({
+                    "event":"evidence-file-response","path":directory.join(name),"completed":false,
+                    "error":error.to_string(),"may_be_partial":true
+                })
+            });
             warn(
                 warnings,
                 format!("{name} write failed; retained path may be partial: {error}"),

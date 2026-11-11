@@ -9,8 +9,9 @@ mod computed_route;
 mod control_search;
 pub(crate) mod freecell_calculation;
 mod freecell_execution;
-mod freecell_reconnaissance;
+pub(crate) mod freecell_reconnaissance;
 pub(crate) mod freecell_route;
+mod freecell_telemetry;
 mod game_operations;
 #[cfg(test)]
 mod image_recording_tests;
@@ -23,6 +24,7 @@ mod pyramid_reconnaissance;
 pub(crate) mod pyramid_search_control;
 mod pyramid_session;
 mod pyramid_stop;
+pub(crate) mod qmp_wire;
 mod spider_execution;
 mod tcp_capture;
 #[cfg(test)]
@@ -204,6 +206,8 @@ enum WorkerCommand {
     ListFreeCellSources {
         /// Selected UI context used only to reject stale directory results.
         context: ControllerContext,
+        /// Checked browser request token, independent of calculation ownership.
+        request_id: u64,
         /// Exact operator-selected directory to enumerate.
         directory: PathBuf,
     },
@@ -224,6 +228,10 @@ enum WorkerCommand {
         run_id: u64,
         /// One deliberate transfer plus observed automatic closure, or the remaining route.
         single_step: bool,
+        /// Pointer protocol frozen for this SINGLE STEP; normal routes ignore this setting.
+        drag_mode: crate::freecell_route::DragMode,
+        /// ABS diagnostic interval copied from the explicit button invocation.
+        drag_timing: crate::freecell_route::DiagnosticDragTiming,
         /// Frozen central animation setting.
         settle: Duration,
     },
@@ -339,6 +347,8 @@ pub struct WorkerRunFailure {
 pub enum WorkerEvent {
     /// A directory-bound source browser result, unrelated to route authority.
     FreeCellSourcesListed {
+        /// Exact browser invocation; duplicates cannot replace a later refusal.
+        request_id: u64,
         /// Directory whose filenames were enumerated.
         directory: PathBuf,
         /// Matching source paths or the original enumeration refusal.
@@ -366,10 +376,13 @@ pub enum WorkerEvent {
     FreeCellReconFinished {
         /// Checked identity of the acquisition that has released its reservation.
         request_id: u64,
+        /// Exact request pixels, installed only after accepting this completion identity.
+        frame: Option<CapturedFrame>,
         /// Causal completion category, retaining genuine failures over late STOP.
         termination: crate::pyramid_workflow_model::RunTermination,
         /// Export result or first refusal, independent of retained diagnostic pixels.
-        result: Result<freecell_reconnaissance::Report, String>,
+        result:
+            Result<freecell_reconnaissance::Report, Box<freecell_reconnaissance::FailureReport>>,
     },
     /// Ordered completion of a RESET-only read-only preview.
     ResetPreviewFinished {
@@ -388,6 +401,13 @@ pub enum WorkerEvent {
     Log(String),
     /// Extended Single step evidence persisted only in the private session log.
     SessionTelemetry(String),
+    /// One outgoing wire attempt, shown without recursively tracing its packet.
+    QmpWireLog {
+        /// Full frozen provenance without an escaped duplicate of the packet.
+        metadata: String,
+        /// Readable attempt identity followed by the exact compact JSON sent.
+        packet_line: String,
+    },
     /// Source-owned stop details, tagged with the original request context and failure time.
     RunFailure(WorkerRunFailure),
     /// Concise current-operation text for the status area.
@@ -860,6 +880,7 @@ impl WorkerEventSink {
         context: Option<ControllerContext>,
         event: WorkerEvent,
     ) -> Result<(), Box<mpsc::SendError<ContextualWorkerEvent>>> {
+        freecell_telemetry::event(&event);
         self.events
             .send(ContextualWorkerEvent {
                 context,
@@ -997,11 +1018,16 @@ impl WorkerHandle {
     pub(crate) fn list_freecell_sources(
         &self,
         context: ControllerContext,
+        request_id: u64,
         directory: PathBuf,
     ) -> Result<(), String> {
         self.check_accepting_requests()?;
         self.command_tx
-            .send(WorkerCommand::ListFreeCellSources { context, directory })
+            .send(WorkerCommand::ListFreeCellSources {
+                context,
+                request_id,
+                directory,
+            })
             .map_err(|e| format!("Worker unavailable: {e}"))
     }
 
@@ -1095,6 +1121,28 @@ impl WorkerHandle {
         plan: freecell_calculation::Identity,
         single_step: bool,
         mode: crate::freecell_route::AutoMode,
+        drag_mode: crate::freecell_route::DragMode,
+        settle: Duration,
+    ) -> Result<u64, String> {
+        self.execute_freecell_route_with_timing(
+            plan,
+            single_step,
+            mode,
+            drag_mode,
+            crate::freecell_route::DiagnosticDragTiming::TwoSeconds,
+            settle,
+        )
+    }
+
+
+    /// Freeze one explicit ABS interval before reserving or queuing live work.
+    pub(crate) fn execute_freecell_route_with_timing(
+        &self,
+        plan: freecell_calculation::Identity,
+        single_step: bool,
+        mode: crate::freecell_route::AutoMode,
+        drag_mode: crate::freecell_route::DragMode,
+        drag_timing: crate::freecell_route::DiagnosticDragTiming,
         settle: Duration,
     ) -> Result<u64, String> {
         self.check_accepting_requests()?;
@@ -1103,6 +1151,12 @@ impl WorkerHandle {
             || plan.context.strategy != SolvingStrategy::ShortestPath
         {
             return Err("Independent Free Cell route only".into());
+        }
+        if single_step
+            && drag_mode == crate::freecell_route::DragMode::Relative
+            && drag_timing == crate::freecell_route::DiagnosticDragTiming::HalfSecond
+        {
+            return Err("Single Step 0.5s requires ABS drag mode".into());
         }
         let run_id = self
             .latest_frame
@@ -1123,6 +1177,8 @@ impl WorkerHandle {
                             plan: plan.clone(),
                             run_id,
                             single_step,
+                            drag_mode,
+                            drag_timing,
                             settle,
                         })
                         .map_err(|e| format!("Worker unavailable: {e}"))
@@ -1700,6 +1756,7 @@ fn run_worker(
     cancel_requested: Arc<AtomicBool>,
     shutdown_requested: Arc<AtomicBool>,
 ) {
+    let _wire_scope = qmp_wire::WorkerScope::install(&event_tx);
     let _capture_scope = tcp_capture::WorkerCaptureScope::install(&event_tx);
     // Processes bounded commands without retaining QMP between transactions.
     let mut scan_state = TableauScanState::initial();
@@ -1719,6 +1776,8 @@ fn run_worker(
         }
 
 
+        let _wire_command = qmp_wire::CommandScope::install(&command);
+        let _freecell_telemetry = freecell_telemetry::scope(&command, &event_tx);
         let phase = match &command {
             WorkerCommand::Reconnoitre { .. } | WorkerCommand::StartPyramidSession { .. } => {
                 Some(pyramid_pause::Phase::Recon)
@@ -1742,7 +1801,11 @@ fn run_worker(
             }
         });
         match command {
-            WorkerCommand::ListFreeCellSources { context, directory } => {
+            WorkerCommand::ListFreeCellSources {
+                context,
+                request_id,
+                directory,
+            } => {
                 let result = (|| {
                     let entries = std::fs::read_dir(&directory)
                         .map_err(|e| format!("Source directory: {e}"))?;
@@ -1767,13 +1830,19 @@ fn run_worker(
                 })();
                 let _ = event_tx.send_for_context(
                     Some(context),
-                    WorkerEvent::FreeCellSourcesListed { directory, result },
+                    WorkerEvent::FreeCellSourcesListed {
+                        request_id,
+                        directory,
+                        result,
+                    },
                 );
             }
             WorkerCommand::ExecuteFreeCellRoute {
                 plan,
                 run_id,
                 single_step,
+                drag_mode,
+                drag_timing,
                 settle,
             } => {
                 if let Some(error) = pause_failure {
@@ -1786,6 +1855,7 @@ fn run_worker(
                         plan,
                         run_id,
                         single_step,
+                        (drag_mode, drag_timing),
                         settle,
                         &event_tx,
                         &cancel_requested,
@@ -1914,16 +1984,19 @@ fn run_worker(
             } => {
                 let telemetry_events = event_tx.events.clone();
                 let telemetry_context = context.clone();
-                let _single_step_telemetry = crate::single_step_telemetry::Scope::install(
-                    settings.single_step_diagnostics(),
-                    move |message| {
-                        let _ = telemetry_events.send(ContextualWorkerEvent {
-                            context: Some(telemetry_context.clone()),
-                            emitted_at: worker_elapsed(),
-                            event: WorkerEvent::SessionTelemetry(message),
-                        });
-                    },
-                );
+                let _single_step_telemetry =
+                    (!crate::single_step_telemetry::is_freecell()).then(|| {
+                        crate::single_step_telemetry::Scope::install(
+                            settings.single_step_diagnostics(),
+                            move |message| {
+                                let _ = telemetry_events.send(ContextualWorkerEvent {
+                                    context: Some(telemetry_context.clone()),
+                                    emitted_at: worker_elapsed(),
+                                    event: WorkerEvent::SessionTelemetry(message),
+                                });
+                            },
+                        )
+                    });
                 crate::single_step_telemetry::record(|| {
                     serde_json::json!({
                         "event": "request", "context": format!("{context:?}"),
@@ -4910,7 +4983,17 @@ fn log_tcp_capture_timing(
 
 /// Log existing full-frame evidence only inside explicit Single step telemetry scope.
 fn log_single_step_capture(frame: &CapturedFrame, timing: CaptureTiming) {
+    let freecell = crate::single_step_telemetry::is_freecell();
     crate::single_step_telemetry::record(|| {
+        let klondike_scene = if freecell {
+            serde_json::Value::Null
+        } else {
+            serde_json::json!(
+                crate::klondike::scene_diagnostics::inspect(frame)
+                    .map(|report| report.value())
+                    .map_err(|error| error.to_string())
+            )
+        };
         serde_json::json!({
             "event": "capture", "layout": [frame.width, frame.height, frame.stride],
             "transport": timing.identity.map(|id| serde_json::json!({
@@ -4920,8 +5003,7 @@ fn log_single_step_capture(frame: &CapturedFrame, timing: CaptureTiming) {
             })),
             "timings_ms": {"request": timing.screendump.as_secs_f64()*1000.0,
                 "read": timing.file_read.as_secs_f64()*1000.0, "decode": timing.decode.as_secs_f64()*1000.0},
-            "klondike_scene": crate::klondike::scene_diagnostics::inspect(frame)
-                .map(|report| report.value()).map_err(|error| error.to_string())
+            "klondike_scene": klondike_scene
         })
     });
 }

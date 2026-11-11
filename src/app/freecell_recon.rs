@@ -60,9 +60,47 @@ impl FreeCellReconState {
         self.stopped_preview.as_ref() == Some(context)
     }
 
+
+    /// Keep generic/coalesced preview pixels from replacing this request's evidence.
+    /// An explicit new capture or selection clears the completed inspection marker.
+    pub(super) fn owns_preview(&self, context: &ControllerContext) -> bool {
+        self.pending
+            .as_ref()
+            .is_some_and(|(expected, _)| expected == context)
+            || self.stopped_preview.as_ref() == Some(context)
+    }
+
     /// Explicit new capture or selection retires the previous inspection marker.
     pub(super) fn clear_preview(&mut self) {
         self.stopped_preview = None;
+    }
+}
+
+
+impl super::QmpQemuSocketApp {
+    /// Open a scoped auxiliary error without changing other games' presentation policy.
+    pub(super) fn freecell_auxiliary_failure(
+        &mut self,
+        label: &str,
+        error: &str,
+        details: serde_json::Value,
+    ) {
+        if self.game_mode == crate::game::GameMode::FreeCell
+            && self.solving_strategy == crate::strategy::SolvingStrategy::ShortestPath
+        {
+            self.trace_freecell_ui(
+                "auxiliary-failure",
+                serde_json::json!({
+                "stage":label,"error":error,"request":details}),
+            );
+            self.failure_window.general(
+                label,
+                error,
+                serde_json::json!({
+                    "context":format!("{:?}",self.current_preview_context()),"request":details,
+                }),
+            );
+        }
     }
 }
 
@@ -70,6 +108,32 @@ impl FreeCellReconState {
 mod tests {
     use super::*;
     use crate::{game::GameMode, strategy::SolvingStrategy};
+
+
+    /// A current RECON owns its preview through completion and rejects advisory overwrite.
+    #[test]
+    fn freecell_313_preview_ownership_survives_finish_until_explicit_new_capture() {
+        let context = ControllerContext::new(
+            "/tmp/recon-preview.sock".into(),
+            GameMode::FreeCell,
+            SolvingStrategy::ShortestPath,
+            13,
+        );
+        let mut state = FreeCellReconState::default();
+        assert!(!state.owns_preview(&context));
+        let id = state.reserve(context.clone()).unwrap();
+        assert!(state.owns_preview(&context));
+        assert!(!state.finish(&context, id + 1, RunTermination::Failed));
+        assert!(state.owns_preview(&context));
+        assert!(state.finish(&context, id, RunTermination::Failed));
+        assert!(state.owns_preview(&context));
+        state.clear_preview();
+        assert!(!state.owns_preview(&context));
+        let next = state.reserve(context.clone()).unwrap();
+        assert!(state.owns_preview(&context));
+        assert!(!state.finish(&context, id, RunTermination::Completed));
+        assert!(state.finish(&context, next, RunTermination::Completed));
+    }
 
     /// No stale/duplicate completion can consume another request or initiate recovery I/O.
     #[test]

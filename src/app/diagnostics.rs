@@ -139,6 +139,22 @@ impl FailureWindow {
     }
 
 
+    /// Present an accepted RECON failure from its immutable worker request and frame.
+    /// The caller rejects stale/duplicate completions before changing this window.
+    pub(super) fn freecell_recon(
+        &mut self,
+        failure: &crate::worker::freecell_reconnaissance::FailureReport,
+    ) {
+        self.general(
+            "Free Cell RECON",
+            &failure.error,
+            serde_json::json!({"worker":failure.details,
+                "diagnostics_directory":failure.directory,
+                "persistence_error":failure.persistence_error}),
+        );
+    }
+
+
     /// Whether a complete last failure remains available, including after STOP or a new run.
     pub(super) fn available(&self) -> bool {
         !self.text.is_empty()
@@ -189,6 +205,63 @@ impl FailureWindow {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+
+    /// Exact request fences precede presentation; disk failures retain the primary cause.
+    #[test]
+    fn freecell_313_recon_failure_opens_once_and_rejects_old_completions() {
+        let context = ControllerContext::new(
+            "/tmp/recon-fence.sock".into(),
+            GameMode::FreeCell,
+            SolvingStrategy::ShortestPath,
+            31,
+        );
+        let mut recon = super::super::freecell_recon::FreeCellReconState::default();
+        let old = recon.reserve(context.clone()).unwrap();
+        assert!(recon.finish(
+            &context,
+            old,
+            crate::pyramid_workflow_model::RunTermination::Completed
+        ));
+        let current = recon.reserve(context.clone()).unwrap();
+        let receipt = crate::worker::freecell_reconnaissance::FailureReport {
+            error: "first native recognition cause".to_owned(),
+            details: serde_json::json!({"request_id":current,"stage":"recognition",
+                "recognition":{"region":"Rank","cause":"first native recognition cause"},
+                "capture":{"request_id":current,"width":1920,"height":1080}}),
+            directory: Some("/tmp/original-request-packet".into()),
+            persistence_error: Some("image save refused after reservation".to_owned()),
+        };
+        let mut window = FailureWindow::default();
+        if recon.finish(
+            &context,
+            current,
+            crate::pyramid_workflow_model::RunTermination::Failed,
+        ) {
+            window.freecell_recon(&receipt);
+        }
+        assert!(window.open && window.available());
+        assert!(window.text.contains("first native recognition cause"));
+        assert!(window.text.contains("image save refused after reservation"));
+        assert!(window.text.contains("original-request-packet"));
+        assert_eq!(window.fields["worker"]["request_id"], current);
+        let frozen = window.text.clone();
+        window.open = false;
+        for stale in [old, current] {
+            if recon.finish(
+                &context,
+                stale,
+                crate::pyramid_workflow_model::RunTermination::Failed,
+            ) {
+                window.general("stale", "must not replace", serde_json::json!({}));
+            }
+        }
+        assert!(!window.open);
+        assert_eq!(window.text, frozen);
+        window.reopen();
+        assert!(window.open);
+        assert_eq!(window.text, frozen);
+    }
 
 
     /// Packet completion preserves closed state and original fields; a new failure opens again.

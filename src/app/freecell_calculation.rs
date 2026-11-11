@@ -5,10 +5,10 @@ use crate::worker::freecell_calculation::{Identity, Progress, Report};
 use std::sync::Arc;
 
 
-/// Offline source selection and one outstanding request, independent of RECON.
+/// Offline source selection and one outstanding request; RECON may select its published file.
 #[derive(Default)]
 pub(super) struct Calculation {
-    /// Operator's exact source pathname.
+    /// Exact selected source pathname, supplied manually or by an accepted publication.
     path: String,
     /// Monotonic source edit generation.
     generation: u64,
@@ -26,7 +26,11 @@ pub(super) struct Calculation {
     browser: bool,
     /// Literal directory to enumerate on the worker, never on egui.
     directory: String,
-    /// Latest browser result bound to its directory.
+    /// Checked source-browser serial, independent of route/calculation identity.
+    browser_serial: u64,
+    /// Exact outstanding browser invocation; closing retires its result.
+    browser_pending: Option<(u64, PathBuf)>,
+    /// Known files for this directory, including a successfully published acquisition.
     files: Vec<PathBuf>,
     /// Route visibility is bound to this accepted calculation report.
     route_open: bool,
@@ -39,14 +43,24 @@ pub(super) struct Calculation {
 
 impl Calculation {
     /// Accept only a still-selected directory response; selection performs no I/O.
-    pub(super) fn sources(&mut self, directory: PathBuf, result: Result<Vec<PathBuf>, String>) {
-        if directory != std::path::Path::new(&self.directory) {
-            return;
+    pub(super) fn sources(
+        &mut self,
+        request_id: u64,
+        directory: PathBuf,
+        result: Result<Vec<PathBuf>, String>,
+    ) -> bool {
+        if !self.browser
+            || directory != std::path::Path::new(&self.directory)
+            || self.browser_pending.as_ref() != Some(&(request_id, directory.clone()))
+        {
+            return false;
         }
+        self.browser_pending = None;
         match result {
             Ok(files) => self.files = files,
             Err(error) => self.message = error,
         }
+        true
     }
 
 
@@ -65,6 +79,34 @@ impl Calculation {
         self.route_open = false;
         self.progress = None;
         self.browser = false;
+        self.browser_pending = None;
+        Ok(())
+    }
+
+
+    /// Select an already published acquisition without opening, listing or calculating it.
+    /// Failed pathname/generation checks leave the previous source and browser intact.
+    fn select_published(&mut self, path: &std::path::Path) -> Result<(), String> {
+        let source = path
+            .to_str()
+            .ok_or("Published Free Cell filename is not UTF-8")?;
+        let parent = path
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .unwrap_or_else(|| std::path::Path::new("."));
+        let directory = parent
+            .to_str()
+            .ok_or("Published Free Cell directory is not UTF-8")?;
+        self.set_source(source.to_owned())?;
+        if std::path::Path::new(&self.directory) != parent {
+            self.files.clear();
+        }
+        self.directory = directory.to_owned();
+        if !self.files.iter().any(|known| known == path) {
+            self.files.push(path.to_owned());
+            self.files.sort();
+        }
+        self.message = "RECON JSON selected; CALCULATE prepares its route".to_owned();
         Ok(())
     }
 
@@ -88,10 +130,11 @@ impl Calculation {
         };
         self.pending = Some(identity.clone());
         self.browser = false;
+        self.browser_pending = None;
         self.progress = None;
         self.report = None;
         self.route_open = false;
-        self.message = "Calculating complete route — no configured search cutoffs".to_owned();
+        self.message = "Calculating full board first; exhaustive maximum removal fallback — no configured search cutoffs".to_owned();
         Ok((identity, PathBuf::from(&self.path)))
     }
 
@@ -105,7 +148,7 @@ impl Calculation {
         self.pending = None;
         match result {
             Ok(report) => {
-                use xsar::games::freecell::search::Outcome;
+                use xsar::games::freecell::search::BestEffortOutcome as Outcome;
                 self.message = match &report.outcome {
                     Outcome::Solved { moves, replay, .. } => format!(
                         "Complete route independently replayed: {} transfers; {} deliberate, {} automatic; 52 foundation cards",
@@ -113,7 +156,21 @@ impl Calculation {
                         replay.deliberate,
                         replay.automatic
                     ),
-                    Outcome::Exhausted(_) => "Search graph exhausted: no complete route".to_owned(),
+                    Outcome::Partial {
+                        moves,
+                        deliberate_moves,
+                        automatic_moves,
+                        foundation_cards,
+                        ..
+                    } => format!(
+                        "Proved maximum partial route: {foundation_cards}/52 foundation cards; {} transfers, {deliberate_moves} deliberate, {automatic_moves} automatic; search graph exhausted; independently replayed{}",
+                        moves.len(),
+                        if moves.is_empty() {
+                            "; no foundation progress is reachable"
+                        } else {
+                            ""
+                        }
+                    ),
                     Outcome::Cancelled(_) => "Calculation cancelled; no usable route".to_owned(),
                     Outcome::Failed { failure, .. } => format!("Calculation failed: {failure}"),
                 };
@@ -137,22 +194,166 @@ impl Calculation {
 
 
 impl QmpQemuSocketApp {
+    /// An accepted RECON publication replaces source selection and revokes the former plan.
+    /// This grants no capture, calculation or guest-input authority.
+    pub(super) fn select_freecell_published_source(
+        &mut self,
+        request_id: u64,
+        destination: &std::path::Path,
+    ) {
+        self.revoke_freecell_playback();
+        match self.freecell_calculation.select_published(destination) {
+            Ok(()) => {
+                self.trace_freecell_ui(
+                    "recon-source-selected",
+                    serde_json::json!({
+                    "request_id":request_id,"published_destination":destination,
+                    "source_generation":self.freecell_calculation.generation,
+                    "calculation_started":false,"guest_input_attempted":false}),
+                );
+                self.push_log(format!(
+                    "Free Cell RECON JSON selected for CALCULATE: {}",
+                    destination.display()
+                ));
+            }
+            Err(error) => {
+                self.trace_freecell_ui(
+                    "recon-source-selection-failed",
+                    serde_json::json!({
+                    "request_id":request_id,"published_destination":destination,
+                    "publication":"published","error":error}),
+                );
+                self.failure_window.general(
+                    "Free Cell RECON source selection",
+                    &error,
+                    serde_json::json!({"request_id":request_id,"published_destination":destination,
+                        "publication":"published","guest_input_attempted":false}),
+                );
+                self.push_log(format!(
+                    "Free Cell RECON exported; source selection: {error}"
+                ));
+            }
+        }
+    }
+
+
+    /// Reserve one browser token before dispatch; no directory I/O runs on egui.
+    fn request_freecell_sources(&mut self) {
+        let mut request_identity = None;
+        let result = (|| {
+            let request_id = self
+                .freecell_calculation
+                .browser_serial
+                .checked_add(1)
+                .ok_or("Free Cell browser request identity exhausted")?;
+            self.freecell_calculation.browser_serial = request_id;
+            let directory = PathBuf::from(&self.freecell_calculation.directory);
+            request_identity = Some((request_id, directory.clone()));
+            self.freecell_calculation.browser_pending = Some((request_id, directory.clone()));
+            self.trace_freecell_ui(
+                "source-browser-dispatch",
+                serde_json::json!({
+                "request_id":request_id,"directory":directory}),
+            );
+            self.worker
+                .list_freecell_sources(self.current_preview_context(), request_id, directory)
+        })();
+        if let Err(error) = result {
+            self.freecell_calculation.browser_pending = None;
+            let details = serde_json::json!({
+                "request_id":request_identity.as_ref().map(|(id,_)|*id),
+                "directory":request_identity.as_ref().map(|(_,directory)|directory),
+                "selected_directory":self.freecell_calculation.directory,
+                "context":format!("{:?}",self.current_preview_context()),
+                "stage":if request_identity.is_some(){"worker command dispatch"}else{"request allocation"},
+                "original_error":error,"guest_input_attempted":false,
+            });
+            self.trace_freecell_ui("source-browser-dispatch-failure", details.clone());
+            self.failure_window
+                .general("Free Cell source browser dispatch", &error, details);
+            self.freecell_calculation.message = error;
+        }
+    }
+
+
+    /// Only an exact active directory request may update source choices or failure details.
+    pub(super) fn freecell_sources_listed(
+        &mut self,
+        request_id: u64,
+        directory: PathBuf,
+        result: Result<Vec<PathBuf>, String>,
+    ) {
+        let failure = result.as_ref().err().cloned();
+        let accepted = self
+            .freecell_calculation
+            .sources(request_id, directory.clone(), result);
+        self.trace_freecell_ui(
+            "source-browser-result",
+            serde_json::json!({
+            "request_id":request_id,"directory":directory,"accepted":accepted,"error":failure}),
+        );
+        if accepted && let Some(error) = failure {
+            self.failure_window.general("Free Cell source browser", &error,
+                serde_json::json!({"request_id":request_id,"directory":directory,
+                    "context":format!("{:?}",self.current_preview_context()),"guest_input_attempted":false}));
+        }
+    }
+
+
+    /// Freeze a local/offline error with the selected source or exact accepted identity.
+    pub(super) fn freecell_calculation_failure(
+        &mut self,
+        label: &str,
+        error: &str,
+        identity: Option<&Identity>,
+    ) {
+        self.trace_freecell_ui(
+            "calculation-local-failure",
+            serde_json::json!({
+            "stage":label,"error":error,"identity":identity.map(|id|format!("{id:?}")),
+            "source_path":self.freecell_calculation.path,
+            "source_generation":self.freecell_calculation.generation}),
+        );
+        self.failure_window.general(
+            label,
+            error,
+            serde_json::json!({
+                "context":format!("{:?}",self.current_preview_context()),
+                "identity":identity.map(|identity|format!("{identity:#?}")),
+                "source_path":self.freecell_calculation.path,
+                "source_generation":self.freecell_calculation.generation,
+                "directory":self.freecell_calculation.directory,
+                "guest_input_attempted":false,
+            }),
+        );
+    }
+
+
     /// Offer the complete offline calculation independently of live RECON/export.
     pub(super) fn freecell_calculation_controls(&mut self, ui: &mut egui::Ui) {
         let idle = self.active_run.is_none() && !self.worker_state.is_busy() && !self.exiting;
+        ui.horizontal_wrapped(|ui| {
         let mut source = self.freecell_calculation.path.clone();
         let changed = ui
             .add_enabled(
                 idle,
                 egui::TextEdit::singleline(&mut source)
                     .hint_text("Free Cell source JSON path")
-                    .desired_width(330.0),
+                    .desired_width(ui.available_width().min(330.0)),
             )
             .changed();
         if changed {
             match self.freecell_calculation.set_source(source) {
-                Ok(()) => self.revoke_freecell_playback(),
-                Err(error) => self.freecell_calculation.message = error,
+                Ok(()) => {
+                    self.trace_freecell_ui("source-edited", serde_json::json!({
+                        "source_path":self.freecell_calculation.path,
+                        "source_generation":self.freecell_calculation.generation}));
+                    self.revoke_freecell_playback();
+                }
+                Err(error) => {
+                    self.freecell_calculation_failure("Free Cell source selection", &error, None);
+                    self.freecell_calculation.message = error;
+                }
             }
         }
         if bevel_button(ui, "Select JSON…", SETUP_BLUE, false, idle).clicked() {
@@ -160,62 +361,16 @@ impl QmpQemuSocketApp {
             if self.freecell_calculation.directory.is_empty() {
                 self.freecell_calculation.directory = "/home/charlie/tmp".to_owned();
             }
-            if let Err(error) = self.worker.list_freecell_sources(
-                self.current_preview_context(),
-                PathBuf::from(&self.freecell_calculation.directory),
-            ) {
-                self.freecell_calculation.message = error;
-            }
-        }
-        if self.freecell_calculation.browser && idle {
-            egui::Window::new("Select Free Cell JSON source").show(ui.ctx(), |ui| {
-                ui.text_edit_singleline(&mut self.freecell_calculation.directory);
-                if ui.button("List directory").clicked()
-                    && let Err(error) = self.worker.list_freecell_sources(
-                        self.current_preview_context(),
-                        PathBuf::from(&self.freecell_calculation.directory),
-                    )
-                {
-                    self.freecell_calculation.message = error;
-                }
-                let mut selected = None;
-                egui::ScrollArea::vertical().max_height(250.0).show_rows(
-                    ui,
-                    ui.text_style_height(&egui::TextStyle::Body),
-                    self.freecell_calculation.files.len(),
-                    |ui, range| {
-                        for index in range {
-                            if let Some(path) = self.freecell_calculation.files.get(index)
-                                && ui
-                                    .selectable_label(false, path.display().to_string())
-                                    .clicked()
-                            {
-                                selected = Some(path.clone());
-                            }
-                        }
-                    },
-                );
-                if let Some(path) = selected {
-                    match path.to_str() {
-                        Some(path) => match self.freecell_calculation.set_source(path.to_owned()) {
-                            Ok(()) => self.revoke_freecell_playback(),
-                            Err(error) => self.freecell_calculation.message = error,
-                        },
-                        None => {
-                            self.freecell_calculation.message = "Unsupported filename".to_owned()
-                        }
-                    }
-                }
-                if ui.button("Close").clicked() {
-                    self.freecell_calculation.browser = false;
-                }
-            });
+            self.request_freecell_sources();
         }
         if bevel_button(ui, "CALCULATE", SETUP_BLUE, false, idle).clicked() {
             self.revoke_freecell_playback();
             let context = self.current_preview_context();
             match self.freecell_calculation.reserve(context) {
                 Ok((identity, path)) => {
+                    self.trace_freecell_ui("calculation-dispatch", serde_json::json!({
+                        "request_id":identity.request_id,"source_generation":identity.source_generation,
+                        "source_path":path,"identity":format!("{identity:?}")}));
                     match self.worker.calculate_freecell(
                         identity.context.clone(),
                         identity.request_id,
@@ -228,12 +383,81 @@ impl QmpQemuSocketApp {
                             self.stop_requested = false;
                         }
                         Err(error) => {
+                            self.freecell_calculation_failure("Free Cell calculation dispatch", &error, Some(&identity));
                             self.freecell_calculation.finish(&identity, Err(error));
                         }
                     }
                 }
-                Err(error) => self.freecell_calculation.message = error,
+                Err(error) => {
+                    self.freecell_calculation_failure("Free Cell calculation request", &error, None);
+                    self.freecell_calculation.message = error;
+                }
             }
+        }
+        });
+        if self.freecell_calculation.browser && idle {
+            egui::Window::new("Select Free Cell JSON source").show(ui.ctx(), |ui| {
+                ui.text_edit_singleline(&mut self.freecell_calculation.directory);
+                if ui.button("List directory").clicked() {
+                    self.request_freecell_sources();
+                }
+                let mut selected = None;
+                egui::ScrollArea::vertical().max_height(250.0).show_rows(
+                    ui,
+                    ui.text_style_height(&egui::TextStyle::Body),
+                    self.freecell_calculation.files.len(),
+                    |ui, range| {
+                        for index in range {
+                            if let Some(path) = self.freecell_calculation.files.get(index)
+                                && ui
+                                    .selectable_label(
+                                        std::path::Path::new(&self.freecell_calculation.path)
+                                            == path,
+                                        path.display().to_string(),
+                                    )
+                                    .clicked()
+                            {
+                                selected = Some(path.clone());
+                            }
+                        }
+                    },
+                );
+                if let Some(path) = selected {
+                    match path.to_str() {
+                        Some(path) => match self.freecell_calculation.set_source(path.to_owned()) {
+                            Ok(()) => {
+                                self.trace_freecell_ui(
+                                    "source-selected",
+                                    serde_json::json!({
+                                    "source_path":self.freecell_calculation.path,
+                                    "source_generation":self.freecell_calculation.generation}),
+                                );
+                                self.revoke_freecell_playback();
+                            }
+                            Err(error) => {
+                                self.freecell_calculation_failure(
+                                    "Free Cell source selection",
+                                    &error,
+                                    None,
+                                );
+                                self.freecell_calculation.message = error;
+                            }
+                        },
+                        None => {
+                            self.freecell_calculation_failure(
+                                "Free Cell source selection",
+                                "Unsupported filename",
+                                None,
+                            );
+                            self.freecell_calculation.message = "Unsupported filename".to_owned()
+                        }
+                    }
+                }
+                if ui.button("Close").clicked() {
+                    self.freecell_calculation.browser = false;
+                    self.freecell_calculation.browser_pending = None;
+                }
+            });
         }
         if self.active_run == Some(ActiveRun::FreeCellCalculation) {
             if let Some(pause) = self.worker.pause_state() {
@@ -241,9 +465,22 @@ impl QmpQemuSocketApp {
                 if ui
                     .button(if requested { "CONTINUE" } else { "PAUSE" })
                     .clicked()
-                    && let Err(error) = self.worker.request_pause(pause.epoch, !requested)
                 {
-                    self.freecell_calculation.message = error;
+                    self.trace_freecell_ui(
+                        "calculation-pause-intent",
+                        serde_json::json!({
+                        "identity":format!("{:?}",self.freecell_calculation.pending),
+                        "pause_epoch":pause.epoch,"pause_requested":!requested}),
+                    );
+                    if let Err(error) = self.worker.request_pause(pause.epoch, !requested) {
+                        let identity = self.freecell_calculation.pending.clone();
+                        self.freecell_calculation_failure(
+                            "Free Cell calculation pause",
+                            &error,
+                            identity.as_ref(),
+                        );
+                        self.freecell_calculation.message = error;
+                    }
                 }
                 if pause.acknowledged {
                     ui.label("Paused — frontier retained");
@@ -252,6 +489,11 @@ impl QmpQemuSocketApp {
                 }
             }
             if ui.button("CANCEL").clicked() {
+                self.trace_freecell_ui(
+                    "calculation-cancel-intent",
+                    serde_json::json!({
+                    "identity":format!("{:?}",self.freecell_calculation.pending)}),
+                );
                 self.worker.cancel_freecell_calculation();
                 self.freecell_calculation.message = "Cancelling…".to_owned();
             }
@@ -277,10 +519,8 @@ impl QmpQemuSocketApp {
                 report.bytes.len(),
                 report.deal.metadata().deal_id()
             ));
-            if matches!(
-                &report.outcome,
-                xsar::games::freecell::search::Outcome::Solved { .. }
-            ) && ui.button("Inspect physical route").clicked()
+            if route_moves(&report.outcome).is_some()
+                && ui.button("Inspect physical route").clicked()
             {
                 self.freecell_calculation.route_open = true;
                 self.freecell_calculation.route_chrome.maximise();
@@ -300,11 +540,12 @@ impl QmpQemuSocketApp {
             calculation.route_open = false;
             return;
         };
-        let xsar::games::freecell::search::Outcome::Solved { moves, .. } = &report.outcome else {
+        let Some(moves) = route_moves(&report.outcome) else {
             calculation.route_open = false;
             return;
         };
         let mut open = calculation.route_open;
+        let route_description = calculation.message.clone();
         calculation.route_chrome.show(
             context,
             window_chrome::WindowAppearance {
@@ -322,6 +563,7 @@ impl QmpQemuSocketApp {
                         MAXIMUM_OUTPUT_TEXT_SIZE_POINTS,
                     )
                 });
+                ui.label(&route_description);
                 ui.horizontal_wrapped(|ui| {
                     ui.label(format!(
                         "{} · {} transfers · inspection only",
@@ -377,19 +619,38 @@ impl QmpQemuSocketApp {
         identity: Identity,
         result: Result<Arc<Report>, String>,
     ) {
-        if self.active_run == Some(ActiveRun::FreeCellCalculation)
+        let failure = match &result {
+            Err(error) => Some(error.clone()),
+            Ok(report) => match &report.outcome {
+                xsar::games::freecell::search::BestEffortOutcome::Failed { failure, .. } => {
+                    Some(failure.to_string())
+                }
+                _ => None,
+            },
+        };
+        let accepted = self.active_run == Some(ActiveRun::FreeCellCalculation)
             && identity.context == self.current_preview_context()
-            && self.freecell_calculation.finish(&identity, result)
-        {
+            && self.freecell_calculation.finish(&identity, result);
+        self.trace_freecell_ui(
+            "calculation-result",
+            serde_json::json!({
+            "request_id":identity.request_id,"source_generation":identity.source_generation,
+            "identity":format!("{identity:?}"),"accepted":accepted,"error":failure,
+            "message":self.freecell_calculation.message}),
+        );
+        if accepted {
+            if let Some(error) = failure {
+                self.freecell_calculation_failure("Free Cell calculation", &error, Some(&identity));
+            }
             let stopped = self.stop_requested;
             if stopped {
                 self.revoke_freecell_playback();
-            } else if self.freecell_calculation.report.as_ref().is_some_and(|r| {
-                matches!(
-                    &r.outcome,
-                    xsar::games::freecell::search::Outcome::Solved { .. }
-                )
-            }) {
+            } else if self
+                .freecell_calculation
+                .report
+                .as_ref()
+                .is_some_and(|r| route_moves(&r.outcome).is_some_and(|moves| !moves.is_empty()))
+            {
                 self.freecell_playback.plan = Some(identity.clone());
             }
             self.active_run = None;
@@ -398,9 +659,7 @@ impl QmpQemuSocketApp {
             self.current_status = self.freecell_calculation.message.clone();
             self.push_log(self.current_status.clone());
             if let Some(report) = self.freecell_calculation.report.take() {
-                if let xsar::games::freecell::search::Outcome::Solved { moves, .. } =
-                    &report.outcome
-                {
+                if let Some(moves) = route_moves(&report.outcome) {
                     for (index, action) in moves.iter().enumerate() {
                         self.push_session_telemetry_at(
                             self.started_at.elapsed(),
@@ -428,6 +687,21 @@ impl QmpQemuSocketApp {
         {
             self.freecell_calculation.progress(progress);
         }
+    }
+}
+
+
+/// Borrow only independently replayed full or exhaustive partial physical transfers.
+/// Cancellation and failures contain no route; an empty partial remains inspectable only.
+fn route_moves(
+    outcome: &xsar::games::freecell::search::BestEffortOutcome,
+) -> Option<&[xsar::games::freecell::rules::RecordedMove]> {
+    use xsar::games::freecell::search::BestEffortOutcome;
+    match outcome {
+        BestEffortOutcome::Solved { moves, .. } | BestEffortOutcome::Partial { moves, .. } => {
+            Some(moves)
+        }
+        BestEffortOutcome::Cancelled(_) | BestEffortOutcome::Failed { .. } => None,
     }
 }
 
@@ -465,6 +739,138 @@ fn card(id: u8) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+
+    /// A published source retires old inspection/browser results and is the next calculation input.
+    #[test]
+    fn freecell_315_published_recon_selects_exact_json_and_retires_old_ui_state() {
+        let directory = PathBuf::from("/nonexistent-freecell/exports");
+        let published = directory.join("new deal.json");
+        let mut state = Calculation {
+            path: "previous.json".to_owned(),
+            generation: 7,
+            directory: directory.display().to_string(),
+            files: vec![directory.join("older.json")],
+            browser: true,
+            browser_pending: Some((12, directory.clone())),
+            route_open: true,
+            route_text_size_points: Some(22.0),
+            ..Default::default()
+        };
+        state.select_published(&published).unwrap();
+        assert_eq!(std::path::Path::new(&state.path), published);
+        assert_eq!(state.generation, 8);
+        assert!(!state.browser);
+        assert!(state.browser_pending.is_none());
+        assert!(!state.route_open);
+        assert_eq!(state.route_text_size_points, Some(22.0));
+        assert!(state.files.contains(&published));
+        assert_eq!(state.files.len(), 2);
+        assert!(!state.sources(12, directory, Err("late listing".into())));
+        let (identity, selected) = state.reserve(context()).unwrap();
+        assert_eq!(selected, published);
+        assert_eq!(identity.source_generation, 8);
+    }
+
+
+    /// Only one exact accepted RECON completion can replace the selected source.
+    #[test]
+    fn freecell_315_stale_duplicate_and_failed_recon_do_not_select_a_source() {
+        use crate::pyramid_workflow_model::RunTermination;
+        let selected_context = context();
+        let mut recon = super::super::freecell_recon::FreeCellReconState::default();
+        let mut calculation = Calculation::default();
+        calculation.set_source("retained.json".into()).unwrap();
+        let id = recon.reserve(selected_context.clone()).unwrap();
+        let mut stale_context = selected_context.clone();
+        stale_context.generation += 1;
+        for (context, token, termination, published) in [
+            (
+                &stale_context,
+                id,
+                RunTermination::Completed,
+                Some("stale.json"),
+            ),
+            (
+                &selected_context,
+                id + 1,
+                RunTermination::Completed,
+                Some("wrong.json"),
+            ),
+            (
+                &selected_context,
+                id,
+                RunTermination::Completed,
+                Some("accepted.json"),
+            ),
+            (
+                &selected_context,
+                id,
+                RunTermination::Completed,
+                Some("duplicate.json"),
+            ),
+        ] {
+            if recon.finish(context, token, termination)
+                && let Some(path) = published
+            {
+                calculation
+                    .select_published(std::path::Path::new(path))
+                    .unwrap();
+            }
+        }
+        assert_eq!(calculation.path, "accepted.json");
+        assert_eq!(calculation.generation, 2);
+        let next = recon.reserve(selected_context.clone()).unwrap();
+        assert!(recon.finish(&selected_context, next, RunTermination::Failed));
+        assert_eq!(calculation.path, "accepted.json");
+        assert_eq!(calculation.generation, 2);
+    }
+
+
+    /// Generation exhaustion cannot partially replace the source or the cached directory.
+    #[test]
+    fn freecell_315_published_recon_selection_failure_preserves_previous_source() {
+        let mut state = Calculation {
+            path: "previous.json".into(),
+            generation: u64::MAX,
+            directory: "previous-directory".into(),
+            files: vec!["previous.json".into()],
+            browser: true,
+            route_open: true,
+            ..Default::default()
+        };
+        assert_eq!(
+            state.select_published(std::path::Path::new("new/deal.json")),
+            Err("Source generation exhausted".to_owned())
+        );
+        assert_eq!(state.path, "previous.json");
+        assert_eq!(state.directory, "previous-directory");
+        assert_eq!(state.files, vec![PathBuf::from("previous.json")]);
+        assert!(state.browser);
+        assert!(state.route_open);
+    }
+
+
+    /// Repeated same-directory requests need their own token; a closed browser stays closed.
+    #[test]
+    fn freecell_313_source_browser_retains_current_failure_against_duplicates() {
+        let directory = PathBuf::from("/tmp/freecell-json");
+        let mut state = Calculation {
+            browser: true,
+            directory: directory.display().to_string(),
+            browser_pending: Some((2, directory.clone())),
+            ..Default::default()
+        };
+        assert!(!state.sources(1, directory.clone(), Err("old failure".into())));
+        assert!(state.sources(2, directory.clone(), Err("current original cause".into())));
+        assert_eq!(state.message, "current original cause");
+        assert!(!state.sources(2, directory.clone(), Err("duplicate error".into())));
+        assert_eq!(state.message, "current original cause");
+        state.browser_pending = Some((3, directory.clone()));
+        state.browser = false;
+        assert!(!state.sources(3, directory, Err("closed browser".into())));
+        assert_eq!(state.message, "current original cause");
+    }
 
 
     /// Correlation context grants no live acquisition or input authority.

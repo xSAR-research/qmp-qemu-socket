@@ -249,7 +249,17 @@ fn assert_frame(actual: &CapturedFrame, expected: &CapturedFrame) {
             expected.format
         )
     );
-    assert_eq!(actual.pixels, expected.pixels);
+    assert_eq!(actual.pixels.len(), expected.pixels.len());
+    assert_eq!(
+        actual
+            .pixels
+            .iter()
+            .zip(&expected.pixels)
+            .enumerate()
+            .find(|(_, (actual, expected))| actual != expected),
+        None,
+        "first changed pixel byte"
+    );
     assert!(actual.is_layout_valid());
 }
 
@@ -457,6 +467,15 @@ pub(super) enum V3Reply {
 
 /// Emit the public production version-3 codec on explicitly grouped persistent sessions.
 pub(super) fn v3_server(sessions: Vec<Vec<V3Reply>>) -> (String, ServerJoin) {
+    v3_server_with_read_timeout(sessions, Duration::from_secs(3))
+}
+
+
+/// Permit an explicitly paced diagnostic client without changing other mock deadlines.
+pub(super) fn v3_server_with_read_timeout(
+    sessions: Vec<Vec<V3Reply>>,
+    read_timeout: Duration,
+) -> (String, ServerJoin) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap().to_string();
     listener.set_nonblocking(true).unwrap();
@@ -464,9 +483,7 @@ pub(super) fn v3_server(sessions: Vec<Vec<V3Reply>>) -> (String, ServerJoin) {
         let mut total_requests = 0usize;
         for (session_index, replies) in sessions.into_iter().enumerate() {
             let mut stream = accept_tcp(&listener);
-            stream
-                .set_read_timeout(Some(Duration::from_secs(3)))
-                .unwrap();
+            stream.set_read_timeout(Some(read_timeout)).unwrap();
             stream
                 .set_write_timeout(Some(Duration::from_secs(3)))
                 .unwrap();
@@ -879,7 +896,7 @@ fn one_shot_v3_opens_distinct_sessions() {
 /// The real v3 acquisition exports its sole frame; failures retain those pixels without another request.
 #[test]
 fn freecell_300_tcp_recon_exports_one_frame_and_retains_refusals() {
-    use super::freecell_reconnaissance::{Request, run_checked};
+    use super::freecell_reconnaissance::{Acquisition, Request, run_checked};
     for malformed in [false, true] {
         let root = TestDirectory::new();
         let _diagnostics = DiagnosticsRestore::install(None);
@@ -919,14 +936,23 @@ fn freecell_300_tcp_recon_exports_one_frame_and_retains_refusals() {
             deal_id: "native-one-frame".to_owned(),
         };
         let trace = pyramid_stop::StopTrace::default();
-        let result = run_checked(&context, &request, &events, &cancel, &trace);
-        let latest = events
-            .latest_frame
-            .take()
-            .expect("same acquired diagnostic frame");
-        assert_frame(&latest.frame, &original);
-        assert!(latest.prediction.is_none() && latest.diagnostic);
-        assert_eq!(latest.context, Some(context));
+        let mut acquisition = Acquisition::new(1);
+        let result = run_checked(
+            &context,
+            &request,
+            &events,
+            &cancel,
+            &trace,
+            &mut acquisition,
+        );
+        assert_frame(
+            acquisition.frame.as_ref().expect("same requested frame"),
+            &original,
+        );
+        assert!(
+            events.latest_frame.take().is_none(),
+            "RECON pixels bypass the advisory coalescing slot"
+        );
         if malformed {
             assert!(result.is_err());
             assert!(!request.destination.exists());
@@ -950,6 +976,309 @@ fn freecell_300_tcp_recon_exports_one_frame_and_retains_refusals() {
         assert_eq!(tcp.finish(), 1);
     }
 }
+
+/// Consecutive explicit requests retain their own exact pixels with recording disabled.
+#[test]
+fn freecell_313_recon_completion_keeps_each_fresh_frame_and_original_failure() {
+    use super::freecell_reconnaissance::{Request, run};
+    let root = TestDirectory::new();
+    let _diagnostics = DiagnosticsRestore::install(None);
+    let (events, receiver) = sink();
+    let _capture_scope = tcp_capture::WorkerCaptureScope::install(&events);
+    let context = ControllerContext::new(
+        root.0.join("qmp.sock"),
+        GameMode::FreeCell,
+        SolvingStrategy::ShortestPath,
+        313,
+    );
+    let cancel = Arc::new(AtomicBool::new(false));
+    let _cancel_scope = tcp_capture::CancellationScope::install(Arc::clone(&cancel));
+    events.set_capture_context(Some(context.clone()));
+    let mut frames = Vec::new();
+    for marker in [21, 67] {
+        let mut frame =
+            decode_png(include_bytes!("../../tests/fixtures/freecell-FC01.png")).unwrap();
+        for y in 338..361 {
+            let first = y * frame.stride + 220 * 4;
+            for pixel in frame.pixels[first..first + 26 * 4].as_chunks_mut::<4>().0 {
+                pixel[..3].fill(marker);
+            }
+        }
+        frames.push(frame);
+    }
+    let (address, tcp) = v3_server(vec![frames.iter().cloned().map(V3Reply::Frame).collect()]);
+    let _backend = TestCaptureBackend::tcp_mode(address, CaptureMode::PersistentBgrV3);
+    for (offset, original) in frames.iter().enumerate() {
+        let request_id = 40 + offset as u64;
+        events
+            .latest_frame
+            .reconnaissance
+            .select(&context, &cancel)
+            .unwrap();
+        events
+            .latest_frame
+            .reconnaissance
+            .queue_reconnaissance(&context, &cancel, || Ok(()))
+            .unwrap();
+        let request = Request {
+            destination: root.0.join(format!("refused-{request_id}.json")),
+            deal_id: format!("fresh-request-{request_id}"),
+        };
+        run(&context, request_id, &request, &events, &cancel);
+        let completion = receiver
+            .try_iter()
+            .find_map(|tagged| match tagged.event {
+                WorkerEvent::FreeCellReconFinished {
+                    request_id: received,
+                    frame,
+                    termination,
+                    result,
+                } => Some((received, frame, termination, result)),
+                _ => None,
+            })
+            .expect("correlated completion");
+        assert_eq!(completion.0, request_id);
+        assert_frame(completion.1.as_ref().unwrap(), original);
+        assert_eq!(
+            completion.2,
+            crate::pyramid_workflow_model::RunTermination::Failed
+        );
+        let failure = completion.3.unwrap_err();
+        assert_eq!(failure.details["request_id"], request_id);
+        assert_eq!(failure.details["capture"]["request_id"], request_id);
+        assert_eq!(
+            failure.details["capture"]["transport_identity"]["protocol_version"],
+            3
+        );
+        assert!(
+            failure.details["capture"]["transport_identity"]["frame_id"]
+                .as_u64()
+                .unwrap()
+                > 0
+        );
+        assert_eq!(failure.details["stage"], "recognition");
+        assert!(failure.error.contains("native-freecell-v1"));
+        let packet = failure
+            .directory
+            .expect("failure evidence independent of GAME WIN recording");
+        assert!(
+            failure.persistence_error.is_none(),
+            "{:?}",
+            failure.persistence_error
+        );
+        let saved = decode_png(&fs::read(packet.join("first-unmatched.png")).unwrap()).unwrap();
+        assert_frame(&saved, original);
+        let state: serde_json::Value =
+            serde_json::from_slice(&fs::read(packet.join("error-state.json")).unwrap()).unwrap();
+        assert_eq!(state["error"], failure.error);
+        assert!(!request.destination.exists());
+        assert!(events.latest_frame.take().is_none());
+    }
+    drop(_capture_scope);
+    assert_eq!(
+        tcp.finish(),
+        2,
+        "each explicit request captures exactly once"
+    );
+}
+
+
+/// A synthetic objective derivative exports honest metadata and the exact already acquired pixels.
+#[test]
+fn freecell_313_unresolved_objective_export_keeps_same_acquisition_evidence() {
+    use super::freecell_reconnaissance::{Request, run};
+    let root = TestDirectory::new();
+    let _diagnostics = DiagnosticsRestore::install(None);
+    let (events, receiver) = sink();
+    let _capture_scope = tcp_capture::WorkerCaptureScope::install(&events);
+    let context = ControllerContext::new(
+        root.0.join("never-connected-qmp.sock"),
+        GameMode::FreeCell,
+        SolvingStrategy::ShortestPath,
+        314,
+    );
+    let cancel = Arc::new(AtomicBool::new(false));
+    let _cancel_scope = tcp_capture::CancellationScope::install(Arc::clone(&cancel));
+    events.set_capture_context(Some(context.clone()));
+    // Synthetic derivative: supported FC01 cards with only the later challenge objective ROI.
+    let mut frame = decode_png(include_bytes!("../../tests/fixtures/freecell-FC01.png")).unwrap();
+    let challenge = decode_png(include_bytes!(
+        "../../tests/fixtures/freecell-challenge-20261107.png"
+    ))
+    .unwrap();
+    let bounds = crate::freecell_recon::objective::BOUNDS;
+    for y in bounds.y..bounds.y + bounds.height {
+        let begin = y as usize * frame.stride + bounds.x as usize * 4;
+        let source = y as usize * challenge.stride + bounds.x as usize * 4;
+        let bytes = bounds.width as usize * 4;
+        frame.pixels[begin..begin + bytes]
+            .copy_from_slice(&challenge.pixels[source..source + bytes]);
+    }
+    let (address, tcp) = v3_server(vec![vec![V3Reply::Frame(frame.clone())]]);
+    let _backend = TestCaptureBackend::tcp_mode(address, CaptureMode::PersistentBgrV3);
+    events
+        .latest_frame
+        .reconnaissance
+        .select(&context, &cancel)
+        .unwrap();
+    events
+        .latest_frame
+        .reconnaissance
+        .queue_reconnaissance(&context, &cancel, || Ok(()))
+        .unwrap();
+    let request = Request {
+        destination: root.0.join("unresolved-objective.json"),
+        deal_id: "same-frame-objective".to_owned(),
+    };
+    run(&context, 51, &request, &events, &cancel);
+    let (acquired, report) = receiver
+        .try_iter()
+        .find_map(|tagged| match tagged.event {
+            WorkerEvent::FreeCellReconFinished {
+                request_id: 51,
+                frame,
+                result,
+                ..
+            } => Some((frame, result)),
+            _ => None,
+        })
+        .expect("accepted acquisition completion");
+    assert_frame(&acquired.unwrap(), &frame);
+    let report = report.unwrap();
+    assert!(
+        report.persistence_error.is_none(),
+        "{:?}",
+        report.persistence_error
+    );
+    let directory = report.acquisition_directory.unwrap();
+    let basename = directory.file_name().unwrap().to_str().unwrap();
+    let deal = xsar::freecell_json::from_slice(&fs::read(&request.destination).unwrap()).unwrap();
+    assert_eq!(
+        crate::freecell_recon::objective::from_metadata(deal.metadata()),
+        crate::freecell_recon::objective::Objective::Unresolved
+    );
+    assert!(
+        deal.metadata()
+            .source()
+            .ends_with(&format!(";evidence={basename}"))
+    );
+    assert!(crate::freecell_recon::objective::require_acquired(deal.metadata()).is_ok());
+    let saved = decode_png(&fs::read(directory.join("first-unmatched.png")).unwrap()).unwrap();
+    assert_frame(&saved, &frame);
+    let state: serde_json::Value =
+        serde_json::from_slice(&fs::read(directory.join("error-state.json")).unwrap()).unwrap();
+    assert!(
+        state["error"]
+            .as_str()
+            .unwrap()
+            .contains("recognition succeeded")
+    );
+    assert_eq!(report.capture["transport_identity"]["protocol_version"], 3);
+    assert!(events.latest_frame.take().is_none());
+    drop(_capture_scope);
+    assert_eq!(
+        tcp.finish(),
+        1,
+        "evidence retention cannot request another frame"
+    );
+}
+
+
+/// Native highlighted cards and a synthetic off-card pop-up publish the same inventory.
+#[test]
+fn freecell_314_recon_publishes_highlighted_native_inventory_despite_off_card_popup() {
+    use super::freecell_reconnaissance::{Request, run};
+    let root = TestDirectory::new();
+    let _diagnostics = DiagnosticsRestore::install(None);
+    let (events, receiver) = sink();
+    let _capture_scope = tcp_capture::WorkerCaptureScope::install(&events);
+    let context = ControllerContext::new(
+        root.0.join("never-connected-qmp.sock"),
+        GameMode::FreeCell,
+        SolvingStrategy::ShortestPath,
+        314,
+    );
+    let cancel = Arc::new(AtomicBool::new(false));
+    let _cancel_scope = tcp_capture::CancellationScope::install(Arc::clone(&cancel));
+    events.set_capture_context(Some(context.clone()));
+    let original = decode_png(include_bytes!(
+        "../../tests/fixtures/freecell-challenge-highlight-20261109.png"
+    ))
+    .unwrap();
+    let mut popup = original.clone();
+    // Explicitly synthetic: this rectangle is below every required card-reading crop.
+    for y in 862..935 {
+        let begin = y * popup.stride + 1180 * 4;
+        for pixel in popup.pixels[begin..begin + 137 * 4].as_chunks_mut::<4>().0 {
+            pixel[..3].fill(0);
+        }
+    }
+    let frames = [original, popup];
+    let (address, tcp) = v3_server(vec![frames.iter().cloned().map(V3Reply::Frame).collect()]);
+    let _backend = TestCaptureBackend::tcp_mode(address, CaptureMode::PersistentBgrV3);
+    let mut first_board = None;
+    for (offset, frame) in frames.iter().enumerate() {
+        events
+            .latest_frame
+            .reconnaissance
+            .select(&context, &cancel)
+            .unwrap();
+        events
+            .latest_frame
+            .reconnaissance
+            .queue_reconnaissance(&context, &cancel, || Ok(()))
+            .unwrap();
+        let request_id = 61 + offset as u64;
+        let request = Request {
+            destination: root.0.join(format!("highlighted-{request_id}.json")),
+            deal_id: format!("highlighted-{request_id}"),
+        };
+        run(&context, request_id, &request, &events, &cancel);
+        let (acquired, report) = receiver
+            .try_iter()
+            .find_map(|tagged| match tagged.event {
+                WorkerEvent::FreeCellReconFinished {
+                    request_id: received,
+                    frame,
+                    result,
+                    ..
+                } if received == request_id => Some((frame, result)),
+                _ => None,
+            })
+            .expect("matching native acquisition completion");
+        assert_frame(&acquired.unwrap(), frame);
+        let report = report.unwrap_or_else(|failure| panic!("{}", failure.error));
+        assert!(
+            report.persistence_error.is_none(),
+            "{:?}",
+            report.persistence_error
+        );
+        let deal =
+            xsar::freecell_json::from_slice(&fs::read(&request.destination).unwrap()).unwrap();
+        assert_eq!(
+            crate::freecell_recon::objective::from_metadata(deal.metadata()),
+            crate::freecell_recon::objective::Objective::Unresolved
+        );
+        assert!(crate::freecell_recon::objective::require_acquired(deal.metadata()).is_ok());
+        if let Some(expected) = &first_board {
+            assert_eq!(deal.board(), expected);
+        } else {
+            first_board = Some(deal.board().clone());
+        }
+        let directory = report.acquisition_directory.unwrap();
+        let saved = decode_png(&fs::read(directory.join("first-unmatched.png")).unwrap()).unwrap();
+        assert_frame(&saved, frame);
+        assert!(events.latest_frame.take().is_none());
+        assert!(!context.socket_path.exists());
+    }
+    drop(_capture_scope);
+    assert_eq!(
+        tcp.finish(),
+        2,
+        "one acquisition per explicit RECON; no evidence-only capture"
+    );
+}
+
 
 /// Unsupported transport and an already requested STOP refuse before opening any socket.
 #[test]
@@ -986,7 +1315,8 @@ fn freecell_300_backend_and_stopped_owner_cannot_acquire_or_publish() {
                 &request,
                 &events,
                 &cancel,
-                &pyramid_stop::StopTrace::default()
+                &pyramid_stop::StopTrace::default(),
+                &mut super::freecell_reconnaissance::Acquisition::new(1)
             )
             .unwrap_err()
             .to_string()
@@ -1002,7 +1332,8 @@ fn freecell_300_backend_and_stopped_owner_cannot_acquire_or_publish() {
                 &request,
                 &events,
                 &cancel,
-                &pyramid_stop::StopTrace::default()
+                &pyramid_stop::StopTrace::default(),
+                &mut super::freecell_reconnaissance::Acquisition::new(1)
             )
             .unwrap_err()
             .to_string()
@@ -1016,7 +1347,17 @@ fn freecell_300_backend_and_stopped_owner_cannot_acquire_or_publish() {
             .reconnaissance
             .operator_stop(&context, &cancel);
         let trace = pyramid_stop::StopTrace::default();
-        assert!(run_checked(&context, &request, &events, &cancel, &trace).is_err());
+        assert!(
+            run_checked(
+                &context,
+                &request,
+                &events,
+                &cancel,
+                &trace,
+                &mut super::freecell_reconnaissance::Acquisition::new(1)
+            )
+            .is_err()
+        );
         assert_eq!(
             trace.termination(true, true),
             crate::pyramid_workflow_model::RunTermination::OperatorStopped
@@ -1058,7 +1399,17 @@ fn freecell_300_tcp_operator_stop_refuses_publication() {
         deal_id: "cancelled".to_owned(),
     };
     let trace = pyramid_stop::StopTrace::default();
-    assert!(run_checked(&context, &request, &events, &cancel, &trace).is_err());
+    assert!(
+        run_checked(
+            &context,
+            &request,
+            &events,
+            &cancel,
+            &trace,
+            &mut super::freecell_reconnaissance::Acquisition::new(1)
+        )
+        .is_err()
+    );
     assert_eq!(
         trace.termination(true, true),
         crate::pyramid_workflow_model::RunTermination::OperatorStopped

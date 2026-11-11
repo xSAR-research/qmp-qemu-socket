@@ -1,6 +1,99 @@
 # qmp-qemu-socket
 
-## 3.1.2 — explicit-target drag and consistent A* workspace
+## 3.1.16 — source-up and native midpoint ABS trial (host-qualified)
+
+ABS Single Step holds LEFT through source-up45, the native floor midpoint of the original source and effective destination, destination-up45 and exact destination. Both two-second and half-second choices use six timing gaps across seven inputs. CELL/SUIT targets keep their canonical centres. All 51 fresh paired host gates passed with 1,893 application, 366 library and 80 console tests. The full suites report zero failed, ignored, measured or filtered tests. See [contract](docs/FreeCell-Source-Midpoint-3.1.16.md) and [verification](docs/Verification-3.1.16.md).
+
+## 3.1.15 — quarter-card ABS trial (host-qualified)
+
+ABS Single Step now holds LEFT through destination →45nativepx up →34nativepx left →exactdestination, then releases. Seven input packets have six selected2s or500ms minimum gaps. Upper CELL/SUIT drops use the slot centre to keep the path inside it; PLAY keeps the observed destination. Adopt additive xSAR0.16.0 four-point transport; legacy APIs, normal drag and REL retain their contracts. Recognition, relevant effect proofs, sourceACK/STOP and release-only recovery remain unchanged. All 51 fresh paired host gates passed: 1,891 application, 365 library and 80 console tests, zero failed, ignored, measured or filtered. Fresh Windows acceptance remains separate. See [contract](docs/FreeCell-Quarter-3.1.15.md) and [verification](docs/Verification-3.1.15.md).
+
+## 3.1.14 — relevant printed identities (host-qualified)
+
+Fresh original-52 binding uses the same independent printed-identity reader as RECON. Decorative card rails and full-face edges no longer veto playback. Subsequent preparation and effect observations inspect the source, destination and recorded AUTO-affected piles; unrelated columns are excluded. Compressed columns use observed printed corners rather than a fixed fan pitch or hidden-card count.
+
+All six fresh application gates passed, including all 1,887 tests with zero failed, ignored or filtered. xSAR 0.15.1, console 0.8.5, input gestures/timings and other game policies are unchanged; sibling qualifications are retained historical evidence only. Free Cell uses one-board card/rank-count goals without score targets; independently replayed partial routes remain permitted. Fresh Windows acceptance remains separate. See [contract](docs/FreeCell-Identity-3.1.14.md) and [verification](docs/Verification-3.1.14.md).
+
+
+## Free Cell 3.1.13 / xSAR 0.15.1 — destination approach trial (host-qualified)
+
+ABS SINGLE STEP now moves to four native pixels above the destination, then the exact destination, replacing the midpoint. Keep all five inputs and both frozen timing choices: four 2 s or four 500 ms waits. Fast remains ABS-only; no extra click. All 51 fresh paired host gates passed: 1,886 application, 354 library and 80 console tests, zero failed/ignored/filtered. Fresh Windows acceptance remains separate. See [contract](docs/FreeCell-Approach-3.1.13.md) and [verification](docs/Verification-3.1.13.md).
+
+## 3.1.12, midpoint and two ABS step timings
+
+A* Free Cell ABS SINGLE STEP sends source → LEFT down → native midpoint → exact destination → LEFT up with two seconds between inputs. The additional **SINGLE STEP 0.5 s** button uses the same process with four 500-millisecond intervals. Timing is frozen in each queued request. There is no extra click. The faster button is ABS-only; REL and normal remaining-route playback retain their existing behaviour.
+
+xSAR is 0.15.0. Source ACK, fresh routing, STOP and release-only recovery, complete physical source binding and two fresh exact endpoint proofs remain required. All 51 fresh paired host gates passed: 1,886 application, 354 library and 80 console tests, zero failed/ignored/filtered. These remain operator timing trials; fresh Windows acceptance is pending. See [contract](docs/FreeCell-Midpoint-3.1.12.md) and [verification](docs/Verification-3.1.12.md).
+
+## 3.1.11, visible five-packet ABS diagnostic
+
+A* Free Cell SINGLE STEP / ABS sends source → LEFT down → destination → identical destination → LEFT up, with one second between each consecutive input pair (at least four seconds overall). Source acknowledgement, routing/STOP guards, release-only recovery and two fresh exact effect proofs remain required. Probe/routing requests are additional protocol traffic.
+
+All 51 fresh paired host gates passed: 1,882 application, 353 library and 80 console tests, zero failed/ignored/filtered. xSAR is 0.14.3. Normal remaining-route drag, REL, cached manual UNDO ALL retry and AUTO follow-ups are unchanged. Close the older application before launching 3.1.11. Fresh Windows acceptance and necessity of the duplicate packet remain separate questions. See [contract](docs/FreeCell-Pacing-3.1.11.md) and [verification](docs/Verification-3.1.11.md).
+
+## 3.1.10, Free Cell recognition and playback corrections
+
+A* Free Cell **SINGLE STEP** with **ABS** sends five separate input requests:
+
+1. Move absolutely to the source and await its acknowledgement.
+2. Press LEFT down after a fresh pointer-routing check.
+3. Move absolutely to the destination.
+4. Send the identical absolute destination again.
+5. Release LEFT, then collect all four held-phase acknowledgements.
+
+The gesture adds no intentional hold or settling wait. Socket I/O and synchronous logging still take time. Fresh scene and parent-position proofs, STOP/context guards, targeted release-only recovery and two fresh semantic endpoint matches still govern playback. Acknowledgements establish delivery only. The separate REL movement probe retains its two-second phases; **SOLVE remaining route** retains its normal drag.
+
+After an eligible failed playback or a transfer-policy change, manually **UNDO ALL**, then explicitly request **Single Step** or **SOLVE remaining route** again. The cached original route restarts at transfer 1 only after fresh recognition of the same complete 52-card board. The failed live cursor and input authority are discarded. Offline A* search and route policy are unchanged.
+
+A labelled native Six rank prototype resolves the retained normal 6D refusal without widening the suit model. Rank maximum difference/minimum label gap remain 48/20 and suit limits remain 16/12, with existing colour, contrast, coherence and unique-deck checks. The native gold 5H calibration lowers only the right-rail red minimum from 220 to 219. Every required edge pixel still has to pass. Gold challenge outlines grant no route authority.
+
+Charlie reports about 35 earlier 3.1.9 game moves with AUTO enabled. All 51 fresh paired host gates passed: 1,881 application, 351 library and 80 console tests, zero failed/ignored/filtered. Fresh Windows acceptance of this new gesture remains an operator trial. See the [correction contract](docs/FreeCell-Corrections-3.1.10.md) and [verification record](docs/Verification-3.1.10.md).
+
+## 3.1.9 — one action and verified AUTO follow-ups
+
+In A* Free Cell, select **Observe recorded AUTO follow-ups**. SINGLE STEP confirms the current board, performs one explicit drag, verifies its recorded automatic follow-ups twice, credits the combined result and stops. For AC followed automatically by 2C, both records are credited before the next button press. Expected AUTOs are proved from fresh frames. The selector changes application policy, not Solitaire settings. xSAR stays at 0.14.1; ABS gestures and the separate REL movement probe are unchanged. See [contract](docs/FreeCell-Auto-Followups-3.1.9.md) and [verification](docs/Verification-3.1.9.md).
+
+## 3.1.8 — held-motion and halo correction (host-qualified)
+
+A* Free Cell SINGLE STEP now explicitly selects a queried pointer. ABS uses ten held positions, starting small and ending at the intended destination. REL is a separate ten-step movement probe: two signed device counts per axis per step, no route cursor credit, and authority retired after delivery. Both use two-second boundaries, one down/up and no extra click. Arbitrary below-card/header/gutter background vetoes are removed; native sevens halos use positive card geometry. All 51 fresh host gates passed; fresh live guest acceptance is pending; see [contract](docs/QMP-Drag-Diagnostics-3.1.8.md).
+
+## 3.1.7 — ABS/REL drag diagnostics (host-qualified)
+
+In A* → Free Cell, select **ABS** or **REL**, then request **SINGLE STEP** for one diagnostic trial. Both modes position the source, wait two seconds, press LEFT, wait two seconds, move while held, wait two seconds and release LEFT. They send no separate source or destination click. Normal route playback keeps its existing gesture.
+
+ABS uses checked absolute coordinates. REL first queries the mouse inventory, positions the source absolutely, selects its unique relative pointer and verifies that selection before pressing LEFT. Its signed motion counts are the native destination-minus-source delta, not normalised absolute coordinates or guaranteed guest pixels. Guest acceleration and scaling can change the distance travelled; fresh physical endpoint observations still decide whether the transfer succeeded.
+
+The REL trial restores the original pointer only after acknowledged release and while STOP/context authority remains valid. Its safety recovery explicitly selects the captured relative pointer before releasing LEFT; it never replays DOWN or motion. STOP or failure can leave the relative pointer selected, because restoration is forbidden after authority is lost.
+
+Exact outgoing QMP JSON appears as an unmodified line in the visible LOG and the existing private session log. Separate metadata identifies the request, connection, elapsed time and write outcome, including capability negotiation and recovery. A completed write or QMP acknowledgement does not prove a guest effect.
+
+Application 3.1.7 and paired xSAR 0.14.0 passed all 51 host qualification gates; no live guest drag fix is claimed.
+
+## 3.1.6 — QMP drag diagnostics
+
+Record outgoing QMP JSON with request, connection and timing details in the complete private session log. A* Free Cell SINGLE STEP uses one-second drag phases, then waits three seconds before a separately logged destination click, subject to fresh authority and frame checks. Normal route playback retains its existing gesture. This diagnostic build does not claim to fix guest drag acceptance. All 51 paired gate outcomes passed; see [verification](docs/Verification-3.1.6.md).
+
+## 3.1.5 — Free Cell challenge routes
+
+A successful RECON selects its exported JSON automatically for SOLVE. Planning first tries full board clearance. If the unlimited search exhausts its graph, it returns an independently replayed route attaining the maximum reachable foundation count. Cancellation and failures expose no prefix. A zero-improvement result is labelled explicitly.
+
+Solve, score, designated-card and rank-count challenges use this same policy without OCR. Fresh native scene, complete physical geometry and printed-identity proofs remain required for playback, including measured highlighted-card support. A game-reported Challenge Complete event retires the remainder; Continue, restart and new-game controls remain operator actions. Free Cell has no multi-board continuation. Host qualification with xSAR 0.12.0 passed all 51 recorded gates; see [verification](docs/Verification-3.1.5.md).
+
+## Retained 3.1.4 — Free Cell RECON reads the fixed card regions
+
+RECON reads the challenge information and all 52 fixed rank/suit positions, then validates a complete unique deck. It accepts readable challenge-highlighted cards and ignores unrelated felt, border decoration and off-card pop-ups. Frame/crop bounds and unknown/ambiguous identity refusal remain. The same acquired frame supplies preview, export and retained objective evidence.
+
+Live playback retains its separate strict scene and input-authority checks. Unresolved challenge acquisitions still refuse CALCULATE/playback; their text is retained as pixels and is not interpreted as a supported completion goal. xSAR stays at 0.11.1. See [3.1.4 verification](docs/Verification-3.1.4.md).
+
+## Retained 3.1.3 — Free Cell acquisition, errors and telemetry
+
+A* defaults to Free Cell. Acquisition, calculation and playback controls have separate wrapping rows. Each RECON captures once and displays that request's exact pixels on completion, including failure. Accepted errors open populated FAILURE DETAILS with the original cause, request/stage/capture details and evidence. Stale or duplicate results cannot replace them.
+
+Variable challenge text no longer has to match blank felt. Independent scene, Solver, card and geometry checks remain. Unresolved objective pixels are retained; CALCULATE and playback refuse unresolved objectives and legacy/unmarked saved deals. Re-acquire and export older deals. Challenge interpretation remains separate work.
+
+Development telemetry covers all A* / Free Cell operations in the private session log. It observes existing stages, capture responses, recognition, transport delivery and evidence filenames without adding capture, input or retries. Other games and Computer Vision retain their existing tracing policy. xSAR stays at 0.11.1. See [3.1.3 verification](docs/Verification-3.1.3.md).
+
+## Retained 3.1.2 — explicit-target drag and consistent A* workspace
 
 Free Cell playback now uses one guarded source-to-destination drag per recorded transfer. The source movement is acknowledged before button-down; held movement and release are sent before collecting their replies. Interrupted or uncertain delivery permits release-only recovery and never replays the transfer. Two fresh semantic endpoint observations, rather than delivery acknowledgements, advance the cursor. CALCULATE remains offline; autoplay policy, Single Step scope and permanent revocation rules remain unchanged.
 

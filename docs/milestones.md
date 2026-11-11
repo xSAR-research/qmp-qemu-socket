@@ -1,6 +1,160 @@
 # Milestone Tracker & Baseline Receipt — qmp-qemu-socket
 
-## Active receipt — 3.1.2 / xSAR 0.11.1
+## 3.1.16 — source-up and native midpoint ABS trial (host-qualified)
+
+ABS Single Step holds LEFT through source-up45, the native floor midpoint of the original source and effective destination, destination-up45 and exact destination. Both two-second and half-second choices use six timing gaps across seven inputs. CELL/SUIT targets keep their canonical centres. All 51 fresh paired host gates passed with 1,893 application, 366 library and 80 console tests. The full suites report zero failed, ignored, measured or filtered tests. See [contract](FreeCell-Source-Midpoint-3.1.16.md) and [verification](Verification-3.1.16.md).
+
+## 3.1.15 — quarter-card ABS trial (host-qualified)
+
+ABS Single Step now holds LEFT through destination →45nativepx up →34nativepx left →exactdestination, then releases. Seven input packets have six selected2s or500ms minimum gaps. Upper CELL/SUIT drops use the slot centre to keep the path inside it; PLAY keeps the observed destination. Adopt additive xSAR0.16.0 four-point transport; legacy APIs, normal drag and REL retain their contracts. Recognition, relevant effect proofs, sourceACK/STOP and release-only recovery remain unchanged. All 51 fresh paired host gates passed: 1,891 application, 365 library and 80 console tests, zero failed, ignored, measured or filtered. Fresh Windows acceptance remains separate. See [contract](FreeCell-Quarter-3.1.15.md) and [verification](Verification-3.1.15.md).
+
+## 3.1.14 — relevant printed identities (host-qualified)
+
+Fresh original-52 binding uses the same independent printed-identity reader as RECON. Decorative card rails and full-face edges no longer veto playback. Subsequent preparation and effect observations inspect the source, destination and recorded AUTO-affected piles; unrelated columns are excluded. Compressed columns use observed printed corners rather than a fixed fan pitch or hidden-card count.
+
+All six fresh application gates passed, including all 1,887 tests with zero failed, ignored or filtered. xSAR 0.15.1, console 0.8.5, input gestures/timings and other game policies are unchanged; sibling qualifications are retained historical evidence only. Free Cell uses one-board card/rank-count goals without score targets; independently replayed partial routes remain permitted. Fresh Windows acceptance remains separate. See [contract](FreeCell-Identity-3.1.14.md) and [verification](Verification-3.1.14.md).
+
+The six checks bind 1,050 inputs to seal `39a575f501e87c6122d6bc844bebd80c05e979cab58afd324cbf3b802fa1b618` under the recorded nightly toolchain/configuration. First focused failures, the one-pixel fixture adjustment and the old card-count assertion failure remain retained. The prior 3.1.13 scoped sentinel passed using independent closeout digest `b847bcce3cb3b665a2d7d2396525003ddaacf7d0ac41c6a1b67b006632b3a5a7`; no new 3.1.14 sentinel pass is claimed. All four HEAD/index/staged fields and three sibling tracked diffs/metadata are preserved.
+
+Qualified mutable executable: `/home/charlie/repo/RUST/qmp-qemu-socket/target/x86_64-unknown-linux-gnu/release/qmp-qemu-socket`, version 3.1.14, 16827632 bytes, mode 0755, SHA-256 `82f24c96eb91c1069c1873390d054a4eb192e30a3441b53a42fac4634a8eb65e`. Exact commands, dependency fingerprints, failures and artifact context are in `Evidence/FreeCell/Validation/freecell-identity-314-20261111/`. No agent launch, guest operation, installation or promotion occurred.
+
+
+## Application 3.1.13 / xSAR 0.15.1 — destination approach (host-qualified)
+
+Approved four-pixel native upward approach followed by exact destination, same two timing profiles. All 51 fresh paired host gates passed: 1,886 application, 354 library and 80 console tests, zero failed/ignored/filtered. Prior 3.1.12 scoped sentinel passed with independent digest `77a694a3cbd611e2f2be9716a3f99961ffa54c6834219c098edad6ac2e84bb13`; 1,043 inputs matched and 1,082 preimages/four Git states are recorded in `Evidence/FreeCell/Validation/freecell-approach-313-20261111/`. See [goal](FREE_CELL_goal_20261111D.md), [contract](FreeCell-Approach-3.1.13.md) and [verification](Verification-3.1.13.md).
+
+Qualified source is bound to 1,046 inputs by seal `477ad1bd0c9e396e6b0e84584228a3e7276a872e5e37196cc5fbb803ecdf1b57`. Exact commands, toolchain/configuration, consumers and artifact contexts are recorded in the paired `Evidence/FreeCell/Validation/freecell-approach-313-20261111/` capsule. No qualifying attempt failed. HEAD, index and staged fields are preserved in all four repositories; unrelated state and prior sealed evidence remain unchanged. No new 3.1.13 sentinel pass is claimed.
+
+Qualified mutable executable: `/home/charlie/repo/RUST/qmp-qemu-socket/target/x86_64-unknown-linux-gnu/release/qmp-qemu-socket`, version 3.1.13, 16835936 bytes, mode 0755, SHA-256 `f3f23273841e88131c8d9697492f2a02260ee8748471150d2cfec6a5dd7dd249`. No agent launch or installation occurred.
+
+## Application 3.1.12 / xSAR 0.15.0 — midpoint trial (11 November 2026)
+
+Approved native midpoint and two frozen ABS timing choices. All 51 fresh paired host gates passed: 1,886 application, 354 library and 80 console tests, zero failed/ignored/filtered. Final input seal `928e92f12bc4399a5906f1d1c527db02fadfd862c2bb6bcaab5476a7db9d22ba` covers 1,043 compiler/configuration/test inputs; compiler inputs, toolchain, four Git states and exact preimages are recorded under `Evidence/FreeCell/Validation/freecell-midpoint-312-20261111/`. Prior 3.1.11 scoped sentinel passed with independent closeout digest `6c5a1333233cb4029edf3fb462a17a201e245942673a6b7290cdf092825ad47c`; all 1,040 previous inputs matched before mutation. See [contract](FreeCell-Midpoint-3.1.12.md) and [verification](Verification-3.1.12.md).
+
+The selected toolchain is `rustc 1.102.0-nightly (ac8310ba6 2026-11-09)` with host `x86_64-unknown-linux-gnu`; full configuration and command receipts identify the tested dirty path dependency, not HEAD alone. Focused QMP tests passed 21 cases and six new button/native-worker cases passed; thirteen old 3.1.2 regressions also passed. Preserve the initial Clippy failure and lint-only correction; every final gate uses the final seal. Independent reviews passed.
+
+Qualified mutable executable: `/home/charlie/repo/RUST/qmp-qemu-socket/target/x86_64-unknown-linux-gnu/release/qmp-qemu-socket`, 16835616 bytes, mode 0755, SHA-256 `82d07ddc68831052318376c5860d91c3c434d1c41804cb7b8ac905b94fcdf9d1`. Separate standalone and application-consumer xSAR contexts are recorded in `paired-artifacts.json`. All four HEAD/index/staged fields and unrelated server work remain preserved. No guest operations, launch, installation or promotion occurred. New sentinel validation needs the independent delivery digest; no self-derived 3.1.12 sentinel pass is claimed.
+
+## Application 3.1.11 / xSAR 0.14.3 — visible pacing (11 November 2026)
+
+Approved and completed: four one-second pauses between source, DOWN, destination, identical destination and UP. Source acknowledgement and fresh routing precede DOWN; held replies are collected only after UP. Normal drag, REL, recognition, AUTO sequencing and cached UNDO ALL recovery remain unchanged.
+
+All 51 fresh paired host gates passed: 1,882 application, 353 library and 80 console tests, zero failed/ignored/filtered. Both focused first runs passed, with 14 library and two native-worker tests. The final 1,040-input seal is `17ad2764ee87d46b7f7909c2ce8b21859f2eb9aa6c17443e1b3f96501d10ffcc`. Exact commands, selected toolchain/configuration, paired dependency state and artifacts are in `Evidence/FreeCell/Validation/freecell-pacing-311-20261111/`. Qualified mutable executable: `/home/charlie/repo/RUST/qmp-qemu-socket/target/x86_64-unknown-linux-gnu/release/qmp-qemu-socket`, version 3.1.11, 16829984 bytes, mode 0755, SHA-256 `8454ac2c02eb8033354a2846b3aec692914bdca6bbe42ee353d057599b6d77fa`.
+
+The previous 3.1.10 scoped sentinel passed before edits using independent digest `28ebeb2138bc7661c3adb344b54a8b564a61bcc218c530f0b1be66f44bb9ffbd`. All four histories/indices/staged changes and unrelated work are preserved. New closeout validation requires the independent delivery digest; no self-derived new sentinel pass is claimed. Fresh Windows acceptance remains for the operator; no guest input/capture, application launch, installation or promotion occurred.
+
+See [goal](FREE_CELL_goal_20261111B.md), [contract](FreeCell-Pacing-3.1.11.md) and [verification](Verification-3.1.11.md).
+
+## Application 3.1.10 / xSAR 0.14.2 — corrections (11 November 2026)
+
+Approved no-delay five-packet ABS SINGLE STEP repeats the identical destination.
+Ordinary failure retains the immutable verified solution for a separately requested
+manual UNDO ALL restart with fresh original-52-card binding. Native 6D rank and
+gold 5H right-rail calibration retain all recognition margins and required edges.
+Normal route drag, REL pacing, public signatures, schemas and dependency versions
+are unchanged. Console remains 0.8.5 with only its xSAR lock entry aligned.
+
+All 51 fresh paired host gates passed: 1,881 application, 351 library and 80 console tests, zero failed/ignored/filtered. The matrix includes
+strict private rustdoc, all-target Clippy, defaults, all sixteen isolated library
+features, real consumer integration and release builds. The final 1,037-input
+seal is `26df2a0869736d5777ab668afe91eedf3f3de8b26436fc6655a6a2fd39a438fe`; recorded toolchain starts `rustc 1.102.0-nightly (ac8310ba6 2026-11-09)`.
+Focused checks passed eighteen library and 207 application cases. Original mock,
+harness-argument and Clippy failures remain retained; the final source is unchanged.
+
+Mutable executable: version 3.1.10, 16829824 bytes, mode 0755,
+SHA256 `5595fa12ee546bf78fc3d4bbb7f9561aca2bb19239a722638f755e28163f0027`. No agent launch, guest input/capture, installation or
+promotion. All four histories/index bytes/staged diffs and unrelated server work
+are preserved. Operator-reported 35 earlier moves apply to 3.1.9; fresh no-delay
+guest acceptance remains pending. See [verification](Verification-3.1.10.md),
+[contract](FreeCell-Corrections-3.1.10.md) and `Evidence/FreeCell/Validation/freecell-corrections-310-20261111/qualification-summary.json`.
+
+
+During closeout Charlie confirmed playing through the calculated A* winning
+route successfully. This is recorded as operator route validation. The new
+no-delay gesture awaits its own trial.
+
+## Application 3.1.9 — verified AUTO follow-ups (10 November 2026)
+
+Charlie approved application 3.1.9 with unchanged xSAR 0.14.1. The default transfer policy now accepts twice-confirmed current/recorded-prefix readiness, explicitly drags one next record even AUTO, proves its recorded AUTO closure twice and stops Single Step. UI labels describe application policy rather than Solitaire settings.
+
+Six fresh application gates passed against 1,033 frozen compiler/configuration/test inputs: scoped format, locked all-target check, strict private rustdoc, all-target Clippy, full tests including ignored cases and release. Tests: 1,871 passed, zero failed/ignored/filtered. Ten focused regressions passed. xSAR 347 and console 80 tests are retained with exact source/configuration/toolchain bindings, not rerun. No dependency/public API/transport change; all four indices/history and sibling tracked diffs preserved.
+
+See [verification](Verification-3.1.9.md), [contract](FreeCell-Auto-Followups-3.1.9.md), and `Evidence/FreeCell/Validation/freecell-auto-followups-319-20261110/qualification-summary.json`. The input seal is `42ca3d5829dbd455558cd67ee52e8e57dc2aceb420d8b9a5c935d194a13a2e5a`. The mutable 3.1.9 executable SHA256 is `9e9637e275578e18b4d2de44f8dcf2ded3093939eeaac05eab3b2cd1265a54da`. Independent reviews passed; first focused fixture failures and the closeout-helper correction remain retained. Fresh live acceptance is pending; no application launch, guest operation, installation or promotion was performed.
+
+## Active receipt — 3.1.8 / xSAR 0.14.1
+
+Baseline_HEAD_SHA: c541e878440b19e3f7aaa289d7e3c92ed895fe2c.
+
+Application **3.1.8** with xSAR **0.14.1** is host-qualified for explicit queried-pointer ten-step ABS diagnostics, a separate bounded REL movement probe, and the native highlighted-sevens binding correction. Arbitrary canvas/header-gutter/below-card reference vetoes are removed; positive card/control/empty-slot evidence, exact physical source, confidence/ambiguity and STOP remain. REL delivers no route cursor credit and retires authority before its diagnostic after-frame. Normal playback retains its existing drag.
+
+All **51 fresh gates passed** against **1,033 source/configuration/test inputs**, seal SHA256 `36052160e609c451152bcb9344228740e8016ce746bd1c8b1611d94491420ba6`, with stable recorded compiler/configuration and path-dependency content. Full tests: **1,862 application, 347 library, 80 console**, zero failed, ignored or filtered. Defaults and all 16 isolated library features, strict private rustdoc, Clippy, real consumer and release builds passed. First application focused run's 183 passes / five geometry failures are preserved; corrected recognition passed 39 cases, and the final full suite passed.
+
+Mutable qualified executable: `/home/charlie/repo/RUST/qmp-qemu-socket/target/x86_64-unknown-linux-gnu/release/qmp-qemu-socket`, version **3.1.8**, 16822312 bytes, mode 0755, SHA256 `a5998ebd55c29804f06f21def72c54e7589972d6969e41d1fbdcdbcec346cef2`. No install/launch/guest input/promotion. Running PID 672085 remains the operator's 3.1.7 build; a rebuild does not replace it. Fresh Windows drag acceptance is **pending operator trial**, not proved by native fixtures or local peers. All four histories/index bytes/staged changes and unrelated server edits are preserved.
+
+The old 3.1.7 sentinel failed on removed local material and remains unchanged. User-approved new starting-state reconciliation records unchanged source and changed compiler/artifacts separately. New handoff coverage explicitly separates source/evidence integrity from mutable artifacts and current-toolchain cache validation.
+
+See [Verification-3.1.8.md](Verification-3.1.8.md).
+
+## Previous receipt — 3.1.7 / xSAR 0.14.0
+
+Application **3.1.7** with xSAR **0.14.0** is host-qualified for explicit ABS/REL Free Cell A* SINGLE STEP diagnostics. Each request freezes one mode; both use at least two seconds between source positioning, LEFT down, held movement and LEFT up. No standalone source or destination click follows. Full-route playback retains its original gesture.
+
+Exact outgoing JSON appears unescaped on its own line in the existing visible LOG and private session, after a QMP_TX identity header. Separate QMP_WIRE metadata retains microsecond/source clocks, owner, primary/recovery connection, QMP ID and write outcomes. Neither flushing nor acknowledgement proves guest effect.
+
+All **51 fresh required gates passed**, bound to **1,032 compiler inputs** at SHA256 `a28d0d145b00d0807146f28fbfcb85f88dd4230e28d1a8d5366f4a7ba6f8f5c5` and the recorded toolchain/configuration. Full tests: **1,850 application, 345 library and 80 console**, zero failed, ignored or filtered. The matrix includes dependency-free defaults, sixteen isolated features, strict private rustdoc, Clippy and release builds for both owners and the real console consumer.
+
+REL first queries the pointer inventory, positions the source absolutely, selects/verifies a unique relative pointer and rechecks it before pressing. Signed native deltas are approximate relative device units. Original-pointer restoration requires acknowledged UP and continuing authority. The explicitly approved failure exception selects the captured relative pointer before old/fresh release-UP; no DOWN or motion is replayed. STOP/error may leave REL selected. Concurrent routing changes remain outside a pinned-device guarantee.
+
+Qualified mutable Cargo executable: `/home/charlie/repo/RUST/qmp-qemu-socket/target/x86_64-unknown-linux-gnu/release/qmp-qemu-socket`, **3.1.7**, 16806144 bytes, mode 0755, SHA256 `3c1ecef2d0eec235d868f4284daa7e33dffa0e855270b63d663474526db11567`. No protected copy, install, launch, guest input or Git promotion. Four histories/index trees/staged changes and independent server work are preserved. No fresh Windows/Solitaire drag acceptance or QEMU root cause is claimed.
+
+## Previous receipt — 3.1.6 / xSAR 0.13.0
+
+Baseline_HEAD_SHA: c541e878440b19e3f7aaa289d7e3c92ed895fe2c.
+
+Application **3.1.6** with xSAR **0.13.0** is host-qualified for the approved QMP diagnostic. Complete outgoing JSON packets, including `execute`, `arguments` and `id`, are recorded under `QMP_WIRE` in the existing private session log. Capability negotiation and primary/fresh release-only recovery are covered. `detail.json` on each `write-attempt` contains the exact compact packet string; separate flushed/failed records distinguish write outcomes from acknowledgement and guest effect.
+
+A* Free Cell SINGLE STEP uses one-second source/down/held-move/up intervals, then a cancellable three-second wait, one fresh terminal/physical-authority frame and a separately guarded current-pointer LEFT click. Normal route playback retains its existing gesture. STOP after confirmed UP produces no later capture, probe, click or recovery connection. The usual two fresh physical endpoint proofs within six observations remain necessary for cursor advancement.
+
+All **51 required gate outcomes passed**: **47 fresh gates** bind the final **1,031 inputs** at seal SHA256 `34b5cce8ddb9dadc28d1806e322af7146488d2eac418d126a12e11620e81aa65`; four library format/check/private-doc/Clippy gates are retained against identical xSAR source, configuration and toolchain. The intervening source difference was a consumer-private Clippy simplification; `retained-library-gates.json` records the comparison. The matrix covers dependency-free defaults, all sixteen isolated xSAR features, both owning packages and the real console consumer. Full tests passed **1,845 application, 338 library, 80 console**, zero failed, ignored or filtered. All eleven new 3.1.6 tests passed in the full suites.
+
+Application base is `c541e878440b19e3f7aaa289d7e3c92ed895fe2c`; xSAR base is `59c5639eed1b57e5be51b97c3f35065f92c22b42`. Exact dirty-file pins bind qualification. All four Git histories, indices and staged changes, plus independent capture-server edits, are preserved. Console stays at 0.8.5 with approved lock alignment. No installation, application launch, guest input or promotion was performed.
+
+Windows/Solitaire drag acceptance and a QEMU root cause remain unverified. Supplied xHCI/tablet, listener and actual `/run/user/1000/qmp-qemu-socket.sock` configuration show no discrepancy requiring a setup change. Logging remains best effort if the existing session log is disabled, fails or the process terminates abruptly.
+
+## Prior receipt — 3.1.5 / xSAR 0.12.0
+
+Baseline_HEAD_SHA: c541e878440b19e3f7aaa289d7e3c92ed895fe2c.
+
+Application **3.1.5** and xSAR **0.12.0** are host-qualified. Accepted RECON automatically selects its exact JSON. Opaque challenges use complete-first unlimited planning and an independently replayed exhaustive maximum-foundation fallback. Full clearance, partial exhaustion, game-reported completion, cancellation and failure remain distinct. Positive measured highlighted-card geometry supports fresh same-source binding; ordinary glyph confidence and white-paper policy remain.
+
+All **51 recorded gates passed** against the same **1,029 inputs**, seal SHA256 774f44714cb545ade4b1be8ebf283f3b234b77fdcd92050e00b38d9ca0273602: both owning format/check/private-rustdoc/Clippy/full-test/release suites, dependency-free defaults and all sixteen isolated xSAR features, and console check/private-rustdoc/Clippy/full-tests/release. Full tests: **1,839 application, 333 library and 80 console**, zero failed, ignored or filtered. The final focused family passed 92 cases; library fallback regressions passed ten. See [Verification-3.1.5.md](Verification-3.1.5.md).
+
+Current app base is c541e878440b19e3f7aaa289d7e3c92ed895fe2c; xSAR base is 59c5639eed1b57e5be51b97c3f35065f92c22b42. These bases plus exact dirty-file pins establish qualification; HEAD alone does not. Console remains 0.8.5 with only its approved lock alignment. All four histories/indices/staged states and independent server changes are preserved. Source remains unstaged/uncommitted. No installation, launch, guest input or promotion occurred.
+
+The unlimited graph can be expensive; a maximum is proved only under the approved irreversible-foundation, single-card/Horne rules. Complete routes have no shortest-route claim. Native gold evidence covers the exposed retained 9D; full lower faces and occupied cells are labelled synthetic. Shared terminal appearances and local peers prove passive retirement/transport behaviour, not fresh Free Cell guest acceptance. Positive completion retires input before recording and never advances an unproved cursor, clicks Continue or starts another board.
+
+## Prior receipt — 3.1.4 / xSAR 0.11.1
+
+Baseline_HEAD_SHA: `c541e878440b19e3f7aaa289d7e3c92ed895fe2c`.
+
+Application 3.1.4 corrects read-only RECON acceptance: native frame/crop bounds, challenge retention and all 52 fixed rank/suit readings with exact unique-deck validation. Felt, unrelated scene pixels and grey borders no longer veto acquisition. Local contrast permits the readable warm-highlighted 9♦; shape confidence and ambiguity limits remain unchanged. Live playback retains a separate strict recogniser and its existing input-authority policy. xSAR remains 0.11.1 at `59c5639eed1b57e5be51b97c3f35065f92c22b42`.
+
+All six fresh host gates passed against the same 1,024 compiler inputs and stable nightly 1.102.0: owning-file format, locked all-target check, strict private rustdoc, strict all-target Clippy, **1,810 tests with zero failed/ignored/filtered**, and release build. The seven new regressions include the exact retained highlighted board, every irrelevant pixel changed, native ambiguity, isolated paper-policy separation, low contrast, invalid frames and local TCP export with an off-card pop-up. Source seal SHA256 `8b3adc9ce4a242c489ff412fdd77d1395e7b6806b341f06a417e4a01637c4a71`. See [Verification-3.1.4.md](Verification-3.1.4.md).
+
+The app base remains published `c541e878440b19e3f7aaa289d7e3c92ed895fe2c`; qualification binds the changed tree, not HEAD alone. All four Git histories/indices and the independent sibling staged/unstaged changes match the starting receipt. Source remains uncommitted and unstaged. Original incidents and sealed 3.1.3 evidence are preserved. No installation, application launch, guest input or promotion occurred; fresh guest/operator acceptance remains unperformed.
+
+## Retained receipt — 3.1.3 / xSAR 0.11.1
+
+Baseline_HEAD_SHA: `c541e878440b19e3f7aaa289d7e3c92ed895fe2c`. Baseline_PARENT_SHA: `5fa150a610bbbd2b6718bf87b6730c0b852b41e2`.
+
+Application 3.1.3 implements all seven correction items: request-bound fresh RECON pixels and original-cause FAILURE DETAILS, variable objective acquisition with honest planning/playback refusal, Free Cell as the A* entry default, aligned wrapping workflow controls, and scoped passive development telemetry. xSAR remains 0.11.1 at `59c5639eed1b57e5be51b97c3f35065f92c22b42`; no sibling source, schema, dependency or transport-policy change was needed.
+
+All six fresh host gates passed on the same 1,022 pinned compiler inputs: owning-file format, locked all-target check, strict private rustdoc, strict all-target Clippy, **1,803 tests with zero failed/ignored/filtered**, and release build. Seal SHA256 `fc3687822599e4f8af2e1c0f5d7c6f82759bfe9c8a920289138c2fde1b90da3a`; toolchain and complete commands are recorded in [Verification-3.1.3.md](Verification-3.1.3.md). First failures and their corrections remain retained.
+
+The application base is published `c541e878440b19e3f7aaa289d7e3c92ed895fe2c`. Baseline qualification covers the pinned changed tree, not HEAD alone. Four histories and indices, and independent server staged/unstaged work, match this correction's starting receipt. Source remains uncommitted; no staging, promotion, installation, launch or guest input was performed. Host/native-retained/synthetic/local-peer qualification is complete; fresh operator/guest acceptance remains unperformed. Unresolved or legacy/unmarked objectives require supported acquisition before CALCULATE/playback; they never silently become a full-board objective.
+
+
+## Retained receipt — 3.1.2 / xSAR 0.11.1
 
 Free Cell playback now uses one guarded source-to-destination drag per recorded transfer. The source movement is acknowledged before button-down; held movement and release are sent before collecting their replies. Interrupted or uncertain delivery permits release-only recovery and never replays the transfer. Two fresh semantic endpoint observations, rather than delivery acknowledgements, advance the cursor. CALCULATE remains offline; autoplay policy, Single Step scope and permanent revocation rules remain unchanged.
 
