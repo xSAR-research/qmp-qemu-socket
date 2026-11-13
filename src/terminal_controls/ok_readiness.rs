@@ -49,30 +49,150 @@ const CAPTION_LAST_Y: u32 = 380;
 /// at least 93%, whereas the recorded fading Free Cell caption scores below 8%.
 /// This mask contributes diagnostics only and never authorises or blocks input.
 const CAPTION_ROWS: [[u64; 4]; 24] = [
-    [0x0000000000380070, 0x7fc0000000000003, 0x0000000000000000, 0x0038000000000007],
-    [0x80000000003c00f0, 0xffc0000000000003, 0x0000000000000003, 0x0038000000000007],
-    [0x80000000001c00e0, 0xffc0000000000003, 0x000000000000000f, 0x0038000000000007],
-    [0x80000000000c01e0, 0x01c0000000000003, 0x000000000000000f, 0x0038000000000007],
-    [0x80000000000e01c0, 0x01c0000000000003, 0x000000000000001e, 0x0038000000000007],
-    [0x80000000000603c0, 0x01c0000000000003, 0x000000000000001c, 0x0038000000000007],
-    [0x8000000000070380, 0x01c0000000000003, 0x000000000000001c, 0x0038000000000007],
-    [0x03807003f8030780, 0x01c00007c0380180, 0x03f0003f000f801c, 0x003878003e000f87],
-    [0x0380700ffe038700, 0x01c0001ff03801c0, 0x07fc00ffc03fe01c, 0x0039fe007f801fc7],
-    [0x0380701e0f018700, 0x01c00038381c0380, 0x041e01e0c070701e, 0x003b0f00e1c03c27],
-    [0x0380703c0781ce00, 0x01c000301c1c0380, 0x000f01c00060380e, 0x003c0781c0e0381f],
-    [0x038070380380ce00, 0x83c000700e0c0300, 0x0007838000e01807, 0x003c03838070380f],
-    [0x0380703801c0fc00, 0xffc000700e0e0700, 0x0003838000e01c01, 0x003801c380707807],
-    [0x0380707001c07c00, 0xffc000600e0e0700, 0x0003838000c01c00, 0x003801c380307007],
-    [0x0380707001c07800, 0xc1c0007ffe060600, 0x000383fe00fffc01, 0x003801c3fff87007],
-    [0x0380707001c03800, 0x81c0007ffe070e00, 0x0001c39fc1fffc03, 0x003801c3fff87007],
-    [0x0380707001c03800, 0x01c000000e030e00, 0x0001c380e0001c07, 0x003801c000387007],
-    [0x0380707001c03800, 0x01c000000e030c00, 0x0003838070001c0e, 0x003801c000387007],
-    [0x0380703801c03800, 0x01c000000e039c00, 0x0003838070001c0e, 0x003801c000707007],
-    [0x0380703803803800, 0x01c000000e019c00, 0x000383c070001c1c, 0x003c03c000707007],
-    [0x03c0703c03803800, 0x01c000001c019800, 0x000703c07000383c, 0x003c038000707007],
-    [0x03a0f01e0f003800, 0x01c000203c019800, 0x000f03a0f0407838, 0x003a078101e07007],
-    [0x039fe00ffe003800, 0x01c0003ff800f000, 0x07fe039fe07ff078, 0x0039ff01ffc07007],
-    [0x038fc003f8003800, 0x01c0001fe000f000, 0x03f8038fc03fc070, 0x0038fe00ff807007],
+    [
+        0x0000000000380070,
+        0x7fc0000000000003,
+        0x0000000000000000,
+        0x0038000000000007,
+    ],
+    [
+        0x80000000003c00f0,
+        0xffc0000000000003,
+        0x0000000000000003,
+        0x0038000000000007,
+    ],
+    [
+        0x80000000001c00e0,
+        0xffc0000000000003,
+        0x000000000000000f,
+        0x0038000000000007,
+    ],
+    [
+        0x80000000000c01e0,
+        0x01c0000000000003,
+        0x000000000000000f,
+        0x0038000000000007,
+    ],
+    [
+        0x80000000000e01c0,
+        0x01c0000000000003,
+        0x000000000000001e,
+        0x0038000000000007,
+    ],
+    [
+        0x80000000000603c0,
+        0x01c0000000000003,
+        0x000000000000001c,
+        0x0038000000000007,
+    ],
+    [
+        0x8000000000070380,
+        0x01c0000000000003,
+        0x000000000000001c,
+        0x0038000000000007,
+    ],
+    [
+        0x03807003f8030780,
+        0x01c00007c0380180,
+        0x03f0003f000f801c,
+        0x003878003e000f87,
+    ],
+    [
+        0x0380700ffe038700,
+        0x01c0001ff03801c0,
+        0x07fc00ffc03fe01c,
+        0x0039fe007f801fc7,
+    ],
+    [
+        0x0380701e0f018700,
+        0x01c00038381c0380,
+        0x041e01e0c070701e,
+        0x003b0f00e1c03c27,
+    ],
+    [
+        0x0380703c0781ce00,
+        0x01c000301c1c0380,
+        0x000f01c00060380e,
+        0x003c0781c0e0381f,
+    ],
+    [
+        0x038070380380ce00,
+        0x83c000700e0c0300,
+        0x0007838000e01807,
+        0x003c03838070380f,
+    ],
+    [
+        0x0380703801c0fc00,
+        0xffc000700e0e0700,
+        0x0003838000e01c01,
+        0x003801c380707807,
+    ],
+    [
+        0x0380707001c07c00,
+        0xffc000600e0e0700,
+        0x0003838000c01c00,
+        0x003801c380307007,
+    ],
+    [
+        0x0380707001c07800,
+        0xc1c0007ffe060600,
+        0x000383fe00fffc01,
+        0x003801c3fff87007,
+    ],
+    [
+        0x0380707001c03800,
+        0x81c0007ffe070e00,
+        0x0001c39fc1fffc03,
+        0x003801c3fff87007,
+    ],
+    [
+        0x0380707001c03800,
+        0x01c000000e030e00,
+        0x0001c380e0001c07,
+        0x003801c000387007,
+    ],
+    [
+        0x0380707001c03800,
+        0x01c000000e030c00,
+        0x0003838070001c0e,
+        0x003801c000387007,
+    ],
+    [
+        0x0380703801c03800,
+        0x01c000000e039c00,
+        0x0003838070001c0e,
+        0x003801c000707007,
+    ],
+    [
+        0x0380703803803800,
+        0x01c000000e019c00,
+        0x000383c070001c1c,
+        0x003c03c000707007,
+    ],
+    [
+        0x03c0703c03803800,
+        0x01c000001c019800,
+        0x000703c07000383c,
+        0x003c038000707007,
+    ],
+    [
+        0x03a0f01e0f003800,
+        0x01c000203c019800,
+        0x000f03a0f0407838,
+        0x003a078101e07007,
+    ],
+    [
+        0x039fe00ffe003800,
+        0x01c0003ff800f000,
+        0x07fe039fe07ff078,
+        0x0039ff01ffc07007,
+    ],
+    [
+        0x038fc003f8003800,
+        0x01c0001fe000f000,
+        0x03f8038fc03fc070,
+        0x0038fe00ff807007,
+    ],
 ];
 
 /// Caption holes and gaps that remain dark in all retained positive native fixtures.
@@ -80,10 +200,26 @@ const CAPTION_ROWS: [[u64; 4]; 24] = [
 /// These negative samples prevent a uniformly bright patch or firework washout
 /// from satisfying the white-stroke mask by itself.
 const CAPTION_DARK_PROBES: [(u32, u32); 20] = [
-    (850, 20), (862, 14), (874, 8), (886, 14), (898, 8),
-    (910, 8), (922, 14), (934, 20), (946, 14), (958, 14),
-    (970, 14), (982, 20), (994, 2), (1006, 14), (1018, 14),
-    (1030, 14), (1042, 14), (1054, 20), (1066, 8), (1078, 25),
+    (850, 20),
+    (862, 14),
+    (874, 8),
+    (886, 14),
+    (898, 8),
+    (910, 8),
+    (922, 14),
+    (934, 20),
+    (946, 14),
+    (958, 14),
+    (970, 14),
+    (982, 20),
+    (994, 2),
+    (1006, 14),
+    (1018, 14),
+    (1030, 14),
+    (1042, 14),
+    (1054, 20),
+    (1066, 8),
+    (1078, 25),
 ];
 
 /// Current-frame evidence used for the selected OK coordinate.
@@ -207,7 +343,13 @@ impl OkReadiness {
             if bounds.contains(raw_point) {
                 glyph_point = raw_point;
             } else {
-                let result = search(frame, SearchSpec { bounds, run_length: BLACK_RUN_LENGTH })?;
+                let result = search(
+                    frame,
+                    SearchSpec {
+                        bounds,
+                        run_length: BLACK_RUN_LENGTH,
+                    },
+                )?;
                 pixels_examined += result.pixels_examined;
                 glyph_point = result.point;
             }
@@ -230,7 +372,9 @@ impl OkReadiness {
             Some(bounds) if !settled_size(bounds) => "entrance-button-size",
             Some(_) if !geometry_stable => "button-geometry-changing",
             Some(_) if glyph_point == PixelPoint::new(0, 0) => "missing-current-caption-glyph",
-            Some(_) if glyph_evidence == GlyphEvidence::KlondikeCaption => "settled-button-and-caption-appearance",
+            Some(_) if glyph_evidence == GlyphEvidence::KlondikeCaption => {
+                "settled-button-and-caption-appearance"
+            }
             Some(_) => "settled-button-and-glyph",
         };
         let ready = geometry_stable
@@ -256,7 +400,11 @@ impl OkReadiness {
             confirmation_pending,
             interrupted_confirmation,
             body_confirmation_pending,
-            point: if ready { glyph_point } else { PixelPoint::new(0, 0) },
+            point: if ready {
+                glyph_point
+            } else {
+                PixelPoint::new(0, 0)
+            },
             reason,
             button,
             caption_present,
@@ -330,7 +478,11 @@ fn same_geometry(previous: PixelRect, current: PixelRect) -> bool {
 
 /// Measure the diagnostic bright caption while permitting its native Y translations.
 fn find_caption(view: FrameView<'_>, work: &mut u64) -> Option<u32> {
-    let total: u32 = CAPTION_ROWS.iter().flatten().map(|bits| bits.count_ones()).sum();
+    let total: u32 = CAPTION_ROWS
+        .iter()
+        .flatten()
+        .map(|bits| bits.count_ones())
+        .sum();
     let allowed_misses = total / 10;
     'candidate: for top in CAPTION_FIRST_Y..=CAPTION_LAST_Y {
         let mut misses = 0;
@@ -341,7 +493,10 @@ fn find_caption(view: FrameView<'_>, work: &mut u64) -> Option<u32> {
                     let column = remaining.trailing_zeros();
                     remaining &= remaining - 1;
                     let [red, green, blue] = rgb(
-                        view, CAPTION_X + chunk as u32 * 64 + column, top + row as u32, work,
+                        view,
+                        CAPTION_X + chunk as u32 * 64 + column,
+                        top + row as u32,
+                        work,
                     );
                     if red < 235 || green < 235 || blue < 235 {
                         misses += 1;
@@ -370,9 +525,12 @@ fn find_caption(view: FrameView<'_>, work: &mut u64) -> Option<u32> {
 mod tests {
     //! Native entrance/fading/settled captures and independent layout regressions.
 
-    use super::*;
-    use crate::{capture::{PixelFormat, decode_png}, game::GameMode};
     use super::super::{Control, profiles::for_game};
+    use super::*;
+    use crate::{
+        capture::{PixelFormat, decode_png},
+        game::GameMode,
+    };
 
     /// Decode an unchanged retained native fixture.
     fn fixture(name: &str) -> CapturedFrame {
@@ -382,7 +540,9 @@ mod tests {
 
     /// Supply the same shared exact-black scanner used by the controller.
     fn raw(frame: &CapturedFrame, game: GameMode) -> PixelPoint {
-        search(frame, for_game(game).spec(Control::Ok)).unwrap().point
+        search(frame, for_game(game).spec(Control::Ok))
+            .unwrap()
+            .point
     }
 
 
@@ -539,17 +699,23 @@ mod tests {
         let fading = fixture("game-win-readiness/fading.png");
         let settled = fixture("game-win-readiness/settled.png");
         let mut readiness = OkReadiness::new();
-        let first = readiness.observe(&entrance, raw(&entrance, GameMode::FreeCell)).unwrap();
+        let first = readiness
+            .observe(&entrance, raw(&entrance, GameMode::FreeCell))
+            .unwrap();
         assert_eq!(first.button, Some(PixelRect::new(848, 709, 219, 65)));
         assert_eq!(first.reason, "entrance-button-size");
         assert!(!first.ready && !first.caption_present && !first.geometry_stable);
         assert!(!first.confirmation_pending);
-        let second = readiness.observe(&fading, raw(&fading, GameMode::FreeCell)).unwrap();
+        let second = readiness
+            .observe(&fading, raw(&fading, GameMode::FreeCell))
+            .unwrap();
         assert_eq!(second.button, Some(PixelRect::new(839, 723, 237, 71)));
         assert!(!second.ready && !second.caption_present && !second.geometry_stable);
         assert!(!second.confirmation_pending);
         assert_eq!(raw(&settled, GameMode::FreeCell), PixelPoint::new(945, 792));
-        let third = readiness.observe(&settled, raw(&settled, GameMode::FreeCell)).unwrap();
+        let third = readiness
+            .observe(&settled, raw(&settled, GameMode::FreeCell))
+            .unwrap();
         assert!(third.ready && third.caption_present && third.geometry_stable);
         assert!(!third.confirmation_pending);
         assert_eq!(third.point, PixelPoint::new(941, 770));
@@ -565,7 +731,9 @@ mod tests {
         let fading = fixture("game-win-readiness/fading.png");
         let mut readiness = OkReadiness::new();
         for attempt in 0..3 {
-            let observation = readiness.observe(&fading, raw(&fading, GameMode::FreeCell)).unwrap();
+            let observation = readiness
+                .observe(&fading, raw(&fading, GameMode::FreeCell))
+                .unwrap();
             assert!(!observation.ready);
             assert!(!observation.confirmation_pending);
             assert!(!observation.caption_present);
@@ -584,21 +752,32 @@ mod tests {
         let near_black = fixture("spider-game-win-20261015/near-black.png");
         let grey_caption = fixture("spider-game-win-20261015/grey-caption.png");
         let mut entry = OkReadiness::new();
-        let score_observation = entry.observe(&score, raw(&score, GameMode::Spider)).unwrap();
+        let score_observation = entry
+            .observe(&score, raw(&score, GameMode::Spider))
+            .unwrap();
         assert_eq!(score_observation.button, None);
         assert!(!score_observation.ready);
 
         let mut readiness = OkReadiness::new();
-        let first = readiness.observe(&entering, raw(&entering, GameMode::Spider)).unwrap();
+        let first = readiness
+            .observe(&entering, raw(&entering, GameMode::Spider))
+            .unwrap();
         assert_eq!(first.reason, "missing-button-body");
         assert!(!first.ready);
-        let second = readiness.observe(&near_black, raw(&near_black, GameMode::Spider)).unwrap();
+        let second = readiness
+            .observe(&near_black, raw(&near_black, GameMode::Spider))
+            .unwrap();
         assert_eq!(raw(&near_black, GameMode::Spider), PixelPoint::new(0, 0));
         assert_eq!(second.button, Some(PixelRect::new(839, 723, 237, 71)));
         assert!(!second.ready && !second.geometry_stable);
         assert!(!second.confirmation_pending);
-        let third = readiness.observe(&grey_caption, raw(&grey_caption, GameMode::Spider)).unwrap();
-        assert_eq!(raw(&grey_caption, GameMode::Spider), PixelPoint::new(943, 770));
+        let third = readiness
+            .observe(&grey_caption, raw(&grey_caption, GameMode::Spider))
+            .unwrap();
+        assert_eq!(
+            raw(&grey_caption, GameMode::Spider),
+            PixelPoint::new(943, 770)
+        );
         assert!(third.ready && third.geometry_stable);
         assert!(!third.confirmation_pending);
         assert_eq!(third.point, PixelPoint::new(943, 770));
@@ -701,7 +880,12 @@ mod tests {
         let point = raw(&modal, GameMode::FreeCell);
         let mut readiness = OkReadiness::new();
         assert!(!readiness.observe(&modal, point).unwrap().ready);
-        assert!(!readiness.observe(&menu, PixelPoint::new(0, 0)).unwrap().ready);
+        assert!(
+            !readiness
+                .observe(&menu, PixelPoint::new(0, 0))
+                .unwrap()
+                .ready
+        );
         let after_gap = readiness.observe(&modal, point).unwrap();
         assert!(!after_gap.ready && !after_gap.geometry_stable);
         assert!(readiness.observe(&modal, point).unwrap().ready);
@@ -718,7 +902,9 @@ mod tests {
             assert!(!observation.confirmation_pending);
             assert_eq!(observation.point, PixelPoint::new(0, 0));
         }
-        let third = readiness.observe(&frame, raw(&frame, GameMode::FreeCell)).unwrap();
+        let third = readiness
+            .observe(&frame, raw(&frame, GameMode::FreeCell))
+            .unwrap();
         assert!(third.ready && third.geometry_stable);
     }
 
@@ -762,9 +948,15 @@ mod tests {
         assert!(!readiness.observe(&padded, point).unwrap().ready);
         assert!(readiness.observe(&padded, point).unwrap().ready);
         padded.width -= 1;
-        assert_eq!(readiness.observe(&padded, point).unwrap_err(), HaloDetectionError::InvalidFrameLayout);
+        assert_eq!(
+            readiness.observe(&padded, point).unwrap_err(),
+            HaloDetectionError::InvalidFrameLayout
+        );
         padded.width += 1;
         padded.pixels.pop();
-        assert_eq!(readiness.observe(&padded, point).unwrap_err(), HaloDetectionError::InvalidFrameLayout);
+        assert_eq!(
+            readiness.observe(&padded, point).unwrap_err(),
+            HaloDetectionError::InvalidFrameLayout
+        );
     }
 }

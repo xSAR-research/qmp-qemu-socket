@@ -8,7 +8,10 @@
 use std::{collections::VecDeque, sync::atomic::AtomicBool};
 
 use super::*;
-use crate::{capture::PixelFormat, game::InputOperation, geometry::PixelPoint, klondike::KlondikeTarget, parameters::AnimationSettleDelays};
+use crate::{
+    capture::PixelFormat, game::InputOperation, geometry::PixelPoint, klondike::KlondikeTarget,
+    parameters::AnimationSettleDelays,
+};
 
 
 /// Deterministic adapter recording order while independently injecting I/O failures.
@@ -59,23 +62,35 @@ struct FakeIo<'a> {
 
 
 impl KlondikeIo for FakeIo<'_> {
-
-
     fn capture(&mut self) -> Result<CaptureResult, String> {
         self.trace.push("capture");
-        let observation = self.frames.pop_front().ok_or_else(|| "unexpected capture".to_owned())?;
+        let observation = self
+            .frames
+            .pop_front()
+            .ok_or_else(|| "unexpected capture".to_owned())?;
 
 
         if let Some(stop) = self.stop_on_capture
-            && self.trace.iter().filter(|entry| **entry == "capture").count() > self.captures_before_stop
+            && self
+                .trace
+                .iter()
+                .filter(|entry| **entry == "capture")
+                .count()
+                > self.captures_before_stop
         {
             stop.store(true, Ordering::Release);
-            return Ok(CaptureResult::Diagnostic { frame: observation.frame, reason: "STOP during capture".to_owned() });
+            return Ok(CaptureResult::Diagnostic {
+                frame: observation.frame,
+                reason: "STOP during capture".to_owned(),
+            });
         }
 
 
         Ok(match self.capture_failure {
-            Some(reason) => CaptureResult::Diagnostic { frame: observation.frame, reason: reason.to_owned() },
+            Some(reason) => CaptureResult::Diagnostic {
+                frame: observation.frame,
+                reason: reason.to_owned(),
+            },
             None => CaptureResult::Classified(observation),
         })
     }
@@ -83,7 +98,11 @@ impl KlondikeIo for FakeIo<'_> {
 
     fn capture_diagnostic(&mut self) -> Result<CapturedFrame, String> {
         self.trace.push("capture");
-        let frame = self.frames.pop_front().ok_or_else(|| "unexpected capture".to_owned())?.frame;
+        let frame = self
+            .frames
+            .pop_front()
+            .ok_or_else(|| "unexpected capture".to_owned())?
+            .frame;
 
 
         if let Some(stop) = self.stop_on_diagnostic_capture {
@@ -106,9 +125,10 @@ impl KlondikeIo for FakeIo<'_> {
     }
 
 
-    fn terminal_stage(&mut self, frame: &CapturedFrame) -> Result<Option<klondike::terminal::TerminalStage>, String> {
-
-
+    fn terminal_stage(
+        &mut self,
+        frame: &CapturedFrame,
+    ) -> Result<Option<klondike::terminal::TerminalStage>, String> {
         if self.native_terminal_analysis {
             return klondike::terminal::classify_terminal(frame)
                 .map_err(|error| format!("native test terminal analysis failed: {error}"));
@@ -130,21 +150,31 @@ impl KlondikeIo for FakeIo<'_> {
             return klondike::terminal::expected_control_point(frame, stage)
                 .map_err(|error| format!("native test expected control analysis failed: {error}"));
         }
-        Ok(if self.terminal_stages.pop_front().flatten() == Some(stage) {
-            match stage {
-                klondike::terminal::TerminalStage::LevelUp => PixelPoint::new(942, 804),
-                klondike::terminal::TerminalStage::NewGame => PixelPoint::new(863, 862),
-                klondike::terminal::TerminalStage::Play => PixelPoint::new(680, 861),
-                _ => stage.click_point(),
-            }
-        } else {
-            PixelPoint::new(0, 0)
-        })
+        Ok(
+            if self.terminal_stages.pop_front().flatten() == Some(stage) {
+                match stage {
+                    klondike::terminal::TerminalStage::LevelUp => PixelPoint::new(942, 804),
+                    klondike::terminal::TerminalStage::NewGame => PixelPoint::new(863, 862),
+                    klondike::terminal::TerminalStage::Play => PixelPoint::new(680, 861),
+                    _ => stage.click_point(),
+                }
+            } else {
+                PixelPoint::new(0, 0)
+            },
+        )
     }
 
 
-    fn terminal_input(&mut self, stage: klondike::terminal::TerminalStage, point: PixelPoint) -> Result<(), String> {
-        assert_ne!(point, PixelPoint::new(0, 0), "the sentinel must never reach input");
+    fn terminal_input(
+        &mut self,
+        stage: klondike::terminal::TerminalStage,
+        point: PixelPoint,
+    ) -> Result<(), String> {
+        assert_ne!(
+            point,
+            PixelPoint::new(0, 0),
+            "the sentinel must never reach input"
+        );
         self.trace.push("terminal");
         self.terminal_inputs.push(stage);
         self.terminal_points.push(point);
@@ -163,7 +193,8 @@ impl KlondikeIo for FakeIo<'_> {
 
 
         if let Some(stop) = self.stop_on_probe
-            && self.trace.iter().filter(|entry| **entry == "probe").count() > self.probes_before_stop
+            && self.trace.iter().filter(|entry| **entry == "probe").count()
+                > self.probes_before_stop
         {
             stop.store(true, Ordering::Release);
         }
@@ -209,14 +240,14 @@ impl KlondikeIo for FakeIo<'_> {
         }
         Ok(())
     }
-
-
 }
 
 
 /// Use a canonical evidenced draw target; rank classification is irrelevant to controller tests.
 fn draw() -> PredictedAction {
-    PredictedAction::Action(klondike::canonical_action(KlondikeTarget::Draw).expect("canonical draw"))
+    PredictedAction::Action(
+        klondike::canonical_action(KlondikeTarget::Draw).expect("canonical draw"),
+    )
 }
 
 
@@ -227,7 +258,10 @@ fn observation(prediction: PredictedAction, gameplay_scene: bool) -> FrameObserv
     let stride = width as usize * 4;
     FrameObservation {
         frame: CapturedFrame {
-            width, height, stride, format: PixelFormat::Rgba8,
+            width,
+            height,
+            stride,
+            format: PixelFormat::Rgba8,
             pixels: vec![0; stride * height as usize],
         },
         prediction,
@@ -241,7 +275,10 @@ fn observation(prediction: PredictedAction, gameplay_scene: bool) -> FrameObserv
 /// Construct a fake from scene/target pairs without pre-authorising any effects.
 fn fake<'a>(states: &[(PredictedAction, bool)]) -> FakeIo<'a> {
     FakeIo {
-        frames: states.iter().map(|(prediction, scene)| observation(*prediction, *scene)).collect(),
+        frames: states
+            .iter()
+            .map(|(prediction, scene)| observation(*prediction, *scene))
+            .collect(),
         trace: Vec::new(),
         native_terminal_analysis: false,
         inputs: Vec::new(),
@@ -249,7 +286,8 @@ fn fake<'a>(states: &[(PredictedAction, bool)]) -> FakeIo<'a> {
         completion_checks: 0,
         waits: Vec::new(),
         terminal_stages: VecDeque::new(),
-        terminal_inputs: Vec::new(), terminal_points: Vec::new(),
+        terminal_inputs: Vec::new(),
+        terminal_points: Vec::new(),
         capture_failure: None,
         fail_input: false,
         fail_terminal_stage: None,
@@ -277,12 +315,10 @@ fn pending_solve_pair() -> (FrameObservation, FrameObservation) {
 
 
     for y in (143..256).step_by(4) {
-
-
         for x in (562..686).step_by(4) {
-
-
-            if changed < 24 && (578..670).contains(&x) && (159..240).contains(&y)
+            if changed < 24
+                && (578..670).contains(&x)
+                && (159..240).contains(&y)
                 && !((590..660).contains(&x) && (160..236).contains(&y))
             {
                 let offset = y as usize * pending.stride + x as usize * 4;
@@ -293,7 +329,10 @@ fn pending_solve_pair() -> (FrameObservation, FrameObservation) {
     }
     assert_eq!(changed, 24);
     let evidence = klondike::inspect_solve_control(&pending).unwrap();
-    assert_eq!((evidence.interior_matched, evidence.glyph_matched), (459, 342));
+    assert_eq!(
+        (evidence.interior_matched, evidence.glyph_matched),
+        (459, 342)
+    );
     assert!(evidence.awaiting_settle() && !evidence.available);
     (native_observation(pending), native_observation(settled))
 }
@@ -302,7 +341,9 @@ fn pending_solve_pair() -> (FrameObservation, FrameObservation) {
 /// Classify unchanged native geometry without replacing pixel guards with a mock.
 fn native_observation(frame: CapturedFrame) -> FrameObservation {
     FrameObservation {
-        prediction: klondike::analyse(&frame).expect("classify evidence pixels").prediction,
+        prediction: klondike::analyse(&frame)
+            .expect("classify evidence pixels")
+            .prediction,
         gameplay_scene: klondike::is_gameplay_scene(&frame).expect("validate evidence scene"),
         frame,
         observed_rows: None,
@@ -330,14 +371,16 @@ fn absent_solve_observation(pending: &FrameObservation) -> FrameObservation {
 
 
     for y in 143..256 {
-
-
         for x in 562..686 {
             let offset = y * frame.stride + x * 4;
             frame.pixels[offset..offset + 3].copy_from_slice(&[12, 82, 45]);
         }
     }
-    assert!(!klondike::inspect_solve_control(&frame).unwrap().awaiting_settle());
+    assert!(
+        !klondike::inspect_solve_control(&frame)
+            .unwrap()
+            .awaiting_settle()
+    );
     native_observation(frame)
 }
 
@@ -357,7 +400,12 @@ fn exercise(
     limit: usize,
     stop: &AtomicBool,
 ) -> (Result<RunOutcome, String>, bool, Option<FrameObservation>) {
-    exercise_with_settings(io, approved, StepRunSettings::new(AnimationSettleDelays::default(), limit), stop)
+    exercise_with_settings(
+        io,
+        approved,
+        StepRunSettings::new(AnimationSettleDelays::default(), limit),
+        stop,
+    )
 }
 
 
@@ -371,7 +419,15 @@ fn exercise_with_settings(
     let sink = event_sink();
     let mut latest = None;
     let mut input_attempted = false;
-    let result = drive_run(io, approved, settings, &sink, stop, &mut latest, &mut input_attempted);
+    let result = drive_run(
+        io,
+        approved,
+        settings,
+        &sink,
+        stop,
+        &mut latest,
+        &mut input_attempted,
+    );
     (result, input_attempted, latest)
 }
 
@@ -395,12 +451,15 @@ fn exercise_terminal(
     let mut latest = Some(observation(PredictedAction::NoHighlight, false));
     let mut input_attempted = false;
     let result = resume_after_win(
-        io, &mut latest, StepRunSettings::new(AnimationSettleDelays::default(), 0),
-        &event_sink(), stop, &mut input_attempted,
+        io,
+        &mut latest,
+        StepRunSettings::new(AnimationSettleDelays::default(), 0),
+        &event_sink(),
+        stop,
+        &mut input_attempted,
     );
     (result, input_attempted, latest)
 }
-
 
 
 /// Every logical source/stock class uses the same fresh-capture action budget.
@@ -421,10 +480,20 @@ fn changed_advisory_preview_uses_the_fresh_canonical_source() {
     let fresh = canonical(KlondikeTarget::Waste { offset: 2 });
 
 
-    for approved in [PredictedAction::NoHighlight, draw(), canonical(KlondikeTarget::Foundation { column: 2 })] {
+    for approved in [
+        PredictedAction::NoHighlight,
+        draw(),
+        canonical(KlondikeTarget::Foundation { column: 2 }),
+    ] {
         let mut io = fake(&[(fresh, true), (draw(), true)]);
         let (result, attempted, latest) = exercise(&mut io, approved, 1, &AtomicBool::new(false));
-        assert_eq!(result, Ok(RunOutcome::Completed { verified: 0, halo: 1 }));
+        assert_eq!(
+            result,
+            Ok(RunOutcome::Completed {
+                verified: 0,
+                halo: 1
+            })
+        );
         assert!(attempted);
         assert_eq!(io.inputs, [fresh]);
         assert_eq!(io.trace, ["capture", "probe", "input", "wait", "capture"]);
@@ -443,7 +512,13 @@ fn native_one_row_preview_change_uses_the_fresh_source_geometry() {
     let expected = thin.prediction;
     let mut io = fake_frames(vec![copy_observation(&thin), thin]);
     let (result, attempted, _) = exercise(&mut io, approved, 1, &AtomicBool::new(false));
-    assert_eq!(result, Ok(RunOutcome::Completed { verified: 0, halo: 1 }));
+    assert_eq!(
+        result,
+        Ok(RunOutcome::Completed {
+            verified: 0,
+            halo: 1
+        })
+    );
     assert!(attempted);
     assert_eq!(io.inputs, [expected]);
     assert_eq!(io.trace, ["capture", "probe", "input", "wait", "capture"]);
@@ -453,20 +528,35 @@ fn native_one_row_preview_change_uses_the_fresh_source_geometry() {
 /// Fresh source classes, including repeated DRAW and Recycle, consume new actions.
 #[test]
 fn fresh_repeated_halos_count_actions_without_card_or_move_matching() {
-
-
     for target in [
-        KlondikeTarget::Draw, KlondikeTarget::Recycle, KlondikeTarget::Waste { offset: 1 },
+        KlondikeTarget::Draw,
+        KlondikeTarget::Recycle,
+        KlondikeTarget::Waste { offset: 1 },
         KlondikeTarget::Foundation { column: 2 },
-        KlondikeTarget::Tableau { column: 4, top: 808, bottom: 947 },
+        KlondikeTarget::Tableau {
+            column: 4,
+            top: 808,
+            bottom: 947,
+        },
     ] {
         let predicted = canonical(target);
         let mut io = fake(&[(predicted, true); 3]);
         let (result, attempted, _) = exercise(&mut io, predicted, 2, &AtomicBool::new(false));
-        assert_eq!(result, Ok(RunOutcome::Completed { verified: 0, halo: 2 }));
+        assert_eq!(
+            result,
+            Ok(RunOutcome::Completed {
+                verified: 0,
+                halo: 2
+            })
+        );
         assert!(attempted);
         assert_eq!(io.inputs, [predicted, predicted]);
-        assert_eq!(io.trace, ["capture", "probe", "input", "wait", "capture", "probe", "input", "wait", "capture"]);
+        assert_eq!(
+            io.trace,
+            [
+                "capture", "probe", "input", "wait", "capture", "probe", "input", "wait", "capture"
+            ]
+        );
         assert!(io.terminal_inputs.is_empty());
     }
 }
@@ -480,11 +570,23 @@ fn fresh_different_halos_reuse_each_result_frame_and_probe_each_action() {
     let third = canonical(KlondikeTarget::Recycle);
     let mut io = fake(&[(first, true), (second, true), (third, true)]);
     let (result, _, latest) = exercise(&mut io, draw(), 2, &AtomicBool::new(false));
-    assert_eq!(result, Ok(RunOutcome::Completed { verified: 0, halo: 2 }));
+    assert_eq!(
+        result,
+        Ok(RunOutcome::Completed {
+            verified: 0,
+            halo: 2
+        })
+    );
     assert_eq!(io.inputs, [first, second]);
     assert_eq!(latest.unwrap().prediction, third);
-    assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), 3);
-    assert_eq!(io.trace.iter().filter(|entry| **entry == "probe").count(), 2);
+    assert_eq!(
+        io.trace.iter().filter(|entry| **entry == "capture").count(),
+        3
+    );
+    assert_eq!(
+        io.trace.iter().filter(|entry| **entry == "probe").count(),
+        2
+    );
     assert!(!io.trace.contains(&"solver"));
 }
 
@@ -492,15 +594,26 @@ fn fresh_different_halos_reuse_each_result_frame_and_probe_each_action() {
 /// Step Once ends after its fresh result; no missing-HALO recovery adds more input.
 #[test]
 fn finite_budget_stops_after_one_fresh_result_even_without_a_supported_target() {
-
-
-    for (result_target, scene) in [(draw(), true), (PredictedAction::NoHighlight, true), (PredictedAction::NoHighlight, false)] {
+    for (result_target, scene) in [
+        (draw(), true),
+        (PredictedAction::NoHighlight, true),
+        (PredictedAction::NoHighlight, false),
+    ] {
         let mut io = fake(&[(draw(), true), (result_target, scene)]);
         let delays = AnimationSettleDelays::default().with_klondike_millis(750, 250);
         let (result, attempted, latest) = exercise_with_settings(
-            &mut io, draw(), StepRunSettings::new(delays, 1), &AtomicBool::new(false),
+            &mut io,
+            draw(),
+            StepRunSettings::new(delays, 1),
+            &AtomicBool::new(false),
         );
-        assert_eq!(result, Ok(RunOutcome::Completed { verified: 0, halo: 1 }));
+        assert_eq!(
+            result,
+            Ok(RunOutcome::Completed {
+                verified: 0,
+                halo: 1
+            })
+        );
         assert!(attempted);
         assert_eq!(io.inputs, [draw()]);
         assert_eq!(io.trace, ["capture", "probe", "input", "wait", "capture"]);
@@ -524,11 +637,27 @@ fn halo_action_events_keep_verified_totals_zero() {
     };
     let mut latest = None;
     let mut attempted = false;
-    let result = drive_run(&mut io, draw(), StepRunSettings::new(AnimationSettleDelays::default(), 1),
-        &sink, &AtomicBool::new(false), &mut latest, &mut attempted);
-    assert_eq!(result, Ok(RunOutcome::Completed { verified: 0, halo: 1 }));
-    let accepted: Vec<_> = receiver.try_iter().map(|notification| notification.event)
-        .filter(|event| matches!(event, WorkerEvent::ActionCompleted { .. })).collect();
+    let result = drive_run(
+        &mut io,
+        draw(),
+        StepRunSettings::new(AnimationSettleDelays::default(), 1),
+        &sink,
+        &AtomicBool::new(false),
+        &mut latest,
+        &mut attempted,
+    );
+    assert_eq!(
+        result,
+        Ok(RunOutcome::Completed {
+            verified: 0,
+            halo: 1
+        })
+    );
+    let accepted: Vec<_> = receiver
+        .try_iter()
+        .map(|notification| notification.event)
+        .filter(|event| matches!(event, WorkerEvent::ActionCompleted { .. }))
+        .collect();
     assert_eq!(accepted.len(), 1);
     assert!(matches!(accepted[0], WorkerEvent::ActionCompleted {
         operation_index: 1, operation_limit: 1, before, after, continued_from_halo: true, ..
@@ -548,7 +677,13 @@ fn continuous_repeated_halo_stops_at_the_next_fresh_probe() {
     assert!(result.unwrap_err().contains("STOP"));
     assert!(attempted);
     assert_eq!(io.inputs, [draw(), draw()]);
-    assert_eq!(io.trace, ["capture", "probe", "input", "wait", "capture", "probe", "input", "wait", "capture", "probe"]);
+    assert_eq!(
+        io.trace,
+        [
+            "capture", "probe", "input", "wait", "capture", "probe", "input", "wait", "capture",
+            "probe"
+        ]
+    );
     assert_eq!(latest.unwrap().prediction, draw());
 }
 
@@ -556,19 +691,42 @@ fn continuous_repeated_halo_stops_at_the_next_fresh_probe() {
 /// No HALO gets bounded read-only captures before the one supported-scene Solver click.
 #[test]
 fn missing_halo_context_has_finite_observations_and_one_solver_refresh() {
-
-
     for limit in [0, 1] {
         let mut io = fake(&unresolved_context());
-        let (result, attempted, latest) = exercise(&mut io, PredictedAction::NoHighlight, limit, &AtomicBool::new(false));
+        let (result, attempted, latest) = exercise(
+            &mut io,
+            PredictedAction::NoHighlight,
+            limit,
+            &AtomicBool::new(false),
+        );
         assert!(result.is_err());
         assert!(attempted);
         assert!(io.inputs.is_empty() && io.terminal_inputs.is_empty());
-        assert_eq!(io.trace.iter().filter(|entry| **entry == "solver").count(), 1);
-        assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), 2 * (REOBSERVATION_LIMIT + 1));
-        let first_solver = io.trace.iter().position(|entry| *entry == "solver").unwrap();
-        assert_eq!(io.trace[..first_solver].iter().filter(|entry| **entry == "capture").count(), REOBSERVATION_LIMIT + 1);
-        assert_eq!(io.trace[first_solver + 1], "capture", "Solver has no speculative post-click sleep");
+        assert_eq!(
+            io.trace.iter().filter(|entry| **entry == "solver").count(),
+            1
+        );
+        assert_eq!(
+            io.trace.iter().filter(|entry| **entry == "capture").count(),
+            2 * (REOBSERVATION_LIMIT + 1)
+        );
+        let first_solver = io
+            .trace
+            .iter()
+            .position(|entry| *entry == "solver")
+            .unwrap();
+        assert_eq!(
+            io.trace[..first_solver]
+                .iter()
+                .filter(|entry| **entry == "capture")
+                .count(),
+            REOBSERVATION_LIMIT + 1
+        );
+        assert_eq!(
+            io.trace[first_solver + 1],
+            "capture",
+            "Solver has no speculative post-click sleep"
+        );
         assert_eq!(latest.unwrap().prediction, PredictedAction::NoHighlight);
     }
 }
@@ -577,12 +735,32 @@ fn missing_halo_context_has_finite_observations_and_one_solver_refresh() {
 /// A delayed HALO appearing before recovery requires no Solver click.
 #[test]
 fn missing_halo_recapture_can_find_a_target_before_solver_activation() {
-    let mut io = fake(&[(PredictedAction::NoHighlight, true), (draw(), true), (draw(), true)]);
-    let (result, attempted, _) = exercise(&mut io, PredictedAction::NoHighlight, 1, &AtomicBool::new(false));
-    assert_eq!(result, Ok(RunOutcome::Completed { verified: 0, halo: 1 }));
+    let mut io = fake(&[
+        (PredictedAction::NoHighlight, true),
+        (draw(), true),
+        (draw(), true),
+    ]);
+    let (result, attempted, _) = exercise(
+        &mut io,
+        PredictedAction::NoHighlight,
+        1,
+        &AtomicBool::new(false),
+    );
+    assert_eq!(
+        result,
+        Ok(RunOutcome::Completed {
+            verified: 0,
+            halo: 1
+        })
+    );
     assert!(attempted);
     assert_eq!(io.inputs, [draw()]);
-    assert_eq!(io.trace, ["capture", "wait", "capture", "probe", "input", "wait", "capture"]);
+    assert_eq!(
+        io.trace,
+        [
+            "capture", "wait", "capture", "probe", "input", "wait", "capture"
+        ]
+    );
     assert!(!io.trace.contains(&"solver"));
 }
 
@@ -593,12 +771,29 @@ fn initial_no_halo_step_once_plays_one_fresh_recovered_target() {
     let mut states = vec![(PredictedAction::NoHighlight, true); REOBSERVATION_LIMIT + 1];
     states.extend([(draw(), true), (draw(), true)]);
     let mut io = fake(&states);
-    let (result, attempted, latest) = exercise(&mut io, PredictedAction::NoHighlight, 1, &AtomicBool::new(false));
-    assert_eq!(result, Ok(RunOutcome::Completed { verified: 0, halo: 1 }));
+    let (result, attempted, latest) = exercise(
+        &mut io,
+        PredictedAction::NoHighlight,
+        1,
+        &AtomicBool::new(false),
+    );
+    assert_eq!(
+        result,
+        Ok(RunOutcome::Completed {
+            verified: 0,
+            halo: 1
+        })
+    );
     assert!(attempted);
     assert_eq!(io.inputs, [draw()]);
-    assert_eq!(io.trace.iter().filter(|entry| **entry == "solver").count(), 1);
-    assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), REOBSERVATION_LIMIT + 3);
+    assert_eq!(
+        io.trace.iter().filter(|entry| **entry == "solver").count(),
+        1
+    );
+    assert_eq!(
+        io.trace.iter().filter(|entry| **entry == "capture").count(),
+        REOBSERVATION_LIMIT + 3
+    );
     assert_eq!(latest.unwrap().prediction, draw());
 }
 
@@ -607,30 +802,54 @@ fn initial_no_halo_step_once_plays_one_fresh_recovered_target() {
 #[test]
 fn late_recovered_target_uses_editable_input_free_waits_before_gameplay() {
     let mut states = vec![(PredictedAction::NoHighlight, true); REOBSERVATION_LIMIT + 1];
-    states.extend([(PredictedAction::NoHighlight, true), (PredictedAction::NoHighlight, true), (draw(), true), (draw(), true)]);
+    states.extend([
+        (PredictedAction::NoHighlight, true),
+        (PredictedAction::NoHighlight, true),
+        (draw(), true),
+        (draw(), true),
+    ]);
     let mut io = fake(&states);
     let delays = AnimationSettleDelays::default().with_klondike_millis(750, 250);
-    let (result, _, _) = exercise_with_settings(&mut io, draw(), StepRunSettings::new(delays, 1), &AtomicBool::new(false));
-    assert_eq!(result, Ok(RunOutcome::Completed { verified: 0, halo: 1 }));
+    let (result, _, _) = exercise_with_settings(
+        &mut io,
+        draw(),
+        StepRunSettings::new(delays, 1),
+        &AtomicBool::new(false),
+    );
+    assert_eq!(
+        result,
+        Ok(RunOutcome::Completed {
+            verified: 0,
+            halo: 1
+        })
+    );
     assert_eq!(io.inputs, [draw()]);
     assert_eq!(io.waits.last(), Some(&delays.klondike_settle));
-    assert!(io.waits[..io.waits.len() - 1].iter().all(|delay| *delay == delays.klondike_reobserve));
-    assert_eq!(io.trace.iter().filter(|entry| **entry == "solver").count(), 1);
+    assert!(
+        io.waits[..io.waits.len() - 1]
+            .iter()
+            .all(|delay| *delay == delays.klondike_reobserve)
+    );
+    assert_eq!(
+        io.trace.iter().filter(|entry| **entry == "solver").count(),
+        1
+    );
 }
 
 
 /// Unsupported pixels cannot grant Solver or gameplay input after the read-only budget.
 #[test]
 fn unknown_scenes_never_authorise_solver_even_with_an_injected_target() {
-
-
     for prediction in [PredictedAction::NoHighlight, draw()] {
         let mut io = fake(&[(prediction, false); REOBSERVATION_LIMIT + 1]);
         let (result, attempted, latest) = exercise(&mut io, draw(), 0, &AtomicBool::new(false));
         assert!(result.is_err());
         assert!(!attempted && io.inputs.is_empty() && io.terminal_inputs.is_empty());
         assert!(!io.trace.contains(&"solver") && !io.trace.contains(&"probe"));
-        assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), REOBSERVATION_LIMIT + 1);
+        assert_eq!(
+            io.trace.iter().filter(|entry| **entry == "capture").count(),
+            REOBSERVATION_LIMIT + 1
+        );
         assert!(latest.is_some());
     }
 }
@@ -643,13 +862,17 @@ fn initial_and_result_targets_must_be_unique_and_canonical() {
     forged.anchor.x += 1;
 
 
-    for rejected in [PredictedAction::Ambiguous { highlight_count: 2 }, PredictedAction::Action(forged)] {
+    for rejected in [
+        PredictedAction::Ambiguous { highlight_count: 2 },
+        PredictedAction::Action(forged),
+    ] {
         let mut initial = fake(&[(rejected, true)]);
         let (result, attempted, _) = exercise(&mut initial, draw(), 0, &AtomicBool::new(false));
         assert!(result.is_err());
         assert!(!attempted && initial.inputs.is_empty() && !initial.trace.contains(&"solver"));
         let mut result_io = fake(&[(draw(), true), (rejected, true)]);
-        let (result, attempted, latest) = exercise(&mut result_io, draw(), 2, &AtomicBool::new(false));
+        let (result, attempted, latest) =
+            exercise(&mut result_io, draw(), 2, &AtomicBool::new(false));
         assert!(result.is_err());
         assert!(attempted);
         assert_eq!(result_io.inputs, [draw()]);
@@ -662,14 +885,28 @@ fn initial_and_result_targets_must_be_unique_and_canonical() {
 /// Unknown result scenes receive read-only observations while a fresh later HALO can resume.
 #[test]
 fn unsupported_result_recapture_can_resume_from_a_supported_fresh_halo() {
-    let mut io = fake(&[(draw(), true), (PredictedAction::NoHighlight, false), (draw(), true), (draw(), true)]);
+    let mut io = fake(&[
+        (draw(), true),
+        (PredictedAction::NoHighlight, false),
+        (draw(), true),
+        (draw(), true),
+    ]);
     let (result, attempted, latest) = exercise(&mut io, draw(), 2, &AtomicBool::new(false));
-    assert_eq!(result, Ok(RunOutcome::Completed { verified: 0, halo: 2 }));
+    assert_eq!(
+        result,
+        Ok(RunOutcome::Completed {
+            verified: 0,
+            halo: 2
+        })
+    );
     assert!(attempted);
     assert_eq!(io.inputs, [draw(), draw()]);
     assert_eq!(latest.unwrap().prediction, draw());
     assert!(!io.trace.contains(&"solver"));
-    assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), 4);
+    assert_eq!(
+        io.trace.iter().filter(|entry| **entry == "capture").count(),
+        4
+    );
 }
 
 
@@ -684,7 +921,10 @@ fn unsupported_result_exhausts_input_free_observations_without_replaying_gamepla
     assert!(attempted);
     assert_eq!(io.inputs, [draw()]);
     assert!(!io.trace.contains(&"solver") && io.terminal_inputs.is_empty());
-    assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), REOBSERVATION_LIMIT + 2);
+    assert_eq!(
+        io.trace.iter().filter(|entry| **entry == "capture").count(),
+        REOBSERVATION_LIMIT + 2
+    );
 }
 
 
@@ -703,8 +943,14 @@ fn continuous_missing_halo_recovery_resets_after_a_new_acknowledged_action() {
     let (result, _, _) = exercise(&mut io, draw(), 0, &stop);
     assert!(result.unwrap_err().contains("STOP"));
     assert_eq!(io.inputs, [draw(), draw()]);
-    assert_eq!(io.trace.iter().filter(|entry| **entry == "solver").count(), 2);
-    assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), 2 * REOBSERVATION_LIMIT + 5);
+    assert_eq!(
+        io.trace.iter().filter(|entry| **entry == "solver").count(),
+        2
+    );
+    assert_eq!(
+        io.trace.iter().filter(|entry| **entry == "capture").count(),
+        2 * REOBSERVATION_LIMIT + 5
+    );
 }
 
 
@@ -739,7 +985,10 @@ fn recovered_target_keeps_its_own_final_stop_probe() {
     let (result, attempted, latest) = exercise(&mut io, draw(), 0, &stop);
     assert!(result.unwrap_err().contains("STOP"));
     assert!(attempted && io.inputs.is_empty());
-    assert_eq!(io.trace.iter().filter(|entry| **entry == "solver").count(), 1);
+    assert_eq!(
+        io.trace.iter().filter(|entry| **entry == "solver").count(),
+        1
+    );
     assert_eq!(latest.unwrap().prediction, draw());
 }
 
@@ -752,7 +1001,10 @@ fn uncertain_solver_stops_after_one_attempt_without_capture_or_replay() {
     let (result, attempted, _) = exercise(&mut io, draw(), 0, &AtomicBool::new(false));
     assert!(result.unwrap_err().contains("uncertain Solver"));
     assert!(attempted && io.inputs.is_empty());
-    assert_eq!(io.trace.iter().filter(|entry| **entry == "solver").count(), 1);
+    assert_eq!(
+        io.trace.iter().filter(|entry| **entry == "solver").count(),
+        1
+    );
     assert_eq!(io.trace.last(), Some(&"solver"));
     assert!(io.frames.is_empty());
 }
@@ -766,7 +1018,13 @@ fn ordinary_action_can_reach_independent_game_win_without_a_transfer_claim() {
     let mut io = fake(&states);
     io.completion_candidates = VecDeque::from([true, true]);
     let (result, attempted, _) = exercise(&mut io, draw(), 2, &AtomicBool::new(false));
-    assert_eq!(result, Ok(RunOutcome::GameWon { previous_verified: 0, previous_halo: 1 }));
+    assert_eq!(
+        result,
+        Ok(RunOutcome::GameWon {
+            previous_verified: 0,
+            previous_halo: 1
+        })
+    );
     assert!(attempted);
     assert_eq!(io.inputs, [draw()]);
     assert_eq!(io.completion_checks, 2);
@@ -780,7 +1038,13 @@ fn initial_confirmed_win_preempts_solver_after_bounded_read_only_observation() {
     let mut io = fake(&[(PredictedAction::NoHighlight, false); REOBSERVATION_LIMIT + 2]);
     io.completion_candidates = VecDeque::from([true, true]);
     let (result, attempted, latest) = exercise(&mut io, draw(), 1, &AtomicBool::new(false));
-    assert_eq!(result, Ok(RunOutcome::GameWon { previous_verified: 0, previous_halo: 0 }));
+    assert_eq!(
+        result,
+        Ok(RunOutcome::GameWon {
+            previous_verified: 0,
+            previous_halo: 0
+        })
+    );
     assert!(!attempted && io.inputs.is_empty() && io.terminal_inputs.is_empty());
     assert!(!io.trace.contains(&"solver"));
     assert_eq!(io.completion_checks, 2);
@@ -792,10 +1056,20 @@ fn initial_confirmed_win_preempts_solver_after_bounded_read_only_observation() {
 #[test]
 fn fresh_initial_solve_is_authorised_from_the_current_canonical_frame() {
     let solve = canonical(KlondikeTarget::Solve);
-    let mut io = fake(&[(solve, true), (PredictedAction::NoHighlight, false), (PredictedAction::NoHighlight, false)]);
+    let mut io = fake(&[
+        (solve, true),
+        (PredictedAction::NoHighlight, false),
+        (PredictedAction::NoHighlight, false),
+    ]);
     io.completion_candidates = VecDeque::from([true, true]);
     let (result, attempted, _) = exercise(&mut io, draw(), 1, &AtomicBool::new(false));
-    assert_eq!(result, Ok(RunOutcome::GameWon { previous_verified: 0, previous_halo: 0 }));
+    assert_eq!(
+        result,
+        Ok(RunOutcome::GameWon {
+            previous_verified: 0,
+            previous_halo: 0
+        })
+    );
     assert!(attempted);
     assert_eq!(io.inputs, [solve]);
     assert!(io.terminal_inputs.is_empty() && !io.trace.contains(&"solver"));
@@ -807,21 +1081,25 @@ fn fresh_initial_solve_is_authorised_from_the_current_canonical_frame() {
 fn fresh_solve_after_card_reports_unverified_action_before_one_solve_request() {
     let solve = canonical(KlondikeTarget::Solve);
     let mut states = vec![(draw(), true), (solve, true)];
-    states.extend([(PredictedAction::NoHighlight, false); SOLVE_COMPLETION_REOBSERVATION_LIMIT + 1]);
+    states
+        .extend([(PredictedAction::NoHighlight, false); SOLVE_COMPLETION_REOBSERVATION_LIMIT + 1]);
     let mut io = fake(&states);
     let (result, _, _) = exercise(&mut io, draw(), 2, &AtomicBool::new(false));
-    assert_eq!(result, Ok(RunOutcome::SolveRequested { previous_verified: 0, previous_halo: 1 }));
+    assert_eq!(
+        result,
+        Ok(RunOutcome::SolveRequested {
+            previous_verified: 0,
+            previous_halo: 1
+        })
+    );
     assert_eq!(io.inputs, [draw(), solve]);
     assert!(!io.trace.contains(&"solver") && io.terminal_inputs.is_empty());
 }
 
 
-
 /// Excessive finite limits fail before all capture and input operations.
 #[test]
 fn limits_fail_before_io() {
-
-
     for limit in [KLONDIKE_MAX_MULTI_STEP_ACTIONS + 1, usize::MAX] {
         let mut io = fake(&[]);
         let (result, _, latest) = exercise(&mut io, draw(), limit, &AtomicBool::new(false));
@@ -855,9 +1133,23 @@ fn stop_before_capture_and_after_probe_prevents_input() {
     let stop = AtomicBool::new(false);
     let mut after_probe = FakeIo {
         frames: VecDeque::from([observation(draw(), true)]),
-        trace: Vec::new(), native_terminal_analysis: false, inputs: Vec::new(),
-        completion_candidates: VecDeque::new(), completion_checks: 0, waits: Vec::new(), terminal_stages: VecDeque::new(), terminal_inputs: Vec::new(), terminal_points: Vec::new(), capture_failure: None, fail_input: false, fail_terminal_stage: None, fail_solver: false,
-        stop_on_probe: Some(&stop), probes_before_stop: 0, stop_on_wait: None, waits_before_stop: 0,
+        trace: Vec::new(),
+        native_terminal_analysis: false,
+        inputs: Vec::new(),
+        completion_candidates: VecDeque::new(),
+        completion_checks: 0,
+        waits: Vec::new(),
+        terminal_stages: VecDeque::new(),
+        terminal_inputs: Vec::new(),
+        terminal_points: Vec::new(),
+        capture_failure: None,
+        fail_input: false,
+        fail_terminal_stage: None,
+        fail_solver: false,
+        stop_on_probe: Some(&stop),
+        probes_before_stop: 0,
+        stop_on_wait: None,
+        waits_before_stop: 0,
         stop_on_capture: None,
         captures_before_stop: 0,
         stop_on_diagnostic_capture: None,
@@ -874,9 +1166,23 @@ fn stop_during_settle_preserves_uncertain_input_without_next_capture() {
     let stop = AtomicBool::new(false);
     let mut io = FakeIo {
         frames: VecDeque::from([observation(draw(), true)]),
-        trace: Vec::new(), native_terminal_analysis: false, inputs: Vec::new(),
-        completion_candidates: VecDeque::new(), completion_checks: 0, waits: Vec::new(), terminal_stages: VecDeque::new(), terminal_inputs: Vec::new(), terminal_points: Vec::new(), capture_failure: None, fail_input: false, fail_terminal_stage: None, fail_solver: false,
-        stop_on_probe: None, probes_before_stop: 0, stop_on_wait: Some(&stop), waits_before_stop: 0,
+        trace: Vec::new(),
+        native_terminal_analysis: false,
+        inputs: Vec::new(),
+        completion_candidates: VecDeque::new(),
+        completion_checks: 0,
+        waits: Vec::new(),
+        terminal_stages: VecDeque::new(),
+        terminal_inputs: Vec::new(),
+        terminal_points: Vec::new(),
+        capture_failure: None,
+        fail_input: false,
+        fail_terminal_stage: None,
+        fail_solver: false,
+        stop_on_probe: None,
+        probes_before_stop: 0,
+        stop_on_wait: Some(&stop),
+        waits_before_stop: 0,
         stop_on_capture: None,
         captures_before_stop: 0,
         stop_on_diagnostic_capture: None,
@@ -901,7 +1207,10 @@ fn stop_interrupts_unsupported_result_reobservation() {
     assert!(attempted);
     assert_eq!(io.inputs, [draw()]);
 
-    assert_eq!(io.trace, ["capture", "probe", "input", "wait", "capture", "wait"]);
+    assert_eq!(
+        io.trace,
+        ["capture", "probe", "input", "wait", "capture", "wait"]
+    );
     assert!(!latest.unwrap().gameplay_scene);
     assert!(!io.trace.contains(&"solver"));
     assert!(io.terminal_inputs.is_empty());
@@ -915,18 +1224,36 @@ fn unresolved_solve_is_requested_once_then_stops_without_effect_or_recovery() {
 
 
     for limit in [0, 1, 10] {
-
-
-        for result_scene in [(solve, true), (PredictedAction::NoHighlight, true), (PredictedAction::NoHighlight, false)] {
+        for result_scene in [
+            (solve, true),
+            (PredictedAction::NoHighlight, true),
+            (PredictedAction::NoHighlight, false),
+        ] {
             let mut states = vec![(solve, true)];
             states.extend([result_scene; SOLVE_COMPLETION_REOBSERVATION_LIMIT + 1]);
             let mut io = fake(&states);
 
-            let (result, input_attempted, latest) = exercise(&mut io, solve, limit, &AtomicBool::new(false));
-            assert_eq!(result, Ok(RunOutcome::SolveRequested { previous_verified: 0, previous_halo: 0 }));
-            assert_eq!(io.trace.iter().filter(|entry| **entry == "input").count(), 1);
-            assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), SOLVE_COMPLETION_REOBSERVATION_LIMIT + 2);
-            assert_eq!(io.completion_checks, SOLVE_COMPLETION_REOBSERVATION_LIMIT + 1);
+            let (result, input_attempted, latest) =
+                exercise(&mut io, solve, limit, &AtomicBool::new(false));
+            assert_eq!(
+                result,
+                Ok(RunOutcome::SolveRequested {
+                    previous_verified: 0,
+                    previous_halo: 0
+                })
+            );
+            assert_eq!(
+                io.trace.iter().filter(|entry| **entry == "input").count(),
+                1
+            );
+            assert_eq!(
+                io.trace.iter().filter(|entry| **entry == "capture").count(),
+                SOLVE_COMPLETION_REOBSERVATION_LIMIT + 2
+            );
+            assert_eq!(
+                io.completion_checks,
+                SOLVE_COMPLETION_REOBSERVATION_LIMIT + 1
+            );
 
             assert_eq!(io.waits[0], AnimationSettleDelays::default().klondike_solve);
             assert!(io.terminal_inputs.is_empty());
@@ -950,7 +1277,6 @@ fn uncertain_solve_input_stops_without_recapture_or_retry() {
     let (result, _, _) = exercise(&mut io, solve, 0, &AtomicBool::new(false));
     assert!(result.unwrap_err().contains("uncertain"));
     assert_eq!(io.trace, ["capture", "probe", "input"]);
-
 }
 
 
@@ -958,9 +1284,20 @@ fn uncertain_solve_input_stops_without_recapture_or_retry() {
 #[test]
 fn cumulative_counters_reject_overflow() {
     assert_eq!(next_counter(0, "gameplay action").unwrap(), 1);
-    assert_eq!(next_counter(usize::MAX - 1, "Solver refresh").unwrap(), usize::MAX);
-    assert!(next_counter(usize::MAX, "gameplay action").unwrap_err().contains("before further input"));
-    assert!(next_counter(usize::MAX, "Solver refresh").unwrap_err().contains("before further input"));
+    assert_eq!(
+        next_counter(usize::MAX - 1, "Solver refresh").unwrap(),
+        usize::MAX
+    );
+    assert!(
+        next_counter(usize::MAX, "gameplay action")
+            .unwrap_err()
+            .contains("before further input")
+    );
+    assert!(
+        next_counter(usize::MAX, "Solver refresh")
+            .unwrap_err()
+            .contains("before further input")
+    );
 }
 
 
@@ -979,7 +1316,6 @@ fn solve_late_stop_retains_the_new_diagnostic_frame() {
     assert_eq!(diagnostic.frame.pixels[0], 123);
     assert_eq!(diagnostic.prediction, PredictedAction::NoHighlight);
     assert!(!diagnostic.gameplay_scene);
-
 }
 
 
@@ -990,7 +1326,11 @@ fn failed_capture_analysis_retains_new_pixels_before_propagating_error() {
     io.frames.front_mut().unwrap().frame.pixels[0] = 77;
     io.capture_failure = Some("simulated unsupported capture dimensions");
     let (result, input_attempted, latest) = exercise(&mut io, draw(), 0, &AtomicBool::new(false));
-    assert!(result.unwrap_err().contains("unsupported capture dimensions"));
+    assert!(
+        result
+            .unwrap_err()
+            .contains("unsupported capture dimensions")
+    );
     assert_eq!(io.trace, ["capture"]);
     assert!(!input_attempted);
     let diagnostic = latest.unwrap();
@@ -1031,12 +1371,32 @@ fn finite_solve_confirms_one_game_without_restart_and_uses_separate_delay() {
 
 
     for limit in [1, 10] {
-        let mut io = fake(&[(solve, true), (PredictedAction::NoHighlight, false), (PredictedAction::NoHighlight, false)]);
+        let mut io = fake(&[
+            (solve, true),
+            (PredictedAction::NoHighlight, false),
+            (PredictedAction::NoHighlight, false),
+        ]);
         io.completion_candidates = VecDeque::from([true, true]);
         let delays = AnimationSettleDelays::default().with_klondike_solve_millis(1_750);
-        let (result, input_attempted, _) = exercise_with_settings(&mut io, solve, StepRunSettings::new(delays, limit), &AtomicBool::new(false));
-        assert_eq!(result, Ok(RunOutcome::GameWon { previous_verified: 0, previous_halo: 0 }));
-        assert_eq!(io.trace, ["capture", "probe", "input", "wait", "capture", "wait", "capture"]);
+        let (result, input_attempted, _) = exercise_with_settings(
+            &mut io,
+            solve,
+            StepRunSettings::new(delays, limit),
+            &AtomicBool::new(false),
+        );
+        assert_eq!(
+            result,
+            Ok(RunOutcome::GameWon {
+                previous_verified: 0,
+                previous_halo: 0
+            })
+        );
+        assert_eq!(
+            io.trace,
+            [
+                "capture", "probe", "input", "wait", "capture", "wait", "capture"
+            ]
+        );
         assert_eq!(io.waits, [delays.klondike_solve, delays.klondike_reobserve]);
         assert_eq!(delays.klondike_settle, Duration::from_millis(750));
 
@@ -1055,9 +1415,18 @@ fn solve_completion_resets_after_an_incomplete_frame() {
     let mut io = fake(&states);
     io.completion_candidates = VecDeque::from([true, false, true, true]);
     let (result, _, _) = exercise(&mut io, solve, 1, &AtomicBool::new(false));
-    assert_eq!(result, Ok(RunOutcome::GameWon { previous_verified: 0, previous_halo: 0 }));
+    assert_eq!(
+        result,
+        Ok(RunOutcome::GameWon {
+            previous_verified: 0,
+            previous_halo: 0
+        })
+    );
     assert_eq!(io.completion_checks, 4);
-    assert_eq!(io.trace.iter().filter(|entry| **entry == "input").count(), 1);
+    assert_eq!(
+        io.trace.iter().filter(|entry| **entry == "input").count(),
+        1
+    );
     assert!(!io.trace.contains(&"solver"));
     assert!(io.terminal_inputs.is_empty());
 }
@@ -1068,12 +1437,22 @@ fn solve_completion_resets_after_an_incomplete_frame() {
 fn solve_completion_never_accepts_a_single_positive_frame() {
     let solve = PredictedAction::Action(klondike::canonical_action(KlondikeTarget::Solve).unwrap());
     let mut states = vec![(solve, true)];
-    states.extend([(PredictedAction::NoHighlight, false); SOLVE_COMPLETION_REOBSERVATION_LIMIT + 1]);
+    states
+        .extend([(PredictedAction::NoHighlight, false); SOLVE_COMPLETION_REOBSERVATION_LIMIT + 1]);
     let mut io = fake(&states);
     io.completion_candidates = VecDeque::from([true, false, false, false]);
     let (result, _, _) = exercise(&mut io, solve, 0, &AtomicBool::new(false));
-    assert_eq!(result, Ok(RunOutcome::SolveRequested { previous_verified: 0, previous_halo: 0 }));
-    assert_eq!(io.completion_checks, SOLVE_COMPLETION_REOBSERVATION_LIMIT + 1);
+    assert_eq!(
+        result,
+        Ok(RunOutcome::SolveRequested {
+            previous_verified: 0,
+            previous_halo: 0
+        })
+    );
+    assert_eq!(
+        io.completion_checks,
+        SOLVE_COMPLETION_REOBSERVATION_LIMIT + 1
+    );
     assert!(io.terminal_inputs.is_empty());
 }
 
@@ -1086,21 +1465,34 @@ fn solve_waits_through_observed_transition_before_confirming_settled_win() {
     let mut states = vec![(solve, true)];
     states.extend([(PredictedAction::NoHighlight, false); 8]);
     let mut io = fake(&states);
-    io.completion_candidates = VecDeque::from([false, true, false, false, false, false, true, true]);
+    io.completion_candidates =
+        VecDeque::from([false, true, false, false, false, false, true, true]);
     let delays = AnimationSettleDelays::default().with_klondike_millis(750, 1_500);
     let (result, attempted, latest) = exercise_with_settings(
-        &mut io, solve, StepRunSettings::new(delays, 1), &AtomicBool::new(false),
+        &mut io,
+        solve,
+        StepRunSettings::new(delays, 1),
+        &AtomicBool::new(false),
     );
-    assert_eq!(result, Ok(RunOutcome::GameWon { previous_verified: 0, previous_halo: 0 }));
+    assert_eq!(
+        result,
+        Ok(RunOutcome::GameWon {
+            previous_verified: 0,
+            previous_halo: 0
+        })
+    );
     assert_eq!(io.completion_checks, 8);
     assert_eq!(io.inputs, [solve]);
     assert_eq!(io.waits[0], delays.klondike_solve);
-    assert!(io.waits[1..].iter().all(|delay| *delay == delays.klondike_reobserve));
+    assert!(
+        io.waits[1..]
+            .iter()
+            .all(|delay| *delay == delays.klondike_reobserve)
+    );
     assert!(attempted);
     assert!(latest.is_some());
     assert!(io.terminal_inputs.is_empty());
     assert!(!io.trace.contains(&"solver"));
-
 }
 
 
@@ -1109,13 +1501,24 @@ fn solve_waits_through_observed_transition_before_confirming_settled_win() {
 fn intermittent_win_candidates_cannot_keep_solve_wait_alive_indefinitely() {
     let solve = PredictedAction::Action(klondike::canonical_action(KlondikeTarget::Solve).unwrap());
     let mut states = vec![(solve, true)];
-    states.extend([(PredictedAction::NoHighlight, false); SOLVE_COMPLETION_REOBSERVATION_LIMIT + 1]);
+    states
+        .extend([(PredictedAction::NoHighlight, false); SOLVE_COMPLETION_REOBSERVATION_LIMIT + 1]);
     let mut io = fake(&states);
     io.completion_candidates = (0..=SOLVE_COMPLETION_REOBSERVATION_LIMIT)
-        .map(|index| index % 2 == 0).collect();
+        .map(|index| index % 2 == 0)
+        .collect();
     let (result, _, latest) = exercise(&mut io, solve, 0, &AtomicBool::new(false));
-    assert_eq!(result, Ok(RunOutcome::SolveRequested { previous_verified: 0, previous_halo: 0 }));
-    assert_eq!(io.completion_checks, SOLVE_COMPLETION_REOBSERVATION_LIMIT + 1);
+    assert_eq!(
+        result,
+        Ok(RunOutcome::SolveRequested {
+            previous_verified: 0,
+            previous_halo: 0
+        })
+    );
+    assert_eq!(
+        io.completion_checks,
+        SOLVE_COMPLETION_REOBSERVATION_LIMIT + 1
+    );
     assert_eq!(io.inputs, [solve]);
     assert_eq!(io.waits.len(), SOLVE_COMPLETION_REOBSERVATION_LIMIT + 1);
     assert!(io.terminal_inputs.is_empty());
@@ -1134,21 +1537,46 @@ fn continuous_solve_advances_one_board_terminal_cycle_then_obeys_stop() {
     states.extend([(PredictedAction::NoHighlight, false); 13]);
     states.push((draw(), true));
     let mut io = fake(&states);
-    io.completion_candidates = VecDeque::from([false, true, false, false, false, false, true, true]);
-    let stages = [TerminalStage::ScoreCounting, TerminalStage::LevelUp, TerminalStage::NewGame, TerminalStage::Play, TerminalStage::SolverReady];
+    io.completion_candidates =
+        VecDeque::from([false, true, false, false, false, false, true, true]);
+    let stages = [
+        TerminalStage::ScoreCounting,
+        TerminalStage::LevelUp,
+        TerminalStage::NewGame,
+        TerminalStage::Play,
+        TerminalStage::SolverReady,
+    ];
     io.frames[9] = native_hint_phase(91);
     io.frames[10] = native_hint_phase(91);
-    io.terminal_stages = [TerminalStage::ScoreCounting, TerminalStage::LevelUp, TerminalStage::LevelUp,
-        TerminalStage::NewGame, TerminalStage::Play, TerminalStage::SolverReady].into_iter().map(Some).collect();
+    io.terminal_stages = [
+        TerminalStage::ScoreCounting,
+        TerminalStage::LevelUp,
+        TerminalStage::LevelUp,
+        TerminalStage::NewGame,
+        TerminalStage::Play,
+        TerminalStage::SolverReady,
+    ]
+    .into_iter()
+    .map(Some)
+    .collect();
     io.stop_on_probe = Some(&stop);
     io.probes_before_stop = 6;
     let (result, input_attempted, latest) = exercise(&mut io, solve, 0, &stop);
     assert!(result.unwrap_err().contains("STOP"));
     assert!(input_attempted);
     assert_eq!(io.terminal_inputs, stages);
-    assert_eq!(io.trace.iter().filter(|entry| **entry == "input").count(), 1);
-    assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), 15);
-    assert_eq!(io.trace.iter().filter(|entry| **entry == "probe").count(), 7);
+    assert_eq!(
+        io.trace.iter().filter(|entry| **entry == "input").count(),
+        1
+    );
+    assert_eq!(
+        io.trace.iter().filter(|entry| **entry == "capture").count(),
+        15
+    );
+    assert_eq!(
+        io.trace.iter().filter(|entry| **entry == "probe").count(),
+        7
+    );
     assert_eq!(latest.unwrap().prediction, draw());
     assert!(!io.trace.contains(&"solver"));
     assert!(io.terminal_stages.is_empty());
@@ -1165,7 +1593,10 @@ fn terminal_same_stage_is_not_retried() {
     assert!(result.unwrap_err().contains("advancement exhausted"));
     assert!(input_attempted);
     assert_eq!(io.terminal_inputs, [TerminalStage::ScoreCounting]);
-    assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), 3);
+    assert_eq!(
+        io.trace.iter().filter(|entry| **entry == "capture").count(),
+        3
+    );
     assert!(io.frames.is_empty());
     assert!(latest.is_some());
 }
@@ -1176,12 +1607,21 @@ fn terminal_same_stage_is_not_retried() {
 fn terminal_unexpected_stage_stops_before_input() {
     use klondike::terminal::TerminalStage;
     let mut io = fake(&[(PredictedAction::NoHighlight, false); 3]);
-    io.terminal_stages = VecDeque::from([Some(TerminalStage::ScoreCounting), Some(TerminalStage::Play)]);
+    io.terminal_stages = VecDeque::from([
+        Some(TerminalStage::ScoreCounting),
+        Some(TerminalStage::Play),
+    ]);
     let (result, _, _) = exercise_terminal(&mut io, &AtomicBool::new(false));
     assert!(result.unwrap_err().contains("advancement exhausted"));
     assert_eq!(io.terminal_inputs, [TerminalStage::ScoreCounting]);
-    assert_eq!(io.trace.iter().filter(|entry| **entry == "probe").count(), 1);
-    assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), 3);
+    assert_eq!(
+        io.trace.iter().filter(|entry| **entry == "probe").count(),
+        1
+    );
+    assert_eq!(
+        io.trace.iter().filter(|entry| **entry == "capture").count(),
+        3
+    );
     assert!(io.frames.is_empty());
 }
 
@@ -1260,23 +1700,43 @@ fn pending_solve_settles_before_lower_tableau_input() {
     let (pending, settled) = pending_solve_pair();
     let solve = settled.prediction;
     let mut io = fake_frames(vec![
-        observation(draw(), true), copy_observation(&pending), copy_observation(&pending), pending,
-        settled, observation(PredictedAction::NoHighlight, false),
+        observation(draw(), true),
+        copy_observation(&pending),
+        copy_observation(&pending),
+        pending,
+        settled,
+        observation(PredictedAction::NoHighlight, false),
         observation(PredictedAction::NoHighlight, false),
     ]);
 
     io.completion_candidates = VecDeque::from([true, true]);
     let delays = AnimationSettleDelays::default().with_klondike_millis(750, 1_250);
     let (result, input_attempted, _) = exercise_with_settings(
-        &mut io, draw(), StepRunSettings::new(delays, 2), &AtomicBool::new(false),
+        &mut io,
+        draw(),
+        StepRunSettings::new(delays, 2),
+        &AtomicBool::new(false),
     );
-    assert_eq!(result, Ok(RunOutcome::GameWon { previous_verified: 0, previous_halo: 1 }));
+    assert_eq!(
+        result,
+        Ok(RunOutcome::GameWon {
+            previous_verified: 0,
+            previous_halo: 1
+        })
+    );
     assert_eq!(io.inputs, [draw(), solve]);
 
-    assert_eq!(io.waits, [
-        delays.klondike_settle, delays.klondike_reobserve, delays.klondike_reobserve,
-        delays.klondike_reobserve, delays.klondike_solve, delays.klondike_reobserve,
-    ]);
+    assert_eq!(
+        io.waits,
+        [
+            delays.klondike_settle,
+            delays.klondike_reobserve,
+            delays.klondike_reobserve,
+            delays.klondike_reobserve,
+            delays.klondike_solve,
+            delays.klondike_reobserve,
+        ]
+    );
     assert!(input_attempted && io.frames.is_empty());
     assert!(!io.trace.contains(&"solver") && io.terminal_inputs.is_empty());
 }
@@ -1288,11 +1748,19 @@ fn persistent_pending_solve_stops_without_lower_card_or_solve_input() {
     let (pending, _) = pending_solve_pair();
     let lower = pending.prediction;
     let mut io = fake_frames(vec![
-        observation(draw(), true), copy_observation(&pending), copy_observation(&pending), copy_observation(&pending), pending,
+        observation(draw(), true),
+        copy_observation(&pending),
+        copy_observation(&pending),
+        copy_observation(&pending),
+        pending,
     ]);
 
     let (result, input_attempted, latest) = exercise(&mut io, draw(), 0, &AtomicBool::new(false));
-    assert!(result.unwrap_err().contains("after 3 delayed input-free planning captures"));
+    assert!(
+        result
+            .unwrap_err()
+            .contains("after 3 delayed input-free planning captures")
+    );
     assert_eq!(io.inputs, [draw()]);
 
     assert_eq!(io.waits.len(), 4);
@@ -1307,13 +1775,28 @@ fn disappearing_pending_solve_uses_fresh_lower_target_without_solver_refresh() {
     let (pending, _) = pending_solve_pair();
     let absent = absent_solve_observation(&pending);
     let lower = absent.prediction;
-    assert!(matches!(lower, PredictedAction::Action(GuidedAction {
-        target: ActionTarget::Klondike(KlondikeTarget::Tableau { .. }), ..
-    })));
-    let mut io = fake_frames(vec![observation(draw(), true), pending, absent, observation(draw(), true)]);
+    assert!(matches!(
+        lower,
+        PredictedAction::Action(GuidedAction {
+            target: ActionTarget::Klondike(KlondikeTarget::Tableau { .. }),
+            ..
+        })
+    ));
+    let mut io = fake_frames(vec![
+        observation(draw(), true),
+        pending,
+        absent,
+        observation(draw(), true),
+    ]);
 
     let (result, _, latest) = exercise(&mut io, draw(), 2, &AtomicBool::new(false));
-    assert_eq!(result, Ok(RunOutcome::Completed { verified: 0, halo: 2 }));
+    assert_eq!(
+        result,
+        Ok(RunOutcome::Completed {
+            verified: 0,
+            halo: 2
+        })
+    );
     assert_eq!(io.inputs, [draw(), lower]);
 
     assert_eq!(io.waits.len(), 3);
@@ -1329,14 +1812,24 @@ fn pending_solve_never_defers_higher_priority_draw_recycle_or_right() {
     let (pending, _) = pending_solve_pair();
 
 
-    for target in [KlondikeTarget::Draw, KlondikeTarget::Recycle, KlondikeTarget::Waste { offset: 1 }] {
+    for target in [
+        KlondikeTarget::Draw,
+        KlondikeTarget::Recycle,
+        KlondikeTarget::Waste { offset: 1 },
+    ] {
         let higher = PredictedAction::Action(klondike::canonical_action(target).unwrap());
         let mut planning = copy_observation(&pending);
         planning.prediction = higher;
         let mut io = fake_frames(vec![planning, observation(draw(), true)]);
 
         let (result, _, _) = exercise(&mut io, higher, 1, &AtomicBool::new(false));
-        assert_eq!(result, Ok(RunOutcome::Completed { verified: 0, halo: 1 }));
+        assert_eq!(
+            result,
+            Ok(RunOutcome::Completed {
+                verified: 0,
+                halo: 1
+            })
+        );
         assert_eq!(io.inputs, [higher]);
         assert_eq!(io.waits, [AnimationSettleDelays::default().klondike_settle]);
         assert!(io.frames.is_empty());
@@ -1348,9 +1841,16 @@ fn pending_solve_never_defers_higher_priority_draw_recycle_or_right() {
 #[test]
 fn pending_solve_defers_foundation_source_input() {
     let (mut pending, _) = pending_solve_pair();
-    let foundation = PredictedAction::Action(klondike::canonical_action(KlondikeTarget::Foundation { column: 3 }).unwrap());
+    let foundation = PredictedAction::Action(
+        klondike::canonical_action(KlondikeTarget::Foundation { column: 3 }).unwrap(),
+    );
     pending.prediction = foundation;
-    let mut io = fake_frames(vec![copy_observation(&pending), copy_observation(&pending), copy_observation(&pending), pending]);
+    let mut io = fake_frames(vec![
+        copy_observation(&pending),
+        copy_observation(&pending),
+        copy_observation(&pending),
+        pending,
+    ]);
     let (result, input_attempted, _) = exercise(&mut io, foundation, 1, &AtomicBool::new(false));
     assert!(result.unwrap_err().contains("pending Klondike Solve"));
     assert!(!input_attempted && io.inputs.is_empty());
@@ -1366,7 +1866,13 @@ fn final_step_does_not_wait_for_pending_solve_after_its_budget_is_consumed() {
     let mut io = fake_frames(vec![observation(draw(), true), pending]);
 
     let (result, _, latest) = exercise(&mut io, draw(), 1, &AtomicBool::new(false));
-    assert_eq!(result, Ok(RunOutcome::Completed { verified: 0, halo: 1 }));
+    assert_eq!(
+        result,
+        Ok(RunOutcome::Completed {
+            verified: 0,
+            halo: 1
+        })
+    );
     assert_eq!(io.inputs, [draw()]);
     assert_eq!(io.waits, [AnimationSettleDelays::default().klondike_settle]);
     assert_eq!(latest.unwrap().prediction, lower);
@@ -1377,13 +1883,10 @@ fn final_step_does_not_wait_for_pending_solve_after_its_budget_is_consumed() {
 /// STOP during pending artwork observation or the final fresh probe forbids Solve.
 #[test]
 fn pending_solve_wait_and_final_probe_obey_stop_without_replaying_input() {
-
-
     for stop_during_wait in [true, false] {
         let stop = AtomicBool::new(false);
         let (pending, settled) = pending_solve_pair();
         let mut io = fake_frames(vec![observation(draw(), true), pending, settled]);
-
 
 
         if stop_during_wait {
@@ -1411,7 +1914,11 @@ fn pending_solve_recapture_with_malformed_storage_stops_with_latest_pixels() {
     let mut io = fake_frames(vec![observation(draw(), true), pending, malformed]);
 
     let (result, _, latest) = exercise(&mut io, draw(), 0, &AtomicBool::new(false));
-    assert!(result.unwrap_err().contains("pending Solve analysis failed"));
+    assert!(
+        result
+            .unwrap_err()
+            .contains("pending Solve analysis failed")
+    );
     assert_eq!(io.inputs, [draw()]);
     assert_eq!(latest.unwrap().frame.pixels.len(), 1);
     assert!(!io.trace.contains(&"solver"));
@@ -1426,10 +1933,17 @@ fn pending_solve_capture_analysis_error_retains_the_new_diagnostic_frame() {
     io.capture_failure = Some("simulated pending recapture analysis failure");
     let mut latest = Some(pending);
     let result = await_pending_solve(
-        &mut io, &mut latest, StepRunSettings::new(AnimationSettleDelays::default(), 0),
-        &event_sink(), &AtomicBool::new(false),
+        &mut io,
+        &mut latest,
+        StepRunSettings::new(AnimationSettleDelays::default(), 0),
+        &event_sink(),
+        &AtomicBool::new(false),
     );
-    assert!(result.unwrap_err().contains("simulated pending recapture analysis failure"));
+    assert!(
+        result
+            .unwrap_err()
+            .contains("simulated pending recapture analysis failure")
+    );
     assert!(latest.unwrap().frame.is_layout_valid());
     assert_eq!(io.trace, ["wait", "capture"]);
     assert!(io.inputs.is_empty());
@@ -1440,16 +1954,27 @@ fn pending_solve_capture_analysis_error_retains_the_new_diagnostic_frame() {
 #[test]
 fn pending_solve_wait_keeps_the_prior_unverified_source_verdict_separate() {
     let (pending, settled) = pending_solve_pair();
-    let right = PredictedAction::Action(klondike::canonical_action(KlondikeTarget::Waste { offset: 1 }).unwrap());
+    let right = PredictedAction::Action(
+        klondike::canonical_action(KlondikeTarget::Waste { offset: 1 }).unwrap(),
+    );
     let solve = settled.prediction;
     let mut io = fake_frames(vec![
-        observation(right, true), pending, settled,
-        observation(PredictedAction::NoHighlight, false), observation(PredictedAction::NoHighlight, false),
+        observation(right, true),
+        pending,
+        settled,
+        observation(PredictedAction::NoHighlight, false),
+        observation(PredictedAction::NoHighlight, false),
     ]);
 
     io.completion_candidates = VecDeque::from([true, true]);
     let (result, _, _) = exercise(&mut io, right, 2, &AtomicBool::new(false));
-    assert_eq!(result, Ok(RunOutcome::GameWon { previous_verified: 0, previous_halo: 1 }));
+    assert_eq!(
+        result,
+        Ok(RunOutcome::GameWon {
+            previous_verified: 0,
+            previous_halo: 1
+        })
+    );
     assert_eq!(io.inputs, [right, solve]);
 
     assert!(!io.trace.contains(&"solver"));
@@ -1467,18 +1992,34 @@ fn restarted_continuous_game_can_settle_pending_solve_before_its_next_action() {
     let mut frames = vec![observation(solve, true)];
     frames.extend((0..7).map(|_| observation(PredictedAction::NoHighlight, false)));
     frames.extend([
-        pending, settled, observation(PredictedAction::NoHighlight, false),
+        pending,
+        settled,
+        observation(PredictedAction::NoHighlight, false),
         observation(PredictedAction::NoHighlight, false),
     ]);
     let mut io = fake_frames(frames);
     io.completion_candidates = VecDeque::from([true, true, true, true]);
-    let stages = [TerminalStage::ScoreCounting, TerminalStage::LevelUp, TerminalStage::NewGame,
-        TerminalStage::Play, TerminalStage::SolverReady];
+    let stages = [
+        TerminalStage::ScoreCounting,
+        TerminalStage::LevelUp,
+        TerminalStage::NewGame,
+        TerminalStage::Play,
+        TerminalStage::SolverReady,
+    ];
     io.frames[3] = native_hint_phase(91);
     io.frames[4] = native_hint_phase(91);
-    io.terminal_stages = [TerminalStage::ScoreCounting, TerminalStage::LevelUp, TerminalStage::LevelUp,
-        TerminalStage::NewGame, TerminalStage::Play, TerminalStage::SolverReady, TerminalStage::ScoreCounting]
-        .into_iter().map(Some).collect();
+    io.terminal_stages = [
+        TerminalStage::ScoreCounting,
+        TerminalStage::LevelUp,
+        TerminalStage::LevelUp,
+        TerminalStage::NewGame,
+        TerminalStage::Play,
+        TerminalStage::SolverReady,
+        TerminalStage::ScoreCounting,
+    ]
+    .into_iter()
+    .map(Some)
+    .collect();
     io.stop_on_probe = Some(&stop);
     io.probes_before_stop = 7;
     let (result, input_attempted, _) = exercise(&mut io, solve, 0, &stop);
@@ -1504,9 +2045,20 @@ fn native_pro_level_up_restart_cycle_recognises_each_control_once() {
     };
     let initial = native(25);
     let approved = initial.prediction;
-    assert_eq!(approved, PredictedAction::Action(klondike::canonical_action(KlondikeTarget::Solve).unwrap()));
+    assert_eq!(
+        approved,
+        PredictedAction::Action(klondike::canonical_action(KlondikeTarget::Solve).unwrap())
+    );
     let mut io = fake_frames(vec![
-        initial, native(26), native(26), native(67), native(67), native(28), native(29), native(30), native(2),
+        initial,
+        native(26),
+        native(26),
+        native(67),
+        native(67),
+        native(28),
+        native(29),
+        native(30),
+        native(2),
     ]);
     let stop = AtomicBool::new(false);
     io.native_terminal_analysis = true;
@@ -1516,12 +2068,23 @@ fn native_pro_level_up_restart_cycle_recognises_each_control_once() {
     assert!(result.unwrap_err().contains("STOP"));
     assert!(input_attempted);
     assert_eq!(io.inputs, [approved]);
-    assert_eq!(io.terminal_inputs, [TerminalStage::ScoreCounting, TerminalStage::LevelUp,
-        TerminalStage::NewGame, TerminalStage::Play, TerminalStage::SolverReady]);
+    assert_eq!(
+        io.terminal_inputs,
+        [
+            TerminalStage::ScoreCounting,
+            TerminalStage::LevelUp,
+            TerminalStage::NewGame,
+            TerminalStage::Play,
+            TerminalStage::SolverReady
+        ]
+    );
     assert_eq!(io.completion_checks, 2);
 
     assert!(io.frames.is_empty() && !io.trace.contains(&"solver"));
-    assert!(matches!(latest.unwrap().prediction, PredictedAction::Action(_)));
+    assert!(matches!(
+        latest.unwrap().prediction,
+        PredictedAction::Action(_)
+    ));
 }
 
 
@@ -1534,8 +2097,15 @@ fn native_grandmaster_buttons_restart_after_confirmed_win_without_theme_matching
     let initial = native_hint_phase(25);
     let approved = initial.prediction;
     let mut io = fake_frames(vec![
-        initial, native_hint_phase(26), native_hint_phase(26), native_hint_phase(91),
-        native_hint_phase(91), native_hint_phase(92), native_hint_phase(93), native_hint_phase(77), native_hint_phase(2),
+        initial,
+        native_hint_phase(26),
+        native_hint_phase(26),
+        native_hint_phase(91),
+        native_hint_phase(91),
+        native_hint_phase(92),
+        native_hint_phase(93),
+        native_hint_phase(77),
+        native_hint_phase(2),
     ]);
     let stop = AtomicBool::new(false);
     io.native_terminal_analysis = true;
@@ -1545,10 +2115,25 @@ fn native_grandmaster_buttons_restart_after_confirmed_win_without_theme_matching
     assert!(result.unwrap_err().contains("STOP"));
     assert!(attempted);
     assert_eq!(io.inputs, [approved]);
-    assert_eq!(io.terminal_inputs, [TerminalStage::ScoreCounting, TerminalStage::LevelUp,
-        TerminalStage::NewGame, TerminalStage::Play, TerminalStage::SolverReady]);
+    assert_eq!(
+        io.terminal_inputs,
+        [
+            TerminalStage::ScoreCounting,
+            TerminalStage::LevelUp,
+            TerminalStage::NewGame,
+            TerminalStage::Play,
+            TerminalStage::SolverReady
+        ]
+    );
     assert_eq!(io.completion_checks, 2);
-    assert_eq!(&io.terminal_points[1..4], &[PixelPoint::new(942, 804), PixelPoint::new(863, 862), PixelPoint::new(680, 861)]);
+    assert_eq!(
+        &io.terminal_points[1..4],
+        &[
+            PixelPoint::new(942, 804),
+            PixelPoint::new(863, 862),
+            PixelPoint::new(680, 861)
+        ]
+    );
     assert!(io.frames.is_empty() && !io.trace.contains(&"solver"));
     assert_eq!(latest.unwrap().prediction, native_hint_phase(2).prediction);
 }
@@ -1563,8 +2148,14 @@ fn confirmed_win_confirms_expected_ok_within_three_searches_without_repeating_sc
     let approved = initial.prediction;
     let mut frames = vec![initial, native_hint_phase(26), native_hint_phase(26)];
     frames.push(native_hint_phase(26));
-    frames.extend([native_hint_phase(91), native_hint_phase(91), native_hint_phase(92), native_hint_phase(93),
-        native_hint_phase(77), native_hint_phase(2)]);
+    frames.extend([
+        native_hint_phase(91),
+        native_hint_phase(91),
+        native_hint_phase(92),
+        native_hint_phase(93),
+        native_hint_phase(77),
+        native_hint_phase(2),
+    ]);
     let stop = AtomicBool::new(false);
     let mut io = fake_frames(frames);
     io.native_terminal_analysis = true;
@@ -1572,9 +2163,20 @@ fn confirmed_win_confirms_expected_ok_within_three_searches_without_repeating_sc
     io.probes_before_stop = 6;
     let (result, _, _) = exercise(&mut io, approved, 0, &stop);
     assert!(result.unwrap_err().contains("STOP"));
-    assert_eq!(io.terminal_inputs, [TerminalStage::ScoreCounting, TerminalStage::LevelUp,
-        TerminalStage::NewGame, TerminalStage::Play, TerminalStage::SolverReady]);
-    assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), 10);
+    assert_eq!(
+        io.terminal_inputs,
+        [
+            TerminalStage::ScoreCounting,
+            TerminalStage::LevelUp,
+            TerminalStage::NewGame,
+            TerminalStage::Play,
+            TerminalStage::SolverReady
+        ]
+    );
+    assert_eq!(
+        io.trace.iter().filter(|entry| **entry == "capture").count(),
+        10
+    );
     assert_eq!(io.inputs, [approved]);
     assert!(io.frames.is_empty());
     assert!(!io.trace.contains(&"solver"));
@@ -1588,17 +2190,32 @@ fn confirmed_win_unchanged_native_ok_cannot_authorise_next_control() {
     use klondike::terminal::TerminalStage;
     let initial = native_hint_phase(25);
     let approved = initial.prediction;
-    let mut frames = vec![initial, native_hint_phase(26), native_hint_phase(26), native_hint_phase(91)];
+    let mut frames = vec![
+        initial,
+        native_hint_phase(26),
+        native_hint_phase(26),
+        native_hint_phase(91),
+    ];
     frames.extend((0..4).map(|_| native_hint_phase(91)));
     let mut io = fake_frames(frames);
     io.native_terminal_analysis = true;
     let (result, attempted, latest) = exercise(&mut io, approved, 0, &AtomicBool::new(false));
-    assert!(result.unwrap_err().contains("terminal advancement exhausted"));
+    assert!(
+        result
+            .unwrap_err()
+            .contains("terminal advancement exhausted")
+    );
     assert!(attempted);
     assert_eq!(io.inputs, [approved]);
-    assert_eq!(io.terminal_inputs, [TerminalStage::ScoreCounting, TerminalStage::LevelUp]);
+    assert_eq!(
+        io.terminal_inputs,
+        [TerminalStage::ScoreCounting, TerminalStage::LevelUp]
+    );
     assert!(io.frames.is_empty() && !io.trace.contains(&"solver"));
-    assert_eq!(latest.unwrap().frame.pixels, native_hint_phase(91).frame.pixels);
+    assert_eq!(
+        latest.unwrap().frame.pixels,
+        native_hint_phase(91).frame.pixels
+    );
 }
 
 
@@ -1608,16 +2225,28 @@ fn confirmed_win_expected_ok_uncertainty_does_not_replay_or_advance() {
     use klondike::terminal::TerminalStage;
     let initial = native_hint_phase(25);
     let approved = initial.prediction;
-    let mut io = fake_frames(vec![initial, native_hint_phase(26), native_hint_phase(26),
-        native_hint_phase(91), native_hint_phase(91), native_hint_phase(92)]);
+    let mut io = fake_frames(vec![
+        initial,
+        native_hint_phase(26),
+        native_hint_phase(26),
+        native_hint_phase(91),
+        native_hint_phase(91),
+        native_hint_phase(92),
+    ]);
     io.native_terminal_analysis = true;
     io.fail_terminal_stage = Some(TerminalStage::LevelUp);
     let (result, attempted, latest) = exercise(&mut io, approved, 0, &AtomicBool::new(false));
     assert!(result.unwrap_err().contains("uncertain terminal input"));
     assert!(attempted);
-    assert_eq!(io.terminal_inputs, [TerminalStage::ScoreCounting, TerminalStage::LevelUp]);
+    assert_eq!(
+        io.terminal_inputs,
+        [TerminalStage::ScoreCounting, TerminalStage::LevelUp]
+    );
     assert_eq!(io.frames.len(), 1);
-    assert_eq!(latest.unwrap().frame.pixels, native_hint_phase(91).frame.pixels);
+    assert_eq!(
+        latest.unwrap().frame.pixels,
+        native_hint_phase(91).frame.pixels
+    );
 }
 
 
@@ -1630,8 +2259,15 @@ fn native_master_level_up_restart_cycle_recognises_ok_then_new_game() {
     let initial = native_hint_phase(25);
     let approved = initial.prediction;
     let mut io = fake_frames(vec![
-        initial, native_hint_phase(26), native_hint_phase(26), native_hint_phase(86),
-        native_hint_phase(86), native_hint_phase(28), native_hint_phase(29), native_hint_phase(30), native_hint_phase(2),
+        initial,
+        native_hint_phase(26),
+        native_hint_phase(26),
+        native_hint_phase(86),
+        native_hint_phase(86),
+        native_hint_phase(28),
+        native_hint_phase(29),
+        native_hint_phase(30),
+        native_hint_phase(2),
     ]);
     let stop = AtomicBool::new(false);
     io.native_terminal_analysis = true;
@@ -1641,8 +2277,16 @@ fn native_master_level_up_restart_cycle_recognises_ok_then_new_game() {
     assert!(result.unwrap_err().contains("STOP"));
     assert!(attempted);
     assert_eq!(io.inputs, [approved]);
-    assert_eq!(io.terminal_inputs, [TerminalStage::ScoreCounting, TerminalStage::LevelUp,
-        TerminalStage::NewGame, TerminalStage::Play, TerminalStage::SolverReady]);
+    assert_eq!(
+        io.terminal_inputs,
+        [
+            TerminalStage::ScoreCounting,
+            TerminalStage::LevelUp,
+            TerminalStage::NewGame,
+            TerminalStage::Play,
+            TerminalStage::SolverReady
+        ]
+    );
     assert_eq!(io.completion_checks, 2);
     assert!(io.frames.is_empty() && !io.trace.contains(&"solver"));
     assert_eq!(latest.unwrap().prediction, native_hint_phase(2).prediction);
@@ -1672,12 +2316,26 @@ fn native_new_deal_activates_solver_once_then_waits_for_fresh_halo() {
     assert!(result.unwrap_err().contains("STOP"));
     assert!(input_attempted);
     assert_eq!(io.inputs, [approved]);
-    assert_eq!(io.terminal_inputs, [TerminalStage::ScoreCounting, TerminalStage::LevelUp,
-        TerminalStage::NewGame, TerminalStage::Play, TerminalStage::SolverReady]);
+    assert_eq!(
+        io.terminal_inputs,
+        [
+            TerminalStage::ScoreCounting,
+            TerminalStage::LevelUp,
+            TerminalStage::NewGame,
+            TerminalStage::Play,
+            TerminalStage::SolverReady
+        ]
+    );
     assert_eq!(io.completion_checks, 2);
 
-    assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), 10);
-    assert_eq!(io.trace.iter().filter(|entry| **entry == "probe").count(), 7);
+    assert_eq!(
+        io.trace.iter().filter(|entry| **entry == "capture").count(),
+        10
+    );
+    assert_eq!(
+        io.trace.iter().filter(|entry| **entry == "probe").count(),
+        7
+    );
     assert!(io.frames.is_empty() && !io.trace.contains(&"solver"));
     assert_eq!(latest.as_ref().unwrap().prediction, next_prediction);
     assert_eq!(latest.unwrap().frame.pixels, next_pixels);
@@ -1695,15 +2353,33 @@ fn native_new_deal_without_fresh_halo_stops_after_one_solver_ready_input() {
     let mut io = fake_frames(frames);
     io.native_terminal_analysis = true;
     let (result, input_attempted, latest) = exercise(&mut io, approved, 0, &AtomicBool::new(false));
-    assert!(result.unwrap_err().contains("terminal advancement exhausted"));
+    assert!(
+        result
+            .unwrap_err()
+            .contains("terminal advancement exhausted")
+    );
     assert!(input_attempted);
     assert_eq!(io.inputs, [approved]);
-    assert_eq!(io.terminal_inputs, [TerminalStage::ScoreCounting, TerminalStage::LevelUp,
-        TerminalStage::NewGame, TerminalStage::Play, TerminalStage::SolverReady]);
+    assert_eq!(
+        io.terminal_inputs,
+        [
+            TerminalStage::ScoreCounting,
+            TerminalStage::LevelUp,
+            TerminalStage::NewGame,
+            TerminalStage::Play,
+            TerminalStage::SolverReady
+        ]
+    );
 
     assert!(io.frames.is_empty() && !io.trace.contains(&"solver"));
-    assert_eq!(latest.as_ref().unwrap().prediction, PredictedAction::NoHighlight);
-    assert_eq!(latest.unwrap().frame.pixels, native_hint_phase(77).frame.pixels);
+    assert_eq!(
+        latest.as_ref().unwrap().prediction,
+        PredictedAction::NoHighlight
+    );
+    assert_eq!(
+        latest.unwrap().frame.pixels,
+        native_hint_phase(77).frame.pixels
+    );
 }
 
 
@@ -1720,29 +2396,54 @@ fn native_new_deal_keeps_solver_ready_stop_and_uncertainty_boundaries() {
     stopped.probes_before_stop = 5;
     let (result, input_attempted, latest) = exercise(&mut stopped, approved, 0, &stop);
     assert!(result.unwrap_err().contains("STOP"));
-    assert!(input_attempted, "only the earlier acknowledged controls were attempted");
+    assert!(
+        input_attempted,
+        "only the earlier acknowledged controls were attempted"
+    );
     assert_eq!(stopped.inputs, [approved]);
-    assert_eq!(stopped.terminal_inputs, [TerminalStage::ScoreCounting, TerminalStage::LevelUp,
-        TerminalStage::NewGame, TerminalStage::Play]);
+    assert_eq!(
+        stopped.terminal_inputs,
+        [
+            TerminalStage::ScoreCounting,
+            TerminalStage::LevelUp,
+            TerminalStage::NewGame,
+            TerminalStage::Play
+        ]
+    );
 
     assert!(stopped.frames.is_empty() && !stopped.trace.contains(&"solver"));
-    assert_eq!(latest.unwrap().frame.pixels, native_hint_phase(77).frame.pixels);
+    assert_eq!(
+        latest.unwrap().frame.pixels,
+        native_hint_phase(77).frame.pixels
+    );
 
     let (_, mut frames) = native_restart_to_solver_off_deal();
     frames.push(native_hint_phase(2));
     let mut uncertain = fake_frames(frames);
     uncertain.native_terminal_analysis = true;
     uncertain.fail_terminal_stage = Some(TerminalStage::SolverReady);
-    let (result, input_attempted, latest) = exercise(&mut uncertain, approved, 0, &AtomicBool::new(false));
+    let (result, input_attempted, latest) =
+        exercise(&mut uncertain, approved, 0, &AtomicBool::new(false));
     assert!(result.unwrap_err().contains("uncertain terminal input"));
     assert!(input_attempted);
     assert_eq!(uncertain.inputs, [approved]);
-    assert_eq!(uncertain.terminal_inputs, [TerminalStage::ScoreCounting, TerminalStage::LevelUp,
-        TerminalStage::NewGame, TerminalStage::Play, TerminalStage::SolverReady]);
+    assert_eq!(
+        uncertain.terminal_inputs,
+        [
+            TerminalStage::ScoreCounting,
+            TerminalStage::LevelUp,
+            TerminalStage::NewGame,
+            TerminalStage::Play,
+            TerminalStage::SolverReady
+        ]
+    );
 
     assert_eq!(uncertain.frames.len(), 1);
     assert!(!uncertain.trace.contains(&"solver"));
-    assert_eq!(latest.unwrap().frame.pixels, native_hint_phase(77).frame.pixels);
+    assert_eq!(
+        latest.unwrap().frame.pixels,
+        native_hint_phase(77).frame.pixels
+    );
 }
 
 
@@ -1764,11 +2465,20 @@ fn native_red_back_deal_activates_solver_once_then_uses_fresh_source() {
     let on = native_hint_phase(97);
     assert!(off.gameplay_scene && on.gameplay_scene);
     assert_eq!(off.prediction, PredictedAction::NoHighlight);
-    assert_eq!(on.prediction, canonical(KlondikeTarget::Tableau { column: 7, top: 443, bottom: 632 }));
+    assert_eq!(
+        on.prediction,
+        canonical(KlondikeTarget::Tableau {
+            column: 7,
+            top: 443,
+            bottom: 632
+        })
+    );
 
 
     for limit in [0, 1] {
-        let mut frames = (0..=REOBSERVATION_LIMIT).map(|_| copy_observation(&off)).collect::<Vec<_>>();
+        let mut frames = (0..=REOBSERVATION_LIMIT)
+            .map(|_| copy_observation(&off))
+            .collect::<Vec<_>>();
         frames.extend([copy_observation(&on), copy_observation(&on)]);
         let stop = AtomicBool::new(false);
         let mut io = fake_frames(frames);
@@ -1783,17 +2493,40 @@ fn native_red_back_deal_activates_solver_once_then_uses_fresh_source() {
 
 
         if limit == 1 {
-            assert_eq!(result, Ok(RunOutcome::Completed { verified: 0, halo: 1 }));
+            assert_eq!(
+                result,
+                Ok(RunOutcome::Completed {
+                    verified: 0,
+                    halo: 1
+                })
+            );
         } else {
             assert!(result.unwrap_err().contains("STOP"));
         }
         assert!(attempted && io.frames.is_empty());
         assert_eq!(io.inputs, [on.prediction]);
         assert!(io.terminal_inputs.is_empty());
-        assert_eq!(io.trace.iter().filter(|entry| **entry == "solver").count(), 1);
-        let solver = io.trace.iter().position(|entry| *entry == "solver").unwrap();
-        assert_eq!(io.trace[..solver].iter().filter(|entry| **entry == "capture").count(), REOBSERVATION_LIMIT + 1);
-        assert_eq!(io.trace[solver + 1], "capture", "Solver is followed immediately by a fresh capture");
+        assert_eq!(
+            io.trace.iter().filter(|entry| **entry == "solver").count(),
+            1
+        );
+        let solver = io
+            .trace
+            .iter()
+            .position(|entry| *entry == "solver")
+            .unwrap();
+        assert_eq!(
+            io.trace[..solver]
+                .iter()
+                .filter(|entry| **entry == "capture")
+                .count(),
+            REOBSERVATION_LIMIT + 1
+        );
+        assert_eq!(
+            io.trace[solver + 1],
+            "capture",
+            "Solver is followed immediately by a fresh capture"
+        );
         assert_eq!(latest.unwrap().prediction, on.prediction);
     }
 }
@@ -1806,8 +2539,19 @@ fn native_red_back_halo_plays_one_source_without_solver_refresh() {
     let on = native_hint_phase(97);
     let mut io = fake_frames(vec![copy_observation(&on), copy_observation(&on)]);
     io.native_terminal_analysis = true;
-    let (result, attempted, latest) = exercise(&mut io, PredictedAction::NoHighlight, 1, &AtomicBool::new(false));
-    assert_eq!(result, Ok(RunOutcome::Completed { verified: 0, halo: 1 }));
+    let (result, attempted, latest) = exercise(
+        &mut io,
+        PredictedAction::NoHighlight,
+        1,
+        &AtomicBool::new(false),
+    );
+    assert_eq!(
+        result,
+        Ok(RunOutcome::Completed {
+            verified: 0,
+            halo: 1
+        })
+    );
     assert!(attempted && io.frames.is_empty());
     assert_eq!(io.inputs, [on.prediction]);
     assert_eq!(io.trace, ["capture", "probe", "input", "wait", "capture"]);
@@ -1824,36 +2568,51 @@ fn native_red_back_no_halo_stops_after_one_bounded_solver_refresh() {
 
 
     for limit in [0, 1] {
-        let frames = (0..2 * (REOBSERVATION_LIMIT + 1)).map(|_| copy_observation(&off)).collect();
+        let frames = (0..2 * (REOBSERVATION_LIMIT + 1))
+            .map(|_| copy_observation(&off))
+            .collect();
         let mut io = fake_frames(frames);
         io.native_terminal_analysis = true;
-        let (result, attempted, latest) = exercise(&mut io, off.prediction, limit, &AtomicBool::new(false));
+        let (result, attempted, latest) =
+            exercise(&mut io, off.prediction, limit, &AtomicBool::new(false));
         assert!(result.is_err() && attempted && io.frames.is_empty());
         assert!(io.inputs.is_empty() && io.terminal_inputs.is_empty());
-        assert_eq!(io.trace.iter().filter(|entry| **entry == "solver").count(), 1);
-        assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), 2 * (REOBSERVATION_LIMIT + 1));
+        assert_eq!(
+            io.trace.iter().filter(|entry| **entry == "solver").count(),
+            1
+        );
+        assert_eq!(
+            io.trace.iter().filter(|entry| **entry == "capture").count(),
+            2 * (REOBSERVATION_LIMIT + 1)
+        );
         assert_eq!(latest.unwrap().prediction, PredictedAction::NoHighlight);
     }
 }
-
-
 
 
 /// Assemble native terminal artwork from separate original fixtures. This
 /// deterministic composition is not Charlie's unsaved live restart sequence.
 /// K77 supplies the newly dealt Solver-off board only after acknowledged Play.
 fn native_restart_to_solver_off_deal() -> (PredictedAction, Vec<FrameObservation>) {
-    let frames: Vec<_> = [25, 26, 26, 67, 67, 28, 29, 77].into_iter().map(native_hint_phase).collect();
+    let frames: Vec<_> = [25, 26, 26, 67, 67, 28, 29, 77]
+        .into_iter()
+        .map(native_hint_phase)
+        .collect();
     let approved = frames[0].prediction;
-    assert_eq!(approved, PredictedAction::Action(klondike::canonical_action(KlondikeTarget::Solve).unwrap()));
-    assert_eq!(frames.last().unwrap().prediction, PredictedAction::NoHighlight);
-    assert_eq!(klondike::terminal::classify_terminal(&frames.last().unwrap().frame).unwrap(),
-        Some(klondike::terminal::TerminalStage::SolverReady));
+    assert_eq!(
+        approved,
+        PredictedAction::Action(klondike::canonical_action(KlondikeTarget::Solve).unwrap())
+    );
+    assert_eq!(
+        frames.last().unwrap().prediction,
+        PredictedAction::NoHighlight
+    );
+    assert_eq!(
+        klondike::terminal::classify_terminal(&frames.last().unwrap().frame).unwrap(),
+        Some(klondike::terminal::TerminalStage::SolverReady)
+    );
     (approved, frames)
 }
-
-
-
 
 
 /// Manual source phases are distinct valid recommendations but not a proved transfer.
@@ -1864,12 +2623,28 @@ fn native_same_card_phase_continues_only_from_each_fresh_canonical_halo() {
 
 
     for (before, after) in [(&thin, &thick), (&thick, &thin)] {
-        let PredictedAction::Action(planned) = before.prediction else { panic!("native source must be actionable"); };
+        let PredictedAction::Action(planned) = before.prediction else {
+            panic!("native source must be actionable");
+        };
         let evidence = klondike::inspect_effect(&before.frame, &after.frame, planned).unwrap();
-        assert!(!evidence.verified && !evidence.source_replaced, "phase is not transfer proof: {evidence}");
-        let mut io = fake_frames(vec![copy_observation(before), copy_observation(after), copy_observation(after)]);
-        let (result, attempted, latest) = exercise(&mut io, before.prediction, 2, &AtomicBool::new(false));
-        assert_eq!(result, Ok(RunOutcome::Completed { verified: 0, halo: 2 }));
+        assert!(
+            !evidence.verified && !evidence.source_replaced,
+            "phase is not transfer proof: {evidence}"
+        );
+        let mut io = fake_frames(vec![
+            copy_observation(before),
+            copy_observation(after),
+            copy_observation(after),
+        ]);
+        let (result, attempted, latest) =
+            exercise(&mut io, before.prediction, 2, &AtomicBool::new(false));
+        assert_eq!(
+            result,
+            Ok(RunOutcome::Completed {
+                verified: 0,
+                halo: 2
+            })
+        );
         assert!(attempted);
         assert_eq!(io.inputs, [before.prediction, after.prediction]);
         assert_eq!(latest.unwrap().frame.pixels, after.frame.pixels);
@@ -1884,17 +2659,44 @@ fn native_same_card_phase_continues_only_from_each_fresh_canonical_halo() {
 fn native_sparse_suit_return_does_not_gate_the_next_halo_on_old_print_matching() {
     let before = native_hint_phase(78);
     let after = native_hint_phase(79);
-    let PredictedAction::Action(planned) = before.prediction else { panic!("native SUIT source must be actionable"); };
-    assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Foundation { column: 2 }));
-    assert_eq!(after.prediction, canonical(KlondikeTarget::Waste { offset: 2 }));
+    let PredictedAction::Action(planned) = before.prediction else {
+        panic!("native SUIT source must be actionable");
+    };
+    assert_eq!(
+        planned.target,
+        ActionTarget::Klondike(KlondikeTarget::Foundation { column: 2 })
+    );
+    assert_eq!(
+        after.prediction,
+        canonical(KlondikeTarget::Waste { offset: 2 })
+    );
     let evidence = klondike::inspect_effect(&before.frame, &after.frame, planned).unwrap();
-    assert!(!evidence.verified, "old proof remains diagnostic only: {evidence}");
-    let mut io = fake_frames(vec![copy_observation(&before), copy_observation(&after), copy_observation(&after)]);
-    let (result, attempted, latest) = exercise(&mut io, before.prediction, 2, &AtomicBool::new(false));
-    assert_eq!(result, Ok(RunOutcome::Completed { verified: 0, halo: 2 }));
+    assert!(
+        !evidence.verified,
+        "old proof remains diagnostic only: {evidence}"
+    );
+    let mut io = fake_frames(vec![
+        copy_observation(&before),
+        copy_observation(&after),
+        copy_observation(&after),
+    ]);
+    let (result, attempted, latest) =
+        exercise(&mut io, before.prediction, 2, &AtomicBool::new(false));
+    assert_eq!(
+        result,
+        Ok(RunOutcome::Completed {
+            verified: 0,
+            halo: 2
+        })
+    );
     assert!(attempted);
     assert_eq!(io.inputs, [before.prediction, after.prediction]);
-    assert_eq!(io.trace, ["capture", "probe", "input", "wait", "capture", "probe", "input", "wait", "capture"]);
+    assert_eq!(
+        io.trace,
+        [
+            "capture", "probe", "input", "wait", "capture", "probe", "input", "wait", "capture"
+        ]
+    );
     assert_eq!(latest.unwrap().frame.pixels, after.frame.pixels);
     assert_eq!(io.completion_checks, 0);
     assert!(!io.trace.contains(&"solver") && io.terminal_inputs.is_empty());
@@ -1909,8 +2711,18 @@ fn native_long_column_seven_source_continues_from_acknowledged_waste_without_eff
     let before = native_hint_phase(81);
     let after = native_hint_phase(80);
     assert!(before.gameplay_scene && after.gameplay_scene);
-    assert_eq!(before.prediction, canonical(KlondikeTarget::Waste { offset: 1 }));
-    assert_eq!(after.prediction, canonical(KlondikeTarget::Tableau { column: 7, top: 372, bottom: 947 }));
+    assert_eq!(
+        before.prediction,
+        canonical(KlondikeTarget::Waste { offset: 1 })
+    );
+    assert_eq!(
+        after.prediction,
+        canonical(KlondikeTarget::Tableau {
+            column: 7,
+            top: 372,
+            bottom: 947
+        })
+    );
 
 
     for limit in [1, 2] {
@@ -1932,22 +2744,48 @@ fn native_long_column_seven_source_continues_from_acknowledged_waste_without_eff
         let mut latest = None;
         let mut attempted = false;
         let result = drive_run(
-            &mut io, before.prediction, StepRunSettings::new(AnimationSettleDelays::default(), limit),
-            &sink, &AtomicBool::new(false), &mut latest, &mut attempted,
+            &mut io,
+            before.prediction,
+            StepRunSettings::new(AnimationSettleDelays::default(), limit),
+            &sink,
+            &AtomicBool::new(false),
+            &mut latest,
+            &mut attempted,
         );
-        assert_eq!(result, Ok(RunOutcome::Completed { verified: 0, halo: limit }));
+        assert_eq!(
+            result,
+            Ok(RunOutcome::Completed {
+                verified: 0,
+                halo: limit
+            })
+        );
         assert!(attempted);
         assert_eq!(io.inputs, expected_inputs);
-        assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), limit + 1);
-        assert_eq!(io.trace.iter().filter(|entry| **entry == "probe").count(), limit);
-        assert_eq!(io.trace.iter().filter(|entry| **entry == "input").count(), limit);
-        assert_eq!(io.trace.iter().filter(|entry| **entry == "wait").count(), limit);
+        assert_eq!(
+            io.trace.iter().filter(|entry| **entry == "capture").count(),
+            limit + 1
+        );
+        assert_eq!(
+            io.trace.iter().filter(|entry| **entry == "probe").count(),
+            limit
+        );
+        assert_eq!(
+            io.trace.iter().filter(|entry| **entry == "input").count(),
+            limit
+        );
+        assert_eq!(
+            io.trace.iter().filter(|entry| **entry == "wait").count(),
+            limit
+        );
         assert!(io.frames.is_empty());
         assert_eq!(latest.unwrap().frame.pixels, after.frame.pixels);
         assert_eq!(io.completion_checks, 0);
         assert!(!io.trace.contains(&"solver") && io.terminal_inputs.is_empty());
-        let accepted: Vec<_> = receiver.try_iter().map(|notification| notification.event)
-            .filter(|event| matches!(event, WorkerEvent::ActionCompleted { .. })).collect();
+        let accepted: Vec<_> = receiver
+            .try_iter()
+            .map(|notification| notification.event)
+            .filter(|event| matches!(event, WorkerEvent::ActionCompleted { .. }))
+            .collect();
         assert_eq!(accepted.len(), limit);
 
 
@@ -1968,11 +2806,40 @@ fn native_long_column_seven_source_continues_from_acknowledged_waste_without_eff
 #[test]
 fn native_column_five_sources_continue_with_exact_finite_action_budgets() {
     let cases = [
-        (83, 82, KlondikeTarget::Waste { offset: 2 }, KlondikeTarget::Tableau { column: 5, top: 407, bottom: 947 }),
-        (85, 84, KlondikeTarget::Tableau { column: 2, top: 336, bottom: 527 },
-            KlondikeTarget::Tableau { column: 5, top: 389, bottom: 947 }),
-        (88, 87, KlondikeTarget::Waste { offset: 0 },
-            KlondikeTarget::Tableau { column: 5, top: 610, bottom: 909 }),
+        (
+            83,
+            82,
+            KlondikeTarget::Waste { offset: 2 },
+            KlondikeTarget::Tableau {
+                column: 5,
+                top: 407,
+                bottom: 947,
+            },
+        ),
+        (
+            85,
+            84,
+            KlondikeTarget::Tableau {
+                column: 2,
+                top: 336,
+                bottom: 527,
+            },
+            KlondikeTarget::Tableau {
+                column: 5,
+                top: 389,
+                bottom: 947,
+            },
+        ),
+        (
+            88,
+            87,
+            KlondikeTarget::Waste { offset: 0 },
+            KlondikeTarget::Tableau {
+                column: 5,
+                top: 610,
+                bottom: 909,
+            },
+        ),
     ];
 
 
@@ -1994,12 +2861,25 @@ fn native_column_five_sources_continue_with_exact_finite_action_budgets() {
                 expected_inputs.push(after.prediction);
             }
             let mut io = fake_frames(frames);
-            let (result, attempted, latest) = exercise(&mut io, before.prediction, limit, &AtomicBool::new(false));
-            assert_eq!(result, Ok(RunOutcome::Completed { verified: 0, halo: limit }));
+            let (result, attempted, latest) =
+                exercise(&mut io, before.prediction, limit, &AtomicBool::new(false));
+            assert_eq!(
+                result,
+                Ok(RunOutcome::Completed {
+                    verified: 0,
+                    halo: limit
+                })
+            );
             assert!(attempted);
             assert_eq!(io.inputs, expected_inputs);
-            assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), limit + 1);
-            assert_eq!(io.trace.iter().filter(|entry| **entry == "probe").count(), limit);
+            assert_eq!(
+                io.trace.iter().filter(|entry| **entry == "capture").count(),
+                limit + 1
+            );
+            assert_eq!(
+                io.trace.iter().filter(|entry| **entry == "probe").count(),
+                limit
+            );
             assert_eq!(io.waits.len(), limit);
             assert!(io.frames.is_empty());
             assert_eq!(latest.unwrap().frame.pixels, after.frame.pixels);
@@ -2026,7 +2906,12 @@ fn native_sparse_suit_return_preserves_stop_and_uncertain_input_guards() {
     assert_eq!(latest.unwrap().frame.pixels, after.frame.pixels);
     let mut uncertain = fake_frames(vec![copy_observation(&before), after]);
     uncertain.fail_input = true;
-    let (result, attempted, _) = exercise(&mut uncertain, before.prediction, 0, &AtomicBool::new(false));
+    let (result, attempted, _) = exercise(
+        &mut uncertain,
+        before.prediction,
+        0,
+        &AtomicBool::new(false),
+    );
     assert!(result.unwrap_err().contains("uncertain"));
     assert!(attempted);
     assert_eq!(uncertain.inputs, [before.prediction]);
@@ -2041,13 +2926,21 @@ fn native_displaced_hint_copy_stays_input_free_after_one_solver_refresh() {
     let duplicate = native_hint_phase(76);
     assert!(duplicate.gameplay_scene);
     assert_eq!(duplicate.prediction, PredictedAction::NoHighlight);
-    let mut io = fake_frames((0..2 * (REOBSERVATION_LIMIT + 1)).map(|_| copy_observation(&duplicate)).collect());
+    let mut io = fake_frames(
+        (0..2 * (REOBSERVATION_LIMIT + 1))
+            .map(|_| copy_observation(&duplicate))
+            .collect(),
+    );
     io.native_terminal_analysis = true;
-    let (result, attempted, latest) = exercise(&mut io, duplicate.prediction, 0, &AtomicBool::new(false));
+    let (result, attempted, latest) =
+        exercise(&mut io, duplicate.prediction, 0, &AtomicBool::new(false));
     assert!(result.is_err());
     assert!(attempted);
     assert!(io.inputs.is_empty() && io.terminal_inputs.is_empty());
-    assert_eq!(io.trace.iter().filter(|entry| **entry == "solver").count(), 1);
+    assert_eq!(
+        io.trace.iter().filter(|entry| **entry == "solver").count(),
+        1
+    );
     assert!(io.frames.is_empty());
     assert_eq!(latest.unwrap().frame.pixels, duplicate.frame.pixels);
 }
@@ -2085,14 +2978,29 @@ fn initial_pending_solve_uses_fresh_settled_control_without_stale_preview_approv
     let (pending, settled) = pending_solve_pair();
     let approved = pending.prediction;
     let solve = settled.prediction;
-    let mut io = fake_frames(vec![pending, settled,
-        observation(PredictedAction::NoHighlight, false), observation(PredictedAction::NoHighlight, false)]);
+    let mut io = fake_frames(vec![
+        pending,
+        settled,
+        observation(PredictedAction::NoHighlight, false),
+        observation(PredictedAction::NoHighlight, false),
+    ]);
     io.completion_candidates = VecDeque::from([true, true]);
     let (result, attempted, _) = exercise(&mut io, approved, 1, &AtomicBool::new(false));
-    assert_eq!(result, Ok(RunOutcome::GameWon { previous_verified: 0, previous_halo: 0 }));
+    assert_eq!(
+        result,
+        Ok(RunOutcome::GameWon {
+            previous_verified: 0,
+            previous_halo: 0
+        })
+    );
     assert!(attempted);
     assert_eq!(io.inputs, [solve]);
-    assert_eq!(io.trace, ["capture", "wait", "capture", "probe", "input", "wait", "capture", "wait", "capture"]);
+    assert_eq!(
+        io.trace,
+        [
+            "capture", "wait", "capture", "probe", "input", "wait", "capture", "wait", "capture"
+        ]
+    );
     assert!(!io.trace.contains(&"solver"));
 }
 
@@ -2100,8 +3008,13 @@ fn initial_pending_solve_uses_fresh_settled_control_without_stale_preview_approv
 /// Changing source coordinates does not authorise another mode's stale preview.
 #[test]
 fn advisory_and_fresh_predictions_keep_the_selected_mode_boundary() {
-    let PredictedAction::Action(mut foreign) = draw() else { unreachable!(); };
-    foreign.target = ActionTarget::Bottom { index: 0, label: "DRAW" };
+    let PredictedAction::Action(mut foreign) = draw() else {
+        unreachable!();
+    };
+    foreign.target = ActionTarget::Bottom {
+        index: 0,
+        label: "DRAW",
+    };
     let foreign = PredictedAction::Action(foreign);
     let mut initial = fake(&[(draw(), true)]);
     let (result, attempted, latest) = exercise(&mut initial, foreign, 1, &AtomicBool::new(false));
@@ -2145,12 +3058,22 @@ fn ordinary_result_capture_late_stop_retains_pixels_and_never_replays_input() {
 fn native_hint_shadow_long_run_uses_fresh_targets_and_finite_budgets() {
     let before = native_hint_phase(90);
     let after = native_hint_phase(89);
-    assert_eq!(before.prediction, canonical(KlondikeTarget::Tableau {
-        column: 5, top: 337, bottom: 909,
-    }));
-    assert_eq!(after.prediction, canonical(KlondikeTarget::Tableau {
-        column: 4, top: 372, bottom: 947,
-    }));
+    assert_eq!(
+        before.prediction,
+        canonical(KlondikeTarget::Tableau {
+            column: 5,
+            top: 337,
+            bottom: 909,
+        })
+    );
+    assert_eq!(
+        after.prediction,
+        canonical(KlondikeTarget::Tableau {
+            column: 4,
+            top: 372,
+            bottom: 947,
+        })
+    );
 
 
     for limit in [1, 2] {
@@ -2163,12 +3086,25 @@ fn native_hint_shadow_long_run_uses_fresh_targets_and_finite_budgets() {
             expected_inputs.push(after.prediction);
         }
         let mut io = fake_frames(frames);
-        let (result, attempted, latest) = exercise(&mut io, before.prediction, limit, &AtomicBool::new(false));
-        assert_eq!(result, Ok(RunOutcome::Completed { verified: 0, halo: limit }));
+        let (result, attempted, latest) =
+            exercise(&mut io, before.prediction, limit, &AtomicBool::new(false));
+        assert_eq!(
+            result,
+            Ok(RunOutcome::Completed {
+                verified: 0,
+                halo: limit
+            })
+        );
         assert!(attempted);
         assert_eq!(io.inputs, expected_inputs);
-        assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), limit + 1);
-        assert_eq!(io.trace.iter().filter(|entry| **entry == "probe").count(), limit);
+        assert_eq!(
+            io.trace.iter().filter(|entry| **entry == "capture").count(),
+            limit + 1
+        );
+        assert_eq!(
+            io.trace.iter().filter(|entry| **entry == "probe").count(),
+            limit
+        );
         assert_eq!(io.waits.len(), limit);
         assert!(io.frames.is_empty());
         assert_eq!(latest.unwrap().frame.pixels, after.frame.pixels);
@@ -2185,18 +3121,34 @@ fn native_hint_shadow_long_run_uses_fresh_targets_and_finite_budgets() {
 fn native_toolbar_clipped_five_card_source_sends_one_step_once_click() {
     let before = native_hint_phase(95);
     let expected = canonical(KlondikeTarget::Tableau {
-        column: 6, top: 571, bottom: 947,
+        column: 6,
+        top: 571,
+        bottom: 947,
     });
     assert!(before.gameplay_scene);
     assert_eq!(before.prediction, expected);
-    let PredictedAction::Action(action) = expected else { panic!("native source must be actionable"); };
-    assert_eq!(action.operation(), InputOperation::Click(PixelPoint::new(1296, 611)));
+    let PredictedAction::Action(action) = expected else {
+        panic!("native source must be actionable");
+    };
+    assert_eq!(
+        action.operation(),
+        InputOperation::Click(PixelPoint::new(1296, 611))
+    );
     let mut io = fake_frames(vec![copy_observation(&before), copy_observation(&before)]);
     let delays = AnimationSettleDelays::default().with_klondike_millis(750, 250);
     let (result, attempted, latest) = exercise_with_settings(
-        &mut io, PredictedAction::NoHighlight, StepRunSettings::new(delays, 1), &AtomicBool::new(false),
+        &mut io,
+        PredictedAction::NoHighlight,
+        StepRunSettings::new(delays, 1),
+        &AtomicBool::new(false),
     );
-    assert_eq!(result, Ok(RunOutcome::Completed { verified: 0, halo: 1 }));
+    assert_eq!(
+        result,
+        Ok(RunOutcome::Completed {
+            verified: 0,
+            halo: 1
+        })
+    );
     assert!(attempted);
     assert_eq!(io.inputs, [expected]);
     assert_eq!(io.trace, ["capture", "probe", "input", "wait", "capture"]);
@@ -2213,13 +3165,35 @@ fn native_toolbar_clipped_five_card_source_sends_one_step_once_click() {
 fn bounded_control_retries_report_searches_recaptures_and_wall_time() {
     use klondike::terminal::TerminalStage;
     for (previous, expected, number, point, label) in [
-        (TerminalStage::ScoreCounting, TerminalStage::LevelUp, 91, PixelPoint::new(942, 804), "OK"),
-        (TerminalStage::LevelUp, TerminalStage::NewGame, 92, PixelPoint::new(863, 862), "New Game"),
-        (TerminalStage::NewGame, TerminalStage::Play, 93, PixelPoint::new(680, 861), "Play"),
+        (
+            TerminalStage::ScoreCounting,
+            TerminalStage::LevelUp,
+            91,
+            PixelPoint::new(942, 804),
+            "OK",
+        ),
+        (
+            TerminalStage::LevelUp,
+            TerminalStage::NewGame,
+            92,
+            PixelPoint::new(863, 862),
+            "New Game",
+        ),
+        (
+            TerminalStage::NewGame,
+            TerminalStage::Play,
+            93,
+            PixelPoint::new(680, 861),
+            "Play",
+        ),
     ] {
         for attempt in [2usize, 3] {
             let (events, receiver) = std::sync::mpsc::channel();
-            let sink = WorkerEventSink { events, latest_frame: super::super::LatestFrameSlot::default(), capture_context: std::sync::Mutex::new(None) };
+            let sink = WorkerEventSink {
+                events,
+                latest_frame: super::super::LatestFrameSlot::default(),
+                capture_context: std::sync::Mutex::new(None),
+            };
             let frames: Vec<_> = if expected == TerminalStage::LevelUp {
                 (1..attempt).map(|_| native_hint_phase(number)).collect()
             } else {
@@ -2229,28 +3203,59 @@ fn bounded_control_retries_report_searches_recaptures_and_wall_time() {
             };
             let mut io = fake_frames(frames);
             io.native_terminal_analysis = true;
-            let mut latest = Some(native_hint_phase(if expected == TerminalStage::LevelUp && attempt == 2 { number } else { 26 }));
-            let result = await_terminal_stage(&mut io, &mut latest,
-                StepRunSettings::new(AnimationSettleDelays::default(), 0), &sink,
-                &AtomicBool::new(false), Some(previous));
+            let mut latest = Some(native_hint_phase(
+                if expected == TerminalStage::LevelUp && attempt == 2 {
+                    number
+                } else {
+                    26
+                },
+            ));
+            let result = await_terminal_stage(
+                &mut io,
+                &mut latest,
+                StepRunSettings::new(AnimationSettleDelays::default(), 0),
+                &sink,
+                &AtomicBool::new(false),
+                Some(previous),
+            );
             assert_eq!(result.unwrap(), Some((expected, point)));
             let expected_trace: Vec<_> = (1..attempt).flat_map(|_| ["wait", "capture"]).collect();
             assert_eq!(io.trace, expected_trace);
-            let mut expected_waits = vec![AnimationSettleDelays::default().klondike_reobserve; attempt - 1];
+            let mut expected_waits =
+                vec![AnimationSettleDelays::default().klondike_reobserve; attempt - 1];
             if expected == TerminalStage::LevelUp {
                 *expected_waits.last_mut().unwrap() = Duration::from_millis(200);
             }
-            assert_eq!(io.waits, expected_waits, "only a current full-size OK glyph shortens confirmation");
+            assert_eq!(
+                io.waits, expected_waits,
+                "only a current full-size OK glyph shortens confirmation"
+            );
             assert!(io.frames.is_empty());
             assert!(io.terminal_inputs.is_empty() && io.inputs.is_empty());
-            let logs: Vec<_> = receiver.try_iter().filter_map(|notification| match notification.event {
-                WorkerEvent::Log(message) => Some(message), _ => None,
-            }).collect();
-            let summary = logs.iter().find(|line| line.contains(&format!("Klondike {label} search summary:"))).unwrap();
-            assert!(summary.contains(&format!("searches={attempt}; recaptures={}; second_grab=true;", attempt - 1)));
+            let logs: Vec<_> = receiver
+                .try_iter()
+                .filter_map(|notification| match notification.event {
+                    WorkerEvent::Log(message) => Some(message),
+                    _ => None,
+                })
+                .collect();
+            let summary = logs
+                .iter()
+                .find(|line| line.contains(&format!("Klondike {label} search summary:")))
+                .unwrap();
+            assert!(summary.contains(&format!(
+                "searches={attempt}; recaptures={}; second_grab=true;",
+                attempt - 1
+            )));
             assert!(summary.contains("scan_total_ms=") && summary.contains("wall_ms="));
             assert!(summary.ends_with("outcome=found."));
-            assert_eq!(logs.iter().filter(|line| line.contains(&format!("Klondike {label} search ")) && line.contains("inclusive;")).count(), attempt);
+            assert_eq!(
+                logs.iter()
+                    .filter(|line| line.contains(&format!("Klondike {label} search "))
+                        && line.contains("inclusive;"))
+                    .count(),
+                attempt
+            );
         }
     }
 }
@@ -2262,24 +3267,48 @@ fn bounded_control_retries_report_searches_recaptures_and_wall_time() {
 fn bounded_control_confirmed_win_entry_can_confirm_ok_on_third_search() {
     use klondike::terminal::TerminalStage;
     let (events, receiver) = std::sync::mpsc::channel();
-    let sink = WorkerEventSink { events, latest_frame: super::super::LatestFrameSlot::default(), capture_context: std::sync::Mutex::new(None) };
+    let sink = WorkerEventSink {
+        events,
+        latest_frame: super::super::LatestFrameSlot::default(),
+        capture_context: std::sync::Mutex::new(None),
+    };
     let mut unsupported = observation(PredictedAction::NoHighlight, false);
     unsupported.frame.pixels.fill(255);
     let mut io = fake_frames(vec![native_hint_phase(91), native_hint_phase(91)]);
     io.native_terminal_analysis = true;
     let mut latest = Some(unsupported);
-    let result = await_terminal_stage(&mut io, &mut latest,
-        StepRunSettings::new(AnimationSettleDelays::default(), 0), &sink,
-        &AtomicBool::new(false), None);
-    assert_eq!(result.unwrap(), Some((TerminalStage::LevelUp, PixelPoint::new(942, 804))));
+    let result = await_terminal_stage(
+        &mut io,
+        &mut latest,
+        StepRunSettings::new(AnimationSettleDelays::default(), 0),
+        &sink,
+        &AtomicBool::new(false),
+        None,
+    );
+    assert_eq!(
+        result.unwrap(),
+        Some((TerminalStage::LevelUp, PixelPoint::new(942, 804)))
+    );
     assert_eq!(io.trace, ["wait", "capture", "wait", "capture"]);
-    assert_eq!(io.waits, [AnimationSettleDelays::default().klondike_reobserve,
-        Duration::from_millis(200)]);
+    assert_eq!(
+        io.waits,
+        [
+            AnimationSettleDelays::default().klondike_reobserve,
+            Duration::from_millis(200)
+        ]
+    );
     assert!(io.frames.is_empty() && io.terminal_inputs.is_empty() && io.inputs.is_empty());
-    let logs: Vec<_> = receiver.try_iter().filter_map(|notification| match notification.event {
-        WorkerEvent::Log(message) => Some(message), _ => None,
-    }).collect();
-    assert!(logs.iter().any(|line| line.contains("Klondike OK search summary: searches=3; recaptures=2; second_grab=true;") && line.ends_with("outcome=found.")));
+    let logs: Vec<_> = receiver
+        .try_iter()
+        .filter_map(|notification| match notification.event {
+            WorkerEvent::Log(message) => Some(message),
+            _ => None,
+        })
+        .collect();
+    assert!(logs.iter().any(|line| {
+        line.contains("Klondike OK search summary: searches=3; recaptures=2; second_grab=true;")
+            && line.ends_with("outcome=found.")
+    }));
 }
 
 
@@ -2289,19 +3318,46 @@ fn bounded_control_confirmed_win_entry_can_confirm_ok_on_third_search() {
 fn bounded_control_absent_ok_clears_fast_timing_then_reserves_one_final_witness() {
     use klondike::terminal::TerminalStage;
     let delays = AnimationSettleDelays::default().with_klondike_millis(750, 1_250);
-    let mut io = fake_frames(vec![native_hint_phase(26), native_hint_phase(91), native_hint_phase(91)]);
+    let mut io = fake_frames(vec![
+        native_hint_phase(26),
+        native_hint_phase(91),
+        native_hint_phase(91),
+    ]);
     io.native_terminal_analysis = true;
     let mut latest = Some(native_hint_phase(91));
-    let result = await_terminal_stage(&mut io, &mut latest,
-        StepRunSettings::new(delays, 0), &event_sink(),
-        &AtomicBool::new(false), Some(TerminalStage::ScoreCounting));
-    assert_eq!(result.unwrap(), Some((TerminalStage::LevelUp, PixelPoint::new(942, 804))));
-    assert_eq!(io.waits, [Duration::from_millis(200), delays.klondike_reobserve,
-        Duration::from_millis(200)]);
-    assert_eq!(io.trace, ["wait", "capture", "wait", "capture", "wait", "capture"]);
-    assert!(io.frames.is_empty(), "only the one final fresh confirmation was consumed");
+    let result = await_terminal_stage(
+        &mut io,
+        &mut latest,
+        StepRunSettings::new(delays, 0),
+        &event_sink(),
+        &AtomicBool::new(false),
+        Some(TerminalStage::ScoreCounting),
+    );
+    assert_eq!(
+        result.unwrap(),
+        Some((TerminalStage::LevelUp, PixelPoint::new(942, 804)))
+    );
+    assert_eq!(
+        io.waits,
+        [
+            Duration::from_millis(200),
+            delays.klondike_reobserve,
+            Duration::from_millis(200)
+        ]
+    );
+    assert_eq!(
+        io.trace,
+        ["wait", "capture", "wait", "capture", "wait", "capture"]
+    );
+    assert!(
+        io.frames.is_empty(),
+        "only the one final fresh confirmation was consumed"
+    );
     assert!(io.terminal_inputs.is_empty() && io.inputs.is_empty());
-    assert_eq!(latest.unwrap().frame.pixels, native_hint_phase(91).frame.pixels);
+    assert_eq!(
+        latest.unwrap().frame.pixels,
+        native_hint_phase(91).frame.pixels
+    );
 }
 
 
@@ -2328,22 +3384,45 @@ fn bounded_control_fast_confirmation_clicks_only_current_glyph_before_later_tint
     }
     let current = native_observation(current_frame);
     let tinted = native_observation(tinted_frame);
-    assert_eq!(crate::terminal_controls::control_point(&current.frame, KLONDIKE_CONTROLS.ok).unwrap(), PixelPoint::new(943, 804));
-    assert_eq!(crate::terminal_controls::control_point(&tinted.frame, KLONDIKE_CONTROLS.ok).unwrap(), PixelPoint::new(0, 0));
+    assert_eq!(
+        crate::terminal_controls::control_point(&current.frame, KLONDIKE_CONTROLS.ok).unwrap(),
+        PixelPoint::new(943, 804)
+    );
+    assert_eq!(
+        crate::terminal_controls::control_point(&tinted.frame, KLONDIKE_CONTROLS.ok).unwrap(),
+        PixelPoint::new(0, 0)
+    );
     let tinted_pixels = tinted.frame.pixels.clone();
-    let mut io = fake_frames(vec![current, copy_observation(&tinted), copy_observation(&tinted), tinted]);
+    let mut io = fake_frames(vec![
+        current,
+        copy_observation(&tinted),
+        copy_observation(&tinted),
+        tinted,
+    ]);
     io.native_terminal_analysis = true;
     let mut latest = Some(first);
     let mut input_attempted = false;
-    let result = resume_after_win(&mut io, &mut latest,
-        StepRunSettings::new(AnimationSettleDelays::default(), 0), &event_sink(),
-        &AtomicBool::new(false), &mut input_attempted);
-    assert!(result.unwrap_err().contains("terminal advancement exhausted 2"));
+    let result = resume_after_win(
+        &mut io,
+        &mut latest,
+        StepRunSettings::new(AnimationSettleDelays::default(), 0),
+        &event_sink(),
+        &AtomicBool::new(false),
+        &mut input_attempted,
+    );
+    assert!(
+        result
+            .unwrap_err()
+            .contains("terminal advancement exhausted 2")
+    );
     assert!(input_attempted);
     assert_eq!(io.waits[0], Duration::from_millis(200));
     assert_eq!(io.terminal_inputs, [TerminalStage::LevelUp]);
     assert_eq!(io.terminal_points, [PixelPoint::new(943, 804)]);
-    assert_eq!(io.trace.iter().filter(|entry| **entry == "probe").count(), 1);
+    assert_eq!(
+        io.trace.iter().filter(|entry| **entry == "probe").count(),
+        1
+    );
     assert!(io.frames.is_empty() && io.inputs.is_empty());
     assert_eq!(latest.unwrap().frame.pixels, tinted_pixels);
 }
@@ -2360,16 +3439,37 @@ fn bounded_control_first_clean_ok_on_third_observation_confirms_on_fourth() {
         unknown.frame.pixels.fill(255);
         let current = final_ok_glyph(Some(PixelPoint::new(943, 804)));
         let current_pixels = current.frame.pixels.clone();
-        let mut io = fake_frames(vec![copy_observation(&unknown), native_hint_phase(91), current]);
+        let mut io = fake_frames(vec![
+            copy_observation(&unknown),
+            native_hint_phase(91),
+            current,
+        ]);
         io.native_terminal_analysis = true;
         let mut latest = Some(unknown);
-        let result = await_terminal_stage(&mut io, &mut latest,
-            StepRunSettings::new(AnimationSettleDelays::default(), 0), &event_sink(),
-            &AtomicBool::new(false), previous);
-        assert_eq!(result.unwrap(), Some((TerminalStage::LevelUp, PixelPoint::new(943, 804))));
-        assert_eq!(io.trace, ["wait", "capture", "wait", "capture", "wait", "capture"]);
-        assert_eq!(io.waits, [AnimationSettleDelays::default().klondike_reobserve,
-            AnimationSettleDelays::default().klondike_reobserve, Duration::from_millis(200)]);
+        let result = await_terminal_stage(
+            &mut io,
+            &mut latest,
+            StepRunSettings::new(AnimationSettleDelays::default(), 0),
+            &event_sink(),
+            &AtomicBool::new(false),
+            previous,
+        );
+        assert_eq!(
+            result.unwrap(),
+            Some((TerminalStage::LevelUp, PixelPoint::new(943, 804)))
+        );
+        assert_eq!(
+            io.trace,
+            ["wait", "capture", "wait", "capture", "wait", "capture"]
+        );
+        assert_eq!(
+            io.waits,
+            [
+                AnimationSettleDelays::default().klondike_reobserve,
+                AnimationSettleDelays::default().klondike_reobserve,
+                Duration::from_millis(200)
+            ]
+        );
         assert!(io.frames.is_empty() && io.terminal_inputs.is_empty() && io.inputs.is_empty());
         assert_eq!(latest.unwrap().frame.pixels, current_pixels);
     }
@@ -2477,19 +3577,38 @@ fn bounded_control_final_confirmation_failure_cannot_obtain_a_fifth_frame() {
                     row[..8].fill(255);
                 }
                 native_observation(frame)
-            } else { final_ok_glyph(None) };
+            } else {
+                final_ok_glyph(None)
+            };
             let fourth_pixels = fourth.frame.pixels.clone();
-            let mut io = fake_frames(vec![copy_observation(&unknown), native_hint_phase(91),
-                fourth, native_hint_phase(91)]);
+            let mut io = fake_frames(vec![
+                copy_observation(&unknown),
+                native_hint_phase(91),
+                fourth,
+                native_hint_phase(91),
+            ]);
             io.native_terminal_analysis = true;
             let mut latest = Some(unknown);
-            let result = await_terminal_stage(&mut io, &mut latest,
-                StepRunSettings::new(AnimationSettleDelays::default(), 0), &event_sink(),
-                &AtomicBool::new(false), previous);
-            assert!(result.unwrap_err().contains("terminal advancement exhausted 3"));
+            let result = await_terminal_stage(
+                &mut io,
+                &mut latest,
+                StepRunSettings::new(AnimationSettleDelays::default(), 0),
+                &event_sink(),
+                &AtomicBool::new(false),
+                previous,
+            );
+            assert!(
+                result
+                    .unwrap_err()
+                    .contains("terminal advancement exhausted 3")
+            );
             assert_eq!(io.waits.len(), 3);
             assert_eq!(io.waits[2], Duration::from_millis(200));
-            assert_eq!(io.frames.len(), 1, "a fifth clean frame receives no capture authority");
+            assert_eq!(
+                io.frames.len(),
+                1,
+                "a fifth clean frame receives no capture authority"
+            );
             assert!(io.terminal_inputs.is_empty() && io.inputs.is_empty());
             assert_eq!(latest.unwrap().frame.pixels, fourth_pixels);
         }
@@ -2506,20 +3625,33 @@ fn bounded_control_stop_during_final_ok_confirmation_never_acquires_or_clicks() 
         let stop = AtomicBool::new(false);
         let mut unknown = observation(PredictedAction::NoHighlight, false);
         unknown.frame.pixels.fill(255);
-        let mut io = fake_frames(vec![copy_observation(&unknown), native_hint_phase(91), native_hint_phase(91)]);
+        let mut io = fake_frames(vec![
+            copy_observation(&unknown),
+            native_hint_phase(91),
+            native_hint_phase(91),
+        ]);
         io.native_terminal_analysis = true;
         io.stop_on_wait = Some(&stop);
         io.waits_before_stop = 2;
         let mut latest = Some(unknown);
-        let result = await_terminal_stage(&mut io, &mut latest,
-            StepRunSettings::new(AnimationSettleDelays::default(), 0), &event_sink(), &stop, previous);
+        let result = await_terminal_stage(
+            &mut io,
+            &mut latest,
+            StepRunSettings::new(AnimationSettleDelays::default(), 0),
+            &event_sink(),
+            &stop,
+            previous,
+        );
         assert!(result.unwrap_err().contains("STOP"));
         assert_eq!(io.waits.len(), 3);
         assert_eq!(io.waits[2], Duration::from_millis(200));
         assert_eq!(io.trace, ["wait", "capture", "wait", "capture", "wait"]);
         assert_eq!(io.frames.len(), 1);
         assert!(io.terminal_inputs.is_empty() && io.inputs.is_empty());
-        assert_eq!(latest.unwrap().frame.pixels, native_hint_phase(91).frame.pixels);
+        assert_eq!(
+            latest.unwrap().frame.pixels,
+            native_hint_phase(91).frame.pixels
+        );
     }
 }
 
@@ -2529,40 +3661,85 @@ fn bounded_control_stop_during_final_ok_confirmation_never_acquires_or_clicks() 
 /// three searches and two recaptures; only OK may inspect the fourth frame.
 #[test]
 fn bounded_control_reserved_ok_frame_cannot_authorise_another_terminal_stage() {
-    assert_eq!(klondike::terminal::classify_terminal(&native_hint_phase(91).frame).unwrap(), None,
-        "K91 must exercise the entry fallback rather than a classified Level Up");
+    assert_eq!(
+        klondike::terminal::classify_terminal(&native_hint_phase(91).frame).unwrap(),
+        None,
+        "K91 must exercise the entry fallback rather than a classified Level Up"
+    );
     for fourth_number in [26, 92] {
         let (events, receiver) = std::sync::mpsc::channel();
-        let sink = WorkerEventSink { events, latest_frame: super::super::LatestFrameSlot::default(), capture_context: std::sync::Mutex::new(None) };
+        let sink = WorkerEventSink {
+            events,
+            latest_frame: super::super::LatestFrameSlot::default(),
+            capture_context: std::sync::Mutex::new(None),
+        };
         let mut unknown = observation(PredictedAction::NoHighlight, false);
         unknown.frame.pixels.fill(255);
-        let mut io = fake_frames(vec![copy_observation(&unknown), native_hint_phase(91),
-            native_hint_phase(fourth_number), native_hint_phase(91)]);
+        let mut io = fake_frames(vec![
+            copy_observation(&unknown),
+            native_hint_phase(91),
+            native_hint_phase(fourth_number),
+            native_hint_phase(91),
+        ]);
         io.native_terminal_analysis = true;
         let mut latest = Some(unknown);
-        let result = await_terminal_stage(&mut io, &mut latest,
-            StepRunSettings::new(AnimationSettleDelays::default(), 0), &sink,
-            &AtomicBool::new(false), None);
-        assert!(result.unwrap_err().contains("terminal advancement exhausted 3"));
+        let result = await_terminal_stage(
+            &mut io,
+            &mut latest,
+            StepRunSettings::new(AnimationSettleDelays::default(), 0),
+            &sink,
+            &AtomicBool::new(false),
+            None,
+        );
+        assert!(
+            result
+                .unwrap_err()
+                .contains("terminal advancement exhausted 3")
+        );
         assert_eq!(io.frames.len(), 1);
         assert!(io.terminal_inputs.is_empty() && io.inputs.is_empty());
-        let logs: Vec<_> = receiver.try_iter().filter_map(|notification| match notification.event {
-            WorkerEvent::Log(message) => Some(message), _ => None,
-        }).collect();
-        let final_ok_search = logs.iter().position(|line| line.starts_with("Klondike OK search 4:"))
+        let logs: Vec<_> = receiver
+            .try_iter()
+            .filter_map(|notification| match notification.event {
+                WorkerEvent::Log(message) => Some(message),
+                _ => None,
+            })
+            .collect();
+        let final_ok_search = logs
+            .iter()
+            .position(|line| line.starts_with("Klondike OK search 4:"))
             .unwrap_or_else(|| panic!("the reserved frame must search OK; logs={logs:#?}"));
-        let new_game_searches: Vec<_> = logs.iter().enumerate()
-            .filter(|(_, line)| line.starts_with("Klondike New Game search ")
-                && !line.starts_with("Klondike New Game search summary:"))
-            .map(|(index, _)| index).collect();
-        assert_eq!(new_game_searches.len(), 3,
-            "New Game may search only the three normal observations; logs={logs:#?}");
-        assert!(new_game_searches.iter().all(|index| *index < final_ok_search),
-            "the reserved fourth frame must never search New Game; logs={logs:#?}");
-        assert!(logs.iter().any(|line| line.contains("Klondike New Game search summary: searches=3; recaptures=2;")),
-            "New Game must retain its three-search, two-recapture budget; logs={logs:#?}");
-        assert!(logs.iter().any(|line| line.contains("Klondike OK search summary: searches=4; recaptures=3;")),
-            "only OK receives the reserved fourth observation; logs={logs:#?}");
+        let new_game_searches: Vec<_> = logs
+            .iter()
+            .enumerate()
+            .filter(|(_, line)| {
+                line.starts_with("Klondike New Game search ")
+                    && !line.starts_with("Klondike New Game search summary:")
+            })
+            .map(|(index, _)| index)
+            .collect();
+        assert_eq!(
+            new_game_searches.len(),
+            3,
+            "New Game may search only the three normal observations; logs={logs:#?}"
+        );
+        assert!(
+            new_game_searches
+                .iter()
+                .all(|index| *index < final_ok_search),
+            "the reserved fourth frame must never search New Game; logs={logs:#?}"
+        );
+        assert!(
+            logs.iter()
+                .any(|line| line
+                    .contains("Klondike New Game search summary: searches=3; recaptures=2;")),
+            "New Game must retain its three-search, two-recapture budget; logs={logs:#?}"
+        );
+        assert!(
+            logs.iter()
+                .any(|line| line.contains("Klondike OK search summary: searches=4; recaptures=3;")),
+            "only OK receives the reserved fourth observation; logs={logs:#?}"
+        );
     }
 }
 
@@ -2576,29 +3753,56 @@ fn bounded_control_fourth_ok_click_preserves_acknowledged_and_uncertain_input_li
         let mut unknown = observation(PredictedAction::NoHighlight, false);
         unknown.frame.pixels.fill(255);
         let tinted = final_ok_glyph(None);
-        let mut io = fake_frames(vec![copy_observation(&unknown), native_hint_phase(91),
+        let mut io = fake_frames(vec![
+            copy_observation(&unknown),
+            native_hint_phase(91),
             final_ok_glyph(Some(PixelPoint::new(943, 804))),
-            copy_observation(&tinted), copy_observation(&tinted), tinted]);
+            copy_observation(&tinted),
+            copy_observation(&tinted),
+            tinted,
+        ]);
         io.native_terminal_analysis = true;
         io.fail_terminal_stage = uncertain.then_some(TerminalStage::LevelUp);
         let mut latest = Some(unknown);
         let mut input_attempted = false;
-        let result = resume_after_win(&mut io, &mut latest,
-            StepRunSettings::new(AnimationSettleDelays::default(), 0), &event_sink(),
-            &AtomicBool::new(false), &mut input_attempted);
+        let result = resume_after_win(
+            &mut io,
+            &mut latest,
+            StepRunSettings::new(AnimationSettleDelays::default(), 0),
+            &event_sink(),
+            &AtomicBool::new(false),
+            &mut input_attempted,
+        );
         let error = result.unwrap_err();
         assert!(input_attempted);
         assert_eq!(io.terminal_inputs, [TerminalStage::LevelUp]);
         assert_eq!(io.terminal_points, [PixelPoint::new(943, 804)]);
-        let input_index = io.trace.iter().position(|entry| *entry == "terminal").unwrap();
-        assert_eq!(io.trace[..input_index].iter().filter(|entry| **entry == "capture").count(), 3);
+        let input_index = io
+            .trace
+            .iter()
+            .position(|entry| *entry == "terminal")
+            .unwrap();
+        assert_eq!(
+            io.trace[..input_index]
+                .iter()
+                .filter(|entry| **entry == "capture")
+                .count(),
+            3
+        );
         assert_eq!(io.waits[2], Duration::from_millis(200));
         assert!(io.inputs.is_empty());
         if uncertain {
             assert!(error.contains("uncertain terminal input"));
-            assert_eq!(io.frames.len(), 3, "uncertain OK permits no subsequent capture");
+            assert_eq!(
+                io.frames.len(),
+                3,
+                "uncertain OK permits no subsequent capture"
+            );
         } else {
-            assert!(error.contains("terminal advancement exhausted 2"), "New Game retains three observations");
+            assert!(
+                error.contains("terminal advancement exhausted 2"),
+                "New Game retains three observations"
+            );
             assert!(io.frames.is_empty());
         }
     }
@@ -2623,16 +3827,31 @@ fn bounded_control_visible_ok_panel_blocks_underlay_new_game_without_ok_match() 
         let offset = 862 * panel.frame.stride + x * 4;
         panel.frame.pixels[offset..offset + 3].copy_from_slice(&[0, 0, 0]);
     }
-    assert_eq!(crate::terminal_controls::control_point(&panel.frame, KLONDIKE_CONTROLS.ok).unwrap(), PixelPoint::new(0, 0));
-    assert_eq!(crate::terminal_controls::control_point(&panel.frame, KLONDIKE_CONTROLS.new_game).unwrap(), PixelPoint::new(863, 862));
+    assert_eq!(
+        crate::terminal_controls::control_point(&panel.frame, KLONDIKE_CONTROLS.ok).unwrap(),
+        PixelPoint::new(0, 0)
+    );
+    assert_eq!(
+        crate::terminal_controls::control_point(&panel.frame, KLONDIKE_CONTROLS.new_game).unwrap(),
+        PixelPoint::new(863, 862)
+    );
     let mut io = fake_frames(vec![copy_observation(&panel), copy_observation(&panel)]);
     io.native_terminal_analysis = true;
     let pixels = panel.frame.pixels.clone();
     let mut latest = Some(panel);
-    let result = await_terminal_stage(&mut io, &mut latest,
-        StepRunSettings::new(AnimationSettleDelays::default(), 0), &event_sink(),
-        &AtomicBool::new(false), None);
-    assert!(result.unwrap_err().contains("terminal advancement exhausted 2"));
+    let result = await_terminal_stage(
+        &mut io,
+        &mut latest,
+        StepRunSettings::new(AnimationSettleDelays::default(), 0),
+        &event_sink(),
+        &AtomicBool::new(false),
+        None,
+    );
+    assert!(
+        result
+            .unwrap_err()
+            .contains("terminal advancement exhausted 2")
+    );
     assert_eq!(io.trace, ["wait", "capture", "wait", "capture"]);
     assert!(io.frames.is_empty() && io.terminal_inputs.is_empty() && io.inputs.is_empty());
     assert_eq!(latest.unwrap().frame.pixels, pixels);
@@ -2648,27 +3867,66 @@ fn bounded_control_visible_ok_panel_blocks_underlay_new_game_without_ok_match() 
 fn bounded_control_native_entrance_waits_for_settled_ok_before_one_click() {
     use klondike::terminal::TerminalStage;
     let ready_frame = |bytes: &[u8]| native_observation(crate::capture::decode_png(bytes).unwrap());
-    let early = ready_frame(include_bytes!("../../../tests/fixtures/game-win-readiness/early.png"));
-    let fading = ready_frame(include_bytes!("../../../tests/fixtures/game-win-readiness/fading.png"));
-    let settled = ready_frame(include_bytes!("../../../tests/fixtures/game-win-readiness/settled.png"));
+    let early = ready_frame(include_bytes!(
+        "../../../tests/fixtures/game-win-readiness/early.png"
+    ));
+    let fading = ready_frame(include_bytes!(
+        "../../../tests/fixtures/game-win-readiness/fading.png"
+    ));
+    let settled = ready_frame(include_bytes!(
+        "../../../tests/fixtures/game-win-readiness/settled.png"
+    ));
     let settled_pixels = settled.frame.pixels.clone();
-    let mut io = fake_frames(vec![early, fading, copy_observation(&settled),
-        copy_observation(&settled), copy_observation(&settled), settled]);
+    let mut io = fake_frames(vec![
+        early,
+        fading,
+        copy_observation(&settled),
+        copy_observation(&settled),
+        copy_observation(&settled),
+        settled,
+    ]);
     io.native_terminal_analysis = true;
     let mut latest = Some(native_hint_phase(26));
     let mut input_attempted = false;
-    let result = resume_after_win(&mut io, &mut latest,
-        StepRunSettings::new(AnimationSettleDelays::default(), 0), &event_sink(),
-        &AtomicBool::new(false), &mut input_attempted);
-    assert!(result.unwrap_err().contains("terminal advancement exhausted 2"));
+    let result = resume_after_win(
+        &mut io,
+        &mut latest,
+        StepRunSettings::new(AnimationSettleDelays::default(), 0),
+        &event_sink(),
+        &AtomicBool::new(false),
+        &mut input_attempted,
+    );
+    assert!(
+        result
+            .unwrap_err()
+            .contains("terminal advancement exhausted 2")
+    );
     assert!(input_attempted);
-    assert_eq!(io.terminal_inputs, [TerminalStage::ScoreCounting, TerminalStage::LevelUp]);
+    assert_eq!(
+        io.terminal_inputs,
+        [TerminalStage::ScoreCounting, TerminalStage::LevelUp]
+    );
     assert_eq!(io.terminal_points[1], PixelPoint::new(941, 770));
-    let ok_index = io.trace.iter().enumerate().filter(|(_, entry)| **entry == "terminal")
-        .nth(1).unwrap().0;
-    assert_eq!(io.trace[..ok_index].iter().filter(|entry| **entry == "capture").count(), 3);
+    let ok_index = io
+        .trace
+        .iter()
+        .enumerate()
+        .filter(|(_, entry)| **entry == "terminal")
+        .nth(1)
+        .unwrap()
+        .0;
+    assert_eq!(
+        io.trace[..ok_index]
+            .iter()
+            .filter(|entry| **entry == "capture")
+            .count(),
+        3
+    );
     assert_eq!(io.waits[0], Duration::from_millis(1000));
-    assert_eq!(io.trace.iter().filter(|entry| **entry == "capture").count(), 6);
+    assert_eq!(
+        io.trace.iter().filter(|entry| **entry == "capture").count(),
+        6
+    );
     assert!(io.frames.is_empty() && io.inputs.is_empty());
     assert_eq!(latest.unwrap().frame.pixels, settled_pixels);
 }
@@ -2684,15 +3942,23 @@ fn bounded_control_stop_during_ok_confirmation_never_clicks() {
     io.native_terminal_analysis = true;
     io.stop_on_wait = Some(&stop);
     let mut latest = Some(native_hint_phase(91));
-    let result = await_terminal_stage(&mut io, &mut latest,
-        StepRunSettings::new(AnimationSettleDelays::default(), 0), &event_sink(),
-        &stop, Some(TerminalStage::ScoreCounting));
+    let result = await_terminal_stage(
+        &mut io,
+        &mut latest,
+        StepRunSettings::new(AnimationSettleDelays::default(), 0),
+        &event_sink(),
+        &stop,
+        Some(TerminalStage::ScoreCounting),
+    );
     assert!(result.unwrap_err().contains("STOP"));
     assert_eq!(io.trace, ["wait"]);
     assert_eq!(io.waits, [Duration::from_millis(200)]);
     assert_eq!(io.frames.len(), 1);
     assert!(io.terminal_inputs.is_empty() && io.inputs.is_empty());
-    assert_eq!(latest.unwrap().frame.pixels, native_hint_phase(91).frame.pixels);
+    assert_eq!(
+        latest.unwrap().frame.pixels,
+        native_hint_phase(91).frame.pixels
+    );
 }
 
 
@@ -2706,7 +3972,11 @@ fn bounded_control_third_miss_retains_latest_preview_and_summary() {
         (TerminalStage::NewGame, "Play"),
     ] {
         let (events, receiver) = std::sync::mpsc::channel();
-        let sink = WorkerEventSink { events, latest_frame: super::super::LatestFrameSlot::default(), capture_context: std::sync::Mutex::new(None) };
+        let sink = WorkerEventSink {
+            events,
+            latest_frame: super::super::LatestFrameSlot::default(),
+            capture_context: std::sync::Mutex::new(None),
+        };
         let mut second = native_hint_phase(26);
         second.frame.pixels[0] ^= 1;
         let mut third = native_hint_phase(26);
@@ -2715,10 +3985,19 @@ fn bounded_control_third_miss_retains_latest_preview_and_summary() {
         let mut io = fake_frames(vec![second, third]);
         io.native_terminal_analysis = true;
         let mut latest = Some(native_hint_phase(26));
-        let result = await_terminal_stage(&mut io, &mut latest,
-            StepRunSettings::new(AnimationSettleDelays::default(), 0), &sink,
-            &AtomicBool::new(false), Some(previous));
-        assert!(result.unwrap_err().contains("terminal advancement exhausted 2"));
+        let result = await_terminal_stage(
+            &mut io,
+            &mut latest,
+            StepRunSettings::new(AnimationSettleDelays::default(), 0),
+            &sink,
+            &AtomicBool::new(false),
+            Some(previous),
+        );
+        assert!(
+            result
+                .unwrap_err()
+                .contains("terminal advancement exhausted 2")
+        );
         assert_eq!(io.trace, ["wait", "capture", "wait", "capture"]);
         assert!(io.frames.is_empty());
         assert!(io.terminal_inputs.is_empty() && io.inputs.is_empty());
@@ -2726,10 +4005,16 @@ fn bounded_control_third_miss_retains_latest_preview_and_summary() {
         let preview = sink.latest_frame.take().unwrap();
         assert!(preview.diagnostic && preview.prediction.is_none());
         assert_eq!(preview.frame.pixels, third_pixels);
-        let logs: Vec<_> = receiver.try_iter().filter_map(|notification| match notification.event {
-            WorkerEvent::Log(message) => Some(message), _ => None,
-        }).collect();
-        assert!(logs.iter().any(|line| line.contains(&format!("Klondike {label} search summary: searches=3; recaptures=2; second_grab=true;")) && line.ends_with("outcome=missing.")));
+        let logs: Vec<_> = receiver
+            .try_iter()
+            .filter_map(|notification| match notification.event {
+                WorkerEvent::Log(message) => Some(message),
+                _ => None,
+            })
+            .collect();
+        assert!(logs.iter().any(|line| line.contains(&format!(
+            "Klondike {label} search summary: searches=3; recaptures=2; second_grab=true;"
+        )) && line.ends_with("outcome=missing.")));
     }
 }
 
@@ -2740,21 +4025,37 @@ fn bounded_control_cancelled_wait_reports_no_second_grab() {
     use klondike::terminal::TerminalStage;
     let stop = AtomicBool::new(false);
     let (events, receiver) = std::sync::mpsc::channel();
-    let sink = WorkerEventSink { events, latest_frame: super::super::LatestFrameSlot::default(), capture_context: std::sync::Mutex::new(None) };
+    let sink = WorkerEventSink {
+        events,
+        latest_frame: super::super::LatestFrameSlot::default(),
+        capture_context: std::sync::Mutex::new(None),
+    };
     let mut io = fake_frames(vec![native_hint_phase(91)]);
     io.native_terminal_analysis = true;
     io.stop_on_wait = Some(&stop);
     let mut latest = Some(native_hint_phase(26));
-    let result = await_terminal_stage(&mut io, &mut latest,
-        StepRunSettings::new(AnimationSettleDelays::default(), 0), &sink,
-        &stop, Some(TerminalStage::ScoreCounting));
+    let result = await_terminal_stage(
+        &mut io,
+        &mut latest,
+        StepRunSettings::new(AnimationSettleDelays::default(), 0),
+        &sink,
+        &stop,
+        Some(TerminalStage::ScoreCounting),
+    );
     assert!(result.unwrap_err().contains("STOP"));
     assert_eq!(io.trace, ["wait"]);
     assert!(io.terminal_inputs.is_empty());
-    let logs: Vec<_> = receiver.try_iter().filter_map(|notification| match notification.event {
-        WorkerEvent::Log(message) => Some(message), _ => None,
-    }).collect();
-    assert!(logs.iter().any(|line| line.contains("searches=1; recaptures=0; second_grab=false;") && line.ends_with("outcome=cancelled-or-wait-error.")));
+    let logs: Vec<_> = receiver
+        .try_iter()
+        .filter_map(|notification| match notification.event {
+            WorkerEvent::Log(message) => Some(message),
+            _ => None,
+        })
+        .collect();
+    assert!(logs.iter().any(
+        |line| line.contains("searches=1; recaptures=0; second_grab=false;")
+            && line.ends_with("outcome=cancelled-or-wait-error.")
+    ));
 }
 
 
@@ -2764,7 +4065,11 @@ fn bounded_control_cancelled_second_wait_reports_no_third_capture() {
     use klondike::terminal::TerminalStage;
     let stop = AtomicBool::new(false);
     let (events, receiver) = std::sync::mpsc::channel();
-    let sink = WorkerEventSink { events, latest_frame: super::super::LatestFrameSlot::default(), capture_context: std::sync::Mutex::new(None) };
+    let sink = WorkerEventSink {
+        events,
+        latest_frame: super::super::LatestFrameSlot::default(),
+        capture_context: std::sync::Mutex::new(None),
+    };
     let mut second = native_hint_phase(26);
     second.frame.pixels[0] ^= 1;
     let second_pixels = second.frame.pixels.clone();
@@ -2773,21 +4078,37 @@ fn bounded_control_cancelled_second_wait_reports_no_third_capture() {
     io.stop_on_wait = Some(&stop);
     io.waits_before_stop = 1;
     let mut latest = Some(native_hint_phase(26));
-    let result = await_terminal_stage(&mut io, &mut latest,
-        StepRunSettings::new(AnimationSettleDelays::default(), 0), &sink,
-        &stop, Some(TerminalStage::ScoreCounting));
+    let result = await_terminal_stage(
+        &mut io,
+        &mut latest,
+        StepRunSettings::new(AnimationSettleDelays::default(), 0),
+        &sink,
+        &stop,
+        Some(TerminalStage::ScoreCounting),
+    );
     assert!(result.unwrap_err().contains("STOP"));
     assert_eq!(io.trace, ["wait", "capture", "wait"]);
-    assert_eq!(io.frames.len(), 1, "the ready third frame must remain unread");
+    assert_eq!(
+        io.frames.len(),
+        1,
+        "the ready third frame must remain unread"
+    );
     assert!(io.terminal_inputs.is_empty() && io.inputs.is_empty());
     assert_eq!(latest.unwrap().frame.pixels, second_pixels);
     let preview = sink.latest_frame.take().unwrap();
     assert!(preview.diagnostic && preview.prediction.is_none());
     assert_eq!(preview.frame.pixels, second_pixels);
-    let logs: Vec<_> = receiver.try_iter().filter_map(|notification| match notification.event {
-        WorkerEvent::Log(message) => Some(message), _ => None,
-    }).collect();
-    assert!(logs.iter().any(|line| line.contains("searches=2; recaptures=1; second_grab=true;") && line.ends_with("outcome=cancelled-or-wait-error.")));
+    let logs: Vec<_> = receiver
+        .try_iter()
+        .filter_map(|notification| match notification.event {
+            WorkerEvent::Log(message) => Some(message),
+            _ => None,
+        })
+        .collect();
+    assert!(logs.iter().any(
+        |line| line.contains("searches=2; recaptures=1; second_grab=true;")
+            && line.ends_with("outcome=cancelled-or-wait-error.")
+    ));
 }
 
 
@@ -2796,21 +4117,40 @@ fn bounded_control_cancelled_second_wait_reports_no_third_capture() {
 fn bounded_control_first_match_reports_no_retry() {
     use klondike::terminal::TerminalStage;
     let (events, receiver) = std::sync::mpsc::channel();
-    let sink = WorkerEventSink { events, latest_frame: super::super::LatestFrameSlot::default(), capture_context: std::sync::Mutex::new(None) };
+    let sink = WorkerEventSink {
+        events,
+        latest_frame: super::super::LatestFrameSlot::default(),
+        capture_context: std::sync::Mutex::new(None),
+    };
     let mut io = fake_frames(Vec::new());
     io.native_terminal_analysis = true;
     let mut latest = Some(native_hint_phase(93));
-    let result = await_terminal_stage(&mut io, &mut latest,
-        StepRunSettings::new(AnimationSettleDelays::default(), 0), &sink,
-        &AtomicBool::new(false), Some(TerminalStage::NewGame));
-    assert_eq!(result.unwrap(), Some((TerminalStage::Play, PixelPoint::new(680, 861))));
+    let result = await_terminal_stage(
+        &mut io,
+        &mut latest,
+        StepRunSettings::new(AnimationSettleDelays::default(), 0),
+        &sink,
+        &AtomicBool::new(false),
+        Some(TerminalStage::NewGame),
+    );
+    assert_eq!(
+        result.unwrap(),
+        Some((TerminalStage::Play, PixelPoint::new(680, 861)))
+    );
     assert!(io.trace.is_empty());
-    let logs: Vec<_> = receiver.try_iter().filter_map(|notification| match notification.event {
-        WorkerEvent::Log(message) => Some(message), _ => None,
-    }).collect();
-    assert!(logs.iter().any(|line| line.contains("Klondike Play search summary: searches=1; recaptures=0; second_grab=false;") && line.ends_with("outcome=found.")));
+    let logs: Vec<_> = receiver
+        .try_iter()
+        .filter_map(|notification| match notification.event {
+            WorkerEvent::Log(message) => Some(message),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        logs.iter().any(|line| line.contains(
+            "Klondike Play search summary: searches=1; recaptures=0; second_grab=false;"
+        ) && line.ends_with("outcome=found."))
+    );
 }
-
 
 
 /// Decode an original level-841 observation without replacing native classification.

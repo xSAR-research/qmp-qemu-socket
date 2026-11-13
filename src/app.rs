@@ -126,6 +126,8 @@ enum ActiveRun {
     ComputedRoute,
     /// One automatic Pyramid session retained through acquisition, planning and restart.
     PyramidSession,
+    /// Worker-owned automatic Free Cell session across Recon, A* planning, execution, and restart.
+    FreeCellSession,
 }
 
 
@@ -516,6 +518,8 @@ pub struct QmpQemuSocketApp {
     computed_route_form: ComputedRouteForm,
     /// Concise three-step presentation and context-bound failure details.
     pyramid_workflow: PyramidWorkflow,
+    /// Independent Free Cell session play-style selection and advisory session progress.
+    freecell_workflow: pyramid_workflow::FreeCellWorkflow,
     /// Editable local socket pathname; edits revoke preview authority.
     qmp_socket_path: String,
     /// Bounded visible tail of timestamped session output.
@@ -662,11 +666,12 @@ impl QmpQemuSocketApp {
     ///
     /// Uses the display handle for clipboard access. A log-creation failure is
     /// reported in the visible output and does not prevent the application opening.
-    pub(crate) fn new(
+    pub fn new(
         creation_context: &eframe::CreationContext<'_>,
         diagnostics: ImageDiagnostics,
         shutdown: crate::shutdown::ShutdownRequest,
     ) -> Self {
+        crate::ui_style::apply_dark_theme(&creation_context.egui_ctx);
         activity_status::install_fonts(&creation_context.egui_ctx);
         let started_at = diagnostics.started_at;
         let qmp_socket_path = default_qmp_socket_path().display().to_string();
@@ -708,6 +713,7 @@ impl QmpQemuSocketApp {
             reconnaissance_report: None,
             computed_route_form,
             pyramid_workflow: PyramidWorkflow::default(),
+            freecell_workflow: pyramid_workflow::FreeCellWorkflow::default(),
             qmp_socket_path,
             log_lines: Vec::new(),
             show_output: false,
@@ -1173,6 +1179,7 @@ impl QmpQemuSocketApp {
                                 ActiveRun::Reconnaissance
                                     | ActiveRun::ComputedRoute
                                     | ActiveRun::PyramidSession
+                                    | ActiveRun::FreeCellSession
                                     | ActiveRun::FreeCellCalculation
                                     | ActiveRun::FreeCellRoute
                                     | ActiveRun::FreeCellRecon
@@ -1292,6 +1299,7 @@ impl QmpQemuSocketApp {
                             ActiveRun::Reconnaissance
                                 | ActiveRun::ComputedRoute
                                 | ActiveRun::PyramidSession
+                                | ActiveRun::FreeCellSession
                                 | ActiveRun::FreeCellCalculation
                                 | ActiveRun::FreeCellRoute
                                 | ActiveRun::FreeCellRecon
@@ -1325,6 +1333,12 @@ impl QmpQemuSocketApp {
                 }
                 WorkerEvent::PyramidSessionFinished(completion) => {
                     self.apply_pyramid_session_finished(completion)
+                }
+                WorkerEvent::FreeCellSessionProgress(progress) => {
+                    self.apply_freecell_session_progress(progress);
+                }
+                WorkerEvent::FreeCellSessionFinished(completion) => {
+                    self.apply_freecell_session_finished(completion);
                 }
                 WorkerEvent::ReconnaissanceFinished {
                     termination,
@@ -2306,22 +2320,12 @@ impl QmpQemuSocketApp {
         let mut preview_available = self.has_current_preview();
         let strategy_changed = activity_status::header(self, ui, |app, ui| {
             let mut selected_strategy = app.solving_strategy;
-            ui.horizontal_wrapped(|ui| {
-                ui.label("Solving strategy");
-                ui.add_enabled_ui(controls_enabled, |ui| {
-                    egui::ComboBox::from_id_salt("solving-strategy")
-                        .selected_text(app.solving_strategy.label())
-                        .show_ui(ui, |ui| {
-                            for strategy in SolvingStrategy::AVAILABLE {
-                                ui.selectable_value(
-                                    &mut selected_strategy,
-                                    strategy,
-                                    strategy.label(),
-                                );
-                            }
-                        });
-                });
-            });
+            top_bar_selection(
+                ui,
+                &mut selected_strategy,
+                controls_enabled,
+                STRATEGY_SELECTION,
+            );
 
 
             if selected_strategy != app.solving_strategy {
@@ -2338,39 +2342,14 @@ impl QmpQemuSocketApp {
                 });
                 ui.label(if app.game_mode==GameMode::FreeCell {"RECON exports the initial deal. CALCULATE stays offline; separate playback controls verify the live board before each transfer."} else {"Capture controls remain read-only. Use the separate reconnaissance, input-free calculation and confirmed computed-route execution controls below."});
             }
-            ui.horizontal_wrapped(|ui| {
-                ui.label("Game Type");
-                let previous_mode = app.game_mode;
-                ui.add_enabled_ui(controls_enabled, |ui| {
-                    let style = ui.style_mut();
-                    style.visuals.widgets.inactive.bg_fill = SETUP_BLUE;
-                    style.visuals.widgets.hovered.bg_fill = SETUP_BLUE.gamma_multiply(1.2);
-                    style.visuals.widgets.inactive.fg_stroke.color = Color32::WHITE;
-                    egui::ComboBox::from_id_salt("game-mode")
-                        .selected_text(
-                            egui::RichText::new(app.game_mode.label())
-                                .strong()
-                                .color(Color32::WHITE),
-                        )
-                        .show_ui(ui, |ui| {
-                            for mode in GameMode::AVAILABLE {
-                                ui.selectable_value(
-                                    &mut app.game_mode,
-                                    mode,
-                                    egui::RichText::new(mode.label()).strong(),
-                                );
-                            }
-                        });
-                });
-
-
-                if app.game_mode != previous_mode {
-                    let selected = app.game_mode;
-                    app.game_mode = previous_mode;
-                    app.select_game_mode(selected);
-                    preview_available = false;
-                }
-            });
+            let previous_mode = app.game_mode;
+            top_bar_selection(ui, &mut app.game_mode, controls_enabled, GAME_SELECTION);
+            if app.game_mode != previous_mode {
+                let selected = app.game_mode;
+                app.game_mode = previous_mode;
+                app.select_game_mode(selected);
+                preview_available = false;
+            }
             false
         });
         if strategy_changed {
@@ -2447,7 +2426,7 @@ impl QmpQemuSocketApp {
                         && let Err(error) = self.request_stop() {
 
 
-                            if !matches!(self.active_run, Some(ActiveRun::Reconnaissance | ActiveRun::FreeCellRecon | ActiveRun::ComputedRoute | ActiveRun::PyramidSession | ActiveRun::FreeCellCalculation
+                            if !matches!(self.active_run, Some(ActiveRun::Reconnaissance | ActiveRun::FreeCellRecon | ActiveRun::ComputedRoute | ActiveRun::PyramidSession | ActiveRun::FreeCellSession | ActiveRun::FreeCellCalculation
                                     | ActiveRun::FreeCellRoute)) {
                                 self.active_run = None;
                             }
@@ -2458,37 +2437,6 @@ impl QmpQemuSocketApp {
                 });
             }
         });
-        if self.solving_strategy == SolvingStrategy::ShortestPath
-            && self.game_mode == GameMode::FreeCell
-        {
-            freecell_control_group(ui, "Initial deal acquisition", |ui| {
-                ui.horizontal_wrapped(|ui| {
-                    ui.add_enabled(
-                        controls_enabled,
-                        egui::TextEdit::singleline(&mut self.freecell_export_path)
-                            .hint_text("Export path (blank = unique)")
-                            .desired_width(ui.available_width().min(330.0)),
-                    );
-                    if bevel_button(
-                        ui,
-                        "RECON / Export 52 cards",
-                        SETUP_BLUE,
-                        false,
-                        controls_enabled,
-                    )
-                    .clicked()
-                    {
-                        self.request_freecell_recon();
-                    }
-                });
-            });
-            freecell_control_group(ui, "Offline route calculation", |ui| {
-                self.freecell_calculation_controls(ui);
-            });
-            freecell_control_group(ui, "Live route playback", |ui| {
-                self.freecell_route_controls(ui);
-            });
-        }
         ui.horizontal(|ui| {
 
 
@@ -3087,7 +3035,7 @@ impl QmpQemuSocketApp {
                     }
 
 
-                    if ui.button("Restore execution defaults").clicked() {
+                    if crate::ui_style::press_able_button(ui, "Restore execution defaults").clicked() {
                         self.draw_animation_settle_ms = DRAW_ANIMATION_SETTLE_DELAY_MS;
                         self.tableau_animation_settle_ms = TABLEAU_ANIMATION_SETTLE_DELAY_MS;
                         self.tripeaks_reobserve_ms = TRIPEAKS_REOBSERVE_DELAY_MS;
@@ -3458,7 +3406,7 @@ impl QmpQemuSocketApp {
 
 
                     if menu
-                        .add_enabled(!selected_text.is_empty(), egui::Button::new("Cut"))
+                        .add_enabled(!selected_text.is_empty(), crate::ui_style::PressableButton::new("Cut"))
                         .clicked()
                     {
                         edit_action = Some(SnapshotEditAction::Cut);
@@ -3467,7 +3415,7 @@ impl QmpQemuSocketApp {
 
 
                     if menu
-                        .add_enabled(!selected_text.is_empty(), egui::Button::new("Copy"))
+                        .add_enabled(!selected_text.is_empty(), crate::ui_style::PressableButton::new("Copy"))
                         .clicked()
                     {
                         edit_action = Some(SnapshotEditAction::Copy);
@@ -3475,7 +3423,7 @@ impl QmpQemuSocketApp {
                     }
 
 
-                    if menu.button("Paste").clicked() {
+                    if crate::ui_style::press_able_button(menu, "Paste").clicked() {
                         edit_action = Some(SnapshotEditAction::Paste);
                         menu.close();
                     }
@@ -3572,14 +3520,14 @@ impl QmpQemuSocketApp {
 
 
                     if ui
-                        .add_enabled(!self.snapshot_capture_pending, egui::Button::new("Recapture"))
+                        .add_enabled(!self.snapshot_capture_pending, crate::ui_style::PressableButton::new("Recapture"))
                         .clicked()
                     {
                         recapture = true;
                     }
 
 
-                    if ui.button("Cancel").clicked() {
+                    if crate::ui_style::press_able_button(ui, "Cancel").clicked() {
                         cancel = true;
                     }
                 });
@@ -3639,7 +3587,7 @@ impl eframe::App for QmpQemuSocketApp {
                 activity_status::header(self, ui, |app, ui| {
                     ui.heading("Closing application");
                     ui.label("STOP is latched. Waiting for the current worker transaction or release-only recovery to finish.");
-                    if ui.button("View Log").clicked() { app.show_output = true; }
+                    if crate::ui_style::press_able_button(ui, "View Log").clicked() { app.show_output = true; }
                 });
             } else if self.strategy_choice_pending {
                 self.startup_choices(ui);
@@ -3658,10 +3606,10 @@ impl eframe::App for QmpQemuSocketApp {
 
 
                 ui.horizontal_wrapped(|ui| {
-                    if ui.button("View Log").clicked() {
+                    if crate::ui_style::press_able_button(ui, "View Log").clicked() {
                         self.show_output = true;
                     }
-                    if ui.add_enabled(self.failure_window.available(), egui::Button::new("Failure details")).clicked() {
+                    if ui.add_enabled(self.failure_window.available(), crate::ui_style::PressableButton::new("Failure details")).clicked() {
                         self.failure_window.reopen();
                     }
                 });
@@ -3705,9 +3653,7 @@ fn freecell_control_group<R>(
 }
 
 
-/// Adds an enabled or disabled coloured button and returns its interaction response.
-///
-/// The bevel reverses when selected or pressed; painting does not alter click handling.
+/// Retain existing action gates and semantic accents through the shared pressable widget.
 fn bevel_button(
     ui: &mut egui::Ui,
     label: &str,
@@ -3715,43 +3661,16 @@ fn bevel_button(
     selected: bool,
     enabled: bool,
 ) -> egui::Response {
-    let button = egui::Button::new(egui::RichText::new(label).strong().color(Color32::WHITE))
-        .fill(fill)
-        .stroke(Stroke::new(1.0, fill));
-    let response = ui.add_enabled(enabled, button);
-
-
-    if enabled {
-        let pressed = selected || response.is_pointer_button_down_on();
-        let light = fill.gamma_multiply(1.7);
-        let dark = fill.gamma_multiply(0.5);
-
-
-        let (top_left, bottom_right) = if pressed {
-            (dark, light)
-        } else {
-            (light, dark)
-        };
-        let rect = response.rect.shrink(1.0);
-        let painter = ui.painter();
-        painter.line_segment(
-            [rect.left_bottom(), rect.left_top()],
-            Stroke::new(1.5, top_left),
-        );
-        painter.line_segment(
-            [rect.left_top(), rect.right_top()],
-            Stroke::new(1.5, top_left),
-        );
-        painter.line_segment(
-            [rect.right_top(), rect.right_bottom()],
-            Stroke::new(1.5, bottom_right),
-        );
-        painter.line_segment(
-            [rect.right_bottom(), rect.left_bottom()],
-            Stroke::new(1.5, bottom_right),
-        );
+    let accent = if fill == SETUP_BLUE {
+        crate::ui_style::ACCENT
+    } else {
+        fill
+    };
+    let mut button = crate::ui_style::PressableButton::new(label).accent(accent);
+    if selected || matches!(label, "Track" | "Draw Targets" | "Params") {
+        button = button.selected(selected);
     }
-    response
+    ui.add_enabled(enabled, button)
 }
 
 
@@ -3777,6 +3696,7 @@ fn active_run_after_worker_state(
                 | ActiveRun::FreeCellRecon
                 | ActiveRun::ComputedRoute
                 | ActiveRun::PyramidSession
+                | ActiveRun::FreeCellSession
                 | ActiveRun::FreeCellCalculation
                 | ActiveRun::FreeCellRoute
         )
@@ -4529,11 +4449,184 @@ fn step_settings_for_owner(settings: StepRunSettings, owner: ActiveRun) -> StepR
 }
 
 
+/// Native selector metadata shared by the header and its headless interaction checks.
+#[derive(Clone, Copy)]
+struct TopBarSelection<T: 'static> {
+    /// Visible label paired with the native combo box.
+    label: &'static str,
+    /// Stable widget identity used across frames and selected values.
+    id_salt: &'static str,
+    /// Available values in their displayed order.
+    choices: &'static [T],
+    /// Convert an available value into its displayed option label.
+    choice_label: fn(T) -> &'static str,
+}
+
+
+/// Solving strategies offered by the application header selector.
+const STRATEGY_SELECTION: TopBarSelection<SolvingStrategy> = TopBarSelection {
+    label: "Solving strategy",
+    id_salt: "solving-strategy",
+    choices: &SolvingStrategy::AVAILABLE,
+    choice_label: SolvingStrategy::label,
+};
+
+
+/// Game modes offered by the application header selector.
+const GAME_SELECTION: TopBarSelection<GameMode> = TopBarSelection {
+    label: "Game Type",
+    id_salt: "game-mode",
+    choices: &GameMode::AVAILABLE,
+    choice_label: GameMode::label,
+};
+
+
+/// Reserve native combo height and let its inner row grow from the top of its cell.
+fn top_bar_selection<T: Copy + PartialEq>(
+    ui: &mut egui::Ui,
+    selected: &mut T,
+    enabled: bool,
+    selection: TopBarSelection<T>,
+) -> [egui::Response; 2] {
+    ui.horizontal_wrapped(|ui| {
+        let text_height = ui.text_style_height(&egui::TextStyle::Button);
+        let height = (text_height.max(ui.spacing().icon_width)
+            + 2.0 * ui.spacing().button_padding.y)
+            .max(ui.spacing().interact_size.y);
+        ui.set_row_height(height);
+        let label = ui.label(selection.label);
+        let combo = ui
+            .allocate_ui_with_layout(
+                egui::vec2(ui.spacing().combo_width, height),
+                egui::Layout::top_down(egui::Align::Min),
+                |ui| {
+                    ui.add_enabled_ui(enabled, |ui| {
+                        egui::ComboBox::from_id_salt(selection.id_salt)
+                            .selected_text((selection.choice_label)(*selected))
+                            .show_ui(ui, |ui| {
+                                for &choice in selection.choices {
+                                    ui.selectable_value(
+                                        selected,
+                                        choice,
+                                        (selection.choice_label)(choice),
+                                    );
+                                }
+                            })
+                            .response
+                    })
+                    .inner
+                },
+            )
+            .inner;
+        [label, combo]
+    })
+    .inner
+}
+
+
 #[cfg(test)]
 mod freecell_layout_tests {
     //! Headless geometry checks for the actual workflow-stage container.
 
     use super::*;
+
+
+    fn check_selection<T: Copy + PartialEq + std::fmt::Debug>(
+        selection: TopBarSelection<T>,
+        initial: T,
+        alternative: T,
+    ) {
+        for width in [320.0, 640.0, 1_920.0] {
+            for enabled in [false, true] {
+                let context = egui::Context::default();
+                let mut selected = initial;
+                let input = |events| egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(width, 1_080.0))),
+                    events,
+                    ..Default::default()
+                };
+                let mut frame = |events| {
+                    crate::ui_style::apply_dark_theme(&context);
+                    let mut responses = None;
+                    let output = context.run_ui(input(events), |ui| {
+                        responses = Some(top_bar_selection(ui, &mut selected, enabled, selection));
+                    });
+                    let shapes = output.shapes.clone();
+                    output.drop_without_applying_deltas();
+                    (responses.unwrap(), shapes)
+                };
+                frame(vec![]);
+                let ([label, combo], _) = frame(vec![]);
+                assert_eq!(combo.enabled(), enabled);
+                for response in [&label, &combo] {
+                    assert!(response.rect.is_positive());
+                    assert!(
+                        response.rect.left() >= 0.0 && response.rect.right() <= width,
+                        "{} at {width}: {:?}",
+                        selection.label,
+                        response.rect
+                    );
+                }
+                if label.rect.intersects(combo.rect) || label.rect.right() <= combo.rect.left() {
+                    assert!(
+                        (label.rect.center().y - combo.rect.center().y).abs() <= 1.0,
+                        "{} at {width}, enabled {enabled}: {:?} {:?}",
+                        selection.label,
+                        label.rect,
+                        combo.rect
+                    );
+                } else {
+                    assert!(label.rect.bottom() < combo.rect.top());
+                }
+                let pointer = |position, pressed| egui::Event::PointerButton {
+                    pos: position,
+                    button: egui::PointerButton::Primary,
+                    pressed,
+                    modifiers: egui::Modifiers::NONE,
+                };
+                let position = combo.rect.center();
+                frame(vec![
+                    egui::Event::PointerMoved(position),
+                    pointer(position, true),
+                ]);
+                frame(vec![pointer(position, false)]);
+                assert_eq!(egui::ComboBox::is_open(&context, combo.id), enabled);
+                if enabled {
+                    let (_, shapes) = frame(vec![]);
+                    let target = shapes
+                        .iter()
+                        .find_map(|shape| {
+                            if let egui::Shape::Text(text) = &shape.shape
+                                && text.galley.job.text == (selection.choice_label)(alternative)
+                            {
+                                Some(Rect::from_min_size(text.pos, text.galley.size()).center())
+                            } else {
+                                None
+                            }
+                        })
+                        .expect("native popup contains the alternative choice");
+                    frame(vec![
+                        egui::Event::PointerMoved(target),
+                        pointer(target, true),
+                    ]);
+                    frame(vec![pointer(target, false)]);
+                }
+                assert_eq!(selected, if enabled { alternative } else { initial });
+            }
+        }
+    }
+
+
+    /// Both production header selectors centre native labels and preserve popup interaction.
+    #[test]
+    fn freecell_321_header_selectors_align_and_keep_native_enabled_gates() {
+        check_selection(
+            STRATEGY_SELECTION,
+            SolvingStrategy::ComputerVision,
+            SolvingStrategy::ShortestPath,
+        );
+        check_selection(GAME_SELECTION, GameMode::FreeCell, GameMode::Pyramid);
+    }
 
 
     /// Stage containers share a left edge and wrap controls inside narrow and wide views.

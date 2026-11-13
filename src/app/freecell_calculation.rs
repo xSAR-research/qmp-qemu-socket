@@ -1,7 +1,10 @@
 //! Identity-fenced, plan-only Free Cell controls. No guest/execution permission.
 
 use super::*;
-use crate::worker::freecell_calculation::{Identity, Progress, Report};
+use crate::{
+    ui_style::PressableButton,
+    worker::freecell_calculation::{Identity, Progress, Report},
+};
 use std::sync::Arc;
 
 
@@ -333,37 +336,61 @@ impl QmpQemuSocketApp {
     pub(super) fn freecell_calculation_controls(&mut self, ui: &mut egui::Ui) {
         let idle = self.active_run.is_none() && !self.worker_state.is_busy() && !self.exiting;
         ui.horizontal_wrapped(|ui| {
-        let mut source = self.freecell_calculation.path.clone();
-        let changed = ui
-            .add_enabled(
-                idle,
-                egui::TextEdit::singleline(&mut source)
-                    .hint_text("Free Cell source JSON path")
-                    .desired_width(ui.available_width().min(330.0)),
-            )
-            .changed();
-        if changed {
-            match self.freecell_calculation.set_source(source) {
-                Ok(()) => {
-                    self.trace_freecell_ui("source-edited", serde_json::json!({
+            let mut source = self.freecell_calculation.path.clone();
+            let changed = ui
+                .add_enabled(
+                    idle,
+                    egui::TextEdit::singleline(&mut source)
+                        .hint_text("Free Cell source JSON path")
+                        .desired_width(ui.available_width().min(330.0)),
+                )
+                .changed();
+            if changed {
+                match self.freecell_calculation.set_source(source) {
+                    Ok(()) => {
+                        self.trace_freecell_ui(
+                            "source-edited",
+                            serde_json::json!({
                         "source_path":self.freecell_calculation.path,
-                        "source_generation":self.freecell_calculation.generation}));
-                    self.revoke_freecell_playback();
-                }
-                Err(error) => {
-                    self.freecell_calculation_failure("Free Cell source selection", &error, None);
-                    self.freecell_calculation.message = error;
+                        "source_generation":self.freecell_calculation.generation}),
+                        );
+                        self.revoke_freecell_playback();
+                    }
+                    Err(error) => {
+                        self.freecell_calculation_failure(
+                            "Free Cell source selection",
+                            &error,
+                            None,
+                        );
+                        self.freecell_calculation.message = error;
+                    }
                 }
             }
-        }
-        if bevel_button(ui, "Select JSON…", SETUP_BLUE, false, idle).clicked() {
-            self.freecell_calculation.browser = true;
-            if self.freecell_calculation.directory.is_empty() {
-                self.freecell_calculation.directory = "/home/charlie/tmp".to_owned();
+            if ui
+                .add_enabled(idle, PressableButton::new("Select JSON…"))
+                .clicked()
+            {
+                self.freecell_calculation.browser = true;
+                if self.freecell_calculation.directory.is_empty() {
+                    self.freecell_calculation.directory = "/home/charlie/tmp".to_owned();
+                }
+                self.request_freecell_sources();
             }
-            self.request_freecell_sources();
-        }
-        if bevel_button(ui, "CALCULATE", SETUP_BLUE, false, idle).clicked() {
+        });
+        let active = self.active_run == Some(ActiveRun::FreeCellCalculation);
+        let pause = active.then(|| self.worker.pause_state()).flatten();
+        let paused = pause
+            .as_ref()
+            .map(|state| state.requested || state.acknowledged);
+        let [action_clicked, pause_clicked] = calculation_buttons(
+            ui,
+            idle,
+            active,
+            paused,
+            !self.stop_requested && !self.exiting,
+        )
+        .map(|response| response.is_some_and(|response| response.clicked()));
+        if action_clicked && !active {
             self.revoke_freecell_playback();
             let context = self.current_preview_context();
             match self.freecell_calculation.reserve(context) {
@@ -383,22 +410,29 @@ impl QmpQemuSocketApp {
                             self.stop_requested = false;
                         }
                         Err(error) => {
-                            self.freecell_calculation_failure("Free Cell calculation dispatch", &error, Some(&identity));
+                            self.freecell_calculation_failure(
+                                "Free Cell calculation dispatch",
+                                &error,
+                                Some(&identity),
+                            );
                             self.freecell_calculation.finish(&identity, Err(error));
                         }
                     }
                 }
                 Err(error) => {
-                    self.freecell_calculation_failure("Free Cell calculation request", &error, None);
+                    self.freecell_calculation_failure(
+                        "Free Cell calculation request",
+                        &error,
+                        None,
+                    );
                     self.freecell_calculation.message = error;
                 }
             }
         }
-        });
         if self.freecell_calculation.browser && idle {
             egui::Window::new("Select Free Cell JSON source").show(ui.ctx(), |ui| {
                 ui.text_edit_singleline(&mut self.freecell_calculation.directory);
-                if ui.button("List directory").clicked() {
+                if ui.add(PressableButton::new("List directory")).clicked() {
                     self.request_freecell_sources();
                 }
                 let mut selected = None;
@@ -453,49 +487,45 @@ impl QmpQemuSocketApp {
                         }
                     }
                 }
-                if ui.button("Close").clicked() {
+                if ui.add(PressableButton::new("Close")).clicked() {
                     self.freecell_calculation.browser = false;
                     self.freecell_calculation.browser_pending = None;
                 }
             });
         }
-        if self.active_run == Some(ActiveRun::FreeCellCalculation) {
-            if let Some(pause) = self.worker.pause_state() {
-                let requested = pause.requested || pause.acknowledged;
-                if ui
-                    .button(if requested { "CONTINUE" } else { "PAUSE" })
-                    .clicked()
-                {
-                    self.trace_freecell_ui(
-                        "calculation-pause-intent",
-                        serde_json::json!({
-                        "identity":format!("{:?}",self.freecell_calculation.pending),
-                        "pause_epoch":pause.epoch,"pause_requested":!requested}),
-                    );
-                    if let Err(error) = self.worker.request_pause(pause.epoch, !requested) {
-                        let identity = self.freecell_calculation.pending.clone();
-                        self.freecell_calculation_failure(
-                            "Free Cell calculation pause",
-                            &error,
-                            identity.as_ref(),
-                        );
-                        self.freecell_calculation.message = error;
-                    }
-                }
-                if pause.acknowledged {
-                    ui.label("Paused — frontier retained");
-                } else if pause.requested {
-                    ui.label("Pausing…");
-                }
-            }
-            if ui.button("CANCEL").clicked() {
-                self.trace_freecell_ui(
-                    "calculation-cancel-intent",
-                    serde_json::json!({
-                    "identity":format!("{:?}",self.freecell_calculation.pending)}),
+        if pause_clicked && let Some(pause) = pause.as_ref() {
+            let requested = !(pause.requested || pause.acknowledged);
+            self.trace_freecell_ui(
+                "calculation-pause-intent",
+                serde_json::json!({
+                    "identity":format!("{:?}",self.freecell_calculation.pending),
+                    "pause_epoch":pause.epoch,"pause_requested":requested}),
+            );
+            if let Err(error) = self.worker.request_pause(pause.epoch, requested) {
+                let identity = self.freecell_calculation.pending.clone();
+                self.freecell_calculation_failure(
+                    "Free Cell calculation pause",
+                    &error,
+                    identity.as_ref(),
                 );
-                self.worker.cancel_freecell_calculation();
-                self.freecell_calculation.message = "Cancelling…".to_owned();
+                self.freecell_calculation.message = error;
+            }
+        }
+        if active && action_clicked {
+            self.trace_freecell_ui(
+                "calculation-cancel-intent",
+                serde_json::json!({
+                    "identity":format!("{:?}",self.freecell_calculation.pending),
+                    "action":"Stop"}),
+            );
+            self.worker.cancel_freecell_calculation();
+            self.freecell_calculation.message = "Cancelling…".to_owned();
+        }
+        if active && let Some(pause) = pause.as_ref() {
+            if pause.acknowledged {
+                ui.label("Paused — frontier retained");
+            } else if pause.requested {
+                ui.label("Pausing…");
             }
         }
         if let Some(progress) = self
@@ -520,7 +550,9 @@ impl QmpQemuSocketApp {
                 report.deal.metadata().deal_id()
             ));
             if route_moves(&report.outcome).is_some()
-                && ui.button("Inspect physical route").clicked()
+                && ui
+                    .add(PressableButton::new("Inspect physical route"))
+                    .clicked()
             {
                 self.freecell_calculation.route_open = true;
                 self.freecell_calculation.route_chrome.maximise();
@@ -691,6 +723,42 @@ impl QmpQemuSocketApp {
 }
 
 
+/// Render the offline action and its active controls together without scheduling work.
+/// Stop requests cancellation; Pause retains the frontier for Continue.
+fn calculation_buttons(
+    ui: &mut egui::Ui,
+    idle: bool,
+    active: bool,
+    paused: Option<bool>,
+    mutable: bool,
+) -> [Option<egui::Response>; 2] {
+    ui.horizontal(|ui| {
+        let action = ui
+            .add_enabled(
+                if active { mutable } else { idle },
+                PressableButton::new(if active { "Stop" } else { "CALCULATE" }),
+            )
+            .on_hover_text(if active {
+                "Cancel this calculation; no usable route is retained"
+            } else {
+                "Calculate a route offline without sending guest input"
+            });
+        let pause = active.then(|| {
+            ui.add_enabled(
+                mutable && paused.is_some(),
+                PressableButton::new(if paused == Some(true) {
+                    "Continue"
+                } else {
+                    "Pause"
+                }),
+            )
+        });
+        [Some(action), pause]
+    })
+    .inner
+}
+
+
 /// Borrow only independently replayed full or exhaustive partial physical transfers.
 /// Cancellation and failures contain no route; an empty partial remains inspectable only.
 fn route_moves(
@@ -739,6 +807,109 @@ fn card(id: u8) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+
+    /// Render the production calculation row without a worker, filesystem or guest.
+    fn calculation_button_frame(
+        context: &egui::Context,
+        state: (bool, bool, Option<bool>, bool),
+        events: Vec<egui::Event>,
+        width: f32,
+    ) -> [(egui::Rect, bool, bool); 2] {
+        crate::ui_style::apply_dark_theme(context);
+        let mut buttons = [(egui::Rect::NOTHING, false, false); 2];
+        context
+            .run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(width, 300.0),
+                    )),
+                    events,
+                    ..Default::default()
+                },
+                |ui| {
+                    buttons = calculation_buttons(ui, state.0, state.1, state.2, state.3).map(
+                        |response| {
+                            response.map_or((egui::Rect::NOTHING, false, false), |response| {
+                                (response.rect, response.enabled(), response.clicked())
+                            })
+                        },
+                    );
+                },
+            )
+            .drop_without_applying_deltas();
+        buttons
+    }
+
+
+    /// Click one real calculation control without dispatching any operation.
+    fn click_calculation_button(
+        context: &egui::Context,
+        state: (bool, bool, Option<bool>, bool),
+        position: egui::Pos2,
+        width: f32,
+    ) -> [bool; 2] {
+        let pointer = |pressed| egui::Event::PointerButton {
+            pos: position,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        };
+        calculation_button_frame(
+            context,
+            state,
+            vec![egui::Event::PointerMoved(position), pointer(true)],
+            width,
+        );
+        calculation_button_frame(context, state, vec![pointer(false)], width)
+            .map(|(_, _, clicked)| clicked)
+    }
+
+
+    /// CALCULATE becomes the sole Stop action beside Pause/Continue for its active owner.
+    #[test]
+    fn freecell_321_actual_calculation_stop_pause_stay_adjacent_and_lock_on_stop() {
+        for width in [320.0, 640.0, 1920.0] {
+            let context = egui::Context::default();
+            let idle = (true, false, None, true);
+            let buttons = calculation_button_frame(&context, idle, vec![], width);
+            assert_eq!(buttons.map(|(_, enabled, _)| enabled), [true, false]);
+            assert!(!buttons[1].0.is_positive());
+            assert_eq!(
+                click_calculation_button(&context, idle, buttons[0].0.center(), width),
+                [true, false]
+            );
+            for paused in [false, true] {
+                let active = (false, true, Some(paused), true);
+                let buttons = calculation_button_frame(&context, active, vec![], width);
+                assert_eq!(buttons.map(|(_, enabled, _)| enabled), [true; 2]);
+                for (index, (bounds, _, _)) in buttons.into_iter().enumerate() {
+                    assert!(bounds.is_positive());
+                    assert!(bounds.left() >= 0.0 && bounds.right() <= width);
+                    assert_eq!(bounds.center().y, buttons[0].0.center().y);
+                    let mut expected = [false; 2];
+                    expected[index] = true;
+                    assert_eq!(
+                        click_calculation_button(&context, active, bounds.center(), width),
+                        expected
+                    );
+                }
+            }
+            let stopping = (false, true, Some(false), false);
+            let buttons = calculation_button_frame(&context, stopping, vec![], width);
+            assert_eq!(buttons.map(|(_, enabled, _)| enabled), [false; 2]);
+            for (bounds, _, _) in buttons {
+                assert_eq!(
+                    click_calculation_button(&context, stopping, bounds.center(), width),
+                    [false; 2]
+                );
+            }
+            let queued =
+                calculation_button_frame(&context, (false, true, None, true), vec![], width);
+            assert_eq!(queued.map(|(_, enabled, _)| enabled), [true, false]);
+        }
+    }
 
 
     /// A published source retires old inspection/browser results and is the next calculation input.

@@ -67,7 +67,8 @@ const CARD_MARGIN_PAPER_RADIUS: u32 = 8;
 
 /// Keep a clipped card's margin probes at least 18px below its closed top.
 /// The resulting 66 visible pixels are a coordinate bound, not a card-size guess.
-const MINIMUM_CLIPPED_SOURCE_HEIGHT: u32 = SOURCE_CLICK_BOTTOM_INSET + CARD_MARGIN_PAPER_RADIUS + 18;
+const MINIMUM_CLIPPED_SOURCE_HEIGHT: u32 =
+    SOURCE_CLICK_BOTTOM_INSET + CARD_MARGIN_PAPER_RADIUS + 18;
 
 
 /// Maximum tolerated rail gap around rounded corners or a shared card boundary.
@@ -120,17 +121,16 @@ pub enum FreeCellTarget {
 
 
 impl fmt::Display for FreeCellTarget {
-
-
     /// Preserve source geometry in predictions and diagnostic messages.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-
-
         match self {
             Self::Cell { column } => write!(formatter, "CELL {column}"),
             Self::Foundation { column } => write!(formatter, "SUIT {column}"),
-            Self::Play { column, top, bottom } =>
-                write!(formatter, "PLAY {column}, rows {top}..{bottom}"),
+            Self::Play {
+                column,
+                top,
+                bottom,
+            } => write!(formatter, "PLAY {column}, rows {top}..{bottom}"),
         }
     }
 }
@@ -138,8 +138,6 @@ impl fmt::Display for FreeCellTarget {
 
 /// Reject malformed storage or captures outside the evidenced native geometry.
 fn validate_frame(frame: &CapturedFrame) -> Result<(), HaloDetectionError> {
-
-
     if !frame.is_layout_valid() {
         return Err(HaloDetectionError::InvalidFrameLayout);
     }
@@ -155,7 +153,8 @@ fn validate_frame(frame: &CapturedFrame) -> Result<(), HaloDetectionError> {
 
 /// Recognise warm source gold by channel relationships, not exact artwork RGB.
 fn is_gold([red, green, blue]: [u8; 3]) -> bool {
-    red >= 125 && green >= 90
+    red >= 125
+        && green >= 90
         && i16::from(red) - i16::from(blue) >= 50
         && i16::from(green) - i16::from(blue) >= 28
         && i16::from(red) - i16::from(green) >= -15
@@ -164,7 +163,8 @@ fn is_gold([red, green, blue]: [u8; 3]) -> bool {
 
 /// Ordinary undimmed felt excludes modal blue and animation-darkened overlays.
 fn is_felt([red, green, blue]: [u8; 3]) -> bool {
-    green >= 65 && i16::from(green) - i16::from(red) >= 25
+    green >= 65
+        && i16::from(green) - i16::from(red) >= 25
         && i16::from(green) - i16::from(blue) >= 20
 }
 
@@ -173,7 +173,9 @@ fn is_felt([red, green, blue]: [u8; 3]) -> bool {
 fn is_slot_edge(rgb: [u8; 3]) -> bool {
     let [red, green, blue] = rgb;
     (red >= 180 && green >= 180 && blue >= 180)
-        || (red >= 55 && green >= 125 && blue >= 105
+        || (red >= 55
+            && green >= 125
+            && blue >= 105
             && i16::from(green) - i16::from(red) >= 25
             && i16::from(green) - i16::from(blue) >= 20)
         || is_gold(rgb)
@@ -198,11 +200,7 @@ fn fraction_at_least(
 
 
     for y in bounds.y..bounds.bottom() {
-
-
         for x in bounds.x..bounds.right() {
-
-
             if pixel_rgb(frame, x, y).is_some_and(predicate) {
                 matched += 1;
             }
@@ -217,19 +215,41 @@ fn fraction_at_least(
 /// No card identity, suit pile, rank, toolbar icon or level artwork is matched.
 pub fn is_gameplay_scene(frame: &CapturedFrame) -> Result<bool, HaloDetectionError> {
     validate_frame(frame)?;
-    let open_gutters = [PixelRect::new(80, 350, 24, 24), PixelRect::new(1_790, 350, 24, 24)];
+    let open_gutters = [
+        PixelRect::new(80, 350, 24, 24),
+        PixelRect::new(1_790, 350, 24, 24),
+    ];
 
 
-    if !open_gutters.into_iter().all(|bounds| fraction_at_least(frame, bounds, is_felt, 900)) {
+    if !open_gutters
+        .into_iter()
+        .all(|bounds| fraction_at_least(frame, bounds, is_felt, 900))
+    {
         return Ok(false);
     }
 
-    let cells = CELL_X.into_iter().filter(|x|
-        fraction_at_least(frame, PixelRect::new(*x + 20, 112, 96, 3), is_slot_edge, 700)
-    ).count();
-    let plays = PLAY_X.into_iter().filter(|x|
-        fraction_at_least(frame, PixelRect::new(*x + 20, 331, 96, 3), is_slot_edge, 700)
-    ).count();
+    let cells = CELL_X
+        .into_iter()
+        .filter(|x| {
+            fraction_at_least(
+                frame,
+                PixelRect::new(*x + 20, 112, 96, 3),
+                is_slot_edge,
+                700,
+            )
+        })
+        .count();
+    let plays = PLAY_X
+        .into_iter()
+        .filter(|x| {
+            fraction_at_least(
+                frame,
+                PixelRect::new(*x + 20, 331, 96, 3),
+                is_slot_edge,
+                700,
+            )
+        })
+        .count();
 
     Ok(cells >= 3 && plays >= 6)
 }
@@ -238,9 +258,9 @@ pub fn is_gameplay_scene(frame: &CapturedFrame) -> Result<bool, HaloDetectionErr
 /// Recognise Solver activation by its stable top banner's golden boundaries.
 pub fn solver_active(frame: &CapturedFrame) -> Result<bool, HaloDetectionError> {
     validate_frame(frame)?;
-    Ok([36, 85].into_iter().all(|y|
-        fraction_at_least(frame, PixelRect::new(828, y, 263, 1), is_gold, 900)
-    ))
+    Ok([36, 85]
+        .into_iter()
+        .all(|y| fraction_at_least(frame, PixelRect::new(828, y, 263, 1), is_gold, 900)))
 }
 
 
@@ -255,7 +275,8 @@ fn paired_rails(frame: &CapturedFrame, x: u32, y: u32) -> bool {
 /// A near-full-width golden crossbar closes a solid source outline.
 fn crossbar(frame: &CapturedFrame, x: u32, y: u32) -> bool {
     let matched = (x + 18..x + CARD_WIDTH - 18)
-        .filter(|column| pixel_rgb(frame, *column, y).is_some_and(is_gold)).count();
+        .filter(|column| pixel_rgb(frame, *column, y).is_some_and(is_gold))
+        .count();
 
     matched >= 95
 }
@@ -271,7 +292,12 @@ fn crossbar(frame: &CapturedFrame, x: u32, y: u32) -> bool {
 /// terminated rails proves that visible end without the clipped-paper fallback.
 /// FC20/FC21 show central diamond pips: visible card margins supply the clipped
 /// presence check without requiring the click itself to land on blank paper.
-fn find_source(frame: &CapturedFrame, x: u32, scan_top: u32, scan_bottom: u32) -> Option<PixelRect> {
+fn find_source(
+    frame: &CapturedFrame,
+    x: u32,
+    scan_top: u32,
+    scan_bottom: u32,
+) -> Option<PixelRect> {
     let mut row = scan_bottom;
 
 
@@ -308,7 +334,8 @@ fn find_source(frame: &CapturedFrame, x: u32, scan_top: u32, scan_bottom: u32) -
         }
 
         let rail_height = lower_rail + 1 - upper_rail;
-        let top = (upper_rail.saturating_sub(10).max(scan_top)..=(upper_rail + 5).min(scan_bottom - 1))
+        let top = (upper_rail.saturating_sub(10).max(scan_top)
+            ..=(upper_rail + 5).min(scan_bottom - 1))
             .find(|y| crossbar(frame, x, *y));
 
 
@@ -317,40 +344,48 @@ fn find_source(frame: &CapturedFrame, x: u32, scan_top: u32, scan_bottom: u32) -
             && lower_rail == TOOLBAR_TOP - 1
             && TOOLBAR_TOP - top >= MINIMUM_CLIPPED_SOURCE_HEIGHT
             && matched_rows * 100 >= rail_height * 85
-            && (TOOLBAR_TOP - 4..TOOLBAR_TOP).all(|y| paired_rails(frame, x, y)) {
+            && (TOOLBAR_TOP - 4..TOOLBAR_TOP).all(|y| paired_rails(frame, x, y))
+        {
             let click_y = TOOLBAR_TOP - SOURCE_CLICK_BOTTOM_INSET;
 
 
-            if [x + CARD_MARGIN_INSET, x + CARD_WIDTH - CARD_MARGIN_INSET].into_iter().all(|centre| {
-                let paper = PixelRect::new(centre - CARD_MARGIN_PAPER_RADIUS,
-                    click_y - CARD_MARGIN_PAPER_RADIUS,
-                    CARD_MARGIN_PAPER_RADIUS * 2 + 1, CARD_MARGIN_PAPER_RADIUS * 2 + 1);
+            if [x + CARD_MARGIN_INSET, x + CARD_WIDTH - CARD_MARGIN_INSET]
+                .into_iter()
+                .all(|centre| {
+                    let paper = PixelRect::new(
+                        centre - CARD_MARGIN_PAPER_RADIUS,
+                        click_y - CARD_MARGIN_PAPER_RADIUS,
+                        CARD_MARGIN_PAPER_RADIUS * 2 + 1,
+                        CARD_MARGIN_PAPER_RADIUS * 2 + 1,
+                    );
 
-                fraction_at_least(frame, paper, is_paper, 500)
-            }) {
+                    fraction_at_least(frame, paper, is_paper, 500)
+                })
+            {
                 return Some(PixelRect::new(x, top, CARD_WIDTH, TOOLBAR_TOP - top));
             }
         }
 
 
-        if rail_height < MINIMUM_SOURCE_HEIGHT - 10
-            || matched_rows * 100 < rail_height * 85 {
+        if rail_height < MINIMUM_SOURCE_HEIGHT - 10 || matched_rows * 100 < rail_height * 85 {
             continue;
         }
 
         let bottom = (lower_rail.saturating_sub(5)..(lower_rail + 11).min(scan_bottom))
-            .rev().find(|y| crossbar(frame, x, *y));
+            .rev()
+            .find(|y| crossbar(frame, x, *y));
 
 
         if let (Some(top), Some(last)) = (top, bottom) {
             let bottom = last + 1;
-            let closes_before_toolbar = scan_bottom == TOOLBAR_TOP
-                && lower_rail < TOOLBAR_TOP - 1 && last > lower_rail;
+            let closes_before_toolbar =
+                scan_bottom == TOOLBAR_TOP && lower_rail < TOOLBAR_TOP - 1 && last > lower_rail;
 
 
             if bottom - top >= MINIMUM_SOURCE_HEIGHT
                 && (lower_rail < scan_bottom - 8 || closes_before_toolbar)
-                && (bottom < scan_bottom || (bottom == TOOLBAR_TOP && closes_before_toolbar)) {
+                && (bottom < scan_bottom || (bottom == TOOLBAR_TOP && closes_before_toolbar))
+            {
                 return Some(PixelRect::new(x, top, CARD_WIDTH, bottom - top));
             }
         }
@@ -375,15 +410,28 @@ pub fn canonical_action(target: FreeCellTarget) -> Option<GuidedAction> {
             let x = *FOUNDATION_X.get(index)?;
             (x, 203, PixelRect::new(x, 112, CARD_WIDTH, 182))
         }
-        FreeCellTarget::Play { column, top, bottom }
-
-
-            if (1..=8).contains(&column) && top >= PLAY_SCAN_TOP && bottom <= TOOLBAR_TOP
-                && bottom.checked_sub(top).is_some_and(|height|
-                    height >= if bottom == TOOLBAR_TOP { MINIMUM_CLIPPED_SOURCE_HEIGHT }
-                        else { MINIMUM_SOURCE_HEIGHT }) => {
+        FreeCellTarget::Play {
+            column,
+            top,
+            bottom,
+        } if (1..=8).contains(&column)
+            && top >= PLAY_SCAN_TOP
+            && bottom <= TOOLBAR_TOP
+            && bottom.checked_sub(top).is_some_and(|height| {
+                height
+                    >= if bottom == TOOLBAR_TOP {
+                        MINIMUM_CLIPPED_SOURCE_HEIGHT
+                    } else {
+                        MINIMUM_SOURCE_HEIGHT
+                    }
+            }) =>
+        {
             let x = PLAY_X[usize::from(column - 1)];
-            (x, bottom - SOURCE_CLICK_BOTTOM_INSET, PixelRect::new(x, top, CARD_WIDTH, bottom - top))
+            (
+                x,
+                bottom - SOURCE_CLICK_BOTTOM_INSET,
+                PixelRect::new(x, top, CARD_WIDTH, bottom - top),
+            )
         }
         _ => return None,
     };
@@ -411,24 +459,18 @@ pub fn analyse(frame: &CapturedFrame) -> Result<FrameAnalysis, HaloDetectionErro
 
 
     if is_gameplay_scene(frame)? && solver_active(frame)? {
-
-
         for (index, x) in CELL_X.into_iter().enumerate() {
-
-
             if find_source(frame, x, 100, 310).is_some() {
-                selected = Some(FreeCellTarget::Cell { column: index as u8 + 1 });
+                selected = Some(FreeCellTarget::Cell {
+                    column: index as u8 + 1,
+                });
                 break;
             }
         }
 
 
         if selected.is_none() {
-
-
             for (index, x) in PLAY_X.into_iter().enumerate() {
-
-
                 if let Some(bounds) = find_source(frame, x, PLAY_SCAN_TOP, TOOLBAR_TOP) {
                     let candidate = FreeCellTarget::Play {
                         column: index as u8 + 1,
@@ -437,8 +479,10 @@ pub fn analyse(frame: &CapturedFrame) -> Result<FrameAnalysis, HaloDetectionErro
                     };
 
 
-                    if selected.is_none_or(|prior| matches!(prior,
-                        FreeCellTarget::Play { bottom, .. } if bounds.bottom() > bottom)) {
+                    if selected.is_none_or(|prior| {
+                        matches!(prior,
+                        FreeCellTarget::Play { bottom, .. } if bounds.bottom() > bottom)
+                    }) {
                         selected = Some(candidate);
                     }
                 }
@@ -447,13 +491,11 @@ pub fn analyse(frame: &CapturedFrame) -> Result<FrameAnalysis, HaloDetectionErro
 
 
         if selected.is_none() {
-
-
             for (index, x) in FOUNDATION_X.into_iter().enumerate() {
-
-
                 if find_source(frame, x, 100, 310).is_some() {
-                    let column = u8::try_from(index).ok().and_then(|value| value.checked_add(1));
+                    let column = u8::try_from(index)
+                        .ok()
+                        .and_then(|value| value.checked_add(1));
                     selected = column.map(|column| FreeCellTarget::Foundation { column });
                     break;
                 }
@@ -462,7 +504,8 @@ pub fn analyse(frame: &CapturedFrame) -> Result<FrameAnalysis, HaloDetectionErro
     }
 
     Ok(FrameAnalysis {
-        prediction: selected.and_then(canonical_action)
+        prediction: selected
+            .and_then(canonical_action)
             .map_or(PredictedAction::NoHighlight, PredictedAction::Action),
         observed_rows: None,
         top_row_face_up_count: 0,
@@ -500,7 +543,10 @@ mod tests {
     //! Focused native source, scene, priority and bounds regressions.
 
     use super::*;
-    use crate::{capture::{PixelFormat, decode_png}, game::GameMode};
+    use crate::{
+        capture::{PixelFormat, decode_png},
+        game::GameMode,
+    };
 
 
     /// Decode an unmodified native fixture by its stable evidence identifier.
@@ -547,11 +593,7 @@ mod tests {
 
     /// Paint only an in-memory fixture copy to isolate an outline decision.
     fn paint(frame: &mut CapturedFrame, bounds: PixelRect, rgb: [u8; 3]) {
-
-
         for y in bounds.y..bounds.bottom() {
-
-
             for x in bounds.x..bounds.right() {
                 let offset = y as usize * frame.stride + x as usize * 4;
                 frame.pixels[offset..offset + 4].copy_from_slice(&[rgb[0], rgb[1], rgb[2], 255]);
@@ -563,30 +605,57 @@ mod tests {
     /// Draw a simple solid source on a fixture copy, not a new PNG artifact.
     fn paint_source(frame: &mut CapturedFrame, x: u32, top: u32, bottom: u32) {
         let gold = [235, 195, 90];
-        paint(frame, PixelRect::new(x - 5, top + 3, 3, bottom - top - 6), gold);
-        paint(frame, PixelRect::new(x + CARD_WIDTH + 2, top + 3, 3, bottom - top - 6), gold);
+        paint(
+            frame,
+            PixelRect::new(x - 5, top + 3, 3, bottom - top - 6),
+            gold,
+        );
+        paint(
+            frame,
+            PixelRect::new(x + CARD_WIDTH + 2, top + 3, 3, bottom - top - 6),
+            gold,
+        );
         paint(frame, PixelRect::new(x + 18, top, CARD_WIDTH - 36, 1), gold);
-        paint(frame, PixelRect::new(x + 18, bottom - 1, CARD_WIDTH - 36, 1), gold);
+        paint(
+            frame,
+            PixelRect::new(x + 18, bottom - 1, CARD_WIDTH - 36, 1),
+            gold,
+        );
     }
 
 
     /// Separate gameplay and terminal panels without whole-screen RGB matching.
     #[test]
     fn native_scenes_and_solver_activation_are_independent() {
-
-
         for code in 1..=13 {
             let frame = fixture(code);
-            assert_eq!(is_gameplay_scene(&frame).unwrap(), code <= 8 || code == 13, "FC{code:02}");
-            assert_eq!(solver_active(&frame).unwrap(), (2..=8).contains(&code), "FC{code:02}");
+            assert_eq!(
+                is_gameplay_scene(&frame).unwrap(),
+                code <= 8 || code == 13,
+                "FC{code:02}"
+            );
+            assert_eq!(
+                solver_active(&frame).unwrap(),
+                (2..=8).contains(&code),
+                "FC{code:02}"
+            );
         }
 
-        assert_eq!(analyse(&fixture(1)).unwrap().prediction, PredictedAction::NoHighlight);
-        assert_eq!(analyse(&fixture(13)).unwrap().prediction, PredictedAction::NoHighlight);
+        assert_eq!(
+            analyse(&fixture(1)).unwrap().prediction,
+            PredictedAction::NoHighlight
+        );
+        assert_eq!(
+            analyse(&fixture(13)).unwrap().prediction,
+            PredictedAction::NoHighlight
+        );
         assert_eq!(GameMode::FreeCell.profile().boards_per_game, 1);
         assert!(GameMode::FreeCell.profile().game_progress.is_none());
         let foreign = decode_png(include_bytes!("../tests/fixtures/klondike/K95.png")).unwrap();
-        assert!(!is_gameplay_scene(&foreign).unwrap(), "a native Klondike board is not Free Cell");
+        assert!(
+            !is_gameplay_scene(&foreign).unwrap(),
+            "a native Klondike board is not Free Cell"
+        );
     }
 
 
@@ -594,19 +663,65 @@ mod tests {
     #[test]
     fn native_moves_select_one_source_and_click_its_bottom_card() {
         let expected = [
-            (2, FreeCellTarget::Play { column: 7, top: 587, bottom: 789 }),
-            (3, FreeCellTarget::Play { column: 5, top: 534, bottom: 736 }),
-            (4, FreeCellTarget::Play { column: 5, top: 481, bottom: 683 }),
+            (
+                2,
+                FreeCellTarget::Play {
+                    column: 7,
+                    top: 587,
+                    bottom: 789,
+                },
+            ),
+            (
+                3,
+                FreeCellTarget::Play {
+                    column: 5,
+                    top: 534,
+                    bottom: 736,
+                },
+            ),
+            (
+                4,
+                FreeCellTarget::Play {
+                    column: 5,
+                    top: 481,
+                    bottom: 683,
+                },
+            ),
             (5, FreeCellTarget::Cell { column: 2 }),
-            (6, FreeCellTarget::Play { column: 2, top: 481, bottom: 736 }),
-            (7, FreeCellTarget::Play { column: 2, top: 481, bottom: 736 }),
-            (8, FreeCellTarget::Play { column: 2, top: 428, bottom: 630 }),
+            (
+                6,
+                FreeCellTarget::Play {
+                    column: 2,
+                    top: 481,
+                    bottom: 736,
+                },
+            ),
+            (
+                7,
+                FreeCellTarget::Play {
+                    column: 2,
+                    top: 481,
+                    bottom: 736,
+                },
+            ),
+            (
+                8,
+                FreeCellTarget::Play {
+                    column: 2,
+                    top: 428,
+                    bottom: 630,
+                },
+            ),
         ];
 
 
         for (code, target) in expected {
             let action = canonical_action(target).unwrap();
-            assert_eq!(analyse(&fixture(code)).unwrap().prediction, PredictedAction::Action(action), "FC{code:02}");
+            assert_eq!(
+                analyse(&fixture(code)).unwrap().prediction,
+                PredictedAction::Action(action),
+                "FC{code:02}"
+            );
             assert_eq!(action.minimum_changed_pixels(), 0);
             assert_eq!(action.repeat_target_policy(), RepeatTargetPolicy::Allowed);
             let InputOperation::Click(click) = action.operation() else {
@@ -628,11 +743,21 @@ mod tests {
     fn a_run_and_its_same_position_next_frame_remain_one_recommendation() {
         let first = analyse(&fixture(6)).unwrap().prediction;
         assert_eq!(first, analyse(&fixture(7)).unwrap().prediction);
-        let PredictedAction::Action(action) = first else { panic!("native run source"); };
-        assert_eq!(action.target, ActionTarget::FreeCell(FreeCellTarget::Play {
-            column: 2, top: 481, bottom: 736,
-        }));
-        assert_eq!(action.operation(), InputOperation::Click(PixelPoint::new(478, 696)));
+        let PredictedAction::Action(action) = first else {
+            panic!("native run source");
+        };
+        assert_eq!(
+            action.target,
+            ActionTarget::FreeCell(FreeCellTarget::Play {
+                column: 2,
+                top: 481,
+                bottom: 736,
+            })
+        );
+        assert_eq!(
+            action.operation(),
+            InputOperation::Click(PixelPoint::new(478, 696))
+        );
     }
 
 
@@ -642,39 +767,69 @@ mod tests {
         let mut frame = fixture(2);
         paint_source(&mut frame, PLAY_X[0], 500, 850);
         paint_source(&mut frame, PLAY_X[1], 500, 850);
-        assert_eq!(analyse(&frame).unwrap().prediction,
-            PredictedAction::Action(canonical_action(FreeCellTarget::Play {
-                column: 1, top: 500, bottom: 850,
-            }).unwrap()));
+        assert_eq!(
+            analyse(&frame).unwrap().prediction,
+            PredictedAction::Action(
+                canonical_action(FreeCellTarget::Play {
+                    column: 1,
+                    top: 500,
+                    bottom: 850,
+                })
+                .unwrap()
+            )
+        );
         paint_source(&mut frame, CELL_X[1], 102, 305);
-        assert_eq!(analyse(&frame).unwrap().prediction,
-            PredictedAction::Action(canonical_action(FreeCellTarget::Cell { column: 2 }).unwrap()));
+        assert_eq!(
+            analyse(&frame).unwrap().prediction,
+            PredictedAction::Action(canonical_action(FreeCellTarget::Cell { column: 2 }).unwrap())
+        );
         paint_source(&mut frame, CELL_X[0], 102, 305);
-        assert_eq!(analyse(&frame).unwrap().prediction,
-            PredictedAction::Action(canonical_action(FreeCellTarget::Cell { column: 1 }).unwrap()));
+        assert_eq!(
+            analyse(&frame).unwrap().prediction,
+            PredictedAction::Action(canonical_action(FreeCellTarget::Cell { column: 1 }).unwrap())
+        );
     }
 
 
     /// Dashed destinations, incomplete sources and toolbar pixels never authorise input.
     #[test]
     fn destination_guides_and_unknown_clipped_sources_are_not_actions() {
-
-
         for (code, x, top) in [(2, PLAY_X[6], 580), (3, PLAY_X[4], 524)] {
             let mut frame = fixture(code);
-            paint(&mut frame, PixelRect::new(x - 10, top, CARD_WIDTH + 21, 218), [20, 120, 75]);
+            paint(
+                &mut frame,
+                PixelRect::new(x - 10, top, CARD_WIDTH + 21, 218),
+                [20, 120, 75],
+            );
             assert!(is_gameplay_scene(&frame).unwrap());
-            assert_eq!(analyse(&frame).unwrap().prediction, PredictedAction::NoHighlight);
+            assert_eq!(
+                analyse(&frame).unwrap().prediction,
+                PredictedAction::NoHighlight
+            );
         }
 
         let mut frame = fixture(2);
-        paint(&mut frame, PixelRect::new(PLAY_X[6] - 10, 580, CARD_WIDTH + 21, 218), [20, 120, 75]);
+        paint(
+            &mut frame,
+            PixelRect::new(PLAY_X[6] - 10, 580, CARD_WIDTH + 21, 218),
+            [20, 120, 75],
+        );
         paint_source(&mut frame, PLAY_X[1], 800, 1_001);
-        assert_eq!(analyse(&frame).unwrap().prediction, PredictedAction::NoHighlight,
-            "rails without visible card paper cannot invent a clipped click");
-        paint(&mut frame, PixelRect::new(0, TOOLBAR_TOP, 1_920, 1_080 - TOOLBAR_TOP), [255, 255, 255]);
-        assert_eq!(analyse(&frame).unwrap().prediction, PredictedAction::NoHighlight,
-            "toolbar pixels are outside source authority");
+        assert_eq!(
+            analyse(&frame).unwrap().prediction,
+            PredictedAction::NoHighlight,
+            "rails without visible card paper cannot invent a clipped click"
+        );
+        paint(
+            &mut frame,
+            PixelRect::new(0, TOOLBAR_TOP, 1_920, 1_080 - TOOLBAR_TOP),
+            [255, 255, 255],
+        );
+        assert_eq!(
+            analyse(&frame).unwrap().prediction,
+            PredictedAction::NoHighlight,
+            "toolbar pixels are outside source authority"
+        );
     }
 
 
@@ -792,26 +947,44 @@ mod tests {
     /// Native clipped single cards and runs use the visible cutoff, never a hidden bottom.
     #[test]
     fn native_toolbar_clipped_sources_ignore_all_toolbar_pixels() {
-
-
         for (code, column, top, click_x) in [
-            (14, 3, 786, 671), (16, 3, 627, 671), (17, 1, 627, 286),
-            (20, 6, 574, 1_248), (21, 7, 786, 1_441),
+            (14, 3, 786, 671),
+            (16, 3, 627, 671),
+            (17, 1, 627, 286),
+            (20, 6, 574, 1_248),
+            (21, 7, 786, 1_441),
         ] {
             let mut frame = fixture(code);
-            let expected = PredictedAction::Action(canonical_action(FreeCellTarget::Play {
-                column, top, bottom: TOOLBAR_TOP,
-            }).unwrap());
+            let expected = PredictedAction::Action(
+                canonical_action(FreeCellTarget::Play {
+                    column,
+                    top,
+                    bottom: TOOLBAR_TOP,
+                })
+                .unwrap(),
+            );
             assert_eq!(analyse(&frame).unwrap().prediction, expected, "FC{code:02}");
-            let PredictedAction::Action(action) = expected else { panic!("native clipped source"); };
-            assert_eq!(action.operation(), InputOperation::Click(PixelPoint::new(click_x, 907)));
+            let PredictedAction::Action(action) = expected else {
+                panic!("native clipped source");
+            };
+            assert_eq!(
+                action.operation(),
+                InputOperation::Click(PixelPoint::new(click_x, 907))
+            );
             assert_eq!(action.minimum_changed_pixels(), 0);
 
 
             for colour in [[0, 0, 0], [255, 255, 255], [235, 195, 90], [20, 120, 75]] {
-                paint(&mut frame, PixelRect::new(0, TOOLBAR_TOP, 1_920, 1_080 - TOOLBAR_TOP), colour);
-                assert_eq!(analyse(&frame).unwrap().prediction, expected,
-                    "FC{code:02}: toolbar pixels cannot affect the visible source");
+                paint(
+                    &mut frame,
+                    PixelRect::new(0, TOOLBAR_TOP, 1_920, 1_080 - TOOLBAR_TOP),
+                    colour,
+                );
+                assert_eq!(
+                    analyse(&frame).unwrap().prediction,
+                    expected,
+                    "FC{code:02}: toolbar pixels cannot affect the visible source"
+                );
             }
         }
     }
@@ -820,31 +993,50 @@ mod tests {
     /// Central card pips cannot hide a clipped source with both visible margins.
     #[test]
     fn clipped_sources_with_centre_pips_require_both_card_margins() {
-
-
         for (code, column, top) in [(20, 6, 574), (21, 7, 786)] {
             let frame = fixture(code);
             let x = PLAY_X[usize::from(column - 1)];
             let centre = PixelRect::new(x + CARD_WIDTH / 2 - 8, 899, 17, 17);
-            assert!(!fraction_at_least(&frame, centre, is_paper, 500),
-                "FC{code:02}: central suit pips reproduce the former rejection");
-            let expected = PredictedAction::Action(canonical_action(FreeCellTarget::Play {
-                column, top, bottom: TOOLBAR_TOP,
-            }).unwrap());
+            assert!(
+                !fraction_at_least(&frame, centre, is_paper, 500),
+                "FC{code:02}: central suit pips reproduce the former rejection"
+            );
+            let expected = PredictedAction::Action(
+                canonical_action(FreeCellTarget::Play {
+                    column,
+                    top,
+                    bottom: TOOLBAR_TOP,
+                })
+                .unwrap(),
+            );
             assert_eq!(analyse(&frame).unwrap().prediction, expected, "FC{code:02}");
 
 
             for margin_x in [x + CARD_MARGIN_INSET, x + CARD_WIDTH - CARD_MARGIN_INSET] {
                 let mut missing_margin = fixture(code);
-                paint(&mut missing_margin, PixelRect::new(margin_x - 8, 899, 17, 17), [20, 120, 75]);
-                assert_eq!(analyse(&missing_margin).unwrap().prediction, PredictedAction::NoHighlight,
-                    "FC{code:02}: one paper margin cannot establish the clipped card");
+                paint(
+                    &mut missing_margin,
+                    PixelRect::new(margin_x - 8, 899, 17, 17),
+                    [20, 120, 75],
+                );
+                assert_eq!(
+                    analyse(&missing_margin).unwrap().prediction,
+                    PredictedAction::NoHighlight,
+                    "FC{code:02}: one paper margin cannot establish the clipped card"
+                );
             }
 
             let mut no_card = fixture(code);
-            paint(&mut no_card, PixelRect::new(x, 899, CARD_WIDTH, 17), [20, 120, 75]);
-            assert_eq!(analyse(&no_card).unwrap().prediction, PredictedAction::NoHighlight,
-                "FC{code:02}: source rails alone cannot establish a clipped card");
+            paint(
+                &mut no_card,
+                PixelRect::new(x, 899, CARD_WIDTH, 17),
+                [20, 120, 75],
+            );
+            assert_eq!(
+                analyse(&no_card).unwrap().prediction,
+                PredictedAction::NoHighlight,
+                "FC{code:02}: source rails alone cannot establish a clipped card"
+            );
         }
     }
 
@@ -852,22 +1044,37 @@ mod tests {
     /// A complete bottom at the cutoff is visible authority even over card ink.
     #[test]
     fn native_closed_bottoms_at_the_toolbar_remain_complete_sources() {
-
-
         for (code, column, click_x) in [(18, 1, 286), (19, 3, 671)] {
             let mut frame = fixture(code);
-            let expected = PredictedAction::Action(canonical_action(FreeCellTarget::Play {
-                column, top: 641, bottom: TOOLBAR_TOP,
-            }).unwrap());
+            let expected = PredictedAction::Action(
+                canonical_action(FreeCellTarget::Play {
+                    column,
+                    top: 641,
+                    bottom: TOOLBAR_TOP,
+                })
+                .unwrap(),
+            );
             assert_eq!(analyse(&frame).unwrap().prediction, expected, "FC{code:02}");
-            let PredictedAction::Action(action) = expected else { panic!("native closed source"); };
-            assert_eq!(action.operation(), InputOperation::Click(PixelPoint::new(click_x, 907)));
+            let PredictedAction::Action(action) = expected else {
+                panic!("native closed source");
+            };
+            assert_eq!(
+                action.operation(),
+                InputOperation::Click(PixelPoint::new(click_x, 907))
+            );
 
 
             for colour in [[0, 0, 0], [255, 255, 255], [235, 195, 90], [20, 120, 75]] {
-                paint(&mut frame, PixelRect::new(0, TOOLBAR_TOP, 1_920, 1_080 - TOOLBAR_TOP), colour);
-                assert_eq!(analyse(&frame).unwrap().prediction, expected,
-                    "FC{code:02}: a closed bottom uses no toolbar pixels");
+                paint(
+                    &mut frame,
+                    PixelRect::new(0, TOOLBAR_TOP, 1_920, 1_080 - TOOLBAR_TOP),
+                    colour,
+                );
+                assert_eq!(
+                    analyse(&frame).unwrap().prediction,
+                    expected,
+                    "FC{code:02}: a closed bottom uses no toolbar pixels"
+                );
             }
         }
     }
@@ -880,23 +1087,49 @@ mod tests {
         let x = PLAY_X[0];
         let gold = [235, 195, 90];
         paint_source(&mut frame, x, 641, TOOLBAR_TOP);
-        assert_eq!(find_source(&frame, x, PLAY_SCAN_TOP, TOOLBAR_TOP),
-            Some(PixelRect::new(x, 641, CARD_WIDTH, TOOLBAR_TOP - 641)));
-        paint(&mut frame, PixelRect::new(x + 18, TOOLBAR_TOP - 1, CARD_WIDTH - 36, 1), [0, 0, 0]);
-        paint(&mut frame, PixelRect::new(x + 18, TOOLBAR_TOP - 5, CARD_WIDTH - 36, 1), gold);
-        assert!(find_source(&frame, x, PLAY_SCAN_TOP, TOOLBAR_TOP).is_none(),
-            "a crossbar above the last paired rail is not a complete bottom");
+        assert_eq!(
+            find_source(&frame, x, PLAY_SCAN_TOP, TOOLBAR_TOP),
+            Some(PixelRect::new(x, 641, CARD_WIDTH, TOOLBAR_TOP - 641))
+        );
+        paint(
+            &mut frame,
+            PixelRect::new(x + 18, TOOLBAR_TOP - 1, CARD_WIDTH - 36, 1),
+            [0, 0, 0],
+        );
+        paint(
+            &mut frame,
+            PixelRect::new(x + 18, TOOLBAR_TOP - 5, CARD_WIDTH - 36, 1),
+            gold,
+        );
+        assert!(
+            find_source(&frame, x, PLAY_SCAN_TOP, TOOLBAR_TOP).is_none(),
+            "a crossbar above the last paired rail is not a complete bottom"
+        );
         paint_source(&mut frame, x, 641, 1_001);
-        paint(&mut frame, PixelRect::new(x + 18, TOOLBAR_TOP - 2, CARD_WIDTH - 36, 1), gold);
-        assert!(find_source(&frame, x, PLAY_SCAN_TOP, TOOLBAR_TOP).is_none(),
-            "rails through the cutoff still require clipped-source paper");
-        paint(&mut frame, PixelRect::new(x + 18, 641, CARD_WIDTH - 36, 1), [0, 0, 0]);
-        assert!(find_source(&frame, x, PLAY_SCAN_TOP, TOOLBAR_TOP).is_none(),
-            "neither near-cutoff path excuses an absent closed top");
+        paint(
+            &mut frame,
+            PixelRect::new(x + 18, TOOLBAR_TOP - 2, CARD_WIDTH - 36, 1),
+            gold,
+        );
+        assert!(
+            find_source(&frame, x, PLAY_SCAN_TOP, TOOLBAR_TOP).is_none(),
+            "rails through the cutoff still require clipped-source paper"
+        );
+        paint(
+            &mut frame,
+            PixelRect::new(x + 18, 641, CARD_WIDTH - 36, 1),
+            [0, 0, 0],
+        );
+        assert!(
+            find_source(&frame, x, PLAY_SCAN_TOP, TOOLBAR_TOP).is_none(),
+            "neither near-cutoff path excuses an absent closed top"
+        );
         let mut frame = blank_frame();
         paint_source(&mut frame, CELL_X[0], 102, 310);
-        assert!(find_source(&frame, CELL_X[0], 100, 310).is_none(),
-            "the PLAY toolbar boundary does not change CELL policy");
+        assert!(
+            find_source(&frame, CELL_X[0], 100, 310).is_none(),
+            "the PLAY toolbar boundary does not change CELL policy"
+        );
     }
 
 
@@ -908,36 +1141,72 @@ mod tests {
 
 
         for (label, bounds, colour) in [
-            ("closed top", PixelRect::new(x - 10, 780, CARD_WIDTH + 21, 19), felt),
-            ("left rail", PixelRect::new(x - 10, 799, 10, TOOLBAR_TOP - 799), felt),
-            ("rails reaching cutoff", PixelRect::new(x + CARD_WIDTH, TOOLBAR_TOP - 4, 11, 4), felt),
-            ("left card margin", PixelRect::new(x + CARD_MARGIN_INSET - 8, 899, 17, 17), [0, 0, 0]),
-            ("right card margin", PixelRect::new(x + CARD_WIDTH - CARD_MARGIN_INSET - 8, 899, 17, 17), [0, 0, 0]),
+            (
+                "closed top",
+                PixelRect::new(x - 10, 780, CARD_WIDTH + 21, 19),
+                felt,
+            ),
+            (
+                "left rail",
+                PixelRect::new(x - 10, 799, 10, TOOLBAR_TOP - 799),
+                felt,
+            ),
+            (
+                "rails reaching cutoff",
+                PixelRect::new(x + CARD_WIDTH, TOOLBAR_TOP - 4, 11, 4),
+                felt,
+            ),
+            (
+                "left card margin",
+                PixelRect::new(x + CARD_MARGIN_INSET - 8, 899, 17, 17),
+                [0, 0, 0],
+            ),
+            (
+                "right card margin",
+                PixelRect::new(x + CARD_WIDTH - CARD_MARGIN_INSET - 8, 899, 17, 17),
+                [0, 0, 0],
+            ),
         ] {
             let mut frame = fixture(14);
             paint(&mut frame, bounds, colour);
-            assert_eq!(analyse(&frame).unwrap().prediction, PredictedAction::NoHighlight, "missing {label}");
+            assert_eq!(
+                analyse(&frame).unwrap().prediction,
+                PredictedAction::NoHighlight,
+                "missing {label}"
+            );
         }
 
         let mut frame = fixture(14);
 
 
         for y in 786..TOOLBAR_TOP {
-
-
             if (y - 786) % 26 >= 12 {
                 paint(&mut frame, PixelRect::new(x - 10, y, 10, 1), felt);
                 paint(&mut frame, PixelRect::new(x + CARD_WIDTH, y, 11, 1), felt);
             }
         }
 
-        assert_eq!(analyse(&frame).unwrap().prediction, PredictedAction::NoHighlight,
-            "dashed opposing rails do not establish a clipped source");
+        assert_eq!(
+            analyse(&frame).unwrap().prediction,
+            PredictedAction::NoHighlight,
+            "dashed opposing rails do not establish a clipped source"
+        );
         let mut frame = fixture(14);
-        paint(&mut frame, PixelRect::new(x - 10, 780, CARD_WIDTH + 21, 103), felt);
-        paint(&mut frame, PixelRect::new(x + 18, 882, CARD_WIDTH - 36, 1), [235, 195, 90]);
-        assert_eq!(analyse(&frame).unwrap().prediction, PredictedAction::NoHighlight,
-            "65 visible rows do not enclose the click inset and its paper probe");
+        paint(
+            &mut frame,
+            PixelRect::new(x - 10, 780, CARD_WIDTH + 21, 103),
+            felt,
+        );
+        paint(
+            &mut frame,
+            PixelRect::new(x + 18, 882, CARD_WIDTH - 36, 1),
+            [235, 195, 90],
+        );
+        assert_eq!(
+            analyse(&frame).unwrap().prediction,
+            PredictedAction::NoHighlight,
+            "65 visible rows do not enclose the click inset and its paper probe"
+        );
     }
 
 
@@ -946,15 +1215,28 @@ mod tests {
     fn rejects_invalid_frames_and_forged_source_coordinates() {
         let mut frame = blank_frame();
         assert!(!is_gameplay_scene(&frame).unwrap());
-        paint(&mut frame, PixelRect::new(0, 0, 1_920, 1_080), [20, 150, 90]);
-        assert!(!is_gameplay_scene(&frame).unwrap(), "plain felt lacks Free Cell slot rows");
+        paint(
+            &mut frame,
+            PixelRect::new(0, 0, 1_920, 1_080),
+            [20, 150, 90],
+        );
+        assert!(
+            !is_gameplay_scene(&frame).unwrap(),
+            "plain felt lacks Free Cell slot rows"
+        );
         frame.pixels.fill(255);
-        assert_eq!(analyse(&frame).unwrap().prediction, PredictedAction::NoHighlight);
+        assert_eq!(
+            analyse(&frame).unwrap().prediction,
+            PredictedAction::NoHighlight
+        );
         frame.pixels.truncate(8);
         assert_eq!(analyse(&frame), Err(HaloDetectionError::InvalidFrameLayout));
         let mut frame = blank_frame();
         frame.width = 1_919;
-        assert_eq!(solver_active(&frame), Err(HaloDetectionError::BoundsOutsideFrame));
+        assert_eq!(
+            solver_active(&frame),
+            Err(HaloDetectionError::BoundsOutsideFrame)
+        );
 
 
         for target in [
@@ -962,13 +1244,41 @@ mod tests {
             FreeCellTarget::Cell { column: 5 },
             FreeCellTarget::Foundation { column: 0 },
             FreeCellTarget::Foundation { column: 5 },
-            FreeCellTarget::Play { column: 0, top: 400, bottom: 600 },
-            FreeCellTarget::Play { column: 9, top: 400, bottom: 600 },
-            FreeCellTarget::Play { column: 1, top: 300, bottom: 600 },
-            FreeCellTarget::Play { column: 1, top: 400, bottom: 948 },
-            FreeCellTarget::Play { column: 1, top: 882, bottom: 947 },
-            FreeCellTarget::Play { column: 1, top: 600, bottom: 400 },
-            FreeCellTarget::Play { column: 1, top: u32::MAX, bottom: u32::MAX },
+            FreeCellTarget::Play {
+                column: 0,
+                top: 400,
+                bottom: 600,
+            },
+            FreeCellTarget::Play {
+                column: 9,
+                top: 400,
+                bottom: 600,
+            },
+            FreeCellTarget::Play {
+                column: 1,
+                top: 300,
+                bottom: 600,
+            },
+            FreeCellTarget::Play {
+                column: 1,
+                top: 400,
+                bottom: 948,
+            },
+            FreeCellTarget::Play {
+                column: 1,
+                top: 882,
+                bottom: 947,
+            },
+            FreeCellTarget::Play {
+                column: 1,
+                top: 600,
+                bottom: 400,
+            },
+            FreeCellTarget::Play {
+                column: 1,
+                top: u32::MAX,
+                bottom: u32::MAX,
+            },
         ] {
             assert!(canonical_action(target).is_none(), "{target}");
         }

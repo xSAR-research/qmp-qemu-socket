@@ -139,16 +139,14 @@ fn identity(command: &WorkerCommand) -> (Option<ControllerContext>, Value) {
             plan,
             run_id,
             single_step,
-            drag_mode,
-            drag_timing,
             ..
         } => (
             Some(&plan.context),
             json!({"command":"execute-freecell","request_id":plan.request_id,
                 "source_generation":plan.source_generation,"run_id":run_id,
                 "single_step":single_step,
-                "diagnostic_drag_mode":single_step.then(||format!("{drag_mode:?}")),
-                "diagnostic_drag_timing":single_step.then(||format!("{drag_timing:?}"))}),
+                "diagnostic_drag_mode":"Absolute",
+                "gesture_phase_wait_ms":crate::parameters::FREECELL_ROUTE_ABS_GESTURE_INTERVAL.as_millis()}),
         ),
         WorkerCommand::ListFreeCellSources {
             context,
@@ -198,6 +196,10 @@ fn identity(command: &WorkerCommand) -> (Option<ControllerContext>, Value) {
         WorkerCommand::StartPyramidSession { context, request } => (
             Some(context),
             json!({"command":"pyramid-session","run_id":request.run_id}),
+        ),
+        WorkerCommand::StartFreeCellSession { context, request } => (
+            Some(context),
+            json!({"command":"freecell-session","run_id":request.run_id,"play_style":request.play_style.label()}),
         ),
         WorkerCommand::CalculateRoute {
             context,

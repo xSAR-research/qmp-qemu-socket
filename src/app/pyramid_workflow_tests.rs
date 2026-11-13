@@ -659,7 +659,11 @@ fn matching_terminal_completion_reconciles_busy_badge_and_consumes_run() {
             &mut owner,
             &mut state,
             RouteCompletion {
-                termination: if succeeds { crate::pyramid_workflow_model::RunTermination::Completed } else { crate::pyramid_workflow_model::RunTermination::Failed },
+                termination: if succeeds {
+                    crate::pyramid_workflow_model::RunTermination::Completed
+                } else {
+                    crate::pyramid_workflow_model::RunTermination::Failed
+                },
                 retained_recon: false,
                 context: context.clone(),
                 run_id: id,
@@ -1132,7 +1136,7 @@ fn final_automatic_statistics_precede_phase_and_survive_session_finish() {
         assert_eq!(displayed.stats, final_update.stats);
     }
     let completion = SessionCompletion {
-            termination: crate::pyramid_workflow_model::RunTermination::Completed,
+        termination: crate::pyramid_workflow_model::RunTermination::Completed,
         context: context.clone(),
         run_id: id,
         result: Ok("single board complete".to_owned()),
@@ -1281,7 +1285,11 @@ fn automatic_completion_is_identity_bound_and_preserves_stop_and_detached_states
         let mut owner = Some(ActiveRun::PyramidSession);
         let mut state = initial;
         let mut completion = SessionCompletion {
-            termination: if succeeds { crate::pyramid_workflow_model::RunTermination::Completed } else { crate::pyramid_workflow_model::RunTermination::Failed },
+            termination: if succeeds {
+                crate::pyramid_workflow_model::RunTermination::Completed
+            } else {
+                crate::pyramid_workflow_model::RunTermination::Failed
+            },
             context: context.clone(),
             run_id: id + 1,
             result: if succeeds {
@@ -1372,7 +1380,7 @@ fn failed_session_releases_optional_recon_and_new_start_in_same_context() {
     let mut owner = Some(ActiveRun::PyramidSession);
     let mut state = WorkerState::Capturing;
     let completion = SessionCompletion {
-            termination: crate::pyramid_workflow_model::RunTermination::Completed,
+        termination: crate::pyramid_workflow_model::RunTermination::Completed,
         context: context.clone(),
         run_id: id,
         result: Err("retained first failure".to_owned()),
@@ -1671,9 +1679,14 @@ fn maximum_pending_is_cleared_on_each_display_retirement() {
 /// Stale and duplicate cancellations cannot dispatch another STOP preview.
 #[test]
 fn stop_183_session_dispatches_one_preview_after_matching_owner_retires() {
-    use super::reset_preview::{dispatch_completion, CompletionDispatch, ResetPreview};
+    use super::reset_preview::{CompletionDispatch, ResetPreview, dispatch_completion};
     use crate::pyramid_workflow_model::RunTermination;
-    for initial in [WorkerState::Acting, WorkerState::Detached, WorkerState::Error, WorkerState::Uncertain] {
+    for initial in [
+        WorkerState::Acting,
+        WorkerState::Detached,
+        WorkerState::Error,
+        WorkerState::Uncertain,
+    ] {
         let selected = context();
         let mut form = acquired_route(&selected);
         let id = form.begin_request().unwrap();
@@ -1683,20 +1696,53 @@ fn stop_183_session_dispatches_one_preview_after_matching_owner_retires() {
         let mut state = initial;
         let mut queued = Vec::new();
         let mut preview = None;
-        for (incoming, expected) in [(id+1, CompletionDispatch::Ignored), (id, CompletionDispatch::StopPreview), (id, CompletionDispatch::Ignored)] {
-            let completion = SessionCompletion { context: selected.clone(), run_id: incoming, termination: RunTermination::OperatorStopped, result: Err("Operator STOP".to_owned()) };
-            let accepted = complete_session(&mut workflow, &mut form, &mut owner, &mut state, &completion, &selected, true);
-            assert_eq!(dispatch_completion(accepted, completion.termination, || {
-                assert!(owner.is_none() && form.active_run_id.is_none());
-                preview = Some(ResetPreview::after_stop(41, selected.clone(), state));
-                queued.push((selected.clone(),41));
-            }), expected);
+        for (incoming, expected) in [
+            (id + 1, CompletionDispatch::Ignored),
+            (id, CompletionDispatch::StopPreview),
+            (id, CompletionDispatch::Ignored),
+        ] {
+            let completion = SessionCompletion {
+                context: selected.clone(),
+                run_id: incoming,
+                termination: RunTermination::OperatorStopped,
+                result: Err("Operator STOP".to_owned()),
+            };
+            let accepted = complete_session(
+                &mut workflow,
+                &mut form,
+                &mut owner,
+                &mut state,
+                &completion,
+                &selected,
+                true,
+            );
+            assert_eq!(
+                dispatch_completion(accepted, completion.termination, || {
+                    assert!(owner.is_none() && form.active_run_id.is_none());
+                    preview = Some(ResetPreview::after_stop(41, selected.clone(), state));
+                    queued.push((selected.clone(), 41));
+                }),
+                expected
+            );
         }
-        assert_eq!(queued, [(selected.clone(),41)]);
-        assert!(form.plan.is_none() && form.acquired_context.is_none() && form.confirmed_context.is_none());
+        assert_eq!(queued, [(selected.clone(), 41)]);
+        assert!(
+            form.plan.is_none()
+                && form.acquired_context.is_none()
+                && form.confirmed_context.is_none()
+        );
         assert!(!workflow.details_visible(&selected));
-        let mut refresh = preview.unwrap(); refresh.finish(); refresh.install();
-        assert_eq!(refresh.worker_state(), if matches!(initial, WorkerState::Error | WorkerState::Uncertain) { WorkerState::Error } else { WorkerState::Ready });
+        let mut refresh = preview.unwrap();
+        refresh.finish();
+        refresh.install();
+        assert_eq!(
+            refresh.worker_state(),
+            if matches!(initial, WorkerState::Error | WorkerState::Uncertain) {
+                WorkerState::Error
+            } else {
+                WorkerState::Ready
+            }
+        );
     }
 }
 
@@ -1704,7 +1750,7 @@ fn stop_183_session_dispatches_one_preview_after_matching_owner_retires() {
 /// Route cancellation has the same single-dispatch and genuine-error preservation boundary.
 #[test]
 fn stop_183_route_dispatches_once_and_failed_late_stop_retains_error() {
-    use super::reset_preview::{dispatch_completion, CompletionDispatch};
+    use super::reset_preview::{CompletionDispatch, dispatch_completion};
     use crate::pyramid_workflow_model::RunTermination;
     for termination in [RunTermination::OperatorStopped, RunTermination::Failed] {
         let selected = context();
@@ -1714,12 +1760,231 @@ fn stop_183_route_dispatches_once_and_failed_late_stop_retains_error() {
         let mut state = WorkerState::Validating;
         let result = Err("stopped or real failure".to_owned());
         let mut queued = 0;
-        for incoming in [id+1,id,id] {
-            let accepted = complete_route(&mut form,&mut owner,&mut state,RouteCompletion { retained_recon:false, context:selected.clone(),run_id:incoming,plan_id:None,result:&result,stopped:true,termination });
-            let disposition = dispatch_completion(accepted,termination,|| { assert!(owner.is_none() && form.active_run_id.is_none()); queued+=1; });
-            if incoming==id+1 { assert_eq!(disposition, CompletionDispatch::Ignored); }
+        for incoming in [id + 1, id, id] {
+            let accepted = complete_route(
+                &mut form,
+                &mut owner,
+                &mut state,
+                RouteCompletion {
+                    retained_recon: false,
+                    context: selected.clone(),
+                    run_id: incoming,
+                    plan_id: None,
+                    result: &result,
+                    stopped: true,
+                    termination,
+                },
+            );
+            let disposition = dispatch_completion(accepted, termination, || {
+                assert!(owner.is_none() && form.active_run_id.is_none());
+                queued += 1;
+            });
+            if incoming == id + 1 {
+                assert_eq!(disposition, CompletionDispatch::Ignored);
+            }
         }
-        assert_eq!(queued, usize::from(termination==RunTermination::OperatorStopped));
-        assert_eq!(state, if termination==RunTermination::OperatorStopped {WorkerState::Ready} else {WorkerState::Uncertain});
+        assert_eq!(
+            queued,
+            usize::from(termination == RunTermination::OperatorStopped)
+        );
+        assert_eq!(
+            state,
+            if termination == RunTermination::OperatorStopped {
+                WorkerState::Ready
+            } else {
+                WorkerState::Uncertain
+            }
+        );
     }
+}
+
+
+/// Header transitions resolve strategy changes ahead of stale game selections.
+#[test]
+fn astar_header_transition_gives_strategy_switch_precedence_over_stale_game_value() {
+    assert_eq!(
+        resolve_independent_header_change(
+            SolvingStrategy::ShortestPath,
+            SolvingStrategy::ShortestPath,
+            GameMode::FreeCell,
+            GameMode::FreeCell,
+        ),
+        None
+    );
+    assert_eq!(
+        resolve_independent_header_change(
+            SolvingStrategy::ShortestPath,
+            SolvingStrategy::ShortestPath,
+            GameMode::FreeCell,
+            GameMode::Pyramid,
+        ),
+        Some(IndependentHeaderChange::Game(GameMode::Pyramid))
+    );
+    assert_eq!(
+        resolve_independent_header_change(
+            SolvingStrategy::ShortestPath,
+            SolvingStrategy::ComputerVision,
+            GameMode::FreeCell,
+            GameMode::FreeCell,
+        ),
+        Some(IndependentHeaderChange::Strategy(
+            SolvingStrategy::ComputerVision
+        ))
+    );
+    assert_eq!(
+        resolve_independent_header_change(
+            SolvingStrategy::ShortestPath,
+            SolvingStrategy::ComputerVision,
+            GameMode::FreeCell,
+            GameMode::Pyramid,
+        ),
+        Some(IndependentHeaderChange::Strategy(
+            SolvingStrategy::ComputerVision
+        ))
+    );
+}
+
+
+/// Free Cell Mode defaults to Continuous normal games and uses exact requested option labels.
+#[test]
+fn freecell_330_mode_defaults_and_options_row_render_cleanly() {
+    use crate::freecell_route::AutoMode;
+    use crate::pyramid_workflow_model::FreeCellPlayStyle;
+
+    assert_eq!(
+        FreeCellPlayStyle::default(),
+        FreeCellPlayStyle::ContinuousNormalGames
+    );
+    assert_eq!(
+        FreeCellPlayStyle::ALL.map(FreeCellPlayStyle::label),
+        ["Continuous normal games", "Single board", "Manual"]
+    );
+    assert!(FreeCellPlayStyle::ContinuousNormalGames.uses_session());
+    assert!(FreeCellPlayStyle::SingleBoard.uses_session());
+    assert!(!FreeCellPlayStyle::Manual.uses_session());
+
+    let mut style = FreeCellPlayStyle::default();
+    let mut auto_mode = AutoMode::ObserveGame;
+    let ctx = eframe::egui::Context::default();
+    let output = ctx.run_ui(
+        eframe::egui::RawInput {
+            screen_rect: Some(eframe::egui::Rect::from_min_size(
+                eframe::egui::Pos2::ZERO,
+                eframe::egui::vec2(820.0, 220.0),
+            )),
+            ..Default::default()
+        },
+        |ui| {
+            freecell_options_row(ui, true, &mut style, &mut auto_mode);
+        },
+    );
+    output.drop_without_applying_deltas();
+    assert_eq!(style.label(), "Continuous normal games");
+    assert_eq!(
+        super::freecell_route::auto_mode_label(auto_mode),
+        "Observe recorded AUTO follow-ups"
+    );
+}
+
+
+/// Free Cell automatic session lifecycle accepts Option 2A clean completion and rejects stale events.
+#[test]
+fn freecell_330_session_lifecycle_accepts_option_2a_and_stop_preview_once() {
+    use super::reset_preview::{CompletionDispatch, ResetPreview, dispatch_completion};
+    use crate::pyramid_workflow_model::{
+        FreeCellSessionCompletion, FreeCellSessionProgress, RunTermination,
+    };
+
+    let mut selected = context();
+    selected.game_mode = GameMode::FreeCell;
+
+    let mut workflow = FreeCellWorkflow::default();
+    let run_id = workflow.begin_run(&selected).unwrap();
+    let mut owner = Some(ActiveRun::FreeCellSession);
+    let mut worker_state = WorkerState::Validating;
+
+    let stale = FreeCellSessionProgress {
+        context: selected.clone(),
+        run_id: run_id + 1,
+        deal_generation: 1,
+        completed_games: 0,
+        phase: SessionPhase::Planning,
+        foundation_cards: Some(12),
+        route_cursor: None,
+        expanded_states: Some(100),
+        export_path: None,
+        message: "stale".to_owned(),
+    };
+    assert!(!workflow.receive_session_progress(&stale, &selected, owner));
+
+    let valid = FreeCellSessionProgress {
+        context: selected.clone(),
+        run_id,
+        deal_generation: 2,
+        completed_games: 1,
+        phase: SessionPhase::Planning,
+        foundation_cards: Some(24),
+        route_cursor: None,
+        expanded_states: Some(10_000),
+        export_path: Some(std::path::PathBuf::from("/tmp/fc-deal-2.json")),
+        message: "searching".to_owned(),
+    };
+    assert!(workflow.receive_session_progress(&valid, &selected, owner));
+    assert_eq!(
+        workflow.activity_phase(&selected),
+        Some(PyramidPhase::Planning)
+    );
+
+    let option_2a = FreeCellSessionCompletion {
+        context: selected.clone(),
+        run_id,
+        completed_games: 1,
+        termination: RunTermination::Completed,
+        unsolvable_foundation_cards: Some(41),
+        export_path: Some(std::path::PathBuf::from("/tmp/fc-deal-2.json")),
+        result: Ok("Exhaustive A* proved 41/52 max".to_owned()),
+    };
+    assert!(complete_freecell_session(
+        &mut workflow,
+        &mut owner,
+        &mut worker_state,
+        &option_2a,
+        &selected,
+        false,
+    ));
+    assert!(owner.is_none());
+    assert_eq!(worker_state, WorkerState::Ready);
+    assert_eq!(workflow.unsolvable_foundation_cards, Some(41));
+
+    let stop_id = workflow.begin_run(&selected).unwrap();
+    let mut stop_owner = Some(ActiveRun::FreeCellSession);
+    let mut stop_state = WorkerState::Acting;
+    let mut dispatched = 0_usize;
+    let stopped = FreeCellSessionCompletion {
+        context: selected.clone(),
+        run_id: stop_id,
+        completed_games: 0,
+        termination: RunTermination::OperatorStopped,
+        unsolvable_foundation_cards: None,
+        export_path: None,
+        result: Err("Operator STOP".to_owned()),
+    };
+    let accepted = complete_freecell_session(
+        &mut workflow,
+        &mut stop_owner,
+        &mut stop_state,
+        &stopped,
+        &selected,
+        true,
+    );
+    assert_eq!(
+        dispatch_completion(accepted, stopped.termination, || {
+            let _ = ResetPreview::after_stop(11, selected.clone(), stop_state);
+            dispatched += 1;
+        }),
+        CompletionDispatch::StopPreview
+    );
+    assert_eq!(dispatched, 1);
+    assert!(stop_owner.is_none());
+    assert_eq!(stop_state, WorkerState::Ready);
 }

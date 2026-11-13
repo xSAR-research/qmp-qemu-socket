@@ -27,8 +27,7 @@ impl QmpQemuSocketApp {
             ui.horizontal(|ui| {
 
 
-                if ui
-                    .button("Copy Output")
+                if crate::ui_style::press_able_button(ui, "Copy Output")
                     .on_hover_text(
                         "Copy the complete file-backed session output to the clipboard",
                     )
@@ -46,7 +45,7 @@ impl QmpQemuSocketApp {
                 if ui
                     .add_enabled(
                         controls_are_mutable(self.active_run, self.worker_state, self.stop_requested) && !self.show_snapshot_dialog,
-                        egui::Button::new("Clear Output"),
+                        crate::ui_style::PressableButton::new("Clear Output"),
                     )
                     .on_hover_text(
                         "Clear the visible log and reset board, game, and row-scan progress; the complete session log is retained",

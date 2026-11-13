@@ -47,8 +47,6 @@ pub enum PyramidTargetKind {
 
 
 impl PyramidTargetKind {
-
-
     /// Report whether this target is a tableau slot rather than a lower control.
     pub const fn is_card(self) -> bool {
         matches!(self, Self::Card { .. })
@@ -57,8 +55,6 @@ impl PyramidTargetKind {
 
     /// Map a valid semantic target to its fixed priority index; reject invalid rows.
     pub const fn slot_index(self) -> Option<usize> {
-
-
         match self {
             Self::Move => Some(0),
             Self::Left => Some(1),
@@ -74,12 +70,8 @@ impl PyramidTargetKind {
 
 
 impl fmt::Display for PyramidTargetKind {
-
-
     /// Format the target as a control name or one-based tableau row and column.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-
-
         match self {
             Self::Move => formatter.write_str("Move/Recycle"),
             Self::Left => formatter.write_str("Left"),
@@ -102,8 +94,6 @@ pub struct PyramidBoardState {
 
 
 impl PyramidBoardState {
-
-
     /// Create an empty per-board record with no verified clicked-card removals.
     pub const fn new() -> Self {
         Self {
@@ -114,8 +104,6 @@ impl PyramidBoardState {
 
     /// Record only a valid clicked tableau card as removed; lower piles stay reusable.
     pub fn mark_removed(&mut self, kind: PyramidTargetKind) {
-
-
         if kind.is_card()
             && let Some(index) = kind.slot_index()
         {
@@ -126,8 +114,6 @@ impl PyramidBoardState {
 
 
 impl Default for PyramidBoardState {
-
-
     /// Start with no consumed tableau slots on a newly observed board.
     fn default() -> Self {
         Self::new()
@@ -349,8 +335,6 @@ const PILE_EFFECT_BOUNDS: PixelRect = PixelRect::new(759, 678, 402, 187);
 
 /// Fixed 2x2 probes, not a search over card artwork or a long-line fallback.
 pub const fn halo_probe(slot: PyramidTargetSlot) -> PixelRect {
-
-
     match slot.kind {
         PyramidTargetKind::Move => PixelRect::new(950, 753, 2, 2),
         PyramidTargetKind::Left => PixelRect::new(789, 871, 2, 2),
@@ -364,8 +348,6 @@ pub const fn halo_probe(slot: PyramidTargetSlot) -> PixelRect {
 
 /// Reject uncalibrated dimensions, overflowing strides and truncated pixel buffers.
 fn validate_frame(frame: &CapturedFrame) -> Result<(), HaloDetectionError> {
-
-
     if frame.width != NOMINAL_FRAME_WIDTH || frame.height != NOMINAL_FRAME_HEIGHT {
         return Err(HaloDetectionError::BoundsOutsideFrame);
     }
@@ -410,8 +392,6 @@ fn count_matching(
 
 
     for y in bounds.y..bottom {
-
-
         for x in bounds.x..right {
             let rgb = pixel_rgb(frame, x, y).ok_or(HaloDetectionError::InvalidFrameLayout)?;
             count += u32::from(predicate(rgb));
@@ -455,8 +435,6 @@ pub fn is_gameplay_scene(frame: &CapturedFrame) -> Result<bool, HaloDetectionErr
 
 
     for bounds in WHITE_SCENE_PROBES {
-
-
         if count_matching(frame, bounds, is_white)? != bounds.width * bounds.height {
             return Ok(false);
         }
@@ -464,8 +442,6 @@ pub fn is_gameplay_scene(frame: &CapturedFrame) -> Result<bool, HaloDetectionErr
 
 
     for bounds in FELT_SCENE_PROBES {
-
-
         if count_matching(frame, bounds, is_felt)? != bounds.width * bounds.height {
             return Ok(false);
         }
@@ -532,8 +508,6 @@ pub(crate) fn tableau_evidence_with(
 
 
     for (index, slot) in PYRAMID_TARGETS.iter().copied().enumerate() {
-
-
         let PyramidTargetKind::Card { row, column } = slot.kind else {
             continue;
         };
@@ -616,8 +590,6 @@ pub fn analyse(
     frame: &CapturedFrame,
     state: &PyramidBoardState,
 ) -> Result<FrameAnalysis, HaloDetectionError> {
-
-
     if !is_gameplay_scene(frame)? {
         return Ok(FrameAnalysis {
             prediction: PredictedAction::NoHighlight,
@@ -631,11 +603,7 @@ pub fn analyse(
 
 
     for (index, slot) in PYRAMID_TARGETS.iter().copied().enumerate() {
-
-
         if let PyramidTargetKind::Card { row, .. } = slot.kind {
-
-
             if evidence[index] != FaceEvidence::Absent {
                 rows.insert(row);
             }
@@ -650,8 +618,6 @@ pub fn analyse(
 
 
     for (index, slot) in PYRAMID_TARGETS.iter().copied().enumerate() {
-
-
         let eligible = match slot.kind {
             PyramidTargetKind::Move => true,
             PyramidTargetKind::Left | PyramidTargetKind::Right => {
@@ -684,8 +650,6 @@ pub fn reappeared_consumed_card(
     frame: &CapturedFrame,
     state: &PyramidBoardState,
 ) -> Result<Option<FrameAnalysis>, HaloDetectionError> {
-
-
     if !state.clicked_target_slots[3..]
         .iter()
         .any(|clicked| *clicked)
@@ -712,8 +676,6 @@ pub fn reappeared_consumed_card(
 
 /// Require a recognised scene and positive absence of every tableau card.
 pub fn board_is_empty(frame: &CapturedFrame) -> Result<bool, HaloDetectionError> {
-
-
     if !is_gameplay_scene(frame)? {
         return Ok(false);
     }
@@ -729,8 +691,6 @@ pub fn board_is_empty(frame: &CapturedFrame) -> Result<bool, HaloDetectionError>
 /// Redeal evidence after the controller has already verified an empty board.
 /// Unknown/blocked occupancy does not establish that a new card has arrived.
 pub fn has_visible_tableau_card(frame: &CapturedFrame) -> Result<bool, HaloDetectionError> {
-
-
     if !is_gameplay_scene(frame)? {
         return Ok(false);
     }
@@ -750,8 +710,6 @@ pub fn final_tableau_action(
     frame: &CapturedFrame,
     kind: PyramidTargetKind,
 ) -> Result<bool, HaloDetectionError> {
-
-
     if kind == PyramidTargetKind::Move || !is_gameplay_scene(frame)? {
         return Ok(false);
     }
@@ -799,8 +757,6 @@ pub fn redeal_after_final_tableau_action(
     after: &CapturedFrame,
     kind: PyramidTargetKind,
 ) -> Result<bool, HaloDetectionError> {
-
-
     if !final_tableau_action(before, kind)? || !is_gameplay_scene(after)? {
         return Ok(false);
     }
@@ -969,8 +925,6 @@ pub(crate) fn unique_highlighted_partner(
     before: &CapturedFrame,
     clicked: PyramidTargetSlot,
 ) -> Result<Option<PyramidTargetSlot>, HaloDetectionError> {
-
-
     if count_matching(before, halo_probe(clicked), is_halo_gold)? != 4 {
         return Ok(None);
     }
@@ -979,8 +933,6 @@ pub(crate) fn unique_highlighted_partner(
 
 
     for (index, slot) in PYRAMID_TARGETS.iter().copied().enumerate() {
-
-
         if slot.kind == clicked.kind || slot.kind == PyramidTargetKind::Move {
             continue;
         }
@@ -996,8 +948,6 @@ pub(crate) fn unique_highlighted_partner(
         if face == FaceEvidence::Present
             && count_matching(before, halo_probe(slot), is_halo_gold)? == 4
         {
-
-
             if partner.is_some() {
                 return Ok(None);
             }
@@ -1016,8 +966,6 @@ pub fn has_repeated_pile_pair(
     after: &CapturedFrame,
     clicked: PyramidTargetKind,
 ) -> Result<bool, HaloDetectionError> {
-
-
     let (clicked, opposite) = match clicked {
         PyramidTargetKind::Left => (LEFT_TARGET, RIGHT_TARGET),
         PyramidTargetKind::Right => (RIGHT_TARGET, LEFT_TARGET),
@@ -1026,8 +974,6 @@ pub fn has_repeated_pile_pair(
 
 
     for frame in [before, after] {
-
-
         if !is_gameplay_scene(frame)?
             || face_evidence(frame, clicked)? != FaceEvidence::Present
             || unique_highlighted_partner(frame, clicked)?.map(|slot| slot.kind)
@@ -1087,14 +1033,10 @@ pub(crate) fn measure_effect_with_settings(
             evidence.after_face = Some(tableau_evidence(after)?[index]);
             evidence.verified = evidence.before_face == Some(FaceEvidence::Present)
                 && evidence.after_face == Some(FaceEvidence::Absent)
-                && changed_tableau_corner(before,after,slot,settings)?;
+                && changed_tableau_corner(before, after, slot, settings)?;
         }
         PyramidTargetKind::Move => {
-
-
             for pile in [LEFT_TARGET, RIGHT_TARGET] {
-
-
                 if !matches!(
                     face_evidence(before, pile)?,
                     FaceEvidence::Present | FaceEvidence::Absent
@@ -1107,13 +1049,12 @@ pub(crate) fn measure_effect_with_settings(
             }
             let left = changed_pile_interior_with_settings(before, after, LEFT_TARGET, settings)?;
             let right = changed_pile_interior_with_settings(before, after, RIGHT_TARGET, settings)?;
-            let changed=left.changed_pixels+right.changed_pixels;
+            let changed = left.changed_pixels + right.changed_pixels;
             evidence.pile_changed_pixels = Some(changed);
-            evidence.verified = changed > settings.allowed_changes(left.total_pixels+right.total_pixels);
+            evidence.verified =
+                changed > settings.allowed_changes(left.total_pixels + right.total_pixels);
         }
         PyramidTargetKind::Left | PyramidTargetKind::Right => {
-
-
             let opposite = if kind == PyramidTargetKind::Left {
                 RIGHT_TARGET
             } else {
@@ -1122,8 +1063,8 @@ pub(crate) fn measure_effect_with_settings(
             let before_face = face_evidence(before, slot)?;
             let after_face = face_evidence(after, slot)?;
             let clicked = changed_pile_interior_with_settings(before, after, slot, settings)?;
-            let changed=clicked.changed_pixels;
-            let other=changed_pile_interior_with_settings(before,after,opposite,settings)?;
+            let changed = clicked.changed_pixels;
+            let other = changed_pile_interior_with_settings(before, after, opposite, settings)?;
             let opposite_evidence = PileEffectEvidence {
                 before_face: face_evidence(before, opposite)?,
                 after_face: face_evidence(after, opposite)?,
@@ -1139,8 +1080,6 @@ pub(crate) fn measure_effect_with_settings(
             if before_face == FaceEvidence::Present
                 && matches!(after_face, FaceEvidence::Present | FaceEvidence::Absent)
             {
-
-
                 if clicked.exceeds_allowance() {
                     evidence.verified = true;
                 } else if let Some(partner) = unique_highlighted_partner(before, slot)? {
@@ -1150,10 +1089,9 @@ pub(crate) fn measure_effect_with_settings(
                     if let Some(index) =
                         partner.kind.slot_index().filter(|_| partner.kind.is_card())
                     {
-
-
                         if tableau_evidence(after)?[index] == FaceEvidence::Absent
-                            && changed_tableau_corner(before,after,partner,settings)? {
+                            && changed_tableau_corner(before, after, partner, settings)?
+                        {
                             evidence.removed_highlighted_partner = Some(partner.kind);
                             evidence.verified = true;
                         }
@@ -1173,8 +1111,12 @@ pub(crate) fn measure_effect_with_settings(
                         if opposite_evidence.after_face == FaceEvidence::Absent {
                             evidence.removed_highlighted_partner = Some(partner.kind);
                         }
-                        evidence.verified = (pair_changed > settings.allowed_changes(clicked.total_pixels+opposite_evidence.eligible_pixels))
-                            || (evidence.removed_highlighted_partner.is_some() && other.exceeds_allowance());
+                        evidence.verified = (pair_changed
+                            > settings.allowed_changes(
+                                clicked.total_pixels + opposite_evidence.eligible_pixels,
+                            ))
+                            || (evidence.removed_highlighted_partner.is_some()
+                                && other.exceeds_allowance());
                     }
                 }
             }
@@ -1221,11 +1163,7 @@ mod tests {
 
     /// Paint an RGBA rectangle into a synthetic test frame with known valid bounds.
     fn paint(frame: &mut CapturedFrame, bounds: PixelRect, rgba: [u8; 4]) {
-
-
         for y in bounds.y..bounds.bottom() {
-
-
             for x in bounds.x..bounds.right() {
                 let offset = y as usize * frame.stride + x as usize * 4;
                 frame.pixels[offset..offset + 4].copy_from_slice(&rgba);
@@ -1280,8 +1218,6 @@ mod tests {
         frame: &CapturedFrame,
         state: &PyramidBoardState,
     ) -> Option<PyramidTargetKind> {
-
-
         match analyse(frame, state).expect("valid fixture").prediction {
             PredictedAction::Action(GuidedAction {
                 target: ActionTarget::Pyramid(kind),
@@ -1304,8 +1240,6 @@ mod tests {
 
 
         for row in (1_u8..=7).rev() {
-
-
             for column in 1..=row {
                 assert_eq!(
                     PYRAMID_TARGETS[index].kind,
@@ -1323,8 +1257,6 @@ mod tests {
     /// Verify target geometry and hit points fit the guest frame and QMP range.
     #[test]
     fn every_bound_and_hit_point_is_inside_the_frame_and_qmp_mappable() {
-
-
         for target in PYRAMID_TARGETS {
             assert!(
                 target.bounds.contains(target.click_point),
@@ -1349,19 +1281,13 @@ mod tests {
     /// Verify tableau clicks remain in each exposed top strip.
     #[test]
     fn tableau_hit_points_avoid_overlapping_lower_rows() {
-
-
         for target in PYRAMID_TARGETS {
-
-
             let PyramidTargetKind::Card { row, .. } = target.kind else {
                 continue;
             };
 
 
             for other in PYRAMID_TARGETS {
-
-
                 if let PyramidTargetKind::Card { row: other_row, .. } = other.kind
                     && other_row > row
                 {
@@ -1643,10 +1569,10 @@ mod tests {
             let mut before = empty_board();
             add_card(&mut before, pile.kind, true);
             add_card(&mut before, partner, true);
-        paint_corner(&mut before, partner_slot, WHITE);
+            paint_corner(&mut before, partner_slot, WHITE);
             let mut after = before.clone();
             paint(&mut after, lower_face_probe(partner_slot), FELT);
-        paint_corner(&mut after, partner_slot, FELT);
+            paint_corner(&mut after, partner_slot, FELT);
             paint(&mut after, halo_probe(partner_slot), FELT);
             paint(&mut after, halo_probe(pile), FELT);
 
@@ -1787,9 +1713,18 @@ mod tests {
 
 
         for (pile, expected) in [(LEFT_TARGET, 127), (RIGHT_TARGET, 4)] {
-            assert_eq!(changed_pile_interior(&before, &after, pile).map(|m| m.changed_pixels), Ok(expected));
-            assert_eq!(changed_pile_interior(&before, &padded, pile).map(|m| m.changed_pixels), Ok(expected));
-            assert_eq!(changed_pile_interior(&padded, &before, pile).map(|m| m.changed_pixels), Ok(expected));
+            assert_eq!(
+                changed_pile_interior(&before, &after, pile).map(|m| m.changed_pixels),
+                Ok(expected)
+            );
+            assert_eq!(
+                changed_pile_interior(&before, &padded, pile).map(|m| m.changed_pixels),
+                Ok(expected)
+            );
+            assert_eq!(
+                changed_pile_interior(&padded, &before, pile).map(|m| m.changed_pixels),
+                Ok(expected)
+            );
         }
     }
 
@@ -1843,16 +1778,16 @@ mod tests {
     /// Verify a known pair combines both pile deltas at the exact effect threshold.
     #[test]
     fn known_pile_pair_combines_only_its_cursor_excluded_interiors() {
-
-
         for (clicked, opposite) in [(LEFT_TARGET, RIGHT_TARGET), (RIGHT_TARGET, LEFT_TARGET)] {
-
-
             // These are synthetic threshold cases, not reconstructed historical
             // before/after captures. Both new cards may retain the same halos.
             let source = pile_pair();
-            let clicked_pixels = changed_pile_interior(&source, &source, clicked).unwrap().total_pixels;
-            let opposite_pixels = changed_pile_interior(&source, &source, opposite).unwrap().total_pixels;
+            let clicked_pixels = changed_pile_interior(&source, &source, clicked)
+                .unwrap()
+                .total_pixels;
+            let opposite_pixels = changed_pile_interior(&source, &source, opposite)
+                .unwrap()
+                .total_pixels;
             let allowance = (clicked_pixels + opposite_pixels) / 10;
             let half = allowance / 2;
             assert!(half <= clicked_pixels / 10);
@@ -1889,8 +1824,6 @@ mod tests {
     /// Verify opposite-pile absence needs joint RGB evidence while the clicked pile may stay unchanged.
     #[test]
     fn pile_pair_partner_absence_also_requires_joint_rgb_occurrence() {
-
-
         for (clicked, opposite) in [(LEFT_TARGET, RIGHT_TARGET), (RIGHT_TARGET, LEFT_TARGET)] {
             let before = pile_pair();
             let mut after = before.clone();
@@ -1901,8 +1834,14 @@ mod tests {
             assert_eq!(measured.pair_changed_pixels, Some(0));
             assert_eq!(measured.removed_highlighted_partner, Some(opposite.kind));
             assert!(!measured.verified);
-            let eligible = changed_pile_interior(&before, &before, opposite).unwrap().total_pixels;
-            paint_pile_changes(&mut after, opposite, u32::try_from(eligible / 10 + 1).unwrap());
+            let eligible = changed_pile_interior(&before, &before, opposite)
+                .unwrap()
+                .total_pixels;
+            paint_pile_changes(
+                &mut after,
+                opposite,
+                u32::try_from(eligible / 10 + 1).unwrap(),
+            );
             let measured = measure_effect(&before, &after, clicked.kind).unwrap();
             assert_eq!(measured.pile_changed_pixels, Some(0));
             assert_eq!(measured.removed_highlighted_partner, Some(opposite.kind));
@@ -1914,16 +1853,22 @@ mod tests {
     /// Verify paired-pile effects reject unrelated or uncertain planning evidence.
     #[test]
     fn pile_pair_rejects_unrelated_ambiguous_unknown_or_overlaid_evidence() {
-
-
         for (clicked, opposite) in [(LEFT_TARGET, RIGHT_TARGET), (RIGHT_TARGET, LEFT_TARGET)] {
             let before = pile_pair();
             let mut after = before.clone();
-            let pixels = changed_pile_interior(&before, &before, clicked).unwrap().total_pixels
-                + changed_pile_interior(&before, &before, opposite).unwrap().total_pixels;
+            let pixels = changed_pile_interior(&before, &before, clicked)
+                .unwrap()
+                .total_pixels
+                + changed_pile_interior(&before, &before, opposite)
+                    .unwrap()
+                    .total_pixels;
             let half = pixels / 20;
             paint_pile_changes(&mut after, clicked, u32::try_from(half).unwrap());
-            paint_pile_changes(&mut after, opposite, u32::try_from(pixels / 10 - half + 1).unwrap());
+            paint_pile_changes(
+                &mut after,
+                opposite,
+                u32::try_from(pixels / 10 - half + 1).unwrap(),
+            );
             assert!(verify_effect(&before, &after, clicked.kind).unwrap());
 
 
@@ -2026,11 +1971,7 @@ mod tests {
 
 
         for clicked in [PyramidTargetKind::Left, PyramidTargetKind::Right] {
-
-
             for pile in [LEFT_TARGET, RIGHT_TARGET] {
-
-
                 for bad_face in [FELT, [120, 120, 120, 255]] {
                     let mut bad = before.clone();
                     paint(&mut bad, lower_face_probe(pile), bad_face);
@@ -2144,8 +2085,6 @@ mod tests {
             let action = action_for_kind(slot.kind).unwrap();
             assert_eq!(
                 action.operation(),
-
-
                 if slot.kind == PyramidTargetKind::Move {
                     InputOperation::PressDrawKey
                 } else {
@@ -2154,8 +2093,6 @@ mod tests {
             );
             assert_eq!(
                 action.animation_settle_delay(custom_delays),
-
-
                 if slot.kind == PyramidTargetKind::Move {
                     std::time::Duration::from_millis(725)
                 } else {
@@ -2164,8 +2101,6 @@ mod tests {
             );
             assert_eq!(
                 action.repeat_target_policy(),
-
-
                 if slot.kind.is_card() {
                     RepeatTargetPolicy::MustClear
                 } else {
@@ -2308,8 +2243,6 @@ mod tests {
 
 
                 for y in bounds.y..bounds.bottom() {
-
-
                     for x in bounds.x..bounds.right() {
                         let rgb = [0, 2, 4].map(|channel| {
                             u8::from_str_radix(&hex[offset + channel..offset + channel + 2], 16)

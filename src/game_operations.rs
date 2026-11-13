@@ -1,19 +1,14 @@
-//! Private reusable game operations over existing application and xSAR facilities.
+//! Reusable game operations over existing application and xSAR facilities.
 //!
 //! Recognition borrows pixels and grants no input authority. A session owns one
 //! fresh frame, consumes it before input and latches uncertain delivery. Physical
 //! restoration never deletes learned identities or invents an undo history.
 
-// The catalogue is intentionally usable by later game adapters, while Undo All
-// and typed Draw already have production consumers in this revision.
-#![allow(dead_code)]
-
-pub(crate) mod option;
-pub(crate) mod restoration;
+pub mod option;
+pub mod restoration;
 mod session;
 
-#[allow(unused_imports)]
-pub(crate) use session::{Delivery, Input, OperationIo, Session};
+pub use session::{Delivery, Input, OperationIo, Session};
 
 use crate::{capture::CapturedFrame, pyramid_recon::vision::ReconVision};
 use xsar::games::{cards::Card, pyramid::planning::Location};
@@ -21,7 +16,7 @@ use xsar::games::{cards::Card, pyramid::planning::Location};
 
 /// Operation failures retain their category; uncertain input is never retried.
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum OperationError {
+pub enum OperationError {
     /// Invalid coordinates, storage, bounds or operation configuration.
     #[error("{0}")]
     Invalid(String),
@@ -63,7 +58,7 @@ pub(crate) enum OperationError {
 
 /// An explicitly game-scoped checked physical location; no silent row compaction.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum CardLocation {
+pub enum CardLocation {
     /// Existing checked original one-based tableau or DL/DR location vocabulary.
     Pyramid(Location),
 }
@@ -71,7 +66,7 @@ pub(crate) enum CardLocation {
 
 /// Pure card-reading outcomes; failed recognition never means Empty.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum CardRead {
+pub enum CardRead {
     /// Uniquely recognised rank and suit.
     Card(Card),
     /// Positive empty-pile evidence, exclusive of a recognised identity.
@@ -84,7 +79,7 @@ pub(crate) enum CardRead {
 
 
 /// Validate exact native packed RGBA8 without copying, resizing or disk writes.
-pub(crate) fn validate_native_frame(frame: &CapturedFrame) -> Result<(), OperationError> {
+pub fn validate_native_frame(frame: &CapturedFrame) -> Result<(), OperationError> {
     if frame.width != 1_920
         || frame.height != 1_080
         || frame.stride != 7_680
@@ -103,7 +98,7 @@ pub(crate) fn validate_native_frame(frame: &CapturedFrame) -> Result<(), Operati
 
 
 /// Read one location from a borrowed frame; no capture, input, cache or inference.
-pub(crate) fn read_card(
+pub fn read_card(
     vision: &ReconVision,
     frame: &CapturedFrame,
     location: CardLocation,

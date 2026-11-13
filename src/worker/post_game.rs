@@ -9,6 +9,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+use xsar::games::freecell::{InitialDeal, rules::Position as FreeCellPosition};
+
 use super::{
     CaptureTiming, FrameObservation, WorkerEventSink, WorkerState, capture_with_client,
     click_shared_solver, milliseconds, publish_post_game_observation, send_board_progress,
@@ -43,6 +45,8 @@ pub(super) mod normal_reward;
 
 
 #[cfg(test)]
+mod freecell_independent_tests;
+#[cfg(test)]
 mod pyramid_independent_tests;
 
 
@@ -53,6 +57,11 @@ enum RestartPolicy<'a> {
     ChallengeTarget(&'a ControllerContext, ChallengeCompletion),
     /// Preserve the existing shared Solver/HALO controller.
     ComputerVision(Option<NormalPyramidCompletion>),
+    /// Stop before Solver and prove two matching untouched normal Free Cell boards.
+    IndependentFreeCell {
+        /// Optional completed deal that a newly dealt normal board must differ from.
+        previous_deal: Option<&'a InitialDeal>,
+    },
     /// Stop before Solver and prove a complete untouched Pyramid board.
     IndependentPyramid(&'a ReconVision, Option<NormalPyramidCompletion>),
 }
@@ -71,17 +80,26 @@ pub(super) struct RestartAuthority<'a> {
 impl RestartAuthority<'_> {
     /// Preserve the exact authority refusal that ends this transition.
     fn check(self, events: &WorkerEventSink, cancel: &AtomicBool) -> Result<(), String> {
-        self.trace.check(&events.latest_frame.reconnaissance, self.context, cancel)
+        self.trace
+            .check(&events.latest_frame.reconnaissance, self.context, cancel)
     }
 }
 
 
 /// Retain typed authority only at a known sliced-wait cancellation boundary.
-fn wait_restart(authority: Option<RestartAuthority<'_>>, events: &WorkerEventSink, duration: Duration, cancel: &AtomicBool, message: &str) -> Result<Duration, String> {
+fn wait_restart(
+    authority: Option<RestartAuthority<'_>>,
+    events: &WorkerEventSink,
+    duration: Duration,
+    cancel: &AtomicBool,
+    message: &str,
+) -> Result<Duration, String> {
     match wait_or_stop(duration, cancel, message) {
         Ok(elapsed) => Ok(elapsed),
         Err(error) => {
-            if let Some(authority) = authority { authority.check(events, cancel)?; }
+            if let Some(authority) = authority {
+                authority.check(events, cancel)?;
+            }
             Err(error)
         }
     }
@@ -89,12 +107,12 @@ fn wait_restart(authority: Option<RestartAuthority<'_>>, events: &WorkerEventSin
 
 
 impl<'a> RestartPolicy<'a> {
-
-
     /// Return calibrated full-board recognition only for the independent policy.
     fn pyramid_vision(self) -> Option<&'a ReconVision> {
         match self {
-            Self::ComputerVision(..) | Self::ChallengeTarget(..) => None,
+            Self::ComputerVision(..)
+            | Self::ChallengeTarget(..)
+            | Self::IndependentFreeCell { .. } => None,
             Self::IndependentPyramid(vision, _) => Some(vision),
         }
     }
@@ -108,7 +126,89 @@ impl<'a> RestartPolicy<'a> {
 
     /// Positive Pyramid reward recognition is independent of new-board readiness.
     fn is_pyramid(self) -> bool {
-        !matches!(self, Self::ComputerVision(..))
+        matches!(
+            self,
+            Self::ChallengeTarget(..) | Self::IndependentPyramid(..)
+        )
+    }
+
+
+    /// Independent Free Cell uses calibrated `freecell_terminal` and 52-card recon evidence.
+    fn is_freecell(self) -> bool {
+        matches!(self, Self::IndependentFreeCell { .. })
+    }
+
+
+    /// Return the completed Free Cell deal that a restarted normal board must differ from.
+    fn freecell_previous_deal(self) -> Option<&'a InitialDeal> {
+        match self {
+            Self::IndependentFreeCell { previous_deal } => previous_deal,
+            Self::ChallengeTarget(..) | Self::ComputerVision(..) | Self::IndependentPyramid(..) => {
+                None
+            }
+        }
+    }
+
+
+    /// Positively recognise Free Cell GAME WIN score count-up (`SCORE_SKIP`).
+    fn freecell_score_skip(self, frame: &CapturedFrame) -> Result<bool, String> {
+        if !self.is_freecell() {
+            return Ok(false);
+        }
+        Ok(crate::freecell_terminal::classify_win_entry(frame)
+            .map_err(|error| error.to_string())?
+            == Some(crate::freecell_terminal::TerminalStage::Score))
+    }
+
+
+    /// Positively recognise Free Cell settled Level Up modal + active OK control.
+    fn freecell_level_up_ok(self, frame: &CapturedFrame) -> Result<bool, String> {
+        if !self.is_freecell() {
+            return Ok(false);
+        }
+        crate::freecell_terminal::has_settled_level_up_ok(frame).map_err(|error| error.to_string())
+    }
+
+
+    /// Positively recognise Free Cell Congratulations + New Game stage.
+    fn freecell_new_game(self, frame: &CapturedFrame) -> Result<bool, String> {
+        if !self.is_freecell() {
+            return Ok(false);
+        }
+        Ok(crate::freecell_terminal::classify_win_entry(frame)
+            .map_err(|error| error.to_string())?
+            == Some(crate::freecell_terminal::TerminalStage::NewGame))
+    }
+
+
+    /// Map a positively verified Free Cell terminal/Play frame to its post-game entry stage index.
+    fn freecell_known_stage(
+        self,
+        observation: Option<&FrameObservation>,
+    ) -> Result<Option<usize>, String> {
+        let Some(observation) = observation else {
+            return Ok(None);
+        };
+        if !self.is_freecell() || observation.gameplay_scene {
+            return Ok(None);
+        }
+        if self.freecell_new_game(&observation.frame)? {
+            return Ok(Some(1));
+        }
+        if self.freecell_level_up_ok(&observation.frame)? {
+            return Ok(Some(0));
+        }
+        if !self.freecell_score_skip(&observation.frame)?
+            && crate::freecell_terminal::expected_control_point(
+                &observation.frame,
+                crate::freecell_terminal::TerminalStage::Play,
+            )
+            .map_err(|error| error.to_string())?
+                != PixelPoint::new(0, 0)
+        {
+            return Ok(Some(2));
+        }
+        Ok(None)
     }
 
 
@@ -128,8 +228,15 @@ impl<'a> RestartPolicy<'a> {
 
 
     /// Completion-only runs retain their original context/STOP reservation throughout.
-    fn check(self, events: &WorkerEventSink, cancel: &AtomicBool, authority: Option<RestartAuthority<'_>>) -> Result<(), String> {
-        if let Some(authority) = authority { return authority.check(events, cancel); }
+    fn check(
+        self,
+        events: &WorkerEventSink,
+        cancel: &AtomicBool,
+        authority: Option<RestartAuthority<'_>>,
+    ) -> Result<(), String> {
+        if let Some(authority) = authority {
+            return authority.check(events, cancel);
+        }
         if let Self::ChallengeTarget(context, _) = self {
             events
                 .latest_frame
@@ -187,8 +294,6 @@ pub(super) struct PyramidRestartEntry {
 
 
 impl PyramidRestartEntry {
-
-
     /// Bind an actual final outcome to the caller's positively qualified last board.
     ///
     /// `progress` is the completed-board count before execution, from the caller's
@@ -231,8 +336,6 @@ pub(super) struct NormalPyramidCompletion {
 
 
 impl NormalPyramidCompletion {
-
-
     /// Preserve the existing independent caller's actual final-clear capability.
     fn independent(_entry: PyramidRestartEntry) -> Self {
         Self { _private: () }
@@ -324,7 +427,8 @@ pub(super) fn run_post_game_restart(
         cancel_requested,
         RestartPolicy::ComputerVision(normal_completion),
         None,
-     None)
+        None,
+    )
 }
 
 
@@ -376,7 +480,8 @@ pub(super) fn run_independent_pyramid_restart_retaining_frame(
         cancel_requested,
         RestartPolicy::IndependentPyramid(vision, None),
         Some(latest_frame),
-     authority)
+        authority,
+    )
 }
 
 
@@ -443,7 +548,93 @@ pub(super) fn run_witnessed_pyramid_restart_retaining_frame(
             Some(NormalPyramidCompletion::independent(entry)),
         ),
         Some(latest_frame),
-     authority)
+        authority,
+    )
+}
+
+
+/// Borrowed worker state and cancellation fences for one independent Free Cell restart.
+pub(super) struct FreeCellRestartContext<'a> {
+    /// Connected QMP client used exclusively after fresh visual proof and probes.
+    pub(super) qmp: &'a mut QmpClient,
+    /// Socket path retained for legacy capture metadata parity.
+    pub(super) socket_path: &'a Path,
+    /// Optional freshly captured frame establishing entry stage or score panel.
+    pub(super) initial_observation: Option<&'a FrameObservation>,
+    /// Optional completed deal that a newly dealt normal board must differ from.
+    pub(super) previous_deal: Option<&'a InitialDeal>,
+    /// Mutable scan state reset for Free Cell across the transition.
+    pub(super) scan_state: &'a mut TableauScanState,
+    /// Board counter reset to zero upon proving a fresh untouched board.
+    pub(super) completed_boards: &'a mut usize,
+    /// Shared worker event/state sink.
+    pub(super) event_tx: &'a WorkerEventSink,
+    /// Monotonic run/session cancellation flag.
+    pub(super) cancel_requested: &'a AtomicBool,
+    /// Caller-owned latest frame slot updated after every capture before refusal.
+    pub(super) latest_frame: &'a mut Option<CapturedFrame>,
+    /// Causal STOP/context authority for the active Free Cell session.
+    pub(super) authority: RestartAuthority<'a>,
+}
+
+
+/// Execute Free Cell's post-win sequence (`GAME WIN` -> optional `LEVEL UP` -> `NEW GAME` -> `PLAY`)
+/// and prove two consecutive matching fresh normal deals before returning.
+///
+/// Reuses the shared post-game stage machine, QMP probes, STOP/Pause fences and
+/// default `GAME WIN` image capture (`--no-image` disables win-sequence frames)
+/// without ever invoking CV Solver clicks or HALO recovery.
+///
+/// # Errors
+/// Returns an error for a wrong selected game, revoked authority, unrecognised entry
+/// frame, challenge banner, unchanged previous deal, or missing bounded controls.
+pub(super) fn run_independent_freecell_restart_retaining_frame(
+    ctx: FreeCellRestartContext<'_>,
+) -> Result<PostGameOutcome, String> {
+    if let Some(observation) = ctx.initial_observation {
+        *ctx.latest_frame = Some(observation.frame.clone());
+    }
+    if ctx.scan_state.mode() != crate::game::GameMode::FreeCell {
+        return Err(
+            "Independent Free Cell restart requires the selected Free Cell game".to_owned(),
+        );
+    }
+    let authority = Some(ctx.authority);
+    require_independent_restart_active(ctx.cancel_requested, ctx.event_tx, authority)?;
+    if let Some(observation) = ctx.initial_observation {
+        let recognised_terminal =
+            crate::freecell_terminal::is_recognised_terminal(&observation.frame)
+                .map_err(|error| error.to_string())?;
+        let play_visible = !observation.gameplay_scene
+            && crate::freecell_terminal::expected_control_point(
+                &observation.frame,
+                crate::freecell_terminal::TerminalStage::Play,
+            )
+            .map_err(|error| error.to_string())?
+                != PixelPoint::new(0, 0);
+        let ready_start =
+            freecell_start_readiness(&observation.frame, ctx.previous_deal, &mut || {
+                require_independent_restart_active(ctx.cancel_requested, ctx.event_tx, authority)
+            })?
+            .is_ok();
+        if !recognised_terminal && !play_visible && !ready_start {
+            return Err("Independent Free Cell restart has no positive terminal, Play, or fresh normal-board evidence; no input authorised".to_owned());
+        }
+    }
+    run_post_game_restart_with_policy(
+        ctx.qmp,
+        ctx.socket_path,
+        ctx.initial_observation,
+        ctx.scan_state,
+        ctx.completed_boards,
+        ctx.event_tx,
+        ctx.cancel_requested,
+        RestartPolicy::IndependentFreeCell {
+            previous_deal: ctx.previous_deal,
+        },
+        Some(ctx.latest_frame),
+        authority,
+    )
 }
 
 
@@ -512,7 +703,33 @@ fn run_post_game_restart_with_policy(
             vision,
             false,
             &mut latest_frame,
-         authority);
+            authority,
+        );
+    }
+    if policy.is_freecell()
+        && let Some(observation) = initial_observation
+        && freecell_start_readiness(
+            &observation.frame,
+            policy.freecell_previous_deal(),
+            &mut || require_independent_restart_active(cancel_requested, event_tx, authority),
+        )?
+        .is_ok()
+    {
+        return verify_independent_freecell_start(
+            IndependentStartContext {
+                qmp,
+                socket_path,
+                first: Some(observation),
+                scan_state,
+                completed_boards,
+                event_tx,
+                cancel_requested,
+                restarted: false,
+                latest_frame: &mut latest_frame,
+                authority,
+            },
+            policy.freecell_previous_deal(),
+        );
     }
     let initial_challenge_reward = matches!(policy, RestartPolicy::ChallengeTarget(..))
         && initial_observation.is_some_and(|observation| {
@@ -527,6 +744,8 @@ fn run_post_game_restart_with_policy(
         None
     } else if direct_level_up_entry {
         Some(0)
+    } else if policy.is_freecell() {
+        policy.freecell_known_stage(initial_observation)?
     } else {
         known_post_game_stage(initial_observation, profile)?
     };
@@ -552,7 +771,9 @@ fn run_post_game_restart_with_policy(
                 POST_GAME_STAGE_DELAY.as_millis(),
             ),
         );
-        intentional_wait += wait_restart(authority, event_tx,
+        intentional_wait += wait_restart(
+            authority,
+            event_tx,
             POST_GAME_STAGE_DELAY,
             cancel_requested,
             "STOP was requested before the pre-score transition capture.",
@@ -572,7 +793,9 @@ fn run_post_game_restart_with_policy(
                 scan_state,
                 event_tx,
                 &mut latest_frame,
-             cancel_requested, authority)
+                cancel_requested,
+                authority,
+            )
             .map_err(|error| {
                 format!("Pre-score transition capture failed before input: {error}")
             })?;
@@ -607,10 +830,44 @@ fn run_post_game_restart_with_policy(
                         vision,
                         false,
                         &mut latest_frame,
-                     authority);
+                        authority,
+                    );
                 }
                 if observation.gameplay_scene {
                     return Err("Independent Pyramid restart found gameplay without a full untouched board; Solver and input recovery withheld".to_owned());
+                }
+            }
+
+
+            if policy.is_freecell() {
+                require_independent_restart_active(cancel_requested, event_tx, authority)?;
+                if freecell_start_readiness(
+                    &observation.frame,
+                    policy.freecell_previous_deal(),
+                    &mut || {
+                        require_independent_restart_active(cancel_requested, event_tx, authority)
+                    },
+                )?
+                .is_ok()
+                {
+                    return verify_independent_freecell_start(
+                        IndependentStartContext {
+                            qmp,
+                            socket_path,
+                            first: Some(&observation),
+                            scan_state,
+                            completed_boards,
+                            event_tx,
+                            cancel_requested,
+                            restarted: false,
+                            latest_frame: &mut latest_frame,
+                            authority,
+                        },
+                        policy.freecell_previous_deal(),
+                    );
+                }
+                if observation.gameplay_scene {
+                    return Err("Independent Free Cell restart found gameplay without a full untouched normal board; Solver and input recovery withheld".to_owned());
                 }
             }
 
@@ -629,7 +886,9 @@ fn run_post_game_restart_with_policy(
 
             let foreground_level_up = scan_state.mode() == crate::game::GameMode::TriPeaks
                 && super::tripeaks_terminal::is_direct_level_up_overlay(&observation.frame)?;
-            let observed_stage = if policy.is_pyramid()
+            let observed_stage = if policy.is_freecell() {
+                policy.freecell_known_stage(Some(&observation))?
+            } else if policy.is_pyramid()
                 && !recognised_pyramid_terminal(&observation.frame)?
                 && !(normal_pyramid && expected_pyramid_new_game(&observation.frame)?)
             {
@@ -648,6 +907,8 @@ fn run_post_game_restart_with_policy(
 
             let reward_visible = if policy.is_pyramid() || normal_pyramid {
                 policy.pyramid_reward(&observation.frame)?
+            } else if policy.is_freecell() {
+                policy.freecell_score_skip(&observation.frame)?
             } else {
                 guarded_tripeaks_entry
                     && super::tripeaks_terminal::is_reward_overlay(&observation.frame)?
@@ -664,7 +925,10 @@ fn run_post_game_restart_with_policy(
             };
 
 
-            if ((guarded_tripeaks_entry || policy.is_pyramid() || normal_pyramid)
+            if ((guarded_tripeaks_entry
+                || policy.is_pyramid()
+                || normal_pyramid
+                || policy.is_freecell())
                 && consecutive_reward < 2)
                 || (!guarded_tripeaks_entry && consecutive_non_gameplay < 2)
             {
@@ -679,7 +943,9 @@ fn run_post_game_restart_with_policy(
                         BOARD_TRANSITION_REOBSERVE_DELAY.as_millis(),
                     ),
                 );
-                intentional_wait += wait_restart(authority, event_tx,
+                intentional_wait += wait_restart(
+                    authority,
+                    event_tx,
                     BOARD_TRANSITION_REOBSERVE_DELAY,
                     cancel_requested,
                     "STOP was requested during the pre-score transition wait.",
@@ -691,7 +957,13 @@ fn run_post_game_restart_with_policy(
             send_state(event_tx, WorkerState::Acting);
             send_status(event_tx, "Skip score counting".to_owned());
             policy.check(event_tx, cancel_requested, authority)?;
-            input_wall += send_score_skip_click(qmp, cancel_requested, score_skip_click_attempts, event_tx, authority)?;
+            input_wall += send_score_skip_click(
+                qmp,
+                cancel_requested,
+                score_skip_click_attempts,
+                event_tx,
+                authority,
+            )?;
             score_skip_click_attempts = score_skip_click_attempts.saturating_add(1);
             send_log(
                 event_tx,
@@ -699,6 +971,8 @@ fn run_post_game_restart_with_policy(
                     "Two consecutive {} captures preceded score-counting/reward panel click attempt {score_skip_click_attempts}/{SCORE_SKIP_MAX_CLICK_ATTEMPTS} at guest pixel ({}, {}) with a {} ms hold; waiting {} ms before classifying Level Up.",
                     if guarded_tripeaks_entry {
                         "positively recognised TriPeaks reward"
+                    } else if policy.is_freecell() {
+                        "positively recognised Free Cell score-skip"
                     } else {
                         "non-gameplay"
                     },
@@ -716,7 +990,9 @@ fn run_post_game_restart_with_policy(
                     LEVEL_UP_APPEAR_DELAY.as_millis()
                 ),
             );
-            intentional_wait += wait_restart(authority, event_tx,
+            intentional_wait += wait_restart(
+                authority,
+                event_tx,
                 LEVEL_UP_APPEAR_DELAY,
                 cancel_requested,
                 "STOP was requested during the post-score-skip wait.",
@@ -761,7 +1037,9 @@ fn run_post_game_restart_with_policy(
                 scan_state,
                 event_tx,
                 &mut latest_frame,
-             cancel_requested, authority)
+                cancel_requested,
+                authority,
+            )
             .map_err(|error| {
                 if let Some(lookup) = lookup.as_mut() {
                     lookup.set_outcome("capture-error");
@@ -807,13 +1085,25 @@ fn run_post_game_restart_with_policy(
                         vision,
                         false,
                         &mut latest_frame,
-                     authority);
+                        authority,
+                    );
                 }
                 if observation.gameplay_scene {
                     if let Some(lookup) = lookup.as_mut() {
                         lookup.set_outcome("independent-partial-board");
                     }
                     return Err("Independent Pyramid restart found partial or unsupported gameplay; no Solver or recovery input authorised".to_owned());
+                }
+            }
+
+
+            if policy.is_freecell() {
+                require_independent_restart_active(cancel_requested, event_tx, authority)?;
+                if observation.gameplay_scene {
+                    if let Some(lookup) = lookup.as_mut() {
+                        lookup.set_outcome("independent-freecell-gameplay");
+                    }
+                    return Err("Independent Free Cell restart found gameplay before Play completed; no Solver or recovery input authorised".to_owned());
                 }
             }
 
@@ -855,6 +1145,13 @@ fn run_post_game_restart_with_policy(
                     {
                         lookup.set_outcome("rejected-context");
                         send_log(event_tx, "TriPeaks OK search has no independent Level Up panel authority; no click is authorised.".to_owned());
+                        Ok(None)
+                    } else if policy.is_freecell()
+                        && target.stage == PostGameStage::LevelUpOk
+                        && !policy.freecell_level_up_ok(&observation.frame)?
+                    {
+                        lookup.set_outcome("rejected-context");
+                        send_log(event_tx, "Free Cell OK search lacks settled LEVEL-UP! banner evidence; no click is authorised.".to_owned());
                         Ok(None)
                     } else {
                         Ok(measured_control(
@@ -906,15 +1203,19 @@ fn run_post_game_restart_with_policy(
             }
 
             // New Game also covers games that do not award a level. A confirmed
-            // TriPeaks foreground modal must still be dismissed before its underlay.
+            // TriPeaks or Free Cell foreground modal must still be dismissed before its underlay.
             let foreground_level_up = target.stage == PostGameStage::LevelUpOk
                 && (lookup.as_ref().is_some_and(ControlLookup::has_ok_panel)
                     || (scan_state.mode() == crate::game::GameMode::TriPeaks
                         && super::tripeaks_terminal::is_direct_level_up_context(
                             &observation.frame,
-                        )?));
+                        )?)
+                    || policy.freecell_level_up_ok(&observation.frame)?);
+            let new_game_skip_allowed =
+                !policy.is_freecell() || policy.freecell_new_game(&observation.frame)?;
             if target.stage == PostGameStage::LevelUpOk
                 && !foreground_level_up
+                && new_game_skip_allowed
                 && resolve_post_game_target_logged(
                     &observation,
                     POST_GAME_TARGETS[1],
@@ -933,7 +1234,9 @@ fn run_post_game_restart_with_policy(
                     "RECOVERED: New Game is visible in a fresh non-gameplay frame; optional Level Up is skipped. Waiting for a second capture to verify New Game before sending input."
                         .to_owned(),
                 );
-                intentional_wait += wait_restart(authority, event_tx,
+                intentional_wait += wait_restart(
+                    authority,
+                    event_tx,
                     POST_GAME_STAGE_DELAY,
                     cancel_requested,
                     "STOP was requested while verifying the New Game transition.",
@@ -963,6 +1266,7 @@ fn run_post_game_restart_with_policy(
             } else {
                 0
             };
+
 
             if policy.allows_solver()
                 && observation.gameplay_scene
@@ -1001,7 +1305,9 @@ fn run_post_game_restart_with_policy(
                     ),
                 );
                 send_state(event_tx, WorkerState::Verifying);
-                intentional_wait += wait_restart(authority, event_tx,
+                intentional_wait += wait_restart(
+                    authority,
+                    event_tx,
                     POST_GAME_STAGE_DELAY,
                     cancel_requested,
                     "STOP was requested after the post-game recovery Solver click.",
@@ -1021,6 +1327,8 @@ fn run_post_game_restart_with_policy(
             let guarded_post_ok_skip = post_ok_reward && consecutive_post_ok_reward >= 2;
             let positive_reward = if policy.is_pyramid() || normal_pyramid {
                 policy.pyramid_reward(&observation.frame)?
+            } else if policy.is_freecell() {
+                policy.freecell_score_skip(&observation.frame)?
             } else {
                 super::tripeaks_terminal::is_reward_overlay(&observation.frame)?
             };
@@ -1061,8 +1369,13 @@ fn run_post_game_restart_with_policy(
                 send_state(event_tx, WorkerState::Acting);
                 send_status(event_tx, "Skip score counting".to_owned());
                 policy.check(event_tx, cancel_requested, authority)?;
-                input_wall +=
-                    send_score_skip_click(qmp, cancel_requested, score_skip_click_attempts, event_tx, authority)?;
+                input_wall += send_score_skip_click(
+                    qmp,
+                    cancel_requested,
+                    score_skip_click_attempts,
+                    event_tx,
+                    authority,
+                )?;
                 score_skip_click_attempts = score_skip_click_attempts.saturating_add(1);
                 consecutive_post_ok_reward = 0;
                 consecutive_normal_reward = 0;
@@ -1078,7 +1391,9 @@ fn run_post_game_restart_with_policy(
                     ),
                 );
                 send_state(event_tx, WorkerState::Verifying);
-                intentional_wait += wait_restart(authority, event_tx,
+                intentional_wait += wait_restart(
+                    authority,
+                    event_tx,
                     LEVEL_UP_APPEAR_DELAY,
                     cancel_requested,
                     "STOP was requested while waiting after a score-skip retry.",
@@ -1105,7 +1420,9 @@ fn run_post_game_restart_with_policy(
                     retry_delay.as_millis(),
                 ),
             );
-            intentional_wait += wait_restart(authority, event_tx,
+            intentional_wait += wait_restart(
+                authority,
+                event_tx,
                 retry_delay,
                 cancel_requested,
                 "STOP was requested while waiting for the next post-game screen.",
@@ -1138,7 +1455,9 @@ fn run_post_game_restart_with_policy(
 
 
         if cancel_requested.load(Ordering::Acquire) {
-            if let Some(authority) = authority { authority.check(event_tx, cancel_requested)?; }
+            if let Some(authority) = authority {
+                authority.check(event_tx, cancel_requested)?;
+            }
             return Err(format!(
                 "STOP was requested after the fresh {} probe; no further input was sent.",
                 target.label
@@ -1207,7 +1526,9 @@ fn run_post_game_restart_with_policy(
                 POST_GAME_STAGE_DELAY.as_millis()
             ),
         );
-        intentional_wait += wait_restart(authority, event_tx,
+        intentional_wait += wait_restart(
+            authority,
+            event_tx,
             POST_GAME_STAGE_DELAY,
             cancel_requested,
             "STOP was requested during the one-second post-game stage wait.",
@@ -1227,7 +1548,25 @@ fn run_post_game_restart_with_policy(
             vision,
             true,
             &mut latest_frame,
-         authority);
+            authority,
+        );
+    }
+    if policy.is_freecell() {
+        return verify_independent_freecell_start(
+            IndependentStartContext {
+                qmp,
+                socket_path,
+                first: None,
+                scan_state,
+                completed_boards,
+                event_tx,
+                cancel_requested,
+                restarted: true,
+                latest_frame: &mut latest_frame,
+                authority,
+            },
+            policy.freecell_previous_deal(),
+        );
     }
 
 
@@ -1247,9 +1586,16 @@ fn run_post_game_restart_with_policy(
 
 
     let observation = loop {
-        let (observation, timing) =
-            capture_restart_observation(qmp, socket_path, scan_state, event_tx, &mut latest_frame, cancel_requested, authority)
-                .map_err(|error| format!("First post-Solver HALO capture failed: {error}"))?;
+        let (observation, timing) = capture_restart_observation(
+            qmp,
+            socket_path,
+            scan_state,
+            event_tx,
+            &mut latest_frame,
+            cancel_requested,
+            authority,
+        )
+        .map_err(|error| format!("First post-Solver HALO capture failed: {error}"))?;
         capture_timing.add_assign(timing);
         publish_post_game_observation(event_tx, &observation);
 
@@ -1300,7 +1646,9 @@ fn run_post_game_restart_with_policy(
             );
 
             send_state(event_tx, WorkerState::Verifying);
-            intentional_wait += wait_restart(authority, event_tx,
+            intentional_wait += wait_restart(
+                authority,
+                event_tx,
                 POST_GAME_STAGE_DELAY,
                 cancel_requested,
                 "STOP was requested while waiting after a Solver retry.",
@@ -1314,7 +1662,9 @@ fn run_post_game_restart_with_policy(
                     BOARD_TRANSITION_REOBSERVE_DELAY.as_millis(),
                 ),
             );
-            intentional_wait += wait_restart(authority, event_tx,
+            intentional_wait += wait_restart(
+                authority,
+                event_tx,
                 BOARD_TRANSITION_REOBSERVE_DELAY,
                 cancel_requested,
                 "STOP was requested while waiting for a safe Solver retry frame.",
@@ -1372,11 +1722,19 @@ fn capture_restart_observation(
     let Some(slot) = latest_frame.as_deref_mut() else {
         return capture_with_client(qmp, socket_path, scan_state, event_tx);
     };
-    let (frame, mut timing) = super::capture_screen_causal(qmp, socket_path, event_tx).map_err(|error| {
-        if let Some(authority) = authority {
-            authority.trace.capture_error(error, &event_tx.latest_frame.reconnaissance, authority.context, cancel_requested)
-        } else { error.message }
-    })?;
+    let (frame, mut timing) =
+        super::capture_screen_causal(qmp, socket_path, event_tx).map_err(|error| {
+            if let Some(authority) = authority {
+                authority.trace.capture_error(
+                    error,
+                    &event_tx.latest_frame.reconnaissance,
+                    authority.context,
+                    cancel_requested,
+                )
+            } else {
+                error.message
+            }
+        })?;
     *slot = Some(frame.clone());
     let (observation, detection) =
         super::publish_and_analyse_captured_frame(frame, scan_state, event_tx)?;
@@ -1387,10 +1745,18 @@ fn capture_restart_observation(
 
 
 /// Refuse all later independent restart work once monotonic STOP/context cancellation is set.
-fn require_independent_restart_active(cancel_requested: &AtomicBool, event_tx: &WorkerEventSink, authority: Option<RestartAuthority<'_>>) -> Result<(), String> {
-    if let Some(authority) = authority { return authority.check(event_tx, cancel_requested); }
+fn require_independent_restart_active(
+    cancel_requested: &AtomicBool,
+    event_tx: &WorkerEventSink,
+    authority: Option<RestartAuthority<'_>>,
+) -> Result<(), String> {
+    if let Some(authority) = authority {
+        return authority.check(event_tx, cancel_requested);
+    }
     if cancel_requested.load(Ordering::Acquire) {
-            if let Some(authority) = authority { authority.check(event_tx, cancel_requested)?; }
+        if let Some(authority) = authority {
+            authority.check(event_tx, cancel_requested)?;
+        }
         return Err(
             "STOP or context cancellation revoked independent Pyramid restart authority".to_owned(),
         );
@@ -1462,6 +1828,206 @@ fn independent_start_readiness(
 }
 
 
+/// Borrowed worker state and cancellation fences for verifying two matching fresh starts.
+struct IndependentStartContext<'a, 'b> {
+    /// Connected QMP client (passed only through `capture_restart_observation`).
+    qmp: &'a mut QmpClient,
+    /// Socket path retained for legacy capture metadata parity.
+    socket_path: &'a Path,
+    /// Optional first observation already captured before entering starting verification.
+    first: Option<&'a FrameObservation>,
+    /// Mutable tableau scan state updated for the active game profile.
+    scan_state: &'a mut TableauScanState,
+    /// Completed-board counter reset upon fresh start verification.
+    completed_boards: &'a mut usize,
+    /// Shared worker event/state sink.
+    event_tx: &'a WorkerEventSink,
+    /// Monotonic cancellation flag.
+    cancel_requested: &'a AtomicBool,
+    /// Whether this transition followed terminal clicks (`Restarted`) or cold board entry (`RecoveredGameplay`).
+    restarted: bool,
+    /// Caller-owned latest frame slot updated on every fresh capture.
+    latest_frame: &'a mut Option<&'b mut Option<CapturedFrame>>,
+    /// Causal STOP/context authority for the active session.
+    authority: Option<RestartAuthority<'a>>,
+}
+
+/// Observe whether a Free Cell frame is a fresh untouched 52-card normal board
+/// distinct from `previous_deal`, pending a mid-deal settling frame, or fatal
+/// (malformed frame, unsupported scene, or challenge header).
+fn freecell_start_readiness(
+    frame: &CapturedFrame,
+    previous_deal: Option<&InitialDeal>,
+    check: &mut impl FnMut() -> Result<(), String>,
+) -> Result<Result<FreeCellPosition, String>, String> {
+    use crate::freecell_recon::{FailureKind, recognise_checked};
+    let meta = xsar::games::freecell::Metadata::new(
+        "freecell-restart",
+        crate::freecell_recon::PROFILE,
+        "post-game-readiness",
+    )
+    .map_err(|error| error.to_string())?;
+    let deal = match recognise_checked(frame, meta, check) {
+        Ok(deal) => deal,
+        Err(error) => {
+            return match error.kind {
+                FailureKind::InvalidFrame
+                | FailureKind::Calibration
+                | FailureKind::Revoked
+                | FailureKind::UnsupportedScene => Err(error.to_string()),
+                FailureKind::TopSlotNotEmpty
+                | FailureKind::UnknownIdentity
+                | FailureKind::AmbiguousIdentity
+                | FailureKind::ColourDisagreement
+                | FailureKind::DuplicateIdentity
+                | FailureKind::InvalidDeck => Ok(Err(error.to_string())),
+            };
+        }
+    };
+    match crate::freecell_recon::objective::from_metadata(deal.metadata()) {
+        crate::freecell_recon::objective::Objective::Unresolved => Err(
+            "Independent Free Cell starting-board header is a challenge board, not a normal game; no input authorised"
+                .to_owned(),
+        ),
+        crate::freecell_recon::objective::Objective::Unverified => Ok(Err(
+            "New normal Free Cell header is not yet positively confirmed".to_owned(),
+        )),
+        crate::freecell_recon::objective::Objective::FullBoard => {
+            let pos = FreeCellPosition::initial(&deal);
+            if previous_deal.is_some_and(|prev| {
+                crate::freecell_route::same_physical(&FreeCellPosition::initial(prev), &pos)
+            }) {
+                return Ok(Err(
+                    "Observed Free Cell starting board still matches the previous completed deal"
+                        .to_owned(),
+                ));
+            }
+            Ok(Ok(pos))
+        }
+    }
+}
+
+/// Shared two-consecutive-equal-start loop across independent Pyramid and Free Cell restarts.
+fn verify_independent_start<T>(
+    ctx: IndependentStartContext<'_, '_>,
+    game: crate::game::GameMode,
+    stop_wait_message: &str,
+    ready_status: &str,
+    ready_log: &str,
+    mut read_start: impl FnMut(&CapturedFrame) -> Result<Result<T, String>, String>,
+    same_start: impl Fn(&T, &T) -> bool,
+) -> Result<PostGameOutcome, String> {
+    let mut previous: Option<T> = None;
+    let mut reason = "No matching complete starting-board pair".to_owned();
+    let mut settled = None;
+    for attempt in 0..super::pyramid_session::TRANSITION_OBSERVATIONS {
+        require_independent_restart_active(ctx.cancel_requested, ctx.event_tx, ctx.authority)?;
+        let captured = if attempt == 0 && ctx.first.is_some() {
+            None
+        } else {
+            let captured = capture_restart_observation(
+                ctx.qmp,
+                ctx.socket_path,
+                ctx.scan_state,
+                ctx.event_tx,
+                ctx.latest_frame,
+                ctx.cancel_requested,
+                ctx.authority,
+            )?
+            .0;
+            publish_post_game_observation(ctx.event_tx, &captured);
+            Some(captured)
+        };
+        let observation = captured
+            .as_ref()
+            .or(ctx.first)
+            .ok_or("Missing supplied first starting observation")?;
+        require_independent_restart_active(ctx.cancel_requested, ctx.event_tx, ctx.authority)?;
+        match read_start(&observation.frame)? {
+            Ok(position) => {
+                if let Some(original) = &previous {
+                    if !same_start(original, &position) {
+                        return Err(format!(
+                            "Independent {} starting arrangement changed between two fresh observations; no further input authorised",
+                            game.label()
+                        ));
+                    }
+                    settled = Some(
+                        captured
+                            .ok_or("Starting confirmation requires a newly captured observation")?,
+                    );
+                    break;
+                }
+                previous = Some(position);
+                reason = "Waiting for an equal fresh complete starting position".to_owned();
+            }
+            Err(error) => {
+                previous = None;
+                reason = error;
+            }
+        }
+        send_status(
+            ctx.event_tx,
+            format!(
+                "Waiting for new {} board to settle — observation {}/{}; no input",
+                game.label(),
+                attempt + 1,
+                super::pyramid_session::TRANSITION_OBSERVATIONS
+            ),
+        );
+        if attempt + 1 < super::pyramid_session::TRANSITION_OBSERVATIONS {
+            wait_restart(
+                ctx.authority,
+                ctx.event_tx,
+                POST_GAME_STAGE_DELAY,
+                ctx.cancel_requested,
+                stop_wait_message,
+            )?;
+        }
+    }
+    let observation = settled.ok_or_else(|| {
+        format!(
+            "Independent {} starting board did not settle within {} fresh observations; no input authorised: {reason}",
+            game.label(),
+            super::pyramid_session::TRANSITION_OBSERVATIONS
+        )
+    })?;
+    require_independent_restart_active(ctx.cancel_requested, ctx.event_tx, ctx.authority)?;
+    *ctx.completed_boards = 0;
+    *ctx.scan_state = TableauScanState::for_mode(game);
+    send_board_progress(ctx.event_tx, ctx.scan_state, 0);
+    send_status(ctx.event_tx, ready_status.to_owned());
+    send_log(ctx.event_tx, ready_log.to_owned());
+    if ctx.restarted {
+        Ok(PostGameOutcome::Restarted(observation))
+    } else {
+        Ok(PostGameOutcome::RecoveredGameplay(observation))
+    }
+}
+
+/// Require two consecutive matching normal Free Cell starting-board observations distinct from `previous_deal`.
+fn verify_independent_freecell_start(
+    ctx: IndependentStartContext<'_, '_>,
+    previous_deal: Option<&InitialDeal>,
+) -> Result<PostGameOutcome, String> {
+    let cancel_requested = ctx.cancel_requested;
+    let event_tx = ctx.event_tx;
+    let authority = ctx.authority;
+    verify_independent_start(
+        ctx,
+        crate::game::GameMode::FreeCell,
+        "STOP or context cancellation revoked independent Free Cell starting-board observation",
+        "Free Cell board ready for reconnaissance",
+        "Independent Free Cell restart verified by two fresh matching 52-card normal deals; fresh guarded Recon follows.",
+        |frame| {
+            freecell_start_readiness(frame, previous_deal, &mut || {
+                require_independent_restart_active(cancel_requested, event_tx, authority)
+            })
+        },
+        crate::freecell_route::same_physical,
+    )
+}
+
 /// Require a fresh matching complete pair within the existing six-observation bound.
 ///
 /// A caller-supplied first observation is its actual most recent capture; otherwise
@@ -1488,80 +2054,33 @@ fn verify_independent_pyramid_start(
     authority: Option<RestartAuthority<'_>>,
 ) -> Result<PostGameOutcome, String> {
     use crate::pyramid_recon::vision::StartingReadiness;
-    let mut previous: Option<BoardObservation> = None;
-    let mut reason = "No matching complete starting-board pair".to_owned();
-    let mut settled = None;
-    for attempt in 0..super::pyramid_session::TRANSITION_OBSERVATIONS {
-        require_independent_restart_active(cancel_requested, event_tx, authority)?;
-        let captured = if attempt == 0 && first.is_some() {
-            None
-        } else {
-            let captured =
-                capture_restart_observation(qmp, socket_path, scan_state, event_tx, latest_frame, cancel_requested, authority)?
-                    .0;
-            publish_post_game_observation(event_tx, &captured);
-            Some(captured)
-        };
-        let observation = captured
-            .as_ref()
-            .or(first)
-            .ok_or("Missing supplied first starting observation")?;
-        require_independent_restart_active(cancel_requested, event_tx, authority)?;
-        match independent_start_readiness(vision, &observation.frame)? {
-            StartingReadiness::Ready(position) => {
-                if let Some(original) = &previous {
-                    if original.tableau != position.tableau
-                        || original.left != position.left
-                        || original.right != position.right
-                    {
-                        return Err("Independent Pyramid starting arrangement changed between two fresh observations; no further input authorised".to_owned());
-                    }
-                    settled = Some(
-                        captured
-                            .ok_or("Starting confirmation requires a newly captured observation")?,
-                    );
-                    break;
-                }
-                previous = Some(position);
-                reason = "Waiting for an equal fresh complete starting position".to_owned();
-            }
-            StartingReadiness::Pending(error) => {
-                previous = None;
-                reason = error;
-            }
-        }
-        send_status(
+    verify_independent_start(
+        IndependentStartContext {
+            qmp,
+            socket_path,
+            first,
+            scan_state,
+            completed_boards,
             event_tx,
-            format!(
-                "Waiting for new Pyramid board to settle — observation {}/{}; no input",
-                attempt + 1,
-                super::pyramid_session::TRANSITION_OBSERVATIONS
-            ),
-        );
-        if attempt + 1 < super::pyramid_session::TRANSITION_OBSERVATIONS {
-            wait_restart(authority, event_tx,
-                POST_GAME_STAGE_DELAY,
-                cancel_requested,
-                "STOP or context cancellation revoked independent Pyramid starting-board observation",
-            )?;
-        }
-    }
-    let observation = settled.ok_or_else(|| format!("Independent Pyramid starting board did not settle within {} fresh observations; no input authorised: {reason}", super::pyramid_session::TRANSITION_OBSERVATIONS))?;
-    require_independent_restart_active(cancel_requested, event_tx, authority)?;
-    *completed_boards = 0;
-    *scan_state = TableauScanState::for_mode(crate::game::GameMode::Pyramid);
-    send_board_progress(event_tx, scan_state, 0);
-    send_status(
-        event_tx,
-        "Pyramid board ready for reconnaissance".to_owned(),
-    );
-    send_log(event_tx,
-        "Independent Pyramid restart verified by two fresh matching full tableau/initial-DL/empty-DR and normal-header observations; fresh guarded Recon follows; no Solver or HALO authority used.".to_owned());
-    if restarted {
-        Ok(PostGameOutcome::Restarted(observation))
-    } else {
-        Ok(PostGameOutcome::RecoveredGameplay(observation))
-    }
+            cancel_requested,
+            restarted,
+            latest_frame,
+            authority,
+        },
+        crate::game::GameMode::Pyramid,
+        "STOP or context cancellation revoked independent Pyramid starting-board observation",
+        "Pyramid board ready for reconnaissance",
+        "Independent Pyramid restart verified by two fresh matching full tableau/initial-DL/empty-DR and normal-header observations; fresh guarded Recon follows; no Solver or HALO authority used.",
+        |frame| match independent_start_readiness(vision, frame)? {
+            StartingReadiness::Ready(position) => Ok(Ok(position)),
+            StartingReadiness::Pending(error) => Ok(Err(error)),
+        },
+        |original, position| {
+            original.tableau == position.tableau
+                && original.left == position.left
+                && original.right == position.right
+        },
+    )
 }
 
 
@@ -1884,8 +2403,6 @@ pub(super) fn level_up_overrides_board_progress(
     observation: &FrameObservation,
     profile: &GameControlProfile,
 ) -> Result<bool, String> {
-
-
     // A recognised Level Up dialog is stronger evidence than the earlier
     // progress-bar branch and prevents a stale redeal state from looping.
     if !board_completion_verified {
@@ -1903,8 +2420,6 @@ pub(super) fn known_post_game_stage(
     observation: Option<&FrameObservation>,
     profile: &GameControlProfile,
 ) -> Result<Option<usize>, String> {
-
-
     let Some(observation) = observation else {
         return Ok(None);
     };
@@ -1935,8 +2450,6 @@ pub(super) fn require_post_game_observation_retry_budget(
     observation_round: usize,
     target_label: &str,
 ) -> Result<(), String> {
-
-
     if observation_round < POST_GAME_MAX_OBSERVATION_ROUNDS {
         return Ok(());
     }
@@ -1952,8 +2465,6 @@ pub(super) fn require_post_game_click_retry_budget(
     completed_attempts: usize,
     target_label: &str,
 ) -> Result<(), String> {
-
-
     if completed_attempts < POST_GAME_MAX_CLICK_ATTEMPTS {
         return Ok(());
     }
@@ -1966,8 +2477,6 @@ pub(super) fn require_post_game_click_retry_budget(
 
 /// Reject a score-skip retry once its total confirmed-delivery click budget is exhausted.
 pub(super) fn require_score_skip_click_budget(completed_attempts: usize) -> Result<(), String> {
-
-
     if completed_attempts < SCORE_SKIP_MAX_CLICK_ATTEMPTS {
         return Ok(());
     }
@@ -2008,7 +2517,9 @@ fn send_score_skip_click(
 
 
     if cancel_requested.load(Ordering::Acquire) {
-            if let Some(authority) = authority { authority.check(event_tx, cancel_requested)?; }
+        if let Some(authority) = authority {
+            authority.check(event_tx, cancel_requested)?;
+        }
         return Err(format!(
             "STOP was requested before score-skip click attempt {attempt}; no guest input was sent."
         ));
@@ -2023,7 +2534,9 @@ fn send_score_skip_click(
 
 
     if cancel_requested.load(Ordering::Acquire) {
-            if let Some(authority) = authority { authority.check(event_tx, cancel_requested)?; }
+        if let Some(authority) = authority {
+            authority.check(event_tx, cancel_requested)?;
+        }
         return Err(format!(
             "STOP was requested after the score-skip probe and before click attempt {attempt}; no guest input was sent."
         ));
@@ -2047,8 +2560,6 @@ fn send_score_skip_click(
 
 /// Return the concise status label for the pending post-game control.
 pub(super) const fn post_game_click_status(stage: PostGameStage) -> &'static str {
-
-
     match stage {
         PostGameStage::LevelUpOk => "Click Level Up OK",
         PostGameStage::NewGame => "Start New Game",

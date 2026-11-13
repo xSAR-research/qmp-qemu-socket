@@ -20,13 +20,21 @@ const DIAGNOSTIC_CARD_HEIGHT: u32 = 182;
 const DIAGNOSTIC_LIFT_PIXELS: i32 = 45;
 
 
-/// Plan four native ABS held targets after proof, without recognising or sending input.
+/// Approved input-free spacing before the second matching endpoint proof.
+const ENDPOINT_CONFIRMATION_MAX_WAIT: Duration = Duration::from_millis(100);
+
+
+/// Approved first effect-observation wait; unsupported pixels retain the configured retry.
+const POST_TRANSFER_MAX_WAIT: Duration = Duration::from_millis(200);
+
+
+/// Plan three native ABS held targets after proof, without recognising or sending input.
 ///
-/// PLAY retains its authenticated point. CELL/SUIT use the centre of the same
-/// canonical fixed slot whether occupied or empty. Held points are source minus
+/// Every pile retains its authenticated point, with the same pickup inset from
+/// the proved corner or empty-slot origin. Held points are source minus
 /// 45px vertically, the floor midpoint of the original source/effective target,
-/// target minus 45px vertically, then the exact target. Only the final two points
-/// must stay inside the destination slot. Source and observed target remain
+/// then the exact target. Only the final point must stay inside the destination
+/// slot. Source and observed target remain
 /// bounds-checked proof coordinates; every generated point must stay in frame.
 /// Invalid piles, overflow or any point outside the frame fail without fallback.
 fn diagnostic_abs_path(
@@ -34,7 +42,7 @@ fn diagnostic_abs_path(
     observed_destination: PixelPoint,
     target: Pile,
     frame: (u32, u32),
-) -> Result<[PixelPoint; 4], String> {
+) -> Result<[PixelPoint; 3], String> {
     let slot_x = match target {
         Pile::Cascade(n) if n < 8 => None,
         Pile::Cell(n) => Some(
@@ -62,12 +70,7 @@ fn diagnostic_abs_path(
     let slot = slot_x.map(|x| {
         crate::geometry::PixelRect::new(x, 112, crate::freecell::CARD_WIDTH, DIAGNOSTIC_CARD_HEIGHT)
     });
-    let destination = match slot {
-        Some(rect) => rect
-            .try_centre()
-            .ok_or("Free Cell diagnostic slot centre overflow")?,
-        None => observed_destination,
-    };
+    let destination = observed_destination;
     let source_upper = PixelPoint::new(
         source.x,
         source
@@ -83,19 +86,12 @@ fn diagnostic_abs_path(
         midpoint_axis(source.x, destination.x)?,
         midpoint_axis(source.y, destination.y)?,
     );
-    let destination_upper = PixelPoint::new(
-        destination.x,
-        destination
-            .y
-            .checked_sub(DIAGNOSTIC_LIFT_PIXELS)
-            .ok_or("Free Cell diagnostic destination lift overflow")?,
-    );
-    let points = [source_upper, midpoint, destination_upper, destination];
+    let points = [source_upper, midpoint, destination];
     for point in [source, observed_destination].into_iter().chain(points) {
         crate::geometry::pixel_point_to_qmp(point, frame.0, frame.1)
             .map_err(|error| format!("Invalid Free Cell diagnostic native point: {error}"))?;
     }
-    if slot.is_some_and(|rect| !rect.contains(destination_upper) || !rect.contains(destination)) {
+    if slot.is_some_and(|rect| !rect.contains(destination)) {
         return Err("Free Cell diagnostic held target outside fixed slot".into());
     }
     Ok(points)
@@ -169,18 +165,6 @@ fn stage_details(stage: route::Stage) -> serde_json::Value {
 }
 
 
-/// Private already-acquired motion-probe evidence; it grants no route or input authority.
-#[derive(Clone, Debug)]
-pub(crate) struct ProbeEvidence {
-    /// Same-invocation acquired-frame ordinal, after the acknowledged probe.
-    pub capture_serial: u64,
-    /// Reserved private packet directory, including partial persistence.
-    pub directory: Option<PathBuf>,
-    /// Persistence omissions remain secondary to a completed diagnostic acquisition.
-    pub persistence_error: Option<String>,
-}
-
-
 /// Accepted semantic progress, never an input acknowledgement alone.
 #[derive(Clone, Debug)]
 pub(crate) struct Progress {
@@ -200,8 +184,6 @@ pub(crate) struct Progress {
     pub foundation_cards: u32,
     /// Final semantic reason; coalesced intermediate progress carries none.
     pub completion: Option<route::Completion>,
-    /// Present only for the separate bounded motion diagnostic, never route effect proof.
-    pub probe_evidence: Option<ProbeEvidence>,
 }
 
 
@@ -336,6 +318,8 @@ pub(super) struct Store {
     serial: u64,
     /// Exact owner until matching completion; STOP does not release it early.
     running: Option<(freecell_calculation::Identity, u64)>,
+    /// Exact invocation's request to finish at a verified step, never immediate cancellation.
+    stop_after_step: bool,
     /// Coalesced advisory progress only.
     progress: Option<Progress>,
 }
@@ -362,6 +346,7 @@ impl Store {
         }
         self.cached = prepared.and_then(|prepared| prepared.cached);
         self.live = None;
+        self.stop_after_step = false;
         self.progress = None;
         Ok(())
     }
@@ -377,6 +362,7 @@ impl Store {
     /// Discard uncertain physical history while keeping immutable offline evidence.
     fn retire_live(&mut self) {
         self.live = None;
+        self.stop_after_step = false;
         self.progress = None;
     }
 
@@ -424,6 +410,7 @@ impl Store {
         }
         self.serial = next;
         self.running = Some((plan.clone(), next));
+        self.stop_after_step = false;
         self.progress = None;
         Ok(next)
     }
@@ -432,6 +419,18 @@ impl Store {
     /// Consume coalesced progress without granting authority.
     pub(super) fn take_progress(&mut self) -> Option<Progress> {
         self.progress.take()
+    }
+
+
+    /// Set an idempotent clean-boundary request only for this exact active owner.
+    pub(super) fn request_stop_after_step(
+        &mut self,
+        plan: &freecell_calculation::Identity,
+        run_id: u64,
+    ) -> Result<(), String> {
+        self.check(plan, run_id)?;
+        self.stop_after_step = true;
+        Ok(())
     }
 
 
@@ -472,12 +471,10 @@ impl Store {
             return Err("Stale Free Cell playback completion".into());
         }
         self.running = None;
+        self.stop_after_step = false;
         // A positive terminal observation has already destroyed the live permit;
         // preserve only its exact queued completion owner until this point.
-        if matches!(
-            completion,
-            Some(route::Completion::ChallengeComplete | route::Completion::MovementProbe)
-        ) {
+        if matches!(completion, Some(route::Completion::ChallengeComplete)) {
             self.revoke();
             return Ok(());
         }
@@ -505,7 +502,7 @@ impl Store {
                         && matches!(target, route::Target::Partial { foundation_cards }
                         if state.position.foundation_cards() == foundation_cards)
                 }
-                route::Completion::ChallengeComplete | route::Completion::MovementProbe => {
+                route::Completion::ChallengeComplete => {
                     unreachable!("handled before live access")
                 }
             };
@@ -564,22 +561,41 @@ struct Native<'a> {
     settle: Duration,
     /// Fresh complete physical Free Cell binding, retained through same-source steps only.
     completion_bound: bool,
+    /// True only when running a challenge deal (`Objective::Unresolved`); ordinary `FullBoard` deals stay `false`.
+    challenge_mode: bool,
     /// Positive common terminal report remains true even if recording later fails.
     completion_observed: bool,
-    /// Only an explicit A* Free Cell Single Step selects the diagnostic gesture.
+    /// Every A* Free Cell playback request uses the guarded native gesture.
     diagnostic_step: bool,
-    /// Diagnostic motion mode frozen with this exact worker command.
-    drag_mode: route::DragMode,
-    /// ABS diagnostic interval frozen with this exact worker command.
-    drag_timing: route::DiagnosticDragTiming,
-    /// ACK receipt retained even if subsequent read-only acquisition fails.
-    probe_delivered: bool,
-    /// Diagnostic acquisition receipt, separate from route progress and failures.
-    probe_evidence: Option<ProbeEvidence>,
 }
 
 
 impl Native<'_> {
+    /// Wait without acquiring pixels, preserving STOP and the exact invocation fence.
+    ///
+    /// `duration` is selected from the configured retry interval and the explicit
+    /// confirmation/post-transfer caps. Telemetry distinguishes that intentional
+    /// wait from the subsequent acquisition and physical-position proof.
+    fn wait_for_frame(&mut self, duration: Duration, cadence: &'static str) -> Result<(), String> {
+        self.active()?;
+        let started = Instant::now();
+        let waited = cancellable_wait(duration, self.cancel);
+        crate::single_step_telemetry::record_freecell(|| {
+            serde_json::json!({
+                "event":"playback-wait","cadence":cadence,
+                "configured_ms":self.settle.as_millis(),"chosen_ms":duration.as_millis(),
+                "elapsed_us":started.elapsed().as_micros(),"interrupted":waited.is_err(),
+                "stage":self.stage.map(stage_details),"additional_captures":0
+            })
+        });
+        if waited.is_err() {
+            self.active()?;
+            return Err("Free Cell settling interrupted".into());
+        }
+        self.active()
+    }
+
+
     /// Check the exact active authority without consulting a later cancellation latch.
     fn active(&self) -> Result<(), String> {
         self.trace.check(
@@ -633,115 +649,6 @@ impl Native<'_> {
     }
 
 
-    /// Check only the exact retired invocation for read-only post-probe acquisition.
-    ///
-    /// This check is never used by input, route proof or the transport guard.
-    fn probe_evidence_active(&self) -> Result<(), String> {
-        if !self.probe_delivered {
-            return Err("No acknowledged motion probe for diagnostic acquisition".into());
-        }
-        self.trace.check(
-            &self.events.latest_frame.reconnaissance,
-            &self.plan.context,
-            self.cancel,
-        )?;
-        let store = self
-            .events
-            .latest_frame
-            .freecell_route
-            .lock()
-            .map_err(|_| "Free Cell probe owner store poisoned")?;
-        if store.running.as_ref() != Some(&(self.plan.clone(), self.run_id)) || store.live.is_some()
-        {
-            return Err("Free Cell retired probe owner changed".into());
-        }
-        Ok(())
-    }
-
-
-    /// Retire input immediately after ACK, then acquire one explicitly diagnostic frame.
-    fn finish_movement_probe(&mut self) -> Result<route::TransferOutcome, String> {
-        self.probe_delivered = true;
-        self.trace.check(
-            &self.events.latest_frame.reconnaissance,
-            &self.plan.context,
-            self.cancel,
-        )?;
-        {
-            let mut store = self
-                .events
-                .latest_frame
-                .freecell_route
-                .lock()
-                .map_err(|_| "Free Cell probe retirement store poisoned")?;
-            store.check(self.plan, self.run_id)?;
-            store.retire_live();
-        }
-        self.probe_evidence_active()?;
-        crate::single_step_telemetry::record_freecell(|| {
-            serde_json::json!({
-                "event":"motion-probe-input-retired", "request_id":self.plan.request_id,
-                "run_id":self.run_id,"route_cursor_advanced":false,"effect_proved":false,
-                "after_capture_intent":"read-only motion diagnostic; not route endpoint proof"
-            })
-        });
-        if cancellable_wait(self.settle, self.cancel).is_err() {
-            self.probe_evidence_active()?;
-            return Err("Free Cell diagnostic acquisition wait interrupted".into());
-        }
-        self.probe_evidence_active()?;
-        let (frame, _) =
-            capture_screen_causal(&mut self.qmp, &self.plan.context.socket_path, self.events)
-                .map_err(|error| {
-                    self.trace.capture_error(
-                        error,
-                        &self.events.latest_frame.reconnaissance,
-                        &self.plan.context,
-                        self.cancel,
-                    )
-                })?;
-        self.capture_serial = self
-            .capture_serial
-            .checked_add(1)
-            .ok_or("Free Cell capture serial exhausted")?;
-        self.latest = Some(frame);
-        self.probe_evidence_active()?;
-        if let Some(frame) = &self.latest {
-            self.events.latest_frame.publish(
-                frame.clone(),
-                None,
-                false,
-                true,
-                Some(self.plan.context.clone()),
-            );
-        }
-        if self.retire_if_complete()? {
-            return Ok(route::TransferOutcome::ChallengeComplete);
-        }
-        let saved = crate::pyramid_diagnostics::persist_failure(
-            crate::pyramid_diagnostics::FailureEvidence {
-                progress: None,
-                context: &self.plan.context,
-                phase: crate::pyramid_diagnostics::PyramidPhase::Execution,
-                run_id: Some(self.run_id),
-                error: "Free Cell REL motion probe acquisition; no route effect claimed",
-                details: serde_json::json!({"artifact_kind":"successful motion-probe acquisition evidence",
-                "probe":self.details(),"route_cursor_advanced":false,"effect_proved":false}),
-                source_document: None,
-                first_frame: None,
-                latest_frame: self.latest.as_ref(),
-            },
-        );
-        self.probe_evidence = Some(ProbeEvidence {
-            capture_serial: self.capture_serial,
-            directory: saved.directory,
-            persistence_error: saved.persistence_error,
-        });
-        self.probe_evidence_active()?;
-        Ok(route::TransferOutcome::MovementProbe)
-    }
-
-
     /// Prove only the requested exposed piles; hidden identities remain in authenticated history.
     fn prove(&self, expected: &Position, piles: &[Pile]) -> Result<position::Geometry, String> {
         let frame = self
@@ -752,27 +659,57 @@ impl Native<'_> {
     }
 
 
-    /// Retire on the game's supported completion report without inferring route effects.
+    /// Poll Challenge Complete (`wait_for_challenge_complete`) only in bound challenge mode after fault, then retire.
     ///
-    /// Initial identity binding is mandatory. This passive stop never grants input,
-    /// advances the cursor, infers an unread objective or starts another board.
-    fn retire_if_complete(&mut self) -> Result<bool, String> {
-        if !self.completion_bound {
+    /// If the 5-frame poll ends without `Continue`, inspect the latest captured frame once for an
+    /// active Challenge XP-counting modal or a settled `LEVEL-UP! [OK]` modal (`Option 1A`) and
+    /// retire cleanly without input; otherwise preserve `self.first` and the original fault.
+    fn poll_and_retire_challenge_complete(&mut self) -> Result<bool, String> {
+        if !self.completion_bound || !self.challenge_mode {
             return Ok(false);
         }
-        let complete = crate::freecell_completion::observe(
-            self.latest
-                .as_ref()
-                .ok_or("Missing Free Cell completion frame")?,
-        )?;
-        if !complete {
-            return Ok(false);
+        let complete = {
+            let mut io = ChallengePollIo {
+                native: self,
+                error_detail: None,
+            };
+            match crate::game_controls::wait_for_challenge_complete(&mut io) {
+                Ok(complete) => complete,
+                Err(error) => return Err(io.error_detail.unwrap_or_else(|| error.to_string())),
+            }
+        };
+        if complete {
+            self.retire_challenge_complete("continue_visible")?;
+            return Ok(true);
         }
-        if self.probe_delivered {
-            self.probe_evidence_active()?;
-        } else {
-            self.active()?;
+        if let Some(frame) = self.latest.as_ref()
+            && let Some(handoff) = crate::freecell_terminal::classify_challenge_handoff(frame)
+                .map_err(|error| error.to_string())?
+        {
+            let (reason, message) = match handoff {
+                crate::freecell_terminal::ChallengeTerminalHandoff::XpCounting => (
+                    "xp_counting",
+                    "Free Cell challenge complete (XP counting active after 5 observations); releasing control without input",
+                ),
+                crate::freecell_terminal::ChallengeTerminalHandoff::LevelUp => (
+                    "level_up_ok",
+                    "Free Cell challenge complete (Level Up OK modal active); releasing control to operator without input",
+                ),
+            };
+            let _ = self.events.send(WorkerEvent::Log(message.to_owned()));
+            self.retire_challenge_complete(reason)?;
+            return Ok(true);
         }
+        Ok(false)
+    }
+
+
+    /// Retire route authority and save optional GAME WIN image after Challenge Complete is verified.
+    ///
+    /// Initial identity binding and challenge mode are mandatory. This passive stop never grants
+    /// input, advances the cursor, infers an unread objective or starts another board.
+    fn retire_challenge_complete(&mut self, terminal_handoff: &'static str) -> Result<(), String> {
+        self.active()?;
         let mut store = self
             .events
             .latest_frame
@@ -784,15 +721,7 @@ impl Native<'_> {
             &self.plan.context,
             self.cancel,
         )?;
-        if self.probe_delivered {
-            if store.running.as_ref() != Some(&(self.plan.clone(), self.run_id))
-                || store.live.is_some()
-            {
-                return Err("Free Cell retired probe terminal owner changed".into());
-            }
-        } else {
-            store.check(self.plan, self.run_id)?;
-        }
+        store.check(self.plan, self.run_id)?;
         store.revoke();
         self.completion_observed = true;
         drop(store);
@@ -800,8 +729,9 @@ impl Native<'_> {
             serde_json::json!({
                 "event":"game-reported-challenge-complete", "run_id":self.run_id,
                 "request_id":self.plan.request_id, "capture_serial":self.capture_serial,
-                "stage":self.stage.map(stage_details), "remaining_route_retired":true,
-                "route_cursor_advanced":false, "objective_counter_inferred":false,
+                "stage":self.stage.map(stage_details), "terminal_handoff":terminal_handoff,
+                "remaining_route_retired":true, "route_cursor_advanced":false,
+                "objective_counter_inferred":false,
             })
         });
         // The causal TCP acquisition has cached these exact terminal pixels when
@@ -810,21 +740,21 @@ impl Native<'_> {
         {
             let _game_win_images = super::begin_game_win_images(self.events)?;
         }
-        Ok(true)
+        Ok(())
     }
 
 
     /// Persist already-acquired incident pixels without replacing the original failure.
     fn details(&self) -> serde_json::Value {
         let stage = self.stage.map(stage_details);
-        serde_json::json!({"game":"Free Cell","protocol":if self.diagnostic_step && self.drag_mode==route::DragMode::Relative {"bounded relative motion probe"}else{"explicit held drag"},
+        serde_json::json!({"game":"Free Cell","protocol":"explicit held drag",
             "request_id":self.plan.request_id,"source_generation":self.plan.source_generation,
             "run_id":self.run_id,"stage":stage,"capture_serial":self.capture_serial,
             "complete_initial_identity_bound":self.completion_bound,
+            "challenge_mode":self.challenge_mode,
             "game_reported_challenge_complete":self.completion_observed,
-            "motion_probe_delivered":self.probe_delivered,"diagnostic_drag_mode":format!("{:?}",self.drag_mode),
-            "diagnostic_drag_timing":format!("{:?}",self.drag_timing),
-            "movement_probe_evidence":self.probe_evidence.as_ref().map(|e| serde_json::json!({"capture_serial":e.capture_serial,"directory":e.directory,"persistence_error":e.persistence_error})),
+            "diagnostic_drag_mode":"Absolute",
+            "gesture_phase_wait_ms":crate::parameters::FREECELL_ROUTE_ABS_GESTURE_INTERVAL.as_millis(),
             "attempted":self.counts.0,"acknowledged":self.counts.1,"guest_effect_proven_by_ack":false,
             "first_rejection_historical":self.first_rejection,"last_rejection":self.last_rejection,
             "frozen_endpoints":self.frozen.map(|(action,from,to)|format!("{action:?}: {from:?} -> {to:?}")),
@@ -842,6 +772,20 @@ impl RouteIo for Native<'_> {
             .checkpoint(pyramid_pause::Phase::Gameplay, || self.active())
             .map_err(|e| e.message)?;
         self.active()
+    }
+
+
+    /// Read the exact invocation's resumable stop request without entering a pause.
+    fn stop_after_step(&mut self) -> Result<bool, String> {
+        self.active()?;
+        let store = self
+            .events
+            .latest_frame
+            .freecell_route
+            .lock()
+            .map_err(|_| "Free Cell playback store poisoned".to_owned())?;
+        store.check(self.plan, self.run_id)?;
+        Ok(store.stop_after_step)
     }
 
 
@@ -863,6 +807,8 @@ impl RouteIo for Native<'_> {
         }
         self.active()?;
         self.completion_bound = true;
+        self.challenge_mode = crate::freecell_recon::objective::from_metadata(observed.metadata())
+            == crate::freecell_recon::objective::Objective::Unresolved;
         Ok(())
     }
 
@@ -870,9 +816,6 @@ impl RouteIo for Native<'_> {
     /// Observe one exact physical route prefix, without advancing on unmatched evidence.
     fn observe(&mut self, candidates: &[Candidate]) -> Result<route::Observation, String> {
         self.capture()?;
-        if self.retire_if_complete()? {
-            return Ok(route::Observation::ChallengeComplete);
-        }
         let action = self
             .stage
             .and_then(|stage| stage.action)
@@ -939,28 +882,37 @@ impl RouteIo for Native<'_> {
         action: RecordedMove,
     ) -> Result<route::TransferOutcome, String> {
         self.capture()?;
-        if self.retire_if_complete()? {
-            return Ok(route::TransferOutcome::ChallengeComplete);
-        }
-        let geometry = self.prove(parent, &[action.from, action.to])?;
+        let geometry = match self.prove(parent, &[action.from, action.to]) {
+            Ok(geometry) => geometry,
+            Err(fault) => {
+                if self.first.is_none() {
+                    self.first = self.latest.clone();
+                }
+                if self.poll_and_retire_challenge_complete()? {
+                    return Ok(route::TransferOutcome::ChallengeComplete);
+                }
+                return Err(fault);
+            }
+        };
         let from = geometry.point(action.from)?;
         let observed_to = geometry.point(action.to)?;
-        let held_points = if self.diagnostic_step && self.drag_mode == route::DragMode::Absolute {
+        let held_points = if self.diagnostic_step {
             diagnostic_abs_path(from, observed_to, action.to, (1_920, 1_080))?
         } else {
-            [observed_to; 4]
+            [observed_to; 3]
         };
-        let [_, _, _, to] = held_points;
+        let [_, _, to] = held_points;
         self.frozen = Some((action, from, to));
-        if self.diagnostic_step && self.drag_mode == route::DragMode::Absolute {
+        if self.diagnostic_step {
             crate::single_step_telemetry::record_freecell(|| {
                 serde_json::json!({"event":"diagnostic-abs-native-path-planned",
                     "source":[from.x,from.y],"observed_destination":[observed_to.x,observed_to.y],
                     "effective_destination":[to.x,to.y],
+                    "destination_anchor_contract":"retain the proved corner or empty-slot point with the same native pickup inset (+15 x, +20 y)",
                     "held_points":held_points.map(|point|[point.x,point.y]),
                     "vertical_lift_native_pixels":DIAGNOSTIC_LIFT_PIXELS,
                     "midpoint_contract":"floor((original source + effective destination) / 2) independently on each native axis",
-                    "held_point_roles":["source-minus-45-y","native-midpoint","destination-minus-45-y","exact-destination"],
+                    "held_point_roles":["source-minus-45-y","native-midpoint","exact-destination"],
                     "sequence_is":"planned; wire records identify phases reached","effect_proved":false})
             });
         }
@@ -1000,14 +952,8 @@ impl RouteIo for Native<'_> {
             }
         };
         let delivered = if self.diagnostic_step {
-            self.qmp.diagnostic_drag(
-                from,
-                &held_points,
-                (1_920, 1_080),
-                self.drag_mode,
-                self.drag_timing,
-                &mut permitted,
-            )
+            self.qmp
+                .diagnostic_drag(from, &held_points, (1_920, 1_080), &mut permitted)
         } else {
             self.qmp.drag(from, to, 1_920, 1_080, &mut permitted)
         };
@@ -1024,9 +970,6 @@ impl RouteIo for Native<'_> {
             .1
             .checked_add(1)
             .ok_or("Free Cell ACK counter exhausted")?;
-        if self.diagnostic_step && self.drag_mode == route::DragMode::Relative {
-            return self.finish_movement_probe();
-        }
         let _ = self.events.send(WorkerEvent::Log(format!(
             "Free Cell drag {action:?}: {from:?} -> {to:?} acknowledged; card effect requires fresh semantic proof"
         )));
@@ -1035,13 +978,41 @@ impl RouteIo for Native<'_> {
     }
 
 
-    /// Wait cooperatively without authorising another input or capture.
+    /// Retain the configured retry horizon for unsupported or intermediate pixels.
     fn settle(&mut self) -> Result<(), String> {
-        if cancellable_wait(self.settle, self.cancel).is_err() {
-            self.active()?;
-            return Err("Free Cell settling interrupted".into());
+        self.wait_for_frame(self.settle, "unmatched-or-intermediate-retry")
+    }
+
+
+    /// Confirm an eligible first proof after at most 100 milliseconds, without input.
+    fn confirmation_wait(&mut self) -> Result<(), String> {
+        self.wait_for_frame(
+            self.settle.min(ENDPOINT_CONFIRMATION_MAX_WAIT),
+            "matching-endpoint-confirmation",
+        )
+    }
+
+
+    /// Acquire the first post-release effect after at most 200 milliseconds.
+    fn post_transfer_wait(&mut self) -> Result<(), String> {
+        self.wait_for_frame(
+            self.settle.min(POST_TRANSFER_MAX_WAIT),
+            "first-post-transfer-observation",
+        )
+    }
+
+
+    /// Wait for an AUTO animation while checking STOP, exact ownership and pause each slice.
+    fn animation_wait(&mut self, duration: Duration) -> Result<(), String> {
+        let started = Instant::now();
+        loop {
+            self.check()?;
+            let elapsed = started.elapsed();
+            if elapsed >= duration {
+                return Ok(());
+            }
+            thread::sleep((duration - elapsed).min(CANCELLABLE_WAIT_SLICE));
         }
-        self.active()
     }
 
 
@@ -1067,9 +1038,164 @@ impl RouteIo for Native<'_> {
                 acknowledged: self.counts.1,
                 foundation_cards: position.foundation_cards(),
                 completion: None,
-                probe_evidence: None,
             });
         }
+    }
+
+
+    /// Poll challenge-mode Challenge Complete only after a failed stabilization window.
+    fn resolve_challenge_complete(&mut self) -> Result<bool, String> {
+        self.poll_and_retire_challenge_complete()
+    }
+
+
+    /// Poll normal-game win entry only after the final 52-foundation endpoint is obscured by GAME WIN.
+    fn resolve_normal_game_win(&mut self, goal: &Position) -> Result<bool, String> {
+        if !self.completion_bound || self.challenge_mode {
+            return Ok(false);
+        }
+        const FOUNDATIONS: [Pile; 4] = [
+            Pile::Foundation(0),
+            Pile::Foundation(1),
+            Pile::Foundation(2),
+            Pile::Foundation(3),
+        ];
+        let mut consecutive = 0_usize;
+        for _ in 0..crate::parameters::POST_GAME_MAX_OBSERVATION_ROUNDS {
+            self.check()?;
+            self.wait_for_frame(
+                crate::parameters::BOARD_TRANSITION_REOBSERVE_DELAY,
+                "normal-game-win-poll",
+            )?;
+            self.capture()?;
+            let frame = self
+                .latest
+                .as_ref()
+                .ok_or("Missing Free Cell win-poll frame")?;
+            let terminal = crate::freecell_terminal::is_recognised_terminal(frame)
+                .map_err(|error| error.to_string())?;
+            let matched = terminal || (goal.is_goal() && self.prove(goal, &FOUNDATIONS).is_ok());
+            if matched {
+                consecutive += 1;
+                if consecutive >= 2 {
+                    crate::single_step_telemetry::record_freecell(|| {
+                        serde_json::json!({
+                            "event":"normal-game-win-resolved",
+                            "run_id":self.run_id,
+                            "request_id":self.plan.request_id,
+                            "capture_serial":self.capture_serial,
+                            "terminal":terminal,
+                        })
+                    });
+                    return Ok(true);
+                }
+            } else {
+                consecutive = 0;
+            }
+        }
+        Ok(false)
+    }
+}
+
+
+/// Input-free `OperationIo` bridge driving `wait_for_challenge_complete` without mutating `first`.
+struct ChallengePollIo<'a, 'b> {
+    /// Active Free Cell route worker adapter.
+    native: &'a mut Native<'b>,
+    /// Exact revocation/transport/wait cause preserved across `OperationError`.
+    error_detail: Option<String>,
+}
+
+
+impl ChallengePollIo<'_, '_> {
+    /// Verify active run ownership.
+    fn check_native_active(&mut self) -> Result<(), crate::game_operations::OperationError> {
+        self.native.active().map_err(|cause| {
+            self.error_detail = Some(cause);
+            crate::game_operations::OperationError::Cancelled
+        })
+    }
+}
+
+
+impl crate::game_operations::OperationIo for ChallengePollIo<'_, '_> {
+    fn check_active(&mut self) -> Result<(), crate::game_operations::OperationError> {
+        self.check_native_active()
+    }
+
+
+    fn capture(&mut self) -> Result<CapturedFrame, crate::game_operations::OperationError> {
+        self.check_native_active()?;
+        let (frame, _) = capture_screen_causal(
+            &mut self.native.qmp,
+            &self.native.plan.context.socket_path,
+            self.native.events,
+        )
+        .map_err(|error| {
+            let detail = self.native.trace.capture_error(
+                error,
+                &self.native.events.latest_frame.reconnaissance,
+                &self.native.plan.context,
+                self.native.cancel,
+            );
+            self.error_detail = Some(detail.clone());
+            crate::game_operations::OperationError::Transport(detail)
+        })?;
+        self.native.capture_serial =
+            self.native.capture_serial.checked_add(1).ok_or_else(|| {
+                let msg = "Free Cell capture serial exhausted".to_owned();
+                self.error_detail = Some(msg.clone());
+                crate::game_operations::OperationError::Invalid(msg)
+            })?;
+        self.native.latest = Some(frame.clone());
+        self.native.events.latest_frame.publish(
+            frame.clone(),
+            None,
+            false,
+            true,
+            Some(self.native.plan.context.clone()),
+        );
+        self.check_native_active()?;
+        Ok(frame)
+    }
+
+
+    fn authorise(
+        &mut self,
+        _frame: &CapturedFrame,
+        _input: crate::game_operations::Input,
+    ) -> Result<(), crate::game_operations::OperationError> {
+        Err(crate::game_operations::OperationError::Unsupported(
+            "Challenge Complete polling never authorises guest input".to_owned(),
+        ))
+    }
+
+
+    fn probe(&mut self) -> Result<(), crate::game_operations::OperationError> {
+        Err(crate::game_operations::OperationError::Unsupported(
+            "Challenge Complete polling never probes guest input".to_owned(),
+        ))
+    }
+
+
+    fn deliver(
+        &mut self,
+        _input: crate::game_operations::Input,
+    ) -> Result<(), crate::game_operations::OperationError> {
+        Err(crate::game_operations::OperationError::Unsupported(
+            "Challenge Complete polling never delivers guest input".to_owned(),
+        ))
+    }
+
+
+    fn wait(&mut self, duration: Duration) -> Result<(), crate::game_operations::OperationError> {
+        self.native
+            .wait_for_frame(duration, "challenge-complete-poll")
+            .map_err(|cause| {
+                self.error_detail = Some(cause);
+                crate::game_operations::OperationError::Cancelled
+            })?;
+        self.check_native_active()
     }
 }
 
@@ -1123,17 +1249,26 @@ fn observation_piles(
 }
 
 
-/// Execute one reserved invocation, permanently retiring on any refusal or interruption.
-pub(super) fn run(
+/// Outcome and final captured evidence returned by executing one reserved Free Cell route.
+pub(super) struct SessionExecution {
+    /// Route progress on completion, or the structured failure packet on error.
+    pub(super) result: Result<Progress, Box<Failure>>,
+    /// Classified termination reason (`Completed`, `Stopped`, `Paused`, or `Failed`).
+    pub(super) termination: crate::pyramid_workflow_model::RunTermination,
+    /// Most recent verified guest frame observed during execution, when available.
+    pub(super) latest_frame: Option<CapturedFrame>,
+}
+
+/// Execute one reserved Free Cell route and return its structured outcome without
+/// retiring the outer reconnaissance session or emitting a standalone UI finish event.
+pub(super) fn execute_for_session(
     plan: freecell_calculation::Identity,
     run_id: u64,
     single_step: bool,
-    diagnostic: (route::DragMode, route::DiagnosticDragTiming),
     settle: Duration,
     events: &WorkerEventSink,
     cancel: &AtomicBool,
-) {
-    let (drag_mode, drag_timing) = diagnostic;
+) -> SessionExecution {
     let mut state = None;
     let trace = pyramid_stop::StopTrace::default();
     let mut balanced = true;
@@ -1200,34 +1335,22 @@ pub(super) fn run(
             counts: (0, 0),
             settle,
             completion_bound: current.bound,
+            challenge_mode: crate::freecell_recon::objective::from_metadata(
+                cached.report.deal.metadata(),
+            ) == crate::freecell_recon::objective::Objective::Unresolved,
             completion_observed: false,
-            drag_mode,
-            drag_timing,
-            probe_delivered: false,
-            probe_evidence: None,
-            diagnostic_step: single_step
-                && plan.context.game_mode == GameMode::FreeCell
+            diagnostic_step: plan.context.game_mode == GameMode::FreeCell
                 && plan.context.strategy == SolvingStrategy::ShortestPath,
         };
-        let result = if native.diagnostic_step && drag_mode == route::DragMode::Relative {
-            route::movement_probe(
-                &mut current,
-                &cached.report.deal,
-                moves,
-                live.mode,
-                &mut native,
-            )
-        } else {
-            route::drive(
-                &mut current,
-                &cached.report.deal,
-                moves,
-                target,
-                single_step,
-                live.mode,
-                &mut native,
-            )
-        };
+        let result = route::drive(
+            &mut current,
+            &cached.report.deal,
+            moves,
+            target,
+            single_step,
+            live.mode,
+            &mut native,
+        );
         state = Some(current);
         balanced = native.counts.0 == native.counts.1;
         evidence = (
@@ -1244,7 +1367,6 @@ pub(super) fn run(
             acknowledged: native.counts.1,
             foundation_cards: current.position.foundation_cards(),
             completion: Some(completion),
-            probe_evidence: native.probe_evidence.clone(),
         })
     })();
     // Order the final typed authority check with exact Store retirement. STOP latches
@@ -1302,6 +1424,27 @@ pub(super) fn run(
         ))
     });
     let termination = trace.termination(result.is_err(), balanced);
+    SessionExecution {
+        result,
+        termination,
+        latest_frame: evidence.2,
+    }
+}
+
+/// Execute one reserved invocation, permanently retiring on any refusal or interruption.
+pub(super) fn run(
+    plan: freecell_calculation::Identity,
+    run_id: u64,
+    single_step: bool,
+    settle: Duration,
+    events: &WorkerEventSink,
+    cancel: &AtomicBool,
+) {
+    let SessionExecution {
+        result,
+        termination,
+        ..
+    } = execute_for_session(plan.clone(), run_id, single_step, settle, events, cancel);
     events.latest_frame.reconnaissance.finish();
     let _ = events.send_for_context(
         Some(plan.context.clone()),

@@ -12,8 +12,8 @@ use crate::{
     game::{ActionTarget, GameMode},
     geometry::PixelRect,
     parameters::{ACTION_CHANGE_CHANNEL_THRESHOLD, NOMINAL_FRAME_HEIGHT, NOMINAL_FRAME_WIDTH},
-    terminal_controls::{Control, control_point, profiles::TRIPEAKS_CONTROLS},
     stepper::StepPlan,
+    terminal_controls::{Control, control_point, profiles::TRIPEAKS_CONTROLS},
     tracker::{PredictedAction, RowMask, TableauScanState, analyse_frame_with_state},
 };
 
@@ -40,12 +40,8 @@ pub(super) enum TerminalKind {
 
 
 impl TerminalKind {
-
-
     /// Human-readable scene evidence used by the production verification log.
     pub(super) fn label(self) -> &'static str {
-
-
         match self {
             Self::RewardSkip => "Congratulations/reward/skip",
             Self::LevelUpOk => "Level Up OK over the dim reward panel",
@@ -165,8 +161,6 @@ fn text_mask_matches(
 
 
     for (row, samples) in mask.iter().enumerate() {
-
-
         for (column, sample) in samples.bytes().enumerate() {
             let (index, predicate) = match sample {
                 b'#' => (0, glyph),
@@ -174,7 +168,11 @@ fn text_mask_matches(
                 _ => continue,
             };
             expected[index] += 1;
-            let rgb = pixel_rgb(frame, origin.0 + column as u32 * 4, origin.1 + row as u32 * 4);
+            let rgb = pixel_rgb(
+                frame,
+                origin.0 + column as u32 * 4,
+                origin.1 + row as u32 * 4,
+            );
 
 
             if rgb.is_some_and(predicate) {
@@ -195,18 +193,26 @@ pub(super) fn terminal_action_evidence(
     before: &FrameObservation,
     after: &FrameObservation,
 ) -> Result<Option<(TerminalKind, usize)>, String> {
+    let Some(kind) = terminal_kind(&after.frame)? else {
+        return Ok(None);
+    };
 
 
-    let Some(kind) = terminal_kind(&after.frame)? else { return Ok(None); };
-
-
-    if after.gameplay_scene || after.prediction != PredictedAction::NoHighlight
-        || after.observed_rows.is_some() || !last_tableau_context(plan, before)?
+    if after.gameplay_scene
+        || after.prediction != PredictedAction::NoHighlight
+        || after.observed_rows.is_some()
+        || !last_tableau_context(plan, before)?
     {
-        return Err(format!("TriPeaks {} lacks a fresh canonical final-card context; no terminal input authorised", kind.label()));
+        return Err(format!(
+            "TriPeaks {} lacks a fresh canonical final-card context; no terminal input authorised",
+            kind.label()
+        ));
     }
     let changed = materially_changed_pixels(
-        &before.frame, &after.frame, plan.input().effect_bounds(), plan.input().effect_exclusion_bounds(),
+        &before.frame,
+        &after.frame,
+        plan.input().effect_bounds(),
+        plan.input().effect_exclusion_bounds(),
         ACTION_CHANGE_CHANNEL_THRESHOLD,
     )?;
     let required = plan.input().minimum_changed_pixels();
@@ -214,7 +220,8 @@ pub(super) fn terminal_action_evidence(
 
     if changed < required {
         return Err(format!(
-            "TriPeaks {} cannot prove the last action's effect: changed pixels={changed}, required={required}; no terminal input authorised", kind.label(),
+            "TriPeaks {} cannot prove the last action's effect: changed pixels={changed}, required={required}; no terminal input authorised",
+            kind.label(),
         ));
     }
     Ok(Some((kind, changed)))
@@ -223,8 +230,6 @@ pub(super) fn terminal_action_evidence(
 
 /// Recognise the two separately audited terminal layouts without granting completion.
 pub(super) fn terminal_kind(frame: &CapturedFrame) -> Result<Option<TerminalKind>, String> {
-
-
     if is_reward_overlay(frame)? {
         Ok(Some(TerminalKind::RewardSkip))
     } else if is_direct_level_up_overlay(frame)? {
@@ -241,15 +246,14 @@ pub(super) fn terminal_kind(frame: &CapturedFrame) -> Result<Option<TerminalKind
 /// Changing level, rank and central artwork never supply terminal authority.
 pub(super) fn is_direct_level_up_overlay(frame: &CapturedFrame) -> Result<bool, String> {
     Ok(is_direct_level_up_context(frame)?
-        && control_point(frame, TRIPEAKS_CONTROLS.spec(Control::Ok)).map_err(|error| error.to_string())?
+        && control_point(frame, TRIPEAKS_CONTROLS.spec(Control::Ok))
+            .map_err(|error| error.to_string())?
             != crate::geometry::PixelPoint::new(0, 0))
 }
 
 
 /// Check independent panel authority without repeating a measured OK search.
 pub(super) fn is_direct_level_up_context(frame: &CapturedFrame) -> Result<bool, String> {
-
-
     if !frame.is_layout_valid() {
         return Err("TriPeaks terminal frame has invalid pixel storage".to_owned());
     }
@@ -260,11 +264,19 @@ pub(super) fn is_direct_level_up_context(frame: &CapturedFrame) -> Result<bool, 
     }
 
 
-    if !text_mask_matches(frame, (800, 234), &LEVEL_UP_TITLE_MASK,
+    if !text_mask_matches(
+        frame,
+        (800, 234),
+        &LEVEL_UP_TITLE_MASK,
         |rgb| rgb.into_iter().all(|channel| channel >= 245),
         |[red, green, blue]| blue < 20 && green >= 100 && green >= red.saturating_add(25),
-    ) || !text_mask_matches(frame, (798, 838), &DIM_SKIP_MASK,
-        |[red, green, blue]| (20..=35).contains(&red) && (27..=40).contains(&green) && (37..=50).contains(&blue),
+    ) || !text_mask_matches(
+        frame,
+        (798, 838),
+        &DIM_SKIP_MASK,
+        |[red, green, blue]| {
+            (20..=35).contains(&red) && (27..=40).contains(&green) && (37..=50).contains(&blue)
+        },
         |[red, green, blue]| red <= 10 && (12..=23).contains(&green) && (27..=38).contains(&blue),
     ) {
         return Ok(false);
@@ -272,21 +284,22 @@ pub(super) fn is_direct_level_up_context(frame: &CapturedFrame) -> Result<bool, 
 
 
     for bounds in DIM_REWARD_PROBES {
-
-
-        if !rectangle_matches(frame, bounds, |[red, green, blue]|
-            (10..=15).contains(&red) && (20..=26).contains(&green) && (35..=43).contains(&blue)
-                && green >= red.saturating_add(8) && blue >= green.saturating_add(12))
-        {
+        if !rectangle_matches(frame, bounds, |[red, green, blue]| {
+            (10..=15).contains(&red)
+                && (20..=26).contains(&green)
+                && (35..=43).contains(&blue)
+                && green >= red.saturating_add(8)
+                && blue >= green.saturating_add(12)
+        }) {
             return Ok(false);
         }
     }
 
 
     for bounds in LEVEL_UP_PANEL_PROBES {
-
-
-        if !rectangle_matches(frame, bounds, |rgb| rgb.into_iter().all(|channel| channel >= 235)) {
+        if !rectangle_matches(frame, bounds, |rgb| {
+            rgb.into_iter().all(|channel| channel >= 235)
+        }) {
             return Ok(false);
         }
     }
@@ -295,13 +308,15 @@ pub(super) fn is_direct_level_up_context(frame: &CapturedFrame) -> Result<bool, 
 
 
 /// Separate fixed patches require 95% coverage, excluding isolated decorative pixels.
-fn rectangle_matches(frame: &CapturedFrame, bounds: PixelRect, predicate: fn([u8; 3]) -> bool) -> bool {
+fn rectangle_matches(
+    frame: &CapturedFrame,
+    bounds: PixelRect,
+    predicate: fn([u8; 3]) -> bool,
+) -> bool {
     let mut matched = 0u32;
 
 
     for y in bounds.y..bounds.bottom() {
-
-
         for x in bounds.x..bounds.right() {
             matched += u32::from(pixel_rgb(frame, x, y).is_some_and(predicate));
         }
@@ -315,8 +330,6 @@ fn rectangle_matches(frame: &CapturedFrame, bounds: PixelRect, predicate: fn([u8
 /// The 98% text thresholds apply independently to foreground and backdrop,
 /// preventing a solid white or green rectangle from impersonating the title.
 pub(super) fn is_reward_overlay(frame: &CapturedFrame) -> Result<bool, String> {
-
-
     if !frame.is_layout_valid() {
         return Err("TriPeaks terminal frame has invalid pixel storage".to_owned());
     }
@@ -327,10 +340,16 @@ pub(super) fn is_reward_overlay(frame: &CapturedFrame) -> Result<bool, String> {
     }
 
 
-    if !text_mask_matches(frame, (708, 200), &TITLE_MASK,
+    if !text_mask_matches(
+        frame,
+        (708, 200),
+        &TITLE_MASK,
         |rgb| rgb.into_iter().all(|channel| channel >= 245),
         |[red, green, blue]| blue < 60 && green >= 100 && green >= red.saturating_add(25),
-    ) || !text_mask_matches(frame, (798, 838), &SKIP_MASK,
+    ) || !text_mask_matches(
+        frame,
+        (798, 838),
+        &SKIP_MASK,
         |[red, green, blue]| red >= 110 && green >= 140 && blue >= 180,
         |[red, green, blue]| red < 90 && green < 130 && blue < 190,
     ) {
@@ -343,19 +362,24 @@ pub(super) fn is_reward_overlay(frame: &CapturedFrame) -> Result<bool, String> {
 
 
         for y in bounds.y..bounds.bottom() {
-
-
             for x in bounds.x..bounds.right() {
-                let Some([red, green, blue]) = pixel_rgb(frame, x, y) else { return Ok(false); };
+                let Some([red, green, blue]) = pixel_rgb(frame, x, y) else {
+                    return Ok(false);
+                };
                 let fits = if border {
-                    red >= 40 && green >= 95 && blue >= 150
-                        && green >= red.saturating_add(30) && blue >= green.saturating_add(50)
+                    red >= 40
+                        && green >= 95
+                        && blue >= 150
+                        && green >= red.saturating_add(30)
+                        && blue >= green.saturating_add(50)
                 } else {
                     red <= 10 && (20..=55).contains(&green) && (45..=90).contains(&blue)
                 };
 
 
-                if fits { matched += 1; }
+                if fits {
+                    matched += 1;
+                }
             }
         }
 
@@ -369,21 +393,34 @@ pub(super) fn is_reward_overlay(frame: &CapturedFrame) -> Result<bool, String> {
 
 
 /// Require a fresh canonical top-row click on the sole positively exposed card.
-pub(super) fn last_tableau_context(plan: StepPlan, before: &FrameObservation) -> Result<bool, String> {
+pub(super) fn last_tableau_context(
+    plan: StepPlan,
+    before: &FrameObservation,
+) -> Result<bool, String> {
     let action = plan.input().action();
 
 
-    let ActionTarget::Tableau(target) = action.target else { return Ok(false); };
+    let ActionTarget::Tableau(target) = action.target else {
+        return Ok(false);
+    };
 
 
-    if target.row != 1 || !before.gameplay_scene || before.prediction != plan.before()
+    if target.row != 1
+        || !before.gameplay_scene
+        || before.prediction != plan.before()
         || before.observed_rows != Some(RowMask::all_for(1))
-        || GameMode::TriPeaks.profile().tableau_action(target.slot_index, action.anchor) != Some(action)
+        || GameMode::TriPeaks
+            .profile()
+            .tableau_action(target.slot_index, action.anchor)
+            != Some(action)
     {
         return Ok(false);
     }
-    let analysis = analyse_frame_with_state(&before.frame, &TableauScanState::for_mode(GameMode::TriPeaks))
-        .map_err(|error| format!("TriPeaks final-card context failed: {error}"))?;
+    let analysis = analyse_frame_with_state(
+        &before.frame,
+        &TableauScanState::for_mode(GameMode::TriPeaks),
+    )
+    .map_err(|error| format!("TriPeaks final-card context failed: {error}"))?;
     Ok(analysis.top_row_face_up_count == 1)
 }
 
@@ -413,10 +450,10 @@ pub(super) struct TerminalConfirmation {
 
 
 impl TerminalConfirmation {
-
-
     /// Whether a candidate has started the finite input-free confirmation phase.
-    pub(super) fn active(&self) -> bool { self.captures > 0 }
+    pub(super) fn active(&self) -> bool {
+        self.captures > 0
+    }
 
 
     /// Observe once, resetting transient evidence while preserving the spent budget.
@@ -431,7 +468,9 @@ impl TerminalConfirmation {
 
 
         if self.positives >= 2 {
-            TerminalConfirmationStep::Confirmed(kind.expect("two positive observations retain their terminal kind"))
+            TerminalConfirmationStep::Confirmed(
+                kind.expect("two positive observations retain their terminal kind"),
+            )
         } else if self.captures >= TERMINAL_CONFIRMATION_CAPTURES {
             TerminalConfirmationStep::Stop
         } else {

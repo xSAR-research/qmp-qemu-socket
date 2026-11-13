@@ -273,7 +273,12 @@ fn source_172_paired_scan_observes_thirty_two_frames_with_exact_draw_and_restora
         expected_input(&mut expected, ReconInput::Draw);
         expected.push(Event::Wait(half_second));
         expected_input(&mut expected, ReconInput::Draw);
-        expected.extend([Event::Wait(half_second), Event::Capture, Event::Wait(half_second), Event::Capture]);
+        expected.extend([
+            Event::Wait(half_second),
+            Event::Capture,
+            Event::Wait(half_second),
+            Event::Capture,
+        ]);
     }
     expected_input(&mut expected, ReconInput::Draw);
     expected.extend([
@@ -415,7 +420,10 @@ fn missed_first_or_second_draw_in_any_pair_cannot_trigger_catchup() {
             );
             assert_eq!(failure.progress.stock.len(), 2 + pair * 2);
             assert_eq!(adapter.inputs(), vec![ReconInput::Draw; draws]);
-            assert_eq!(adapter.count(|event| *event == Event::Capture), 6 + pair * 2);
+            assert_eq!(
+                adapter.count(|event| *event == Event::Capture),
+                6 + pair * 2
+            );
             assert_eq!(adapter.count(|event| *event == Event::Publish), 0);
         }
     }

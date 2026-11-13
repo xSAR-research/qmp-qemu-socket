@@ -6,7 +6,7 @@ use crate::geometry::PixelPoint;
 
 /// Control classification must come from calibrated current-frame evidence.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum ControlAvailability {
+pub enum ControlAvailability {
     /// Exactly one enabled known control has been recognised.
     Enabled(PixelPoint),
     /// The control is positively disabled.
@@ -20,7 +20,7 @@ pub(crate) enum ControlAvailability {
 
 /// Restoration input vocabulary; each variant represents exactly one attempt.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum UndoInput {
+pub enum UndoInput {
     /// Known-control Undo All, authorised by the adapter's acquisition history.
     UndoAll(PixelPoint),
     /// The independently confirmed complete modal's OK point.
@@ -31,7 +31,7 @@ pub(crate) enum UndoInput {
 
 
 /// Complete semantic observations, never raw pixel-difference acceptance.
-pub(crate) enum UndoScene<B> {
+pub enum UndoScene<B> {
     /// A supported physical position; retained card knowledge stays elsewhere.
     Board(B),
     /// Complete confirmation signature with an interior OK point.
@@ -45,7 +45,7 @@ pub(crate) enum UndoScene<B> {
 
 
 /// Existing game adapter owns fresh capture, guards, deadlines and no-replay I/O.
-pub(crate) trait UndoAllIo {
+pub trait UndoAllIo {
     /// Physical-position snapshot, excluding accumulated knowledge and toolbar state.
     type Board;
     /// Capture once and recognise a complete board or complete confirmation.
@@ -62,7 +62,7 @@ pub(crate) trait UndoAllIo {
 /// The caller proves acquisition completeness and owns the known Undo All control.
 /// Only a twice-observed complete confirmation permits OK. ACK is followed by
 /// exactly one settle; two consecutive original snapshots prove restoration.
-pub(crate) fn undo_all<I: UndoAllIo>(
+pub fn undo_all<I: UndoAllIo>(
     io: &mut I,
     original: &I::Board,
     current: &I::Board,
@@ -139,7 +139,7 @@ pub(crate) fn undo_all<I: UndoAllIo>(
 
 
 /// A complete single-Undo observation, before or after its one action.
-pub(crate) struct UndoLastObservation<B> {
+pub struct UndoLastObservation<B> {
     /// Actual recognised physical position, including any automatic transfers.
     pub board: B,
     /// Calibrated toolbar result; shared geometry alone cannot produce Enabled.
@@ -148,7 +148,7 @@ pub(crate) struct UndoLastObservation<B> {
 
 
 /// Single Undo needs calibrated enablement and an independently known predecessor.
-pub(crate) trait UndoLastIo {
+pub trait UndoLastIo {
     /// Physical snapshot that includes compound moves and automatic transfers.
     type Board;
     /// Fresh supported observation; unimplemented game adapters return Unsupported.
@@ -164,7 +164,7 @@ pub(crate) trait UndoLastIo {
 ///
 /// No production single-Undo calibration currently exists. This protocol is usable
 /// by a measured adapter, and refuses missing/disabled/ambiguous control evidence.
-pub(crate) fn undo_last<I: UndoLastIo>(
+pub fn undo_last<I: UndoLastIo>(
     io: &mut I,
     previous: &I::Board,
     current: &I::Board,

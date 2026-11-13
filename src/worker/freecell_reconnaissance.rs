@@ -124,7 +124,7 @@ pub(crate) struct FailureReport {
 
 
 /// Preserve only evidence already acquired for this request; no retry or input.
-fn failure_report(
+pub(super) fn failure_report(
     context: &ControllerContext,
     request: &Request,
     acquisition: &Acquisition,
@@ -265,7 +265,7 @@ pub(super) enum Failure {
 }
 
 /// Require the selected v3 transport without guessing, switching or falling back.
-fn backend() -> Result<(String, crate::capture::CaptureMode), String> {
+pub(super) fn backend() -> Result<(String, crate::capture::CaptureMode), String> {
     match selected_capture_backend()? {
         CaptureBackend::Tcp { address, mode: mode @ (crate::capture::CaptureMode::BgrV3 | crate::capture::CaptureMode::PersistentBgrV3) } => Ok((address,mode)),
         _ => Err("Free Cell RECON requires selected TCP v3 or v3-persistent; no fallback or capture was attempted".into()),
@@ -280,6 +280,20 @@ pub(super) fn run_checked(
     trace: &StopTrace,
     acquisition: &mut Acquisition,
 ) -> Result<Report, Failure> {
+    run_checked_with_deal(context, request, events, cancel, trace, acquisition)
+        .map(|(report, _deal)| report)
+}
+
+/// Capture, recognise, and export once under the current reservation, retaining the
+/// validated immutable deal for worker-owned sessions.
+pub(super) fn run_checked_with_deal(
+    context: &ControllerContext,
+    request: &Request,
+    events: &WorkerEventSink,
+    cancel: &AtomicBool,
+    trace: &StopTrace,
+    acquisition: &mut Acquisition,
+) -> Result<(Report, xsar::games::freecell::InitialDeal), Failure> {
     acquisition.stage("request validation");
     request.validate(context).map_err(Failure::Request)?;
     acquisition.stage("transport selection");
@@ -332,13 +346,14 @@ pub(super) fn run_checked(
         })
     });
     acquisition.stage("completed");
-    Ok(Report {
+    let report = Report {
         destination: request.destination.clone(),
         objective: crate::freecell_recon::objective::from_metadata(deal.metadata()).label(),
         capture: acquisition.capture_details(),
         acquisition_directory,
         persistence_error,
-    })
+    };
+    Ok((report, deal))
 }
 /// Serial worker envelope retains causal cancellation and emits one correlated completion.
 pub(super) fn run(

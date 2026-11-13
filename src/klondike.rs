@@ -243,18 +243,18 @@ pub enum KlondikeTarget {
 
 
 impl fmt::Display for KlondikeTarget {
-
-
     /// Describe target geometry without pretending to know a card's rank or suit.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-
-
         match self {
             Self::Draw => formatter.write_str("Draw 1"),
             Self::Recycle => formatter.write_str("stock recycle"),
             Self::Solve => formatter.write_str("Solve control (one-board completion request)"),
             Self::Waste { offset } => write!(formatter, "RIGHT (fan offset {offset})"),
-            Self::Tableau { column, top, bottom } => {
+            Self::Tableau {
+                column,
+                top,
+                bottom,
+            } => {
                 write!(formatter, "tableau column {column}, rows {top}..{bottom}")
             }
             Self::Foundation { column } => write!(formatter, "SUIT {column}"),
@@ -306,8 +306,6 @@ pub const PROFILE: GameProfile = GameProfile {
 
 /// Reject malformed storage and every frame outside the evidenced native geometry.
 fn validate_frame(frame: &CapturedFrame) -> Result<(), HaloDetectionError> {
-
-
     if !frame.is_layout_valid() {
         return Err(HaloDetectionError::InvalidFrameLayout);
     }
@@ -323,8 +321,6 @@ fn validate_frame(frame: &CapturedFrame) -> Result<(), HaloDetectionError> {
 
 /// Check half-open probe bounds before any coordinate iteration or subtraction.
 fn validate_bounds(frame: &CapturedFrame, bounds: PixelRect) -> Result<(), HaloDetectionError> {
-
-
     if bounds.width == 0 || bounds.height == 0 {
         return Err(HaloDetectionError::EmptyBounds);
     }
@@ -345,7 +341,9 @@ fn validate_bounds(frame: &CapturedFrame, bounds: PixelRect) -> Result<(), HaloD
 
 /// Bright continuous source edge; ordinary green felt cannot satisfy this relation.
 fn is_edge_gold([red, green, blue]: [u8; 3]) -> bool {
-    red >= 165 && green >= 115 && blue <= 205
+    red >= 165
+        && green >= 115
+        && blue <= 205
         && i16::from(red) - i16::from(green) >= 7
         && i16::from(green) - i16::from(blue) >= 28
 }
@@ -353,7 +351,9 @@ fn is_edge_gold([red, green, blue]: [u8; 3]) -> bool {
 
 /// Darker gradient on the source side rails; used only outside a known card width.
 fn is_rail_gold([red, green, blue]: [u8; 3]) -> bool {
-    red >= 100 && green >= 70 && blue <= 210
+    red >= 100
+        && green >= 70
+        && blue <= 210
         && i16::from(red) - i16::from(green) >= 7
         && i16::from(green) - i16::from(blue) >= 20
 }
@@ -365,7 +365,9 @@ fn is_rail_gold([red, green, blue]: [u8; 3]) -> bool {
 /// separately bracketed column-7 rail band. Ordinary rails, closed tops and
 /// unmasked lower-edge pixels keep their original colour predicates.
 fn is_toolbar_shadow_gold([red, green, blue]: [u8; 3]) -> bool {
-    red >= 90 && green >= 70 && blue <= 210
+    red >= 90
+        && green >= 70
+        && blue <= 210
         && i16::from(red) - i16::from(green) >= 7
         && i16::from(green) - i16::from(blue) >= 20
 }
@@ -382,7 +384,9 @@ fn is_white([red, green, blue]: [u8; 3]) -> bool {
 /// Opposed red contrast separates the back from blue artwork, felt and paper;
 /// colour alone never supplies a stock HALO, Solver banner or gameplay scene.
 fn is_red_back([red, green, blue]: [u8; 3]) -> bool {
-    red >= 150 && green < 70 && blue <= 100
+    red >= 150
+        && green < 70
+        && blue <= 100
         && i16::from(red) - i16::from(green) >= 80
         && i16::from(red) - i16::from(blue) >= 80
 }
@@ -390,14 +394,14 @@ fn is_red_back([red, green, blue]: [u8; 3]) -> bool {
 
 /// Blue or measured red stock artwork; the closed stock HALO remains separate.
 fn is_back([red, green, blue]: [u8; 3]) -> bool {
-    crate::game::is_classic_blue_back([red, green, blue])
-        || is_red_back([red, green, blue])
+    crate::game::is_classic_blue_back([red, green, blue]) || is_red_back([red, green, blue])
 }
 
 
 /// Undimmed green felt or the green recycle glyph; neither is blue card artwork.
 fn is_felt([red, green, blue]: [u8; 3]) -> bool {
-    green >= 65 && i16::from(green) - i16::from(red) >= 25
+    green >= 65
+        && i16::from(green) - i16::from(red) >= 25
         && i16::from(green) - i16::from(blue) >= 20
 }
 
@@ -407,7 +411,8 @@ fn is_felt([red, green, blue]: [u8; 3]) -> bool {
 /// this darker range is separate from the ordinary bright-felt predicate.
 #[cfg(test)]
 fn is_dimmed_felt([red, green, blue]: [u8; 3]) -> bool {
-    (15..65).contains(&green) && i16::from(green) - i16::from(red) >= 8
+    (15..65).contains(&green)
+        && i16::from(green) - i16::from(red) >= 8
         && i16::from(green) - i16::from(blue) >= 6
 }
 
@@ -418,7 +423,8 @@ fn is_slot_edge(rgb: [u8; 3]) -> bool {
     (red >= 190 && green >= 190 && blue >= 190)
         || (blue >= 105 && i16::from(blue) - i16::from(red) >= 30)
         || is_red_back(rgb)
-        || (red >= 40 && green >= 145
+        || (red >= 40
+            && green >= 145
             && i16::from(green) - i16::from(red) >= 40
             && i16::from(green) - i16::from(blue) >= 25)
 }
@@ -430,11 +436,7 @@ fn count_pixels(frame: &CapturedFrame, bounds: PixelRect, predicate: fn([u8; 3])
 
 
     for y in bounds.y..bounds.y + bounds.height {
-
-
         for x in bounds.x..bounds.x + bounds.width {
-
-
             if pixel_rgb(frame, x, y).is_some_and(predicate) {
                 count += 1;
             }
@@ -474,18 +476,28 @@ pub fn is_gameplay_scene(frame: &CapturedFrame) -> Result<bool, HaloDetectionErr
     ];
 
 
-    if !gutters.into_iter().all(|bounds| fraction_at_least(frame, bounds, is_felt, 950)) {
+    if !gutters
+        .into_iter()
+        .all(|bounds| fraction_at_least(frame, bounds, is_felt, 950))
+    {
         return Ok(false);
     }
 
-    let tableau_edges = (0..7).filter(|column| {
-        fraction_at_least(
-            frame,
-            PixelRect::new(FIRST_COLUMN_X + COLUMN_PITCH * column + 20, TABLEAU_Y, 92, 6),
-            is_slot_edge,
-            700,
-        )
-    }).count();
+    let tableau_edges = (0..7)
+        .filter(|column| {
+            fraction_at_least(
+                frame,
+                PixelRect::new(
+                    FIRST_COLUMN_X + COLUMN_PITCH * column + 20,
+                    TABLEAU_Y,
+                    92,
+                    6,
+                ),
+                is_slot_edge,
+                700,
+            )
+        })
+        .count();
     // Foundation HALOs and destination guides are legitimate gameplay content.
     // Board-scene authority uses independent felt gutters and PLAY edges only.
     Ok(tableau_edges >= 5)
@@ -494,9 +506,9 @@ pub fn is_gameplay_scene(frame: &CapturedFrame) -> Result<bool, HaloDetectionErr
 
 /// A source halo is actionable only while the measured Solver banner is present.
 fn has_solver_banner(frame: &CapturedFrame) -> bool {
-    [36, 85].into_iter().all(|y| {
-        fraction_at_least(frame, PixelRect::new(828, y, 263, 1), is_rail_gold, 950)
-    })
+    [36, 85]
+        .into_iter()
+        .all(|y| fraction_at_least(frame, PixelRect::new(828, y, 263, 1), is_rail_gold, 950))
 }
 
 
@@ -509,7 +521,9 @@ fn is_toolbar_undo_red([red, green, blue]: [u8; 3]) -> bool {
 /// Positive warm-gold interior fill measured in the partial progress of K25.
 /// Bright white, green felt, neutral grey and merely non-black pixels fail.
 fn is_progress_gold([red, green, blue]: [u8; 3]) -> bool {
-    red >= 190 && green >= 150 && (80..=170).contains(&blue)
+    red >= 190
+        && green >= 150
+        && (80..=170).contains(&blue)
         && i16::from(red) - i16::from(green) >= 20
         && i16::from(green) - i16::from(blue) >= 55
 }
@@ -534,13 +548,13 @@ pub struct CompletionEvidence {
 
 
 impl fmt::Display for CompletionEvidence {
-
-
     /// Log raw black/fill counts without promoting absence into a positive result.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter,
+        write!(
+            formatter,
             "complete candidate={}; BLACK={}/{COMPLETION_PROGRESS_PIXELS}, positive gold={}/{COMPLETION_PROGRESS_PIXELS}; {}",
-            self.complete_candidate, self.black_pixels, self.gold_pixels, self.reason)
+            self.complete_candidate, self.black_pixels, self.gold_pixels, self.reason
+        )
     }
 }
 
@@ -559,14 +573,17 @@ pub fn completion_evidence(
     validate_frame(frame)?;
     validate_bounds(frame, COMPLETION_PROGRESS_BOUNDS)?;
     let black_pixels = count_pixels(frame, COMPLETION_PROGRESS_BOUNDS, |rgb| {
-        rgb.into_iter().all(|channel| channel <= COMPLETION_BLACK_MAXIMUM)
+        rgb.into_iter()
+            .all(|channel| channel <= COMPLETION_BLACK_MAXIMUM)
     }) as usize;
     let gold_pixels = count_pixels(frame, COMPLETION_PROGRESS_BOUNDS, is_progress_gold) as usize;
     let terminal_completion = terminal::classify_terminal(frame)?
         .is_some_and(terminal::TerminalStage::demonstrates_game_win);
     let positive_progress = black_pixels == 0 && gold_pixels == COMPLETION_PROGRESS_PIXELS;
-    let progress_completion = positive_progress && is_gameplay_scene(frame)?
-        && has_solver_banner(frame) && select_target(frame)?.is_none();
+    let progress_completion = positive_progress
+        && is_gameplay_scene(frame)?
+        && has_solver_banner(frame)
+        && select_target(frame)?.is_none();
     let complete_candidate = terminal_completion || progress_completion;
 
 
@@ -578,7 +595,12 @@ pub fn completion_evidence(
         "neither a validated completed terminal scene nor full-gold/no-action progress is present"
     };
 
-    Ok(CompletionEvidence { complete_candidate, black_pixels, gold_pixels, reason })
+    Ok(CompletionEvidence {
+        complete_candidate,
+        black_pixels,
+        gold_pixels,
+        reason,
+    })
 }
 
 
@@ -608,8 +630,6 @@ pub struct SolveEvidence {
 
 
 impl SolveEvidence {
-
-
     /// A nearly matching face requests read-only settling, never a Solve click.
     /// The native run retained 459/483 face samples and every glyph sample for
     /// three observations before the original 98% face guard passed. Preserve
@@ -618,7 +638,9 @@ impl SolveEvidence {
     /// Missing probe samples withdraw even this diagnostic recovery request.
     pub fn awaiting_settle(&self) -> bool {
         !self.available
-            && self.stock_probe_pixels != 0 && self.interior_samples != 0 && self.glyph_samples != 0
+            && self.stock_probe_pixels != 0
+            && self.interior_samples != 0
+            && self.glyph_samples != 0
             && u64::from(self.stock_felt_pixels) * 100 >= u64::from(self.stock_probe_pixels) * 90
             && u64::from(self.interior_matched) * 100 >= u64::from(self.interior_samples) * 95
             && u64::from(self.glyph_matched) * 100 >= u64::from(self.glyph_samples) * 98
@@ -627,15 +649,21 @@ impl SolveEvidence {
 
 
 impl fmt::Display for SolveEvidence {
-
-
     /// Preserve the exact classification counts needed to diagnose live refusal.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter,
+        write!(
+            formatter,
             "Solve candidate={}; awaiting read-only settle={}; empty-stock felt={}/{} (required 90%); stable interior={}/{} and glyph={}/{} (each required 98% for input; 95% face only requests recapture); full artwork={}/{} (diagnostic only, animated frame excluded from authority); scene and target priority remain separate",
-            self.available, self.awaiting_settle(), self.stock_felt_pixels, self.stock_probe_pixels,
-            self.interior_matched, self.interior_samples, self.glyph_matched, self.glyph_samples,
-            self.artwork_matched, self.artwork_samples,
+            self.available,
+            self.awaiting_settle(),
+            self.stock_felt_pixels,
+            self.stock_probe_pixels,
+            self.interior_matched,
+            self.interior_samples,
+            self.glyph_matched,
+            self.glyph_samples,
+            self.artwork_matched,
+            self.artwork_samples,
         )
     }
 }
@@ -664,18 +692,20 @@ pub fn inspect_solve_control(frame: &CapturedFrame) -> Result<SolveEvidence, Hal
 
 
     for y in (SOLVE_BOUNDS.y..SOLVE_BOUNDS.y + SOLVE_BOUNDS.height).step_by(4) {
-
-
         for x in (SOLVE_BOUNDS.x..SOLVE_BOUNDS.x + SOLVE_BOUNDS.width).step_by(4) {
             let expected = &SOLVE_TEMPLATE[sample..sample + 3];
             sample += 3;
             let interior = SOLVE_STABLE_INTERIOR.contains(PixelPoint::new(x as i32, y as i32));
             let actual = pixel_rgb(frame, x, y);
             let agrees = actual.is_some_and(|actual| {
-                let ordinary_match = actual.into_iter().zip(expected).all(|(a, b)| a.abs_diff(*b) <= 24);
+                let ordinary_match = actual
+                    .into_iter()
+                    .zip(expected)
+                    .all(|(a, b)| a.abs_diff(*b) <= 24);
                 let border_warming = !interior
                     && (25..=26).contains(&(i16::from(actual[0]) - i16::from(expected[0])))
-                    && actual[1].abs_diff(expected[1]) <= 24 && actual[2].abs_diff(expected[2]) <= 24;
+                    && actual[1].abs_diff(expected[1]) <= 24
+                    && actual[2].abs_diff(expected[2]) <= 24;
                 ordinary_match || border_warming
             });
             matched += u32::from(agrees);
@@ -698,12 +728,17 @@ pub fn inspect_solve_control(frame: &CapturedFrame) -> Result<SolveEvidence, Hal
         && interior_matched * 100 >= interior_samples * 98
         && glyph_matched * 100 >= glyph_samples * 98;
     Ok(SolveEvidence {
-        available, stock_felt_pixels, stock_probe_pixels,
-        artwork_matched: matched, artwork_samples: 899, interior_matched, interior_samples,
-        glyph_matched, glyph_samples,
+        available,
+        stock_felt_pixels,
+        stock_probe_pixels,
+        artwork_matched: matched,
+        artwork_samples: 899,
+        interior_matched,
+        interior_samples,
+        glyph_matched,
+        glyph_samples,
     })
 }
-
 
 
 /// Reuse the measured artwork result after the caller has validated its scene.
@@ -787,13 +822,15 @@ fn find_solid_outline_using_overlay(
             && (right..right + 10).any(|xx| pixel_rgb(frame, xx, row).is_some_and(is_rail_gold))
     };
     let bracketed_column_seven_shadow = require_card_face
-        && x == FIRST_COLUMN_X + COLUMN_PITCH * 6 && scan.width == CARD_WIDTH
+        && x == FIRST_COLUMN_X + COLUMN_PITCH * 6
+        && scan.width == CARD_WIDTH
         && bottom >= TABLEAU_OUTLINE_BOTTOM
         && (TOOLBAR_TOP - 2..TOOLBAR_TOP).all(ordinary_paired_rails)
         && (COLUMN_SEVEN_TOOLBAR_SHADOW_BOTTOM..COLUMN_SEVEN_TOOLBAR_SHADOW_BOTTOM + 2)
             .all(ordinary_paired_rails);
     let bracketed_column_four_shadow = require_card_face
-        && x == FIRST_COLUMN_X + COLUMN_PITCH * 3 && scan.width == CARD_WIDTH
+        && x == FIRST_COLUMN_X + COLUMN_PITCH * 3
+        && scan.width == CARD_WIDTH
         && bottom >= TABLEAU_OUTLINE_BOTTOM
         && (COLUMN_FOUR_TOOLBAR_SHADOW_TOP - 3..COLUMN_FOUR_TOOLBAR_SHADOW_TOP - 1)
             .all(ordinary_paired_rails)
@@ -802,11 +839,14 @@ fn find_solid_outline_using_overlay(
     let paired_rails = |row| {
         ordinary_paired_rails(row)
             || (((bracketed_column_seven_shadow
-                    && (TOOLBAR_TOP..COLUMN_SEVEN_TOOLBAR_SHADOW_BOTTOM).contains(&row))
-                    || (bracketed_column_four_shadow
-                        && (COLUMN_FOUR_TOOLBAR_SHADOW_TOP..COLUMN_FOUR_TOOLBAR_SHADOW_BOTTOM).contains(&row)))
-                && (x - 9..x).any(|xx| pixel_rgb(frame, xx, row).is_some_and(is_toolbar_shadow_gold))
-                && (right..right + 10).any(|xx| pixel_rgb(frame, xx, row).is_some_and(is_toolbar_shadow_gold)))
+                && (TOOLBAR_TOP..COLUMN_SEVEN_TOOLBAR_SHADOW_BOTTOM).contains(&row))
+                || (bracketed_column_four_shadow
+                    && (COLUMN_FOUR_TOOLBAR_SHADOW_TOP..COLUMN_FOUR_TOOLBAR_SHADOW_BOTTOM)
+                        .contains(&row)))
+                && (x - 9..x)
+                    .any(|xx| pixel_rgb(frame, xx, row).is_some_and(is_toolbar_shadow_gold))
+                && (right..right + 10)
+                    .any(|xx| pixel_rgb(frame, xx, row).is_some_and(is_toolbar_shadow_gold)))
     };
 
 
@@ -820,25 +860,34 @@ fn find_solid_outline_using_overlay(
     }
 
     let last_rail_row = (scan.y..bottom).rev().find(|&row| paired_rails(row));
-    let icon_envelope = if complete_icon_overlay { TOOLBAR_ICON_ENVELOPE } else { TOOLBAR_EDGE_OCCLUSION };
+    let icon_envelope = if complete_icon_overlay {
+        TOOLBAR_ICON_ENVELOPE
+    } else {
+        TOOLBAR_EDGE_OCCLUSION
+    };
 
 
     for y in (scan.y..bottom).rev() {
-        let toolbar_overlap = require_card_face && (TOOLBAR_TOP..TABLEAU_OUTLINE_BOTTOM).contains(&y);
-        let known_icon_occlusion = toolbar_overlap && x == 1_230 && scan.width == CARD_WIDTH
+        let toolbar_overlap =
+            require_card_face && (TOOLBAR_TOP..TABLEAU_OUTLINE_BOTTOM).contains(&y);
+        let known_icon_occlusion = toolbar_overlap
+            && x == 1_230
+            && scan.width == CARD_WIDTH
             && bottom >= icon_envelope.bottom()
             && (icon_envelope.y..icon_envelope.bottom()).contains(&y)
-            && count_pixels(frame, TOOLBAR_ICON_SUPPORT, is_toolbar_undo_red) as usize >= MINIMUM_CORNER_CHANGE;
-        let lower_edge = |rgb| is_edge_gold(rgb)
-            || (toolbar_overlap && is_rail_gold(rgb));
+            && count_pixels(frame, TOOLBAR_ICON_SUPPORT, is_toolbar_undo_red) as usize
+                >= MINIMUM_CORNER_CHANGE;
+        let lower_edge = |rgb| is_edge_gold(rgb) || (toolbar_overlap && is_rail_gold(rgb));
 
 
         if y < scan.y + 170
             || !pixel_rgb(frame, x + scan.width / 2, y).is_some_and(lower_edge)
             || last_rail_row.is_some_and(|row| row >= y + 10)
             || (toolbar_overlap && last_rail_row.is_none_or(|row| row.abs_diff(y) > 10))
-            || (complete_icon_overlay && (y >= TOOLBAR_EDGE_OCCLUSION.y || !known_icon_occlusion
-                || last_rail_row.is_none_or(|row| row < icon_envelope.y || row >= y)))
+            || (complete_icon_overlay
+                && (y >= TOOLBAR_EDGE_OCCLUSION.y
+                    || !known_icon_occlusion
+                    || last_rail_row.is_none_or(|row| row < icon_envelope.y || row >= y)))
         {
             continue;
         }
@@ -846,24 +895,28 @@ fn find_solid_outline_using_overlay(
 
         let mut visible_edge_pixels = 0;
         let closed_lower_edge = (x + 18..right - 18).all(|xx| {
-
-
-            if known_icon_occlusion && icon_envelope.contains(PixelPoint::new(xx as i32, y as i32)) {
+            if known_icon_occlusion && icon_envelope.contains(PixelPoint::new(xx as i32, y as i32))
+            {
                 return true;
             }
 
             visible_edge_pixels += 1;
-            pixel_rgb(frame, xx, y).is_some_and(|rgb| lower_edge(rgb)
-                || (!complete_icon_overlay && known_icon_occlusion
-                    && TOOLBAR_SHADOW_EDGE_TAIL.contains(PixelPoint::new(xx as i32, y as i32))
-                    && is_toolbar_shadow_gold(rgb))
-                || (bracketed_column_four_shadow
-                    && COLUMN_FOUR_HINT_EDGE_TAIL.contains(PixelPoint::new(xx as i32, y as i32))
-                    && is_toolbar_shadow_gold(rgb)))
+            pixel_rgb(frame, xx, y).is_some_and(|rgb| {
+                lower_edge(rgb)
+                    || (!complete_icon_overlay
+                        && known_icon_occlusion
+                        && TOOLBAR_SHADOW_EDGE_TAIL.contains(PixelPoint::new(xx as i32, y as i32))
+                        && is_toolbar_shadow_gold(rgb))
+                    || (bracketed_column_four_shadow
+                        && COLUMN_FOUR_HINT_EDGE_TAIL
+                            .contains(PixelPoint::new(xx as i32, y as i32))
+                        && is_toolbar_shadow_gold(rgb))
+            })
         });
 
 
-        if !closed_lower_edge || visible_edge_pixels < 48
+        if !closed_lower_edge
+            || visible_edge_pixels < 48
             || (!complete_icon_overlay && known_icon_occlusion && visible_edge_pixels != 68)
         {
             continue;
@@ -875,8 +928,6 @@ fn find_solid_outline_using_overlay(
 
 
         for row in (scan.y..y - 9).rev() {
-
-
             if paired_rails(row) {
                 top = row;
                 gap = 0;
@@ -894,9 +945,11 @@ fn find_solid_outline_using_overlay(
         let height = y + 1 - top;
 
 
-        if !(180..=MAXIMUM_SOURCE_HEIGHT).contains(&height) || top == scan.y
+        if !(180..=MAXIMUM_SOURCE_HEIGHT).contains(&height)
+            || top == scan.y
             || (complete_icon_overlay && height > MAXIMUM_ICON_OVERLAY_SOURCE_HEIGHT)
-            || matched_rows * 100 < (height - 10) * 85 {
+            || matched_rows * 100 < (height - 10) * 85
+        {
             continue;
         }
 
@@ -911,7 +964,11 @@ fn find_solid_outline_using_overlay(
         }
 
 
-        let face_bottom = if require_card_face { y.min(TOOLBAR_TOP) } else { y };
+        let face_bottom = if require_card_face {
+            y.min(TOOLBAR_TOP)
+        } else {
+            y
+        };
         let face_probe = PixelRect::new(x + 18, face_bottom - 36, scan.width - 36, 12);
 
 
@@ -1007,8 +1064,6 @@ fn find_toolbar_clipped_source(
 
 
     for row in (scan.y..TOOLBAR_TOP).rev() {
-
-
         if paired_rails(row) {
             top = row;
             gap = 0;
@@ -1051,22 +1106,24 @@ fn find_historical_tableau_source(
     frame: &CapturedFrame,
     scan: PixelRect,
 ) -> Result<Option<PixelRect>, HaloDetectionError> {
-
-
     if let Some(bounds) = find_solid_card_source(frame, scan)? {
         return Ok(Some(bounds));
     }
 
-    find_solid_card_source(frame, PixelRect::new(
-        scan.x + TABLEAU_SOURCE_RIGHT_OFFSET, scan.y, scan.width, scan.height,
-    ))
+    find_solid_card_source(
+        frame,
+        PixelRect::new(
+            scan.x + TABLEAU_SOURCE_RIGHT_OFFSET,
+            scan.y,
+            scan.width,
+            scan.height,
+        ),
+    )
 }
 
 
 /// Build the immutable operation for a valid target; reject forged dynamic geometry.
 pub fn canonical_action(target: KlondikeTarget) -> Option<GuidedAction> {
-
-
     let (operation, bounds) = match target {
         KlondikeTarget::Draw => (InputOperation::PressDrawKey, WASTE_BOUNDS),
         KlondikeTarget::Recycle => (
@@ -1084,20 +1141,31 @@ pub fn canonical_action(target: KlondikeTarget) -> Option<GuidedAction> {
                 PixelRect::new(x, UPPER_Y, CARD_WIDTH, CARD_HEIGHT),
             )
         }
-        KlondikeTarget::Tableau { column, top, bottom }
-
-
-            if (1..=7).contains(&column) && u32::from(top) >= TABLEAU_SCAN_TOP
-                && u32::from(bottom) <= TABLEAU_OUTLINE_BOTTOM
-                && u32::from(top) + 40 < TOOLBAR_TOP
-                && bottom.checked_sub(top).is_some_and(|height|
-                    (180..=MAXIMUM_SOURCE_HEIGHT).contains(&u32::from(height))
-                        || (u32::from(bottom) == TOOLBAR_TOP && height >= 48)) =>
+        KlondikeTarget::Tableau {
+            column,
+            top,
+            bottom,
+        } if (1..=7).contains(&column)
+            && u32::from(top) >= TABLEAU_SCAN_TOP
+            && u32::from(bottom) <= TABLEAU_OUTLINE_BOTTOM
+            && u32::from(top) + 40 < TOOLBAR_TOP
+            && bottom.checked_sub(top).is_some_and(|height| {
+                (180..=MAXIMUM_SOURCE_HEIGHT).contains(&u32::from(height))
+                    || (u32::from(bottom) == TOOLBAR_TOP && height >= 48)
+            }) =>
         {
             let x = FIRST_COLUMN_X + COLUMN_PITCH * u32::from(column - 1);
             (
-                InputOperation::Click(PixelPoint::new((x + CARD_WIDTH / 2) as i32, i32::from(top) + 40)),
-                PixelRect::new(x, u32::from(top), CARD_WIDTH, u32::from(bottom).min(TOOLBAR_TOP) - u32::from(top)),
+                InputOperation::Click(PixelPoint::new(
+                    (x + CARD_WIDTH / 2) as i32,
+                    i32::from(top) + 40,
+                )),
+                PixelRect::new(
+                    x,
+                    u32::from(top),
+                    CARD_WIDTH,
+                    u32::from(bottom).min(TOOLBAR_TOP) - u32::from(top),
+                ),
             )
         }
         KlondikeTarget::Foundation { column } if (1..=4).contains(&column) => {
@@ -1139,17 +1207,20 @@ pub fn canonical_action(target: KlondikeTarget) -> Option<GuidedAction> {
 /// Completion evidence is independent and evaluated only after these priorities.
 /// Source run grouping never treats each outlined card as a separate action.
 pub fn analyse(frame: &CapturedFrame) -> Result<FrameAnalysis, HaloDetectionError> {
-
-
     let target = if is_gameplay_scene(frame)? {
         select_target(frame)?
     } else {
         None
     };
-    let prediction = target.and_then(canonical_action)
+    let prediction = target
+        .and_then(canonical_action)
         .map_or(PredictedAction::NoHighlight, PredictedAction::Action);
 
-    Ok(FrameAnalysis { prediction, observed_rows: None, top_row_face_up_count: 0 })
+    Ok(FrameAnalysis {
+        prediction,
+        observed_rows: None,
+        top_row_face_up_count: 0,
+    })
 }
 
 
@@ -1195,12 +1266,10 @@ fn select_target_using_tableau(
 
 
     if solver_active {
-
-
         for offset in (0..=2_u8).rev() {
-
-
-            if find_solid_card_source(frame, upper_scan(558 + WASTE_FAN_STEP * u32::from(offset)))?.is_some() {
+            if find_solid_card_source(frame, upper_scan(558 + WASTE_FAN_STEP * u32::from(offset)))?
+                .is_some()
+            {
                 return Ok(Some(KlondikeTarget::Waste { offset }));
             }
         }
@@ -1221,7 +1290,12 @@ fn select_target_using_tableau(
 
     for column in 1..=7_u8 {
         let x = FIRST_COLUMN_X + COLUMN_PITCH * u32::from(column - 1);
-        let scan = PixelRect::new(x, TABLEAU_SCAN_TOP, CARD_WIDTH, tableau_bottom - TABLEAU_SCAN_TOP);
+        let scan = PixelRect::new(
+            x,
+            TABLEAU_SCAN_TOP,
+            CARD_WIDTH,
+            tableau_bottom - TABLEAU_SCAN_TOP,
+        );
 
 
         if let Some(bounds) = tableau_source(frame, scan)? {
@@ -1262,17 +1336,27 @@ fn select_target_using_tableau(
 /// the live HALO loop to inspect a hidden lower edge or compare card identities.
 #[cfg(test)]
 fn analyse_historical(frame: &CapturedFrame) -> Result<FrameAnalysis, HaloDetectionError> {
-
-
     if !is_gameplay_scene(frame)? {
-        return Ok(FrameAnalysis { prediction: PredictedAction::NoHighlight, observed_rows: None, top_row_face_up_count: 0 });
+        return Ok(FrameAnalysis {
+            prediction: PredictedAction::NoHighlight,
+            observed_rows: None,
+            top_row_face_up_count: 0,
+        });
     }
 
-    let prediction = select_target_using_tableau(frame, find_historical_tableau_source, TABLEAU_OUTLINE_BOTTOM)?
-        .and_then(canonical_action)
-        .map(PredictedAction::Action)
-        .unwrap_or(PredictedAction::NoHighlight);
-    Ok(FrameAnalysis { prediction, observed_rows: None, top_row_face_up_count: 0 })
+    let prediction = select_target_using_tableau(
+        frame,
+        find_historical_tableau_source,
+        TABLEAU_OUTLINE_BOTTOM,
+    )?
+    .and_then(canonical_action)
+    .map(PredictedAction::Action)
+    .unwrap_or(PredictedAction::NoHighlight);
+    Ok(FrameAnalysis {
+        prediction,
+        observed_rows: None,
+        top_row_face_up_count: 0,
+    })
 }
 
 
@@ -1296,11 +1380,7 @@ fn content_changes(
 
 
     for y in bounds.y + 16..bounds.y + bounds.height - 16 {
-
-
         for x in bounds.x + 16..bounds.x + bounds.width - 16 {
-
-
             if click.is_some_and(|point| {
                 (i64::from(x) - i64::from(point.x)).abs() < 48
                     && (i64::from(y) - i64::from(point.y)).abs() < 48
@@ -1309,10 +1389,14 @@ fn content_changes(
             }
 
 
-            let Some(first) = pixel_rgb(before, x, y) else { continue; };
+            let Some(first) = pixel_rgb(before, x, y) else {
+                continue;
+            };
 
 
-            let Some(second) = pixel_rgb(after, x, y) else { continue; };
+            let Some(second) = pixel_rgb(after, x, y) else {
+                continue;
+            };
 
 
             if is_rail_gold(first) || is_rail_gold(second) {
@@ -1320,12 +1404,15 @@ fn content_changes(
             }
 
 
-            let replacement = (is_felt(second) && !is_felt(first))
-                || (is_white(second) && !is_white(first));
+            let replacement =
+                (is_felt(second) && !is_felt(first)) || (is_white(second) && !is_white(first));
 
 
             if (!require_positive_replacement || replacement)
-                && first.into_iter().zip(second).any(|(a, b)| a.abs_diff(b) >= 48)
+                && first
+                    .into_iter()
+                    .zip(second)
+                    .any(|(a, b)| a.abs_diff(b) >= 48)
             {
                 count += 1;
             }
@@ -1347,18 +1434,14 @@ fn tableau_dimmed_felt_changes(
     bounds: PixelRect,
     action: GuidedAction,
 ) -> usize {
-
-
-    let InputOperation::Click(point) = action.operation() else { return 0; };
+    let InputOperation::Click(point) = action.operation() else {
+        return 0;
+    };
     let mut count = 0;
 
 
     for y in bounds.y + 16..bounds.y + bounds.height - 16 {
-
-
         for x in bounds.x + 16..bounds.x + bounds.width - 16 {
-
-
             if (i64::from(x) - i64::from(point.x)).abs() < 48
                 && (i64::from(y) - i64::from(point.y)).abs() < 48
             {
@@ -1366,10 +1449,14 @@ fn tableau_dimmed_felt_changes(
             }
 
 
-            let Some(first) = pixel_rgb(before, x, y) else { continue; };
+            let Some(first) = pixel_rgb(before, x, y) else {
+                continue;
+            };
 
 
-            let Some(second) = pixel_rgb(after, x, y) else { continue; };
+            let Some(second) = pixel_rgb(after, x, y) else {
+                continue;
+            };
 
 
             if is_rail_gold(first) || is_rail_gold(second) {
@@ -1377,8 +1464,12 @@ fn tableau_dimmed_felt_changes(
             }
 
 
-            if is_white(first) && is_dimmed_felt(second)
-                && first.into_iter().zip(second).any(|(a, b)| a.abs_diff(b) >= 48)
+            if is_white(first)
+                && is_dimmed_felt(second)
+                && first
+                    .into_iter()
+                    .zip(second)
+                    .any(|(a, b)| a.abs_diff(b) >= 48)
             {
                 count += 1;
             }
@@ -1392,8 +1483,7 @@ fn tableau_dimmed_felt_changes(
 /// Black or red printed detail; this does not identify a card rank or suit.
 #[cfg(test)]
 fn is_card_ink([red, green, blue]: [u8; 3]) -> bool {
-    (red <= 180 && green <= 180 && blue <= 180)
-        || (red >= 140 && green <= 130 && blue <= 130)
+    (red <= 180 && green <= 180 && blue <= 180) || (red >= 140 && green <= 130 && blue <= 130)
 }
 
 
@@ -1413,15 +1503,13 @@ fn card_identity_changes(
     source: PixelRect,
     action: GuidedAction,
 ) -> [[usize; 2]; 2] {
-
-
     let (top, tableau) = match action.target {
         ActionTarget::Klondike(KlondikeTarget::Waste { .. }) => (UPPER_Y, false),
         ActionTarget::Klondike(KlondikeTarget::Foundation { .. }) => (UPPER_Y, true),
         ActionTarget::Klondike(KlondikeTarget::Tableau { top, bottom, .. })
-
-
-            if bottom.checked_sub(top).is_some_and(|height| (180..=190).contains(&height)) =>
+            if bottom
+                .checked_sub(top)
+                .is_some_and(|height| (180..=190).contains(&height)) =>
         {
             (u32::from(top), true)
         }
@@ -1435,20 +1523,22 @@ fn card_identity_changes(
 
     // A recognised outline may overlap the toolbar, but its proof ROI never
     // does. A partly clipped corner is unavailable, not a smaller trusted patch.
-    if patches.into_iter().any(|bounds| bounds.x < source.x || bounds.y < source.y
-        || bounds.x + bounds.width > source.x + source.width
-        || bounds.y + bounds.height > source.y + source.height
-        || (tableau && bounds.y + bounds.height > TOOLBAR_TOP))
-    {
+    if patches.into_iter().any(|bounds| {
+        bounds.x < source.x
+            || bounds.y < source.y
+            || bounds.x + bounds.width > source.x + source.width
+            || bounds.y + bounds.height > source.y + source.height
+            || (tableau && bounds.y + bounds.height > TOOLBAR_TOP)
+    }) {
         return [[0, 0], [0, 0]];
     }
 
 
-    let InputOperation::Click(point) = action.operation() else { return [[0, 0], [0, 0]]; };
+    let InputOperation::Click(point) = action.operation() else {
+        return [[0, 0], [0, 0]];
+    };
 
     patches.map(|bounds| {
-
-
         if !fraction_at_least(before, bounds, is_white, 500)
             || !fraction_at_least(after, bounds, is_white, 500)
         {
@@ -1460,11 +1550,7 @@ fn card_identity_changes(
 
 
         for y in bounds.y..bounds.y + bounds.height {
-
-
             for x in bounds.x..bounds.x + bounds.width {
-
-
                 if (i64::from(x) - i64::from(point.x)).abs() < 48
                     && (i64::from(y) - i64::from(point.y)).abs() < 48
                 {
@@ -1472,10 +1558,14 @@ fn card_identity_changes(
                 }
 
 
-                let Some(first) = pixel_rgb(before, x, y) else { continue; };
+                let Some(first) = pixel_rgb(before, x, y) else {
+                    continue;
+                };
 
 
-                let Some(second) = pixel_rgb(after, x, y) else { continue; };
+                let Some(second) = pixel_rgb(after, x, y) else {
+                    continue;
+                };
 
 
                 if tableau && (is_rail_gold(first) || is_rail_gold(second)) {
@@ -1483,7 +1573,11 @@ fn card_identity_changes(
                 }
 
 
-                if first.into_iter().zip(second).any(|(a, b)| a.abs_diff(b) >= 48) {
+                if first
+                    .into_iter()
+                    .zip(second)
+                    .any(|(a, b)| a.abs_diff(b) >= 48)
+                {
                     paper_to_ink += usize::from(is_white(first) && is_card_ink(second));
                     ink_to_paper += usize::from(is_card_ink(first) && is_white(second));
                 }
@@ -1510,15 +1604,17 @@ fn tableau_visible_identity_changes(
     source: PixelRect,
     action: GuidedAction,
 ) -> [[usize; 2]; 2] {
-
-
-    let ActionTarget::Klondike(target @ KlondikeTarget::Tableau { top, bottom, .. }) = action.target else {
+    let ActionTarget::Klondike(target @ KlondikeTarget::Tableau { top, bottom, .. }) =
+        action.target
+    else {
         return [[0, 0], [0, 0]];
     };
 
 
     if canonical_action(target) != Some(action)
-        || !bottom.checked_sub(top).is_some_and(|height| (180..=190).contains(&height))
+        || !bottom
+            .checked_sub(top)
+            .is_some_and(|height| (180..=190).contains(&height))
         || u32::from(bottom) <= TOOLBAR_TOP
         || u32::from(top) + 126 + 44 <= TOOLBAR_TOP
         || source.y != u32::from(top)
@@ -1535,19 +1631,24 @@ fn tableau_visible_identity_changes(
 
 
     if patches[0].bottom() > patches[1].y
-        || patches.into_iter().any(|bounds| bounds.x < source.x || bounds.y < source.y
-            || bounds.right() > source.right() || bounds.bottom() > source.bottom()
-            || validate_bounds(before, bounds).is_err() || validate_bounds(after, bounds).is_err())
+        || patches.into_iter().any(|bounds| {
+            bounds.x < source.x
+                || bounds.y < source.y
+                || bounds.right() > source.right()
+                || bounds.bottom() > source.bottom()
+                || validate_bounds(before, bounds).is_err()
+                || validate_bounds(after, bounds).is_err()
+        })
     {
         return [[0, 0], [0, 0]];
     }
 
 
-    let InputOperation::Click(point) = action.operation() else { return [[0, 0], [0, 0]]; };
+    let InputOperation::Click(point) = action.operation() else {
+        return [[0, 0], [0, 0]];
+    };
 
     patches.map(|bounds| {
-
-
         if !fraction_at_least(before, bounds, is_white, 500)
             || !fraction_at_least(after, bounds, is_white, 500)
         {
@@ -1558,11 +1659,7 @@ fn tableau_visible_identity_changes(
 
 
         for y in bounds.y..bounds.bottom() {
-
-
             for x in bounds.x..bounds.right() {
-
-
                 if (i64::from(x) - i64::from(point.x)).abs() < 48
                     && (i64::from(y) - i64::from(point.y)).abs() < 48
                 {
@@ -1570,10 +1667,14 @@ fn tableau_visible_identity_changes(
                 }
 
 
-                let Some(first) = pixel_rgb(before, x, y) else { continue; };
+                let Some(first) = pixel_rgb(before, x, y) else {
+                    continue;
+                };
 
 
-                let Some(second) = pixel_rgb(after, x, y) else { continue; };
+                let Some(second) = pixel_rgb(after, x, y) else {
+                    continue;
+                };
 
 
                 if is_rail_gold(first) || is_rail_gold(second) {
@@ -1581,7 +1682,11 @@ fn tableau_visible_identity_changes(
                 }
 
 
-                if first.into_iter().zip(second).any(|(a, b)| a.abs_diff(b) >= 48) {
+                if first
+                    .into_iter()
+                    .zip(second)
+                    .any(|(a, b)| a.abs_diff(b) >= 48)
+                {
                     directions[0] += usize::from(is_white(first) && is_card_ink(second));
                     directions[1] += usize::from(is_card_ink(first) && is_white(second));
                 }
@@ -1608,7 +1713,8 @@ fn is_dimmed_paper(rgb: [u8; 3]) -> bool {
 /// black-pip replacement remains unsupported by this specialised fallback.
 #[cfg(test)]
 fn is_dimmed_red_ink([red, green, blue]: [u8; 3]) -> bool {
-    (20..=100).contains(&red) && i16::from(red) - i16::from(green) >= 15
+    (20..=100).contains(&red)
+        && i16::from(red) - i16::from(green) >= 15
         && i16::from(red) - i16::from(blue) >= 15
         && u16::from(green) * 2 < u16::from(red)
         && u16::from(blue) * 2 < u16::from(red)
@@ -1618,8 +1724,7 @@ fn is_dimmed_red_ink([red, green, blue]: [u8; 3]) -> bool {
 /// Bright neutral card paper; chromatic tint and the dark guide are excluded.
 #[cfg(test)]
 fn is_bright_neutral_paper(rgb: [u8; 3]) -> bool {
-    is_white(rgb) && rgb.into_iter().max().unwrap_or(255)
-        - rgb.into_iter().min().unwrap_or(0) <= 6
+    is_white(rgb) && rgb.into_iter().max().unwrap_or(255) - rgb.into_iter().min().unwrap_or(0) <= 6
 }
 
 
@@ -1634,10 +1739,12 @@ fn retained_bright_paper_field(
     x: u32,
     y: u32,
 ) -> bool {
-    (y - 1..=y + 1).all(|yy| (x - 1..=x + 1).all(|xx| {
-        pixel_rgb(before, xx, yy).is_some_and(is_bright_neutral_paper)
-            && pixel_rgb(after, xx, yy).is_some_and(is_bright_neutral_paper)
-    }))
+    (y - 1..=y + 1).all(|yy| {
+        (x - 1..=x + 1).all(|xx| {
+            pixel_rgb(before, xx, yy).is_some_and(is_bright_neutral_paper)
+                && pixel_rgb(after, xx, yy).is_some_and(is_bright_neutral_paper)
+        })
+    })
 }
 
 
@@ -1652,9 +1759,9 @@ fn visible_opposed_print_supported(
     material: usize,
     directions: [[usize; 2]; 2],
 ) -> bool {
-
-
-    let ActionTarget::Klondike(target @ KlondikeTarget::Tableau { top, bottom, .. }) = action.target else {
+    let ActionTarget::Klondike(target @ KlondikeTarget::Tableau { top, bottom, .. }) =
+        action.target
+    else {
         return false;
     };
 
@@ -1663,8 +1770,7 @@ fn visible_opposed_print_supported(
         && bottom.checked_sub(top) == Some(190)
         && u32::from(bottom) > TOOLBAR_TOP
         && directions.into_iter().all(|[new_ink, cleared_ink]| {
-            new_ink > 0 && cleared_ink > 0
-                && new_ink + cleared_ink >= MINIMUM_CORNER_CHANGE * 2
+            new_ink > 0 && cleared_ink > 0 && new_ink + cleared_ink >= MINIMUM_CORNER_CHANGE * 2
         })
         && directions[0][0] + directions[1][0] >= MINIMUM_CORNER_CHANGE * 2
         && directions[0][1] + directions[1][1] >= MINIMUM_CORNER_CHANGE * 2
@@ -1685,7 +1791,12 @@ fn visible_contracted_source_replaced(
     material: usize,
     directions: [[usize; 2]; 2],
 ) -> Result<bool, HaloDetectionError> {
-    let ActionTarget::Klondike(KlondikeTarget::Tableau { column, top, bottom }) = action.target else {
+    let ActionTarget::Klondike(KlondikeTarget::Tableau {
+        column,
+        top,
+        bottom,
+    }) = action.target
+    else {
         return Ok(false);
     };
 
@@ -1695,12 +1806,19 @@ fn visible_contracted_source_replaced(
     }
 
 
-    let PredictedAction::Action(next) = analyse_historical(after)?.prediction else { return Ok(false); };
+    let PredictedAction::Action(next) = analyse_historical(after)?.prediction else {
+        return Ok(false);
+    };
 
 
     let ActionTarget::Klondike(KlondikeTarget::Tableau {
-        column: next_column, top: next_top, bottom: next_bottom,
-    }) = next.target else { return Ok(false); };
+        column: next_column,
+        top: next_top,
+        bottom: next_bottom,
+    }) = next.target
+    else {
+        return Ok(false);
+    };
 
     Ok(column == next_column
         && top.checked_sub(next_top) == Some(VISIBLE_SOURCE_CONTRACTION)
@@ -1747,7 +1865,9 @@ fn foundation_source_print_changes(
     let mut evidence = FoundationSourceEvidence::default();
 
 
-    let InputOperation::Click(point) = action.operation() else { return evidence; };
+    let InputOperation::Click(point) = action.operation() else {
+        return evidence;
+    };
     let mut before_paper = 0;
     let mut after_paper = 0;
     let mut before_ink = 0;
@@ -1756,11 +1876,7 @@ fn foundation_source_print_changes(
 
 
     for y in bounds.y + 16..bounds.y + bounds.height - 16 {
-
-
         for x in bounds.x + 16..bounds.x + bounds.width - 16 {
-
-
             if (i64::from(x) - i64::from(point.x)).abs() < 48
                 && (i64::from(y) - i64::from(point.y)).abs() < 48
             {
@@ -1768,10 +1884,14 @@ fn foundation_source_print_changes(
             }
 
 
-            let Some(first) = pixel_rgb(before, x, y) else { continue; };
+            let Some(first) = pixel_rgb(before, x, y) else {
+                continue;
+            };
 
 
-            let Some(second) = pixel_rgb(after, x, y) else { continue; };
+            let Some(second) = pixel_rgb(after, x, y) else {
+                continue;
+            };
 
 
             if is_rail_gold(first) || is_rail_gold(second) {
@@ -1791,22 +1911,34 @@ fn foundation_source_print_changes(
 
 
             if retained_bright_paper_field(before, after, x, y) {
-                evidence.changed_paper_fields += usize::from(first.into_iter().zip(second)
-                    .any(|(a, b)| a.abs_diff(b) >= GUIDE_STABILITY_DELTA));
+                evidence.changed_paper_fields += usize::from(
+                    first
+                        .into_iter()
+                        .zip(second)
+                        .any(|(a, b)| a.abs_diff(b) >= GUIDE_STABILITY_DELTA),
+                );
             }
 
 
-            if first.into_iter().zip(second).any(|(a, b)| a.abs_diff(b) >= 48) {
+            if first
+                .into_iter()
+                .zip(second)
+                .any(|(a, b)| a.abs_diff(b) >= 48)
+            {
                 evidence.new_ink += usize::from(first_paper && second_ink);
                 evidence.cleared_ink += usize::from(first_ink && second_paper);
             }
         }
     }
 
-    evidence.paper_supported = eligible != 0 && [before_paper, after_paper, evidence.stable_paper]
-        .into_iter().all(|count| count * 1_000 >= eligible * MINIMUM_STABLE_PAPER_PERMILLE)
-        && before_ink >= MINIMUM_CORNER_CHANGE && after_ink >= MINIMUM_CORNER_CHANGE;
-    evidence.verified = material_changed >= MINIMUM_CONTENT_CHANGE && evidence.paper_supported
+    evidence.paper_supported = eligible != 0
+        && [before_paper, after_paper, evidence.stable_paper]
+            .into_iter()
+            .all(|count| count * 1_000 >= eligible * MINIMUM_STABLE_PAPER_PERMILLE)
+        && before_ink >= MINIMUM_CORNER_CHANGE
+        && after_ink >= MINIMUM_CORNER_CHANGE;
+    evidence.verified = material_changed >= MINIMUM_CONTENT_CHANGE
+        && evidence.paper_supported
         && evidence.changed_paper_fields == 0
         && evidence.new_ink >= MINIMUM_CORNER_CHANGE
         && evidence.cleared_ink >= MINIMUM_CORNER_CHANGE;
@@ -1847,9 +1979,19 @@ fn foundation_guide_stable(
 ) -> bool {
     let rails = [
         PixelRect::new(bounds.x + 3, bounds.y + 3, bounds.width - 6, 10),
-        PixelRect::new(bounds.x + 3, bounds.y + bounds.height - 13, bounds.width - 6, 10),
+        PixelRect::new(
+            bounds.x + 3,
+            bounds.y + bounds.height - 13,
+            bounds.width - 6,
+            10,
+        ),
         PixelRect::new(bounds.x + 3, bounds.y + 13, 10, bounds.height - 26),
-        PixelRect::new(bounds.x + bounds.width - 13, bounds.y + 13, 10, bounds.height - 26),
+        PixelRect::new(
+            bounds.x + bounds.width - 13,
+            bounds.y + 13,
+            10,
+            bounds.height - 26,
+        ),
     ];
 
 
@@ -1858,21 +2000,25 @@ fn foundation_guide_stable(
 
 
         for y in rail.y..rail.y + rail.height {
-
-
             for x in rail.x..rail.x + rail.width {
+                let Some(first) = pixel_rgb(before, x, y) else {
+                    return false;
+                };
 
 
-                let Some(first) = pixel_rgb(before, x, y) else { return false; };
-
-
-                let Some(second) = pixel_rgb(after, x, y) else { return false; };
+                let Some(second) = pixel_rgb(after, x, y) else {
+                    return false;
+                };
                 let first_gold = is_rail_gold(first);
                 let second_gold = is_rail_gold(second);
 
 
-                if first_gold != second_gold || (first_gold && first.into_iter().zip(second)
-                    .any(|(a, b)| a.abs_diff(b) >= GUIDE_STABILITY_DELTA))
+                if first_gold != second_gold
+                    || (first_gold
+                        && first
+                            .into_iter()
+                            .zip(second)
+                            .any(|(a, b)| a.abs_diff(b) >= GUIDE_STABILITY_DELTA))
                 {
                     return false;
                 }
@@ -1919,11 +2065,7 @@ fn foundation_print_changes(
 
 
     for y in bounds.y + 16..bounds.y + bounds.height - 16 {
-
-
         for x in bounds.x + 16..bounds.x + bounds.width - 16 {
-
-
             if click.is_some_and(|point| {
                 (i64::from(x) - i64::from(point.x)).abs() < 48
                     && (i64::from(y) - i64::from(point.y)).abs() < 48
@@ -1932,10 +2074,14 @@ fn foundation_print_changes(
             }
 
 
-            let Some(first) = pixel_rgb(before, x, y) else { continue; };
+            let Some(first) = pixel_rgb(before, x, y) else {
+                continue;
+            };
 
 
-            let Some(second) = pixel_rgb(after, x, y) else { continue; };
+            let Some(second) = pixel_rgb(after, x, y) else {
+                continue;
+            };
 
 
             if is_rail_gold(first) || is_rail_gold(second) {
@@ -1955,13 +2101,21 @@ fn foundation_print_changes(
 
             if first_paper && second_paper {
                 evidence.stable_paper += 1;
-                evidence.changed_paper += usize::from(first.into_iter().zip(second)
-                    .any(|(a, b)| a.abs_diff(b) >= GUIDE_STABILITY_DELTA));
+                evidence.changed_paper += usize::from(
+                    first
+                        .into_iter()
+                        .zip(second)
+                        .any(|(a, b)| a.abs_diff(b) >= GUIDE_STABILITY_DELTA),
+                );
             }
 
 
-            if first_paper && second_ink && first.into_iter().zip(second)
-                .any(|(a, b)| a.abs_diff(b) >= 48)
+            if first_paper
+                && second_ink
+                && first
+                    .into_iter()
+                    .zip(second)
+                    .any(|(a, b)| a.abs_diff(b) >= 48)
             {
                 let half = usize::from(x >= bounds.x + bounds.width / 2);
                 evidence.new_ink_halves[half] += 1;
@@ -1969,12 +2123,19 @@ fn foundation_print_changes(
         }
     }
 
-    evidence.paper_supported = eligible != 0 && [before_paper, after_paper, evidence.stable_paper]
-        .into_iter().all(|count| count * 1_000 >= eligible * MINIMUM_STABLE_PAPER_PERMILLE)
-        && before_ink >= MINIMUM_CORNER_CHANGE && after_ink >= MINIMUM_CORNER_CHANGE;
-    evidence.verified = evidence.paper_supported && evidence.guide_stable
+    evidence.paper_supported = eligible != 0
+        && [before_paper, after_paper, evidence.stable_paper]
+            .into_iter()
+            .all(|count| count * 1_000 >= eligible * MINIMUM_STABLE_PAPER_PERMILLE)
+        && before_ink >= MINIMUM_CORNER_CHANGE
+        && after_ink >= MINIMUM_CORNER_CHANGE;
+    evidence.verified = evidence.paper_supported
+        && evidence.guide_stable
         && evidence.changed_paper == 0
-        && evidence.new_ink_halves.into_iter().all(|count| count >= MINIMUM_CORNER_CHANGE);
+        && evidence
+            .new_ink_halves
+            .into_iter()
+            .all(|count| count >= MINIMUM_CORNER_CHANGE);
     evidence
 }
 
@@ -2046,7 +2207,14 @@ fn aligned_source_print_changes(
     let evidence = AlignedSourceEvidence::default();
 
 
-    let ActionTarget::Klondike(target @ KlondikeTarget::Tableau { column, top, bottom }) = action.target else {
+    let ActionTarget::Klondike(
+        target @ KlondikeTarget::Tableau {
+            column,
+            top,
+            bottom,
+        },
+    ) = action.target
+    else {
         return Ok(evidence);
     };
 
@@ -2054,24 +2222,38 @@ fn aligned_source_print_changes(
     if canonical_action(target) != Some(action)
         || analyse_historical(before)?.prediction != PredictedAction::Action(action)
         || u32::from(bottom) <= TOOLBAR_TOP
-        || !bottom.checked_sub(top).is_some_and(|height| (180..=190).contains(&height))
+        || !bottom
+            .checked_sub(top)
+            .is_some_and(|height| (180..=190).contains(&height))
     {
         return Ok(evidence);
     }
 
 
-    let PredictedAction::Action(next) = analyse_historical(after)?.prediction else { return Ok(evidence); };
+    let PredictedAction::Action(next) = analyse_historical(after)?.prediction else {
+        return Ok(evidence);
+    };
 
 
-    let ActionTarget::Klondike(next_target @ KlondikeTarget::Tableau {
-        column: next_column, top: next_top, bottom: next_bottom,
-    }) = next.target else { return Ok(evidence); };
+    let ActionTarget::Klondike(
+        next_target @ KlondikeTarget::Tableau {
+            column: next_column,
+            top: next_top,
+            bottom: next_bottom,
+        },
+    ) = next.target
+    else {
+        return Ok(evidence);
+    };
 
 
-    let Some(shift) = top.checked_sub(next_top) else { return Ok(evidence); };
+    let Some(shift) = top.checked_sub(next_top) else {
+        return Ok(evidence);
+    };
 
 
-    if canonical_action(next_target) != Some(next) || column != next_column
+    if canonical_action(next_target) != Some(next)
+        || column != next_column
         || bottom.checked_sub(top) != next_bottom.checked_sub(next_top)
         || !(1..=VISIBLE_SOURCE_CONTRACTION).contains(&shift)
     {
@@ -2083,8 +2265,10 @@ fn aligned_source_print_changes(
     let visible_rows = source.height.min(replacement.height);
 
 
-    if source.x != replacement.x || source.width != CARD_WIDTH
-        || replacement.width != CARD_WIDTH || visible_rows <= 32
+    if source.x != replacement.x
+        || source.width != CARD_WIDTH
+        || replacement.width != CARD_WIDTH
+        || visible_rows <= 32
     {
         return Ok(evidence);
     }
@@ -2106,8 +2290,18 @@ fn measure_aligned_source_print_changes(
     action: GuidedAction,
 ) -> Result<AlignedSourceEvidence, HaloDetectionError> {
     let mut evidence = AlignedSourceEvidence::default();
-    let face = PixelRect::new(source.x + 5, source.y + 10, CARD_WIDTH - 10, visible_rows - 15);
-    let core = PixelRect::new(source.x + 16, source.y + 16, CARD_WIDTH - 32, visible_rows - 32);
+    let face = PixelRect::new(
+        source.x + 5,
+        source.y + 10,
+        CARD_WIDTH - 10,
+        visible_rows - 15,
+    );
+    let core = PixelRect::new(
+        source.x + 16,
+        source.y + 16,
+        CARD_WIDTH - 32,
+        visible_rows - 32,
+    );
     let mapped_face = PixelRect::new(face.x, face.y - u32::from(shift), face.width, face.height);
     let mapped_core = PixelRect::new(core.x, core.y - u32::from(shift), core.width, core.height);
     validate_bounds(before, face)?;
@@ -2116,7 +2310,9 @@ fn measure_aligned_source_print_changes(
     validate_bounds(after, mapped_core)?;
 
 
-    let InputOperation::Click(point) = action.operation() else { return Ok(evidence); };
+    let InputOperation::Click(point) = action.operation() else {
+        return Ok(evidence);
+    };
     let cursor_excluded = |x: u32, y: u32, mapped_y: u32| {
         (i64::from(x) - i64::from(point.x)).abs() < 48
             && ((i64::from(y) - i64::from(point.y)).abs() < 48
@@ -2132,18 +2328,24 @@ fn measure_aligned_source_print_changes(
 
 
         for x in face.x..face.right() {
+            if cursor_excluded(x, y, mapped_y) {
+                continue;
+            }
 
 
-            if cursor_excluded(x, y, mapped_y) { continue; }
+            let Some(first) = pixel_rgb(before, x, y) else {
+                return Ok(AlignedSourceEvidence::default());
+            };
 
 
-            let Some(first) = pixel_rgb(before, x, y) else { return Ok(AlignedSourceEvidence::default()); };
+            let Some(second) = pixel_rgb(after, x, mapped_y) else {
+                return Ok(AlignedSourceEvidence::default());
+            };
 
 
-            let Some(second) = pixel_rgb(after, x, mapped_y) else { return Ok(AlignedSourceEvidence::default()); };
-
-
-            if is_rail_gold(first) || is_rail_gold(second) { continue; }
+            if is_rail_gold(first) || is_rail_gold(second) {
+                continue;
+            }
 
             let first_paper = is_bright_neutral_paper(first);
             let second_paper = is_bright_neutral_paper(second);
@@ -2153,7 +2355,11 @@ fn measure_aligned_source_print_changes(
             evidence.stable_paper += usize::from(first_paper && second_paper);
 
 
-            if first.into_iter().zip(second).any(|(a, b)| a.abs_diff(b) >= 48) {
+            if first
+                .into_iter()
+                .zip(second)
+                .any(|(a, b)| a.abs_diff(b) >= 48)
+            {
                 evidence.material_changed += 1;
                 evidence.new_ink += usize::from(first_paper && is_card_ink(second));
                 evidence.cleared_ink += usize::from(is_card_ink(first) && second_paper);
@@ -2167,18 +2373,24 @@ fn measure_aligned_source_print_changes(
 
 
         for x in core.x..core.right() {
+            if cursor_excluded(x, y, mapped_y) {
+                continue;
+            }
 
 
-            if cursor_excluded(x, y, mapped_y) { continue; }
+            let Some(first) = pixel_rgb(before, x, y) else {
+                return Ok(AlignedSourceEvidence::default());
+            };
 
 
-            let Some(first) = pixel_rgb(before, x, y) else { return Ok(AlignedSourceEvidence::default()); };
+            let Some(second) = pixel_rgb(after, x, mapped_y) else {
+                return Ok(AlignedSourceEvidence::default());
+            };
 
 
-            let Some(second) = pixel_rgb(after, x, mapped_y) else { return Ok(AlignedSourceEvidence::default()); };
-
-
-            if is_rail_gold(first) || is_rail_gold(second) { continue; }
+            if is_rail_gold(first) || is_rail_gold(second) {
+                continue;
+            }
 
             let first_paper = is_bright_neutral_paper(first);
             let second_paper = is_bright_neutral_paper(second);
@@ -2186,25 +2398,44 @@ fn measure_aligned_source_print_changes(
             evidence.core_before_paper += usize::from(first_paper);
             evidence.core_after_paper += usize::from(second_paper);
             evidence.core_stable_paper += usize::from(first_paper && second_paper);
-            let retained_field = (y - 1..=y + 1).all(|yy| (x - 1..=x + 1).all(|xx| {
-                pixel_rgb(before, xx, yy).is_some_and(is_bright_neutral_paper)
-                    && pixel_rgb(after, xx, yy - u32::from(shift)).is_some_and(is_bright_neutral_paper)
-            }));
+            let retained_field = (y - 1..=y + 1).all(|yy| {
+                (x - 1..=x + 1).all(|xx| {
+                    pixel_rgb(before, xx, yy).is_some_and(is_bright_neutral_paper)
+                        && pixel_rgb(after, xx, yy - u32::from(shift))
+                            .is_some_and(is_bright_neutral_paper)
+                })
+            });
 
 
             if retained_field {
-                evidence.changed_paper_fields += usize::from(first.into_iter().zip(second)
-                    .any(|(a, b)| a.abs_diff(b) >= GUIDE_STABILITY_DELTA));
+                evidence.changed_paper_fields += usize::from(
+                    first
+                        .into_iter()
+                        .zip(second)
+                        .any(|(a, b)| a.abs_diff(b) >= GUIDE_STABILITY_DELTA),
+                );
             }
         }
     }
 
-    evidence.paper_supported = evidence.eligible != 0 && evidence.core_eligible != 0
-        && [evidence.before_paper, evidence.after_paper, evidence.stable_paper]
-            .into_iter().all(|count| count * 1_000 >= evidence.eligible * MINIMUM_STABLE_PAPER_PERMILLE)
-        && [evidence.core_before_paper, evidence.core_after_paper, evidence.core_stable_paper]
-            .into_iter().all(|count| count * 1_000 >= evidence.core_eligible * MINIMUM_STABLE_PAPER_PERMILLE);
-    evidence.verified = evidence.paper_supported && evidence.changed_paper_fields == 0
+    evidence.paper_supported = evidence.eligible != 0
+        && evidence.core_eligible != 0
+        && [
+            evidence.before_paper,
+            evidence.after_paper,
+            evidence.stable_paper,
+        ]
+        .into_iter()
+        .all(|count| count * 1_000 >= evidence.eligible * MINIMUM_STABLE_PAPER_PERMILLE)
+        && [
+            evidence.core_before_paper,
+            evidence.core_after_paper,
+            evidence.core_stable_paper,
+        ]
+        .into_iter()
+        .all(|count| count * 1_000 >= evidence.core_eligible * MINIMUM_STABLE_PAPER_PERMILLE);
+    evidence.verified = evidence.paper_supported
+        && evidence.changed_paper_fields == 0
         && evidence.material_changed >= MINIMUM_CONTENT_CHANGE
         && evidence.new_ink >= MINIMUM_CORNER_CHANGE
         && evidence.cleared_ink >= MINIMUM_CORNER_CHANGE;
@@ -2231,34 +2462,46 @@ fn ordinary_source_face_top(
     source: PixelRect,
     old_nominal_top: u16,
 ) -> Option<u16> {
-
-
-    if source.width != CARD_WIDTH || validate_bounds(after, source).is_err()
-        || source.bottom() != TOOLBAR_TOP || source.x < 9
-        || source.right().checked_add(9).is_none_or(|right| right >= after.width)
+    if source.width != CARD_WIDTH
+        || validate_bounds(after, source).is_err()
+        || source.bottom() != TOOLBAR_TOP
+        || source.x < 9
+        || source
+            .right()
+            .checked_add(9)
+            .is_none_or(|right| right >= after.width)
     {
         return None;
     }
-    let bright_row = |row: u32| (source.x + 18..source.right() - 18).all(|x| {
-        pixel_rgb(after, x, row).is_some_and(|rgb| {
-            is_bright_neutral_paper(rgb) && rgb.into_iter().all(|value| value >= 240)
+    let bright_row = |row: u32| {
+        (source.x + 18..source.right() - 18).all(|x| {
+            pixel_rgb(after, x, row).is_some_and(|rgb| {
+                is_bright_neutral_paper(rgb) && rgb.into_iter().all(|value| value >= 240)
+            })
         })
-    });
-    let gray_row = |row: u32| (source.x + 18..source.right() - 18).all(|x| {
-        pixel_rgb(after, x, row).is_some_and(|rgb| {
-            is_bright_neutral_paper(rgb) && rgb.into_iter().all(|value| value <= 220)
+    };
+    let gray_row = |row: u32| {
+        (source.x + 18..source.right() - 18).all(|x| {
+            pixel_rgb(after, x, row).is_some_and(|rgb| {
+                is_bright_neutral_paper(rgb) && rgb.into_iter().all(|value| value <= 220)
+            })
         })
-    });
+    };
     let mut found = None;
 
 
     for shift in 1..=VISIBLE_SOURCE_CONTRACTION {
-        let Some(top) = old_nominal_top.checked_sub(shift) else { continue; };
+        let Some(top) = old_nominal_top.checked_sub(shift) else {
+            continue;
+        };
         let row = u32::from(top);
 
 
-        if row == 0 || row + 1 >= TOOLBAR_TOP
-            || !gray_row(row) || !bright_row(row - 1) || !bright_row(row + 1)
+        if row == 0
+            || row + 1 >= TOOLBAR_TOP
+            || !gray_row(row)
+            || !bright_row(row - 1)
+            || !bright_row(row + 1)
         {
             continue;
         }
@@ -2270,10 +2513,14 @@ fn ordinary_source_face_top(
         });
 
 
-        if !complete_visible_sides { continue; }
+        if !complete_visible_sides {
+            continue;
+        }
 
 
-        if found.is_some() { return None; }
+        if found.is_some() {
+            return None;
+        }
         found = Some(top);
     }
     found
@@ -2294,7 +2541,14 @@ fn ordinary_source_print_changes(
     validate_frame(before)?;
     validate_frame(after)?;
     let unsupported = AlignedSourceEvidence::default();
-    let ActionTarget::Klondike(target @ KlondikeTarget::Tableau { column, top, bottom }) = action.target else {
+    let ActionTarget::Klondike(
+        target @ KlondikeTarget::Tableau {
+            column,
+            top,
+            bottom,
+        },
+    ) = action.target
+    else {
         return Ok(unsupported);
     };
 
@@ -2302,24 +2556,36 @@ fn ordinary_source_print_changes(
     if canonical_action(target) != Some(action)
         || analyse_historical(before)?.prediction != PredictedAction::Action(action)
         || u32::from(bottom) <= TOOLBAR_TOP
-        || !bottom.checked_sub(top).is_some_and(|height| (180..=190).contains(&height))
+        || !bottom
+            .checked_sub(top)
+            .is_some_and(|height| (180..=190).contains(&height))
     {
         return Ok(unsupported);
     }
-    let PredictedAction::Action(next) = analyse_historical(after)?.prediction else { return Ok(unsupported); };
-    let ActionTarget::Klondike(next_target) = next.target else { return Ok(unsupported); };
+    let PredictedAction::Action(next) = analyse_historical(after)?.prediction else {
+        return Ok(unsupported);
+    };
+    let ActionTarget::Klondike(next_target) = next.target else {
+        return Ok(unsupported);
+    };
 
 
-    if canonical_action(next_target) != Some(next) || next == action
+    if canonical_action(next_target) != Some(next)
+        || next == action
         || matches!(next_target, KlondikeTarget::Tableau { column: next_column, .. } if next_column == column)
     {
         return Ok(unsupported);
     }
     let source = action.effect_bounds();
-    let Some(old_nominal_top) = top.checked_add(HIGHLIGHTED_NOMINAL_FACE_OFFSET) else { return Ok(unsupported); };
-    let Some(replacement_top) = ordinary_source_face_top(after, source, old_nominal_top) else { return Ok(unsupported); };
+    let Some(old_nominal_top) = top.checked_add(HIGHLIGHTED_NOMINAL_FACE_OFFSET) else {
+        return Ok(unsupported);
+    };
+    let Some(replacement_top) = ordinary_source_face_top(after, source, old_nominal_top) else {
+        return Ok(unsupported);
+    };
     let shift = old_nominal_top - replacement_top;
-    let mut evidence = measure_aligned_source_print_changes(before, after, source, source.height, shift, action)?;
+    let mut evidence =
+        measure_aligned_source_print_changes(before, after, source, source.height, shift, action)?;
     evidence.ordinary_face_geometry = true;
     evidence.ordinary_face_top = replacement_top;
     Ok(evidence)
@@ -2371,20 +2637,37 @@ fn deep_felt_source_changes(
     validate_frame(before)?;
     validate_frame(after)?;
     let mut evidence = DeepFeltSourceEvidence::default();
-    let ActionTarget::Klondike(target @ KlondikeTarget::Tableau { column, top, bottom }) = action.target else {
+    let ActionTarget::Klondike(
+        target @ KlondikeTarget::Tableau {
+            column,
+            top,
+            bottom,
+        },
+    ) = action.target
+    else {
         return Ok(evidence);
     };
 
 
     if canonical_action(target) != Some(action)
         || analyse_historical(before)?.prediction != PredictedAction::Action(action)
-        || !bottom.checked_sub(top).is_some_and(|height| (180..=190).contains(&height))
+        || !bottom
+            .checked_sub(top)
+            .is_some_and(|height| (180..=190).contains(&height))
         || u32::from(bottom) > TOOLBAR_TOP
     {
         return Ok(evidence);
     }
-    let PredictedAction::Action(next) = analyse_historical(after)?.prediction else { return Ok(evidence); };
-    let ActionTarget::Klondike(next_target @ KlondikeTarget::Tableau { column: next_column, .. }) = next.target else {
+    let PredictedAction::Action(next) = analyse_historical(after)?.prediction else {
+        return Ok(evidence);
+    };
+    let ActionTarget::Klondike(
+        next_target @ KlondikeTarget::Tableau {
+            column: next_column,
+            ..
+        },
+    ) = next.target
+    else {
         return Ok(evidence);
     };
 
@@ -2392,28 +2675,35 @@ fn deep_felt_source_changes(
     if canonical_action(next_target) != Some(next) || column == next_column {
         return Ok(evidence);
     }
-    let InputOperation::Click(point) = action.operation() else { return Ok(evidence); };
+    let InputOperation::Click(point) = action.operation() else {
+        return Ok(evidence);
+    };
     let source = action.effect_bounds();
     evidence.context_supported = true;
 
 
     for y in source.y + source.height / 2..source.bottom() - 16 {
-
-
         for x in source.x + 16..source.x + source.width - 16 {
-
-
             if (i64::from(x) - i64::from(point.x)).abs() < 48
                 && (i64::from(y) - i64::from(point.y)).abs() < 48
             {
                 continue;
             }
-            let Some(first) = pixel_rgb(before, x, y) else { continue; };
-            let Some(second @ [red, green, blue]) = pixel_rgb(after, x, y) else { continue; };
+            let Some(first) = pixel_rgb(before, x, y) else {
+                continue;
+            };
+            let Some(second @ [red, green, blue]) = pixel_rgb(after, x, y) else {
+                continue;
+            };
 
 
-            if !is_bright_neutral_paper(first) || is_rail_gold(first) || is_rail_gold(second)
-                || !first.into_iter().zip(second).any(|(a, b)| a.abs_diff(b) >= 48)
+            if !is_bright_neutral_paper(first)
+                || is_rail_gold(first)
+                || is_rail_gold(second)
+                || !first
+                    .into_iter()
+                    .zip(second)
+                    .any(|(a, b)| a.abs_diff(b) >= 48)
             {
                 continue;
             }
@@ -2438,7 +2728,10 @@ fn deep_felt_source_changes(
     }
     evidence.verified = material_changed >= MINIMUM_CONTENT_CHANGE
         && evidence.positive_felt >= MINIMUM_CONTENT_CHANGE
-        && evidence.positive_halves.into_iter().all(|count| count >= MINIMUM_CORNER_CHANGE);
+        && evidence
+            .positive_halves
+            .into_iter()
+            .all(|count| count >= MINIMUM_CORNER_CHANGE);
     Ok(evidence)
 }
 
@@ -2479,8 +2772,7 @@ pub struct FoundationTransferEvidence {
 /// Retain the established 96 by 96 cursor exclusion at every compared coordinate.
 #[cfg(test)]
 fn foundation_transfer_cursor_excluded(point: PixelPoint, x: u32, y: u32) -> bool {
-    (i64::from(x) - i64::from(point.x)).abs() < 48
-        && (i64::from(y) - i64::from(point.y)).abs() < 48
+    (i64::from(x) - i64::from(point.x)).abs() < 48 && (i64::from(y) - i64::from(point.y)).abs() < 48
 }
 
 
@@ -2496,15 +2788,29 @@ fn foundation_transfer_retains_shifted_print(
     patches: [PixelRect; 2],
     point: PixelPoint,
 ) -> bool {
-    let minimum_x = patches.into_iter().map(|patch| i64::from(source.x) - i64::from(patch.x)).max().unwrap_or(0);
-    let maximum_x = patches.into_iter().map(|patch| i64::from(source.right()) - i64::from(patch.right())).min().unwrap_or(-1);
-    let minimum_y = patches.into_iter().map(|patch| i64::from(source.y) - i64::from(patch.y)).max().unwrap_or(0);
-    let maximum_y = patches.into_iter().map(|patch| i64::from(source.bottom()) - i64::from(patch.bottom())).min().unwrap_or(-1);
+    let minimum_x = patches
+        .into_iter()
+        .map(|patch| i64::from(source.x) - i64::from(patch.x))
+        .max()
+        .unwrap_or(0);
+    let maximum_x = patches
+        .into_iter()
+        .map(|patch| i64::from(source.right()) - i64::from(patch.right()))
+        .min()
+        .unwrap_or(-1);
+    let minimum_y = patches
+        .into_iter()
+        .map(|patch| i64::from(source.y) - i64::from(patch.y))
+        .max()
+        .unwrap_or(0);
+    let maximum_y = patches
+        .into_iter()
+        .map(|patch| i64::from(source.bottom()) - i64::from(patch.bottom()))
+        .min()
+        .unwrap_or(-1);
 
 
     for dy in minimum_y..=maximum_y {
-
-
         for dx in minimum_x..=maximum_x {
             let retained = patches.map(|patch| {
                 let mut eligible_ink = 0;
@@ -2512,8 +2818,6 @@ fn foundation_transfer_retains_shifted_print(
 
 
                 for y in patch.y..patch.bottom() {
-
-
                     for x in patch.x..patch.right() {
                         let mapped_x = (i64::from(x) + dx) as u32;
                         let mapped_y = (i64::from(y) + dy) as u32;
@@ -2526,10 +2830,14 @@ fn foundation_transfer_retains_shifted_print(
                         }
 
 
-                        let Some(first) = pixel_rgb(before, x, y) else { continue; };
+                        let Some(first) = pixel_rgb(before, x, y) else {
+                            continue;
+                        };
 
 
-                        let Some(second) = pixel_rgb(after, mapped_x, mapped_y) else { continue; };
+                        let Some(second) = pixel_rgb(after, mapped_x, mapped_y) else {
+                            continue;
+                        };
 
 
                         if is_rail_gold(first) || is_rail_gold(second) || !is_card_ink(first) {
@@ -2546,7 +2854,9 @@ fn foundation_transfer_retains_shifted_print(
             });
 
 
-            if retained.into_iter().all(|supported| supported) { return true; }
+            if retained.into_iter().all(|supported| supported) {
+                return true;
+            }
         }
     }
 
@@ -2558,11 +2868,13 @@ fn foundation_transfer_retains_shifted_print(
 /// The nominal 96-pixel row is gray, with bright neutral rows directly adjacent.
 #[cfg(test)]
 fn foundation_transfer_receiver_seam(frame: &CapturedFrame, x: u32, row: u32) -> bool {
-    let bright = |y| (x + 18..x + CARD_WIDTH - 18).all(|xx| {
-        pixel_rgb(frame, xx, y).is_some_and(|rgb| {
-            is_bright_neutral_paper(rgb) && rgb.into_iter().all(|value| value >= 240)
+    let bright = |y| {
+        (x + 18..x + CARD_WIDTH - 18).all(|xx| {
+            pixel_rgb(frame, xx, y).is_some_and(|rgb| {
+                is_bright_neutral_paper(rgb) && rgb.into_iter().all(|value| value >= 240)
+            })
         })
-    });
+    };
     let gray = (x + 18..x + CARD_WIDTH - 18).all(|xx| {
         pixel_rgb(frame, xx, row).is_some_and(|rgb| {
             is_bright_neutral_paper(rgb) && rgb.into_iter().all(|value| value <= 220)
@@ -2596,19 +2908,29 @@ fn foundation_transfer_source_changes(
     };
 
 
-    if canonical_action(target) != Some(action) { return Ok(evidence); }
+    if canonical_action(target) != Some(action) {
+        return Ok(evidence);
+    }
 
 
-    let PredictedAction::Action(next) = analyse_historical(after)?.prediction else { return Ok(evidence); };
+    let PredictedAction::Action(next) = analyse_historical(after)?.prediction else {
+        return Ok(evidence);
+    };
 
 
-    let ActionTarget::Klondike(next_target) = next.target else { return Ok(evidence); };
+    let ActionTarget::Klondike(next_target) = next.target else {
+        return Ok(evidence);
+    };
 
 
-    if next == action || canonical_action(next_target) != Some(next) { return Ok(evidence); }
+    if next == action || canonical_action(next_target) != Some(next) {
+        return Ok(evidence);
+    }
 
     let source = action.effect_bounds();
-    let InputOperation::Click(point) = action.operation() else { return Ok(evidence); };
+    let InputOperation::Click(point) = action.operation() else {
+        return Ok(evidence);
+    };
     let patches = [
         PixelRect::new(source.x + 5, source.y + 5, 28, 44),
         PixelRect::new(source.x + 99, source.y + 126, 28, 44),
@@ -2621,66 +2943,98 @@ fn foundation_transfer_source_changes(
 
 
     if !evidence.source_paper_supported
-        || evidence.corner_changes.into_iter().any(|count| count < MINIMUM_CORNER_CHANGE)
+        || evidence
+            .corner_changes
+            .into_iter()
+            .any(|count| count < MINIMUM_CORNER_CHANGE)
     {
         return Ok(evidence);
     }
 
 
     for (index, patch) in patches.into_iter().enumerate() {
-
-
         for y in patch.y..patch.bottom() {
-
-
             for x in patch.x..patch.right() {
+                if foundation_transfer_cursor_excluded(point, x, y) {
+                    continue;
+                }
 
 
-                if foundation_transfer_cursor_excluded(point, x, y) { continue; }
+                let Some(first) = pixel_rgb(before, x, y) else {
+                    continue;
+                };
 
 
-                let Some(first) = pixel_rgb(before, x, y) else { continue; };
+                let Some(second) = pixel_rgb(after, x, y) else {
+                    continue;
+                };
 
 
-                let Some(second) = pixel_rgb(after, x, y) else { continue; };
-
-
-                if is_rail_gold(first) || is_rail_gold(second) { continue; }
+                if is_rail_gold(first) || is_rail_gold(second) {
+                    continue;
+                }
 
 
                 if retained_bright_paper_field(before, after, x, y) {
                     evidence.stable_paper_fields[index] += 1;
-                    evidence.changed_paper_fields[index] += usize::from(first.into_iter().zip(second)
-                        .any(|(a, b)| a.abs_diff(b) >= GUIDE_STABILITY_DELTA));
+                    evidence.changed_paper_fields[index] += usize::from(
+                        first
+                            .into_iter()
+                            .zip(second)
+                            .any(|(a, b)| a.abs_diff(b) >= GUIDE_STABILITY_DELTA),
+                    );
                 }
 
 
-                if index != 0 { continue; }
+                if index != 0 {
+                    continue;
+                }
 
                 let mirrored_x = patches[1].right() - 1 - (x - patch.x);
                 let mirrored_y = patches[1].bottom() - 1 - (y - patch.y);
 
 
-                if foundation_transfer_cursor_excluded(point, mirrored_x, mirrored_y) { continue; }
+                if foundation_transfer_cursor_excluded(point, mirrored_x, mirrored_y) {
+                    continue;
+                }
 
 
-                let Some(other_first) = pixel_rgb(before, mirrored_x, mirrored_y) else { continue; };
+                let Some(other_first) = pixel_rgb(before, mirrored_x, mirrored_y) else {
+                    continue;
+                };
 
 
-                let Some(other_second) = pixel_rgb(after, mirrored_x, mirrored_y) else { continue; };
+                let Some(other_second) = pixel_rgb(after, mirrored_x, mirrored_y) else {
+                    continue;
+                };
 
 
-                if is_rail_gold(other_first) || is_rail_gold(other_second)
-                    || !first.into_iter().zip(second).any(|(a, b)| a.abs_diff(b) >= 48)
-                    || !other_first.into_iter().zip(other_second).any(|(a, b)| a.abs_diff(b) >= 48)
+                if is_rail_gold(other_first)
+                    || is_rail_gold(other_second)
+                    || !first
+                        .into_iter()
+                        .zip(second)
+                        .any(|(a, b)| a.abs_diff(b) >= 48)
+                    || !other_first
+                        .into_iter()
+                        .zip(other_second)
+                        .any(|(a, b)| a.abs_diff(b) >= 48)
                 {
                     continue;
                 }
 
-                evidence.paired_changes[0] += usize::from(is_white(first) && is_card_ink(second)
-                    && is_white(other_first) && is_card_ink(other_second));
-                evidence.paired_changes[1] += usize::from(is_card_ink(first) && is_white(second)
-                    && is_card_ink(other_first) && is_white(other_second));
+                evidence.paired_changes[0] += usize::from(
+                    is_white(first)
+                        && is_card_ink(second)
+                        && is_white(other_first)
+                        && is_card_ink(other_second),
+                );
+                evidence.paired_changes[1] += usize::from(
+                    is_card_ink(first)
+                        && is_white(second)
+                        && is_card_ink(other_first)
+                        && is_white(other_second),
+                );
             }
         }
     }
@@ -2688,17 +3042,24 @@ fn foundation_transfer_source_changes(
 
     if evidence.paired_changes.into_iter().any(|count| count == 0)
         || evidence.paired_changes.into_iter().sum::<usize>() < MINIMUM_CORNER_CHANGE
-        || evidence.stable_paper_fields.into_iter().any(|count| count < MINIMUM_CORNER_CHANGE)
-        || evidence.changed_paper_fields.into_iter().any(|count| count != 0)
+        || evidence
+            .stable_paper_fields
+            .into_iter()
+            .any(|count| count < MINIMUM_CORNER_CHANGE)
+        || evidence
+            .changed_paper_fields
+            .into_iter()
+            .any(|count| count != 0)
     {
         return Ok(evidence);
     }
-    evidence.translated_ink_retained = foundation_transfer_retains_shifted_print(
-        before, after, source, patches, point,
-    );
+    evidence.translated_ink_retained =
+        foundation_transfer_retains_shifted_print(before, after, source, patches, point);
 
 
-    if evidence.translated_ink_retained { return Ok(evidence); }
+    if evidence.translated_ink_retained {
+        return Ok(evidence);
+    }
 
     let mut receiver = None;
 
@@ -2708,8 +3069,6 @@ fn foundation_transfer_source_changes(
 
 
         for top in 342..=TABLEAU_EFFECT_BOTTOM - 11 {
-
-
             if top + 5 + patches[0].height > TOOLBAR_TOP
                 || !foundation_transfer_receiver_seam(after, x, top)
                 || foundation_transfer_receiver_seam(before, x, top)
@@ -2720,28 +3079,36 @@ fn foundation_transfer_source_changes(
             let patch = PixelRect::new(x + 5, top + 5, patches[0].width, patches[0].height);
 
 
-            if !fraction_at_least(after, patch, is_white, 500) { continue; }
+            if !fraction_at_least(after, patch, is_white, 500) {
+                continue;
+            }
 
             let mut material = 0;
 
 
             for y in patch.y..patch.bottom() {
-
-
                 for xx in patch.x..patch.right() {
+                    if foundation_transfer_cursor_excluded(point, xx, y) {
+                        continue;
+                    }
 
 
-                    if foundation_transfer_cursor_excluded(point, xx, y) { continue; }
+                    let Some(first) = pixel_rgb(before, xx, y) else {
+                        continue;
+                    };
 
 
-                    let Some(first) = pixel_rgb(before, xx, y) else { continue; };
+                    let Some(second) = pixel_rgb(after, xx, y) else {
+                        continue;
+                    };
 
 
-                    let Some(second) = pixel_rgb(after, xx, y) else { continue; };
-
-
-                    if !is_rail_gold(first) && !is_rail_gold(second)
-                        && first.into_iter().zip(second).any(|(a, b)| a.abs_diff(b) >= 48)
+                    if !is_rail_gold(first)
+                        && !is_rail_gold(second)
+                        && first
+                            .into_iter()
+                            .zip(second)
+                            .any(|(a, b)| a.abs_diff(b) >= 48)
                     {
                         material += 1;
                     }
@@ -2749,7 +3116,9 @@ fn foundation_transfer_source_changes(
             }
 
 
-            if material < MINIMUM_CONTENT_CHANGE { continue; }
+            if material < MINIMUM_CONTENT_CHANGE {
+                continue;
+            }
 
             evidence.receiver_count += 1;
             receiver = Some((column, top, patch, material));
@@ -2757,18 +3126,20 @@ fn foundation_transfer_source_changes(
     }
 
 
-    if evidence.receiver_count != 1 { return Ok(evidence); }
+    if evidence.receiver_count != 1 {
+        return Ok(evidence);
+    }
 
 
-    let Some((column, top, receiving_patch, material)) = receiver else { return Ok(evidence); };
+    let Some((column, top, receiving_patch, material)) = receiver else {
+        return Ok(evidence);
+    };
     evidence.receiver_column = column;
     evidence.receiver_top = top as u16;
     evidence.receiver_material_changed = material;
 
 
     for dy in 0..patches[0].height {
-
-
         for dx in 0..patches[0].width {
             let old_x = patches[0].x + dx;
             let old_y = patches[0].y + dy;
@@ -2783,23 +3154,39 @@ fn foundation_transfer_source_changes(
             }
 
 
-            let Some(old_source) = pixel_rgb(before, old_x, old_y) else { continue; };
+            let Some(old_source) = pixel_rgb(before, old_x, old_y) else {
+                continue;
+            };
 
 
-            let Some(old_recipient) = pixel_rgb(before, receiving_x, receiving_y) else { continue; };
+            let Some(old_recipient) = pixel_rgb(before, receiving_x, receiving_y) else {
+                continue;
+            };
 
 
-            let Some(new_recipient) = pixel_rgb(after, receiving_x, receiving_y) else { continue; };
+            let Some(new_recipient) = pixel_rgb(after, receiving_x, receiving_y) else {
+                continue;
+            };
 
 
-            if is_rail_gold(old_source) || is_rail_gold(old_recipient) || is_rail_gold(new_recipient)
-                || !is_card_ink(old_source) || !is_card_ink(new_recipient)
-                || !old_recipient.into_iter().zip(new_recipient).any(|(a, b)| a.abs_diff(b) >= 48)
+            if is_rail_gold(old_source)
+                || is_rail_gold(old_recipient)
+                || is_rail_gold(new_recipient)
+                || !is_card_ink(old_source)
+                || !is_card_ink(new_recipient)
+                || !old_recipient
+                    .into_iter()
+                    .zip(new_recipient)
+                    .any(|(a, b)| a.abs_diff(b) >= 48)
             {
                 continue;
             }
-            let matches_source = |rgb: [u8; 3]| old_source.into_iter().zip(rgb)
-                .all(|(a, b)| a.abs_diff(b) < GUIDE_STABILITY_DELTA);
+            let matches_source = |rgb: [u8; 3]| {
+                old_source
+                    .into_iter()
+                    .zip(rgb)
+                    .all(|(a, b)| a.abs_diff(b) < GUIDE_STABILITY_DELTA)
+            };
 
 
             if matches_source(new_recipient)
@@ -2861,8 +3248,9 @@ pub struct TableauFoundationTransferEvidence {
 /// black and chromatic printed detail remain eligible; no rank is decoded.
 #[cfg(test)]
 fn is_exposure_ink(rgb: [u8; 3]) -> bool {
-    is_card_ink(rgb) && (rgb.into_iter().min().unwrap_or(255) < 16
-        || rgb.into_iter().max().unwrap_or(0) - rgb.into_iter().min().unwrap_or(255) > 6)
+    is_card_ink(rgb)
+        && (rgb.into_iter().min().unwrap_or(255) < 16
+            || rgb.into_iter().max().unwrap_or(0) - rgb.into_iter().min().unwrap_or(255) > 6)
 }
 
 
@@ -2909,27 +3297,49 @@ fn tableau_foundation_transfer_source_changes(
     validate_frame(before)?;
     validate_frame(after)?;
     let mut evidence = TableauFoundationTransferEvidence::default();
-    let ActionTarget::Klondike(target @ KlondikeTarget::Tableau { top, bottom, .. }) = action.target else {
+    let ActionTarget::Klondike(target @ KlondikeTarget::Tableau { top, bottom, .. }) =
+        action.target
+    else {
         return Ok(evidence);
     };
 
 
     if canonical_action(target) != Some(action)
         || analyse_historical(before)?.prediction != PredictedAction::Action(action)
-        || !bottom.checked_sub(top).is_some_and(|height| (180..=191).contains(&height))
-        || source_changed < MINIMUM_CONTENT_CHANGE || !is_gameplay_scene(after)?
+        || !bottom
+            .checked_sub(top)
+            .is_some_and(|height| (180..=191).contains(&height))
+        || source_changed < MINIMUM_CONTENT_CHANGE
+        || !is_gameplay_scene(after)?
     {
         return Ok(evidence);
     }
     let source = action.effect_bounds();
-    let Some(old_face_top) = top.checked_add(HIGHLIGHTED_NOMINAL_FACE_OFFSET) else { return Ok(evidence); };
+    let Some(old_face_top) = top.checked_add(HIGHLIGHTED_NOMINAL_FACE_OFFSET) else {
+        return Ok(evidence);
+    };
     let visible_height = CARD_HEIGHT.min(TOOLBAR_TOP.saturating_sub(u32::from(old_face_top)));
-    let visible = PixelRect::new(source.x, u32::from(old_face_top), CARD_WIDTH, visible_height);
+    let visible = PixelRect::new(
+        source.x,
+        u32::from(old_face_top),
+        CARD_WIDTH,
+        visible_height,
+    );
 
 
-    if source.x < 9 || source.right().checked_add(9).is_none_or(|right| right >= after.width)
-        || visible_height == 0 || validate_bounds(before, visible).is_err()
-        || !fraction_at_least(before, visible, is_white, MINIMUM_STABLE_PAPER_PERMILLE as u32)
+    if source.x < 9
+        || source
+            .right()
+            .checked_add(9)
+            .is_none_or(|right| right >= after.width)
+        || visible_height == 0
+        || validate_bounds(before, visible).is_err()
+        || !fraction_at_least(
+            before,
+            visible,
+            is_white,
+            MINIMUM_STABLE_PAPER_PERMILLE as u32,
+        )
     {
         return Ok(evidence);
     }
@@ -2940,14 +3350,14 @@ fn tableau_foundation_transfer_source_changes(
         PredictedAction::Action(next) if next != action
             && matches!(next.target, ActionTarget::Klondike(next_target)
                 if canonical_action(next_target) == Some(next)));
-    let InputOperation::Click(point) = action.operation() else { return Ok(evidence); };
+    let InputOperation::Click(point) = action.operation() else {
+        return Ok(evidence);
+    };
     let mut header = None;
     let first_row = u32::from(top.saturating_sub(VISIBLE_SOURCE_CONTRACTION));
 
 
     for row in first_row..=u32::from(old_face_top) {
-
-
         if row + 49 > TOOLBAR_TOP || !tableau_transfer_header_seam(after, source, row) {
             continue;
         }
@@ -2962,7 +3372,11 @@ fn tableau_foundation_transfer_source_changes(
         ];
 
 
-        if old_gray || patches.into_iter().any(|patch| !fraction_at_least(after, patch, is_white, 500)) {
+        if old_gray
+            || patches
+                .into_iter()
+                .any(|patch| !fraction_at_least(after, patch, is_white, 500))
+        {
             continue;
         }
         evidence.header_count += 1;
@@ -2970,10 +3384,14 @@ fn tableau_foundation_transfer_source_changes(
     }
 
 
-    if evidence.header_count != 1 { return Ok(evidence); }
+    if evidence.header_count != 1 {
+        return Ok(evidence);
+    }
 
 
-    let Some(header_top) = header else { return Ok(evidence); };
+    let Some(header_top) = header else {
+        return Ok(evidence);
+    };
     evidence.header_top = header_top as u16;
     let strips = [
         PixelRect::new(source.x + 5, header_top + 5, 14, 44),
@@ -2982,26 +3400,31 @@ fn tableau_foundation_transfer_source_changes(
 
 
     for (index, strip) in strips.into_iter().enumerate() {
-
-
         for y in strip.y..strip.bottom() {
-
-
             for x in strip.x..strip.right() {
+                if foundation_transfer_cursor_excluded(point, x, y) {
+                    continue;
+                }
 
 
-                if foundation_transfer_cursor_excluded(point, x, y) { continue; }
+                let Some(first) = pixel_rgb(before, x, y) else {
+                    continue;
+                };
 
 
-                let Some(first) = pixel_rgb(before, x, y) else { continue; };
+                let Some(second) = pixel_rgb(after, x, y) else {
+                    continue;
+                };
 
 
-                let Some(second) = pixel_rgb(after, x, y) else { continue; };
-
-
-                if !is_rail_gold(first) && !is_rail_gold(second)
-                    && (is_back(first) || is_exposure_ink(first)) && is_bright_neutral_paper(second)
-                    && first.into_iter().zip(second).any(|(a, b)| a.abs_diff(b) >= 48)
+                if !is_rail_gold(first)
+                    && !is_rail_gold(second)
+                    && (is_back(first) || is_exposure_ink(first))
+                    && is_bright_neutral_paper(second)
+                    && first
+                        .into_iter()
+                        .zip(second)
+                        .any(|(a, b)| a.abs_diff(b) >= 48)
                 {
                     evidence.header_positive[index] += 1;
                 }
@@ -3011,32 +3434,46 @@ fn tableau_foundation_transfer_source_changes(
 
 
     for y in visible.y..visible.bottom() {
-
-
         for x in visible.x..visible.right() {
+            if foundation_transfer_cursor_excluded(point, x, y) {
+                continue;
+            }
 
 
-            if foundation_transfer_cursor_excluded(point, x, y) { continue; }
+            let Some(first) = pixel_rgb(before, x, y) else {
+                continue;
+            };
 
 
-            let Some(first) = pixel_rgb(before, x, y) else { continue; };
+            let Some(second) = pixel_rgb(after, x, y) else {
+                continue;
+            };
 
 
-            let Some(second) = pixel_rgb(after, x, y) else { continue; };
-
-
-            if is_rail_gold(first) || is_rail_gold(second) || !is_card_ink(first) { continue; }
+            if is_rail_gold(first) || is_rail_gold(second) || !is_card_ink(first) {
+                continue;
+            }
             evidence.old_source_ink += 1;
-            evidence.retained_source_ink += usize::from(is_card_ink(second)
-                && first.into_iter().zip(second).all(|(a, b)| a.abs_diff(b) < GUIDE_STABILITY_DELTA));
+            evidence.retained_source_ink += usize::from(
+                is_card_ink(second)
+                    && first
+                        .into_iter()
+                        .zip(second)
+                        .all(|(a, b)| a.abs_diff(b) < GUIDE_STABILITY_DELTA),
+            );
         }
     }
     evidence.old_print_retained = evidence.old_source_ink >= MINIMUM_CORNER_CHANGE
-        && evidence.retained_source_ink * 1_000 >= evidence.old_source_ink * MINIMUM_STABLE_PAPER_PERMILLE;
+        && evidence.retained_source_ink * 1_000
+            >= evidence.old_source_ink * MINIMUM_STABLE_PAPER_PERMILLE;
 
 
-    if evidence.header_positive.into_iter().any(|count| count < MINIMUM_CORNER_CHANGE)
-        || evidence.old_source_ink < MINIMUM_CORNER_CHANGE || evidence.old_print_retained
+    if evidence
+        .header_positive
+        .into_iter()
+        .any(|count| count < MINIMUM_CORNER_CHANGE)
+        || evidence.old_source_ink < MINIMUM_CORNER_CHANGE
+        || evidence.old_print_retained
     {
         return Ok(evidence);
     }
@@ -3044,31 +3481,52 @@ fn tableau_foundation_transfer_source_changes(
 
 
     for column in 1..=4_u8 {
-        let bounds = PixelRect::new(894 + COLUMN_PITCH * u32::from(column - 1), UPPER_Y, CARD_WIDTH, CARD_HEIGHT);
-        let inside = PixelRect::new(bounds.x + 16, bounds.y + 16, bounds.width - 32, bounds.height - 32);
+        let bounds = PixelRect::new(
+            894 + COLUMN_PITCH * u32::from(column - 1),
+            UPPER_Y,
+            CARD_WIDTH,
+            CARD_HEIGHT,
+        );
+        let inside = PixelRect::new(
+            bounds.x + 16,
+            bounds.y + 16,
+            bounds.width - 32,
+            bounds.height - 32,
+        );
 
 
-        if !fraction_at_least(after, inside, is_white, MINIMUM_STABLE_PAPER_PERMILLE as u32) { continue; }
+        if !fraction_at_least(
+            after,
+            inside,
+            is_white,
+            MINIMUM_STABLE_PAPER_PERMILLE as u32,
+        ) {
+            continue;
+        }
         let material = content_changes(before, after, bounds, action, false);
 
 
-        if material < MINIMUM_CONTENT_CHANGE { continue; }
+        if material < MINIMUM_CONTENT_CHANGE {
+            continue;
+        }
         evidence.receiver_count += 1;
         receiver = Some((column, bounds, material));
     }
 
 
-    if evidence.receiver_count != 1 { return Ok(evidence); }
+    if evidence.receiver_count != 1 {
+        return Ok(evidence);
+    }
 
 
-    let Some((column, receiving, material)) = receiver else { return Ok(evidence); };
+    let Some((column, receiving, material)) = receiver else {
+        return Ok(evidence);
+    };
     evidence.receiver_column = column;
     evidence.receiver_material_changed = material;
 
 
     for dy in 0..visible.height {
-
-
         for dx in 0..visible.width {
             let old_x = visible.x + dx;
             let old_y = visible.y + dy;
@@ -3083,23 +3541,39 @@ fn tableau_foundation_transfer_source_changes(
             }
 
 
-            let Some(old_source) = pixel_rgb(before, old_x, old_y) else { continue; };
+            let Some(old_source) = pixel_rgb(before, old_x, old_y) else {
+                continue;
+            };
 
 
-            let Some(old_recipient) = pixel_rgb(before, receiving_x, receiving_y) else { continue; };
+            let Some(old_recipient) = pixel_rgb(before, receiving_x, receiving_y) else {
+                continue;
+            };
 
 
-            let Some(new_recipient) = pixel_rgb(after, receiving_x, receiving_y) else { continue; };
+            let Some(new_recipient) = pixel_rgb(after, receiving_x, receiving_y) else {
+                continue;
+            };
 
 
-            if is_rail_gold(old_source) || is_rail_gold(old_recipient) || is_rail_gold(new_recipient)
-                || !is_card_ink(old_source) || !is_card_ink(new_recipient)
-                || !old_recipient.into_iter().zip(new_recipient).any(|(a, b)| a.abs_diff(b) >= 48)
+            if is_rail_gold(old_source)
+                || is_rail_gold(old_recipient)
+                || is_rail_gold(new_recipient)
+                || !is_card_ink(old_source)
+                || !is_card_ink(new_recipient)
+                || !old_recipient
+                    .into_iter()
+                    .zip(new_recipient)
+                    .any(|(a, b)| a.abs_diff(b) >= 48)
             {
                 continue;
             }
-            let matches_source = |rgb: [u8; 3]| old_source.into_iter().zip(rgb)
-                .all(|(a, b)| a.abs_diff(b) < GUIDE_STABILITY_DELTA);
+            let matches_source = |rgb: [u8; 3]| {
+                old_source
+                    .into_iter()
+                    .zip(rgb)
+                    .all(|(a, b)| a.abs_diff(b) < GUIDE_STABILITY_DELTA)
+            };
 
 
             if matches_source(new_recipient)
@@ -3109,8 +3583,8 @@ fn tableau_foundation_transfer_source_changes(
             }
         }
     }
-    evidence.verified = evidence.fresh_target_supported
-        && evidence.matched_transfer_ink >= MINIMUM_CORNER_CHANGE;
+    evidence.verified =
+        evidence.fresh_target_supported && evidence.matched_transfer_ink >= MINIMUM_CORNER_CHANGE;
     Ok(evidence)
 }
 
@@ -3173,20 +3647,33 @@ pub struct EffectEvidence {
 
 #[cfg(test)]
 impl fmt::Display for EffectEvidence {
-
-
     /// Keep all authority-bearing measurements on one readable log line.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             formatter,
             "verified={}; source replaced={}; source changed={}, positive={}, dimmed felt={} (each source proof requires {}), card corner ink/paper={:?} (each required {}), corner [paper-to-ink, ink-to-paper]={:?} (tableau/SUIT each required {}), visible-tableau full-patch directions={:?} (ordinary each {}, contracted-outline opposed totals {}; source 512; continuation only), visible-bottom stable print={:?}, bright-SUIT print={:?}, SUIT-to-tableau transfer={:?} (48 per complete corner, 48 paired signed pixels, unique new seam, 512 receiver material, 48 newly matched old ink; continuation only), tableau-to-SUIT transfer={:?} (unique exposed header, 48 positive each side, unique bright receiver, 512 receiver material, 48 newly matched visible old ink; continuation only), aligned clipped-source print={:?} (512 material, 48 each print direction, 80% face/core paper; ordinary geometry additionally requires independent receiving print; continuation only), deep-guide source felt={:?} (512 positive lower-half pixels, 48 each opposed half; continuation only), destination changed={} (required {}), dimmed-foundation print={:?}; {}",
-            self.verified, self.source_replaced, self.source_changed, self.source_positive,
-            self.source_dimmed_felt, MINIMUM_CONTENT_CHANGE, self.source_identity_corners,
-            MINIMUM_CORNER_CHANGE, self.source_identity_directions, MINIMUM_CORNER_CHANGE,
-            self.source_visible_identity_directions, MINIMUM_CORNER_CHANGE, MINIMUM_CORNER_CHANGE * 2,
-            self.source_visible_print, self.source_foundation_print, self.source_foundation_transfer,
-            self.source_tableau_foundation_transfer, self.source_aligned_print, self.source_deep_felt,
-            self.destination_changed, MINIMUM_CONTENT_CHANGE, self.destination_print,
+            self.verified,
+            self.source_replaced,
+            self.source_changed,
+            self.source_positive,
+            self.source_dimmed_felt,
+            MINIMUM_CONTENT_CHANGE,
+            self.source_identity_corners,
+            MINIMUM_CORNER_CHANGE,
+            self.source_identity_directions,
+            MINIMUM_CORNER_CHANGE,
+            self.source_visible_identity_directions,
+            MINIMUM_CORNER_CHANGE,
+            MINIMUM_CORNER_CHANGE * 2,
+            self.source_visible_print,
+            self.source_foundation_print,
+            self.source_foundation_transfer,
+            self.source_tableau_foundation_transfer,
+            self.source_aligned_print,
+            self.source_deep_felt,
+            self.destination_changed,
+            MINIMUM_CONTENT_CHANGE,
+            self.destination_print,
             self.reason,
         )
     }
@@ -3240,7 +3727,9 @@ pub fn inspect_effect(
     };
 
 
-    let ActionTarget::Klondike(target) = action.target else { return Ok(evidence); };
+    let ActionTarget::Klondike(target) = action.target else {
+        return Ok(evidence);
+    };
 
 
     if canonical_action(target) != Some(action)
@@ -3290,82 +3779,144 @@ pub fn inspect_effect(
 
     if matches!(target, KlondikeTarget::Tableau { .. }) {
         evidence.source_dimmed_felt = tableau_dimmed_felt_changes(before, after, source, action);
-        evidence.source_visible_identity_directions = tableau_visible_identity_changes(before, after, source, action);
+        evidence.source_visible_identity_directions =
+            tableau_visible_identity_changes(before, after, source, action);
 
 
-        if visible_opposed_print_supported(action, evidence.source_changed,
-            evidence.source_visible_identity_directions)
-        {
+        if visible_opposed_print_supported(
+            action,
+            evidence.source_changed,
+            evidence.source_visible_identity_directions,
+        ) {
             evidence.source_visible_print = foundation_source_print_changes(
-                before, after, source, action, evidence.source_changed,
+                before,
+                after,
+                source,
+                action,
+                evidence.source_changed,
             );
         }
     }
 
 
     if matches!(target, KlondikeTarget::Foundation { .. }) {
-        evidence.source_foundation_print = foundation_source_print_changes(
-            before, after, source, action, evidence.source_changed,
-        );
+        evidence.source_foundation_print =
+            foundation_source_print_changes(before, after, source, action, evidence.source_changed);
     }
 
 
-    if matches!(target, KlondikeTarget::Waste { .. } | KlondikeTarget::Tableau { .. }
-        | KlondikeTarget::Foundation { .. })
-    {
+    if matches!(
+        target,
+        KlondikeTarget::Waste { .. }
+            | KlondikeTarget::Tableau { .. }
+            | KlondikeTarget::Foundation { .. }
+    ) {
         evidence.source_identity_directions = card_identity_changes(before, after, source, action);
-        evidence.source_identity_corners = evidence.source_identity_directions
+        evidence.source_identity_corners = evidence
+            .source_identity_directions
             .map(|directions| directions.into_iter().sum());
         evidence.source_identity_changed = evidence.source_identity_corners.into_iter().sum();
     }
 
     let tableau = (0..7).map(|column| {
-        PixelRect::new(FIRST_COLUMN_X + COLUMN_PITCH * column, TABLEAU_Y, CARD_WIDTH, TABLEAU_EFFECT_BOTTOM - TABLEAU_Y)
+        PixelRect::new(
+            FIRST_COLUMN_X + COLUMN_PITCH * column,
+            TABLEAU_Y,
+            CARD_WIDTH,
+            TABLEAU_EFFECT_BOTTOM - TABLEAU_Y,
+        )
     });
     let foundations = (0..4).map(|column| {
-        PixelRect::new(894 + COLUMN_PITCH * column, UPPER_Y, CARD_WIDTH, CARD_HEIGHT)
+        PixelRect::new(
+            894 + COLUMN_PITCH * column,
+            UPPER_Y,
+            CARD_WIDTH,
+            CARD_HEIGHT,
+        )
     });
-    evidence.destination_changed = tableau.chain(foundations).map(|bounds| {
-        let same_source_column = bounds.x == source.x
-            && ((bounds.y >= TABLEAU_Y && source.y >= 332) || bounds.y == source.y);
+    evidence.destination_changed = tableau
+        .chain(foundations)
+        .map(|bounds| {
+            let same_source_column = bounds.x == source.x
+                && ((bounds.y >= TABLEAU_Y && source.y >= 332) || bounds.y == source.y);
 
 
-        if same_source_column { 0 } else { content_changes(before, after, bounds, action, false) }
-    }).max().unwrap_or(0);
+            if same_source_column {
+                0
+            } else {
+                content_changes(before, after, bounds, action, false)
+            }
+        })
+        .max()
+        .unwrap_or(0);
 
 
-    if matches!(target, KlondikeTarget::Waste { .. } | KlondikeTarget::Tableau { .. }) {
-        evidence.destination_print = (1..=4_u8).map(|column| {
-            let bounds = PixelRect::new(894 + COLUMN_PITCH * u32::from(column - 1), UPPER_Y, CARD_WIDTH, CARD_HEIGHT);
-            foundation_print_changes(before, after, bounds, column, action)
-        }).max_by_key(|print| (print.verified, print.new_ink_halves.into_iter().sum::<usize>()))
+    if matches!(
+        target,
+        KlondikeTarget::Waste { .. } | KlondikeTarget::Tableau { .. }
+    ) {
+        evidence.destination_print = (1..=4_u8)
+            .map(|column| {
+                let bounds = PixelRect::new(
+                    894 + COLUMN_PITCH * u32::from(column - 1),
+                    UPPER_Y,
+                    CARD_WIDTH,
+                    CARD_HEIGHT,
+                );
+                foundation_print_changes(before, after, bounds, column, action)
+            })
+            .max_by_key(|print| {
+                (
+                    print.verified,
+                    print.new_ink_halves.into_iter().sum::<usize>(),
+                )
+            })
             .unwrap_or_default();
     }
 
-    let identity_verified = evidence.source_identity_corners.into_iter()
+    let identity_verified = evidence
+        .source_identity_corners
+        .into_iter()
         .all(|count| count >= MINIMUM_CORNER_CHANGE)
-        && (!matches!(target, KlondikeTarget::Tableau { .. } | KlondikeTarget::Foundation { .. })
-            || (evidence.source_changed >= MINIMUM_CONTENT_CHANGE
-                && evidence.source_identity_directions.into_iter().flatten()
-                    .all(|count| count >= MINIMUM_CORNER_CHANGE)));
+        && (!matches!(
+            target,
+            KlondikeTarget::Tableau { .. } | KlondikeTarget::Foundation { .. }
+        ) || (evidence.source_changed >= MINIMUM_CONTENT_CHANGE
+            && evidence
+                .source_identity_directions
+                .into_iter()
+                .flatten()
+                .all(|count| count >= MINIMUM_CORNER_CHANGE)));
     let visible_source_replaced = evidence.source_changed >= MINIMUM_CONTENT_CHANGE
-        && evidence.source_visible_identity_directions.into_iter().flatten()
+        && evidence
+            .source_visible_identity_directions
+            .into_iter()
+            .flatten()
             .all(|count| count >= MINIMUM_CORNER_CHANGE);
     evidence.source_foundation_transfer = foundation_transfer_source_changes(
-        before, after, action, evidence.source_identity_directions,
+        before,
+        after,
+        action,
+        evidence.source_identity_directions,
     )?;
-    evidence.source_tableau_foundation_transfer = tableau_foundation_transfer_source_changes(
-        before, after, action, evidence.source_changed,
-    )?;
+    evidence.source_tableau_foundation_transfer =
+        tableau_foundation_transfer_source_changes(before, after, action, evidence.source_changed)?;
     let source_verified = evidence.source_positive >= MINIMUM_CONTENT_CHANGE
-        || evidence.source_dimmed_felt >= MINIMUM_CONTENT_CHANGE || identity_verified
+        || evidence.source_dimmed_felt >= MINIMUM_CONTENT_CHANGE
+        || identity_verified
         || evidence.source_foundation_print.verified;
     let contracted_source_replaced = visible_contracted_source_replaced(
-        after, action, evidence.source_changed, evidence.source_visible_identity_directions,
+        after,
+        action,
+        evidence.source_changed,
+        evidence.source_visible_identity_directions,
     )?;
     let stable_visible_source_replaced = evidence.source_visible_print.verified
         && evidence.destination_changed >= MINIMUM_CONTENT_CHANGE
-        && matches!(analyse_historical(after)?.prediction, PredictedAction::Action(_));
+        && matches!(
+            analyse_historical(after)?.prediction,
+            PredictedAction::Action(_)
+        );
     evidence.source_aligned_print = aligned_source_print_changes(before, after, action)?;
 
 
@@ -3374,40 +3925,58 @@ pub fn inspect_effect(
     }
     let aligned_source_replaced = evidence.source_aligned_print.verified
         && evidence.destination_changed >= MINIMUM_CONTENT_CHANGE
-        && (!evidence.source_aligned_print.ordinary_face_geometry || evidence.destination_print.verified);
-    evidence.source_deep_felt = deep_felt_source_changes(before, after, action, evidence.source_changed)?;
+        && (!evidence.source_aligned_print.ordinary_face_geometry
+            || evidence.destination_print.verified);
+    evidence.source_deep_felt =
+        deep_felt_source_changes(before, after, action, evidence.source_changed)?;
     let deep_felt_source_replaced = evidence.source_deep_felt.verified
         && evidence.destination_changed >= MINIMUM_CONTENT_CHANGE;
-    evidence.source_replaced = source_verified || visible_source_replaced
-        || contracted_source_replaced || stable_visible_source_replaced || aligned_source_replaced
-        || deep_felt_source_replaced || evidence.source_foundation_transfer.verified
+    evidence.source_replaced = source_verified
+        || visible_source_replaced
+        || contracted_source_replaced
+        || stable_visible_source_replaced
+        || aligned_source_replaced
+        || deep_felt_source_replaced
+        || evidence.source_foundation_transfer.verified
         || evidence.source_tableau_foundation_transfer.verified;
     let destination_verified = evidence.destination_changed >= MINIMUM_CONTENT_CHANGE
-        || (evidence.destination_print.verified && evidence.source_changed >= MINIMUM_CONTENT_CHANGE);
+        || (evidence.destination_print.verified
+            && evidence.source_changed >= MINIMUM_CONTENT_CHANGE);
     evidence.verified = source_verified && destination_verified;
 
 
     evidence.reason = match (source_verified, destination_verified) {
-        (false, _) if evidence.source_foundation_transfer.verified =>
-            "paired fixed-SUIT replacement and independently located newly received old artwork support fresh-target continuation only; complete effect unverified",
-        (false, _) if evidence.source_tableau_foundation_transfer.verified =>
-            "independently exposed ordinary tableau header and unique bright-SUIT receipt of visible old artwork support fresh-target continuation only; complete effect unverified",
-        (false, _) if contracted_source_replaced =>
-            "opposed print and a 26-pixel contracted same-column outline support fresh-HALO continuation only; complete effect unverified",
-        (false, _) if visible_source_replaced =>
-            "two full visible patches establish source replacement for fresh-HALO continuation only; recipient and complete effect unverified",
-        (false, _) if stable_visible_source_replaced =>
-            "stable bright-paper replacement and opposed visible print support fresh-HALO continuation; material non-source change is not recipient proof; complete effect unverified",
-        (false, _) if aligned_source_replaced && evidence.source_aligned_print.ordinary_face_geometry =>
-            "independently aligned ordinary clipped-source print and separately verified receiving print support fresh-target continuation only; complete effect unverified",
-        (false, _) if aligned_source_replaced =>
-            "aligned clipped-source print and a bounded fresh same-column source support continuation only; non-source change is not recipient proof; complete effect unverified",
-        (false, _) if deep_felt_source_replaced =>
-            "neutral source paper exposing deep chromatic guide-shaded felt supports a different fresh-target continuation only; non-source change is not recipient proof; complete effect unverified",
+        (false, _) if evidence.source_foundation_transfer.verified => {
+            "paired fixed-SUIT replacement and independently located newly received old artwork support fresh-target continuation only; complete effect unverified"
+        }
+        (false, _) if evidence.source_tableau_foundation_transfer.verified => {
+            "independently exposed ordinary tableau header and unique bright-SUIT receipt of visible old artwork support fresh-target continuation only; complete effect unverified"
+        }
+        (false, _) if contracted_source_replaced => {
+            "opposed print and a 26-pixel contracted same-column outline support fresh-HALO continuation only; complete effect unverified"
+        }
+        (false, _) if visible_source_replaced => {
+            "two full visible patches establish source replacement for fresh-HALO continuation only; recipient and complete effect unverified"
+        }
+        (false, _) if stable_visible_source_replaced => {
+            "stable bright-paper replacement and opposed visible print support fresh-HALO continuation; material non-source change is not recipient proof; complete effect unverified"
+        }
+        (false, _)
+            if aligned_source_replaced && evidence.source_aligned_print.ordinary_face_geometry =>
+        {
+            "independently aligned ordinary clipped-source print and separately verified receiving print support fresh-target continuation only; complete effect unverified"
+        }
+        (false, _) if aligned_source_replaced => {
+            "aligned clipped-source print and a bounded fresh same-column source support continuation only; non-source change is not recipient proof; complete effect unverified"
+        }
+        (false, _) if deep_felt_source_replaced => {
+            "neutral source paper exposing deep chromatic guide-shaded felt supports a different fresh-target continuation only; non-source change is not recipient proof; complete effect unverified"
+        }
         (false, _) => "source removal/replacement not established; fresh HALO is insufficient",
         (true, false) => "source changed, but no independent destination change was established",
-        (true, true) if evidence.destination_changed < MINIMUM_CONTENT_CHANGE =>
-            "independent source replacement and new red print under unchanged occupied-foundation guide",
+        (true, true) if evidence.destination_changed < MINIMUM_CONTENT_CHANGE => {
+            "independent source replacement and new red print under unchanged occupied-foundation guide"
+        }
         (true, true) => "independent source and destination changes established",
     };
 
@@ -3431,7 +4000,10 @@ mod tests {
     /// Reconstruct only the historical effect-regression plan. Production HALO
     /// tests use action(), whose observed geometry excludes the toolbar.
     fn historical_action(frame: &CapturedFrame) -> GuidedAction {
-        let PredictedAction::Action(action) = analyse_historical(frame).expect("analyse historical effect fixture").prediction else {
+        let PredictedAction::Action(action) = analyse_historical(frame)
+            .expect("analyse historical effect fixture")
+            .prediction
+        else {
             panic!("historical effect fixture has no action");
         };
         action
@@ -3440,13 +4012,21 @@ mod tests {
 
     /// Source damage above the toolbar still refuses input; any damage wholly
     /// in the excluded toolbar region must leave the live prediction unchanged.
-    fn assert_live_source_after_damage(native: &CapturedFrame, changed: &CapturedFrame, bounds: PixelRect) {
+    fn assert_live_source_after_damage(
+        native: &CapturedFrame,
+        changed: &CapturedFrame,
+        bounds: PixelRect,
+    ) {
         let expected = if bounds.y >= TOOLBAR_TOP {
             analyse(native).unwrap().prediction
         } else {
             PredictedAction::NoHighlight
         };
-        assert_eq!(analyse(changed).unwrap().prediction, expected, "live source damage {bounds:?}");
+        assert_eq!(
+            analyse(changed).unwrap().prediction,
+            expected,
+            "live source damage {bounds:?}"
+        );
     }
 
 
@@ -3474,30 +4054,58 @@ mod tests {
     /// eleven-row rail bridge never change input, proof or scan bounds.
     #[test]
     fn hint_shadow_keeps_complete_native_column_four_sources_actionable() {
-
-
         for (number, top) in [(74, 807), (75, 808)] {
             let frame = fixture(number);
-            let bounds = find_solid_card_source(&frame, PixelRect::new(894, 332, 132, 666)).unwrap();
-            assert_eq!(bounds, Some(PixelRect::new(894, top, 132, 996 - top)), "K{number}");
+            let bounds =
+                find_solid_card_source(&frame, PixelRect::new(894, 332, 132, 666)).unwrap();
+            assert_eq!(
+                bounds,
+                Some(PixelRect::new(894, top, 132, 996 - top)),
+                "K{number}"
+            );
             let planned = historical_action(&frame);
-            assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-                column: 4, top: top as u16, bottom: 996,
-            }));
-            assert_eq!(planned.operation(), InputOperation::Click(PixelPoint::new(960, top as i32 + 40)));
+            assert_eq!(
+                planned.target,
+                ActionTarget::Klondike(KlondikeTarget::Tableau {
+                    column: 4,
+                    top: top as u16,
+                    bottom: 996,
+                })
+            );
+            assert_eq!(
+                planned.operation(),
+                InputOperation::Click(PixelPoint::new(960, top as i32 + 40))
+            );
             assert_eq!(planned.effect_bounds().bottom(), TOOLBAR_TOP);
-            assert!(!inspect_effect(&frame, &frame, planned).unwrap().source_replaced,
-                "recognition alone is not previous-effect authority");
+            assert!(
+                !inspect_effect(&frame, &frame, planned)
+                    .unwrap()
+                    .source_replaced,
+                "recognition alone is not previous-effect authority"
+            );
         }
         let thin = fixture(75);
         assert_eq!(pixel_rgb(&thin, 963, 995), Some([98, 88, 48]));
         assert_eq!(pixel_rgb(&thin, 964, 995), Some([98, 87, 44]));
-        assert_eq!(count_pixels(&thin, PixelRect::new(912, 995, 96, 1), is_rail_gold), 94);
-        assert_eq!(count_pixels(&thin, PixelRect::new(912, 995, 96, 1), is_toolbar_shadow_gold), 96);
+        assert_eq!(
+            count_pixels(&thin, PixelRect::new(912, 995, 96, 1), is_rail_gold),
+            94
+        );
+        assert_eq!(
+            count_pixels(
+                &thin,
+                PixelRect::new(912, 995, 96, 1),
+                is_toolbar_shadow_gold
+            ),
+            96
+        );
         assert!(pixel_rgb(&thin, 960, 995).is_some_and(is_rail_gold));
         let duplicate = fixture(76);
-        assert_eq!(analyse_historical(&duplicate).unwrap().prediction, PredictedAction::NoHighlight,
-            "a displaced duplicate over SUIT4 does not authorise an uncalibrated input");
+        assert_eq!(
+            analyse_historical(&duplicate).unwrap().prediction,
+            PredictedAction::NoHighlight,
+            "a displaced duplicate over SUIT4 does not authorise an uncalibrated input"
+        );
     }
 
 
@@ -3509,14 +4117,27 @@ mod tests {
         let scan = PixelRect::new(894, 332, 132, 666);
 
 
-        for rgb in [[0, 0, 0], [128, 128, 128], [70, 140, 70], [60, 80, 170], [89, 70, 30], [255, 255, 255]] {
-
-
+        for rgb in [
+            [0, 0, 0],
+            [128, 128, 128],
+            [70, 140, 70],
+            [60, 80, 170],
+            [89, 70, 30],
+            [255, 255, 255],
+        ] {
             for x in [963, 964] {
                 let mut changed = native.clone();
                 paint(&mut changed, PixelRect::new(x, 995, 1, 1), rgb);
-                assert_eq!(find_solid_card_source(&changed, scan).unwrap(), None, "x{x}: {rgb:?}");
-                assert_eq!(analyse(&changed).unwrap().prediction, analyse(&native).unwrap().prediction, "x{x}: {rgb:?}");
+                assert_eq!(
+                    find_solid_card_source(&changed, scan).unwrap(),
+                    None,
+                    "x{x}: {rgb:?}"
+                );
+                assert_eq!(
+                    analyse(&changed).unwrap().prediction,
+                    analyse(&native).unwrap().prediction,
+                    "x{x}: {rgb:?}"
+                );
             }
         }
 
@@ -3524,8 +4145,11 @@ mod tests {
         for x in [935, 960] {
             let mut changed = native.clone();
             paint(&mut changed, PixelRect::new(x, 995, 1, 1), [255, 255, 255]);
-            assert_eq!(find_solid_card_source(&changed, scan).unwrap(), None,
-                "ordinary edge/centre x{x} remains independently required");
+            assert_eq!(
+                find_solid_card_source(&changed, scan).unwrap(),
+                None,
+                "ordinary edge/centre x{x} remains independently required"
+            );
         }
     }
 
@@ -3542,8 +4166,11 @@ mod tests {
             for (x, width) in [(885, 9), (1026, 10)] {
                 let mut changed = native.clone();
                 paint(&mut changed, PixelRect::new(x, y, width, 1), [0, 0, 0]);
-                assert_eq!(find_solid_card_source(&changed, scan).unwrap(), None,
-                    "ordinary bracket row{y}, side{x} cannot be borrowed");
+                assert_eq!(
+                    find_solid_card_source(&changed, scan).unwrap(),
+                    None,
+                    "ordinary bracket row{y}, side{x} cannot be borrowed"
+                );
             }
         }
 
@@ -3551,14 +4178,28 @@ mod tests {
         for rgb in [[0, 0, 0], [89, 70, 30], [128, 128, 128], [60, 80, 170]] {
             let mut changed = native.clone();
             paint(&mut changed, PixelRect::new(885, 952, 9, 11), rgb);
-            assert_eq!(find_solid_card_source(&changed, scan).unwrap(), None,
-                "the measured band still needs a positive left rail: {rgb:?}");
+            assert_eq!(
+                find_solid_card_source(&changed, scan).unwrap(),
+                None,
+                "the measured band still needs a positive left rail: {rgb:?}"
+            );
         }
         let mut elsewhere = native.clone();
-        paint(&mut elsewhere, PixelRect::new(885, 937, 9, 12), [95, 74, 31]);
-        paint(&mut elsewhere, PixelRect::new(1026, 937, 10, 12), [95, 74, 31]);
-        assert_eq!(find_solid_card_source(&elsewhere, scan).unwrap(), None,
-            "out-of-band shadow gold cannot repair a twelve-row rail gap");
+        paint(
+            &mut elsewhere,
+            PixelRect::new(885, 937, 9, 12),
+            [95, 74, 31],
+        );
+        paint(
+            &mut elsewhere,
+            PixelRect::new(1026, 937, 10, 12),
+            [95, 74, 31],
+        );
+        assert_eq!(
+            find_solid_card_source(&elsewhere, scan).unwrap(),
+            None,
+            "out-of-band shadow gold cannot repair a twelve-row rail gap"
+        );
     }
 
 
@@ -3570,25 +4211,68 @@ mod tests {
         let native = fixture(75);
         let scan = PixelRect::new(894, 332, 132, 666);
         let mut other_column = native.clone();
-        copy_region(&native, &mut other_column, PixelRect::new(884, 798, 152, 200), PixelPoint::new(716, 798));
-        assert_eq!(find_solid_card_source(&other_column, PixelRect::new(726, 332, 132, 666)).unwrap(), None,
-            "the measured Hint samples never follow source artwork to column3");
+        copy_region(
+            &native,
+            &mut other_column,
+            PixelRect::new(884, 798, 152, 200),
+            PixelPoint::new(716, 798),
+        );
+        assert_eq!(
+            find_solid_card_source(&other_column, PixelRect::new(726, 332, 132, 666)).unwrap(),
+            None,
+            "the measured Hint samples never follow source artwork to column3"
+        );
         let mut other_row = native.clone();
-        paint(&mut other_row, PixelRect::new(884, 788, 152, 210), [30, 110, 70]);
-        copy_region(&native, &mut other_row, PixelRect::new(884, 798, 152, 200), PixelPoint::new(884, 797));
-        assert_eq!(find_solid_card_source(&other_row, scan).unwrap(), None,
-            "the special samples do not follow an edge moved one row up");
+        paint(
+            &mut other_row,
+            PixelRect::new(884, 788, 152, 210),
+            [30, 110, 70],
+        );
+        copy_region(
+            &native,
+            &mut other_row,
+            PixelRect::new(884, 798, 152, 200),
+            PixelPoint::new(884, 797),
+        );
+        assert_eq!(
+            find_solid_card_source(&other_row, scan).unwrap(),
+            None,
+            "the special samples do not follow an edge moved one row up"
+        );
         let mut no_top = native.clone();
-        paint(&mut no_top, PixelRect::new(912, 798, 96, 11), [255, 255, 255]);
-        assert_eq!(find_solid_card_source(&no_top, scan).unwrap(), None, "closed top remains required");
+        paint(
+            &mut no_top,
+            PixelRect::new(912, 798, 96, 11),
+            [255, 255, 255],
+        );
+        assert_eq!(
+            find_solid_card_source(&no_top, scan).unwrap(),
+            None,
+            "closed top remains required"
+        );
         let mut no_face = native.clone();
         paint(&mut no_face, PixelRect::new(912, 911, 96, 12), [0, 0, 0]);
-        assert_eq!(find_solid_card_source(&no_face, scan).unwrap(), None, "complete face support remains required");
-        assert_eq!(find_solid_card_source(&native, PixelRect::new(894, 332, 132, 664)).unwrap(), None,
-            "a shorter scan cannot claim the complete calibrated band context");
+        assert_eq!(
+            find_solid_card_source(&no_face, scan).unwrap(),
+            None,
+            "complete face support remains required"
+        );
+        assert_eq!(
+            find_solid_card_source(&native, PixelRect::new(894, 332, 132, 664)).unwrap(),
+            None,
+            "a shorter scan cannot claim the complete calibrated band context"
+        );
         let mut continuing = native.clone();
-        paint(&mut continuing, PixelRect::new(885, 997, 9, 1), [220, 180, 100]);
-        assert_eq!(find_solid_card_source(&continuing, scan).unwrap(), None, "last-row termination is unchanged");
+        paint(
+            &mut continuing,
+            PixelRect::new(885, 997, 9, 1),
+            [220, 180, 100],
+        );
+        assert_eq!(
+            find_solid_card_source(&continuing, scan).unwrap(),
+            None,
+            "last-row termination is unchanged"
+        );
         assert!(find_solid_card_source(&native, PixelRect::new(894, 1_070, 132, 20)).is_err());
         let mut malformed = native;
         malformed.pixels.pop();
@@ -3606,18 +4290,41 @@ mod tests {
         let before = fixture(70);
         let after = fixture(71);
         let planned = historical_action(&before);
-        assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-            column: 7, top: 407, bottom: 597,
-        }));
-        assert_eq!(analyse_historical(&after).unwrap().prediction, PredictedAction::NoHighlight);
+        assert_eq!(
+            planned.target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 7,
+                top: 407,
+                bottom: 597,
+            })
+        );
+        assert_eq!(
+            analyse_historical(&after).unwrap().prediction,
+            PredictedAction::NoHighlight
+        );
         let report = inspect_effect(&before, &after, planned).unwrap();
         let transfer = report.source_tableau_foundation_transfer;
-        assert!(report.verified && report.source_replaced, "ordinary result is preserved: {report}");
-        assert!(transfer.context_supported && !transfer.fresh_target_supported, "{report}");
-        assert_eq!(transfer.header_count, 0, "the expanded preview interrupts complete gutters: {report}");
+        assert!(
+            report.verified && report.source_replaced,
+            "ordinary result is preserved: {report}"
+        );
+        assert!(
+            transfer.context_supported && !transfer.fresh_target_supported,
+            "{report}"
+        );
+        assert_eq!(
+            transfer.header_count, 0,
+            "the expanded preview interrupts complete gutters: {report}"
+        );
         assert_eq!(transfer.visible_height, 175, "{report}");
-        assert_eq!(transfer.matched_transfer_ink, 0, "rejected geometry is never selected by matching artwork: {report}");
-        assert!(!transfer.verified, "no fresh canonical target means no new continuation authority: {report}");
+        assert_eq!(
+            transfer.matched_transfer_ink, 0,
+            "rejected geometry is never selected by matching artwork: {report}"
+        );
+        assert!(
+            !transfer.verified,
+            "no fresh canonical target means no new continuation authority: {report}"
+        );
     }
 
 
@@ -3628,17 +4335,33 @@ mod tests {
         let before = fixture(72);
         let after = fixture(73);
         let planned = historical_action(&before);
-        assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-            column: 7, top: 800, bottom: 989,
-        }));
-        assert_eq!(historical_action(&after).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-            column: 4, top: 336, bottom: 527,
-        }));
+        assert_eq!(
+            planned.target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 7,
+                top: 800,
+                bottom: 989,
+            })
+        );
+        assert_eq!(
+            historical_action(&after).target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 4,
+                top: 336,
+                bottom: 527,
+            })
+        );
         let report = inspect_effect(&before, &after, planned).unwrap();
         let transfer = report.source_tableau_foundation_transfer;
-        assert!(transfer.context_supported && transfer.fresh_target_supported, "{report}");
+        assert!(
+            transfer.context_supported && transfer.fresh_target_supported,
+            "{report}"
+        );
         assert_eq!(transfer.old_face_top, 805, "{report}");
-        assert_eq!(transfer.visible_height, 142, "a clipped population is not a complete corner: {report}");
+        assert_eq!(
+            transfer.visible_height, 142,
+            "a clipped population is not a complete corner: {report}"
+        );
         assert_eq!(transfer.header_count, 1, "{report}");
         assert_eq!(transfer.header_top, 777, "{report}");
         assert_eq!(transfer.header_positive, [66, 54], "{report}");
@@ -3647,9 +4370,14 @@ mod tests {
         assert_eq!(transfer.receiver_column, 2, "{report}");
         assert_eq!(transfer.receiver_material_changed, 13_256, "{report}");
         assert_eq!(transfer.matched_transfer_ink, 78, "{report}");
-        assert!(transfer.verified && report.source_replaced && !report.verified,
-            "source continuation stays separate from complete effect authority: {report}");
-        assert!(report.reason.contains("unique bright-SUIT receipt"), "{report}");
+        assert!(
+            transfer.verified && report.source_replaced && !report.verified,
+            "source continuation stays separate from complete effect authority: {report}"
+        );
+        assert!(
+            report.reason.contains("unique bright-SUIT receipt"),
+            "{report}"
+        );
     }
 
 
@@ -3660,14 +4388,33 @@ mod tests {
     fn tableau_suit_transfer_accepts_reproduced_synthetic_191_geometry_only_in_its_route() {
         let mut before = fixture(72);
         let source = before.clone();
-        copy_region(&source, &mut before, PixelRect::new(1398, 988, 132, 1), PixelPoint::new(1398, 990));
+        copy_region(
+            &source,
+            &mut before,
+            PixelRect::new(1398, 988, 132, 1),
+            PixelPoint::new(1398, 990),
+        );
         let planned = historical_action(&before);
-        assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-            column: 7, top: 800, bottom: 991,
-        }));
+        assert_eq!(
+            planned.target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 7,
+                top: 800,
+                bottom: 991,
+            })
+        );
         let report = inspect_effect(&before, &fixture(73), planned).unwrap();
-        assert!(report.source_tableau_foundation_transfer.verified && report.source_replaced && !report.verified, "{report}");
-        assert_eq!(report.source_identity_corners, [0, 0], "ordinary 180..190 identity policy is unchanged: {report}");
+        assert!(
+            report.source_tableau_foundation_transfer.verified
+                && report.source_replaced
+                && !report.verified,
+            "{report}"
+        );
+        assert_eq!(
+            report.source_identity_corners,
+            [0, 0],
+            "ordinary 180..190 identity policy is unchanged: {report}"
+        );
     }
 
 
@@ -3679,21 +4426,57 @@ mod tests {
         let after = fixture(73);
         let planned = historical_action(&before);
         let mut source_only = after.clone();
-        copy_region(&before, &mut source_only, PixelRect::new(894, 112, 636, 175), PixelPoint::new(894, 112));
+        copy_region(
+            &before,
+            &mut source_only,
+            PixelRect::new(894, 112, 636, 175),
+            PixelPoint::new(894, 112),
+        );
         assert_eq!(historical_action(&source_only), historical_action(&after));
         let report = inspect_effect(&before, &source_only, planned).unwrap();
-        assert_eq!(report.source_tableau_foundation_transfer.receiver_count, 0, "{report}");
-        assert!(!report.source_tableau_foundation_transfer.verified && !report.source_replaced && !report.verified, "{report}");
+        assert_eq!(
+            report.source_tableau_foundation_transfer.receiver_count, 0,
+            "{report}"
+        );
+        assert!(
+            !report.source_tableau_foundation_transfer.verified
+                && !report.source_replaced
+                && !report.verified,
+            "{report}"
+        );
         let mut recipient_only = after.clone();
-        copy_region(&before, &mut recipient_only, PixelRect::new(1388, 742, 152, 256), PixelPoint::new(1388, 742));
+        copy_region(
+            &before,
+            &mut recipient_only,
+            PixelRect::new(1388, 742, 152, 256),
+            PixelPoint::new(1388, 742),
+        );
         let report = inspect_effect(&before, &recipient_only, planned).unwrap();
-        assert!(!report.source_tableau_foundation_transfer.verified && !report.source_replaced && !report.verified, "{report}");
+        assert!(
+            !report.source_tableau_foundation_transfer.verified
+                && !report.source_replaced
+                && !report.verified,
+            "{report}"
+        );
         let mut existing_receipt = before.clone();
-        copy_region(&after, &mut existing_receipt, PixelRect::new(1062, 112, 132, 175), PixelPoint::new(1062, 112));
+        copy_region(
+            &after,
+            &mut existing_receipt,
+            PixelRect::new(1062, 112, 132, 175),
+            PixelPoint::new(1062, 112),
+        );
         assert_eq!(historical_action(&existing_receipt), planned);
         let report = inspect_effect(&existing_receipt, &after, planned).unwrap();
-        assert_eq!(report.source_tableau_foundation_transfer.receiver_count, 0, "{report}");
-        assert!(!report.source_tableau_foundation_transfer.verified && !report.source_replaced && !report.verified, "old matching receipt is not a new transfer: {report}");
+        assert_eq!(
+            report.source_tableau_foundation_transfer.receiver_count, 0,
+            "{report}"
+        );
+        assert!(
+            !report.source_tableau_foundation_transfer.verified
+                && !report.source_replaced
+                && !report.verified,
+            "old matching receipt is not a new transfer: {report}"
+        );
     }
 
 
@@ -3705,21 +4488,23 @@ mod tests {
         let after = fixture(73);
         let planned = historical_action(&before);
         let mut retained = after.clone();
-        let InputOperation::Click(point) = planned.operation() else { panic!("expected one click"); };
+        let InputOperation::Click(point) = planned.operation() else {
+            panic!("expected one click");
+        };
 
 
         for y in 805..947 {
-
-
             for x in 1398..1530 {
                 let old = pixel_rgb(&before, x, y).unwrap();
                 let current = pixel_rgb(&retained, x, y).unwrap();
-                let exposed_header_strip = y < 826
-                    && ((1403..1417).contains(&x) || (1512..1525).contains(&x));
+                let exposed_header_strip =
+                    y < 826 && ((1403..1417).contains(&x) || (1512..1525).contains(&x));
 
 
                 if foundation_transfer_cursor_excluded(point, x, y)
-                    || is_rail_gold(old) || is_rail_gold(current) || !is_card_ink(old)
+                    || is_rail_gold(old)
+                    || is_rail_gold(current)
+                    || !is_card_ink(old)
                     || exposed_header_strip
                 {
                     continue;
@@ -3731,33 +4516,58 @@ mod tests {
         assert_eq!(historical_action(&before), planned);
         assert_eq!(historical_action(&retained), historical_action(&after));
         let report = inspect_effect(&before, &retained, planned).unwrap();
-        assert!(report.source_changed >= MINIMUM_CONTENT_CHANGE, "the retained ink cannot borrow remaining guide/material change: {report}");
-        assert!(report.source_tableau_foundation_transfer.header_positive.into_iter()
-            .all(|count| count >= MINIMUM_CORNER_CHANGE), "positive exposure cannot borrow retained old print: {report}");
-        assert!(report.source_tableau_foundation_transfer.old_print_retained, "{report}");
-        assert!(!report.source_tableau_foundation_transfer.verified && !report.source_replaced && !report.verified, "retained source plus recipient is insufficient: {report}");
+        assert!(
+            report.source_changed >= MINIMUM_CONTENT_CHANGE,
+            "the retained ink cannot borrow remaining guide/material change: {report}"
+        );
+        assert!(
+            report
+                .source_tableau_foundation_transfer
+                .header_positive
+                .into_iter()
+                .all(|count| count >= MINIMUM_CORNER_CHANGE),
+            "positive exposure cannot borrow retained old print: {report}"
+        );
+        assert!(
+            report.source_tableau_foundation_transfer.old_print_retained,
+            "{report}"
+        );
+        assert!(
+            !report.source_tableau_foundation_transfer.verified
+                && !report.source_replaced
+                && !report.verified,
+            "retained source plus recipient is insufficient: {report}"
+        );
         let mut neutral = before.clone();
 
 
-        for strip in [PixelRect::new(1403, 782, 14, 44), PixelRect::new(1512, 782, 13, 44)] {
-
-
+        for strip in [
+            PixelRect::new(1403, 782, 14, 44),
+            PixelRect::new(1512, 782, 13, 44),
+        ] {
             for y in strip.y..strip.bottom() {
-
-
                 for x in strip.x..strip.right() {
                     let offset = y as usize * neutral.stride + x as usize * 4;
                     let rgb = pixel_rgb(&neutral, x, y).unwrap();
 
 
-                    if !is_rail_gold(rgb) { neutral.pixels[offset..offset + 3].copy_from_slice(&[164, 164, 164]); }
+                    if !is_rail_gold(rgb) {
+                        neutral.pixels[offset..offset + 3].copy_from_slice(&[164, 164, 164]);
+                    }
                 }
             }
         }
         assert_eq!(historical_action(&neutral), planned);
         let report = inspect_effect(&neutral, &after, planned).unwrap();
-        assert_eq!(report.source_tableau_foundation_transfer.header_positive, [0, 0], "neutral shaded paper is not true ink: {report}");
-        assert!(!report.source_tableau_foundation_transfer.verified, "{report}");
+        assert_eq!(
+            report.source_tableau_foundation_transfer.header_positive,
+            [0, 0],
+            "neutral shaded paper is not true ink: {report}"
+        );
+        assert!(
+            !report.source_tableau_foundation_transfer.verified,
+            "{report}"
+        );
     }
 
 
@@ -3769,24 +4579,57 @@ mod tests {
         let after = fixture(73);
         let planned = historical_action(&before);
         let mut absent = after.clone();
-        paint(&mut absent, PixelRect::new(1416, 777, 96, 1), [255, 255, 255]);
+        paint(
+            &mut absent,
+            PixelRect::new(1416, 777, 96, 1),
+            [255, 255, 255],
+        );
         let mut gutter = after.clone();
-        paint(&mut gutter, PixelRect::new(1389, 782, 1, 44), [255, 255, 255]);
+        paint(
+            &mut gutter,
+            PixelRect::new(1389, 782, 1, 44),
+            [255, 255, 255],
+        );
         let mut corner = after.clone();
         paint(&mut corner, PixelRect::new(1403, 782, 28, 44), [0, 0, 0]);
 
 
-        for (name, changed) in [("missing seam", absent), ("missing felt gutter", gutter), ("dark complete header corner", corner)] {
-            assert_eq!(historical_action(&changed), historical_action(&after), "{name}");
+        for (name, changed) in [
+            ("missing seam", absent),
+            ("missing felt gutter", gutter),
+            ("dark complete header corner", corner),
+        ] {
+            assert_eq!(
+                historical_action(&changed),
+                historical_action(&after),
+                "{name}"
+            );
             let report = inspect_effect(&before, &changed, planned).unwrap();
-            assert_eq!(report.source_tableau_foundation_transfer.header_count, 0, "{name}: {report}");
-            assert!(!report.source_tableau_foundation_transfer.verified, "{name}: {report}");
+            assert_eq!(
+                report.source_tableau_foundation_transfer.header_count, 0,
+                "{name}: {report}"
+            );
+            assert!(
+                !report.source_tableau_foundation_transfer.verified,
+                "{name}: {report}"
+            );
         }
         let mut ambiguous = after.clone();
-        copy_region(&after, &mut ambiguous, PixelRect::new(1416, 777, 96, 3), PixelPoint::new(1416, 790));
+        copy_region(
+            &after,
+            &mut ambiguous,
+            PixelRect::new(1416, 777, 96, 3),
+            PixelPoint::new(1416, 790),
+        );
         let report = inspect_effect(&before, &ambiguous, planned).unwrap();
-        assert_eq!(report.source_tableau_foundation_transfer.header_count, 2, "two geometry candidates refuse before matching: {report}");
-        assert!(!report.source_tableau_foundation_transfer.verified, "{report}");
+        assert_eq!(
+            report.source_tableau_foundation_transfer.header_count, 2,
+            "two geometry candidates refuse before matching: {report}"
+        );
+        assert!(
+            !report.source_tableau_foundation_transfer.verified,
+            "{report}"
+        );
     }
 
 
@@ -3798,44 +4641,119 @@ mod tests {
         let before = fixture(72);
         let after = fixture(73);
         let planned = historical_action(&before);
-        assert!(!inspect_effect(&before, &before, planned).unwrap().source_replaced);
+        assert!(
+            !inspect_effect(&before, &before, planned)
+                .unwrap()
+                .source_replaced
+        );
         let mut cursor = before.clone();
-        paint(&mut cursor, PixelRect::new(1416, 792, 96, 96), [255, 255, 255]);
-        assert!(!inspect_effect(&before, &cursor, planned).unwrap().source_tableau_foundation_transfer.verified);
+        paint(
+            &mut cursor,
+            PixelRect::new(1416, 792, 96, 96),
+            [255, 255, 255],
+        );
+        assert!(
+            !inspect_effect(&before, &cursor, planned)
+                .unwrap()
+                .source_tableau_foundation_transfer
+                .verified
+        );
         let mut toolbar = after.clone();
         paint(&mut toolbar, PixelRect::new(1398, 947, 132, 51), [0, 0, 0]);
         let report = inspect_effect(&before, &toolbar, planned).unwrap();
-        assert!(report.source_tableau_foundation_transfer.verified && !report.verified, "{report}");
-        assert_eq!(report.source_tableau_foundation_transfer.matched_transfer_ink, 78, "toolbar pixels supply no receipt: {report}");
+        assert!(
+            report.source_tableau_foundation_transfer.verified && !report.verified,
+            "{report}"
+        );
+        assert_eq!(
+            report
+                .source_tableau_foundation_transfer
+                .matched_transfer_ink,
+            78,
+            "toolbar pixels supply no receipt: {report}"
+        );
         let mut duplicate_before = before.clone();
         let mut duplicate_after = after.clone();
-        copy_region(&before, &mut duplicate_before, PixelRect::new(1078, 128, 100, 143), PixelPoint::new(910, 128));
-        copy_region(&after, &mut duplicate_after, PixelRect::new(1078, 128, 100, 143), PixelPoint::new(910, 128));
-        assert_eq!(historical_action(&duplicate_before), planned, "fixed outer foundation geometry remains genuine");
-        assert_eq!(historical_action(&duplicate_after), historical_action(&after));
+        copy_region(
+            &before,
+            &mut duplicate_before,
+            PixelRect::new(1078, 128, 100, 143),
+            PixelPoint::new(910, 128),
+        );
+        copy_region(
+            &after,
+            &mut duplicate_after,
+            PixelRect::new(1078, 128, 100, 143),
+            PixelPoint::new(910, 128),
+        );
+        assert_eq!(
+            historical_action(&duplicate_before),
+            planned,
+            "fixed outer foundation geometry remains genuine"
+        );
+        assert_eq!(
+            historical_action(&duplicate_after),
+            historical_action(&after)
+        );
         let report = inspect_effect(&duplicate_before, &duplicate_after, planned).unwrap();
-        assert_eq!(report.source_tableau_foundation_transfer.receiver_count, 2, "geometry must be unique before comparing ink: {report}");
-        assert!(!report.source_tableau_foundation_transfer.verified, "{report}");
+        assert_eq!(
+            report.source_tableau_foundation_transfer.receiver_count, 2,
+            "geometry must be unique before comparing ink: {report}"
+        );
+        assert!(
+            !report.source_tableau_foundation_transfer.verified,
+            "{report}"
+        );
         let run_before = fixture(10);
         let run_action = historical_action(&run_before);
-        assert!(!tableau_foundation_transfer_source_changes(&run_before, &fixture(11), run_action, MINIMUM_CONTENT_CHANGE).unwrap().context_supported);
+        assert!(
+            !tableau_foundation_transfer_source_changes(
+                &run_before,
+                &fixture(11),
+                run_action,
+                MINIMUM_CONTENT_CHANGE
+            )
+            .unwrap()
+            .context_supported
+        );
         let mut forged = planned;
         forged.anchor = PixelPoint::new(1465, 840);
-        assert!(!tableau_foundation_transfer_source_changes(&before, &after, forged, MINIMUM_CONTENT_CHANGE).unwrap().context_supported);
+        assert!(
+            !tableau_foundation_transfer_source_changes(
+                &before,
+                &after,
+                forged,
+                MINIMUM_CONTENT_CHANGE
+            )
+            .unwrap()
+            .context_supported
+        );
         let mut unknown = after.clone();
         paint(&mut unknown, PixelRect::new(824, 34, 272, 58), [0, 0, 0]);
-        assert!(!inspect_effect(&before, &unknown, planned).unwrap().source_tableau_foundation_transfer.verified);
+        assert!(
+            !inspect_effect(&before, &unknown, planned)
+                .unwrap()
+                .source_tableau_foundation_transfer
+                .verified
+        );
         let mut malformed = before.clone();
         malformed.pixels.pop();
-        assert!(tableau_foundation_transfer_source_changes(&malformed, &after, planned, MINIMUM_CONTENT_CHANGE).is_err());
+        assert!(
+            tableau_foundation_transfer_source_changes(
+                &malformed,
+                &after,
+                planned,
+                MINIMUM_CONTENT_CHANGE
+            )
+            .is_err()
+        );
     }
 
 
     /// Extract the sole prediction from a capture which is expected to be actionable.
     fn action(frame: &CapturedFrame) -> GuidedAction {
-
-
-        let PredictedAction::Action(action) = analyse(frame).expect("analyse evidence") .prediction else {
+        let PredictedAction::Action(action) = analyse(frame).expect("analyse evidence").prediction
+        else {
             panic!("expected one evidenced Klondike action");
         };
         action
@@ -3851,12 +4769,17 @@ mod tests {
     ) {
         validate_bounds(source, bounds).unwrap();
         assert!(point.x >= 0 && point.y >= 0);
-        validate_bounds(destination, PixelRect::new(point.x as u32, point.y as u32, bounds.width, bounds.height)).unwrap();
+        validate_bounds(
+            destination,
+            PixelRect::new(point.x as u32, point.y as u32, bounds.width, bounds.height),
+        )
+        .unwrap();
 
 
         for row in 0..bounds.height {
             let source_offset = (bounds.y + row) as usize * source.stride + bounds.x as usize * 4;
-            let destination_offset = (point.y as usize + row as usize) * destination.stride + point.x as usize * 4;
+            let destination_offset =
+                (point.y as usize + row as usize) * destination.stride + point.x as usize * 4;
             let length = bounds.width as usize * 4;
             destination.pixels[destination_offset..destination_offset + length]
                 .copy_from_slice(&source.pixels[source_offset..source_offset + length]);
@@ -3870,8 +4793,6 @@ mod tests {
 
 
         for y in bounds.y..bounds.y + bounds.height {
-
-
             for x in bounds.x..bounds.x + bounds.width {
                 let offset = y as usize * frame.stride + x as usize * 4;
                 frame.pixels[offset..offset + 3].copy_from_slice(&rgb);
@@ -3883,37 +4804,53 @@ mod tests {
     /// Build a no-HALO board with the genuine active Solver banner for synthetic tests.
     fn active_without_highlight() -> CapturedFrame {
         let mut frame = fixture(1);
-        copy_region(&fixture(2), &mut frame, PixelRect::new(824, 34, 272, 58), PixelPoint::new(824, 34));
+        copy_region(
+            &fixture(2),
+            &mut frame,
+            PixelRect::new(824, 34, 272, 58),
+            PixelPoint::new(824, 34),
+        );
         frame
     }
 
 
     /// Translate the original A-clubs source highlight to a controlled upper-pile slot.
     fn add_upper_source(frame: &mut CapturedFrame, x: u32) {
-        copy_region(&fixture(2), frame, PixelRect::new(1_388, 436, 154, 202), PixelPoint::new(x as i32 - 10, 100));
+        copy_region(
+            &fixture(2),
+            frame,
+            PixelRect::new(1_388, 436, 154, 202),
+            PixelPoint::new(x as i32 - 10, 100),
+        );
     }
 
 
     /// Arrange genuine card pixels into an explicitly synthetic RIGHT transfer.
     /// K14 supplies 2-diamonds/2-clubs; K15 supplies A-spades/J-clubs. Neither
     /// screenshot has the preceding live frame, so this is a controlled repro.
-    fn synthetic_right_replacement(number: u8, foundation_x: u32) -> (CapturedFrame, CapturedFrame) {
+    fn synthetic_right_replacement(
+        number: u8,
+        foundation_x: u32,
+    ) -> (CapturedFrame, CapturedFrame) {
         let observed = fixture(number);
         let mut before = active_without_highlight();
         add_upper_source(&mut before, 614);
         copy_region(
-            &observed, &mut before,
+            &observed,
+            &mut before,
             PixelRect::new(foundation_x, UPPER_Y, CARD_WIDTH, CARD_HEIGHT),
             PixelPoint::new(614, UPPER_Y as i32),
         );
         let mut after = before.clone();
         copy_region(
-            &observed, &mut after,
+            &observed,
+            &mut after,
             PixelRect::new(614, UPPER_Y, CARD_WIDTH, CARD_HEIGHT),
             PixelPoint::new(614, UPPER_Y as i32),
         );
         copy_region(
-            &observed, &mut after,
+            &observed,
+            &mut after,
             PixelRect::new(foundation_x, UPPER_Y, CARD_WIDTH, CARD_HEIGHT),
             PixelPoint::new(foundation_x as i32, UPPER_Y as i32),
         );
@@ -3925,21 +4862,35 @@ mod tests {
     /// cursor mask. Printed detail in both corners supplies independent proof.
     #[test]
     fn right_replacements_use_two_white_paper_corners_and_a_destination() {
-
-
         for (number, foundation_x) in [(14, 894), (15, 1_398)] {
             let (before, after) = synthetic_right_replacement(number, foundation_x);
             let planned = historical_action(&before);
-            assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Waste { offset: 2 }));
+            assert_eq!(
+                planned.target,
+                ActionTarget::Klondike(KlondikeTarget::Waste { offset: 2 })
+            );
             let evidence = inspect_effect(&before, &after, planned).unwrap();
-            assert!(evidence.source_positive < MINIMUM_CONTENT_CHANGE, "old source gate should reject: {evidence}");
-            assert!(evidence.source_identity_corners.into_iter().all(|count| count >= MINIMUM_CORNER_CHANGE), "{evidence}");
-            assert!(evidence.destination_changed >= MINIMUM_CONTENT_CHANGE, "{evidence}");
+            assert!(
+                evidence.source_positive < MINIMUM_CONTENT_CHANGE,
+                "old source gate should reject: {evidence}"
+            );
+            assert!(
+                evidence
+                    .source_identity_corners
+                    .into_iter()
+                    .all(|count| count >= MINIMUM_CORNER_CHANGE),
+                "{evidence}"
+            );
+            assert!(
+                evidence.destination_changed >= MINIMUM_CONTENT_CHANGE,
+                "{evidence}"
+            );
             assert!(evidence.verified, "{evidence}");
 
             let mut source_only = after;
             copy_region(
-                &before, &mut source_only,
+                &before,
+                &mut source_only,
                 PixelRect::new(foundation_x, UPPER_Y, CARD_WIDTH, CARD_HEIGHT),
                 PixelPoint::new(foundation_x as i32, UPPER_Y as i32),
             );
@@ -3957,7 +4908,12 @@ mod tests {
         let (before, completed) = synthetic_right_replacement(14, 894);
         let planned = historical_action(&before);
         let mut destination_only = before.clone();
-        copy_region(&completed, &mut destination_only, PixelRect::new(894, UPPER_Y, CARD_WIDTH, CARD_HEIGHT), PixelPoint::new(894, UPPER_Y as i32));
+        copy_region(
+            &completed,
+            &mut destination_only,
+            PixelRect::new(894, UPPER_Y, CARD_WIDTH, CARD_HEIGHT),
+            PixelPoint::new(894, UPPER_Y as i32),
+        );
         assert!(!verify_effect(&before, &destination_only, planned).unwrap());
 
 
@@ -3972,11 +4928,20 @@ mod tests {
         }
 
         let mut one_corner = destination_only.clone();
-        copy_region(&completed, &mut one_corner, PixelRect::new(619, 117, 28, 44), PixelPoint::new(619, 117));
+        copy_region(
+            &completed,
+            &mut one_corner,
+            PixelRect::new(619, 117, 28, 44),
+            PixelPoint::new(619, 117),
+        );
         assert!(!verify_effect(&before, &one_corner, planned).unwrap());
 
         let mut dark_guide = destination_only;
-        paint(&mut dark_guide, PixelRect::new(614, UPPER_Y, CARD_WIDTH, CARD_HEIGHT), [0, 0, 0]);
+        paint(
+            &mut dark_guide,
+            PixelRect::new(614, UPPER_Y, CARD_WIDTH, CARD_HEIGHT),
+            [0, 0, 0],
+        );
         let report = inspect_effect(&before, &dark_guide, planned).unwrap();
         assert_eq!(report.source_identity_corners, [0, 0]);
         assert!(!report.verified);
@@ -3989,9 +4954,18 @@ mod tests {
     fn solve_control_requires_its_measured_artwork_empty_stock_and_scene() {
         let frame = fixture(13);
         let planned = historical_action(&frame);
-        assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Solve));
-        assert_eq!(planned.operation(), InputOperation::Click(PixelPoint::new(624, 199)));
-        assert_eq!(planned.specification.animation_class, AnimationClass::KlondikeSolve);
+        assert_eq!(
+            planned.target,
+            ActionTarget::Klondike(KlondikeTarget::Solve)
+        );
+        assert_eq!(
+            planned.operation(),
+            InputOperation::Click(PixelPoint::new(624, 199))
+        );
+        assert_eq!(
+            planned.specification.animation_class,
+            AnimationClass::KlondikeSolve
+        );
         assert!(!inspect_effect(&frame, &frame, planned).unwrap().verified);
         let mut solver_off = frame.clone();
         paint(&mut solver_off, PixelRect::new(824, 34, 272, 58), [0, 0, 0]);
@@ -4005,19 +4979,46 @@ mod tests {
         ] {
             let mut damaged = frame.clone();
             paint(&mut damaged, corruption, rgb);
-            assert_ne!(analyse_historical(&damaged).unwrap().prediction, PredictedAction::Action(planned), "{corruption:?}");
+            assert_ne!(
+                analyse_historical(&damaged).unwrap().prediction,
+                PredictedAction::Action(planned),
+                "{corruption:?}"
+            );
         }
 
         let mut occupied = frame.clone();
-        copy_region(&fixture(1), &mut occupied, PixelRect::new(390, UPPER_Y, CARD_WIDTH, CARD_HEIGHT), PixelPoint::new(390, UPPER_Y as i32));
-        assert_ne!(analyse_historical(&occupied).unwrap().prediction, PredictedAction::Action(planned));
+        copy_region(
+            &fixture(1),
+            &mut occupied,
+            PixelRect::new(390, UPPER_Y, CARD_WIDTH, CARD_HEIGHT),
+            PixelPoint::new(390, UPPER_Y as i32),
+        );
+        assert_ne!(
+            analyse_historical(&occupied).unwrap().prediction,
+            PredictedAction::Action(planned)
+        );
         let mut overlay = frame.clone();
-        paint(&mut overlay, PixelRect::new(820, 600, 400, 200), [20, 20, 20]);
-        assert_eq!(analyse_historical(&overlay).unwrap().prediction, PredictedAction::NoHighlight);
+        paint(
+            &mut overlay,
+            PixelRect::new(820, 600, 400, 200),
+            [20, 20, 20],
+        );
+        assert_eq!(
+            analyse_historical(&overlay).unwrap().prediction,
+            PredictedAction::NoHighlight
+        );
 
         let mut draw = frame;
-        copy_region(&fixture(3), &mut draw, PixelRect::new(378, 100, 164, 204), PixelPoint::new(378, 100));
-        assert_eq!(historical_action(&draw).target, ActionTarget::Klondike(KlondikeTarget::Draw));
+        copy_region(
+            &fixture(3),
+            &mut draw,
+            PixelRect::new(378, 100, 164, 204),
+            PixelPoint::new(378, 100),
+        );
+        assert_eq!(
+            historical_action(&draw).target,
+            ActionTarget::Klondike(KlondikeTarget::Draw)
+        );
     }
 
 
@@ -4027,21 +5028,46 @@ mod tests {
     fn long_source_below_toolbar_remains_one_safe_upper_click() {
         let frame = fixture(19);
         let planned = action(&frame);
-        assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-            column: 6, top: 390, bottom: 947,
-        }));
-        assert_eq!(planned.operation(), InputOperation::Click(PixelPoint::new(1_296, 430)));
-        assert_eq!(planned.effect_bounds(), PixelRect::new(1_230, 390, CARD_WIDTH, 557));
+        assert_eq!(
+            planned.target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 6,
+                top: 390,
+                bottom: 947,
+            })
+        );
+        assert_eq!(
+            planned.operation(),
+            InputOperation::Click(PixelPoint::new(1_296, 430))
+        );
+        assert_eq!(
+            planned.effect_bounds(),
+            PixelRect::new(1_230, 390, CARD_WIDTH, 557)
+        );
         assert!(planned.effect_bounds().y + planned.effect_bounds().height <= TOOLBAR_TOP);
-        assert_eq!(find_solid_card_source(
-            &frame, PixelRect::new(1_230, 332, CARD_WIDTH, 936 - 332),
-        ).unwrap(), None, "an internal crossbar must not close a truncated scan");
-        assert!(canonical_action(KlondikeTarget::Tableau {
-            column: 6, top: 390, bottom: TABLEAU_OUTLINE_BOTTOM as u16 + 1,
-        }).is_none());
-        assert!(canonical_action(KlondikeTarget::Tableau {
-            column: 6, top: 331, bottom: 947,
-        }).is_none(), "source geometry above the unchanged scan stays unsupported");
+        assert_eq!(
+            find_solid_card_source(&frame, PixelRect::new(1_230, 332, CARD_WIDTH, 936 - 332),)
+                .unwrap(),
+            None,
+            "an internal crossbar must not close a truncated scan"
+        );
+        assert!(
+            canonical_action(KlondikeTarget::Tableau {
+                column: 6,
+                top: 390,
+                bottom: TABLEAU_OUTLINE_BOTTOM as u16 + 1,
+            })
+            .is_none()
+        );
+        assert!(
+            canonical_action(KlondikeTarget::Tableau {
+                column: 6,
+                top: 331,
+                bottom: 947,
+            })
+            .is_none(),
+            "source geometry above the unchanged scan stays unsupported"
+        );
     }
 
 
@@ -4054,17 +5080,28 @@ mod tests {
 
 
         for bottom in 570..=959 {
-            assert_eq!(find_solid_card_source(
-                &frame, PixelRect::new(1_230, 332, CARD_WIDTH, bottom - 332),
-            ).unwrap(), None, "truncated scan ending at row{bottom}");
+            assert_eq!(
+                find_solid_card_source(
+                    &frame,
+                    PixelRect::new(1_230, 332, CARD_WIDTH, bottom - 332),
+                )
+                .unwrap(),
+                None,
+                "truncated scan ending at row{bottom}"
+            );
         }
 
 
         for bottom in 960..=TABLEAU_OUTLINE_BOTTOM {
-            assert_eq!(find_solid_card_source(
-                &frame, PixelRect::new(1_230, 332, CARD_WIDTH, bottom - 332),
-            ).unwrap(), Some(PixelRect::new(1_230, 390, CARD_WIDTH, 563)),
-                "closed source with visible rail termination at row{bottom}");
+            assert_eq!(
+                find_solid_card_source(
+                    &frame,
+                    PixelRect::new(1_230, 332, CARD_WIDTH, bottom - 332),
+                )
+                .unwrap(),
+                Some(PixelRect::new(1_230, 390, CARD_WIDTH, 563)),
+                "closed source with visible rail termination at row{bottom}"
+            );
         }
     }
 
@@ -4088,8 +5125,15 @@ mod tests {
         }
 
         let mut toolbar_only = frame;
-        paint(&mut toolbar_only, PixelRect::new(1_218, 380, 156, TOOLBAR_TOP - 380), [12, 82, 45]);
-        assert_eq!(analyse(&toolbar_only).unwrap().prediction, PredictedAction::NoHighlight);
+        paint(
+            &mut toolbar_only,
+            PixelRect::new(1_218, 380, 156, TOOLBAR_TOP - 380),
+            [12, 82, 45],
+        );
+        assert_eq!(
+            analyse(&toolbar_only).unwrap().prediction,
+            PredictedAction::NoHighlight
+        );
     }
 
 
@@ -4100,7 +5144,11 @@ mod tests {
         let before = fixture(19);
         let planned = historical_action(&before);
         let mut after = before.clone();
-        paint(&mut after, PixelRect::new(378, TOOLBAR_TOP, 1_162, 1_033 - TOOLBAR_TOP), [255, 255, 255]);
+        paint(
+            &mut after,
+            PixelRect::new(378, TOOLBAR_TOP, 1_162, 1_033 - TOOLBAR_TOP),
+            [255, 255, 255],
+        );
         let evidence = inspect_effect(&before, &after, planned).unwrap();
         assert!(!evidence.verified, "{evidence}");
         assert_eq!(evidence.source_changed, 0);
@@ -4117,8 +5165,15 @@ mod tests {
         let replayed = fixture(18);
         assert_eq!(stopped.pixels, replayed.pixels);
         let planned = historical_action(&replayed);
-        assert_eq!(planned.operation(), InputOperation::Click(PixelPoint::new(652, 199)));
-        assert!(!inspect_effect(&stopped, &replayed, planned).unwrap().verified);
+        assert_eq!(
+            planned.operation(),
+            InputOperation::Click(PixelPoint::new(652, 199))
+        );
+        assert!(
+            !inspect_effect(&stopped, &replayed, planned)
+                .unwrap()
+                .verified
+        );
     }
 
 
@@ -4128,15 +5183,31 @@ mod tests {
     fn all_original_pixel_fixtures_match_expected_targets() {
         let expected = [
             None,
-            Some(KlondikeTarget::Tableau { column: 7, top: 443, bottom: 632 }),
+            Some(KlondikeTarget::Tableau {
+                column: 7,
+                top: 443,
+                bottom: 632,
+            }),
             Some(KlondikeTarget::Draw),
-            Some(KlondikeTarget::Tableau { column: 5, top: 407, bottom: 597 }),
-            Some(KlondikeTarget::Tableau { column: 3, top: 372, bottom: 562 }),
+            Some(KlondikeTarget::Tableau {
+                column: 5,
+                top: 407,
+                bottom: 597,
+            }),
+            Some(KlondikeTarget::Tableau {
+                column: 3,
+                top: 372,
+                bottom: 562,
+            }),
             Some(KlondikeTarget::Draw),
             Some(KlondikeTarget::Draw),
             Some(KlondikeTarget::Draw),
             Some(KlondikeTarget::Draw),
-            Some(KlondikeTarget::Tableau { column: 5, top: 372, bottom: 671 }),
+            Some(KlondikeTarget::Tableau {
+                column: 5,
+                top: 372,
+                bottom: 671,
+            }),
             Some(KlondikeTarget::Draw),
             Some(KlondikeTarget::Recycle),
             Some(KlondikeTarget::Solve),
@@ -4145,23 +5216,50 @@ mod tests {
             Some(KlondikeTarget::Waste { offset: 1 }),
             Some(KlondikeTarget::Draw),
             Some(KlondikeTarget::Waste { offset: 1 }),
-            Some(KlondikeTarget::Tableau { column: 6, top: 390, bottom: 947 }),
+            Some(KlondikeTarget::Tableau {
+                column: 6,
+                top: 390,
+                bottom: 947,
+            }),
             Some(KlondikeTarget::Waste { offset: 1 }),
-            Some(KlondikeTarget::Tableau { column: 5, top: 571, bottom: 761 }),
-            Some(KlondikeTarget::Tableau { column: 6, top: 407, bottom: 597 }),
-            Some(KlondikeTarget::Tableau { column: 4, top: 372, bottom: 562 }),
-            Some(KlondikeTarget::Tableau { column: 5, top: 571, bottom: 761 }),
+            Some(KlondikeTarget::Tableau {
+                column: 5,
+                top: 571,
+                bottom: 761,
+            }),
+            Some(KlondikeTarget::Tableau {
+                column: 6,
+                top: 407,
+                bottom: 597,
+            }),
+            Some(KlondikeTarget::Tableau {
+                column: 4,
+                top: 372,
+                bottom: 562,
+            }),
+            Some(KlondikeTarget::Tableau {
+                column: 5,
+                top: 571,
+                bottom: 761,
+            }),
             Some(KlondikeTarget::Solve),
         ];
 
 
         for (index, target) in expected.into_iter().enumerate() {
             let frame = fixture(index as u8 + 1);
-            assert!(is_gameplay_scene(&frame).unwrap(), "K{:02} scene", index + 1);
+            assert!(
+                is_gameplay_scene(&frame).unwrap(),
+                "K{:02} scene",
+                index + 1
+            );
             assert_eq!(
                 analyse(&frame).unwrap().prediction,
-                target.and_then(canonical_action).map_or(PredictedAction::NoHighlight, PredictedAction::Action),
-                "K{:02} action", index + 1,
+                target
+                    .and_then(canonical_action)
+                    .map_or(PredictedAction::NoHighlight, PredictedAction::Action),
+                "K{:02} action",
+                index + 1,
             );
         }
     }
@@ -4171,13 +5269,27 @@ mod tests {
     /// from Undo reconstruction must not be sorted into a supposed input trace.
     #[test]
     fn all_nine_recorded_action_pairs_have_independent_effects() {
-
-
-        for (before_number, after_number) in [(2, 3), (4, 5), (6, 7), (8, 9), (10, 11), (17, 18), (20, 21), (21, 22), (31, 32)] {
+        for (before_number, after_number) in [
+            (2, 3),
+            (4, 5),
+            (6, 7),
+            (8, 9),
+            (10, 11),
+            (17, 18),
+            (20, 21),
+            (21, 22),
+            (31, 32),
+        ] {
             let before = fixture(before_number);
             let after = fixture(after_number);
-            assert!(verify_effect(&before, &after, historical_action(&before)).unwrap(), "K{before_number:02}->K{after_number:02}");
-            assert!(!verify_effect(&before, &before, historical_action(&before)).unwrap(), "unchanged K{before_number:02}");
+            assert!(
+                verify_effect(&before, &after, historical_action(&before)).unwrap(),
+                "K{before_number:02}->K{after_number:02}"
+            );
+            assert!(
+                !verify_effect(&before, &before, historical_action(&before)).unwrap(),
+                "unchanged K{before_number:02}"
+            );
         }
     }
 
@@ -4189,13 +5301,32 @@ mod tests {
         let before = fixture(21);
         let after = fixture(22);
         let planned = historical_action(&before);
-        assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau { column: 5, top: 571, bottom: 761 }));
+        assert_eq!(
+            planned.target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 5,
+                top: 571,
+                bottom: 761
+            })
+        );
         let evidence = inspect_effect(&before, &after, planned).unwrap();
-        assert_eq!(evidence.source_positive, 0, "ordinary bright-pixel proof must reproduce the stop: {evidence}");
+        assert_eq!(
+            evidence.source_positive, 0,
+            "ordinary bright-pixel proof must reproduce the stop: {evidence}"
+        );
         assert_eq!(evidence.source_dimmed_felt, 1_050, "{evidence}");
-        assert!(evidence.source_changed >= MINIMUM_CONTENT_CHANGE, "{evidence}");
-        assert!(evidence.destination_changed >= MINIMUM_CONTENT_CHANGE, "{evidence}");
-        assert!(evidence.verified, "completed recorded move must pass: {evidence}");
+        assert!(
+            evidence.source_changed >= MINIMUM_CONTENT_CHANGE,
+            "{evidence}"
+        );
+        assert!(
+            evidence.destination_changed >= MINIMUM_CONTENT_CHANGE,
+            "{evidence}"
+        );
+        assert!(
+            evidence.verified,
+            "completed recorded move must pass: {evidence}"
+        );
         assert!(!verify_effect(&before, &before, planned).unwrap());
     }
 
@@ -4209,7 +5340,12 @@ mod tests {
         let planned = historical_action(&before);
         let mut source_only = before.clone();
         let source = planned.effect_bounds();
-        copy_region(&completed, &mut source_only, source, PixelPoint::new(source.x as i32, source.y as i32));
+        copy_region(
+            &completed,
+            &mut source_only,
+            source,
+            PixelPoint::new(source.x as i32, source.y as i32),
+        );
         let evidence = inspect_effect(&before, &source_only, planned).unwrap();
         assert_eq!(evidence.source_dimmed_felt, 1_050, "{evidence}");
         assert_eq!(evidence.destination_changed, 0, "{evidence}");
@@ -4225,24 +5361,42 @@ mod tests {
         let completed = fixture(22);
         let planned = historical_action(&before);
         let mut destination_only = before.clone();
-        copy_region(&completed, &mut destination_only, PixelRect::new(1_062, UPPER_Y, CARD_WIDTH, CARD_HEIGHT), PixelPoint::new(1_062, UPPER_Y as i32));
+        copy_region(
+            &completed,
+            &mut destination_only,
+            PixelRect::new(1_062, UPPER_Y, CARD_WIDTH, CARD_HEIGHT),
+            PixelPoint::new(1_062, UPPER_Y as i32),
+        );
         let source = planned.effect_bounds();
-        let InputOperation::Click(point) = planned.operation() else { panic!("expected click"); };
+        let InputOperation::Click(point) = planned.operation() else {
+            panic!("expected click");
+        };
 
 
         for (label, bounds, rgb) in [
             ("neutral guide", source, [31, 31, 31]),
             ("opaque black", source, [0, 0, 0]),
             ("gold", source, [240, 190, 70]),
-            ("cursor", PixelRect::new(point.x as u32 - 20, point.y as u32 - 20, 40, 40), [4, 17, 11]),
-            ("toolbar", PixelRect::new(source.x, TOOLBAR_TOP, CARD_WIDTH, 86), [4, 17, 11]),
+            (
+                "cursor",
+                PixelRect::new(point.x as u32 - 20, point.y as u32 - 20, 40, 40),
+                [4, 17, 11],
+            ),
+            (
+                "toolbar",
+                PixelRect::new(source.x, TOOLBAR_TOP, CARD_WIDTH, 86),
+                [4, 17, 11],
+            ),
         ] {
             let mut after = destination_only.clone();
             paint(&mut after, bounds, rgb);
             let evidence = inspect_effect(&before, &after, planned).unwrap();
             assert_eq!(evidence.source_positive, 0, "{label}: {evidence}");
             assert_eq!(evidence.source_dimmed_felt, 0, "{label}: {evidence}");
-            assert!(evidence.destination_changed >= MINIMUM_CONTENT_CHANGE, "{label}: {evidence}");
+            assert!(
+                evidence.destination_changed >= MINIMUM_CONTENT_CHANGE,
+                "{label}: {evidence}"
+            );
             assert!(!evidence.verified, "{label}: {evidence}");
         }
     }
@@ -4255,14 +5409,37 @@ mod tests {
     fn synthetic_last_card_removal_exposes_k23_dimmed_empty_column() {
         let after = fixture(23);
         let mut before = after.clone();
-        copy_region(&fixture(20), &mut before, PixelRect::new(884, 332, 154, 420), PixelPoint::new(884, 332));
-        copy_region(&fixture(21), &mut before, PixelRect::new(1_052, 561, 154, 212), PixelPoint::new(1_220, 327));
+        copy_region(
+            &fixture(20),
+            &mut before,
+            PixelRect::new(884, 332, 154, 420),
+            PixelPoint::new(884, 332),
+        );
+        copy_region(
+            &fixture(21),
+            &mut before,
+            PixelRect::new(1_052, 561, 154, 212),
+            PixelPoint::new(1_220, 327),
+        );
         let planned = historical_action(&before);
-        assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau { column: 6, top: 337, bottom: 527 }));
+        assert_eq!(
+            planned.target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 6,
+                top: 337,
+                bottom: 527
+            })
+        );
         let evidence = inspect_effect(&before, &after, planned).unwrap();
         assert_eq!(evidence.source_positive, 0, "{evidence}");
-        assert!(evidence.source_dimmed_felt >= MINIMUM_CONTENT_CHANGE, "{evidence}");
-        assert!(evidence.destination_changed >= MINIMUM_CONTENT_CHANGE, "{evidence}");
+        assert!(
+            evidence.source_dimmed_felt >= MINIMUM_CONTENT_CHANGE,
+            "{evidence}"
+        );
+        assert!(
+            evidence.destination_changed >= MINIMUM_CONTENT_CHANGE,
+            "{evidence}"
+        );
         assert!(evidence.verified, "{evidence}");
     }
 
@@ -4271,8 +5448,14 @@ mod tests {
     #[test]
     fn unchanged_draw_halo_never_proves_an_effect() {
         let before = fixture(8);
-        assert_eq!(historical_action(&before).target, ActionTarget::Klondike(KlondikeTarget::Draw));
-        assert_eq!(historical_action(&fixture(9)).target, historical_action(&before).target);
+        assert_eq!(
+            historical_action(&before).target,
+            ActionTarget::Klondike(KlondikeTarget::Draw)
+        );
+        assert_eq!(
+            historical_action(&fixture(9)).target,
+            historical_action(&before).target
+        );
         assert!(verify_effect(&before, &fixture(9), historical_action(&before)).unwrap());
         assert!(!verify_effect(&before, &before, historical_action(&before)).unwrap());
     }
@@ -4282,12 +5465,27 @@ mod tests {
     #[test]
     fn dashed_destinations_and_solid_dark_guides_are_not_sources() {
         let mut frame = fixture(4);
-        copy_region(&fixture(3), &mut frame, PixelRect::new(1_050, 390, 156, 220), PixelPoint::new(1_050, 390));
-        assert_eq!(analyse(&frame).unwrap().prediction, PredictedAction::NoHighlight);
+        copy_region(
+            &fixture(3),
+            &mut frame,
+            PixelRect::new(1_050, 390, 156, 220),
+            PixelPoint::new(1_050, 390),
+        );
+        assert_eq!(
+            analyse(&frame).unwrap().prediction,
+            PredictedAction::NoHighlight
+        );
 
         let mut dark_source = fixture(2);
-        paint(&mut dark_source, PixelRect::new(1_398, 448, 132, 175), [0, 0, 0]);
-        assert_eq!(analyse(&dark_source).unwrap().prediction, PredictedAction::NoHighlight);
+        paint(
+            &mut dark_source,
+            PixelRect::new(1_398, 448, 132, 175),
+            [0, 0, 0],
+        );
+        assert_eq!(
+            analyse(&dark_source).unwrap().prediction,
+            PredictedAction::NoHighlight
+        );
     }
 
 
@@ -4297,7 +5495,12 @@ mod tests {
         let before = fixture(2);
         let mut after = before.clone();
         paint(&mut after, PixelRect::new(1_398, 448, 132, 175), [0, 0, 0]);
-        copy_region(&fixture(3), &mut after, PixelRect::new(894, 112, 132, 175), PixelPoint::new(894, 112));
+        copy_region(
+            &fixture(3),
+            &mut after,
+            PixelRect::new(894, 112, 132, 175),
+            PixelPoint::new(894, 112),
+        );
         assert!(is_gameplay_scene(&after).unwrap());
         assert!(!verify_effect(&before, &after, historical_action(&before)).unwrap());
     }
@@ -4310,13 +5513,24 @@ mod tests {
         let planned = historical_action(&before);
 
 
-        let InputOperation::Click(point) = planned.operation() else { panic!("expected click"); };
+        let InputOperation::Click(point) = planned.operation() else {
+            panic!("expected click");
+        };
         let mut cursor = before.clone();
-        paint(&mut cursor, PixelRect::new(point.x as u32 - 20, point.y as u32 - 20, 40, 40), [0, 0, 0]);
+        paint(
+            &mut cursor,
+            PixelRect::new(point.x as u32 - 20, point.y as u32 - 20, 40, 40),
+            [0, 0, 0],
+        );
         assert!(!verify_effect(&before, &cursor, planned).unwrap());
 
         let mut source_only = before.clone();
-        copy_region(&fixture(3), &mut source_only, PixelRect::new(1_388, 425, 154, 213), PixelPoint::new(1_388, 425));
+        copy_region(
+            &fixture(3),
+            &mut source_only,
+            PixelRect::new(1_388, 425, 154, 213),
+            PixelPoint::new(1_388, 425),
+        );
         assert!(!verify_effect(&before, &source_only, planned).unwrap());
     }
 
@@ -4326,23 +5540,42 @@ mod tests {
     fn draw_priority_and_connected_run_identity_are_preserved() {
         let run = fixture(10);
         let selected = action(&run);
-        assert!(matches!(selected.target, ActionTarget::Klondike(KlondikeTarget::Tableau { column: 5, top: 372, bottom: 671 })));
-        assert_eq!(selected.operation(), InputOperation::Click(PixelPoint::new(1_128, 412)));
+        assert!(matches!(
+            selected.target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 5,
+                top: 372,
+                bottom: 671
+            })
+        ));
+        assert_eq!(
+            selected.operation(),
+            InputOperation::Click(PixelPoint::new(1_128, 412))
+        );
         let mut draw_and_run = run;
-        copy_region(&fixture(3), &mut draw_and_run, PixelRect::new(378, 100, 164, 204), PixelPoint::new(378, 100));
-        assert_eq!(action(&draw_and_run).target, ActionTarget::Klondike(KlondikeTarget::Draw));
+        copy_region(
+            &fixture(3),
+            &mut draw_and_run,
+            PixelRect::new(378, 100, 164, 204),
+            PixelPoint::new(378, 100),
+        );
+        assert_eq!(
+            action(&draw_and_run).target,
+            ActionTarget::Klondike(KlondikeTarget::Draw)
+        );
     }
 
 
     /// Synthetic translated genuine halos cover the three fan positions and four foundations.
     #[test]
     fn right_fan_geometry_and_last_priority_foundations_are_bounded() {
-
-
         for offset in 0..=2 {
             let mut frame = active_without_highlight();
             add_upper_source(&mut frame, 558 + WASTE_FAN_STEP * u32::from(offset));
-            assert_eq!(action(&frame).target, ActionTarget::Klondike(KlondikeTarget::Waste { offset }));
+            assert_eq!(
+                action(&frame).target,
+                ActionTarget::Klondike(KlondikeTarget::Waste { offset })
+            );
         }
 
 
@@ -4351,11 +5584,20 @@ mod tests {
             add_upper_source(&mut frame, 894 + COLUMN_PITCH * u32::from(column - 1));
             let selected = action(&frame);
             let x = 894 + COLUMN_PITCH * u32::from(column - 1);
-            assert_eq!(selected.target, ActionTarget::Klondike(KlondikeTarget::Foundation { column }));
-            assert_eq!(selected.operation(), InputOperation::Click(PixelPoint::new((x + 66) as i32, 199)));
+            assert_eq!(
+                selected.target,
+                ActionTarget::Klondike(KlondikeTarget::Foundation { column })
+            );
+            assert_eq!(
+                selected.operation(),
+                InputOperation::Click(PixelPoint::new((x + 66) as i32, 199))
+            );
             assert_eq!(selected.effect_bounds(), PixelRect::new(x, 112, 132, 175));
             add_upper_source(&mut frame, 614);
-            assert_eq!(action(&frame).target, ActionTarget::Klondike(KlondikeTarget::Waste { offset: 2 }));
+            assert_eq!(
+                action(&frame).target,
+                ActionTarget::Klondike(KlondikeTarget::Waste { offset: 2 })
+            );
         }
     }
 
@@ -4366,11 +5608,24 @@ mod tests {
     fn recycle_requires_both_stock_return_and_empty_waste() {
         let before = fixture(12);
         let selected = historical_action(&before);
-        assert_eq!(selected.operation(), InputOperation::Click(PixelPoint::new(456, 199)));
+        assert_eq!(
+            selected.operation(),
+            InputOperation::Click(PixelPoint::new(456, 199))
+        );
         let mut after = before.clone();
-        copy_region(&fixture(3), &mut after, PixelRect::new(378, 100, 164, 204), PixelPoint::new(378, 100));
+        copy_region(
+            &fixture(3),
+            &mut after,
+            PixelRect::new(378, 100, 164, 204),
+            PixelPoint::new(378, 100),
+        );
         assert!(!verify_effect(&before, &after, selected).unwrap());
-        copy_region(&fixture(6), &mut after, PixelRect::new(548, 100, 210, 204), PixelPoint::new(548, 100));
+        copy_region(
+            &fixture(6),
+            &mut after,
+            PixelRect::new(548, 100, 210, 204),
+            PixelPoint::new(548, 100),
+        );
         assert!(verify_effect(&before, &after, selected).unwrap());
     }
 
@@ -4380,18 +5635,38 @@ mod tests {
     fn invalid_frames_scenes_and_dynamic_targets_fail_closed() {
         let mut malformed = fixture(2);
         malformed.pixels.truncate(4);
-        assert_eq!(analyse(&malformed), Err(HaloDetectionError::InvalidFrameLayout));
+        assert_eq!(
+            analyse(&malformed),
+            Err(HaloDetectionError::InvalidFrameLayout)
+        );
         let mut wrong_size = fixture(2);
         wrong_size.width = 1_919;
-        assert_eq!(analyse(&wrong_size), Err(HaloDetectionError::BoundsOutsideFrame));
+        assert_eq!(
+            analyse(&wrong_size),
+            Err(HaloDetectionError::BoundsOutsideFrame)
+        );
         let mut overlay = fixture(2);
-        paint(&mut overlay, PixelRect::new(820, 600, 400, 200), [20, 20, 20]);
+        paint(
+            &mut overlay,
+            PixelRect::new(820, 600, 400, 200),
+            [20, 20, 20],
+        );
         assert!(!is_gameplay_scene(&overlay).unwrap());
-        assert_eq!(analyse(&overlay).unwrap().prediction, PredictedAction::NoHighlight);
+        assert_eq!(
+            analyse(&overlay).unwrap().prediction,
+            PredictedAction::NoHighlight
+        );
         assert!(canonical_action(KlondikeTarget::Waste { offset: 3 }).is_none());
         assert!(canonical_action(KlondikeTarget::Foundation { column: 0 }).is_none());
         assert!(canonical_action(KlondikeTarget::Foundation { column: 5 }).is_none());
-        assert!(canonical_action(KlondikeTarget::Tableau { column: 1, top: 1, bottom: u16::MAX }).is_none());
+        assert!(
+            canonical_action(KlondikeTarget::Tableau {
+                column: 1,
+                top: 1,
+                bottom: u16::MAX
+            })
+            .is_none()
+        );
         assert!(find_solid_card_source(&fixture(2), PixelRect::new(0, 100, 132, 200)).is_err());
     }
 
@@ -4410,7 +5685,10 @@ mod tests {
     #[test]
     fn recorded_solve_available_progress_remains_unfinished() {
         let frame = fixture(25);
-        assert_eq!(action(&frame).target, ActionTarget::Klondike(KlondikeTarget::Solve));
+        assert_eq!(
+            action(&frame).target,
+            ActionTarget::Klondike(KlondikeTarget::Solve)
+        );
         let evidence = completion_evidence(&frame).unwrap();
         assert_eq!(evidence.black_pixels, 56, "{evidence}");
         assert_eq!(evidence.gold_pixels, 20, "{evidence}");
@@ -4418,8 +5696,12 @@ mod tests {
 
 
         for number in 1..=25 {
-            assert!(!completion_evidence(&fixture(number)).unwrap().complete_candidate,
-                "K{number:02} is not a supplied positive game-win capture");
+            assert!(
+                !completion_evidence(&fixture(number))
+                    .unwrap()
+                    .complete_candidate,
+                "K{number:02} is not a supplied positive game-win capture"
+            );
         }
     }
 
@@ -4429,19 +5711,39 @@ mod tests {
     #[test]
     fn completion_requires_every_progress_pixel_to_be_gold_and_none_black() {
         let full = synthetic_full_progress_without_action();
-        assert_eq!(completion_evidence(&full).unwrap(), CompletionEvidence {
-            complete_candidate: true, black_pixels: 0, gold_pixels: 76,
-            reason: "literal full-gold progress with intact Klondike scene/Solver banner and no higher-priority action",
-        });
+        assert_eq!(
+            completion_evidence(&full).unwrap(),
+            CompletionEvidence {
+                complete_candidate: true,
+                black_pixels: 0,
+                gold_pixels: 76,
+                reason: "literal full-gold progress with intact Klondike scene/Solver banner and no higher-priority action",
+            }
+        );
 
 
-        for rgb in [[0, 0, 0], [32, 32, 32], [33, 33, 33], [255, 255, 255], [12, 82, 45]] {
+        for rgb in [
+            [0, 0, 0],
+            [32, 32, 32],
+            [33, 33, 33],
+            [255, 255, 255],
+            [12, 82, 45],
+        ] {
             let mut corrupted = full.clone();
             paint(&mut corrupted, PixelRect::new(1_087, 88, 1, 1), rgb);
             let evidence = completion_evidence(&corrupted).unwrap();
-            assert!(!evidence.complete_candidate, "one unfilled pixel {rgb:?}: {evidence}");
+            assert!(
+                !evidence.complete_candidate,
+                "one unfilled pixel {rgb:?}: {evidence}"
+            );
             assert_eq!(evidence.gold_pixels, 75, "{evidence}");
-            assert_eq!(evidence.black_pixels, usize::from(rgb.into_iter().all(|channel| channel <= COMPLETION_BLACK_MAXIMUM)));
+            assert_eq!(
+                evidence.black_pixels,
+                usize::from(
+                    rgb.into_iter()
+                        .all(|channel| channel <= COMPLETION_BLACK_MAXIMUM)
+                )
+            );
         }
 
 
@@ -4450,7 +5752,10 @@ mod tests {
             paint(&mut blank_bar, COMPLETION_PROGRESS_BOUNDS, rgb);
             let evidence = completion_evidence(&blank_bar).unwrap();
             assert_eq!(evidence.gold_pixels, 0, "{evidence}");
-            assert!(!evidence.complete_candidate, "arbitrary non-black is not gold fill: {evidence}");
+            assert!(
+                !evidence.complete_candidate,
+                "arbitrary non-black is not gold fill: {evidence}"
+            );
         }
     }
 
@@ -4473,15 +5778,30 @@ mod tests {
             paint(&mut unsupported, bounds, [0, 0, 0]);
             let evidence = completion_evidence(&unsupported).unwrap();
             assert_eq!(evidence.gold_pixels, 76, "{evidence}");
-            assert!(!evidence.complete_candidate, "damaged context {bounds:?}: {evidence}");
+            assert!(
+                !evidence.complete_candidate,
+                "damaged context {bounds:?}: {evidence}"
+            );
         }
 
         let mut blank = full.clone();
-        paint(&mut blank, PixelRect::new(0, 0, PROFILE.frame_width, PROFILE.frame_height), [0, 0, 0]);
-        copy_region(&full, &mut blank, PixelRect::new(824, 34, 272, 58), PixelPoint::new(824, 34));
+        paint(
+            &mut blank,
+            PixelRect::new(0, 0, PROFILE.frame_width, PROFILE.frame_height),
+            [0, 0, 0],
+        );
+        copy_region(
+            &full,
+            &mut blank,
+            PixelRect::new(824, 34, 272, 58),
+            PixelPoint::new(824, 34),
+        );
         let evidence = completion_evidence(&blank).unwrap();
         assert_eq!(evidence.gold_pixels, 76, "{evidence}");
-        assert!(!evidence.complete_candidate, "a banner on a blank frame is not a game: {evidence}");
+        assert!(
+            !evidence.complete_candidate,
+            "a banner on a blank frame is not a game: {evidence}"
+        );
     }
 
 
@@ -4489,8 +5809,6 @@ mod tests {
     /// progress bar, including Draw, recycle, RIGHT, Solve and tableau blocks.
     #[test]
     fn full_progress_never_overrides_a_higher_priority_target() {
-
-
         for number in 2..=25 {
             let mut frame = fixture(number);
             let selected = action(&frame);
@@ -4498,12 +5816,18 @@ mod tests {
             assert_eq!(action(&frame), selected);
             let evidence = completion_evidence(&frame).unwrap();
             assert_eq!(evidence.gold_pixels, 76, "{evidence}");
-            assert!(!evidence.complete_candidate, "K{number:02} still has a priority action: {evidence}");
+            assert!(
+                !evidence.complete_candidate,
+                "K{number:02} still has a priority action: {evidence}"
+            );
         }
 
         let mut foundation = synthetic_full_progress_without_action();
         add_upper_source(&mut foundation, 894);
-        assert_eq!(action(&foundation).target, ActionTarget::Klondike(KlondikeTarget::Foundation { column: 1 }));
+        assert_eq!(
+            action(&foundation).target,
+            ActionTarget::Klondike(KlondikeTarget::Foundation { column: 1 })
+        );
         assert!(!completion_evidence(&foundation).unwrap().complete_candidate);
     }
 
@@ -4514,11 +5838,23 @@ mod tests {
     fn undo_replay_capture_selects_the_tableau_source_and_not_an_old_right_target() {
         let replayed = fixture(24);
         let selected = historical_action(&replayed);
-        assert_eq!(selected.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-            column: 5, top: 571, bottom: 761,
-        }));
-        assert_eq!(selected.operation(), InputOperation::Click(PixelPoint::new(1_128, 611)));
-        assert!(!inspect_effect(&replayed, &replayed, selected).unwrap().verified);
+        assert_eq!(
+            selected.target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 5,
+                top: 571,
+                bottom: 761,
+            })
+        );
+        assert_eq!(
+            selected.operation(),
+            InputOperation::Click(PixelPoint::new(1_128, 611))
+        );
+        assert!(
+            !inspect_effect(&replayed, &replayed, selected)
+                .unwrap()
+                .verified
+        );
     }
 
 
@@ -4527,10 +5863,16 @@ mod tests {
     fn completion_rejects_malformed_storage_and_wrong_native_geometry() {
         let mut malformed = synthetic_full_progress_without_action();
         malformed.pixels.truncate(4);
-        assert_eq!(completion_evidence(&malformed), Err(HaloDetectionError::InvalidFrameLayout));
+        assert_eq!(
+            completion_evidence(&malformed),
+            Err(HaloDetectionError::InvalidFrameLayout)
+        );
         let mut wrong_size = synthetic_full_progress_without_action();
         wrong_size.width = 1_919;
-        assert_eq!(completion_evidence(&wrong_size), Err(HaloDetectionError::BoundsOutsideFrame));
+        assert_eq!(
+            completion_evidence(&wrong_size),
+            Err(HaloDetectionError::BoundsOutsideFrame)
+        );
     }
 
 
@@ -4538,21 +5880,27 @@ mod tests {
     /// independent positive win evidence despite their dimmed/non-gold top bar.
     #[test]
     fn recorded_completed_terminal_scenes_are_independent_one_board_win_evidence() {
-
-
         for number in 26..=28 {
             let frame = fixture(number);
             let evidence = completion_evidence(&frame).unwrap();
             assert!(evidence.complete_candidate, "K{number:02}: {evidence}");
-            assert_eq!(evidence.gold_pixels, 0, "the actual terminal bar is dimmed: {evidence}");
-            assert_eq!(evidence.reason,
-                "independent completed Klondike terminal artwork and completed-board background");
+            assert_eq!(
+                evidence.gold_pixels, 0,
+                "the actual terminal bar is dimmed: {evidence}"
+            );
+            assert_eq!(
+                evidence.reason,
+                "independent completed Klondike terminal artwork and completed-board background"
+            );
         }
 
 
         for number in [29, 30] {
             let evidence = completion_evidence(&fixture(number)).unwrap();
-            assert!(!evidence.complete_candidate, "new game/setup cannot supply previous game-win authority: K{number:02}: {evidence}");
+            assert!(
+                !evidence.complete_candidate,
+                "new game/setup cannot supply previous game-win authority: K{number:02}: {evidence}"
+            );
         }
     }
 
@@ -4563,26 +5911,35 @@ mod tests {
     fn synthetic_one_way_tableau_corners(paper_to_ink: bool) -> CapturedFrame {
         let before = fixture(31);
         let mut after = before.clone();
-        copy_region(&fixture(32), &mut after,
-            PixelRect::new(726, TABLEAU_Y, CARD_WIDTH, TABLEAU_EFFECT_BOTTOM - TABLEAU_Y),
-            PixelPoint::new(726, TABLEAU_Y as i32));
+        copy_region(
+            &fixture(32),
+            &mut after,
+            PixelRect::new(
+                726,
+                TABLEAU_Y,
+                CARD_WIDTH,
+                TABLEAU_EFFECT_BOTTOM - TABLEAU_Y,
+            ),
+            PixelPoint::new(726, TABLEAU_Y as i32),
+        );
         paint(&mut after, PixelRect::new(1_428, 515, 50, 25), [64, 64, 64]);
         let point = PixelPoint::new(1_464, 465);
 
 
-        for bounds in [PixelRect::new(1_403, 430, 28, 44), PixelRect::new(1_497, 551, 28, 44)] {
+        for bounds in [
+            PixelRect::new(1_403, 430, 28, 44),
+            PixelRect::new(1_497, 551, 28, 44),
+        ] {
             let mut changed = 0;
 
 
             for y in bounds.y..bounds.y + bounds.height {
-
-
                 for x in bounds.x..bounds.x + bounds.width {
                     let first = pixel_rgb(&before, x, y).unwrap();
                     let excluded_cursor = (i64::from(x) - i64::from(point.x)).abs() < 48
                         && (i64::from(y) - i64::from(point.y)).abs() < 48;
-                    let eligible = (paper_to_ink && is_white(first))
-                        || (!paper_to_ink && is_card_ink(first));
+                    let eligible =
+                        (paper_to_ink && is_white(first)) || (!paper_to_ink && is_card_ink(first));
 
 
                     if changed == 80 || excluded_cursor || is_rail_gold(first) || !eligible {
@@ -4592,7 +5949,11 @@ mod tests {
                     let offset = y as usize * after.stride + x as usize * 4;
 
 
-                    let rgb = if paper_to_ink { [0, 0, 0] } else { [255, 255, 255] };
+                    let rgb = if paper_to_ink {
+                        [0, 0, 0]
+                    } else {
+                        [255, 255, 255]
+                    };
                     after.pixels[offset..offset + 3].copy_from_slice(&rgb);
                     changed += 1;
                 }
@@ -4613,20 +5974,51 @@ mod tests {
         let before = fixture(31);
         let after = fixture(32);
         let planned = historical_action(&before);
-        assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-            column: 7, top: 425, bottom: 615,
-        }));
-        assert_eq!(historical_action(&after).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-            column: 7, top: 407, bottom: 597,
-        }));
+        assert_eq!(
+            planned.target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 7,
+                top: 425,
+                bottom: 615,
+            })
+        );
+        assert_eq!(
+            historical_action(&after).target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 7,
+                top: 407,
+                bottom: 597,
+            })
+        );
         let evidence = inspect_effect(&before, &after, planned).unwrap();
-        assert!(evidence.source_positive < MINIMUM_CONTENT_CHANGE, "old bright proof refuses: {evidence}");
-        assert!(evidence.source_dimmed_felt < MINIMUM_CONTENT_CHANGE, "old dimmed-felt proof refuses: {evidence}");
-        assert!(evidence.source_changed >= MINIMUM_CONTENT_CHANGE, "{evidence}");
-        assert!(evidence.destination_changed >= MINIMUM_CONTENT_CHANGE, "{evidence}");
-        assert!(evidence.source_identity_directions.into_iter().flatten()
-            .all(|count| count >= MINIMUM_CORNER_CHANGE), "{evidence}");
-        assert!(evidence.verified, "the evidenced replacement must pass: {evidence}");
+        assert!(
+            evidence.source_positive < MINIMUM_CONTENT_CHANGE,
+            "old bright proof refuses: {evidence}"
+        );
+        assert!(
+            evidence.source_dimmed_felt < MINIMUM_CONTENT_CHANGE,
+            "old dimmed-felt proof refuses: {evidence}"
+        );
+        assert!(
+            evidence.source_changed >= MINIMUM_CONTENT_CHANGE,
+            "{evidence}"
+        );
+        assert!(
+            evidence.destination_changed >= MINIMUM_CONTENT_CHANGE,
+            "{evidence}"
+        );
+        assert!(
+            evidence
+                .source_identity_directions
+                .into_iter()
+                .flatten()
+                .all(|count| count >= MINIMUM_CORNER_CHANGE),
+            "{evidence}"
+        );
+        assert!(
+            evidence.verified,
+            "the evidenced replacement must pass: {evidence}"
+        );
         assert!(!verify_effect(&before, &before, planned).unwrap());
         assert!(!completion_evidence(&before).unwrap().complete_candidate);
         assert!(!completion_evidence(&after).unwrap().complete_candidate);
@@ -4642,51 +6034,102 @@ mod tests {
         let planned = historical_action(&before);
         let source = planned.effect_bounds();
         let mut source_only = before.clone();
-        copy_region(&completed, &mut source_only, source, PixelPoint::new(source.x as i32, source.y as i32));
+        copy_region(
+            &completed,
+            &mut source_only,
+            source,
+            PixelPoint::new(source.x as i32, source.y as i32),
+        );
         let report = inspect_effect(&before, &source_only, planned).unwrap();
         assert_eq!(report.destination_changed, 0, "{report}");
         assert!(!report.verified, "{report}");
         let mut destination_only = before.clone();
-        copy_region(&completed, &mut destination_only,
-            PixelRect::new(726, TABLEAU_Y, CARD_WIDTH, TABLEAU_EFFECT_BOTTOM - TABLEAU_Y),
-            PixelPoint::new(726, TABLEAU_Y as i32));
-        assert!(!inspect_effect(&before, &destination_only, planned).unwrap().verified);
+        copy_region(
+            &completed,
+            &mut destination_only,
+            PixelRect::new(
+                726,
+                TABLEAU_Y,
+                CARD_WIDTH,
+                TABLEAU_EFFECT_BOTTOM - TABLEAU_Y,
+            ),
+            PixelPoint::new(726, TABLEAU_Y as i32),
+        );
+        assert!(
+            !inspect_effect(&before, &destination_only, planned)
+                .unwrap()
+                .verified
+        );
 
 
         for (bounds, rgb) in [
             (source, [0, 0, 0]),
             (source, [170, 120, 75]),
             (PixelRect::new(1_444, 445, 40, 40), [0, 0, 0]),
-            (PixelRect::new(378, TOOLBAR_TOP, 1_162, 1_033 - TOOLBAR_TOP), [255, 255, 255]),
+            (
+                PixelRect::new(378, TOOLBAR_TOP, 1_162, 1_033 - TOOLBAR_TOP),
+                [255, 255, 255],
+            ),
         ] {
             let mut damaged = destination_only.clone();
             paint(&mut damaged, bounds, rgb);
-            assert!(!inspect_effect(&before, &damaged, planned).unwrap().verified, "masked/dark source {bounds:?}");
+            assert!(
+                !inspect_effect(&before, &damaged, planned).unwrap().verified,
+                "masked/dark source {bounds:?}"
+            );
         }
 
         let mut one_corner = completed.clone();
-        copy_region(&before, &mut one_corner, PixelRect::new(1_497, 551, 28, 44), PixelPoint::new(1_497, 551));
+        copy_region(
+            &before,
+            &mut one_corner,
+            PixelRect::new(1_497, 551, 28, 44),
+            PixelPoint::new(1_497, 551),
+        );
         let evidence = inspect_effect(&before, &one_corner, planned).unwrap();
         assert_eq!(evidence.source_identity_corners[1], 0, "{evidence}");
-        assert!(!evidence.verified, "one good corner is insufficient: {evidence}");
+        assert!(
+            !evidence.verified,
+            "one good corner is insufficient: {evidence}"
+        );
 
         let mut insufficient_material = destination_only;
 
 
-        for bounds in [PixelRect::new(1_403, 430, 28, 44), PixelRect::new(1_497, 551, 28, 44)] {
-            copy_region(&completed, &mut insufficient_material, bounds, PixelPoint::new(bounds.x as i32, bounds.y as i32));
+        for bounds in [
+            PixelRect::new(1_403, 430, 28, 44),
+            PixelRect::new(1_497, 551, 28, 44),
+        ] {
+            copy_region(
+                &completed,
+                &mut insufficient_material,
+                bounds,
+                PixelPoint::new(bounds.x as i32, bounds.y as i32),
+            );
         }
 
         let evidence = inspect_effect(&before, &insufficient_material, planned).unwrap();
-        assert!(evidence.source_identity_directions.into_iter().flatten()
-            .all(|count| count >= MINIMUM_CORNER_CHANGE), "{evidence}");
-        assert!(evidence.source_changed < MINIMUM_CONTENT_CHANGE, "material source guard stays independent: {evidence}");
+        assert!(
+            evidence
+                .source_identity_directions
+                .into_iter()
+                .flatten()
+                .all(|count| count >= MINIMUM_CORNER_CHANGE),
+            "{evidence}"
+        );
+        assert!(
+            evidence.source_changed < MINIMUM_CONTENT_CHANGE,
+            "material source guard stays independent: {evidence}"
+        );
         assert!(!evidence.verified, "{evidence}");
 
         let run = fixture(19);
         let run_action = historical_action(&run);
-        assert_eq!(card_identity_changes(&run, &run, run_action.effect_bounds(), run_action), [[0, 0], [0, 0]],
-            "printed-corner replacement is limited to evidenced complete single-card geometry");
+        assert_eq!(
+            card_identity_changes(&run, &run, run_action.effect_bounds(), run_action),
+            [[0, 0], [0, 0]],
+            "printed-corner replacement is limited to evidenced complete single-card geometry"
+        );
     }
 
 
@@ -4701,12 +6144,29 @@ mod tests {
         for paper_to_ink in [true, false] {
             let after = synthetic_one_way_tableau_corners(paper_to_ink);
             let evidence = inspect_effect(&before, &after, planned).unwrap();
-            assert!(evidence.source_changed >= MINIMUM_CONTENT_CHANGE, "{evidence}");
-            assert!(evidence.destination_changed >= MINIMUM_CONTENT_CHANGE, "{evidence}");
-            assert!(evidence.source_positive < MINIMUM_CONTENT_CHANGE, "{evidence}");
-            assert!(evidence.source_identity_corners.into_iter()
-                .all(|count| count >= MINIMUM_CORNER_CHANGE), "one-way totals alone would be insufficient: {evidence}");
-            assert!(!evidence.verified, "one-way guide-like changes cannot prove replacement: {evidence}");
+            assert!(
+                evidence.source_changed >= MINIMUM_CONTENT_CHANGE,
+                "{evidence}"
+            );
+            assert!(
+                evidence.destination_changed >= MINIMUM_CONTENT_CHANGE,
+                "{evidence}"
+            );
+            assert!(
+                evidence.source_positive < MINIMUM_CONTENT_CHANGE,
+                "{evidence}"
+            );
+            assert!(
+                evidence
+                    .source_identity_corners
+                    .into_iter()
+                    .all(|count| count >= MINIMUM_CORNER_CHANGE),
+                "one-way totals alone would be insufficient: {evidence}"
+            );
+            assert!(
+                !evidence.verified,
+                "one-way guide-like changes cannot prove replacement: {evidence}"
+            );
         }
     }
 
@@ -4716,23 +6176,40 @@ mod tests {
     #[test]
     fn clipped_single_card_identity_corner_cannot_use_toolbar_pixels() {
         let planned = canonical_action(KlondikeTarget::Tableau {
-            column: 7, top: 783, bottom: 963,
-        }).unwrap();
+            column: 7,
+            top: 783,
+            bottom: 963,
+        })
+        .unwrap();
         let source = planned.effect_bounds();
         assert_eq!(source.y + source.height, TOOLBAR_TOP);
         let mut before = fixture(31);
         let mut after = before.clone();
 
 
-        for bounds in [PixelRect::new(1_403, 788, 28, 44), PixelRect::new(1_497, 909, 28, 44)] {
+        for bounds in [
+            PixelRect::new(1_403, 788, 28, 44),
+            PixelRect::new(1_497, 909, 28, 44),
+        ] {
             paint(&mut before, bounds, [255, 255, 255]);
             paint(&mut after, bounds, [0, 0, 0]);
-            paint(&mut before, PixelRect::new(bounds.x, bounds.y, 14, 44), [0, 0, 0]);
-            paint(&mut after, PixelRect::new(bounds.x, bounds.y, 14, 44), [255, 255, 255]);
+            paint(
+                &mut before,
+                PixelRect::new(bounds.x, bounds.y, 14, 44),
+                [0, 0, 0],
+            );
+            paint(
+                &mut after,
+                PixelRect::new(bounds.x, bounds.y, 14, 44),
+                [255, 255, 255],
+            );
         }
 
-        assert_eq!(card_identity_changes(&before, &after, source, planned), [[0, 0], [0, 0]],
-            "even synthetic opposite paper/ink changes cannot borrow toolbar rows947..952");
+        assert_eq!(
+            card_identity_changes(&before, &after, source, planned),
+            [[0, 0], [0, 0]],
+            "even synthetic opposite paper/ink changes cannot borrow toolbar rows947..952"
+        );
     }
 
 
@@ -4744,17 +6221,35 @@ mod tests {
         let before = fixture(33);
         let after = fixture(34);
         let planned = historical_action(&before);
-        assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Waste { offset: 2 }));
-        assert_eq!(historical_action(&after), planned, "success can retain the same source geometry");
+        assert_eq!(
+            planned.target,
+            ActionTarget::Klondike(KlondikeTarget::Waste { offset: 2 })
+        );
+        assert_eq!(
+            historical_action(&after),
+            planned,
+            "success can retain the same source geometry"
+        );
         let evidence = inspect_effect(&before, &after, planned).unwrap();
-        assert!(evidence.source_positive >= MINIMUM_CONTENT_CHANGE, "source already passed: {evidence}");
-        assert_eq!(evidence.destination_changed, 360, "recipient reproduces the runtime count: {evidence}");
+        assert!(
+            evidence.source_positive >= MINIMUM_CONTENT_CHANGE,
+            "source already passed: {evidence}"
+        );
+        assert_eq!(
+            evidence.destination_changed, 360,
+            "recipient reproduces the runtime count: {evidence}"
+        );
         assert_eq!(evidence.destination_print.column, 1);
         assert_eq!(evidence.destination_print.new_ink_halves, [176, 184]);
         assert_eq!(evidence.destination_print.stable_paper, 12_483);
         assert_eq!(evidence.destination_print.changed_paper, 0);
-        assert!(evidence.destination_print.paper_supported && evidence.destination_print.guide_stable);
-        assert!(evidence.destination_print.verified && evidence.verified, "{evidence}");
+        assert!(
+            evidence.destination_print.paper_supported && evidence.destination_print.guide_stable
+        );
+        assert!(
+            evidence.destination_print.verified && evidence.verified,
+            "{evidence}"
+        );
         assert!(!inspect_effect(&before, &before, planned).unwrap().verified);
         assert!(!completion_evidence(&after).unwrap().complete_candidate);
     }
@@ -4770,17 +6265,36 @@ mod tests {
         let source = planned.effect_bounds();
         let foundation = PixelRect::new(894, UPPER_Y, CARD_WIDTH, CARD_HEIGHT);
         let mut source_only = before.clone();
-        copy_region(&completed, &mut source_only, source, PixelPoint::new(source.x as i32, source.y as i32));
+        copy_region(
+            &completed,
+            &mut source_only,
+            source,
+            PixelPoint::new(source.x as i32, source.y as i32),
+        );
         let report = inspect_effect(&before, &source_only, planned).unwrap();
         assert!(report.source_positive >= MINIMUM_CONTENT_CHANGE, "{report}");
         assert_eq!(report.destination_changed, 0);
-        assert!(!report.destination_print.verified && !report.verified, "{report}");
+        assert!(
+            !report.destination_print.verified && !report.verified,
+            "{report}"
+        );
         let mut recipient_only = before.clone();
-        copy_region(&completed, &mut recipient_only, foundation, PixelPoint::new(894, UPPER_Y as i32));
+        copy_region(
+            &completed,
+            &mut recipient_only,
+            foundation,
+            PixelPoint::new(894, UPPER_Y as i32),
+        );
         let report = inspect_effect(&before, &recipient_only, planned).unwrap();
-        assert!(report.destination_print.verified, "recipient alone is real: {report}");
+        assert!(
+            report.destination_print.verified,
+            "recipient alone is real: {report}"
+        );
         assert_eq!(report.source_changed, 0);
-        assert!(!report.verified, "recipient alone has no source authority: {report}");
+        assert!(
+            !report.verified,
+            "recipient alone has no source authority: {report}"
+        );
     }
 
 
@@ -4798,9 +6312,14 @@ mod tests {
             let mut different = completed.clone();
             paint(&mut different, foundation, rgb);
             let print = foundation_print_changes(&before, &different, foundation, 1, planned);
-            assert!(!print.verified, "a blank/white/felt/opaque recipient is unavailable: {rgb:?}: {print:?}");
-            assert!(!foundation_print_changes(&different, &completed, foundation, 1, planned).verified,
-                "introducing a guide is also unavailable: {rgb:?}");
+            assert!(
+                !print.verified,
+                "a blank/white/felt/opaque recipient is unavailable: {rgb:?}: {print:?}"
+            );
+            assert!(
+                !foundation_print_changes(&different, &completed, foundation, 1, planned).verified,
+                "introducing a guide is also unavailable: {rgb:?}"
+            );
         }
 
         let mut paper_faded = completed.clone();
@@ -4809,16 +6328,15 @@ mod tests {
 
 
         for y in foundation.y..foundation.y + foundation.height {
-
-
             for x in foundation.x..foundation.x + foundation.width {
                 let rgb = pixel_rgb(&paper_faded, x, y).unwrap();
                 let offset = y as usize * paper_faded.stride + x as usize * 4;
 
 
                 if is_dimmed_paper(rgb) {
-                    paper_faded.pixels[offset..offset + 3]
-                        .copy_from_slice(&rgb.map(|channel| channel.saturating_sub(GUIDE_STABILITY_DELTA)));
+                    paper_faded.pixels[offset..offset + 3].copy_from_slice(
+                        &rgb.map(|channel| channel.saturating_sub(GUIDE_STABILITY_DELTA)),
+                    );
                     let mut tint = rgb;
                     tint[0] = tint[0].saturating_add(16);
                     paper_recoloured.pixels[offset..offset + 3].copy_from_slice(&tint);
@@ -4834,8 +6352,14 @@ mod tests {
 
         for different in [paper_faded, paper_recoloured, rail_recoloured] {
             let report = inspect_effect(&before, &different, planned).unwrap();
-            assert!(report.destination_changed < MINIMUM_CONTENT_CHANGE, "ordinary route stays insufficient: {report}");
-            assert!(!report.destination_print.verified && !report.verified, "{report}");
+            assert!(
+                report.destination_changed < MINIMUM_CONTENT_CHANGE,
+                "ordinary route stays insufficient: {report}"
+            );
+            assert!(
+                !report.destination_print.verified && !report.verified,
+                "{report}"
+            );
         }
     }
 
@@ -4849,7 +6373,12 @@ mod tests {
         let planned = historical_action(&before);
         let source = planned.effect_bounds();
         let mut source_only = before.clone();
-        copy_region(&completed, &mut source_only, source, PixelPoint::new(source.x as i32, source.y as i32));
+        copy_region(
+            &completed,
+            &mut source_only,
+            source,
+            PixelPoint::new(source.x as i32, source.y as i32),
+        );
 
 
         for (bounds, rgb) in [
@@ -4858,20 +6387,36 @@ mod tests {
             (PixelRect::new(956, 189, 8, 5), [73, 0, 0]),
             (PixelRect::new(940, 189, 10, 10), [73, 0, 0]),
             (PixelRect::new(952, 189, 16, 16), [170, 120, 75]),
-            (PixelRect::new(378, TOOLBAR_TOP, 1_162, 1_033 - TOOLBAR_TOP), [255, 255, 255]),
+            (
+                PixelRect::new(378, TOOLBAR_TOP, 1_162, 1_033 - TOOLBAR_TOP),
+                [255, 255, 255],
+            ),
         ] {
             let mut after = source_only.clone();
             paint(&mut after, bounds, rgb);
             let report = inspect_effect(&before, &after, planned).unwrap();
-            assert!(report.destination_changed < MINIMUM_CONTENT_CHANGE, "{bounds:?}: {report}");
-            assert!(!report.destination_print.verified && !report.verified, "{bounds:?}: {report}");
+            assert!(
+                report.destination_changed < MINIMUM_CONTENT_CHANGE,
+                "{bounds:?}: {report}"
+            );
+            assert!(
+                !report.destination_print.verified && !report.verified,
+                "{bounds:?}: {report}"
+            );
         }
 
         let mut pointer_before = before.clone();
-        paint(&mut pointer_before, PixelRect::new(952, 189, 16, 16), [0, 0, 0]);
+        paint(
+            &mut pointer_before,
+            PixelRect::new(952, 189, 16, 16),
+            [0, 0, 0],
+        );
         let pointer_plan = historical_action(&pointer_before);
         let report = inspect_effect(&pointer_before, &source_only, pointer_plan).unwrap();
-        assert!(!report.destination_print.verified && !report.verified, "cursor departure is not new red print: {report}");
+        assert!(
+            !report.destination_print.verified && !report.verified,
+            "cursor departure is not new red print: {report}"
+        );
     }
 
 
@@ -4881,12 +6426,37 @@ mod tests {
     fn synthetic_foundation_replacement() -> (CapturedFrame, CapturedFrame) {
         let mut before = active_without_highlight();
         add_upper_source(&mut before, 1_230);
-        copy_region(&fixture(15), &mut before, PixelRect::new(1_398, UPPER_Y, CARD_WIDTH, CARD_HEIGHT), PixelPoint::new(1_230, UPPER_Y as i32));
-        let destination = PixelRect::new(726, TABLEAU_Y, CARD_WIDTH, TABLEAU_EFFECT_BOTTOM - TABLEAU_Y);
-        copy_region(&fixture(31), &mut before, destination, PixelPoint::new(726, TABLEAU_Y as i32));
+        copy_region(
+            &fixture(15),
+            &mut before,
+            PixelRect::new(1_398, UPPER_Y, CARD_WIDTH, CARD_HEIGHT),
+            PixelPoint::new(1_230, UPPER_Y as i32),
+        );
+        let destination = PixelRect::new(
+            726,
+            TABLEAU_Y,
+            CARD_WIDTH,
+            TABLEAU_EFFECT_BOTTOM - TABLEAU_Y,
+        );
+        copy_region(
+            &fixture(31),
+            &mut before,
+            destination,
+            PixelPoint::new(726, TABLEAU_Y as i32),
+        );
         let mut after = before.clone();
-        copy_region(&fixture(14), &mut after, PixelRect::new(614, UPPER_Y, CARD_WIDTH, CARD_HEIGHT), PixelPoint::new(1_230, UPPER_Y as i32));
-        copy_region(&fixture(32), &mut after, destination, PixelPoint::new(726, TABLEAU_Y as i32));
+        copy_region(
+            &fixture(14),
+            &mut after,
+            PixelRect::new(614, UPPER_Y, CARD_WIDTH, CARD_HEIGHT),
+            PixelPoint::new(1_230, UPPER_Y as i32),
+        );
+        copy_region(
+            &fixture(32),
+            &mut after,
+            destination,
+            PixelPoint::new(726, TABLEAU_Y as i32),
+        );
         (before, after)
     }
 
@@ -4897,13 +6467,23 @@ mod tests {
     fn synthetic_foundation_replacement_uses_strict_upper_card_proofs() {
         let (before, after) = synthetic_foundation_replacement();
         let planned = historical_action(&before);
-        assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Foundation { column: 3 }));
+        assert_eq!(
+            planned.target,
+            ActionTarget::Klondike(KlondikeTarget::Foundation { column: 3 })
+        );
         let report = inspect_effect(&before, &after, planned).unwrap();
         assert_eq!(report.source_changed, 772, "{report}");
-        assert_eq!(report.source_positive, 70, "old positive gate is insufficient: {report}");
+        assert_eq!(
+            report.source_positive, 70,
+            "old positive gate is insufficient: {report}"
+        );
         assert_eq!(report.source_identity_directions, [[67, 88], [67, 83]]);
         assert_eq!(report.destination_changed, 17_151);
-        assert_eq!(report.destination_print, FoundationPrintEvidence::default(), "SUIT source cannot use specialised foundation recipients");
+        assert_eq!(
+            report.destination_print,
+            FoundationPrintEvidence::default(),
+            "SUIT source cannot use specialised foundation recipients"
+        );
         assert!(report.verified, "{report}");
         assert!(!inspect_effect(&before, &before, planned).unwrap().verified);
     }
@@ -4917,25 +6497,57 @@ mod tests {
         let (before, mut completed) = synthetic_foundation_replacement();
         let planned = historical_action(&before);
         let source = planned.effect_bounds();
-        copy_region(&before, &mut completed, PixelRect::new(source.x + 5, UPPER_Y + 5, 8, 44), PixelPoint::new(source.x as i32 + 5, UPPER_Y as i32 + 5));
+        copy_region(
+            &before,
+            &mut completed,
+            PixelRect::new(source.x + 5, UPPER_Y + 5, 8, 44),
+            PixelPoint::new(source.x as i32 + 5, UPPER_Y as i32 + 5),
+        );
         let report = inspect_effect(&before, &completed, planned).unwrap();
-        assert!(report.source_identity_directions[0][0] < MINIMUM_CORNER_CHANGE, "corner route is insufficient: {report}");
+        assert!(
+            report.source_identity_directions[0][0] < MINIMUM_CORNER_CHANGE,
+            "corner route is insufficient: {report}"
+        );
         assert_eq!(report.source_changed, 772);
         assert_eq!(report.source_foundation_print.new_ink, 643);
         assert_eq!(report.source_foundation_print.cleared_ink, 65);
         assert_eq!(report.source_foundation_print.changed_paper_fields, 0);
-        assert!(report.source_foundation_print.verified && report.verified, "{report}");
-        let destination = PixelRect::new(726, TABLEAU_Y, CARD_WIDTH, TABLEAU_EFFECT_BOTTOM - TABLEAU_Y);
+        assert!(
+            report.source_foundation_print.verified && report.verified,
+            "{report}"
+        );
+        let destination = PixelRect::new(
+            726,
+            TABLEAU_Y,
+            CARD_WIDTH,
+            TABLEAU_EFFECT_BOTTOM - TABLEAU_Y,
+        );
         let mut source_only = completed.clone();
-        copy_region(&before, &mut source_only, destination, PixelPoint::new(726, TABLEAU_Y as i32));
+        copy_region(
+            &before,
+            &mut source_only,
+            destination,
+            PixelPoint::new(726, TABLEAU_Y as i32),
+        );
         let report = inspect_effect(&before, &source_only, planned).unwrap();
-        assert!(report.source_foundation_print.verified && !report.verified, "no recipient: {report}");
+        assert!(
+            report.source_foundation_print.verified && !report.verified,
+            "no recipient: {report}"
+        );
         assert_eq!(report.destination_changed, 0);
         let mut recipient_only = before.clone();
-        copy_region(&completed, &mut recipient_only, destination, PixelPoint::new(726, TABLEAU_Y as i32));
+        copy_region(
+            &completed,
+            &mut recipient_only,
+            destination,
+            PixelPoint::new(726, TABLEAU_Y as i32),
+        );
         let report = inspect_effect(&before, &recipient_only, planned).unwrap();
         assert_eq!(report.source_changed, 0);
-        assert!(!report.source_foundation_print.verified && !report.verified, "no source: {report}");
+        assert!(
+            !report.source_foundation_print.verified && !report.verified,
+            "no source: {report}"
+        );
     }
 
 
@@ -4946,21 +6558,25 @@ mod tests {
         let (before, mut completed) = synthetic_foundation_replacement();
         let planned = historical_action(&before);
         let source = planned.effect_bounds();
-        copy_region(&before, &mut completed, PixelRect::new(source.x + 5, UPPER_Y + 5, 8, 44), PixelPoint::new(source.x as i32 + 5, UPPER_Y as i32 + 5));
+        copy_region(
+            &before,
+            &mut completed,
+            PixelRect::new(source.x + 5, UPPER_Y + 5, 8, 44),
+            PixelPoint::new(source.x as i32 + 5, UPPER_Y as i32 + 5),
+        );
         let mut faded = completed.clone();
         let mut tinted = completed.clone();
 
 
         for y in source.y..source.y + source.height {
-
-
             for x in source.x..source.x + source.width {
                 let rgb = pixel_rgb(&completed, x, y).unwrap();
 
 
                 if is_bright_neutral_paper(rgb) {
                     let offset = y as usize * completed.stride + x as usize * 4;
-                    faded.pixels[offset..offset + 3].copy_from_slice(&rgb.map(|channel| channel.saturating_sub(16)));
+                    faded.pixels[offset..offset + 3]
+                        .copy_from_slice(&rgb.map(|channel| channel.saturating_sub(16)));
                     tinted.pixels[offset..offset + 3].copy_from_slice(&[255, 240, 240]);
                 }
             }
@@ -4969,26 +6585,52 @@ mod tests {
 
         for after in [faded, tinted] {
             let report = inspect_effect(&before, &after, planned).unwrap();
-            assert!(report.source_changed >= MINIMUM_CONTENT_CHANGE && report.destination_changed >= MINIMUM_CONTENT_CHANGE, "material alone remains insufficient: {report}");
-            assert!(!report.source_foundation_print.verified && !report.verified, "{report}");
+            assert!(
+                report.source_changed >= MINIMUM_CONTENT_CHANGE
+                    && report.destination_changed >= MINIMUM_CONTENT_CHANGE,
+                "material alone remains insufficient: {report}"
+            );
+            assert!(
+                !report.source_foundation_print.verified && !report.verified,
+                "{report}"
+            );
         }
 
-        let destination = PixelRect::new(726, TABLEAU_Y, CARD_WIDTH, TABLEAU_EFFECT_BOTTOM - TABLEAU_Y);
+        let destination = PixelRect::new(
+            726,
+            TABLEAU_Y,
+            CARD_WIDTH,
+            TABLEAU_EFFECT_BOTTOM - TABLEAU_Y,
+        );
         let mut recipient_only = before.clone();
-        copy_region(&completed, &mut recipient_only, destination, PixelPoint::new(726, TABLEAU_Y as i32));
+        copy_region(
+            &completed,
+            &mut recipient_only,
+            destination,
+            PixelPoint::new(726, TABLEAU_Y as i32),
+        );
 
 
         for (bounds, rgb) in [
             (PixelRect::new(1_276, 179, 40, 40), [0, 0, 0]),
             (source, [170, 120, 75]),
             (source, [160, 160, 160]),
-            (PixelRect::new(source.x + 24, source.y + 16, 40, 20), [0, 0, 0]),
-            (PixelRect::new(378, TOOLBAR_TOP, 1_162, 1_033 - TOOLBAR_TOP), [255, 255, 255]),
+            (
+                PixelRect::new(source.x + 24, source.y + 16, 40, 20),
+                [0, 0, 0],
+            ),
+            (
+                PixelRect::new(378, TOOLBAR_TOP, 1_162, 1_033 - TOOLBAR_TOP),
+                [255, 255, 255],
+            ),
         ] {
             let mut after = recipient_only.clone();
             paint(&mut after, bounds, rgb);
             let report = inspect_effect(&before, &after, planned).unwrap();
-            assert!(!report.source_foundation_print.verified && !report.verified, "{bounds:?}: {report}");
+            assert!(
+                !report.source_foundation_print.verified && !report.verified,
+                "{bounds:?}: {report}"
+            );
         }
     }
 
@@ -5001,10 +6643,16 @@ mod tests {
         let planned = historical_action(&before);
         let mut broken = fixture(34);
         broken.pixels.truncate(4);
-        assert_eq!(inspect_effect(&before, &broken, planned), Err(HaloDetectionError::InvalidFrameLayout));
+        assert_eq!(
+            inspect_effect(&before, &broken, planned),
+            Err(HaloDetectionError::InvalidFrameLayout)
+        );
         let mut wrong_size = fixture(34);
         wrong_size.width = 1_919;
-        assert_eq!(inspect_effect(&before, &wrong_size, planned), Err(HaloDetectionError::BoundsOutsideFrame));
+        assert_eq!(
+            inspect_effect(&before, &wrong_size, planned),
+            Err(HaloDetectionError::BoundsOutsideFrame)
+        );
     }
 
 
@@ -5016,14 +6664,33 @@ mod tests {
         let before = fixture(35);
         let after = fixture(36);
         let planned = historical_action(&before);
-        assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Waste { offset: 1 }));
-        assert_eq!(historical_action(&after).target, ActionTarget::Klondike(KlondikeTarget::Waste { offset: 0 }));
+        assert_eq!(
+            planned.target,
+            ActionTarget::Klondike(KlondikeTarget::Waste { offset: 1 })
+        );
+        assert_eq!(
+            historical_action(&after).target,
+            ActionTarget::Klondike(KlondikeTarget::Waste { offset: 0 })
+        );
         let report = inspect_effect(&before, &after, planned).unwrap();
-        assert!(report.source_replaced, "independent source evidence survives sparse recipient artwork: {report}");
+        assert!(
+            report.source_replaced,
+            "independent source evidence survives sparse recipient artwork: {report}"
+        );
         assert!(report.source_positive >= MINIMUM_CONTENT_CHANGE, "{report}");
-        assert_eq!(report.destination_changed, 251, "the reconstructed recipient reproduces the log: {report}");
-        assert!(!report.destination_print.verified && !report.verified, "no black-pip special case is invented: {report}");
-        assert!(!inspect_effect(&before, &before, planned).unwrap().source_replaced);
+        assert_eq!(
+            report.destination_changed, 251,
+            "the reconstructed recipient reproduces the log: {report}"
+        );
+        assert!(
+            !report.destination_print.verified && !report.verified,
+            "no black-pip special case is invented: {report}"
+        );
+        assert!(
+            !inspect_effect(&before, &before, planned)
+                .unwrap()
+                .source_replaced
+        );
     }
 
 
@@ -5036,19 +6703,36 @@ mod tests {
         let planned = historical_action(&before);
         let source = planned.effect_bounds();
         let mut source_only = before.clone();
-        copy_region(&completed, &mut source_only, source, PixelPoint::new(source.x as i32, source.y as i32));
+        copy_region(
+            &completed,
+            &mut source_only,
+            source,
+            PixelPoint::new(source.x as i32, source.y as i32),
+        );
         let report = inspect_effect(&before, &source_only, planned).unwrap();
-        assert!(report.source_replaced && !report.verified, "source is not complete effect authority: {report}");
+        assert!(
+            report.source_replaced && !report.verified,
+            "source is not complete effect authority: {report}"
+        );
         let mut recipient_only = before.clone();
-        copy_region(&completed, &mut recipient_only, PixelRect::new(1_398, UPPER_Y, CARD_WIDTH, CARD_HEIGHT), PixelPoint::new(1_398, UPPER_Y as i32));
+        copy_region(
+            &completed,
+            &mut recipient_only,
+            PixelRect::new(1_398, UPPER_Y, CARD_WIDTH, CARD_HEIGHT),
+            PixelPoint::new(1_398, UPPER_Y as i32),
+        );
         let report = inspect_effect(&before, &recipient_only, planned).unwrap();
         assert!(!report.source_replaced && !report.verified, "{report}");
 
 
         for (first, second) in [(6, 7), (12, 1), (13, 13)] {
             let frame = fixture(first);
-            let report = inspect_effect(&frame, &fixture(second), historical_action(&frame)).unwrap();
-            assert!(!report.source_replaced, "stock/Recycle/Solve are not card-source continuation: K{first:02}: {report}");
+            let report =
+                inspect_effect(&frame, &fixture(second), historical_action(&frame)).unwrap();
+            assert!(
+                !report.source_replaced,
+                "stock/Recycle/Solve are not card-source continuation: K{first:02}: {report}"
+            );
         }
     }
 
@@ -5062,15 +6746,31 @@ mod tests {
         assert!(has_solve_control(&frame));
         let solve = historical_action(&frame);
         assert_eq!(solve.target, ActionTarget::Klondike(KlondikeTarget::Solve));
-        assert_eq!(solve.operation(), InputOperation::Click(PixelPoint::new(624, 199)));
-        assert!(find_solid_card_source(&frame, PixelRect::new(390, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)).unwrap().is_some());
+        assert_eq!(
+            solve.operation(),
+            InputOperation::Click(PixelPoint::new(624, 199))
+        );
+        assert!(
+            find_solid_card_source(
+                &frame,
+                PixelRect::new(390, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)
+            )
+            .unwrap()
+            .is_some()
+        );
         let mut preceding = frame.clone();
         paint(&mut preceding, SOLVE_BOUNDS, [12, 82, 45]);
         let card = historical_action(&preceding);
-        assert!(matches!(card.target, ActionTarget::Klondike(KlondikeTarget::Tableau { column: 1, .. })));
+        assert!(matches!(
+            card.target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau { column: 1, .. })
+        ));
         let report = inspect_effect(&preceding, &frame, card).unwrap();
         assert_eq!(report.source_changed, 0);
-        assert!(!report.source_replaced && !report.verified, "Solve availability is separate authority: {report}");
+        assert!(
+            !report.source_replaced && !report.verified,
+            "Solve availability is separate authority: {report}"
+        );
     }
 
 
@@ -5081,15 +6781,35 @@ mod tests {
     fn recorded_nine_card_source_under_toolbar_is_one_safe_upper_action() {
         let frame = fixture(38);
         let planned = action(&frame);
-        assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-            column: 6, top: 407, bottom: 947,
-        }));
-        assert_eq!(planned.operation(), InputOperation::Click(PixelPoint::new(1_296, 447)));
-        assert_eq!(planned.effect_bounds(), PixelRect::new(1_230, 407, CARD_WIDTH, 540));
+        assert_eq!(
+            planned.target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 6,
+                top: 407,
+                bottom: 947,
+            })
+        );
+        assert_eq!(
+            planned.operation(),
+            InputOperation::Click(PixelPoint::new(1_296, 447))
+        );
+        assert_eq!(
+            planned.effect_bounds(),
+            PixelRect::new(1_230, 407, CARD_WIDTH, 540)
+        );
         assert_eq!(planned.effect_bounds().bottom(), TOOLBAR_TOP);
-        assert_eq!(find_solid_card_source(&frame, PixelRect::new(1_230, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)).unwrap(),
-            Some(PixelRect::new(1_230, 407, CARD_WIDTH, 583)));
-        assert_eq!(count_pixels(&frame, TOOLBAR_ICON_SUPPORT, is_toolbar_undo_red), 68);
+        assert_eq!(
+            find_solid_card_source(
+                &frame,
+                PixelRect::new(1_230, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)
+            )
+            .unwrap(),
+            Some(PixelRect::new(1_230, 407, CARD_WIDTH, 583))
+        );
+        assert_eq!(
+            count_pixels(&frame, TOOLBAR_ICON_SUPPORT, is_toolbar_undo_red),
+            68
+        );
         assert!(!completion_evidence(&frame).unwrap().complete_candidate);
     }
 
@@ -5102,21 +6822,42 @@ mod tests {
 
 
         for bottom in 930..TOOLBAR_EDGE_OCCLUSION.bottom() {
-            assert_eq!(find_solid_card_source(&frame, PixelRect::new(1_230, 332, CARD_WIDTH, bottom - 332)).unwrap(), None,
-                "the known icon mask cannot complete a scan cropped at row{bottom}");
+            assert_eq!(
+                find_solid_card_source(
+                    &frame,
+                    PixelRect::new(1_230, 332, CARD_WIDTH, bottom - 332)
+                )
+                .unwrap(),
+                None,
+                "the known icon mask cannot complete a scan cropped at row{bottom}"
+            );
         }
 
 
-        assert!(find_solid_card_source(&frame,
-            PixelRect::new(1_230, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)).unwrap().is_some());
+        assert!(
+            find_solid_card_source(
+                &frame,
+                PixelRect::new(1_230, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)
+            )
+            .unwrap()
+            .is_some()
+        );
 
 
         for bottom in TOOLBAR_EDGE_OCCLUSION.bottom()..=TABLEAU_OUTLINE_BOTTOM {
-            assert_eq!(find_solid_card_source(&frame,
-                PixelRect::new(1_230, 332, CARD_WIDTH, bottom - 332)).unwrap(),
-                find_solid_card_source(&frame,
-                    PixelRect::new(1_230, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)).unwrap(),
-                "complete observed column-6 mask remains valid at row{bottom}");
+            assert_eq!(
+                find_solid_card_source(
+                    &frame,
+                    PixelRect::new(1_230, 332, CARD_WIDTH, bottom - 332)
+                )
+                .unwrap(),
+                find_solid_card_source(
+                    &frame,
+                    PixelRect::new(1_230, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)
+                )
+                .unwrap(),
+                "complete observed column-6 mask remains valid at row{bottom}"
+            );
         }
 
 
@@ -5141,27 +6882,65 @@ mod tests {
     fn nine_card_toolbar_source_rejects_floating_edges_dark_guides_and_cursors() {
         let frame = fixture(38);
         let mut empty = frame.clone();
-        paint(&mut empty, PixelRect::new(1_218, 398, 156, TABLEAU_OUTLINE_BOTTOM - 398), [12, 82, 45]);
+        paint(
+            &mut empty,
+            PixelRect::new(1_218, 398, 156, TABLEAU_OUTLINE_BOTTOM - 398),
+            [12, 82, 45],
+        );
         let mut floating_edge = empty.clone();
-        paint(&mut floating_edge, PixelRect::new(1_248, 989, 96, 1), [170, 120, 75]);
-        copy_region(&frame, &mut floating_edge, TOOLBAR_ICON_SUPPORT, PixelPoint::new(TOOLBAR_ICON_SUPPORT.x as i32, TOOLBAR_ICON_SUPPORT.y as i32));
-        assert_eq!(analyse(&floating_edge).unwrap().prediction, PredictedAction::NoHighlight);
+        paint(
+            &mut floating_edge,
+            PixelRect::new(1_248, 989, 96, 1),
+            [170, 120, 75],
+        );
+        copy_region(
+            &frame,
+            &mut floating_edge,
+            TOOLBAR_ICON_SUPPORT,
+            PixelPoint::new(TOOLBAR_ICON_SUPPORT.x as i32, TOOLBAR_ICON_SUPPORT.y as i32),
+        );
+        assert_eq!(
+            analyse(&floating_edge).unwrap().prediction,
+            PredictedAction::NoHighlight
+        );
         let mut dashed = empty.clone();
-        copy_region(&frame, &mut dashed, PixelRect::new(726, 398, CARD_WIDTH, CARD_HEIGHT), PixelPoint::new(1_230, 407));
-        assert_eq!(analyse(&dashed).unwrap().prediction, PredictedAction::NoHighlight);
+        copy_region(
+            &frame,
+            &mut dashed,
+            PixelRect::new(726, 398, CARD_WIDTH, CARD_HEIGHT),
+            PixelPoint::new(1_230, 407),
+        );
+        assert_eq!(
+            analyse(&dashed).unwrap().prediction,
+            PredictedAction::NoHighlight
+        );
 
 
         for rgb in [[0, 0, 0], [255, 255, 255]] {
             let mut cursor = empty.clone();
             paint(&mut cursor, PixelRect::new(1_276, 427, 40, 60), rgb);
-            assert_eq!(analyse(&cursor).unwrap().prediction, PredictedAction::NoHighlight);
+            assert_eq!(
+                analyse(&cursor).unwrap().prediction,
+                PredictedAction::NoHighlight
+            );
         }
 
         let mut internal_edge = frame.clone();
-        paint(&mut internal_edge, PixelRect::new(1_218, 975, 156, TABLEAU_OUTLINE_BOTTOM - 975), [12, 82, 45]);
-        paint(&mut internal_edge, PixelRect::new(1_248, 944, 96, 1), [170, 120, 75]);
-        assert_eq!(analyse(&internal_edge).unwrap().prediction, analyse(&frame).unwrap().prediction,
-            "a below-toolbar erasure or interior stripe cannot split the visible connected run");
+        paint(
+            &mut internal_edge,
+            PixelRect::new(1_218, 975, 156, TABLEAU_OUTLINE_BOTTOM - 975),
+            [12, 82, 45],
+        );
+        paint(
+            &mut internal_edge,
+            PixelRect::new(1_248, 944, 96, 1),
+            [170, 120, 75],
+        );
+        assert_eq!(
+            analyse(&internal_edge).unwrap().prediction,
+            analyse(&frame).unwrap().prediction,
+            "a below-toolbar erasure or interior stripe cannot split the visible connected run"
+        );
     }
 
 
@@ -5172,18 +6951,41 @@ mod tests {
         let before = fixture(38);
         let planned = historical_action(&before);
         let mut toolbar_changed = before.clone();
-        paint(&mut toolbar_changed, PixelRect::new(378, TOOLBAR_TOP, 1_162, 1_033 - TOOLBAR_TOP), [255, 255, 255]);
+        paint(
+            &mut toolbar_changed,
+            PixelRect::new(378, TOOLBAR_TOP, 1_162, 1_033 - TOOLBAR_TOP),
+            [255, 255, 255],
+        );
         let report = inspect_effect(&before, &toolbar_changed, planned).unwrap();
         assert_eq!(report.source_changed, 0);
         assert_eq!(report.destination_changed, 0);
         assert!(!report.source_replaced && !report.verified, "{report}");
-        assert!(canonical_action(KlondikeTarget::Tableau { column: 6, top: 407, bottom: TABLEAU_OUTLINE_BOTTOM as u16 + 1 }).is_none());
-        assert!(canonical_action(KlondikeTarget::Tableau { column: 6, top: 331, bottom: 994 }).is_none(),
-            "source geometry above the unchanged scan stays unsupported");
+        assert!(
+            canonical_action(KlondikeTarget::Tableau {
+                column: 6,
+                top: 407,
+                bottom: TABLEAU_OUTLINE_BOTTOM as u16 + 1
+            })
+            .is_none()
+        );
+        assert!(
+            canonical_action(KlondikeTarget::Tableau {
+                column: 6,
+                top: 331,
+                bottom: 994
+            })
+            .is_none(),
+            "source geometry above the unchanged scan stays unsupported"
+        );
         let mut malformed = before;
         malformed.pixels.truncate(4);
-        assert_eq!(find_solid_card_source(&malformed, PixelRect::new(1_230, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)),
-            Err(HaloDetectionError::InvalidFrameLayout));
+        assert_eq!(
+            find_solid_card_source(
+                &malformed,
+                PixelRect::new(1_230, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)
+            ),
+            Err(HaloDetectionError::InvalidFrameLayout)
+        );
     }
 
 
@@ -5195,20 +6997,41 @@ mod tests {
         let before = fixture(39);
         let after = fixture(40);
         let planned = historical_action(&before);
-        assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-            column: 3, top: 799, bottom: 989,
-        }));
-        assert_eq!(planned.operation(), InputOperation::Click(PixelPoint::new(792, 839)));
+        assert_eq!(
+            planned.target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 3,
+                top: 799,
+                bottom: 989,
+            })
+        );
+        assert_eq!(
+            planned.operation(),
+            InputOperation::Click(PixelPoint::new(792, 839))
+        );
         assert_eq!(planned.effect_bounds().bottom(), TOOLBAR_TOP);
-        assert_eq!(historical_action(&after).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-            column: 6, top: 372, bottom: 562,
-        }));
+        assert_eq!(
+            historical_action(&after).target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 6,
+                top: 372,
+                bottom: 562,
+            })
+        );
         let report = inspect_effect(&before, &after, planned).unwrap();
         assert_eq!(report.source_changed, 824, "{report}");
         assert_eq!(report.source_positive, 61, "{report}");
         assert_eq!(report.source_dimmed_felt, 0, "{report}");
-        assert_eq!(report.source_identity_directions, [[0, 0], [0, 0]], "ordinary clipped proof stays refused");
-        assert_eq!(report.source_visible_identity_directions, [[68, 204], [228, 56]], "{report}");
+        assert_eq!(
+            report.source_identity_directions,
+            [[0, 0], [0, 0]],
+            "ordinary clipped proof stays refused"
+        );
+        assert_eq!(
+            report.source_visible_identity_directions,
+            [[68, 204], [228, 56]],
+            "{report}"
+        );
         assert_eq!(report.destination_changed, 1_298, "{report}");
         assert!(report.source_replaced && !report.verified, "{report}");
         assert!(!inspect_effect(&before, &before, planned).unwrap().verified);
@@ -5226,35 +7049,77 @@ mod tests {
         let source = planned.effect_bounds();
         let recipient = PixelRect::new(1_398, UPPER_Y, CARD_WIDTH, CARD_HEIGHT);
         let mut source_only = before.clone();
-        copy_region(&completed, &mut source_only, source, PixelPoint::new(source.x as i32, source.y as i32));
+        copy_region(
+            &completed,
+            &mut source_only,
+            source,
+            PixelPoint::new(source.x as i32, source.y as i32),
+        );
         let report = inspect_effect(&before, &source_only, planned).unwrap();
-        assert_eq!(report.source_visible_identity_directions, [[68, 204], [228, 56]], "{report}");
+        assert_eq!(
+            report.source_visible_identity_directions,
+            [[68, 204], [228, 56]],
+            "{report}"
+        );
         assert!(report.source_changed >= MINIMUM_CONTENT_CHANGE, "{report}");
         assert_eq!(report.destination_changed, 0, "{report}");
         assert!(report.source_replaced && !report.verified, "{report}");
         let mut recipient_only = before.clone();
-        copy_region(&completed, &mut recipient_only, recipient, PixelPoint::new(recipient.x as i32, recipient.y as i32));
+        copy_region(
+            &completed,
+            &mut recipient_only,
+            recipient,
+            PixelPoint::new(recipient.x as i32, recipient.y as i32),
+        );
         let report = inspect_effect(&before, &recipient_only, planned).unwrap();
-        assert_eq!(report.destination_changed, 318, "actual received foundation has no next-source HALO decoration: {report}");
+        assert_eq!(
+            report.destination_changed, 318,
+            "actual received foundation has no next-source HALO decoration: {report}"
+        );
         assert!(!report.source_replaced && !report.verified, "{report}");
         let mut halo_only = before.clone();
-        copy_region(&completed, &mut halo_only,
-            PixelRect::new(1_230, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332), PixelPoint::new(1_230, 332));
+        copy_region(
+            &completed,
+            &mut halo_only,
+            PixelRect::new(1_230, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332),
+            PixelPoint::new(1_230, 332),
+        );
         let report = inspect_effect(&before, &halo_only, planned).unwrap();
-        assert_eq!(report.destination_changed, 1_298, "broad change diagnostic includes the next source's HALO shadow: {report}");
+        assert_eq!(
+            report.destination_changed, 1_298,
+            "broad change diagnostic includes the next source's HALO shadow: {report}"
+        );
         assert_eq!(report.source_changed, 0, "{report}");
-        assert!(!report.source_replaced && !report.verified, "HALO decoration alone establishes neither source nor complete effect: {report}");
+        assert!(
+            !report.source_replaced && !report.verified,
+            "HALO decoration alone establishes neither source nor complete effect: {report}"
+        );
 
         let mut tiny_source = recipient_only;
 
 
-        for bounds in [PixelRect::new(731, 804, 28, 44), PixelRect::new(825, 903, 28, 44)] {
-            copy_region(&completed, &mut tiny_source, bounds, PixelPoint::new(bounds.x as i32, bounds.y as i32));
+        for bounds in [
+            PixelRect::new(731, 804, 28, 44),
+            PixelRect::new(825, 903, 28, 44),
+        ] {
+            copy_region(
+                &completed,
+                &mut tiny_source,
+                bounds,
+                PixelPoint::new(bounds.x as i32, bounds.y as i32),
+            );
         }
 
         let report = inspect_effect(&before, &tiny_source, planned).unwrap();
-        assert_eq!(report.source_visible_identity_directions, [[68, 204], [228, 56]], "{report}");
-        assert!(report.source_changed < MINIMUM_CONTENT_CHANGE, "independent material source remains required: {report}");
+        assert_eq!(
+            report.source_visible_identity_directions,
+            [[68, 204], [228, 56]],
+            "{report}"
+        );
+        assert!(
+            report.source_changed < MINIMUM_CONTENT_CHANGE,
+            "independent material source remains required: {report}"
+        );
         assert!(!report.source_replaced && !report.verified, "{report}");
     }
 
@@ -5268,22 +7133,52 @@ mod tests {
         let planned = historical_action(&before);
         let source = planned.effect_bounds();
         let mut source_and_foundation = before.clone();
-        copy_region(&completed, &mut source_and_foundation, source, PixelPoint::new(source.x as i32, source.y as i32));
-        copy_region(&completed, &mut source_and_foundation, PixelRect::new(1_398, UPPER_Y, CARD_WIDTH, CARD_HEIGHT), PixelPoint::new(1_398, UPPER_Y as i32));
+        copy_region(
+            &completed,
+            &mut source_and_foundation,
+            source,
+            PixelPoint::new(source.x as i32, source.y as i32),
+        );
+        copy_region(
+            &completed,
+            &mut source_and_foundation,
+            PixelRect::new(1_398, UPPER_Y, CARD_WIDTH, CARD_HEIGHT),
+            PixelPoint::new(1_398, UPPER_Y as i32),
+        );
 
 
-        for (index, bounds) in [PixelRect::new(731, 804, 28, 44), PixelRect::new(825, 903, 28, 44)]
-            .into_iter().enumerate()
+        for (index, bounds) in [
+            PixelRect::new(731, 804, 28, 44),
+            PixelRect::new(825, 903, 28, 44),
+        ]
+        .into_iter()
+        .enumerate()
         {
             let mut one_patch = source_and_foundation.clone();
-            copy_region(&before, &mut one_patch, bounds, PixelPoint::new(bounds.x as i32, bounds.y as i32));
-            paint(&mut one_patch, PixelRect::new(760, 891, 64, 10), [190, 190, 190]);
+            copy_region(
+                &before,
+                &mut one_patch,
+                bounds,
+                PixelPoint::new(bounds.x as i32, bounds.y as i32),
+            );
+            paint(
+                &mut one_patch,
+                PixelRect::new(760, 891, 64, 10),
+                [190, 190, 190],
+            );
             let report = inspect_effect(&before, &one_patch, planned).unwrap();
-            assert_eq!(report.source_visible_identity_directions[index], [0, 0], "{report}");
+            assert_eq!(
+                report.source_visible_identity_directions[index],
+                [0, 0],
+                "{report}"
+            );
             assert!(report.source_changed >= MINIMUM_CONTENT_CHANGE, "{report}");
             assert_eq!(report.destination_changed, 318, "{report}");
             assert!(report.source_positive < MINIMUM_CONTENT_CHANGE, "{report}");
-            assert!(!report.source_replaced && !report.verified, "one complete patch is insufficient: {report}");
+            assert!(
+                !report.source_replaced && !report.verified,
+                "one complete patch is insufficient: {report}"
+            );
         }
     }
 
@@ -5301,19 +7196,23 @@ mod tests {
         for paper_to_ink in [true, false] {
             let mut before = original.clone();
             let mut after = original.clone();
-            copy_region(&completed, &mut after, PixelRect::new(1_398, UPPER_Y, CARD_WIDTH, CARD_HEIGHT), PixelPoint::new(1_398, UPPER_Y as i32));
+            copy_region(
+                &completed,
+                &mut after,
+                PixelRect::new(1_398, UPPER_Y, CARD_WIDTH, CARD_HEIGHT),
+                PixelPoint::new(1_398, UPPER_Y as i32),
+            );
 
 
-            for bounds in [PixelRect::new(731, 804, 28, 44), PixelRect::new(825, 903, 28, 44)] {
+            for bounds in [
+                PixelRect::new(731, 804, 28, 44),
+                PixelRect::new(825, 903, 28, 44),
+            ] {
                 let mut changed = 0;
 
 
                 for y in bounds.y..bounds.bottom() {
-
-
                     for x in bounds.x..bounds.right() {
-
-
                         if changed == 80
                             || ((i64::from(x) - 792).abs() < 48 && (i64::from(y) - 839).abs() < 48)
                             || !pixel_rgb(&original, x, y).is_some_and(is_white)
@@ -5321,8 +7220,24 @@ mod tests {
                             continue;
                         }
 
-                        paint(&mut before, PixelRect::new(x, y, 1, 1), if paper_to_ink { [255, 255, 255] } else { [0, 0, 0] });
-                        paint(&mut after, PixelRect::new(x, y, 1, 1), if paper_to_ink { [0, 0, 0] } else { [255, 255, 255] });
+                        paint(
+                            &mut before,
+                            PixelRect::new(x, y, 1, 1),
+                            if paper_to_ink {
+                                [255, 255, 255]
+                            } else {
+                                [0, 0, 0]
+                            },
+                        );
+                        paint(
+                            &mut after,
+                            PixelRect::new(x, y, 1, 1),
+                            if paper_to_ink {
+                                [0, 0, 0]
+                            } else {
+                                [255, 255, 255]
+                            },
+                        );
                         changed += 1;
                     }
                 }
@@ -5330,14 +7245,31 @@ mod tests {
                 assert_eq!(changed, 80);
             }
 
-            paint(&mut after, PixelRect::new(760, 891, 64, 10), [190, 190, 190]);
-            assert_eq!(historical_action(&before), planned, "synthetic print preserves the independently recognised source");
+            paint(
+                &mut after,
+                PixelRect::new(760, 891, 64, 10),
+                [190, 190, 190],
+            );
+            assert_eq!(
+                historical_action(&before),
+                planned,
+                "synthetic print preserves the independently recognised source"
+            );
             let report = inspect_effect(&before, &after, planned).unwrap();
             assert!(report.source_changed >= MINIMUM_CONTENT_CHANGE, "{report}");
             assert_eq!(report.destination_changed, 318, "{report}");
             assert!(report.source_positive < MINIMUM_CONTENT_CHANGE, "{report}");
-            assert!(report.source_visible_identity_directions.into_iter().all(|counts| counts[usize::from(paper_to_ink)] == 0), "{report}");
-            assert!(!report.source_replaced && !report.verified, "both directions stay mandatory: {report}");
+            assert!(
+                report
+                    .source_visible_identity_directions
+                    .into_iter()
+                    .all(|counts| counts[usize::from(paper_to_ink)] == 0),
+                "{report}"
+            );
+            assert!(
+                !report.source_replaced && !report.verified,
+                "both directions stay mandatory: {report}"
+            );
         }
     }
 
@@ -5350,22 +7282,53 @@ mod tests {
         let completed = fixture(40);
         let planned = historical_action(&before);
         let mut recipient_only = before.clone();
-        copy_region(&completed, &mut recipient_only, PixelRect::new(1_398, UPPER_Y, CARD_WIDTH, CARD_HEIGHT), PixelPoint::new(1_398, UPPER_Y as i32));
+        copy_region(
+            &completed,
+            &mut recipient_only,
+            PixelRect::new(1_398, UPPER_Y, CARD_WIDTH, CARD_HEIGHT),
+            PixelPoint::new(1_398, UPPER_Y as i32),
+        );
 
 
         for (name, bounds, rgb) in [
             ("pointer", PixelRect::new(745, 792, 94, 94), [0, 0, 0]),
-            ("white pointer", PixelRect::new(745, 792, 94, 94), [255, 255, 255]),
-            ("gold", PixelRect::new(726, 799, CARD_WIDTH, TOOLBAR_TOP - 799), [230, 185, 70]),
-            ("dark guide", PixelRect::new(726, 799, CARD_WIDTH, TOOLBAR_TOP - 799), [32, 32, 32]),
-            ("neutral shading", PixelRect::new(726, 799, CARD_WIDTH, TOOLBAR_TOP - 799), [190, 190, 190]),
-            ("toolbar", PixelRect::new(378, TOOLBAR_TOP, 1_162, 1_033 - TOOLBAR_TOP), [255, 255, 255]),
+            (
+                "white pointer",
+                PixelRect::new(745, 792, 94, 94),
+                [255, 255, 255],
+            ),
+            (
+                "gold",
+                PixelRect::new(726, 799, CARD_WIDTH, TOOLBAR_TOP - 799),
+                [230, 185, 70],
+            ),
+            (
+                "dark guide",
+                PixelRect::new(726, 799, CARD_WIDTH, TOOLBAR_TOP - 799),
+                [32, 32, 32],
+            ),
+            (
+                "neutral shading",
+                PixelRect::new(726, 799, CARD_WIDTH, TOOLBAR_TOP - 799),
+                [190, 190, 190],
+            ),
+            (
+                "toolbar",
+                PixelRect::new(378, TOOLBAR_TOP, 1_162, 1_033 - TOOLBAR_TOP),
+                [255, 255, 255],
+            ),
         ] {
             let mut after = recipient_only.clone();
             paint(&mut after, bounds, rgb);
             let report = inspect_effect(&before, &after, planned).unwrap();
-            assert_eq!(report.destination_changed, 318, "{name}: actual recipient pixels are retained without next-source decoration: {report}");
-            assert!(!report.source_replaced && !report.verified, "{name}: {report}");
+            assert_eq!(
+                report.destination_changed, 318,
+                "{name}: actual recipient pixels are retained without next-source decoration: {report}"
+            );
+            assert!(
+                !report.source_replaced && !report.verified,
+                "{name}: {report}"
+            );
         }
     }
 
@@ -5379,38 +7342,100 @@ mod tests {
         let planned = historical_action(&before);
         let mut toolbar_before = before.clone();
         let mut toolbar_after = after.clone();
-        paint(&mut toolbar_before, PixelRect::new(726, TOOLBAR_TOP, CARD_WIDTH, 86), [0, 0, 0]);
-        paint(&mut toolbar_after, PixelRect::new(726, TOOLBAR_TOP, CARD_WIDTH, 86), [255, 255, 255]);
-        assert_eq!(tableau_visible_identity_changes(&toolbar_before, &toolbar_after, planned.effect_bounds(), planned), [[68, 204], [228, 56]],
-            "no pixel at or below947 enters a complete alternative patch");
-        assert_eq!(card_identity_changes(&before, &after, planned.effect_bounds(), planned), [[0, 0], [0, 0]],
-            "ordinary clipped-corner rejection is preserved");
+        paint(
+            &mut toolbar_before,
+            PixelRect::new(726, TOOLBAR_TOP, CARD_WIDTH, 86),
+            [0, 0, 0],
+        );
+        paint(
+            &mut toolbar_after,
+            PixelRect::new(726, TOOLBAR_TOP, CARD_WIDTH, 86),
+            [255, 255, 255],
+        );
+        assert_eq!(
+            tableau_visible_identity_changes(
+                &toolbar_before,
+                &toolbar_after,
+                planned.effect_bounds(),
+                planned
+            ),
+            [[68, 204], [228, 56]],
+            "no pixel at or below947 enters a complete alternative patch"
+        );
+        assert_eq!(
+            card_identity_changes(&before, &after, planned.effect_bounds(), planned),
+            [[0, 0], [0, 0]],
+            "ordinary clipped-corner rejection is preserved"
+        );
 
 
         for target in [
-            KlondikeTarget::Tableau { column: 3, top: 799, bottom: 990 },
-            KlondikeTarget::Tableau { column: 3, top: 799, bottom: 995 },
-            KlondikeTarget::Tableau { column: 3, top: 446, bottom: 636 },
-            KlondikeTarget::Tableau { column: 3, top: 768, bottom: 958 },
-            KlondikeTarget::Tableau { column: 3, top: 777, bottom: 967 },
-            KlondikeTarget::Tableau { column: 6, top: 407, bottom: 990 },
+            KlondikeTarget::Tableau {
+                column: 3,
+                top: 799,
+                bottom: 990,
+            },
+            KlondikeTarget::Tableau {
+                column: 3,
+                top: 799,
+                bottom: 995,
+            },
+            KlondikeTarget::Tableau {
+                column: 3,
+                top: 446,
+                bottom: 636,
+            },
+            KlondikeTarget::Tableau {
+                column: 3,
+                top: 768,
+                bottom: 958,
+            },
+            KlondikeTarget::Tableau {
+                column: 3,
+                top: 777,
+                bottom: 967,
+            },
+            KlondikeTarget::Tableau {
+                column: 6,
+                top: 407,
+                bottom: 990,
+            },
         ] {
-
-
             if let Some(other) = canonical_action(target) {
-                assert_eq!(tableau_visible_identity_changes(&before, &after, other.effect_bounds(), other), [[0, 0], [0, 0]], "{target:?}");
+                assert_eq!(
+                    tableau_visible_identity_changes(&before, &after, other.effect_bounds(), other),
+                    [[0, 0], [0, 0]],
+                    "{target:?}"
+                );
             } else {
                 assert_eq!(canonical_action(target), None);
             }
         }
 
         let mut shifted = planned;
-        shifted.target = ActionTarget::Klondike(KlondikeTarget::Tableau { column: 4, top: 799, bottom: 989 });
-        assert_eq!(tableau_visible_identity_changes(&before, &after, planned.effect_bounds(), shifted), [[0, 0], [0, 0]]);
-        assert!(canonical_action(KlondikeTarget::Tableau { column: 3, top: 799, bottom: TABLEAU_OUTLINE_BOTTOM as u16 + 1 }).is_none());
+        shifted.target = ActionTarget::Klondike(KlondikeTarget::Tableau {
+            column: 4,
+            top: 799,
+            bottom: 989,
+        });
+        assert_eq!(
+            tableau_visible_identity_changes(&before, &after, planned.effect_bounds(), shifted),
+            [[0, 0], [0, 0]]
+        );
+        assert!(
+            canonical_action(KlondikeTarget::Tableau {
+                column: 3,
+                top: 799,
+                bottom: TABLEAU_OUTLINE_BOTTOM as u16 + 1
+            })
+            .is_none()
+        );
         let mut malformed = after;
         malformed.pixels.truncate(4);
-        assert_eq!(inspect_effect(&before, &malformed, planned), Err(HaloDetectionError::InvalidFrameLayout));
+        assert_eq!(
+            inspect_effect(&before, &malformed, planned),
+            Err(HaloDetectionError::InvalidFrameLayout)
+        );
     }
 
 
@@ -5420,23 +7445,61 @@ mod tests {
     fn recorded_ten_card_source_keeps_one_upper_click_and_excludes_toolbar_effects() {
         let before = fixture(41);
         let planned = historical_action(&before);
-        assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-            column: 6, top: 390, bottom: 994,
-        }));
-        assert_eq!(planned.operation(), InputOperation::Click(PixelPoint::new(1_296, 430)));
-        assert_eq!(planned.effect_bounds(), PixelRect::new(1_230, 390, CARD_WIDTH, 557));
-        assert_eq!(count_pixels(&before, TOOLBAR_ICON_SUPPORT, is_toolbar_undo_red), 68);
-        assert_eq!(find_solid_card_source(&before, PixelRect::new(1_230, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)).unwrap(),
-            Some(PixelRect::new(1_230, 390, CARD_WIDTH, 604)));
+        assert_eq!(
+            planned.target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 6,
+                top: 390,
+                bottom: 994,
+            })
+        );
+        assert_eq!(
+            planned.operation(),
+            InputOperation::Click(PixelPoint::new(1_296, 430))
+        );
+        assert_eq!(
+            planned.effect_bounds(),
+            PixelRect::new(1_230, 390, CARD_WIDTH, 557)
+        );
+        assert_eq!(
+            count_pixels(&before, TOOLBAR_ICON_SUPPORT, is_toolbar_undo_red),
+            68
+        );
+        assert_eq!(
+            find_solid_card_source(
+                &before,
+                PixelRect::new(1_230, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)
+            )
+            .unwrap(),
+            Some(PixelRect::new(1_230, 390, CARD_WIDTH, 604))
+        );
         assert!(!completion_evidence(&before).unwrap().complete_candidate);
         let mut toolbar_changed = before.clone();
-        paint(&mut toolbar_changed, PixelRect::new(378, TOOLBAR_TOP, 1_162, 1_033 - TOOLBAR_TOP), [255, 255, 255]);
+        paint(
+            &mut toolbar_changed,
+            PixelRect::new(378, TOOLBAR_TOP, 1_162, 1_033 - TOOLBAR_TOP),
+            [255, 255, 255],
+        );
         let report = inspect_effect(&before, &toolbar_changed, planned).unwrap();
         assert_eq!(report.source_changed, 0);
         assert_eq!(report.destination_changed, 0);
         assert!(!report.source_replaced && !report.verified, "{report}");
-        assert!(canonical_action(KlondikeTarget::Tableau { column: 6, top: 331, bottom: 994 }).is_none());
-        assert!(canonical_action(KlondikeTarget::Tableau { column: 6, top: 390, bottom: 999 }).is_none());
+        assert!(
+            canonical_action(KlondikeTarget::Tableau {
+                column: 6,
+                top: 331,
+                bottom: 994
+            })
+            .is_none()
+        );
+        assert!(
+            canonical_action(KlondikeTarget::Tableau {
+                column: 6,
+                top: 390,
+                bottom: 999
+            })
+            .is_none()
+        );
     }
 
 
@@ -5448,21 +7511,42 @@ mod tests {
 
 
         for bottom in 930..TOOLBAR_EDGE_OCCLUSION.bottom() {
-            assert_eq!(find_solid_card_source(&frame, PixelRect::new(1_230, 332, CARD_WIDTH, bottom - 332)).unwrap(), None,
-                "the icon mask cannot complete a cropped scan ending at row{bottom}");
+            assert_eq!(
+                find_solid_card_source(
+                    &frame,
+                    PixelRect::new(1_230, 332, CARD_WIDTH, bottom - 332)
+                )
+                .unwrap(),
+                None,
+                "the icon mask cannot complete a cropped scan ending at row{bottom}"
+            );
         }
 
 
-        assert!(find_solid_card_source(&frame,
-            PixelRect::new(1_230, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)).unwrap().is_some());
+        assert!(
+            find_solid_card_source(
+                &frame,
+                PixelRect::new(1_230, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)
+            )
+            .unwrap()
+            .is_some()
+        );
 
 
         for bottom in TOOLBAR_EDGE_OCCLUSION.bottom()..=TABLEAU_OUTLINE_BOTTOM {
-            assert_eq!(find_solid_card_source(&frame,
-                PixelRect::new(1_230, 332, CARD_WIDTH, bottom - 332)).unwrap(),
-                find_solid_card_source(&frame,
-                    PixelRect::new(1_230, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)).unwrap(),
-                "complete observed column-6 mask remains valid at row{bottom}");
+            assert_eq!(
+                find_solid_card_source(
+                    &frame,
+                    PixelRect::new(1_230, 332, CARD_WIDTH, bottom - 332)
+                )
+                .unwrap(),
+                find_solid_card_source(
+                    &frame,
+                    PixelRect::new(1_230, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)
+                )
+                .unwrap(),
+                "complete observed column-6 mask remains valid at row{bottom}"
+            );
         }
 
 
@@ -5482,8 +7566,13 @@ mod tests {
 
         let mut malformed = frame;
         malformed.pixels.truncate(4);
-        assert_eq!(find_solid_card_source(&malformed, PixelRect::new(1_230, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)),
-            Err(HaloDetectionError::InvalidFrameLayout));
+        assert_eq!(
+            find_solid_card_source(
+                &malformed,
+                PixelRect::new(1_230, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)
+            ),
+            Err(HaloDetectionError::InvalidFrameLayout)
+        );
     }
 
 
@@ -5493,27 +7582,65 @@ mod tests {
     fn ten_card_source_rejects_floating_gold_dashed_guides_and_internal_edges() {
         let frame = fixture(41);
         let mut empty = frame.clone();
-        paint(&mut empty, PixelRect::new(1_218, 380, 156, TABLEAU_OUTLINE_BOTTOM - 380), [12, 82, 45]);
+        paint(
+            &mut empty,
+            PixelRect::new(1_218, 380, 156, TABLEAU_OUTLINE_BOTTOM - 380),
+            [12, 82, 45],
+        );
         let mut floating = empty.clone();
-        paint(&mut floating, PixelRect::new(1_248, 993, 96, 1), [170, 120, 75]);
-        copy_region(&frame, &mut floating, TOOLBAR_ICON_SUPPORT, PixelPoint::new(TOOLBAR_ICON_SUPPORT.x as i32, TOOLBAR_ICON_SUPPORT.y as i32));
-        assert_eq!(analyse(&floating).unwrap().prediction, PredictedAction::NoHighlight);
+        paint(
+            &mut floating,
+            PixelRect::new(1_248, 993, 96, 1),
+            [170, 120, 75],
+        );
+        copy_region(
+            &frame,
+            &mut floating,
+            TOOLBAR_ICON_SUPPORT,
+            PixelPoint::new(TOOLBAR_ICON_SUPPORT.x as i32, TOOLBAR_ICON_SUPPORT.y as i32),
+        );
+        assert_eq!(
+            analyse(&floating).unwrap().prediction,
+            PredictedAction::NoHighlight
+        );
         let mut dashed = empty.clone();
-        copy_region(&frame, &mut dashed, PixelRect::new(726, 342, CARD_WIDTH, CARD_HEIGHT), PixelPoint::new(1_230, 390));
-        assert_eq!(analyse(&dashed).unwrap().prediction, PredictedAction::NoHighlight);
+        copy_region(
+            &frame,
+            &mut dashed,
+            PixelRect::new(726, 342, CARD_WIDTH, CARD_HEIGHT),
+            PixelPoint::new(1_230, 390),
+        );
+        assert_eq!(
+            analyse(&dashed).unwrap().prediction,
+            PredictedAction::NoHighlight
+        );
 
 
         for rgb in [[0, 0, 0], [255, 255, 255]] {
             let mut cursor = empty.clone();
             paint(&mut cursor, PixelRect::new(1_276, 410, 40, 60), rgb);
-            assert_eq!(analyse(&cursor).unwrap().prediction, PredictedAction::NoHighlight);
+            assert_eq!(
+                analyse(&cursor).unwrap().prediction,
+                PredictedAction::NoHighlight
+            );
         }
 
         let mut internal_edge = frame.clone();
-        paint(&mut internal_edge, PixelRect::new(1_218, 975, 156, TABLEAU_OUTLINE_BOTTOM - 975), [12, 82, 45]);
-        paint(&mut internal_edge, PixelRect::new(1_248, 944, 96, 1), [170, 120, 75]);
-        assert_eq!(analyse(&internal_edge).unwrap().prediction, analyse(&frame).unwrap().prediction,
-            "a below-toolbar erasure or interior stripe cannot split the visible connected run");
+        paint(
+            &mut internal_edge,
+            PixelRect::new(1_218, 975, 156, TABLEAU_OUTLINE_BOTTOM - 975),
+            [12, 82, 45],
+        );
+        paint(
+            &mut internal_edge,
+            PixelRect::new(1_248, 944, 96, 1),
+            [170, 120, 75],
+        );
+        assert_eq!(
+            analyse(&internal_edge).unwrap().prediction,
+            analyse(&frame).unwrap().prediction,
+            "a below-toolbar erasure or interior stripe cannot split the visible connected run"
+        );
     }
 
 
@@ -5524,21 +7651,46 @@ mod tests {
     fn recorded_shadow_tail_source_keeps_one_safe_upper_action() {
         let frame = fixture(54);
         let planned = action(&frame);
-        assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-            column: 6, top: 390, bottom: 947,
-        }));
-        assert_eq!(planned.operation(), InputOperation::Click(PixelPoint::new(1_296, 430)));
-        assert_eq!(planned.effect_bounds(), PixelRect::new(1_230, 390, CARD_WIDTH, 557));
-        assert_eq!(find_solid_card_source(&frame,
-            PixelRect::new(1_230, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)).unwrap(),
-            Some(PixelRect::new(1_230, 390, CARD_WIDTH, 599)));
-        assert_eq!(count_pixels(&frame, TOOLBAR_ICON_SUPPORT, is_toolbar_undo_red), 69);
+        assert_eq!(
+            planned.target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 6,
+                top: 390,
+                bottom: 947,
+            })
+        );
+        assert_eq!(
+            planned.operation(),
+            InputOperation::Click(PixelPoint::new(1_296, 430))
+        );
+        assert_eq!(
+            planned.effect_bounds(),
+            PixelRect::new(1_230, 390, CARD_WIDTH, 557)
+        );
+        assert_eq!(
+            find_solid_card_source(
+                &frame,
+                PixelRect::new(1_230, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)
+            )
+            .unwrap(),
+            Some(PixelRect::new(1_230, 390, CARD_WIDTH, 599))
+        );
+        assert_eq!(
+            count_pixels(&frame, TOOLBAR_ICON_SUPPORT, is_toolbar_undo_red),
+            69
+        );
 
 
         for (x, rgb) in [(1_336, [91, 78, 40]), (1_337, [99, 84, 43])] {
             assert_eq!(pixel_rgb(&frame, x, 988), Some(rgb));
-            assert!(!is_rail_gold(rgb), "ordinary rail colour must remain strict");
-            assert!(is_toolbar_shadow_gold(rgb), "recorded tail requires positive warm gold");
+            assert!(
+                !is_rail_gold(rgb),
+                "ordinary rail colour must remain strict"
+            );
+            assert!(
+                is_toolbar_shadow_gold(rgb),
+                "recorded tail requires positive warm gold"
+            );
         }
         assert!(!completion_evidence(&frame).unwrap().complete_candidate);
     }
@@ -5553,13 +7705,20 @@ mod tests {
 
 
         for x in [1_248, 1_307, 1_336, 1_337, 1_338] {
-
-
-            for rgb in [[12, 82, 45], [0, 0, 0], [255, 255, 255], [150, 20, 20], [89, 78, 40]] {
+            for rgb in [
+                [12, 82, 45],
+                [0, 0, 0],
+                [255, 255, 255],
+                [150, 20, 20],
+                [89, 78, 40],
+            ] {
                 let mut damaged = frame.clone();
                 paint(&mut damaged, PixelRect::new(x, 988, 1, 1), rgb);
-                assert_eq!(analyse(&damaged).unwrap().prediction, analyse(&frame).unwrap().prediction,
-                    "historical lower-edge pixel ({x},988) is outside the live tableau ROI");
+                assert_eq!(
+                    analyse(&damaged).unwrap().prediction,
+                    analyse(&frame).unwrap().prediction,
+                    "historical lower-edge pixel ({x},988) is outside the live tableau ROI"
+                );
             }
         }
     }
@@ -5574,35 +7733,65 @@ mod tests {
 
 
         for bottom in 930..TOOLBAR_EDGE_OCCLUSION.bottom() {
-            assert_eq!(find_solid_card_source(&frame,
-                PixelRect::new(1_230, 332, CARD_WIDTH, bottom - 332)).unwrap(), None,
-                "shadow support cannot complete a scan cropped at row{bottom}");
+            assert_eq!(
+                find_solid_card_source(
+                    &frame,
+                    PixelRect::new(1_230, 332, CARD_WIDTH, bottom - 332)
+                )
+                .unwrap(),
+                None,
+                "shadow support cannot complete a scan cropped at row{bottom}"
+            );
         }
 
 
-        assert!(find_solid_card_source(&frame,
-            PixelRect::new(1_230, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)).unwrap().is_some());
+        assert!(
+            find_solid_card_source(
+                &frame,
+                PixelRect::new(1_230, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)
+            )
+            .unwrap()
+            .is_some()
+        );
 
 
         for bottom in TOOLBAR_EDGE_OCCLUSION.bottom()..=TABLEAU_OUTLINE_BOTTOM {
-            assert_eq!(find_solid_card_source(&frame,
-                PixelRect::new(1_230, 332, CARD_WIDTH, bottom - 332)).unwrap(),
-                find_solid_card_source(&frame,
-                    PixelRect::new(1_230, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)).unwrap(),
-                "complete observed column-6 mask remains valid at row{bottom}");
+            assert_eq!(
+                find_solid_card_source(
+                    &frame,
+                    PixelRect::new(1_230, 332, CARD_WIDTH, bottom - 332)
+                )
+                .unwrap(),
+                find_solid_card_source(
+                    &frame,
+                    PixelRect::new(1_230, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)
+                )
+                .unwrap(),
+                "complete observed column-6 mask remains valid at row{bottom}"
+            );
         }
 
 
-        for corruption in [TOOLBAR_ICON_SUPPORT, PixelRect::new(1_218, 975, 156, 19),
-            PixelRect::new(1_218, 380, 156, 31), PixelRect::new(1_218, 850, 12, 24)]
-        {
+        for corruption in [
+            TOOLBAR_ICON_SUPPORT,
+            PixelRect::new(1_218, 975, 156, 19),
+            PixelRect::new(1_218, 380, 156, 31),
+            PixelRect::new(1_218, 850, 12, 24),
+        ] {
             let mut damaged = frame.clone();
             paint(&mut damaged, corruption, [12, 82, 45]);
             assert_live_source_after_damage(&frame, &damaged, corruption);
         }
         let mut dimmed_face = frame;
-        paint(&mut dimmed_face, PixelRect::new(1_248, 911, 96, 12), [128, 128, 128]);
-        assert_eq!(analyse(&dimmed_face).unwrap().prediction, PredictedAction::NoHighlight);
+        paint(
+            &mut dimmed_face,
+            PixelRect::new(1_248, 911, 96, 12),
+            [128, 128, 128],
+        );
+        assert_eq!(
+            analyse(&dimmed_face).unwrap().prediction,
+            PredictedAction::NoHighlight
+        );
     }
 
 
@@ -5615,27 +7804,62 @@ mod tests {
         let envelope = PixelRect::new(1_218, 380, 156, TABLEAU_OUTLINE_BOTTOM - 380);
         let mut empty = frame.clone();
         paint(&mut empty, envelope, [12, 82, 45]);
-        copy_region(&frame, &mut empty, TOOLBAR_ICON_SUPPORT,
-            PixelPoint::new(TOOLBAR_ICON_SUPPORT.x as i32, TOOLBAR_ICON_SUPPORT.y as i32));
+        copy_region(
+            &frame,
+            &mut empty,
+            TOOLBAR_ICON_SUPPORT,
+            PixelPoint::new(TOOLBAR_ICON_SUPPORT.x as i32, TOOLBAR_ICON_SUPPORT.y as i32),
+        );
         let mut translated = empty.clone();
-        copy_region(&frame, &mut translated, envelope, PixelPoint::new(1_386, 380));
-        assert_eq!(count_pixels(&translated, TOOLBAR_ICON_SUPPORT, is_toolbar_undo_red), 69);
-        assert_eq!(action(&translated).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-            column: 7, top: 390, bottom: TOOLBAR_TOP as u16,
-        }), "a complete visible source in another column no longer needs toolbar-shadow calibration");
+        copy_region(
+            &frame,
+            &mut translated,
+            envelope,
+            PixelPoint::new(1_386, 380),
+        );
+        assert_eq!(
+            count_pixels(&translated, TOOLBAR_ICON_SUPPORT, is_toolbar_undo_red),
+            69
+        );
+        assert_eq!(
+            action(&translated).target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 7,
+                top: 390,
+                bottom: TOOLBAR_TOP as u16,
+            }),
+            "a complete visible source in another column no longer needs toolbar-shadow calibration"
+        );
         let mut dashed = empty.clone();
-        copy_region(&frame, &mut dashed, PixelRect::new(558, 390, CARD_WIDTH, 200),
-            PixelPoint::new(1_230, 390));
-        assert_eq!(analyse(&dashed).unwrap().prediction, PredictedAction::NoHighlight);
+        copy_region(
+            &frame,
+            &mut dashed,
+            PixelRect::new(558, 390, CARD_WIDTH, 200),
+            PixelPoint::new(1_230, 390),
+        );
+        assert_eq!(
+            analyse(&dashed).unwrap().prediction,
+            PredictedAction::NoHighlight
+        );
         let mut floating = empty.clone();
-        paint(&mut floating, PixelRect::new(1_248, 988, 96, 1), [170, 120, 75]);
-        assert_eq!(analyse(&floating).unwrap().prediction, PredictedAction::NoHighlight);
+        paint(
+            &mut floating,
+            PixelRect::new(1_248, 988, 96, 1),
+            [170, 120, 75],
+        );
+        assert_eq!(
+            analyse(&floating).unwrap().prediction,
+            PredictedAction::NoHighlight
+        );
 
 
         for rgb in [[0, 0, 0], [255, 255, 255]] {
             let mut cursor = empty.clone();
             paint(&mut cursor, PixelRect::new(1_276, 410, 40, 60), rgb);
-            assert_eq!(analyse(&cursor).unwrap().prediction, PredictedAction::NoHighlight);
+            assert_eq!(
+                analyse(&cursor).unwrap().prediction,
+                PredictedAction::NoHighlight
+            );
         }
     }
 
@@ -5647,11 +7871,17 @@ mod tests {
         let before = fixture(54);
         let planned = historical_action(&before);
         let unchanged = inspect_effect(&before, &before, planned).unwrap();
-        assert_eq!((unchanged.source_changed, unchanged.destination_changed), (0, 0));
+        assert_eq!(
+            (unchanged.source_changed, unchanged.destination_changed),
+            (0, 0)
+        );
         assert!(!unchanged.source_replaced && !unchanged.verified);
         let mut toolbar_changed = before.clone();
-        paint(&mut toolbar_changed,
-            PixelRect::new(378, TOOLBAR_TOP, 1_162, 1_033 - TOOLBAR_TOP), [255, 255, 255]);
+        paint(
+            &mut toolbar_changed,
+            PixelRect::new(378, TOOLBAR_TOP, 1_162, 1_033 - TOOLBAR_TOP),
+            [255, 255, 255],
+        );
         let report = inspect_effect(&before, &toolbar_changed, planned).unwrap();
         assert_eq!((report.source_changed, report.destination_changed), (0, 0));
         assert!(!report.source_replaced && !report.verified);
@@ -5665,8 +7895,6 @@ mod tests {
 
 
         for y in (SOLVE_BOUNDS.y..SOLVE_BOUNDS.bottom()).step_by(4) {
-
-
             for x in (SOLVE_BOUNDS.x..SOLVE_BOUNDS.right()).step_by(4) {
                 let expected = &SOLVE_TEMPLATE[sample..sample + 3];
                 sample += 3;
@@ -5678,7 +7906,11 @@ mod tests {
 
 
                 if let Ok(red) = u8::try_from(i16::from(expected[0]) + delta) {
-                    paint(frame, PixelRect::new(x, y, 1, 1), [red, expected[1], expected[2]]);
+                    paint(
+                        frame,
+                        PixelRect::new(x, y, 1, 1),
+                        [red, expected[1], expected[2]],
+                    );
                 }
             }
         }
@@ -5691,21 +7923,37 @@ mod tests {
     fn solve_animation_frame_does_not_change_interior_colour_tolerance() {
         let frame = fixture(42);
         assert!(has_solve_control(&frame));
-        assert_eq!(action(&frame).target, ActionTarget::Klondike(KlondikeTarget::Solve));
-        assert!(find_solid_card_source(&frame, PixelRect::new(558, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)).unwrap().is_some());
+        assert_eq!(
+            action(&frame).target,
+            ActionTarget::Klondike(KlondikeTarget::Solve)
+        );
+        assert!(
+            find_solid_card_source(
+                &frame,
+                PixelRect::new(558, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)
+            )
+            .unwrap()
+            .is_some()
+        );
 
 
         for delta in [27, -25] {
             let mut damaged = frame.clone();
             shift_solve_sample_red(&mut damaged, true, delta);
             assert!(has_solve_control(&damaged), "outer-frame red delta={delta}");
-            assert_eq!(action(&damaged).target, ActionTarget::Klondike(KlondikeTarget::Solve));
+            assert_eq!(
+                action(&damaged).target,
+                ActionTarget::Klondike(KlondikeTarget::Solve)
+            );
         }
 
         let mut damaged = frame;
         shift_solve_sample_red(&mut damaged, false, 25);
         assert!(!has_solve_control(&damaged));
-        assert_ne!(action(&damaged).target, ActionTarget::Klondike(KlondikeTarget::Solve));
+        assert_ne!(
+            action(&damaged).target,
+            ActionTarget::Klondike(KlondikeTarget::Solve)
+        );
     }
 
 
@@ -5742,11 +7990,23 @@ mod tests {
         }
 
         let mut occupied = frame.clone();
-        copy_region(&fixture(1), &mut occupied, PixelRect::new(390, UPPER_Y, CARD_WIDTH, CARD_HEIGHT), PixelPoint::new(390, UPPER_Y as i32));
+        copy_region(
+            &fixture(1),
+            &mut occupied,
+            PixelRect::new(390, UPPER_Y, CARD_WIDTH, CARD_HEIGHT),
+            PixelPoint::new(390, UPPER_Y as i32),
+        );
         assert!(!has_solve_control(&occupied));
         let mut overlay = frame;
-        paint(&mut overlay, PixelRect::new(820, 600, 400, 200), [20, 20, 20]);
-        assert_eq!(analyse(&overlay).unwrap().prediction, PredictedAction::NoHighlight);
+        paint(
+            &mut overlay,
+            PixelRect::new(820, 600, 400, 200),
+            [20, 20, 20],
+        );
+        assert_eq!(
+            analyse(&overlay).unwrap().prediction,
+            PredictedAction::NoHighlight
+        );
     }
 
 
@@ -5759,16 +8019,32 @@ mod tests {
         assert!(is_gameplay_scene(&frame).unwrap());
         let scan = PixelRect::new(390, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332);
         assert_eq!(find_solid_card_source(&frame, scan).unwrap(), None);
-        assert_eq!(find_historical_tableau_source(&frame, scan).unwrap(),
-            Some(PixelRect::new(404, 442, CARD_WIDTH, 464)));
+        assert_eq!(
+            find_historical_tableau_source(&frame, scan).unwrap(),
+            Some(PixelRect::new(404, 442, CARD_WIDTH, 464))
+        );
         let planned = historical_action(&frame);
-        assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-            column: 1, top: 442, bottom: 906,
-        }));
-        assert_eq!(planned.operation(), InputOperation::Click(PixelPoint::new(456, 482)));
-        assert_eq!(planned.effect_bounds(), PixelRect::new(390, 442, CARD_WIDTH, 464));
+        assert_eq!(
+            planned.target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 1,
+                top: 442,
+                bottom: 906,
+            })
+        );
+        assert_eq!(
+            planned.operation(),
+            InputOperation::Click(PixelPoint::new(456, 482))
+        );
+        assert_eq!(
+            planned.effect_bounds(),
+            PixelRect::new(390, 442, CARD_WIDTH, 464)
+        );
         let report = inspect_effect(&frame, &frame, planned).unwrap();
-        assert!(!report.source_replaced && !report.verified, "unchanged source: {report}");
+        assert!(
+            !report.source_replaced && !report.verified,
+            "unchanged source: {report}"
+        );
     }
 
 
@@ -5780,13 +8056,24 @@ mod tests {
         let before = fixture(45);
         let after = fixture(44);
         let planned = historical_action(&before);
-        assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Waste { offset: 2 }));
+        assert_eq!(
+            planned.target,
+            ActionTarget::Klondike(KlondikeTarget::Waste { offset: 2 })
+        );
         let report = inspect_effect(&before, &after, planned).unwrap();
         assert!(report.source_replaced && report.verified, "{report}");
-        assert!(report.destination_changed >= MINIMUM_CONTENT_CHANGE, "{report}");
-        assert_eq!(historical_action(&after).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-            column: 1, top: 442, bottom: 906,
-        }));
+        assert!(
+            report.destination_changed >= MINIMUM_CONTENT_CHANGE,
+            "{report}"
+        );
+        assert_eq!(
+            historical_action(&after).target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 1,
+                top: 442,
+                bottom: 906,
+            })
+        );
     }
 
 
@@ -5804,15 +8091,38 @@ mod tests {
         ] {
             let mut damaged = frame.clone();
             paint(&mut damaged, bounds, [12, 82, 45]);
-            assert_eq!(analyse(&damaged).unwrap().prediction, PredictedAction::NoHighlight, "{bounds:?}");
+            assert_eq!(
+                analyse(&damaged).unwrap().prediction,
+                PredictedAction::NoHighlight,
+                "{bounds:?}"
+            );
         }
         let mut unsupported = frame.clone();
-        paint(&mut unsupported, PixelRect::new(160, 310, 16, 16), [0, 0, 0]);
-        assert_eq!(analyse(&unsupported).unwrap().prediction, PredictedAction::NoHighlight);
+        paint(
+            &mut unsupported,
+            PixelRect::new(160, 310, 16, 16),
+            [0, 0, 0],
+        );
+        assert_eq!(
+            analyse(&unsupported).unwrap().prediction,
+            PredictedAction::NoHighlight
+        );
         let mut shifted_farther = frame.clone();
-        paint(&mut shifted_farther, PixelRect::new(378, 430, 184, 486), [12, 82, 45]);
-        copy_region(&frame, &mut shifted_farther, PixelRect::new(395, 432, 154, 480), PixelPoint::new(425, 432));
-        assert_eq!(analyse(&shifted_farther).unwrap().prediction, PredictedAction::NoHighlight);
+        paint(
+            &mut shifted_farther,
+            PixelRect::new(378, 430, 184, 486),
+            [12, 82, 45],
+        );
+        copy_region(
+            &frame,
+            &mut shifted_farther,
+            PixelRect::new(395, 432, 154, 480),
+            PixelPoint::new(425, 432),
+        );
+        assert_eq!(
+            analyse(&shifted_farther).unwrap().prediction,
+            PredictedAction::NoHighlight
+        );
     }
 
 
@@ -5822,11 +8132,22 @@ mod tests {
     fn recorded_third_stop_capture_already_has_one_complete_four_card_source() {
         let frame = fixture(47);
         assert!(is_gameplay_scene(&frame).unwrap());
-        assert_eq!(find_solid_card_source(&frame, PixelRect::new(894, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)).unwrap(),
-            Some(PixelRect::new(894, 555, CARD_WIDTH, 354)));
-        assert_eq!(action(&frame).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-            column: 4, top: 555, bottom: 909,
-        }));
+        assert_eq!(
+            find_solid_card_source(
+                &frame,
+                PixelRect::new(894, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)
+            )
+            .unwrap(),
+            Some(PixelRect::new(894, 555, CARD_WIDTH, 354))
+        );
+        assert_eq!(
+            action(&frame).target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 4,
+                top: 555,
+                bottom: 909,
+            })
+        );
     }
 
 
@@ -5837,8 +8158,18 @@ mod tests {
         let frame = fixture(48);
         assert!(is_gameplay_scene(&frame).unwrap());
         assert!(has_solve_control(&frame));
-        assert!(find_solid_card_source(&frame, PixelRect::new(390, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)).unwrap().is_some());
-        assert_eq!(action(&frame).target, ActionTarget::Klondike(KlondikeTarget::Solve));
+        assert!(
+            find_solid_card_source(
+                &frame,
+                PixelRect::new(390, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)
+            )
+            .unwrap()
+            .is_some()
+        );
+        assert_eq!(
+            action(&frame).target,
+            ActionTarget::Klondike(KlondikeTarget::Solve)
+        );
     }
 
 
@@ -5847,37 +8178,84 @@ mod tests {
     #[test]
     fn logged_bottom_print_counts_need_material_opposed_print_and_exact_contraction() {
         let frame = fixture(46);
-        let planned = canonical_action(KlondikeTarget::Tableau { column: 1, top: 799, bottom: 989 }).unwrap();
-        assert_eq!(historical_action(&frame).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-            column: 1, top: 773, bottom: 963,
-        }));
-        assert!(visible_contracted_source_replaced(&frame, planned, 687, [[36, 207], [142, 58]]).unwrap());
+        let planned = canonical_action(KlondikeTarget::Tableau {
+            column: 1,
+            top: 799,
+            bottom: 989,
+        })
+        .unwrap();
+        assert_eq!(
+            historical_action(&frame).target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 1,
+                top: 773,
+                bottom: 963,
+            })
+        );
+        assert!(
+            visible_contracted_source_replaced(&frame, planned, 687, [[36, 207], [142, 58]])
+                .unwrap()
+        );
 
 
         for counts in [
-            [[0, 207], [142, 58]], [[36, 0], [142, 58]],
-            [[36, 207], [0, 58]], [[36, 207], [142, 0]],
-            [[1, 94], [142, 58]], [[36, 207], [58, 58]],
-            [[36, 37], [142, 58]], [[36, 207], [47, 48]],
+            [[0, 207], [142, 58]],
+            [[36, 0], [142, 58]],
+            [[36, 207], [0, 58]],
+            [[36, 207], [142, 0]],
+            [[1, 94], [142, 58]],
+            [[36, 207], [58, 58]],
+            [[36, 37], [142, 58]],
+            [[36, 207], [47, 48]],
         ] {
-            assert!(!visible_contracted_source_replaced(&frame, planned, 687, counts).unwrap(), "{counts:?}");
+            assert!(
+                !visible_contracted_source_replaced(&frame, planned, 687, counts).unwrap(),
+                "{counts:?}"
+            );
         }
-        assert!(!visible_contracted_source_replaced(&frame, planned, 511, [[36, 207], [142, 58]]).unwrap());
+        assert!(
+            !visible_contracted_source_replaced(&frame, planned, 511, [[36, 207], [142, 58]])
+                .unwrap()
+        );
 
 
         for target in [
-            KlondikeTarget::Tableau { column: 1, top: 798, bottom: 988 },
-            KlondikeTarget::Tableau { column: 1, top: 800, bottom: 990 },
-            KlondikeTarget::Tableau { column: 2, top: 799, bottom: 989 },
-            KlondikeTarget::Tableau { column: 1, top: 773, bottom: 963 },
-            KlondikeTarget::Waste { offset: 0 }, KlondikeTarget::Foundation { column: 1 },
+            KlondikeTarget::Tableau {
+                column: 1,
+                top: 798,
+                bottom: 988,
+            },
+            KlondikeTarget::Tableau {
+                column: 1,
+                top: 800,
+                bottom: 990,
+            },
+            KlondikeTarget::Tableau {
+                column: 2,
+                top: 799,
+                bottom: 989,
+            },
+            KlondikeTarget::Tableau {
+                column: 1,
+                top: 773,
+                bottom: 963,
+            },
+            KlondikeTarget::Waste { offset: 0 },
+            KlondikeTarget::Foundation { column: 1 },
         ] {
             let different = canonical_action(target).unwrap();
-            assert!(!visible_contracted_source_replaced(&frame, different, 687, [[36, 207], [142, 58]]).unwrap(), "{target:?}");
+            assert!(
+                !visible_contracted_source_replaced(&frame, different, 687, [[36, 207], [142, 58]])
+                    .unwrap(),
+                "{target:?}"
+            );
         }
         let mut malformed = frame.clone();
         malformed.pixels.truncate(1);
-        assert!(visible_contracted_source_replaced(&malformed, planned, 687, [[36, 207], [142, 58]]).is_err());
+        assert!(
+            visible_contracted_source_replaced(&malformed, planned, 687, [[36, 207], [142, 58]])
+                .is_err()
+        );
     }
 
 
@@ -5887,13 +8265,32 @@ mod tests {
     fn synthetic_bottom_contraction() -> (CapturedFrame, CapturedFrame, GuidedAction) {
         let after = fixture(46);
         let mut before = after.clone();
-        paint(&mut before, PixelRect::new(378, 760, 156, 234), [12, 82, 45]);
-        copy_region(&fixture(39), &mut before, PixelRect::new(716, 799, 154, 190), PixelPoint::new(380, 799));
-        copy_region(&fixture(44), &mut before, PixelRect::new(614, UPPER_Y, CARD_WIDTH, CARD_HEIGHT), PixelPoint::new(390, 805));
+        paint(
+            &mut before,
+            PixelRect::new(378, 760, 156, 234),
+            [12, 82, 45],
+        );
+        copy_region(
+            &fixture(39),
+            &mut before,
+            PixelRect::new(716, 799, 154, 190),
+            PixelPoint::new(380, 799),
+        );
+        copy_region(
+            &fixture(44),
+            &mut before,
+            PixelRect::new(614, UPPER_Y, CARD_WIDTH, CARD_HEIGHT),
+            PixelPoint::new(390, 805),
+        );
         let planned = historical_action(&before);
-        assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-            column: 1, top: 799, bottom: 989,
-        }));
+        assert_eq!(
+            planned.target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 1,
+                top: 799,
+                bottom: 989,
+            })
+        );
         (before, after, planned)
     }
 
@@ -5907,8 +8304,19 @@ mod tests {
         println!("synthetic contraction: {report}");
         assert!(report.source_replaced && !report.verified, "{report}");
         assert!(report.source_changed >= MINIMUM_CONTENT_CHANGE, "{report}");
-        assert!(report.source_visible_identity_directions.into_iter().flatten().any(|count| count < MINIMUM_CORNER_CHANGE), "old per-corner route must remain insufficient: {report}");
-        assert!(!inspect_effect(&before, &before, planned).unwrap().source_replaced);
+        assert!(
+            report
+                .source_visible_identity_directions
+                .into_iter()
+                .flatten()
+                .any(|count| count < MINIMUM_CORNER_CHANGE),
+            "old per-corner route must remain insufficient: {report}"
+        );
+        assert!(
+            !inspect_effect(&before, &before, planned)
+                .unwrap()
+                .source_replaced
+        );
     }
 
 
@@ -5919,14 +8327,25 @@ mod tests {
         let before = fixture(44);
         let planned = historical_action(&before);
         let mut source_only = before.clone();
-        paint(&mut source_only, PixelRect::new(395, 432, 154, 480), [12, 82, 45]);
+        paint(
+            &mut source_only,
+            PixelRect::new(395, 432, 154, 480),
+            [12, 82, 45],
+        );
         let report = inspect_effect(&before, &source_only, planned).unwrap();
         assert!(report.source_replaced && !report.verified, "{report}");
         assert!(report.source_positive >= MINIMUM_CONTENT_CHANGE, "{report}");
         let mut receiver_only = before.clone();
-        paint(&mut receiver_only, PixelRect::new(1_078, 130, 100, 139), [245, 245, 245]);
+        paint(
+            &mut receiver_only,
+            PixelRect::new(1_078, 130, 100, 139),
+            [245, 245, 245],
+        );
         let report = inspect_effect(&before, &receiver_only, planned).unwrap();
-        assert!(report.destination_changed >= MINIMUM_CONTENT_CHANGE, "{report}");
+        assert!(
+            report.destination_changed >= MINIMUM_CONTENT_CHANGE,
+            "{report}"
+        );
         assert!(!report.source_replaced && !report.verified, "{report}");
 
 
@@ -5938,7 +8357,10 @@ mod tests {
             let mut masked = before.clone();
             paint(&mut masked, bounds, rgb);
             let report = inspect_effect(&before, &masked, planned).unwrap();
-            assert!(!report.source_replaced && !report.verified, "{bounds:?}: {report}");
+            assert!(
+                !report.source_replaced && !report.verified,
+                "{bounds:?}: {report}"
+            );
         }
     }
 
@@ -5950,20 +8372,42 @@ mod tests {
         let (before, after, planned) = synthetic_bottom_contraction();
 
 
-        for patch in [PixelRect::new(395, 804, 28, 44), PixelRect::new(489, 903, 28, 44)] {
+        for patch in [
+            PixelRect::new(395, 804, 28, 44),
+            PixelRect::new(489, 903, 28, 44),
+        ] {
             let mut restored = after.clone();
-            copy_region(&before, &mut restored, patch, PixelPoint::new(patch.x as i32, patch.y as i32));
-            paint(&mut restored, PixelRect::new(430, 891, 40, 10), [190, 190, 190]);
+            copy_region(
+                &before,
+                &mut restored,
+                patch,
+                PixelPoint::new(patch.x as i32, patch.y as i32),
+            );
+            paint(
+                &mut restored,
+                PixelRect::new(430, 891, 40, 10),
+                [190, 190, 190],
+            );
             let report = inspect_effect(&before, &restored, planned).unwrap();
             assert!(report.source_changed >= MINIMUM_CONTENT_CHANGE, "{report}");
-            assert!(!report.source_replaced && !report.verified, "restored {patch:?}: {report}");
+            assert!(
+                !report.source_replaced && !report.verified,
+                "restored {patch:?}: {report}"
+            );
             let mut dark = after.clone();
             paint(&mut dark, patch, [170, 120, 75]);
             let report = inspect_effect(&before, &dark, planned).unwrap();
-            assert!(!report.source_replaced && !report.verified, "dark {patch:?}: {report}");
+            assert!(
+                !report.source_replaced && !report.verified,
+                "dark {patch:?}: {report}"
+            );
         }
         let mut cursor_only = before.clone();
-        paint(&mut cursor_only, PixelRect::new(440, 823, 32, 32), [0, 0, 0]);
+        paint(
+            &mut cursor_only,
+            PixelRect::new(440, 823, 32, 32),
+            [0, 0, 0],
+        );
         let report = inspect_effect(&before, &cursor_only, planned).unwrap();
         assert!(!report.source_replaced && !report.verified, "{report}");
         let mut malformed = after;
@@ -5977,15 +8421,32 @@ mod tests {
     #[test]
     fn solve_diagnostic_reports_full_artwork_and_independent_empty_stock_guard() {
         let frame = fixture(48);
-        assert_eq!(inspect_solve_control(&frame).unwrap(), SolveEvidence {
-            available: true, stock_felt_pixels: 13_900, stock_probe_pixels: 13_900,
-            artwork_matched: 899, artwork_samples: 899, interior_matched: 483, interior_samples: 483,
-            glyph_matched: 342, glyph_samples: 342,
-        });
+        assert_eq!(
+            inspect_solve_control(&frame).unwrap(),
+            SolveEvidence {
+                available: true,
+                stock_felt_pixels: 13_900,
+                stock_probe_pixels: 13_900,
+                artwork_matched: 899,
+                artwork_samples: 899,
+                interior_matched: 483,
+                interior_samples: 483,
+                glyph_matched: 342,
+                glyph_samples: 342,
+            }
+        );
         let mut stock_occupied = frame.clone();
-        copy_region(&fixture(1), &mut stock_occupied, PixelRect::new(390, UPPER_Y, CARD_WIDTH, CARD_HEIGHT), PixelPoint::new(390, UPPER_Y as i32));
+        copy_region(
+            &fixture(1),
+            &mut stock_occupied,
+            PixelRect::new(390, UPPER_Y, CARD_WIDTH, CARD_HEIGHT),
+            PixelPoint::new(390, UPPER_Y as i32),
+        );
         let report = inspect_solve_control(&stock_occupied).unwrap();
-        assert!(!report.available && report.stock_felt_pixels < 12_510, "{report}");
+        assert!(
+            !report.available && report.stock_felt_pixels < 12_510,
+            "{report}"
+        );
         assert_eq!((report.artwork_matched, report.glyph_matched), (899, 342));
         let mut malformed = frame;
         malformed.pixels.truncate(1);
@@ -6004,15 +8465,34 @@ mod tests {
         for rgb in [[12, 82, 45], [0, 0, 0], [255, 255, 255]] {
             let mut derivative = recorded.clone();
             paint(&mut derivative, SOLVE_BOUNDS, rgb);
-            copy_region(&recorded, &mut derivative, SOLVE_STABLE_INTERIOR,
-                PixelPoint::new(SOLVE_STABLE_INTERIOR.x as i32, SOLVE_STABLE_INTERIOR.y as i32));
+            copy_region(
+                &recorded,
+                &mut derivative,
+                SOLVE_STABLE_INTERIOR,
+                PixelPoint::new(
+                    SOLVE_STABLE_INTERIOR.x as i32,
+                    SOLVE_STABLE_INTERIOR.y as i32,
+                ),
+            );
             let report = inspect_solve_control(&derivative).unwrap();
             assert!(report.available, "{report}");
-            assert!(report.artwork_matched * 100 < report.artwork_samples * 98, "{report}");
+            assert!(
+                report.artwork_matched * 100 < report.artwork_samples * 98,
+                "{report}"
+            );
             assert_eq!((report.interior_matched, report.glyph_matched), (483, 342));
-            assert!(find_solid_card_source(&derivative,
-                PixelRect::new(390, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)).unwrap().is_some());
-            assert_eq!(action(&derivative).target, ActionTarget::Klondike(KlondikeTarget::Solve));
+            assert!(
+                find_solid_card_source(
+                    &derivative,
+                    PixelRect::new(390, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)
+                )
+                .unwrap()
+                .is_some()
+            );
+            assert_eq!(
+                action(&derivative).target,
+                ActionTarget::Klondike(KlondikeTarget::Solve)
+            );
         }
     }
 
@@ -6022,11 +8502,13 @@ mod tests {
     /// outlines, without generalising gold colour into a completion-request button.
     #[test]
     fn stable_solve_face_is_specific_across_the_original_recorded_corpus() {
-
-
         for number in 1..=49 {
             let report = inspect_solve_control(&fixture(number)).unwrap();
-            assert_eq!(report.available, [13, 25, 37, 42, 48].contains(&number), "K{number:02}: {report}");
+            assert_eq!(
+                report.available,
+                [13, 25, 37, 42, 48].contains(&number),
+                "K{number:02}: {report}"
+            );
         }
     }
 
@@ -6040,11 +8522,7 @@ mod tests {
 
 
         for y in (SOLVE_BOUNDS.y..SOLVE_BOUNDS.bottom()).step_by(4) {
-
-
             for x in (SOLVE_BOUNDS.x..SOLVE_BOUNDS.right()).step_by(4) {
-
-
                 if changed < losses
                     && SOLVE_STABLE_INTERIOR.contains(PixelPoint::new(x as i32, y as i32))
                     && !((590..660).contains(&x) && (160..236).contains(&y))
@@ -6054,7 +8532,10 @@ mod tests {
                 }
             }
         }
-        assert_eq!(changed, losses, "requested losses exceed the non-glyph face");
+        assert_eq!(
+            changed, losses,
+            "requested losses exceed the non-glyph face"
+        );
         frame
     }
 
@@ -6066,12 +8547,24 @@ mod tests {
     fn solve_nearly_matching_face_requests_settling_without_click_authority() {
         let derivative = solve_with_face_sample_losses(24);
         let report = inspect_solve_control(&derivative).unwrap();
-        assert_eq!((report.interior_matched, report.interior_samples), (459, 483));
+        assert_eq!(
+            (report.interior_matched, report.interior_samples),
+            (459, 483)
+        );
         assert_eq!((report.glyph_matched, report.glyph_samples), (342, 342));
-        assert_eq!((report.stock_felt_pixels, report.stock_probe_pixels), (13_900, 13_900));
+        assert_eq!(
+            (report.stock_felt_pixels, report.stock_probe_pixels),
+            (13_900, 13_900)
+        );
         assert!(report.awaiting_settle(), "{report}");
-        assert!(!report.available && !has_solve_control(&derivative), "{report}");
-        assert!(matches!(action(&derivative).target, ActionTarget::Klondike(KlondikeTarget::Tableau { .. })));
+        assert!(
+            !report.available && !has_solve_control(&derivative),
+            "{report}"
+        );
+        assert!(matches!(
+            action(&derivative).target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau { .. })
+        ));
         let settled = inspect_solve_control(&fixture(48)).unwrap();
         assert!(settled.available && !settled.awaiting_settle(), "{settled}");
     }
@@ -6105,7 +8598,10 @@ mod tests {
                 "stock" => boundary.stock_felt_pixels = refused,
                 _ => unreachable!("test field is bounded"),
             }
-            assert!(!boundary.awaiting_settle(), "{field} below minimum: {boundary}");
+            assert!(
+                !boundary.awaiting_settle(),
+                "{field} below minimum: {boundary}"
+            );
         }
 
 
@@ -6119,14 +8615,30 @@ mod tests {
                 "glyph" => boundary.glyph_samples = 0,
                 _ => unreachable!("test field is bounded"),
             }
-            assert!(!boundary.awaiting_settle(), "missing {missing} probe: {boundary}");
+            assert!(
+                !boundary.awaiting_settle(),
+                "missing {missing} probe: {boundary}"
+            );
         }
         let mut occupied = solve_with_face_sample_losses(24);
-        copy_region(&fixture(1), &mut occupied, PixelRect::new(390, UPPER_Y, CARD_WIDTH, CARD_HEIGHT), PixelPoint::new(390, UPPER_Y as i32));
+        copy_region(
+            &fixture(1),
+            &mut occupied,
+            PixelRect::new(390, UPPER_Y, CARD_WIDTH, CARD_HEIGHT),
+            PixelPoint::new(390, UPPER_Y as i32),
+        );
         assert!(!inspect_solve_control(&occupied).unwrap().awaiting_settle());
         let mut missing_glyph = solve_with_face_sample_losses(24);
-        paint(&mut missing_glyph, PixelRect::new(590, 212, 70, 24), [12, 62, 40]);
-        assert!(!inspect_solve_control(&missing_glyph).unwrap().awaiting_settle());
+        paint(
+            &mut missing_glyph,
+            PixelRect::new(590, 212, 70, 24),
+            [12, 62, 40],
+        );
+        assert!(
+            !inspect_solve_control(&missing_glyph)
+                .unwrap()
+                .awaiting_settle()
+        );
         let mut malformed = occupied;
         malformed.pixels.truncate(1);
         assert!(inspect_solve_control(&malformed).is_err());
@@ -6137,8 +8649,6 @@ mod tests {
     /// partial-face wait; early live face pixels are covered only by derivatives.
     #[test]
     fn solve_pending_settle_is_absent_from_all_recorded_settled_scenes() {
-
-
         for number in 1..=52 {
             let report = inspect_solve_control(&fixture(number)).unwrap();
             assert!(!report.awaiting_settle(), "K{number:02}: {report}");
@@ -6155,27 +8665,70 @@ mod tests {
         let before = fixture(50);
         let after = fixture(51);
         let planned = historical_action(&before);
-        assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-            column: 1, top: 799, bottom: 989,
-        }));
-        assert_eq!(historical_action(&after).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-            column: 3, top: 610, bottom: 800,
-        }));
+        assert_eq!(
+            planned.target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 1,
+                top: 799,
+                bottom: 989,
+            })
+        );
+        assert_eq!(
+            historical_action(&after).target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 3,
+                top: 610,
+                bottom: 800,
+            })
+        );
         let report = inspect_effect(&before, &after, planned).unwrap();
         assert_eq!(report.source_changed, 687, "{report}");
         assert_eq!(report.source_positive, 61, "{report}");
-        assert_eq!(report.source_identity_directions, [[0, 0], [0, 0]], "clipped ordinary corners stay unavailable");
-        assert_eq!(report.source_visible_identity_directions, [[35, 209], [141, 58]], "{report}");
+        assert_eq!(
+            report.source_identity_directions,
+            [[0, 0], [0, 0]],
+            "clipped ordinary corners stay unavailable"
+        );
+        assert_eq!(
+            report.source_visible_identity_directions,
+            [[35, 209], [141, 58]],
+            "{report}"
+        );
         assert_eq!(report.source_visible_print.new_ink, 550, "{report}");
         assert_eq!(report.source_visible_print.cleared_ink, 54, "{report}");
         assert_eq!(report.source_visible_print.stable_paper, 3_925, "{report}");
-        assert_eq!(report.source_visible_print.changed_paper_fields, 0, "{report}");
-        assert!(report.source_visible_print.paper_supported && report.source_visible_print.verified, "{report}");
-        assert_eq!(report.destination_changed, 1_244, "next HALO shadow supplies the broad diagnostic: {report}");
-        assert_eq!(content_changes(&before, &after, PixelRect::new(1_398, UPPER_Y, CARD_WIDTH, CARD_HEIGHT), planned, false),
-            318, "the actual receiving foundation does not meet the general recipient bound");
-        assert!(report.source_replaced && !report.verified, "continuation remains separate from complete effect: {report}");
-        assert!(!inspect_effect(&before, &before, planned).unwrap().source_replaced);
+        assert_eq!(
+            report.source_visible_print.changed_paper_fields, 0,
+            "{report}"
+        );
+        assert!(
+            report.source_visible_print.paper_supported && report.source_visible_print.verified,
+            "{report}"
+        );
+        assert_eq!(
+            report.destination_changed, 1_244,
+            "next HALO shadow supplies the broad diagnostic: {report}"
+        );
+        assert_eq!(
+            content_changes(
+                &before,
+                &after,
+                PixelRect::new(1_398, UPPER_Y, CARD_WIDTH, CARD_HEIGHT),
+                planned,
+                false
+            ),
+            318,
+            "the actual receiving foundation does not meet the general recipient bound"
+        );
+        assert!(
+            report.source_replaced && !report.verified,
+            "continuation remains separate from complete effect: {report}"
+        );
+        assert!(
+            !inspect_effect(&before, &before, planned)
+                .unwrap()
+                .source_replaced
+        );
     }
 
 
@@ -6190,20 +8743,34 @@ mod tests {
         let planned = historical_action(&before);
         let source = planned.effect_bounds();
         let mut source_only = before.clone();
-        copy_region(&completed, &mut source_only, source, PixelPoint::new(source.x as i32, source.y as i32));
+        copy_region(
+            &completed,
+            &mut source_only,
+            source,
+            PixelPoint::new(source.x as i32, source.y as i32),
+        );
         let report = inspect_effect(&before, &source_only, planned).unwrap();
         assert!(report.source_visible_print.verified, "{report}");
         assert_eq!(report.destination_changed, 0, "{report}");
         assert!(!report.source_replaced && !report.verified, "{report}");
         let mut halo_only = before.clone();
-        copy_region(&completed, &mut halo_only, PixelRect::new(716, 600, 154, 212), PixelPoint::new(716, 600));
+        copy_region(
+            &completed,
+            &mut halo_only,
+            PixelRect::new(716, 600, 154, 212),
+            PixelPoint::new(716, 600),
+        );
         let report = inspect_effect(&before, &halo_only, planned).unwrap();
         assert_eq!(report.source_changed, 0, "{report}");
         assert_eq!(report.destination_changed, 1_244, "{report}");
         assert!(!report.source_replaced && !report.verified, "{report}");
         let mut recipient_and_halo = halo_only;
-        copy_region(&completed, &mut recipient_and_halo,
-            PixelRect::new(1_398, UPPER_Y, CARD_WIDTH, CARD_HEIGHT), PixelPoint::new(1_398, UPPER_Y as i32));
+        copy_region(
+            &completed,
+            &mut recipient_and_halo,
+            PixelRect::new(1_398, UPPER_Y, CARD_WIDTH, CARD_HEIGHT),
+            PixelPoint::new(1_398, UPPER_Y as i32),
+        );
         let report = inspect_effect(&before, &recipient_and_halo, planned).unwrap();
         assert_eq!(report.source_changed, 0, "{report}");
         assert!(!report.source_replaced && !report.verified, "{report}");
@@ -6220,20 +8787,45 @@ mod tests {
         let planned = historical_action(&before);
 
 
-        for patch in [PixelRect::new(395, 804, 28, 44), PixelRect::new(489, 903, 28, 44)] {
+        for patch in [
+            PixelRect::new(395, 804, 28, 44),
+            PixelRect::new(489, 903, 28, 44),
+        ] {
             let mut one_patch = completed.clone();
-            copy_region(&before, &mut one_patch, patch, PixelPoint::new(patch.x as i32, patch.y as i32));
-            paint(&mut one_patch, PixelRect::new(425, 888, 40, 20), [190, 190, 190]);
+            copy_region(
+                &before,
+                &mut one_patch,
+                patch,
+                PixelPoint::new(patch.x as i32, patch.y as i32),
+            );
+            paint(
+                &mut one_patch,
+                PixelRect::new(425, 888, 40, 20),
+                [190, 190, 190],
+            );
             let report = inspect_effect(&before, &one_patch, planned).unwrap();
             assert!(report.source_changed >= MINIMUM_CONTENT_CHANGE, "{report}");
-            assert!(!report.source_replaced && !report.verified, "restored patch {patch:?}: {report}");
+            assert!(
+                !report.source_replaced && !report.verified,
+                "restored patch {patch:?}: {report}"
+            );
         }
         let mut faded = completed.clone();
         paint(&mut faded, PixelRect::new(425, 888, 20, 6), [230, 230, 230]);
         let report = inspect_effect(&before, &faded, planned).unwrap();
-        assert_eq!(report.source_visible_identity_directions, [[35, 209], [141, 58]], "print itself is retained: {report}");
-        assert!(report.source_visible_print.changed_paper_fields > 0, "{report}");
-        assert!(!report.source_replaced && !report.verified, "paper-field fading is not replacement: {report}");
+        assert_eq!(
+            report.source_visible_identity_directions,
+            [[35, 209], [141, 58]],
+            "print itself is retained: {report}"
+        );
+        assert!(
+            report.source_visible_print.changed_paper_fields > 0,
+            "{report}"
+        );
+        assert!(
+            !report.source_replaced && !report.verified,
+            "paper-field fading is not replacement: {report}"
+        );
     }
 
 
@@ -6246,24 +8838,44 @@ mod tests {
         let completed = fixture(51);
         let planned = historical_action(&before);
         let mut outside_source = before.clone();
-        copy_region(&completed, &mut outside_source, PixelRect::new(716, 600, 154, 212), PixelPoint::new(716, 600));
-        copy_region(&completed, &mut outside_source,
-            PixelRect::new(1_398, UPPER_Y, CARD_WIDTH, CARD_HEIGHT), PixelPoint::new(1_398, UPPER_Y as i32));
+        copy_region(
+            &completed,
+            &mut outside_source,
+            PixelRect::new(716, 600, 154, 212),
+            PixelPoint::new(716, 600),
+        );
+        copy_region(
+            &completed,
+            &mut outside_source,
+            PixelRect::new(1_398, UPPER_Y, CARD_WIDTH, CARD_HEIGHT),
+            PixelPoint::new(1_398, UPPER_Y as i32),
+        );
 
 
         for (name, bounds, rgb) in [
             ("cursor", PixelRect::new(409, 792, 94, 94), [0, 0, 0]),
-            ("white cursor", PixelRect::new(409, 792, 94, 94), [255, 255, 255]),
+            (
+                "white cursor",
+                PixelRect::new(409, 792, 94, 94),
+                [255, 255, 255],
+            ),
             ("gold", planned.effect_bounds(), [230, 185, 70]),
             ("neutral guide", planned.effect_bounds(), [32, 32, 32]),
             ("neutral fading", planned.effect_bounds(), [190, 190, 190]),
             ("whitening", planned.effect_bounds(), [255, 255, 255]),
-            ("toolbar", PixelRect::new(390, TOOLBAR_TOP, CARD_WIDTH, 86), [255, 255, 255]),
+            (
+                "toolbar",
+                PixelRect::new(390, TOOLBAR_TOP, CARD_WIDTH, 86),
+                [255, 255, 255],
+            ),
         ] {
             let mut after = outside_source.clone();
             paint(&mut after, bounds, rgb);
             let report = inspect_effect(&before, &after, planned).unwrap();
-            assert!(!report.source_replaced && !report.verified, "{name}: {report}");
+            assert!(
+                !report.source_replaced && !report.verified,
+                "{name}: {report}"
+            );
         }
         let mut malformed = completed;
         malformed.pixels.truncate(1);
@@ -6278,22 +8890,48 @@ mod tests {
         let before = fixture(55);
         let after = fixture(56);
         let planned = historical_action(&before);
-        assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-            column: 2, top: 804, bottom: 993,
-        }));
-        assert_eq!(historical_action(&after).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-            column: 2, top: 799, bottom: 988,
-        }));
+        assert_eq!(
+            planned.target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 2,
+                top: 804,
+                bottom: 993,
+            })
+        );
+        assert_eq!(
+            historical_action(&after).target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 2,
+                top: 799,
+                bottom: 988,
+            })
+        );
         let report = inspect_effect(&before, &after, planned).unwrap();
         assert_eq!((report.source_changed, report.source_positive), (373, 310));
         let print = report.source_aligned_print;
         assert!(print.geometry_supported && print.verified, "{report}");
         assert_eq!((print.upward_shift, print.visible_rows), (5, 143));
-        assert_eq!((print.material_changed, print.new_ink, print.cleared_ink), (564, 62, 235));
+        assert_eq!(
+            (print.material_changed, print.new_ink, print.cleared_ink),
+            (564, 62, 235)
+        );
         assert_eq!((print.stable_paper, print.eligible), (7104, 7731));
-        assert_eq!((print.core_stable_paper, print.core_eligible, print.changed_paper_fields), (3493, 3785, 0));
-        assert!(report.destination_changed >= MINIMUM_CONTENT_CHANGE, "{report}");
-        assert!(report.source_replaced && !report.verified, "source continuation is not complete effect: {report}");
+        assert_eq!(
+            (
+                print.core_stable_paper,
+                print.core_eligible,
+                print.changed_paper_fields
+            ),
+            (3493, 3785, 0)
+        );
+        assert!(
+            report.destination_changed >= MINIMUM_CONTENT_CHANGE,
+            "{report}"
+        );
+        assert!(
+            report.source_replaced && !report.verified,
+            "source continuation is not complete effect: {report}"
+        );
         assert!(!completion_evidence(&after).unwrap().complete_candidate);
     }
 
@@ -6303,11 +8941,21 @@ mod tests {
     fn translated_unchanged_clipped_source() -> (CapturedFrame, CapturedFrame, GuidedAction) {
         let before = fixture(55);
         let mut after = fixture(56);
-        copy_region(&before, &mut after, PixelRect::new(563, 814, 122, 128), PixelPoint::new(563, 809));
+        copy_region(
+            &before,
+            &mut after,
+            PixelRect::new(563, 814, 122, 128),
+            PixelPoint::new(563, 809),
+        );
         let planned = historical_action(&before);
-        assert_eq!(historical_action(&after).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-            column: 2, top: 799, bottom: 988,
-        }));
+        assert_eq!(
+            historical_action(&after).target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 2,
+                top: 799,
+                bottom: 988,
+            })
+        );
         (before, after, planned)
     }
 
@@ -6321,8 +8969,14 @@ mod tests {
         assert!(!unchanged.geometry_supported && !unchanged.verified);
         let print = aligned_source_print_changes(&before, &translated, planned).unwrap();
         assert!(print.geometry_supported, "{print:?}");
-        assert_eq!((print.material_changed, print.new_ink, print.cleared_ink), (0, 0, 0));
-        assert!(!print.verified, "pure translation is not replacement: {print:?}");
+        assert_eq!(
+            (print.material_changed, print.new_ink, print.cleared_ink),
+            (0, 0, 0)
+        );
+        assert!(
+            !print.verified,
+            "pure translation is not replacement: {print:?}"
+        );
 
 
         for (bounds, rgb) in [
@@ -6334,7 +8988,10 @@ mod tests {
             paint(&mut different, bounds, rgb);
             let print = aligned_source_print_changes(&before, &different, planned).unwrap();
             assert!(!print.verified, "{bounds:?}, {rgb:?}: {print:?}");
-            assert_eq!(print.material_changed, 0, "excluded overlay supplies no material proof: {print:?}");
+            assert_eq!(
+                print.material_changed, 0,
+                "excluded overlay supplies no material proof: {print:?}"
+            );
         }
     }
 
@@ -6353,8 +9010,6 @@ mod tests {
 
 
             for y in 814..942 {
-
-
                 for x in 563..685 {
                     let first = pixel_rgb(&before, x, y).unwrap();
                     let second = pixel_rgb(&completed, x, y - 5).unwrap();
@@ -6374,9 +9029,23 @@ mod tests {
                 }
             }
             let print = aligned_source_print_changes(&before, &different, planned).unwrap();
-            assert!(print.geometry_supported, "the other source guards remain applicable: {print:?}");
-            assert_eq!(if remove_new { print.new_ink } else { print.cleared_ink }, 0, "{print:?}");
-            assert!(!print.verified, "both printed directions remain mandatory: {print:?}");
+            assert!(
+                print.geometry_supported,
+                "the other source guards remain applicable: {print:?}"
+            );
+            assert_eq!(
+                if remove_new {
+                    print.new_ink
+                } else {
+                    print.cleared_ink
+                },
+                0,
+                "{print:?}"
+            );
+            assert!(
+                !print.verified,
+                "both printed directions remain mandatory: {print:?}"
+            );
         }
     }
 
@@ -6392,28 +9061,36 @@ mod tests {
 
 
         for y in 815..926 {
-
-
             for x in 574..674 {
                 let rgb = pixel_rgb(&completed, x, y).unwrap();
 
 
                 if is_bright_neutral_paper(rgb) {
                     let offset = y as usize * faded.stride + x as usize * 4;
-                    faded.pixels[offset..offset + 3].copy_from_slice(&rgb.map(|value| value.saturating_sub(12)));
+                    faded.pixels[offset..offset + 3]
+                        .copy_from_slice(&rgb.map(|value| value.saturating_sub(12)));
                 }
             }
         }
         let print = aligned_source_print_changes(&before, &faded, planned).unwrap();
-        assert!(print.geometry_supported && print.paper_supported, "{print:?}");
-        assert!(print.changed_paper_fields > 0 && !print.verified, "retained paper fading is not printed replacement: {print:?}");
+        assert!(
+            print.geometry_supported && print.paper_supported,
+            "{print:?}"
+        );
+        assert!(
+            print.changed_paper_fields > 0 && !print.verified,
+            "retained paper fading is not printed replacement: {print:?}"
+        );
 
 
         for rgb in [[32, 32, 32], [60, 110, 75], [230, 185, 70]] {
             let mut different = completed.clone();
             paint(&mut different, PixelRect::new(563, 809, 122, 128), rgb);
             let print = aligned_source_print_changes(&before, &different, planned).unwrap();
-            assert!(!print.verified, "unsupported source paper {rgb:?}: {print:?}");
+            assert!(
+                !print.verified,
+                "unsupported source paper {rgb:?}: {print:?}"
+            );
         }
     }
 
@@ -6427,20 +9104,56 @@ mod tests {
         let completed = fixture(56);
         let planned = historical_action(&before);
         let mut recipient_only = before.clone();
-        copy_region(&completed, &mut recipient_only, PixelRect::new(1398, UPPER_Y, CARD_WIDTH, CARD_HEIGHT), PixelPoint::new(1398, UPPER_Y as i32));
+        copy_region(
+            &completed,
+            &mut recipient_only,
+            PixelRect::new(1398, UPPER_Y, CARD_WIDTH, CARD_HEIGHT),
+            PixelPoint::new(1398, UPPER_Y as i32),
+        );
         let report = inspect_effect(&before, &recipient_only, planned).unwrap();
-        assert!(report.destination_changed >= MINIMUM_CONTENT_CHANGE, "{report}");
-        assert!(!report.source_aligned_print.verified && !report.source_replaced && !report.verified, "recipient alone: {report}");
+        assert!(
+            report.destination_changed >= MINIMUM_CONTENT_CHANGE,
+            "{report}"
+        );
+        assert!(
+            !report.source_aligned_print.verified && !report.source_replaced && !report.verified,
+            "recipient alone: {report}"
+        );
         let mut source_only = before.clone();
-        copy_region(&completed, &mut source_only, PixelRect::new(548, 332, 152, 662), PixelPoint::new(548, 332));
+        copy_region(
+            &completed,
+            &mut source_only,
+            PixelRect::new(548, 332, 152, 662),
+            PixelPoint::new(548, 332),
+        );
         let report = inspect_effect(&before, &source_only, planned).unwrap();
-        assert!(report.source_aligned_print.verified, "source print is independently real: {report}");
-        assert_eq!(report.destination_changed, 0, "source column changes are not recipient proof: {report}");
-        assert!(!report.source_replaced && !report.verified, "no non-source change: {report}");
+        assert!(
+            report.source_aligned_print.verified,
+            "source print is independently real: {report}"
+        );
+        assert_eq!(
+            report.destination_changed, 0,
+            "source column changes are not recipient proof: {report}"
+        );
+        assert!(
+            !report.source_replaced && !report.verified,
+            "no non-source change: {report}"
+        );
         let mut missing_source = completed;
-        paint(&mut missing_source, PixelRect::new(690, 799, 10, 189), [12, 82, 45]);
-        assert_eq!(analyse_historical(&missing_source).unwrap().prediction, PredictedAction::NoHighlight);
-        assert!(!aligned_source_print_changes(&before, &missing_source, planned).unwrap().geometry_supported);
+        paint(
+            &mut missing_source,
+            PixelRect::new(690, 799, 10, 189),
+            [12, 82, 45],
+        );
+        assert_eq!(
+            analyse_historical(&missing_source).unwrap().prediction,
+            PredictedAction::NoHighlight
+        );
+        assert!(
+            !aligned_source_print_changes(&before, &missing_source, planned)
+                .unwrap()
+                .geometry_supported
+        );
     }
 
 
@@ -6453,39 +9166,94 @@ mod tests {
         let planned = historical_action(&before);
 
 
-        for (column, point) in [(3, PixelPoint::new(716, 799)), (2, PixelPoint::new(548, 777))] {
+        for (column, point) in [
+            (3, PixelPoint::new(716, 799)),
+            (2, PixelPoint::new(548, 777)),
+        ] {
             let mut different = completed.clone();
-            paint(&mut different, PixelRect::new(548, 799, 152, 195), [12, 82, 45]);
-            copy_region(&completed, &mut different, PixelRect::new(548, 799, 152, 189), point);
+            paint(
+                &mut different,
+                PixelRect::new(548, 799, 152, 195),
+                [12, 82, 45],
+            );
+            copy_region(
+                &completed,
+                &mut different,
+                PixelRect::new(548, 799, 152, 189),
+                point,
+            );
             let expected_top = point.y as u16;
-            assert_eq!(historical_action(&different).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-                column, top: expected_top, bottom: expected_top + 189,
-            }));
+            assert_eq!(
+                historical_action(&different).target,
+                ActionTarget::Klondike(KlondikeTarget::Tableau {
+                    column,
+                    top: expected_top,
+                    bottom: expected_top + 189,
+                })
+            );
             let print = aligned_source_print_changes(&before, &different, planned).unwrap();
-            assert!(!print.geometry_supported && !print.verified, "different source geometry: {print:?}");
+            assert!(
+                !print.geometry_supported && !print.verified,
+                "different source geometry: {print:?}"
+            );
         }
         let mut different_height = before.clone();
-        copy_region(&before, &mut different_height, PixelRect::new(548, 804, 152, 143), PixelPoint::new(548, 803));
+        copy_region(
+            &before,
+            &mut different_height,
+            PixelRect::new(548, 804, 152, 143),
+            PixelPoint::new(548, 803),
+        );
         let different_plan = historical_action(&different_height);
-        assert_eq!(different_plan.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-            column: 2, top: 803, bottom: 993,
-        }));
-        let print = aligned_source_print_changes(&different_height, &completed, different_plan).unwrap();
-        assert!(!print.geometry_supported && !print.verified, "unequal source heights: {print:?}");
+        assert_eq!(
+            different_plan.target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 2,
+                top: 803,
+                bottom: 993,
+            })
+        );
+        let print =
+            aligned_source_print_changes(&different_height, &completed, different_plan).unwrap();
+        assert!(
+            !print.geometry_supported && !print.verified,
+            "unequal source heights: {print:?}"
+        );
 
 
         for target in [
-            KlondikeTarget::Tableau { column: 2, top: 803, bottom: 993 },
-            KlondikeTarget::Tableau { column: 2, top: 804, bottom: 992 },
-            KlondikeTarget::Tableau { column: 1, top: 501, bottom: 691 },
-            KlondikeTarget::Waste { offset: 2 }, KlondikeTarget::Foundation { column: 4 },
+            KlondikeTarget::Tableau {
+                column: 2,
+                top: 803,
+                bottom: 993,
+            },
+            KlondikeTarget::Tableau {
+                column: 2,
+                top: 804,
+                bottom: 992,
+            },
+            KlondikeTarget::Tableau {
+                column: 1,
+                top: 501,
+                bottom: 691,
+            },
+            KlondikeTarget::Waste { offset: 2 },
+            KlondikeTarget::Foundation { column: 4 },
         ] {
             let other = canonical_action(target).unwrap();
-            assert!(!aligned_source_print_changes(&before, &completed, other).unwrap().geometry_supported, "{target:?}");
+            assert!(
+                !aligned_source_print_changes(&before, &completed, other)
+                    .unwrap()
+                    .geometry_supported,
+                "{target:?}"
+            );
         }
         let mut malformed = completed.clone();
         malformed.pixels.truncate(1);
-        assert_eq!(aligned_source_print_changes(&before, &malformed, planned), Err(HaloDetectionError::InvalidFrameLayout));
+        assert_eq!(
+            aligned_source_print_changes(&before, &malformed, planned),
+            Err(HaloDetectionError::InvalidFrameLayout)
+        );
         let mut wrong_dimensions = completed;
         wrong_dimensions.width -= 1;
         assert!(aligned_source_print_changes(&before, &wrong_dimensions, planned).is_err());
@@ -6500,35 +9268,95 @@ mod tests {
         let before = fixture(57);
         let after = fixture(58);
         let planned = historical_action(&before);
-        assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-            column: 3, top: 803, bottom: 992,
-        }));
-        assert_eq!(historical_action(&after).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-            column: 7, top: 425, bottom: 615,
-        }));
-        assert_eq!(ordinary_source_face_top(&after, planned.effect_bounds(), 808), Some(803));
-        assert!(!aligned_source_print_changes(&before, &after, planned).unwrap().geometry_supported,
-            "the existing same-column HALO alignment is unavailable");
+        assert_eq!(
+            planned.target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 3,
+                top: 803,
+                bottom: 992,
+            })
+        );
+        assert_eq!(
+            historical_action(&after).target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 7,
+                top: 425,
+                bottom: 615,
+            })
+        );
+        assert_eq!(
+            ordinary_source_face_top(&after, planned.effect_bounds(), 808),
+            Some(803)
+        );
+        assert!(
+            !aligned_source_print_changes(&before, &after, planned)
+                .unwrap()
+                .geometry_supported,
+            "the existing same-column HALO alignment is unavailable"
+        );
         let report = inspect_effect(&before, &after, planned).unwrap();
-        assert_eq!((report.source_changed, report.source_positive), (343, 288), "{report}");
+        assert_eq!(
+            (report.source_changed, report.source_positive),
+            (343, 288),
+            "{report}"
+        );
         let print = report.source_aligned_print;
-        assert!(print.geometry_supported && print.ordinary_face_geometry && print.paper_supported && print.verified,
-            "{report}");
-        assert_eq!((print.ordinary_face_top, print.upward_shift, print.visible_rows), (803, 5, 144));
-        assert_eq!((print.material_changed, print.new_ink, print.cleared_ink), (553, 82, 189));
+        assert!(
+            print.geometry_supported
+                && print.ordinary_face_geometry
+                && print.paper_supported
+                && print.verified,
+            "{report}"
+        );
+        assert_eq!(
+            (
+                print.ordinary_face_top,
+                print.upward_shift,
+                print.visible_rows
+            ),
+            (803, 5, 144)
+        );
+        assert_eq!(
+            (print.material_changed, print.new_ink, print.cleared_ink),
+            (553, 82, 189)
+        );
         assert_eq!((print.stable_paper, print.eligible), (7_159, 7_853));
-        assert_eq!((print.core_stable_paper, print.core_eligible, print.changed_paper_fields), (3_608, 3_885, 0));
-        assert!(report.destination_changed >= MINIMUM_CONTENT_CHANGE && report.destination_print.verified,
-            "the ordinary source needs both independent receiving restrictions: {report}");
+        assert_eq!(
+            (
+                print.core_stable_paper,
+                print.core_eligible,
+                print.changed_paper_fields
+            ),
+            (3_608, 3_885, 0)
+        );
+        assert!(
+            report.destination_changed >= MINIMUM_CONTENT_CHANGE
+                && report.destination_print.verified,
+            "the ordinary source needs both independent receiving restrictions: {report}"
+        );
         assert_eq!(report.destination_print.column, 1);
         assert_eq!(report.destination_print.new_ink_halves, [176, 184]);
-        assert_eq!((report.destination_print.stable_paper, report.destination_print.changed_paper), (12_483, 0));
-        assert!(report.destination_print.paper_supported && report.destination_print.guide_stable, "{report}");
-        assert!(report.source_replaced && !report.verified,
-            "ordinary source evidence permits continuation only: {report}");
+        assert_eq!(
+            (
+                report.destination_print.stable_paper,
+                report.destination_print.changed_paper
+            ),
+            (12_483, 0)
+        );
+        assert!(
+            report.destination_print.paper_supported && report.destination_print.guide_stable,
+            "{report}"
+        );
+        assert!(
+            report.source_replaced && !report.verified,
+            "ordinary source evidence permits continuation only: {report}"
+        );
         assert!(!completion_evidence(&after).unwrap().complete_candidate);
         let unchanged = inspect_effect(&before, &before, planned).unwrap();
-        assert!(!unchanged.source_replaced && !unchanged.verified, "{unchanged}");
+        assert!(
+            !unchanged.source_replaced && !unchanged.verified,
+            "{unchanged}"
+        );
     }
 
 
@@ -6538,7 +9366,12 @@ mod tests {
     fn ordinary_face_offset_is_calibrated_by_unchanged_column_seven_print() {
         let before = fixture(57);
         let after = fixture(58);
-        let ActionTarget::Klondike(KlondikeTarget::Tableau { column, top, bottom }) = action(&after).target else {
+        let ActionTarget::Klondike(KlondikeTarget::Tableau {
+            column,
+            top,
+            bottom,
+        }) = action(&after).target
+        else {
             panic!("expected the recorded column-7 source");
         };
         assert_eq!((column, top, bottom), (7, 425, 615));
@@ -6546,11 +9379,20 @@ mod tests {
 
 
         for x in 1_416..1_512 {
-            assert_eq!(pixel_rgb(&before, x, 430), Some([212, 212, 212]), "gray seam x={x}");
+            assert_eq!(
+                pixel_rgb(&before, x, 430),
+                Some([212, 212, 212]),
+                "gray seam x={x}"
+            );
         }
-        let unchanged_print_pixels = (435..475).flat_map(|y| (1_403..1_431).map(move |x| (x, y)))
-            .filter(|&(x, y)| pixel_rgb(&before, x, y) == pixel_rgb(&after, x, y)).count();
-        assert_eq!(unchanged_print_pixels, 1_120, "the complete 28 by 40 printed patch is identical");
+        let unchanged_print_pixels = (435..475)
+            .flat_map(|y| (1_403..1_431).map(move |x| (x, y)))
+            .filter(|&(x, y)| pixel_rgb(&before, x, y) == pixel_rgb(&after, x, y))
+            .count();
+        assert_eq!(
+            unchanged_print_pixels, 1_120,
+            "the complete 28 by 40 printed patch is identical"
+        );
     }
 
 
@@ -6565,54 +9407,145 @@ mod tests {
 
 
         for (name, bounds, rgb) in [
-            ("duplicate seam", PixelRect::new(744, 806, 96, 1), [212, 212, 212]),
-            ("missing seam", PixelRect::new(744, 803, 96, 1), [253, 253, 253]),
-            ("unsupported seam shade", PixelRect::new(744, 803, 96, 1), [209, 209, 209]),
+            (
+                "duplicate seam",
+                PixelRect::new(744, 806, 96, 1),
+                [212, 212, 212],
+            ),
+            (
+                "missing seam",
+                PixelRect::new(744, 803, 96, 1),
+                [253, 253, 253],
+            ),
+            (
+                "unsupported seam shade",
+                PixelRect::new(744, 803, 96, 1),
+                [209, 209, 209],
+            ),
             ("gold seam", PixelRect::new(744, 803, 96, 1), [230, 185, 70]),
-            ("missing bright row above", PixelRect::new(744, 802, 96, 1), [230, 230, 230]),
-            ("missing bright row below", PixelRect::new(744, 804, 96, 1), [230, 230, 230]),
-            ("missing left paper", PixelRect::new(731, 804, 1, 143), [12, 82, 45]),
-            ("missing right paper", PixelRect::new(853, 804, 1, 143), [12, 82, 45]),
-            ("missing left felt", PixelRect::new(717, 804, 1, 143), [253, 253, 253]),
-            ("missing right felt", PixelRect::new(867, 804, 1, 143), [253, 253, 253]),
+            (
+                "missing bright row above",
+                PixelRect::new(744, 802, 96, 1),
+                [230, 230, 230],
+            ),
+            (
+                "missing bright row below",
+                PixelRect::new(744, 804, 96, 1),
+                [230, 230, 230],
+            ),
+            (
+                "missing left paper",
+                PixelRect::new(731, 804, 1, 143),
+                [12, 82, 45],
+            ),
+            (
+                "missing right paper",
+                PixelRect::new(853, 804, 1, 143),
+                [12, 82, 45],
+            ),
+            (
+                "missing left felt",
+                PixelRect::new(717, 804, 1, 143),
+                [253, 253, 253],
+            ),
+            (
+                "missing right felt",
+                PixelRect::new(867, 804, 1, 143),
+                [253, 253, 253],
+            ),
         ] {
             let mut different = completed.clone();
             paint(&mut different, bounds, rgb);
-            assert_eq!(historical_action(&different).target, historical_action(&completed).target, "{name}: fresh source is retained");
-            assert_eq!(ordinary_source_face_top(&different, source, 808), None, "{name}");
+            assert_eq!(
+                historical_action(&different).target,
+                historical_action(&completed).target,
+                "{name}: fresh source is retained"
+            );
+            assert_eq!(
+                ordinary_source_face_top(&different, source, 808),
+                None,
+                "{name}"
+            );
             let print = ordinary_source_print_changes(&before, &different, planned).unwrap();
-            assert!(!print.geometry_supported && !print.verified, "{name}: {print:?}");
+            assert!(
+                !print.geometry_supported && !print.verified,
+                "{name}: {print:?}"
+            );
             let report = inspect_effect(&before, &different, planned).unwrap();
-            assert!(!report.source_replaced && !report.verified, "{name}: {report}");
+            assert!(
+                !report.source_replaced && !report.verified,
+                "{name}: {report}"
+            );
         }
 
 
         for (name, top) in [("zero shift", 808), ("excessive shift", 781)] {
             let mut different = completed.clone();
-            paint(&mut different, PixelRect::new(744, 803, 96, 1), [253, 253, 253]);
-            paint(&mut different, PixelRect::new(744, top - 1, 96, 1), [253, 253, 253]);
-            paint(&mut different, PixelRect::new(744, top, 96, 1), [212, 212, 212]);
-            paint(&mut different, PixelRect::new(744, top + 1, 96, 1), [253, 253, 253]);
-            assert_eq!(ordinary_source_face_top(&different, source, 808), None, "{name}");
-            assert!(!ordinary_source_print_changes(&before, &different, planned).unwrap().geometry_supported,
-                "{name}");
+            paint(
+                &mut different,
+                PixelRect::new(744, 803, 96, 1),
+                [253, 253, 253],
+            );
+            paint(
+                &mut different,
+                PixelRect::new(744, top - 1, 96, 1),
+                [253, 253, 253],
+            );
+            paint(
+                &mut different,
+                PixelRect::new(744, top, 96, 1),
+                [212, 212, 212],
+            );
+            paint(
+                &mut different,
+                PixelRect::new(744, top + 1, 96, 1),
+                [253, 253, 253],
+            );
+            assert_eq!(
+                ordinary_source_face_top(&different, source, 808),
+                None,
+                "{name}"
+            );
+            assert!(
+                !ordinary_source_print_changes(&before, &different, planned)
+                    .unwrap()
+                    .geometry_supported,
+                "{name}"
+            );
         }
     }
 
 
     /// Translate the original print into the ordinary result while preserving
     /// its independently measured seam, paper sides, receiving print and target.
-    fn translated_unchanged_ordinary_clipped_source() -> (CapturedFrame, CapturedFrame, GuidedAction) {
+    fn translated_unchanged_ordinary_clipped_source() -> (CapturedFrame, CapturedFrame, GuidedAction)
+    {
         let before = fixture(57);
         let completed = fixture(58);
         let mut after = completed.clone();
-        copy_region(&before, &mut after, PixelRect::new(731, 813, 122, 129), PixelPoint::new(731, 808));
+        copy_region(
+            &before,
+            &mut after,
+            PixelRect::new(731, 813, 122, 129),
+            PixelPoint::new(731, 808),
+        );
         // Seven original antialiased side pixels are chromatic, but differ by
         // less than the material bound; retain the actual ordinary paper side.
-        copy_region(&completed, &mut after, PixelRect::new(731, 804, 1, 143), PixelPoint::new(731, 804));
+        copy_region(
+            &completed,
+            &mut after,
+            PixelRect::new(731, 804, 1, 143),
+            PixelPoint::new(731, 804),
+        );
         let planned = historical_action(&before);
-        assert_eq!(historical_action(&after).target, historical_action(&completed).target);
-        assert_eq!(ordinary_source_face_top(&after, planned.effect_bounds(), 808), Some(803));
+        assert_eq!(
+            historical_action(&after).target,
+            historical_action(&completed).target
+        );
+        assert_eq!(
+            ordinary_source_face_top(&after, planned.effect_bounds(), 808),
+            Some(803)
+        );
         (before, after, planned)
     }
 
@@ -6623,27 +9556,53 @@ mod tests {
     fn ordinary_clipped_source_rejects_transplanted_unchanged_print_cursor_and_gold() {
         let (before, translated, planned) = translated_unchanged_ordinary_clipped_source();
         let print = ordinary_source_print_changes(&before, &translated, planned).unwrap();
-        assert!(print.geometry_supported && print.ordinary_face_geometry, "{print:?}");
-        assert_eq!((print.material_changed, print.new_ink, print.cleared_ink), (0, 0, 0));
-        assert!(!print.verified, "translated original print cannot prove replacement: {print:?}");
+        assert!(
+            print.geometry_supported && print.ordinary_face_geometry,
+            "{print:?}"
+        );
+        assert_eq!(
+            (print.material_changed, print.new_ink, print.cleared_ink),
+            (0, 0, 0)
+        );
+        assert!(
+            !print.verified,
+            "translated original print cannot prove replacement: {print:?}"
+        );
         let report = inspect_effect(&before, &translated, planned).unwrap();
-        assert!(report.destination_print.verified && report.destination_changed >= MINIMUM_CONTENT_CHANGE,
-            "recipient and fresh target are retained: {report}");
+        assert!(
+            report.destination_print.verified
+                && report.destination_changed >= MINIMUM_CONTENT_CHANGE,
+            "recipient and fresh target are retained: {report}"
+        );
         assert!(!report.source_replaced && !report.verified, "{report}");
 
 
         for (name, bounds, rgb) in [
             ("black cursor", PixelRect::new(780, 824, 24, 32), [0, 0, 0]),
-            ("white cursor", PixelRect::new(780, 824, 24, 32), [255, 255, 255]),
+            (
+                "white cursor",
+                PixelRect::new(780, 824, 24, 32),
+                [255, 255, 255],
+            ),
             ("gold", PixelRect::new(734, 820, 4, 32), [230, 185, 70]),
         ] {
             let mut different = translated.clone();
             paint(&mut different, bounds, rgb);
             let print = ordinary_source_print_changes(&before, &different, planned).unwrap();
-            assert!(print.geometry_supported && print.ordinary_face_geometry, "{name}: {print:?}");
-            assert_eq!((print.material_changed, print.new_ink, print.cleared_ink), (0, 0, 0), "{name}: {print:?}");
+            assert!(
+                print.geometry_supported && print.ordinary_face_geometry,
+                "{name}: {print:?}"
+            );
+            assert_eq!(
+                (print.material_changed, print.new_ink, print.cleared_ink),
+                (0, 0, 0),
+                "{name}: {print:?}"
+            );
             let report = inspect_effect(&before, &different, planned).unwrap();
-            assert!(!report.source_replaced && !report.verified, "{name}: {report}");
+            assert!(
+                !report.source_replaced && !report.verified,
+                "{name}: {report}"
+            );
         }
     }
 
@@ -6662,8 +9621,6 @@ mod tests {
 
 
             for y in 813..942 {
-
-
                 for x in 732..853 {
                     let first = pixel_rgb(&before, x, y).unwrap();
                     let second = pixel_rgb(&completed, x, y - 5).unwrap();
@@ -6683,9 +9640,23 @@ mod tests {
                 }
             }
             let print = ordinary_source_print_changes(&before, &different, planned).unwrap();
-            assert!(print.geometry_supported && print.ordinary_face_geometry, "{print:?}");
-            assert_eq!(if remove_new { print.new_ink } else { print.cleared_ink }, 0, "{print:?}");
-            assert!(!print.verified, "both source print directions are mandatory: {print:?}");
+            assert!(
+                print.geometry_supported && print.ordinary_face_geometry,
+                "{print:?}"
+            );
+            assert_eq!(
+                if remove_new {
+                    print.new_ink
+                } else {
+                    print.cleared_ink
+                },
+                0,
+                "{print:?}"
+            );
+            assert!(
+                !print.verified,
+                "both source print directions are mandatory: {print:?}"
+            );
             let report = inspect_effect(&before, &different, planned).unwrap();
             assert!(!report.source_replaced && !report.verified, "{report}");
         }
@@ -6703,21 +9674,26 @@ mod tests {
 
 
         for y in 814..926 {
-
-
             for x in 742..842 {
                 let rgb = pixel_rgb(&completed, x, y).unwrap();
 
 
                 if is_bright_neutral_paper(rgb) {
                     let offset = y as usize * faded.stride + x as usize * 4;
-                    faded.pixels[offset..offset + 3].copy_from_slice(&rgb.map(|value| value.saturating_sub(12)));
+                    faded.pixels[offset..offset + 3]
+                        .copy_from_slice(&rgb.map(|value| value.saturating_sub(12)));
                 }
             }
         }
         let print = ordinary_source_print_changes(&before, &faded, planned).unwrap();
-        assert!(print.geometry_supported && print.ordinary_face_geometry && print.paper_supported, "{print:?}");
-        assert!(print.changed_paper_fields > 0 && !print.verified, "paper fading is not printed replacement: {print:?}");
+        assert!(
+            print.geometry_supported && print.ordinary_face_geometry && print.paper_supported,
+            "{print:?}"
+        );
+        assert!(
+            print.changed_paper_fields > 0 && !print.verified,
+            "paper fading is not printed replacement: {print:?}"
+        );
         let report = inspect_effect(&before, &faded, planned).unwrap();
         assert!(!report.source_replaced && !report.verified, "{report}");
     }
@@ -6733,29 +9709,80 @@ mod tests {
         let source = planned.effect_bounds();
         let recipient = PixelRect::new(894, UPPER_Y, CARD_WIDTH, CARD_HEIGHT);
         let mut source_only = before.clone();
-        copy_region(&completed, &mut source_only, PixelRect::new(716, 332, 154, 662), PixelPoint::new(716, 332));
-        assert_eq!(ordinary_source_face_top(&source_only, source, 808), Some(803));
-        let print = measure_aligned_source_print_changes(&before, &source_only, source, source.height, 5, planned).unwrap();
-        assert!(print.verified, "source print is independently real: {print:?}");
-        assert_eq!(analyse_historical(&source_only).unwrap().prediction, PredictedAction::NoHighlight);
+        copy_region(
+            &completed,
+            &mut source_only,
+            PixelRect::new(716, 332, 154, 662),
+            PixelPoint::new(716, 332),
+        );
+        assert_eq!(
+            ordinary_source_face_top(&source_only, source, 808),
+            Some(803)
+        );
+        let print = measure_aligned_source_print_changes(
+            &before,
+            &source_only,
+            source,
+            source.height,
+            5,
+            planned,
+        )
+        .unwrap();
+        assert!(
+            print.verified,
+            "source print is independently real: {print:?}"
+        );
+        assert_eq!(
+            analyse_historical(&source_only).unwrap().prediction,
+            PredictedAction::NoHighlight
+        );
         let report = inspect_effect(&before, &source_only, planned).unwrap();
-        assert_eq!(report.destination_changed, 0, "source column does not establish a recipient: {report}");
-        assert!(!report.source_aligned_print.geometry_supported && !report.source_replaced && !report.verified,
-            "no fresh action: {report}");
+        assert_eq!(
+            report.destination_changed, 0,
+            "source column does not establish a recipient: {report}"
+        );
+        assert!(
+            !report.source_aligned_print.geometry_supported
+                && !report.source_replaced
+                && !report.verified,
+            "no fresh action: {report}"
+        );
         let mut recipient_only = before.clone();
-        copy_region(&completed, &mut recipient_only, recipient, PixelPoint::new(894, UPPER_Y as i32));
+        copy_region(
+            &completed,
+            &mut recipient_only,
+            recipient,
+            PixelPoint::new(894, UPPER_Y as i32),
+        );
         let report = inspect_effect(&before, &recipient_only, planned).unwrap();
-        assert!(report.destination_print.verified, "real receiving print is retained: {report}");
+        assert!(
+            report.destination_print.verified,
+            "real receiving print is retained: {report}"
+        );
         assert_eq!(report.source_changed, 0, "{report}");
-        assert!(!report.source_aligned_print.geometry_supported && !report.source_replaced && !report.verified,
-            "receiving print alone: {report}");
+        assert!(
+            !report.source_aligned_print.geometry_supported
+                && !report.source_replaced
+                && !report.verified,
+            "receiving print alone: {report}"
+        );
         let mut no_receiving_print = completed.clone();
-        copy_region(&before, &mut no_receiving_print, recipient, PixelPoint::new(894, UPPER_Y as i32));
+        copy_region(
+            &before,
+            &mut no_receiving_print,
+            recipient,
+            PixelPoint::new(894, UPPER_Y as i32),
+        );
         let report = inspect_effect(&before, &no_receiving_print, planned).unwrap();
-        assert!(report.source_aligned_print.verified && report.destination_changed >= MINIMUM_CONTENT_CHANGE,
-            "real source and fresh HALO remain: {report}");
-        assert!(!report.destination_print.verified && !report.source_replaced && !report.verified,
-            "non-source HALO change is insufficient without receiving print: {report}");
+        assert!(
+            report.source_aligned_print.verified
+                && report.destination_changed >= MINIMUM_CONTENT_CHANGE,
+            "real source and fresh HALO remain: {report}"
+        );
+        assert!(
+            !report.destination_print.verified && !report.source_replaced && !report.verified,
+            "non-source HALO change is insufficient without receiving print: {report}"
+        );
     }
 
 
@@ -6767,19 +9794,42 @@ mod tests {
         let before = fixture(59);
         let after = fixture(60);
         let planned = historical_action(&before);
-        assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-            column: 7, top: 391, bottom: 581,
-        }));
-        assert_eq!(historical_action(&after).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-            column: 3, top: 372, bottom: 562,
-        }));
+        assert_eq!(
+            planned.target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 7,
+                top: 391,
+                bottom: 581,
+            })
+        );
+        assert_eq!(
+            historical_action(&after).target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 3,
+                top: 372,
+                bottom: 562,
+            })
+        );
         let report = inspect_effect(&before, &after, planned).unwrap();
-        assert_eq!((report.source_changed, report.source_positive, report.source_dimmed_felt), (6960, 0, 320));
+        assert_eq!(
+            (
+                report.source_changed,
+                report.source_positive,
+                report.source_dimmed_felt
+            ),
+            (6960, 0, 320)
+        );
         assert_eq!(report.source_deep_felt.paper_to_deep_felt, 990);
         assert_eq!(report.source_deep_felt.halves, [467, 523]);
-        assert!(report.source_deep_felt.context_supported && report.source_deep_felt.verified, "{report}");
+        assert!(
+            report.source_deep_felt.context_supported && report.source_deep_felt.verified,
+            "{report}"
+        );
         assert_eq!(report.destination_changed, 10565);
-        assert!(report.source_replaced && !report.verified, "continuation is not complete effect: {report}");
+        assert!(
+            report.source_replaced && !report.verified,
+            "continuation is not complete effect: {report}"
+        );
         assert!(!completion_evidence(&after).unwrap().complete_candidate);
     }
 
@@ -6792,7 +9842,11 @@ mod tests {
         let before = fixture(59);
         let completed = fixture(60);
         let planned = historical_action(&before);
-        assert!(!inspect_effect(&before, &before, planned).unwrap().source_replaced);
+        assert!(
+            !inspect_effect(&before, &before, planned)
+                .unwrap()
+                .source_replaced
+        );
 
 
         for percent in [2_u16, 5, 10, 11, 15, 20, 25, 30, 100] {
@@ -6800,19 +9854,23 @@ mod tests {
 
 
             for y in 391..581 {
-
-
                 for x in 1398..1530 {
                     let rgb = pixel_rgb(&before, x, y).unwrap();
                     let offset = y as usize * retained.stride + x as usize * 4;
-                    retained.pixels[offset..offset + 3].copy_from_slice(&rgb.map(|value| {
-                        ((u16::from(value) * percent + 50) / 100) as u8
-                    }));
+                    retained.pixels[offset..offset + 3].copy_from_slice(
+                        &rgb.map(|value| ((u16::from(value) * percent + 50) / 100) as u8),
+                    );
                 }
             }
             let report = inspect_effect(&before, &retained, planned).unwrap();
-            assert_eq!(report.source_deep_felt.paper_to_deep_felt, 0, "{percent}%: {report}");
-            assert!(!report.source_replaced && !report.verified, "retained card and guide are insufficient: {percent}%: {report}");
+            assert_eq!(
+                report.source_deep_felt.paper_to_deep_felt, 0,
+                "{percent}%: {report}"
+            );
+            assert!(
+                !report.source_replaced && !report.verified,
+                "retained card and guide are insufficient: {percent}%: {report}"
+            );
         }
     }
 
@@ -6826,23 +9884,52 @@ mod tests {
         let completed = fixture(60);
         let planned = historical_action(&before);
         let mut recipient_only = completed.clone();
-        copy_region(&before, &mut recipient_only, PixelRect::new(1414, 407, 100, 158), PixelPoint::new(1414, 407));
+        copy_region(
+            &before,
+            &mut recipient_only,
+            PixelRect::new(1414, 407, 100, 158),
+            PixelPoint::new(1414, 407),
+        );
         let report = inspect_effect(&before, &recipient_only, planned).unwrap();
         assert_eq!(report.source_deep_felt.paper_to_deep_felt, 0);
-        assert!(!report.source_replaced && !report.verified, "recipient alone: {report}");
+        assert!(
+            !report.source_replaced && !report.verified,
+            "recipient alone: {report}"
+        );
 
         let mut controlled_before = before.clone();
-        copy_region(&completed, &mut controlled_before, PixelRect::new(714, 360, 156, 214), PixelPoint::new(714, 360));
+        copy_region(
+            &completed,
+            &mut controlled_before,
+            PixelRect::new(714, 360, 156, 214),
+            PixelPoint::new(714, 360),
+        );
         assert_eq!(historical_action(&controlled_before), planned);
         let mut source_only = controlled_before.clone();
-        copy_region(&completed, &mut source_only, PixelRect::new(1390, 332, 148, 249), PixelPoint::new(1390, 332));
-        assert_eq!(historical_action(&source_only).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-            column: 3, top: 372, bottom: 562,
-        }));
+        copy_region(
+            &completed,
+            &mut source_only,
+            PixelRect::new(1390, 332, 148, 249),
+            PixelPoint::new(1390, 332),
+        );
+        assert_eq!(
+            historical_action(&source_only).target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 3,
+                top: 372,
+                bottom: 562,
+            })
+        );
         let report = inspect_effect(&controlled_before, &source_only, planned).unwrap();
-        assert!(report.source_deep_felt.verified, "source colour is independently real: {report}");
+        assert!(
+            report.source_deep_felt.verified,
+            "source colour is independently real: {report}"
+        );
         assert_eq!(report.destination_changed, 0);
-        assert!(!report.source_replaced && !report.verified, "source alone: {report}");
+        assert!(
+            !report.source_replaced && !report.verified,
+            "source alone: {report}"
+        );
     }
 
 
@@ -6855,20 +9942,44 @@ mod tests {
         let planned = historical_action(&before);
 
 
-        for rgb in [[32, 32, 32], [190, 190, 190], [230, 185, 70], [14, 14, 14], [5, 9, 6]] {
+        for rgb in [
+            [32, 32, 32],
+            [190, 190, 190],
+            [230, 185, 70],
+            [14, 14, 14],
+            [5, 9, 6],
+        ] {
             let mut different = completed.clone();
             paint(&mut different, PixelRect::new(1414, 407, 100, 158), rgb);
             let report = inspect_effect(&before, &different, planned).unwrap();
-            assert_eq!(report.source_deep_felt.paper_to_deep_felt, 0, "{rgb:?}: {report}");
-            assert!(!report.source_replaced && !report.verified, "{rgb:?}: {report}");
+            assert_eq!(
+                report.source_deep_felt.paper_to_deep_felt, 0,
+                "{rgb:?}: {report}"
+            );
+            assert!(
+                !report.source_replaced && !report.verified,
+                "{rgb:?}: {report}"
+            );
         }
         let mut excluded = completed.clone();
-        copy_region(&before, &mut excluded, PixelRect::new(1414, 407, 100, 158), PixelPoint::new(1414, 407));
+        copy_region(
+            &before,
+            &mut excluded,
+            PixelRect::new(1414, 407, 100, 158),
+            PixelPoint::new(1414, 407),
+        );
         paint(&mut excluded, PixelRect::new(1417, 432, 94, 46), [2, 12, 7]);
-        paint(&mut excluded, PixelRect::new(1398, TOOLBAR_TOP, CARD_WIDTH, 86), [2, 12, 7]);
+        paint(
+            &mut excluded,
+            PixelRect::new(1398, TOOLBAR_TOP, CARD_WIDTH, 86),
+            [2, 12, 7],
+        );
         let report = inspect_effect(&before, &excluded, planned).unwrap();
         assert_eq!(report.source_deep_felt.paper_to_deep_felt, 0, "{report}");
-        assert!(!report.source_replaced && !report.verified, "cursor and toolbar are excluded: {report}");
+        assert!(
+            !report.source_replaced && !report.verified,
+            "cursor and toolbar are excluded: {report}"
+        );
     }
 
 
@@ -6881,13 +9992,24 @@ mod tests {
         let planned = historical_action(&before);
         let evidence = deep_felt_source_changes(&before, &completed, planned, 511).unwrap();
         assert_eq!(evidence.paper_to_deep_felt, 990);
-        assert!(!evidence.verified, "material threshold is independent: {evidence:?}");
+        assert!(
+            !evidence.verified,
+            "material threshold is independent: {evidence:?}"
+        );
 
         let mut one_half = completed.clone();
-        copy_region(&before, &mut one_half, PixelRect::new(1414, 486, 50, 79), PixelPoint::new(1414, 486));
+        copy_region(
+            &before,
+            &mut one_half,
+            PixelRect::new(1414, 486, 50, 79),
+            PixelPoint::new(1414, 486),
+        );
         let report = inspect_effect(&before, &one_half, planned).unwrap();
         assert_eq!(report.source_deep_felt.halves, [0, 523]);
-        assert!(!report.source_deep_felt.verified && !report.source_replaced && !report.verified, "one half exceeds512 but remains insufficient: {report}");
+        assert!(
+            !report.source_deep_felt.verified && !report.source_replaced && !report.verified,
+            "one half exceeds512 but remains insufficient: {report}"
+        );
     }
 
 
@@ -6901,23 +10023,49 @@ mod tests {
 
 
         for target in [
-            KlondikeTarget::Tableau { column: 7, top: 390, bottom: 581 },
-            KlondikeTarget::Tableau { column: 7, top: 391, bottom: 580 },
-            KlondikeTarget::Tableau { column: 7, top: 803, bottom: 993 },
-            KlondikeTarget::Tableau { column: 3, top: 372, bottom: 562 },
+            KlondikeTarget::Tableau {
+                column: 7,
+                top: 390,
+                bottom: 581,
+            },
+            KlondikeTarget::Tableau {
+                column: 7,
+                top: 391,
+                bottom: 580,
+            },
+            KlondikeTarget::Tableau {
+                column: 7,
+                top: 803,
+                bottom: 993,
+            },
+            KlondikeTarget::Tableau {
+                column: 3,
+                top: 372,
+                bottom: 562,
+            },
             KlondikeTarget::Waste { offset: 0 },
             KlondikeTarget::Foundation { column: 2 },
         ] {
             let other = canonical_action(target).unwrap();
             let evidence = deep_felt_source_changes(&before, &completed, other, 6960).unwrap();
-            assert!(!evidence.context_supported && !evidence.verified, "{target:?}: {evidence:?}");
+            assert!(
+                !evidence.context_supported && !evidence.verified,
+                "{target:?}: {evidence:?}"
+            );
         }
         let mut forged = planned;
         forged.anchor.x += 1;
-        assert!(!deep_felt_source_changes(&before, &completed, forged, 6960).unwrap().context_supported);
+        assert!(
+            !deep_felt_source_changes(&before, &completed, forged, 6960)
+                .unwrap()
+                .context_supported
+        );
         let mut malformed = completed;
         malformed.pixels.truncate(1);
-        assert_eq!(deep_felt_source_changes(&before, &malformed, planned, 6960), Err(HaloDetectionError::InvalidFrameLayout));
+        assert_eq!(
+            deep_felt_source_changes(&before, &malformed, planned, 6960),
+            Err(HaloDetectionError::InvalidFrameLayout)
+        );
     }
 
 
@@ -6933,16 +10081,36 @@ mod tests {
             let before = fixture(number);
             let planned = historical_action(&before);
             let evidence = deep_felt_source_changes(&before, &completed, planned, 6960).unwrap();
-            assert!(!evidence.context_supported && !evidence.verified, "K{number}: {evidence:?}");
+            assert!(
+                !evidence.context_supported && !evidence.verified,
+                "K{number}: {evidence:?}"
+            );
         }
         let before = fixture(59);
         let planned = historical_action(&before);
         let mut no_target = completed;
-        copy_region(&before, &mut no_target, PixelRect::new(714, 360, 156, 214), PixelPoint::new(714, 360));
-        assert_eq!(analyse_historical(&no_target).unwrap().prediction, PredictedAction::NoHighlight);
+        copy_region(
+            &before,
+            &mut no_target,
+            PixelRect::new(714, 360, 156, 214),
+            PixelPoint::new(714, 360),
+        );
+        assert_eq!(
+            analyse_historical(&no_target).unwrap().prediction,
+            PredictedAction::NoHighlight
+        );
         let report = inspect_effect(&before, &no_target, planned).unwrap();
-        assert!(report.source_changed >= MINIMUM_CONTENT_CHANGE && report.destination_changed >= MINIMUM_CONTENT_CHANGE, "material changes survive: {report}");
-        assert!(!report.source_deep_felt.context_supported && !report.source_replaced && !report.verified, "no fresh target: {report}");
+        assert!(
+            report.source_changed >= MINIMUM_CONTENT_CHANGE
+                && report.destination_changed >= MINIMUM_CONTENT_CHANGE,
+            "material changes survive: {report}"
+        );
+        assert!(
+            !report.source_deep_felt.context_supported
+                && !report.source_replaced
+                && !report.verified,
+            "no fresh target: {report}"
+        );
     }
 
 
@@ -6954,20 +10122,50 @@ mod tests {
         let before = fixture(63);
         let after = fixture(64);
         let planned = historical_action(&before);
-        assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-            column: 3, top: 354, bottom: 544,
-        }));
-        assert_eq!(historical_action(&after).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-            column: 4, top: 372, bottom: 835,
-        }));
+        assert_eq!(
+            planned.target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 3,
+                top: 354,
+                bottom: 544,
+            })
+        );
+        assert_eq!(
+            historical_action(&after).target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 4,
+                top: 372,
+                bottom: 835,
+            })
+        );
         let report = inspect_effect(&before, &after, planned).unwrap();
-        assert_eq!((report.source_changed, report.source_positive, report.source_dimmed_felt), (5012, 32, 417));
+        assert_eq!(
+            (
+                report.source_changed,
+                report.source_positive,
+                report.source_dimmed_felt
+            ),
+            (5012, 32, 417)
+        );
         let felt = report.source_deep_felt;
-        assert_eq!((felt.paper_to_deep_felt, felt.ordinary_dimmed_felt, felt.positive_felt), (275, 407, 682));
-        assert_eq!((felt.halves, felt.ordinary_halves, felt.positive_halves), ([162, 113], [224, 183], [386, 296]));
+        assert_eq!(
+            (
+                felt.paper_to_deep_felt,
+                felt.ordinary_dimmed_felt,
+                felt.positive_felt
+            ),
+            (275, 407, 682)
+        );
+        assert_eq!(
+            (felt.halves, felt.ordinary_halves, felt.positive_halves),
+            ([162, 113], [224, 183], [386, 296])
+        );
         assert!(felt.context_supported && felt.verified, "{report}");
         assert_eq!(report.destination_changed, 9666);
-        assert!(report.source_replaced && !report.verified, "continuation remains separate from complete effect: {report}");
+        assert!(
+            report.source_replaced && !report.verified,
+            "continuation remains separate from complete effect: {report}"
+        );
         assert!(!completion_evidence(&after).unwrap().complete_candidate);
     }
 
@@ -6987,20 +10185,28 @@ mod tests {
 
 
             for y in 354..544 {
-
-
                 for x in 726..858 {
                     let rgb = pixel_rgb(&before, x, y).unwrap();
                     let offset = y as usize * retained.stride + x as usize * 4;
-                    retained.pixels[offset..offset + 3].copy_from_slice(&rgb.map(|value| {
-                        ((u16::from(value) * percent + 50) / 100) as u8
-                    }));
+                    retained.pixels[offset..offset + 3].copy_from_slice(
+                        &rgb.map(|value| ((u16::from(value) * percent + 50) / 100) as u8),
+                    );
                 }
             }
             let report = inspect_effect(&before, &retained, planned).unwrap();
-            assert_eq!((report.source_deep_felt.paper_to_deep_felt, report.source_deep_felt.ordinary_dimmed_felt,
-                report.source_deep_felt.positive_felt), (0, 0, 0), "{percent}%: {report}");
-            assert!(!report.source_replaced && !report.verified, "retained card plus guide: {percent}%: {report}");
+            assert_eq!(
+                (
+                    report.source_deep_felt.paper_to_deep_felt,
+                    report.source_deep_felt.ordinary_dimmed_felt,
+                    report.source_deep_felt.positive_felt
+                ),
+                (0, 0, 0),
+                "{percent}%: {report}"
+            );
+            assert!(
+                !report.source_replaced && !report.verified,
+                "retained card plus guide: {percent}%: {report}"
+            );
         }
     }
 
@@ -7020,8 +10226,6 @@ mod tests {
 
 
             for y in 449..528 {
-
-
                 for x in 742..842 {
                     let first = pixel_rgb(&before, x, y).unwrap();
                     let second @ [red, green, blue] = pixel_rgb(&completed, x, y).unwrap();
@@ -7030,7 +10234,13 @@ mod tests {
                         && i16::from(green) - i16::from(blue) >= 3;
 
 
-                    if is_bright_neutral_paper(first) && if remove_deep { deep } else { is_dimmed_felt(second) } {
+                    if is_bright_neutral_paper(first)
+                        && if remove_deep {
+                            deep
+                        } else {
+                            is_dimmed_felt(second)
+                        }
+                    {
                         let offset = y as usize * different.stride + x as usize * 4;
                         different.pixels[offset..offset + 3].copy_from_slice(&first);
                     }
@@ -7038,15 +10248,29 @@ mod tests {
             }
             let report = inspect_effect(&before, &different, planned).unwrap();
             let felt = report.source_deep_felt;
-            assert_eq!((felt.paper_to_deep_felt, felt.ordinary_dimmed_felt, felt.positive_felt),
-
-
-                if remove_deep { (0, 407, 407) } else { (275, 0, 275) });
-            assert!(!felt.verified && !report.source_replaced && !report.verified, "one insufficient component: {report}");
+            assert_eq!(
+                (
+                    felt.paper_to_deep_felt,
+                    felt.ordinary_dimmed_felt,
+                    felt.positive_felt
+                ),
+                if remove_deep {
+                    (0, 407, 407)
+                } else {
+                    (275, 0, 275)
+                }
+            );
+            assert!(
+                !felt.verified && !report.source_replaced && !report.verified,
+                "one insufficient component: {report}"
+            );
         }
         let felt = deep_felt_source_changes(&before, &completed, planned, 511).unwrap();
         assert_eq!(felt.positive_felt, 682);
-        assert!(!felt.verified, "material source bound remains independent: {felt:?}");
+        assert!(
+            !felt.verified,
+            "material source bound remains independent: {felt:?}"
+        );
     }
 
 
@@ -7059,24 +10283,53 @@ mod tests {
         let completed = fixture(64);
         let planned = historical_action(&before);
         let mut recipient_only = completed.clone();
-        copy_region(&before, &mut recipient_only, PixelRect::new(742, 370, 100, 158), PixelPoint::new(742, 370));
+        copy_region(
+            &before,
+            &mut recipient_only,
+            PixelRect::new(742, 370, 100, 158),
+            PixelPoint::new(742, 370),
+        );
         let report = inspect_effect(&before, &recipient_only, planned).unwrap();
         assert_eq!(report.source_deep_felt.positive_felt, 0);
-        assert!(!report.source_replaced && !report.verified, "recipient alone: {report}");
+        assert!(
+            !report.source_replaced && !report.verified,
+            "recipient alone: {report}"
+        );
 
         let native_shorter_source = fixture(59);
         let mut controlled_before = before.clone();
-        copy_region(&native_shorter_source, &mut controlled_before, PixelRect::new(1386, 385, 156, 204), PixelPoint::new(1050, 345));
+        copy_region(
+            &native_shorter_source,
+            &mut controlled_before,
+            PixelRect::new(1386, 385, 156, 204),
+            PixelPoint::new(1050, 345),
+        );
         assert_eq!(historical_action(&controlled_before), planned);
         let mut source_only = controlled_before.clone();
-        copy_region(&completed, &mut source_only, PixelRect::new(714, 342, 156, 235), PixelPoint::new(714, 342));
-        assert_eq!(historical_action(&source_only).target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-            column: 5, top: 351, bottom: 541,
-        }));
+        copy_region(
+            &completed,
+            &mut source_only,
+            PixelRect::new(714, 342, 156, 235),
+            PixelPoint::new(714, 342),
+        );
+        assert_eq!(
+            historical_action(&source_only).target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 5,
+                top: 351,
+                bottom: 541,
+            })
+        );
         let report = inspect_effect(&controlled_before, &source_only, planned).unwrap();
-        assert!(report.source_deep_felt.verified, "independent source colour survives: {report}");
+        assert!(
+            report.source_deep_felt.verified,
+            "independent source colour survives: {report}"
+        );
         assert_eq!(report.destination_changed, 0);
-        assert!(!report.source_replaced && !report.verified, "source alone: {report}");
+        assert!(
+            !report.source_replaced && !report.verified,
+            "source alone: {report}"
+        );
     }
 
 
@@ -7088,29 +10341,67 @@ mod tests {
         let completed = fixture(64);
         let planned = historical_action(&before);
         let mut one_half = completed.clone();
-        copy_region(&before, &mut one_half, PixelRect::new(742, 449, 50, 79), PixelPoint::new(742, 449));
+        copy_region(
+            &before,
+            &mut one_half,
+            PixelRect::new(742, 449, 50, 79),
+            PixelPoint::new(742, 449),
+        );
         paint(&mut one_half, PixelRect::new(792, 449, 50, 79), [2, 12, 7]);
         let report = inspect_effect(&before, &one_half, planned).unwrap();
-        assert!(report.source_deep_felt.positive_felt >= MINIMUM_CONTENT_CHANGE, "positive total survives: {report}");
+        assert!(
+            report.source_deep_felt.positive_felt >= MINIMUM_CONTENT_CHANGE,
+            "positive total survives: {report}"
+        );
         assert_eq!(report.source_deep_felt.positive_halves[0], 0);
-        assert!(!report.source_deep_felt.verified && !report.source_replaced && !report.verified, "one half: {report}");
+        assert!(
+            !report.source_deep_felt.verified && !report.source_replaced && !report.verified,
+            "one half: {report}"
+        );
 
         let mut excluded = completed.clone();
-        copy_region(&before, &mut excluded, PixelRect::new(742, 370, 100, 158), PixelPoint::new(742, 370));
+        copy_region(
+            &before,
+            &mut excluded,
+            PixelRect::new(742, 370, 100, 158),
+            PixelPoint::new(742, 370),
+        );
         paint(&mut excluded, PixelRect::new(745, 395, 94, 46), [2, 12, 7]);
         let report = inspect_effect(&before, &excluded, planned).unwrap();
         assert_eq!(report.source_deep_felt.positive_felt, 0);
-        assert!(!report.source_replaced && !report.verified, "cursor-only pixels: {report}");
+        assert!(
+            !report.source_replaced && !report.verified,
+            "cursor-only pixels: {report}"
+        );
 
         let mut gold = completed.clone();
         paint(&mut gold, PixelRect::new(742, 449, 100, 79), [230, 185, 70]);
-        assert_eq!(inspect_effect(&before, &gold, planned).unwrap().source_deep_felt.positive_felt, 0);
+        assert_eq!(
+            inspect_effect(&before, &gold, planned)
+                .unwrap()
+                .source_deep_felt
+                .positive_felt,
+            0
+        );
 
         let mut no_target = completed;
-        copy_region(&before, &mut no_target, PixelRect::new(882, 360, 156, 483), PixelPoint::new(882, 360));
-        assert_eq!(analyse_historical(&no_target).unwrap().prediction, PredictedAction::NoHighlight);
+        copy_region(
+            &before,
+            &mut no_target,
+            PixelRect::new(882, 360, 156, 483),
+            PixelPoint::new(882, 360),
+        );
+        assert_eq!(
+            analyse_historical(&no_target).unwrap().prediction,
+            PredictedAction::NoHighlight
+        );
         let report = inspect_effect(&before, &no_target, planned).unwrap();
-        assert!(!report.source_deep_felt.context_supported && !report.source_replaced && !report.verified, "no fresh target: {report}");
+        assert!(
+            !report.source_deep_felt.context_supported
+                && !report.source_replaced
+                && !report.verified,
+            "no fresh target: {report}"
+        );
     }
 
 
@@ -7124,9 +10415,21 @@ mod tests {
 
 
         for target in [
-            KlondikeTarget::Tableau { column: 3, top: 802, bottom: 992 },
-            KlondikeTarget::Tableau { column: 3, top: 803, bottom: 993 },
-            KlondikeTarget::Tableau { column: 7, top: 425, bottom: 615 },
+            KlondikeTarget::Tableau {
+                column: 3,
+                top: 802,
+                bottom: 992,
+            },
+            KlondikeTarget::Tableau {
+                column: 3,
+                top: 803,
+                bottom: 993,
+            },
+            KlondikeTarget::Tableau {
+                column: 7,
+                top: 425,
+                bottom: 615,
+            },
             KlondikeTarget::Waste { offset: 2 },
             KlondikeTarget::Foundation { column: 1 },
             KlondikeTarget::Draw,
@@ -7134,14 +10437,24 @@ mod tests {
         ] {
             let other = canonical_action(target).unwrap();
             let print = ordinary_source_print_changes(&before, &completed, other).unwrap();
-            assert!(!print.geometry_supported && !print.verified, "{target:?}: {print:?}");
+            assert!(
+                !print.geometry_supported && !print.verified,
+                "{target:?}: {print:?}"
+            );
         }
         let mut forged = planned;
         forged.anchor.x += 1;
-        assert!(!ordinary_source_print_changes(&before, &completed, forged).unwrap().geometry_supported);
+        assert!(
+            !ordinary_source_print_changes(&before, &completed, forged)
+                .unwrap()
+                .geometry_supported
+        );
         let mut malformed = completed;
         malformed.pixels.truncate(1);
-        assert_eq!(ordinary_source_print_changes(&before, &malformed, planned), Err(HaloDetectionError::InvalidFrameLayout));
+        assert_eq!(
+            ordinary_source_print_changes(&before, &malformed, planned),
+            Err(HaloDetectionError::InvalidFrameLayout)
+        );
     }
 
 
@@ -7152,15 +10465,45 @@ mod tests {
         let before = fixture(61);
         let after = fixture(62);
         assert!(is_gameplay_scene(&before).unwrap());
-        assert_eq!(historical_action(&before).target, ActionTarget::Klondike(KlondikeTarget::Draw));
-        assert_eq!(count_pixels(&after, PixelRect::new(868, 710, 14, 14), is_felt), 168);
-        assert_eq!(count_pixels(&after, PixelRect::new(874, 710, 7, 28), is_felt), 196);
+        assert_eq!(
+            historical_action(&before).target,
+            ActionTarget::Klondike(KlondikeTarget::Draw)
+        );
+        assert_eq!(
+            count_pixels(&after, PixelRect::new(868, 710, 14, 14), is_felt),
+            168
+        );
+        assert_eq!(
+            count_pixels(&after, PixelRect::new(874, 710, 7, 28), is_felt),
+            196
+        );
         assert!(is_gameplay_scene(&after).unwrap());
-        assert_eq!(find_historical_tableau_source(&after, PixelRect::new(726, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)).unwrap(), Some(PixelRect::new(726, 372, CARD_WIDTH, 518)));
-        assert_eq!(historical_action(&after).target, ActionTarget::Klondike(KlondikeTarget::Tableau { column: 3, top: 372, bottom: 890 }));
+        assert_eq!(
+            find_historical_tableau_source(
+                &after,
+                PixelRect::new(726, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)
+            )
+            .unwrap(),
+            Some(PixelRect::new(726, 372, CARD_WIDTH, 518))
+        );
+        assert_eq!(
+            historical_action(&after).target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 3,
+                top: 372,
+                bottom: 890
+            })
+        );
         let report = inspect_effect(&before, &after, historical_action(&before)).unwrap();
-        assert!(report.verified && report.destination_changed >= MINIMUM_CONTENT_CHANGE, "Draw effect remains independent: {report}");
-        assert!(!inspect_effect(&before, &before, historical_action(&before)).unwrap().verified);
+        assert!(
+            report.verified && report.destination_changed >= MINIMUM_CONTENT_CHANGE,
+            "Draw effect remains independent: {report}"
+        );
+        assert!(
+            !inspect_effect(&before, &before, historical_action(&before))
+                .unwrap()
+                .verified
+        );
     }
 
 
@@ -7169,17 +10512,27 @@ mod tests {
     #[test]
     fn lower_gap_probe_preserves_sixty_prior_scene_classifications() {
         let accepted = [
-            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
-            21, 22, 23, 24, 25, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42,
-            44, 45, 46, 47, 48, 50, 51, 54, 55, 56, 57, 58, 59, 60,
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+            25, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 44, 45, 46, 47, 48, 50, 51, 54,
+            55, 56, 57, 58, 59, 60,
         ];
 
 
         for number in 1..=60 {
-            assert_eq!(is_gameplay_scene(&fixture(number)).unwrap(), accepted.contains(&number), "K{number:02}");
+            assert_eq!(
+                is_gameplay_scene(&fixture(number)).unwrap(),
+                accepted.contains(&number),
+                "K{number:02}"
+            );
         }
-        assert_eq!(analyse(&fixture(1)).unwrap().prediction, PredictedAction::NoHighlight);
-        assert!(matches!(action(&fixture(47)).target, ActionTarget::Klondike(KlondikeTarget::Tableau { column: 4, .. })));
+        assert_eq!(
+            analyse(&fixture(1)).unwrap().prediction,
+            PredictedAction::NoHighlight
+        );
+        assert!(matches!(
+            action(&fixture(47)).target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau { column: 4, .. })
+        ));
     }
 
 
@@ -7190,12 +10543,21 @@ mod tests {
         let mut frame = fixture(62);
         paint(&mut frame, PixelRect::new(874, 710, 7, 1), [0, 0, 0]);
         paint(&mut frame, PixelRect::new(874, 711, 2, 1), [0, 0, 0]);
-        assert_eq!(count_pixels(&frame, PixelRect::new(874, 710, 7, 28), is_felt), 187);
+        assert_eq!(
+            count_pixels(&frame, PixelRect::new(874, 710, 7, 28), is_felt),
+            187
+        );
         assert!(is_gameplay_scene(&frame).unwrap());
         paint(&mut frame, PixelRect::new(876, 711, 1, 1), [0, 0, 0]);
-        assert_eq!(count_pixels(&frame, PixelRect::new(874, 710, 7, 28), is_felt), 186);
+        assert_eq!(
+            count_pixels(&frame, PixelRect::new(874, 710, 7, 28), is_felt),
+            186
+        );
         assert!(!is_gameplay_scene(&frame).unwrap());
-        assert_eq!(analyse(&frame).unwrap().prediction, PredictedAction::NoHighlight);
+        assert_eq!(
+            analyse(&frame).unwrap().prediction,
+            PredictedAction::NoHighlight
+        );
     }
 
 
@@ -7215,7 +10577,10 @@ mod tests {
             let mut occluded = original.clone();
             paint(&mut occluded, bounds, [0, 0, 0]);
             assert!(!is_gameplay_scene(&occluded).unwrap(), "{bounds:?}");
-            assert_eq!(analyse(&occluded).unwrap().prediction, PredictedAction::NoHighlight);
+            assert_eq!(
+                analyse(&occluded).unwrap().prediction,
+                PredictedAction::NoHighlight
+            );
         }
 
 
@@ -7223,14 +10588,26 @@ mod tests {
             let mut occluded = original.clone();
 
 
-            let (first, y, columns) = if foundation { (894, UPPER_Y, 4) } else { (FIRST_COLUMN_X, TABLEAU_Y, 7) };
+            let (first, y, columns) = if foundation {
+                (894, UPPER_Y, 4)
+            } else {
+                (FIRST_COLUMN_X, TABLEAU_Y, 7)
+            };
 
 
             for column in 0..columns {
-                paint(&mut occluded, PixelRect::new(first + COLUMN_PITCH * column + 20, y, 92, 6), [0, 0, 0]);
+                paint(
+                    &mut occluded,
+                    PixelRect::new(first + COLUMN_PITCH * column + 20, y, 92, 6),
+                    [0, 0, 0],
+                );
             }
             assert_eq!(is_gameplay_scene(&occluded).unwrap(), foundation);
-            let expected = if foundation { analyse(&original).unwrap().prediction } else { PredictedAction::NoHighlight };
+            let expected = if foundation {
+                analyse(&original).unwrap().prediction
+            } else {
+                PredictedAction::NoHighlight
+            };
             assert_eq!(analyse(&occluded).unwrap().prediction, expected);
         }
     }
@@ -7241,12 +10618,21 @@ mod tests {
     #[test]
     fn lower_gap_probe_keeps_dashed_destination_and_incomplete_run_rejected() {
         let mut frame = fixture(62);
-        assert_eq!(find_tableau_source(&frame, PixelRect::new(1_398, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)).unwrap(), None);
+        assert_eq!(
+            find_tableau_source(
+                &frame,
+                PixelRect::new(1_398, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)
+            )
+            .unwrap(),
+            None
+        );
         paint(&mut frame, PixelRect::new(858, 372, 10, 518), [0, 0, 0]);
         assert!(is_gameplay_scene(&frame).unwrap());
-        assert_eq!(analyse(&frame).unwrap().prediction, PredictedAction::NoHighlight);
+        assert_eq!(
+            analyse(&frame).unwrap().prediction,
+            PredictedAction::NoHighlight
+        );
     }
-
 
 
     /// K65 is the Undo reconstruction of the fixed 8-diamonds source; K66 is
@@ -7257,19 +10643,51 @@ mod tests {
         let before = fixture(65);
         let after = fixture(66);
         let planned = historical_action(&before);
-        assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Foundation { column: 2 }));
-        assert_eq!(historical_action(&after).target, ActionTarget::Klondike(KlondikeTarget::Tableau { column: 5, top: 390, bottom: 582 }));
+        assert_eq!(
+            planned.target,
+            ActionTarget::Klondike(KlondikeTarget::Foundation { column: 2 })
+        );
+        assert_eq!(
+            historical_action(&after).target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 5,
+                top: 390,
+                bottom: 582
+            })
+        );
         let report = inspect_effect(&before, &after, planned).unwrap();
         let transfer = report.source_foundation_transfer;
-        assert!(report.source_changed < MINIMUM_CONTENT_CHANGE && report.source_positive < MINIMUM_CONTENT_CHANGE, "{report}");
-        assert!(report.source_identity_directions.into_iter().flatten().any(|count| count < MINIMUM_CORNER_CHANGE), "ordinary SUIT proof remains insufficient: {report}");
+        assert!(
+            report.source_changed < MINIMUM_CONTENT_CHANGE
+                && report.source_positive < MINIMUM_CONTENT_CHANGE,
+            "{report}"
+        );
+        assert!(
+            report
+                .source_identity_directions
+                .into_iter()
+                .flatten()
+                .any(|count| count < MINIMUM_CORNER_CHANGE),
+            "ordinary SUIT proof remains insufficient: {report}"
+        );
         assert_eq!(transfer.paired_changes, [13, 51], "{report}");
         assert_eq!(transfer.stable_paper_fields, [367, 411], "{report}");
         assert_eq!(transfer.changed_paper_fields, [0, 0], "{report}");
-        assert_eq!((transfer.receiver_count, transfer.receiver_column, transfer.receiver_top), (1, 4, 615), "{report}");
+        assert_eq!(
+            (
+                transfer.receiver_count,
+                transfer.receiver_column,
+                transfer.receiver_top
+            ),
+            (1, 4, 615),
+            "{report}"
+        );
         assert_eq!(transfer.receiver_material_changed, 1_146, "{report}");
         assert_eq!(transfer.matched_transfer_ink, 186, "{report}");
-        assert!(transfer.verified && report.source_replaced && !report.verified, "continuation authority remains separate: {report}");
+        assert!(
+            transfer.verified && report.source_replaced && !report.verified,
+            "continuation authority remains separate: {report}"
+        );
     }
 
 
@@ -7281,20 +10699,43 @@ mod tests {
         let after = fixture(66);
         let planned = historical_action(&before);
         let mut source_only = after.clone();
-        copy_region(&before, &mut source_only, PixelRect::new(894, 332, CARD_WIDTH, TABLEAU_EFFECT_BOTTOM - 332), PixelPoint::new(894, 332));
+        copy_region(
+            &before,
+            &mut source_only,
+            PixelRect::new(894, 332, CARD_WIDTH, TABLEAU_EFFECT_BOTTOM - 332),
+            PixelPoint::new(894, 332),
+        );
         let mut recipient_only = after.clone();
-        copy_region(&before, &mut recipient_only, planned.effect_bounds(), PixelPoint::new(1_062, UPPER_Y as i32));
+        copy_region(
+            &before,
+            &mut recipient_only,
+            planned.effect_bounds(),
+            PixelPoint::new(1_062, UPPER_Y as i32),
+        );
         let mut halo_only = before.clone();
         // Preserve both complete exterior rails of the fresh source outline.
-        copy_region(&after, &mut halo_only, PixelRect::new(1_052, 380, CARD_WIDTH + 20, 220), PixelPoint::new(1_052, 380));
+        copy_region(
+            &after,
+            &mut halo_only,
+            PixelRect::new(1_052, 380, CARD_WIDTH + 20, 220),
+            PixelPoint::new(1_052, 380),
+        );
 
 
         for result in [&before, &source_only, &recipient_only, &halo_only] {
             let report = inspect_effect(&before, result, planned).unwrap();
-            assert!(!report.source_foundation_transfer.verified && !report.source_replaced && !report.verified, "{report}");
+            assert!(
+                !report.source_foundation_transfer.verified
+                    && !report.source_replaced
+                    && !report.verified,
+                "{report}"
+            );
         }
         assert_eq!(historical_action(&source_only), historical_action(&after));
-        assert_eq!(historical_action(&recipient_only), historical_action(&after));
+        assert_eq!(
+            historical_action(&recipient_only),
+            historical_action(&after)
+        );
         assert_eq!(historical_action(&halo_only), historical_action(&after));
     }
 
@@ -7306,14 +10747,27 @@ mod tests {
         let before = fixture(65);
         let after = fixture(66);
         let planned = historical_action(&before);
-        let patches = [PixelRect::new(1_067, 117, 28, 44), PixelRect::new(1_161, 238, 28, 44)];
+        let patches = [
+            PixelRect::new(1_067, 117, 28, 44),
+            PixelRect::new(1_161, 238, 28, 44),
+        ];
 
 
         for patch in patches {
             let mut result = after.clone();
-            copy_region(&before, &mut result, patch, PixelPoint::new(patch.x as i32, patch.y as i32));
+            copy_region(
+                &before,
+                &mut result,
+                patch,
+                PixelPoint::new(patch.x as i32, patch.y as i32),
+            );
             let report = inspect_effect(&before, &result, planned).unwrap();
-            assert!(!report.source_foundation_transfer.verified && !report.source_replaced && !report.verified, "{report}");
+            assert!(
+                !report.source_foundation_transfer.verified
+                    && !report.source_replaced
+                    && !report.verified,
+                "{report}"
+            );
         }
         let mut whitened = after.clone();
 
@@ -7322,8 +10776,16 @@ mod tests {
             paint(&mut whitened, patch, [255, 255, 255]);
         }
         let report = inspect_effect(&before, &whitened, planned).unwrap();
-        assert!(report.source_foundation_transfer.paired_changes[0] == 0, "{report}");
-        assert!(!report.source_foundation_transfer.verified && !report.source_replaced && !report.verified, "{report}");
+        assert!(
+            report.source_foundation_transfer.paired_changes[0] == 0,
+            "{report}"
+        );
+        assert!(
+            !report.source_foundation_transfer.verified
+                && !report.source_replaced
+                && !report.verified,
+            "{report}"
+        );
     }
 
 
@@ -7336,15 +10798,12 @@ mod tests {
         let planned = historical_action(&before);
 
 
-        for patch in [PixelRect::new(1_067, 117, 28, 44), PixelRect::new(1_161, 238, 28, 44)] {
-
-
+        for patch in [
+            PixelRect::new(1_067, 117, 28, 44),
+            PixelRect::new(1_161, 238, 28, 44),
+        ] {
             for y in patch.y..patch.bottom() {
-
-
                 for x in patch.x..patch.right() {
-
-
                     if pixel_rgb(&before, x, y).is_some_and(is_white)
                         && pixel_rgb(&after, x, y).is_some_and(is_white)
                     {
@@ -7354,8 +10813,20 @@ mod tests {
             }
         }
         let report = inspect_effect(&before, &after, planned).unwrap();
-        assert!(report.source_foundation_transfer.changed_paper_fields.into_iter().any(|count| count != 0), "{report}");
-        assert!(!report.source_foundation_transfer.verified && !report.source_replaced && !report.verified, "{report}");
+        assert!(
+            report
+                .source_foundation_transfer
+                .changed_paper_fields
+                .into_iter()
+                .any(|count| count != 0),
+            "{report}"
+        );
+        assert!(
+            !report.source_foundation_transfer.verified
+                && !report.source_replaced
+                && !report.verified,
+            "{report}"
+        );
     }
 
 
@@ -7368,14 +10839,38 @@ mod tests {
         let planned = historical_action(&before);
 
 
-        for patch in [PixelRect::new(1_067, 117, 28, 44), PixelRect::new(1_161, 238, 28, 44)] {
+        for patch in [
+            PixelRect::new(1_067, 117, 28, 44),
+            PixelRect::new(1_161, 238, 28, 44),
+        ] {
             paint(&mut after, patch, [255, 255, 255]);
-            copy_region(&before, &mut after, patch, PixelPoint::new(patch.x as i32 + 4, patch.y as i32));
+            copy_region(
+                &before,
+                &mut after,
+                patch,
+                PixelPoint::new(patch.x as i32 + 4, patch.y as i32),
+            );
         }
         let report = inspect_effect(&before, &after, planned).unwrap();
-        assert!(report.source_foundation_transfer.paired_changes.into_iter().sum::<usize>() >= MINIMUM_CORNER_CHANGE, "paired print alone is insufficient: {report}");
-        assert!(report.source_foundation_transfer.translated_ink_retained, "{report}");
-        assert!(!report.source_foundation_transfer.verified && !report.source_replaced && !report.verified, "{report}");
+        assert!(
+            report
+                .source_foundation_transfer
+                .paired_changes
+                .into_iter()
+                .sum::<usize>()
+                >= MINIMUM_CORNER_CHANGE,
+            "paired print alone is insufficient: {report}"
+        );
+        assert!(
+            report.source_foundation_transfer.translated_ink_retained,
+            "{report}"
+        );
+        assert!(
+            !report.source_foundation_transfer.verified
+                && !report.source_replaced
+                && !report.verified,
+            "{report}"
+        );
     }
 
 
@@ -7387,28 +10882,40 @@ mod tests {
         let after = fixture(66);
         let planned = historical_action(&before);
         let mut missing_seam = after.clone();
-        paint(&mut missing_seam, PixelRect::new(912, 615, 96, 1), [255, 255, 255]);
+        paint(
+            &mut missing_seam,
+            PixelRect::new(912, 615, 96, 1),
+            [255, 255, 255],
+        );
         let report = inspect_effect(&before, &missing_seam, planned).unwrap();
-        assert_eq!(report.source_foundation_transfer.receiver_count, 0, "{report}");
+        assert_eq!(
+            report.source_foundation_transfer.receiver_count, 0,
+            "{report}"
+        );
         assert!(!report.source_replaced && !report.verified, "{report}");
         let mut existing_print = before.clone();
 
 
         for dy in 0..44 {
-
-
             for dx in 0..28 {
                 let source_rgb = pixel_rgb(&before, 1_067 + dx, 117 + dy).unwrap();
 
 
                 if is_card_ink(source_rgb) && !is_rail_gold(source_rgb) {
                     let received_rgb = pixel_rgb(&after, 899 + dx, 620 + dy).unwrap();
-                    paint(&mut existing_print, PixelRect::new(899 + dx, 620 + dy, 1, 1), received_rgb);
+                    paint(
+                        &mut existing_print,
+                        PixelRect::new(899 + dx, 620 + dy, 1, 1),
+                        received_rgb,
+                    );
                 }
             }
         }
         let report = inspect_effect(&existing_print, &after, planned).unwrap();
-        assert_eq!(report.source_foundation_transfer.matched_transfer_ink, 0, "old matching recipient artwork is not a transfer: {report}");
+        assert_eq!(
+            report.source_foundation_transfer.matched_transfer_ink, 0,
+            "old matching recipient artwork is not a transfer: {report}"
+        );
         assert!(!report.source_replaced && !report.verified, "{report}");
     }
 
@@ -7420,10 +10927,22 @@ mod tests {
         let mut before = fixture(65);
         let mut after = fixture(66);
         let planned = historical_action(&before);
-        paint(&mut before, PixelRect::new(726, 614, CARD_WIDTH, 50), [15, 100, 60]);
-        copy_region(&fixture(66), &mut after, PixelRect::new(894, 614, CARD_WIDTH, 50), PixelPoint::new(726, 614));
+        paint(
+            &mut before,
+            PixelRect::new(726, 614, CARD_WIDTH, 50),
+            [15, 100, 60],
+        );
+        copy_region(
+            &fixture(66),
+            &mut after,
+            PixelRect::new(894, 614, CARD_WIDTH, 50),
+            PixelPoint::new(726, 614),
+        );
         let report = inspect_effect(&before, &after, planned).unwrap();
-        assert_eq!(report.source_foundation_transfer.receiver_count, 2, "{report}");
+        assert_eq!(
+            report.source_foundation_transfer.receiver_count, 2,
+            "{report}"
+        );
         assert!(!report.source_replaced && !report.verified, "{report}");
     }
 
@@ -7447,11 +10966,19 @@ mod tests {
         let report = inspect_effect(&before, &after, forged).unwrap();
         assert!(!report.source_replaced && !report.verified, "{report}");
         let mut missing_fresh_target = after.clone();
-        paint(&mut missing_fresh_target, PixelRect::new(1_062, 380, CARD_WIDTH, 210), [255, 255, 255]);
+        paint(
+            &mut missing_fresh_target,
+            PixelRect::new(1_062, 380, CARD_WIDTH, 210),
+            [255, 255, 255],
+        );
         let report = inspect_effect(&before, &missing_fresh_target, planned).unwrap();
-        assert!(!report.source_foundation_transfer.verified && !report.source_replaced && !report.verified, "{report}");
+        assert!(
+            !report.source_foundation_transfer.verified
+                && !report.source_replaced
+                && !report.verified,
+            "{report}"
+        );
     }
-
 
 
     /// K68 and K69 retain complete row997 lower borders and terminated exterior
@@ -7459,30 +10986,96 @@ mod tests {
     /// Each whole run remains one canonical upper-card click with no drag.
     #[test]
     fn recorded_new_long_sources_keep_complete_border_and_upper_click() {
-
-
         for (number, column, top) in [(68, 7, 425), (69, 3, 636)] {
             let frame = fixture(number);
             let x = FIRST_COLUMN_X + COLUMN_PITCH * u32::from(column - 1);
             assert!(is_gameplay_scene(&frame).unwrap());
-            assert_eq!(find_historical_tableau_source(&frame, PixelRect::new(x, 332, CARD_WIDTH, 994 - 332)).unwrap(), None,
-                "the former exclusive row994 boundary still clips genuine positive rails");
-            assert_eq!(find_historical_tableau_source(&frame, PixelRect::new(x, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)).unwrap(),
-                Some(PixelRect::new(x, u32::from(top), CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - u32::from(top))));
+            assert_eq!(
+                find_historical_tableau_source(
+                    &frame,
+                    PixelRect::new(x, 332, CARD_WIDTH, 994 - 332)
+                )
+                .unwrap(),
+                None,
+                "the former exclusive row994 boundary still clips genuine positive rails"
+            );
+            assert_eq!(
+                find_historical_tableau_source(
+                    &frame,
+                    PixelRect::new(x, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)
+                )
+                .unwrap(),
+                Some(PixelRect::new(
+                    x,
+                    u32::from(top),
+                    CARD_WIDTH,
+                    TABLEAU_OUTLINE_BOTTOM - u32::from(top)
+                ))
+            );
             let planned = historical_action(&frame);
-            assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau { column, top, bottom: 998 }));
-            assert_eq!(planned.operation(), InputOperation::Click(PixelPoint::new((x + CARD_WIDTH / 2) as i32, i32::from(top) + 40)));
-            assert_eq!(planned.effect_bounds(), PixelRect::new(x, u32::from(top), CARD_WIDTH, TOOLBAR_TOP - u32::from(top)));
+            assert_eq!(
+                planned.target,
+                ActionTarget::Klondike(KlondikeTarget::Tableau {
+                    column,
+                    top,
+                    bottom: 998
+                })
+            );
+            assert_eq!(
+                planned.operation(),
+                InputOperation::Click(PixelPoint::new(
+                    (x + CARD_WIDTH / 2) as i32,
+                    i32::from(top) + 40
+                ))
+            );
+            assert_eq!(
+                planned.effect_bounds(),
+                PixelRect::new(x, u32::from(top), CARD_WIDTH, TOOLBAR_TOP - u32::from(top))
+            );
             let mut toolbar_changed = frame.clone();
-            paint(&mut toolbar_changed, PixelRect::new(x - 10, TOOLBAR_TOP, CARD_WIDTH + 20, TABLEAU_OUTLINE_BOTTOM - TOOLBAR_TOP), [255, 255, 255]);
+            paint(
+                &mut toolbar_changed,
+                PixelRect::new(
+                    x - 10,
+                    TOOLBAR_TOP,
+                    CARD_WIDTH + 20,
+                    TABLEAU_OUTLINE_BOTTOM - TOOLBAR_TOP,
+                ),
+                [255, 255, 255],
+            );
             let report = inspect_effect(&frame, &toolbar_changed, planned).unwrap();
-            assert_eq!((report.source_changed, report.source_positive, report.destination_changed), (0, 0, 0), "{report}");
-            assert!(!report.source_replaced && !report.verified, "the added recognition rows never supply effect authority: {report}");
+            assert_eq!(
+                (
+                    report.source_changed,
+                    report.source_positive,
+                    report.destination_changed
+                ),
+                (0, 0, 0),
+                "{report}"
+            );
+            assert!(
+                !report.source_replaced && !report.verified,
+                "the added recognition rows never supply effect authority: {report}"
+            );
         }
-        assert!(canonical_action(KlondikeTarget::Tableau { column: 7, top: 331, bottom: 998 }).is_none(),
-            "the existing native scan-top bound remains enforced");
-        assert!(canonical_action(KlondikeTarget::Tableau { column: 7, top: 425, bottom: 999 }).is_none(),
-            "one row beyond the complete observed border remains unsupported");
+        assert!(
+            canonical_action(KlondikeTarget::Tableau {
+                column: 7,
+                top: 331,
+                bottom: 998
+            })
+            .is_none(),
+            "the existing native scan-top bound remains enforced"
+        );
+        assert!(
+            canonical_action(KlondikeTarget::Tableau {
+                column: 7,
+                top: 425,
+                bottom: 999
+            })
+            .is_none(),
+            "one row beyond the complete observed border remains unsupported"
+        );
     }
 
 
@@ -7494,18 +11087,40 @@ mod tests {
         let scan = PixelRect::new(1_398, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332);
 
 
-        for row in [TOOLBAR_TOP - 2, TOOLBAR_TOP - 1, COLUMN_SEVEN_TOOLBAR_SHADOW_BOTTOM, COLUMN_SEVEN_TOOLBAR_SHADOW_BOTTOM + 1] {
-
-
-            for rail in [PixelRect::new(1_389, row, 9, 1), PixelRect::new(1_530, row, 10, 1)] {
+        for row in [
+            TOOLBAR_TOP - 2,
+            TOOLBAR_TOP - 1,
+            COLUMN_SEVEN_TOOLBAR_SHADOW_BOTTOM,
+            COLUMN_SEVEN_TOOLBAR_SHADOW_BOTTOM + 1,
+        ] {
+            for rail in [
+                PixelRect::new(1_389, row, 9, 1),
+                PixelRect::new(1_530, row, 10, 1),
+            ] {
                 assert!(count_pixels(&frame, rail, is_rail_gold) > 0);
                 let mut broken = frame.clone();
                 paint(&mut broken, rail, [12, 82, 45]);
-                assert_eq!(find_solid_card_source(&broken, scan).unwrap(), None, "missing ordinary bracket {rail:?}");
+                assert_eq!(
+                    find_solid_card_source(&broken, scan).unwrap(),
+                    None,
+                    "missing ordinary bracket {rail:?}"
+                );
             }
         }
-        assert!(count_pixels(&frame, PixelRect::new(1_389, 954, 9, 12), is_toolbar_shadow_gold) > 0);
-        assert!(count_pixels(&frame, PixelRect::new(1_530, 954, 10, 12), is_toolbar_shadow_gold) > 0);
+        assert!(
+            count_pixels(
+                &frame,
+                PixelRect::new(1_389, 954, 9, 12),
+                is_toolbar_shadow_gold
+            ) > 0
+        );
+        assert!(
+            count_pixels(
+                &frame,
+                PixelRect::new(1_530, 954, 10, 12),
+                is_toolbar_shadow_gold
+            ) > 0
+        );
     }
 
 
@@ -7523,17 +11138,37 @@ mod tests {
 
             for x in [1_389, 1_530] {
                 let mut recoloured = frame.clone();
-                paint(&mut recoloured, PixelRect::new(x, 951, if x == 1_389 { 9 } else { 10 }, 15), colour);
-                assert_eq!(find_solid_card_source(&recoloured, scan).unwrap(), None, "rail {x}, colour {colour:?}");
+                paint(
+                    &mut recoloured,
+                    PixelRect::new(x, 951, if x == 1_389 { 9 } else { 10 }, 15),
+                    colour,
+                );
+                assert_eq!(
+                    find_solid_card_source(&recoloured, scan).unwrap(),
+                    None,
+                    "rail {x}, colour {colour:?}"
+                );
             }
         }
 
 
         for x in [FIRST_COLUMN_X, FIRST_COLUMN_X + COLUMN_PITCH * 4] {
             let mut other_column = frame.clone();
-            copy_region(&frame, &mut other_column, PixelRect::new(1_388, 410, CARD_WIDTH + 20, TABLEAU_OUTLINE_BOTTOM - 410), PixelPoint::new(x as i32 - 10, 410));
-            assert_eq!(find_solid_card_source(&other_column, PixelRect::new(x, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)).unwrap(), None,
-                "the measured column-7 shadow cannot authorise column x{x}");
+            copy_region(
+                &frame,
+                &mut other_column,
+                PixelRect::new(1_388, 410, CARD_WIDTH + 20, TABLEAU_OUTLINE_BOTTOM - 410),
+                PixelPoint::new(x as i32 - 10, 410),
+            );
+            assert_eq!(
+                find_solid_card_source(
+                    &other_column,
+                    PixelRect::new(x, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)
+                )
+                .unwrap(),
+                None,
+                "the measured column-7 shadow cannot authorise column x{x}"
+            );
         }
     }
 
@@ -7542,28 +11177,54 @@ mod tests {
     /// or dark card paper. The Windows taskbar remains outside every scan.
     #[test]
     fn new_long_sources_retain_termination_closed_edges_and_paper() {
-
-
         for (number, x, top) in [(68, 1_398, 425), (69, 726, 636)] {
             let frame = fixture(number);
             let scan = PixelRect::new(x, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332);
             let corruptions = [
-                (PixelRect::new(x - 8, TABLEAU_OUTLINE_BOTTOM - 1, 1, 1), [230, 185, 80]),
-                (PixelRect::new(x + 18, 980, CARD_WIDTH - 36, 18), [12, 82, 45]),
-                (PixelRect::new(x + 18, top - 10, CARD_WIDTH - 36, 11), [12, 82, 45]),
-                (PixelRect::new(x + 18, TOOLBAR_TOP - 36, CARD_WIDTH - 36, 12), [32, 32, 32]),
+                (
+                    PixelRect::new(x - 8, TABLEAU_OUTLINE_BOTTOM - 1, 1, 1),
+                    [230, 185, 80],
+                ),
+                (
+                    PixelRect::new(x + 18, 980, CARD_WIDTH - 36, 18),
+                    [12, 82, 45],
+                ),
+                (
+                    PixelRect::new(x + 18, top - 10, CARD_WIDTH - 36, 11),
+                    [12, 82, 45],
+                ),
+                (
+                    PixelRect::new(x + 18, TOOLBAR_TOP - 36, CARD_WIDTH - 36, 12),
+                    [32, 32, 32],
+                ),
             ];
 
 
             for (bounds, colour) in corruptions {
                 let mut corrupted = frame.clone();
                 paint(&mut corrupted, bounds, colour);
-                assert_eq!(find_solid_card_source(&corrupted, scan).unwrap(), None, "K{number} corrupted {bounds:?}");
+                assert_eq!(
+                    find_solid_card_source(&corrupted, scan).unwrap(),
+                    None,
+                    "K{number} corrupted {bounds:?}"
+                );
             }
             let mut below_scan = frame.clone();
-            paint(&mut below_scan, PixelRect::new(x - 10, TABLEAU_OUTLINE_BOTTOM, CARD_WIDTH + 20, 1_033 - TABLEAU_OUTLINE_BOTTOM), [230, 185, 80]);
-            assert_eq!(find_solid_card_source(&below_scan, scan).unwrap(), find_solid_card_source(&frame, scan).unwrap(),
-                "pixels below the terminated observed outline remain irrelevant");
+            paint(
+                &mut below_scan,
+                PixelRect::new(
+                    x - 10,
+                    TABLEAU_OUTLINE_BOTTOM,
+                    CARD_WIDTH + 20,
+                    1_033 - TABLEAU_OUTLINE_BOTTOM,
+                ),
+                [230, 185, 80],
+            );
+            assert_eq!(
+                find_solid_card_source(&below_scan, scan).unwrap(),
+                find_solid_card_source(&frame, scan).unwrap(),
+                "pixels below the terminated observed outline remain irrelevant"
+            );
         }
     }
 
@@ -7575,13 +11236,36 @@ mod tests {
         let frame = fixture(80);
         assert!(is_gameplay_scene(&frame).unwrap());
         let expected = PixelRect::new(1_398, 372, CARD_WIDTH, TOOLBAR_TOP - 372);
-        assert_eq!(find_tableau_source(&frame, PixelRect::new(1_398, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)).unwrap(), Some(expected));
+        assert_eq!(
+            find_tableau_source(
+                &frame,
+                PixelRect::new(1_398, 332, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - 332)
+            )
+            .unwrap(),
+            Some(expected)
+        );
         let planned = action(&frame);
-        assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau { column: 7, top: 372, bottom: 947 }));
-        assert_eq!(planned.operation(), InputOperation::Click(PixelPoint::new(1_464, 412)));
-        assert_eq!(planned.effect_bounds(), PixelRect::new(1_398, 372, CARD_WIDTH, TOOLBAR_TOP - 372));
+        assert_eq!(
+            planned.target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 7,
+                top: 372,
+                bottom: 947
+            })
+        );
+        assert_eq!(
+            planned.operation(),
+            InputOperation::Click(PixelPoint::new(1_464, 412))
+        );
+        assert_eq!(
+            planned.effect_bounds(),
+            PixelRect::new(1_398, 372, CARD_WIDTH, TOOLBAR_TOP - 372)
+        );
         assert!(!completion_evidence(&frame).unwrap().complete_candidate);
-        assert_eq!(action(&fixture(81)).target, ActionTarget::Klondike(KlondikeTarget::Waste { offset: 1 }));
+        assert_eq!(
+            action(&fixture(81)).target,
+            ActionTarget::Klondike(KlondikeTarget::Waste { offset: 1 })
+        );
     }
 
 
@@ -7594,22 +11278,49 @@ mod tests {
 
 
         for (bounds, colour) in [
-            (PixelRect::new(1_389, TABLEAU_OUTLINE_BOTTOM - 1, 1, 1), [230, 185, 80]),
-            (PixelRect::new(1_416, 980, CARD_WIDTH - 36, 18), [12, 82, 45]),
-            (PixelRect::new(1_416, 362, CARD_WIDTH - 36, 11), [12, 82, 45]),
+            (
+                PixelRect::new(1_389, TABLEAU_OUTLINE_BOTTOM - 1, 1, 1),
+                [230, 185, 80],
+            ),
+            (
+                PixelRect::new(1_416, 980, CARD_WIDTH - 36, 18),
+                [12, 82, 45],
+            ),
+            (
+                PixelRect::new(1_416, 362, CARD_WIDTH - 36, 11),
+                [12, 82, 45],
+            ),
             (PixelRect::new(1_389, 372, 9, 620), [12, 82, 45]),
-            (PixelRect::new(1_416, TOOLBAR_TOP - 36, CARD_WIDTH - 36, 12), [32, 32, 32]),
+            (
+                PixelRect::new(1_416, TOOLBAR_TOP - 36, CARD_WIDTH - 36, 12),
+                [32, 32, 32],
+            ),
         ] {
             let mut corrupted = frame.clone();
             paint(&mut corrupted, bounds, colour);
             assert_live_source_after_damage(&frame, &corrupted, bounds);
         }
-        assert_eq!(find_tableau_source(&frame, PixelRect::new(1_398, 332, CARD_WIDTH, 936 - 332)).unwrap(), None,
-            "an internal crossbar cannot close clipped continuing rails");
+        assert_eq!(
+            find_tableau_source(&frame, PixelRect::new(1_398, 332, CARD_WIDTH, 936 - 332)).unwrap(),
+            None,
+            "an internal crossbar cannot close clipped continuing rails"
+        );
         let mut below_scan = frame.clone();
-        paint(&mut below_scan, PixelRect::new(1_388, TABLEAU_OUTLINE_BOTTOM, CARD_WIDTH + 20, 1_033 - TABLEAU_OUTLINE_BOTTOM), [230, 185, 80]);
-        assert_eq!(find_tableau_source(&below_scan, scan).unwrap(), find_tableau_source(&frame, scan).unwrap(),
-            "pixels below the unchanged scan cannot supply outline authority");
+        paint(
+            &mut below_scan,
+            PixelRect::new(
+                1_388,
+                TABLEAU_OUTLINE_BOTTOM,
+                CARD_WIDTH + 20,
+                1_033 - TABLEAU_OUTLINE_BOTTOM,
+            ),
+            [230, 185, 80],
+        );
+        assert_eq!(
+            find_tableau_source(&below_scan, scan).unwrap(),
+            find_tableau_source(&frame, scan).unwrap(),
+            "pixels below the unchanged scan cannot supply outline authority"
+        );
     }
 
 
@@ -7617,17 +11328,52 @@ mod tests {
     /// a larger height capacity never supplies a click below the toolbar.
     #[test]
     fn tableau_capacity_uses_existing_native_bounds() {
-        assert!(canonical_action(KlondikeTarget::Tableau { column: 7, top: 332, bottom: 998 }).is_some());
+        assert!(
+            canonical_action(KlondikeTarget::Tableau {
+                column: 7,
+                top: 332,
+                bottom: 998
+            })
+            .is_some()
+        );
 
 
         for target in [
-            KlondikeTarget::Tableau { column: 7, top: 331, bottom: 998 },
-            KlondikeTarget::Tableau { column: 7, top: 372, bottom: 999 },
-            KlondikeTarget::Tableau { column: 7, top: 907, bottom: 998 },
-            KlondikeTarget::Tableau { column: 7, top: 819, bottom: 998 },
-            KlondikeTarget::Tableau { column: 0, top: 372, bottom: 992 },
-            KlondikeTarget::Tableau { column: 8, top: 372, bottom: 992 },
-            KlondikeTarget::Tableau { column: 7, top: 992, bottom: 372 },
+            KlondikeTarget::Tableau {
+                column: 7,
+                top: 331,
+                bottom: 998,
+            },
+            KlondikeTarget::Tableau {
+                column: 7,
+                top: 372,
+                bottom: 999,
+            },
+            KlondikeTarget::Tableau {
+                column: 7,
+                top: 907,
+                bottom: 998,
+            },
+            KlondikeTarget::Tableau {
+                column: 7,
+                top: 819,
+                bottom: 998,
+            },
+            KlondikeTarget::Tableau {
+                column: 0,
+                top: 372,
+                bottom: 992,
+            },
+            KlondikeTarget::Tableau {
+                column: 8,
+                top: 372,
+                bottom: 992,
+            },
+            KlondikeTarget::Tableau {
+                column: 7,
+                top: 992,
+                bottom: 372,
+            },
         ] {
             assert!(canonical_action(target).is_none(), "unsupported {target:?}");
         }
@@ -7638,16 +11384,22 @@ mod tests {
     /// the former column-five/six scene probe. The source itself is unchanged.
     #[test]
     fn column_five_sources_keep_independent_scene_context() {
-
-
         for (number, top, bottom) in [(82, 407, 991), (84, 389, 994), (87, 610, 909)] {
             let frame = fixture(number);
             assert!(is_gameplay_scene(&frame).unwrap(), "K{number} native scene");
             let planned = action(&frame);
-            assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-                column: 5, top, bottom: bottom.min(TOOLBAR_TOP as u16),
-            }));
-            assert_eq!(planned.operation(), InputOperation::Click(PixelPoint::new(1_128, i32::from(top) + 40)));
+            assert_eq!(
+                planned.target,
+                ActionTarget::Klondike(KlondikeTarget::Tableau {
+                    column: 5,
+                    top,
+                    bottom: bottom.min(TOOLBAR_TOP as u16),
+                })
+            );
+            assert_eq!(
+                planned.operation(),
+                InputOperation::Click(PixelPoint::new(1_128, i32::from(top) + 40))
+            );
             assert!(!completion_evidence(&frame).unwrap().complete_candidate);
         }
     }
@@ -7667,7 +11419,10 @@ mod tests {
         paint(&mut frame, PixelRect::new(1_210, 841, 1, 1), [0, 0, 0]);
         assert_eq!(count_pixels(&frame, probe, is_felt), 186);
         assert!(!is_gameplay_scene(&frame).unwrap());
-        assert_eq!(analyse(&frame).unwrap().prediction, PredictedAction::NoHighlight);
+        assert_eq!(
+            analyse(&frame).unwrap().prediction,
+            PredictedAction::NoHighlight
+        );
     }
 
 
@@ -7676,16 +11431,19 @@ mod tests {
     #[test]
     fn column_five_gap_preserves_prior_scenes_and_terminal_refusals() {
         let accepted = [
-            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
-            19, 20, 21, 22, 23, 24, 25, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
-            41, 42, 44, 45, 46, 47, 48, 50, 51, 54, 55, 56, 57, 58, 59, 60, 61, 62,
-            63, 64, 65, 66, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81,
-            82, 83, 84, 85, 87, 88,
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+            25, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 44, 45, 46, 47, 48, 50, 51, 54,
+            55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77,
+            78, 79, 80, 81, 82, 83, 84, 85, 87, 88,
         ];
 
 
         for number in 1..=88 {
-            assert_eq!(is_gameplay_scene(&fixture(number)).unwrap(), accepted.contains(&number), "K{number:02}");
+            assert_eq!(
+                is_gameplay_scene(&fixture(number)).unwrap(),
+                accepted.contains(&number),
+                "K{number:02}"
+            );
         }
     }
 
@@ -7700,13 +11458,23 @@ mod tests {
         assert_eq!(pixel_rgb(&frame, 966, 985), Some([96, 87, 43]));
         assert!(!is_rail_gold([96, 87, 43]));
         assert!(is_toolbar_shadow_gold([96, 87, 43]));
-        assert_eq!(find_solid_card_source(&frame, PixelRect::new(894, 332, 132, 666)).unwrap(),
-            Some(PixelRect::new(894, 372, 132, 614)));
+        assert_eq!(
+            find_solid_card_source(&frame, PixelRect::new(894, 332, 132, 666)).unwrap(),
+            Some(PixelRect::new(894, 372, 132, 614))
+        );
         let planned = action(&frame);
-        assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-            column: 4, top: 372, bottom: 947,
-        }));
-        assert_eq!(planned.operation(), InputOperation::Click(PixelPoint::new(960, 412)));
+        assert_eq!(
+            planned.target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 4,
+                top: 372,
+                bottom: 947,
+            })
+        );
+        assert_eq!(
+            planned.operation(),
+            InputOperation::Click(PixelPoint::new(960, 412))
+        );
         assert_eq!(planned.effect_bounds().bottom(), TOOLBAR_TOP);
         assert!(!completion_evidence(&frame).unwrap().complete_candidate);
     }
@@ -7720,18 +11488,33 @@ mod tests {
         let scan = PixelRect::new(894, 332, 132, 666);
 
 
-        for rgb in [[0, 0, 0], [128, 128, 128], [255, 255, 255],
-            [70, 140, 70], [60, 80, 170], [89, 70, 30]]
-        {
+        for rgb in [
+            [0, 0, 0],
+            [128, 128, 128],
+            [255, 255, 255],
+            [70, 140, 70],
+            [60, 80, 170],
+            [89, 70, 30],
+        ] {
             let mut changed = native.clone();
             paint(&mut changed, PixelRect::new(966, 985, 1, 1), rgb);
-            assert_eq!(find_solid_card_source(&changed, scan).unwrap(), None, "{rgb:?}");
-            assert_eq!(analyse(&changed).unwrap().prediction, analyse(&native).unwrap().prediction);
+            assert_eq!(
+                find_solid_card_source(&changed, scan).unwrap(),
+                None,
+                "{rgb:?}"
+            );
+            assert_eq!(
+                analyse(&changed).unwrap().prediction,
+                analyse(&native).unwrap().prediction
+            );
         }
         let mut outside = native;
         paint(&mut outside, PixelRect::new(967, 985, 1, 1), [96, 87, 43]);
-        assert_eq!(find_solid_card_source(&outside, scan).unwrap(), None,
-            "the adjacent sample remains ordinary gold, outside the measured band");
+        assert_eq!(
+            find_solid_card_source(&outside, scan).unwrap(),
+            None,
+            "the adjacent sample remains ordinary gold, outside the measured band"
+        );
     }
 
 
@@ -7744,12 +11527,14 @@ mod tests {
 
 
         for y in [949, 950, 963, 964] {
-
-
             for (x, width) in [(885, 9), (1026, 10)] {
                 let mut changed = native.clone();
                 paint(&mut changed, PixelRect::new(x, y, width, 1), [0, 0, 0]);
-                assert_eq!(find_solid_card_source(&changed, scan).unwrap(), None, "side{x}, row{y}");
+                assert_eq!(
+                    find_solid_card_source(&changed, scan).unwrap(),
+                    None,
+                    "side{x}, row{y}"
+                );
             }
         }
     }
@@ -7763,21 +11548,40 @@ mod tests {
         let scan = PixelRect::new(894, 332, 132, 666);
 
 
-        for bounds in [PixelRect::new(912, 362, 96, 11),
-            PixelRect::new(912, 911, 96, 12), PixelRect::new(935, 978, 1, 10)]
-        {
+        for bounds in [
+            PixelRect::new(912, 362, 96, 11),
+            PixelRect::new(912, 911, 96, 12),
+            PixelRect::new(935, 978, 1, 10),
+        ] {
             let mut changed = native.clone();
             paint(&mut changed, bounds, [0, 0, 0]);
-            assert_eq!(find_solid_card_source(&changed, scan).unwrap(), None, "{bounds:?}");
+            assert_eq!(
+                find_solid_card_source(&changed, scan).unwrap(),
+                None,
+                "{bounds:?}"
+            );
         }
-        assert_eq!(find_solid_card_source(&native, PixelRect::new(390, 332, 132, 666)).unwrap(), None,
-            "the native column-one dark dashed destination is not a source");
-        assert_eq!(find_solid_card_source(&native, PixelRect::new(894, 332, 132, 654)).unwrap(), None,
-            "clipping the lower rail removes the complete scan context");
+        assert_eq!(
+            find_solid_card_source(&native, PixelRect::new(390, 332, 132, 666)).unwrap(),
+            None,
+            "the native column-one dark dashed destination is not a source"
+        );
+        assert_eq!(
+            find_solid_card_source(&native, PixelRect::new(894, 332, 132, 654)).unwrap(),
+            None,
+            "clipping the lower rail removes the complete scan context"
+        );
         let mut continuing = native;
-        paint(&mut continuing, PixelRect::new(885, 997, 9, 1), [220, 180, 100]);
-        assert_eq!(find_solid_card_source(&continuing, scan).unwrap(), None,
-            "an unterminated exterior rail cannot become a closed block");
+        paint(
+            &mut continuing,
+            PixelRect::new(885, 997, 9, 1),
+            [220, 180, 100],
+        );
+        assert_eq!(
+            find_solid_card_source(&continuing, scan).unwrap(),
+            None,
+            "an unterminated exterior rail cannot become a closed block"
+        );
     }
 
 
@@ -7787,17 +11591,33 @@ mod tests {
     fn undo_all_overlay_accepts_native_single_card_source() {
         let frame = fixture(94);
         assert!(is_gameplay_scene(&frame).unwrap());
-        assert_eq!(count_pixels(&frame, TOOLBAR_ICON_SUPPORT, is_toolbar_undo_red), 69);
-        assert_eq!(find_solid_card_source(&frame, PixelRect::new(1_230, 332, CARD_WIDTH, 666)).unwrap(),
-            Some(PixelRect::new(1_230, 790, CARD_WIDTH, 189)));
+        assert_eq!(
+            count_pixels(&frame, TOOLBAR_ICON_SUPPORT, is_toolbar_undo_red),
+            69
+        );
+        assert_eq!(
+            find_solid_card_source(&frame, PixelRect::new(1_230, 332, CARD_WIDTH, 666)).unwrap(),
+            Some(PixelRect::new(1_230, 790, CARD_WIDTH, 189))
+        );
         let planned = action(&frame);
-        assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-            column: 6, top: 790, bottom: 947,
-        }));
-        assert_eq!(planned.operation(), InputOperation::Click(PixelPoint::new(1_296, 830)));
+        assert_eq!(
+            planned.target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 6,
+                top: 790,
+                bottom: 947,
+            })
+        );
+        assert_eq!(
+            planned.operation(),
+            InputOperation::Click(PixelPoint::new(1_296, 830))
+        );
         assert_eq!(planned.effect_bounds().bottom(), TOOLBAR_TOP);
-        assert_eq!(find_solid_card_source(&frame, PixelRect::new(1_398, 102, CARD_WIDTH, 195)).unwrap(), None,
-            "the native dashed foundation-four recipient never supplies source authority");
+        assert_eq!(
+            find_solid_card_source(&frame, PixelRect::new(1_398, 102, CARD_WIDTH, 195)).unwrap(),
+            None,
+            "the native dashed foundation-four recipient never supplies source authority"
+        );
         assert!(!completion_evidence(&frame).unwrap().complete_candidate);
     }
 
@@ -7825,7 +11645,11 @@ mod tests {
         ] {
             let mut changed = native.clone();
             paint(&mut changed, bounds, [0, 0, 0]);
-            assert_eq!(find_solid_card_source(&changed, scan).unwrap(), None, "{bounds:?}");
+            assert_eq!(
+                find_solid_card_source(&changed, scan).unwrap(),
+                None,
+                "{bounds:?}"
+            );
             assert_live_source_after_damage(&native, &changed, bounds);
         }
     }
@@ -7840,38 +11664,85 @@ mod tests {
 
 
         for bottom in 970..TOOLBAR_EDGE_OCCLUSION.bottom() {
-            assert_eq!(find_solid_card_source(&native,
-                PixelRect::new(1_230, 332, CARD_WIDTH, bottom - 332)).unwrap(), None,
-                "the complete fixed overlay envelope must remain inside the scan at row{bottom}");
+            assert_eq!(
+                find_solid_card_source(
+                    &native,
+                    PixelRect::new(1_230, 332, CARD_WIDTH, bottom - 332)
+                )
+                .unwrap(),
+                None,
+                "the complete fixed overlay envelope must remain inside the scan at row{bottom}"
+            );
         }
 
         let mut continuing = native.clone();
-        paint(&mut continuing, PixelRect::new(1_221, 997, 9, 1), [220, 180, 100]);
+        paint(
+            &mut continuing,
+            PixelRect::new(1_221, 997, 9, 1),
+            [220, 180, 100],
+        );
         assert_eq!(find_solid_card_source(&continuing, scan).unwrap(), None);
         let mut dark_card = native.clone();
-        paint(&mut dark_card, PixelRect::new(1_248, 800, 96, TOOLBAR_TOP - 800), [0, 0, 0]);
+        paint(
+            &mut dark_card,
+            PixelRect::new(1_248, 800, 96, TOOLBAR_TOP - 800),
+            [0, 0, 0],
+        );
         assert_eq!(find_solid_card_source(&dark_card, scan).unwrap(), None);
         let mut floating = native.clone();
-        paint(&mut floating, PixelRect::new(1_218, 780, 156, TABLEAU_OUTLINE_BOTTOM - 780), [12, 82, 45]);
-        paint(&mut floating, PixelRect::new(1_248, 978, 96, 1), [220, 180, 100]);
-        copy_region(&native, &mut floating, TOOLBAR_ICON_SUPPORT,
-            PixelPoint::new(TOOLBAR_ICON_SUPPORT.x as i32, TOOLBAR_ICON_SUPPORT.y as i32));
+        paint(
+            &mut floating,
+            PixelRect::new(1_218, 780, 156, TABLEAU_OUTLINE_BOTTOM - 780),
+            [12, 82, 45],
+        );
+        paint(
+            &mut floating,
+            PixelRect::new(1_248, 978, 96, 1),
+            [220, 180, 100],
+        );
+        copy_region(
+            &native,
+            &mut floating,
+            TOOLBAR_ICON_SUPPORT,
+            PixelPoint::new(TOOLBAR_ICON_SUPPORT.x as i32, TOOLBAR_ICON_SUPPORT.y as i32),
+        );
         assert_eq!(find_solid_card_source(&floating, scan).unwrap(), None);
         let mut dashed = native.clone();
-        paint(&mut dashed, PixelRect::new(1_218, 780, 156, TABLEAU_OUTLINE_BOTTOM - 780), [12, 82, 45]);
-        copy_region(&native, &mut dashed, PixelRect::new(1_398, UPPER_Y, CARD_WIDTH, CARD_HEIGHT),
-            PixelPoint::new(1_230, 795));
+        paint(
+            &mut dashed,
+            PixelRect::new(1_218, 780, 156, TABLEAU_OUTLINE_BOTTOM - 780),
+            [12, 82, 45],
+        );
+        copy_region(
+            &native,
+            &mut dashed,
+            PixelRect::new(1_398, UPPER_Y, CARD_WIDTH, CARD_HEIGHT),
+            PixelPoint::new(1_230, 795),
+        );
         assert_eq!(find_solid_card_source(&dashed, scan).unwrap(), None);
         let mut moved_icon = native.clone();
-        copy_region(&native, &mut moved_icon, PixelRect::new(1_218, 780, 156, 218),
-            PixelPoint::new(1_050, 780));
-        assert_eq!(find_solid_card_source(&moved_icon, PixelRect::new(1_062, 332, CARD_WIDTH, 666)).unwrap(), None,
-            "the fixed Undo All mask cannot follow copied artwork into column five");
-        assert_eq!(find_solid_card_source(&native, PixelRect::new(1_900, 332, CARD_WIDTH, 666)),
-            Err(HaloDetectionError::BoundsOutsideFrame));
+        copy_region(
+            &native,
+            &mut moved_icon,
+            PixelRect::new(1_218, 780, 156, 218),
+            PixelPoint::new(1_050, 780),
+        );
+        assert_eq!(
+            find_solid_card_source(&moved_icon, PixelRect::new(1_062, 332, CARD_WIDTH, 666))
+                .unwrap(),
+            None,
+            "the fixed Undo All mask cannot follow copied artwork into column five"
+        );
+        assert_eq!(
+            find_solid_card_source(&native, PixelRect::new(1_900, 332, CARD_WIDTH, 666)),
+            Err(HaloDetectionError::BoundsOutsideFrame)
+        );
         let mut malformed = native;
         malformed.pixels.truncate(4);
-        assert_eq!(find_solid_card_source(&malformed, scan), Err(HaloDetectionError::InvalidFrameLayout));
+        assert_eq!(
+            find_solid_card_source(&malformed, scan),
+            Err(HaloDetectionError::InvalidFrameLayout)
+        );
     }
 
 
@@ -7881,16 +11752,29 @@ mod tests {
     fn undo_all_overlay_accepts_native_five_card_source() {
         let frame = fixture(95);
         assert!(is_gameplay_scene(&frame).unwrap());
-        assert_eq!(find_tableau_source(&frame, PixelRect::new(1_230, 332, CARD_WIDTH, 666)).unwrap(),
-            Some(PixelRect::new(1_230, 571, CARD_WIDTH, TOOLBAR_TOP - 571)));
+        assert_eq!(
+            find_tableau_source(&frame, PixelRect::new(1_230, 332, CARD_WIDTH, 666)).unwrap(),
+            Some(PixelRect::new(1_230, 571, CARD_WIDTH, TOOLBAR_TOP - 571))
+        );
         let planned = action(&frame);
-        assert_eq!(planned.target, ActionTarget::Klondike(KlondikeTarget::Tableau {
-            column: 6, top: 571, bottom: TOOLBAR_TOP as u16,
-        }));
-        assert_eq!(planned.operation(), InputOperation::Click(PixelPoint::new(1_296, 611)));
+        assert_eq!(
+            planned.target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 6,
+                top: 571,
+                bottom: TOOLBAR_TOP as u16,
+            })
+        );
+        assert_eq!(
+            planned.operation(),
+            InputOperation::Click(PixelPoint::new(1_296, 611))
+        );
         assert_eq!(planned.effect_bounds().bottom(), TOOLBAR_TOP);
-        assert_eq!(find_solid_card_source(&frame, PixelRect::new(894, 332, CARD_WIDTH, 666)).unwrap(), None,
-            "the native dark dashed column-four destination never supplies source authority");
+        assert_eq!(
+            find_solid_card_source(&frame, PixelRect::new(894, 332, CARD_WIDTH, 666)).unwrap(),
+            None,
+            "the native dark dashed column-four destination never supplies source authority"
+        );
         assert!(!completion_evidence(&frame).unwrap().complete_candidate);
     }
 
@@ -7900,20 +11784,23 @@ mod tests {
     /// hidden ending or icon colour is part of its live prediction.
     #[test]
     fn all_recorded_live_targets_preserve_operations_with_visible_tableau_bounds() {
-
-
         for number in 1..=94 {
             let frame = fixture(number);
             let old = analyse_historical(&frame).unwrap().prediction;
             let expected = match old {
                 PredictedAction::Action(old_action) => match old_action.target {
-                    ActionTarget::Klondike(KlondikeTarget::Tableau { column, top, bottom })
-                        if u32::from(bottom) > TOOLBAR_TOP =>
-                    {
-                        PredictedAction::Action(canonical_action(KlondikeTarget::Tableau {
-                            column, top, bottom: TOOLBAR_TOP as u16,
-                        }).unwrap())
-                    }
+                    ActionTarget::Klondike(KlondikeTarget::Tableau {
+                        column,
+                        top,
+                        bottom,
+                    }) if u32::from(bottom) > TOOLBAR_TOP => PredictedAction::Action(
+                        canonical_action(KlondikeTarget::Tableau {
+                            column,
+                            top,
+                            bottom: TOOLBAR_TOP as u16,
+                        })
+                        .unwrap(),
+                    ),
                     _ => old,
                 },
                 _ => old,
@@ -7929,17 +11816,29 @@ mod tests {
     /// lower borders and fake gold rails wholly in the excluded screen region.
     #[test]
     fn all_recorded_live_targets_ignore_every_pixel_at_and_below_toolbar() {
-
-
         for number in 1..=97 {
             let native = fixture(number);
             let expected = analyse(&native).unwrap().prediction;
 
 
-            for rgb in [[0, 0, 0], [255, 255, 255], [220, 180, 100], [12, 82, 45], [150, 20, 20]] {
+            for rgb in [
+                [0, 0, 0],
+                [255, 255, 255],
+                [220, 180, 100],
+                [12, 82, 45],
+                [150, 20, 20],
+            ] {
                 let mut changed = native.clone();
-                paint(&mut changed, PixelRect::new(0, TOOLBAR_TOP, native.width, native.height - TOOLBAR_TOP), rgb);
-                assert_eq!(analyse(&changed).unwrap().prediction, expected, "K{number:02} toolbar {rgb:?}");
+                paint(
+                    &mut changed,
+                    PixelRect::new(0, TOOLBAR_TOP, native.width, native.height - TOOLBAR_TOP),
+                    rgb,
+                );
+                assert_eq!(
+                    analyse(&changed).unwrap().prediction,
+                    expected,
+                    "K{number:02} toolbar {rgb:?}"
+                );
             }
         }
     }
@@ -7951,29 +11850,80 @@ mod tests {
     #[test]
     fn toolbar_clipped_source_requires_visible_source_and_exact_cutoff() {
         let native = fixture(95);
-        let scan = PixelRect::new(1_230, TABLEAU_SCAN_TOP, CARD_WIDTH, TABLEAU_OUTLINE_BOTTOM - TABLEAU_SCAN_TOP);
+        let scan = PixelRect::new(
+            1_230,
+            TABLEAU_SCAN_TOP,
+            CARD_WIDTH,
+            TABLEAU_OUTLINE_BOTTOM - TABLEAU_SCAN_TOP,
+        );
 
 
-        for bounds in [PixelRect::new(1_248, 561, 96, 11),
-            PixelRect::new(1_221, 700, 9, 24), PixelRect::new(1_362, 700, 10, 24),
-            PixelRect::new(1_221, TOOLBAR_TOP - 2, 9, 2), PixelRect::new(1_362, TOOLBAR_TOP - 2, 10, 2),
-            PixelRect::new(1_248, TOOLBAR_TOP - 36, 96, 12)]
-        {
+        for bounds in [
+            PixelRect::new(1_248, 561, 96, 11),
+            PixelRect::new(1_221, 700, 9, 24),
+            PixelRect::new(1_362, 700, 10, 24),
+            PixelRect::new(1_221, TOOLBAR_TOP - 2, 9, 2),
+            PixelRect::new(1_362, TOOLBAR_TOP - 2, 10, 2),
+            PixelRect::new(1_248, TOOLBAR_TOP - 36, 96, 12),
+        ] {
             let mut damaged = native.clone();
             paint(&mut damaged, bounds, [0, 0, 0]);
-            assert_eq!(find_tableau_source(&damaged, scan).unwrap(), None, "visible source evidence {bounds:?}");
-            assert_eq!(analyse(&damaged).unwrap().prediction, PredictedAction::NoHighlight);
+            assert_eq!(
+                find_tableau_source(&damaged, scan).unwrap(),
+                None,
+                "visible source evidence {bounds:?}"
+            );
+            assert_eq!(
+                analyse(&damaged).unwrap().prediction,
+                PredictedAction::NoHighlight
+            );
         }
-        assert_eq!(find_tableau_source(&native, PixelRect::new(1_230, TABLEAU_SCAN_TOP, CARD_WIDTH,
-            TOOLBAR_TOP - 1 - TABLEAU_SCAN_TOP)).unwrap(), None, "an arbitrary earlier crop cannot supply the toolbar policy");
-        assert_eq!(find_tableau_source(&native, PixelRect::new(894, TABLEAU_SCAN_TOP, CARD_WIDTH,
-            TABLEAU_OUTLINE_BOTTOM - TABLEAU_SCAN_TOP)).unwrap(), None, "the dark dashed destination is not a source");
-        assert_eq!(find_tableau_source(&native, PixelRect::new(1_230, TOOLBAR_TOP, CARD_WIDTH, 20)).unwrap(), None);
-        assert_eq!(find_tableau_source(&native, PixelRect::new(1_900, TABLEAU_SCAN_TOP, CARD_WIDTH, 200)),
-            Err(HaloDetectionError::BoundsOutsideFrame));
+        assert_eq!(
+            find_tableau_source(
+                &native,
+                PixelRect::new(
+                    1_230,
+                    TABLEAU_SCAN_TOP,
+                    CARD_WIDTH,
+                    TOOLBAR_TOP - 1 - TABLEAU_SCAN_TOP
+                )
+            )
+            .unwrap(),
+            None,
+            "an arbitrary earlier crop cannot supply the toolbar policy"
+        );
+        assert_eq!(
+            find_tableau_source(
+                &native,
+                PixelRect::new(
+                    894,
+                    TABLEAU_SCAN_TOP,
+                    CARD_WIDTH,
+                    TABLEAU_OUTLINE_BOTTOM - TABLEAU_SCAN_TOP
+                )
+            )
+            .unwrap(),
+            None,
+            "the dark dashed destination is not a source"
+        );
+        assert_eq!(
+            find_tableau_source(&native, PixelRect::new(1_230, TOOLBAR_TOP, CARD_WIDTH, 20))
+                .unwrap(),
+            None
+        );
+        assert_eq!(
+            find_tableau_source(
+                &native,
+                PixelRect::new(1_900, TABLEAU_SCAN_TOP, CARD_WIDTH, 200)
+            ),
+            Err(HaloDetectionError::BoundsOutsideFrame)
+        );
         let mut malformed = native;
         malformed.pixels.pop();
-        assert_eq!(find_tableau_source(&malformed, scan), Err(HaloDetectionError::InvalidFrameLayout));
+        assert_eq!(
+            find_tableau_source(&malformed, scan),
+            Err(HaloDetectionError::InvalidFrameLayout)
+        );
     }
 
 
@@ -7981,31 +11931,71 @@ mod tests {
     /// activating Solver reveals a source already supported by ordinary geometry.
     #[test]
     fn native_red_back_deal_and_solver_source_keep_scene_and_halo_separate() {
-
-
         for number in [96, 97] {
             let frame = fixture(number);
-            assert!(is_gameplay_scene(&frame).unwrap(), "K{number} red-backed deal");
-            assert_eq!(count_pixels(&frame, PixelRect::new(406, 130, 100, 139), is_back), 13_900);
+            assert!(
+                is_gameplay_scene(&frame).unwrap(),
+                "K{number} red-backed deal"
+            );
+            assert_eq!(
+                count_pixels(&frame, PixelRect::new(406, 130, 100, 139), is_back),
+                13_900
+            );
 
 
             for column in 0..7 {
-                assert_eq!(count_pixels(&frame, PixelRect::new(FIRST_COLUMN_X + COLUMN_PITCH * column + 20,
-                    TABLEAU_Y, 92, 6), is_slot_edge), if column == 0 { 552 } else { 460 },
-                    "K{number} column{column}: the red antialias row remains outside the stock band");
+                assert_eq!(
+                    count_pixels(
+                        &frame,
+                        PixelRect::new(
+                            FIRST_COLUMN_X + COLUMN_PITCH * column + 20,
+                            TABLEAU_Y,
+                            92,
+                            6
+                        ),
+                        is_slot_edge
+                    ),
+                    if column == 0 { 552 } else { 460 },
+                    "K{number} column{column}: the red antialias row remains outside the stock band"
+                );
             }
             assert!(!completion_evidence(&frame).unwrap().complete_candidate);
         }
         let off = fixture(96);
         assert!(!has_solver_banner(&off));
-        assert_eq!(analyse(&off).unwrap().prediction, PredictedAction::NoHighlight);
+        assert_eq!(
+            analyse(&off).unwrap().prediction,
+            PredictedAction::NoHighlight
+        );
         let on = fixture(97);
         assert!(has_solver_banner(&on));
         let source = action(&on);
-        assert_eq!(source.target, ActionTarget::Klondike(KlondikeTarget::Tableau { column: 7, top: 443, bottom: 632 }));
-        assert_eq!(source.operation(), InputOperation::Click(PixelPoint::new(1_464, 483)));
-        assert_eq!(find_tableau_source(&on, PixelRect::new(558, TABLEAU_SCAN_TOP, CARD_WIDTH,
-            TOOLBAR_TOP - TABLEAU_SCAN_TOP)).unwrap(), None, "the dashed Q-diamonds guide is not a source");
+        assert_eq!(
+            source.target,
+            ActionTarget::Klondike(KlondikeTarget::Tableau {
+                column: 7,
+                top: 443,
+                bottom: 632
+            })
+        );
+        assert_eq!(
+            source.operation(),
+            InputOperation::Click(PixelPoint::new(1_464, 483))
+        );
+        assert_eq!(
+            find_tableau_source(
+                &on,
+                PixelRect::new(
+                    558,
+                    TABLEAU_SCAN_TOP,
+                    CARD_WIDTH,
+                    TOOLBAR_TOP - TABLEAU_SCAN_TOP
+                )
+            )
+            .unwrap(),
+            None,
+            "the dashed Q-diamonds guide is not a source"
+        );
     }
 
 
@@ -8013,22 +12003,33 @@ mod tests {
     /// the measured band does not grant support to its unknown neighbours.
     #[test]
     fn measured_red_back_band_refuses_other_colours_and_boundary_neighbours() {
-
-
         for rgb in [[157, 49, 43], [242, 69, 76], [150, 69, 70]] {
             assert!(is_red_back(rgb));
             assert!(!is_edge_gold(rgb) && !is_rail_gold(rgb) && !is_toolbar_shadow_gold(rgb));
             assert!(!is_white(rgb) && !is_felt(rgb));
             let [red, green, blue] = rgb;
-            assert!(!(blue >= 100 && i16::from(blue) - i16::from(red) >= 40
-                && i16::from(blue) - i16::from(green) >= 15));
+            assert!(
+                !(blue >= 100
+                    && i16::from(blue) - i16::from(red) >= 40
+                    && i16::from(blue) - i16::from(green) >= 15)
+            );
         }
 
 
-        for rgb in [[255, 255, 255], [20, 70, 180], [12, 82, 45], [220, 180, 100],
-            [165, 80, 40], [96, 87, 43], [150, 70, 70], [150, 69, 71],
-            [149, 60, 50], [200, 69, 121], [250, 60, 101], [0, 0, 0]]
-        {
+        for rgb in [
+            [255, 255, 255],
+            [20, 70, 180],
+            [12, 82, 45],
+            [220, 180, 100],
+            [165, 80, 40],
+            [96, 87, 43],
+            [150, 70, 70],
+            [150, 69, 71],
+            [149, 60, 50],
+            [200, 69, 121],
+            [250, 60, 101],
+            [0, 0, 0],
+        ] {
             assert!(!is_red_back(rgb), "unknown/non-back RGB {rgb:?}");
         }
     }
@@ -8041,14 +12042,23 @@ mod tests {
         let native = fixture(97);
 
 
-        for bounds in [PixelRect::new(160, 310, 16, 16), PixelRect::new(1_730, 310, 16, 16),
-            PixelRect::new(874, 710, 7, 28), PixelRect::new(1_208, 840, 7, 28),
-            PixelRect::new(410, TABLEAU_Y, 92 + 2 * COLUMN_PITCH, 6)]
-        {
+        for bounds in [
+            PixelRect::new(160, 310, 16, 16),
+            PixelRect::new(1_730, 310, 16, 16),
+            PixelRect::new(874, 710, 7, 28),
+            PixelRect::new(1_208, 840, 7, 28),
+            PixelRect::new(410, TABLEAU_Y, 92 + 2 * COLUMN_PITCH, 6),
+        ] {
             let mut damaged = native.clone();
             paint(&mut damaged, bounds, [0, 0, 0]);
-            assert!(!is_gameplay_scene(&damaged).unwrap(), "missing context {bounds:?}");
-            assert_eq!(analyse(&damaged).unwrap().prediction, PredictedAction::NoHighlight);
+            assert!(
+                !is_gameplay_scene(&damaged).unwrap(),
+                "missing context {bounds:?}"
+            );
+            assert_eq!(
+                analyse(&damaged).unwrap().prediction,
+                PredictedAction::NoHighlight
+            );
         }
 
 
@@ -8070,19 +12080,21 @@ mod tests {
 
 
                 for y in TABLEAU_Y..TABLEAU_Y + 6 {
-
-
                     for xx in x..x + 92 {
-
-
                         if pixel_rgb(&native, xx, y).is_some_and(is_red_back) {
                             paint(&mut changed, PixelRect::new(xx, y, 1, 1), rgb);
                         }
                     }
                 }
             }
-            assert!(!is_gameplay_scene(&changed).unwrap(), "unknown palette {rgb:?}");
-            assert_eq!(analyse(&changed).unwrap().prediction, PredictedAction::NoHighlight);
+            assert!(
+                !is_gameplay_scene(&changed).unwrap(),
+                "unknown palette {rgb:?}"
+            );
+            assert_eq!(
+                analyse(&changed).unwrap().prediction,
+                PredictedAction::NoHighlight
+            );
         }
     }
 
@@ -8093,32 +12105,71 @@ mod tests {
     fn red_back_draw_still_requires_closed_stock_halo_banner_and_scene() {
         let native = fixture(97);
         let mut draw = native.clone();
-        copy_region(&fixture(3), &mut draw, PixelRect::new(378, 100, 164, 204), PixelPoint::new(378, 100));
-        copy_region(&native, &mut draw, PixelRect::new(406, 130, 100, 139), PixelPoint::new(406, 130));
-        assert_eq!(action(&draw).target, ActionTarget::Klondike(KlondikeTarget::Draw));
-        assert_eq!(count_pixels(&draw, PixelRect::new(406, 130, 100, 139), is_back), 13_900);
+        copy_region(
+            &fixture(3),
+            &mut draw,
+            PixelRect::new(378, 100, 164, 204),
+            PixelPoint::new(378, 100),
+        );
+        copy_region(
+            &native,
+            &mut draw,
+            PixelRect::new(406, 130, 100, 139),
+            PixelPoint::new(406, 130),
+        );
+        assert_eq!(
+            action(&draw).target,
+            ActionTarget::Klondike(KlondikeTarget::Draw)
+        );
+        assert_eq!(
+            count_pixels(&draw, PixelRect::new(406, 130, 100, 139), is_back),
+            13_900
+        );
         let mut no_banner = draw.clone();
         paint(&mut no_banner, PixelRect::new(824, 34, 272, 58), [0, 0, 0]);
         assert!(is_gameplay_scene(&no_banner).unwrap());
-        assert_eq!(analyse(&no_banner).unwrap().prediction, PredictedAction::NoHighlight);
+        assert_eq!(
+            analyse(&no_banner).unwrap().prediction,
+            PredictedAction::NoHighlight
+        );
 
 
-        for bounds in [PixelRect::new(408, 100, 96, 16), PixelRect::new(408, 280, 96, 20),
-            PixelRect::new(381, 155, 9, 30), PixelRect::new(522, 155, 10, 30)]
-        {
+        for bounds in [
+            PixelRect::new(408, 100, 96, 16),
+            PixelRect::new(408, 280, 96, 20),
+            PixelRect::new(381, 155, 9, 30),
+            PixelRect::new(522, 155, 10, 30),
+        ] {
             let mut broken = draw.clone();
             paint(&mut broken, bounds, [0, 0, 0]);
-            assert_ne!(analyse(&broken).unwrap().prediction, canonical_action(KlondikeTarget::Draw)
-                .map(PredictedAction::Action).unwrap(), "missing stock border {bounds:?}");
+            assert_ne!(
+                analyse(&broken).unwrap().prediction,
+                canonical_action(KlondikeTarget::Draw)
+                    .map(PredictedAction::Action)
+                    .unwrap(),
+                "missing stock border {bounds:?}"
+            );
         }
         let mut unknown = draw.clone();
-        paint(&mut unknown, PixelRect::new(406, 130, 100, 139), [200, 70, 50]);
-        assert_eq!(analyse(&unknown), Err(HaloDetectionError::UnclassifiedKlondikeStock {
-            supported_back_pixels: 0, felt_pixels: 0, total_pixels: 13_900,
-        }));
+        paint(
+            &mut unknown,
+            PixelRect::new(406, 130, 100, 139),
+            [200, 70, 50],
+        );
+        assert_eq!(
+            analyse(&unknown),
+            Err(HaloDetectionError::UnclassifiedKlondikeStock {
+                supported_back_pixels: 0,
+                felt_pixels: 0,
+                total_pixels: 13_900,
+            })
+        );
         let mut no_scene = draw;
         paint(&mut no_scene, PixelRect::new(160, 310, 16, 16), [0, 0, 0]);
-        assert_eq!(analyse(&no_scene).unwrap().prediction, PredictedAction::NoHighlight);
+        assert_eq!(
+            analyse(&no_scene).unwrap().prediction,
+            PredictedAction::NoHighlight
+        );
     }
 
 
@@ -8129,16 +12180,22 @@ mod tests {
         let native = fixture(97);
 
 
-        for bounds in [PixelRect::new(824, 34, 272, 58), PixelRect::new(1_416, 618, 96, 18),
-            PixelRect::new(1_416, 437, 96, 8), PixelRect::new(1_389, 500, 9, 30),
-            PixelRect::new(1_530, 500, 10, 30), PixelRect::new(1_416, 586, 96, 21)]
-        {
+        for bounds in [
+            PixelRect::new(824, 34, 272, 58),
+            PixelRect::new(1_416, 618, 96, 18),
+            PixelRect::new(1_416, 437, 96, 8),
+            PixelRect::new(1_389, 500, 9, 30),
+            PixelRect::new(1_530, 500, 10, 30),
+            PixelRect::new(1_416, 586, 96, 21),
+        ] {
             let mut broken = native.clone();
             paint(&mut broken, bounds, [0, 0, 0]);
             assert!(is_gameplay_scene(&broken).unwrap());
-            assert_eq!(analyse(&broken).unwrap().prediction, PredictedAction::NoHighlight,
-                "missing source/banner evidence {bounds:?}");
+            assert_eq!(
+                analyse(&broken).unwrap().prediction,
+                PredictedAction::NoHighlight,
+                "missing source/banner evidence {bounds:?}"
+            );
         }
     }
-
 }

@@ -4,9 +4,5 @@
 //! widened arithmetic. Game geometry and calibrated regions remain local.
 
 pub use xsar::geometry::{
-    PixelPoint, PixelRect, pixel_point_to_qmp, pixel_rect_to_qmp,
+    GeometryError, PixelPoint, PixelRect, QmpPoint, pixel_point_to_qmp, pixel_rect_to_qmp,
 };
-
-
-#[cfg(test)]
-pub use xsar::geometry::{GeometryError, QmpPoint};

@@ -50,8 +50,6 @@ mod effect_155;
 mod testing_156;
 
 
-
-
 /// Accepted deal's original untouched board, before any synthetic header overlay.
 const START: &[u8] = include_bytes!("../../../tests/fixtures/pyramid-recon/native-v7/baseline.png");
 
@@ -495,13 +493,13 @@ fn adapter_with_progress<T>(
     let qmp = QmpClient::connect(&context.socket_path).unwrap();
     let mut io = NativeIo {
         stop_trace: &crate::worker::pyramid_stop::StopTrace::default(),
-            execution_vision: plan.acquisition.vision.for_temporal_execution(),
-            source_transition: None,
-            ready_transition: None,
-            failure_progress: crate::pyramid_diagnostics::progress::FailureProgress::default(),
-            removals: Default::default(),
-            stock_effect: None,
-            effect_settings: crate::parameters::PyramidEffectSettings::default(),
+        execution_vision: plan.acquisition.vision.for_temporal_execution(),
+        source_transition: None,
+        ready_transition: None,
+        failure_progress: crate::pyramid_diagnostics::progress::FailureProgress::default(),
+        removals: Default::default(),
+        stock_effect: None,
+        effect_settings: crate::parameters::PyramidEffectSettings::default(),
         policy: ExecutionPolicy::Standard,
         stock_continuation: false,
         executed_recycles: 0,
@@ -514,7 +512,14 @@ fn adapter_with_progress<T>(
         started: Instant::now(),
         paused: Duration::ZERO,
         captures: 0,
-        capture_limit: capture_allowance(plan.trace.len(), plan.trace.iter().map(|action| operations(action.action).unwrap().len()).sum()).unwrap(),
+        capture_limit: capture_allowance(
+            plan.trace.len(),
+            plan.trace
+                .iter()
+                .map(|action| operations(action.action).unwrap().len())
+                .sum(),
+        )
+        .unwrap(),
         counts: Counts::default(),
         first_mismatch: None,
         latest_frame: None,
@@ -742,8 +747,12 @@ fn guarded_native_delivery_refuses_series_drift_before_first_gesture() {
 #[ignore = "requires local AF_UNIX sockets"]
 fn stop_183_fatal_guard_is_not_softened_by_late_operator_stop() {
     use crate::pyramid_workflow_model::RunTermination;
-    let authority = std::cell::RefCell::new(None::<(
-        crate::worker::pyramid_reconnaissance::ReconControl, ControllerContext)>);
+    let authority = std::cell::RefCell::new(
+        None::<(
+            crate::worker::pyramid_reconnaissance::ReconControl,
+            ControllerContext,
+        )>,
+    );
     let guard_cancel = AtomicBool::new(false);
     let guard = |_frame: &CapturedFrame, _phase: FrameGuardPhase| {
         let authority = authority.borrow();
@@ -753,13 +762,31 @@ fn stop_183_fatal_guard_is_not_softened_by_late_operator_stop() {
     };
     let frame = synthetic_start();
     let evidence = adapter(vec![frame.clone()], Some(&guard), |io| {
-        *authority.borrow_mut() = Some((io.events.latest_frame.reconnaissance.clone(), io.context.clone()));
+        *authority.borrow_mut() = Some((
+            io.events.latest_frame.reconnaissance.clone(),
+            io.context.clone(),
+        ));
         let result = io.observe_source(SearchState::initial());
-        assert!(result.err().expect("genuine guard refusal").contains("real fatal frame guard"));
-        assert_eq!(io.stop_trace.termination(true, true), RunTermination::Failed);
+        assert!(
+            result
+                .err()
+                .expect("genuine guard refusal")
+                .contains("real fatal frame guard")
+        );
+        assert_eq!(
+            io.stop_trace.termination(true, true),
+            RunTermination::Failed
+        );
         assert!(io.action_permit.is_none() && io.source_proof.is_none());
     });
-    assert_eq!((evidence.counts.attempted, evidence.counts.acknowledged, evidence.captures), (0, 0, 1));
+    assert_eq!(
+        (
+            evidence.counts.attempted,
+            evidence.counts.acknowledged,
+            evidence.captures
+        ),
+        (0, 0, 1)
+    );
     assert!(guard_cancel.load(std::sync::atomic::Ordering::Acquire));
     assert!(evidence.wire.events.is_empty());
     assert_eq!(evidence.wire.unused_frames, 0);
@@ -1021,13 +1048,15 @@ fn native_perfect_final_clear_retains_phase_exact_piles_and_series_guard() {
                 assert_eq!((actual_left, actual_right), (None, right));
                 // Existing rejected animation proves the last error still comes
                 // from the permitted final alternative, without extra I/O.
-                let animation = decode_png(
-                    &fs::read(root.join("final-animation-empty-stock.png")).unwrap(),
-                )
-                .unwrap();
+                let animation =
+                    decode_png(&fs::read(root.join("final-animation-empty-stock.png")).unwrap())
+                        .unwrap();
                 assert_eq!(
                     io.verify_final_clear_alternatives(
-                        &animation, &tableau, actual_left, actual_right,
+                        &animation,
+                        &tableau,
+                        actual_left,
+                        actual_right,
                     )
                     .unwrap_err(),
                     "no normal final-clear calibration"
@@ -1035,13 +1064,18 @@ fn native_perfect_final_clear_retains_phase_exact_piles_and_series_guard() {
                 let initial = io.challenge_initial;
                 io.challenge_initial = Some(
                     crate::pyramid_progress::ChallengeProgress::new(
-                        crate::pyramid_progress::ChallengeKind::Score, 0, 1400,
+                        crate::pyramid_progress::ChallengeKind::Score,
+                        0,
+                        1400,
                     )
                     .unwrap(),
                 );
                 assert_eq!(
                     io.verify_final_clear_alternatives(
-                        &animation, &tableau, actual_left, actual_right,
+                        &animation,
+                        &tableau,
+                        actual_left,
+                        actual_right,
                     )
                     .unwrap_err(),
                     "no bound challenge final-clear calibration"

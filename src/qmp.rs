@@ -10,7 +10,8 @@ use xsar::qmp::QmpConfig;
 use crate::{
     geometry::PixelPoint,
     parameters::{
-        KEY_HOLD, MOUSE_HOLD, POINTER_SETTLE_DELAY, QMP_IO_TIMEOUT, QMP_SCREENDUMP_TIMEOUT,
+        FREECELL_ROUTE_ABS_GESTURE_INTERVAL, KEY_HOLD, MOUSE_HOLD, POINTER_SETTLE_DELAY,
+        QMP_IO_TIMEOUT, QMP_SCREENDUMP_TIMEOUT,
     },
 };
 
@@ -19,7 +20,7 @@ pub use xsar::qmp::{QmpError, QmpProbe};
 
 /// Explicit supported application keys, mapped to QEMU qcodes without parsing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum SupportedKey {
+pub enum SupportedKey {
     /// Existing Draw shortcut; other keys require an explicit application contract.
     Draw,
 }
@@ -151,68 +152,42 @@ impl QmpClient {
 
     /// Run the explicitly requested Free Cell diagnostic gesture once.
     ///
-    /// ABS sends source, down, the four application-planned native held targets
-    /// and up, with the selected interval after source acknowledgement and each
+    /// ABS sends source, down, the three application-planned native held targets
+    /// and up, with the fixed interval after source acknowledgement and each
     /// held phase. Targets are source minus 45px vertically, the native floor
-    /// midpoint of the original source/effective destination, destination minus
-    /// 45px vertically, then the exact destination. REL
-    /// retains ten direction-only increments of two device counts per axis with
-    /// two-second waits, and remains a motion probe rather than a route transfer
-    /// or promise of target arrival. Neither mode adds a standalone click;
+    /// midpoint of the original source/proved pickup-aligned destination, then
+    /// the exact destination. Neither mode adds a standalone click;
     /// delivery never proves a card effect.
     pub(crate) fn diagnostic_drag<F: FnMut() -> bool>(
         &mut self,
         source: PixelPoint,
-        held_points: &[PixelPoint; 4],
+        held_points: &[PixelPoint; 3],
         frame: (u32, u32),
-        mode: crate::freecell_route::DragMode,
-        timing: crate::freecell_route::DiagnosticDragTiming,
         mut permitted: F,
     ) -> Result<(), QmpError> {
         let (width, height) = frame;
-        let [_, _, _, destination] = *held_points;
-        let phase_wait_ms = match (mode, timing) {
-            (_, crate::freecell_route::DiagnosticDragTiming::TwoSeconds)
-            | (crate::freecell_route::DragMode::Relative, _) => 2_000,
-            (_, crate::freecell_route::DiagnosticDragTiming::HalfSecond) => 500,
-        };
+        let [_, _, destination] = *held_points;
+        let phase_wait_ms = FREECELL_ROUTE_ABS_GESTURE_INTERVAL.as_millis();
         crate::single_step_telemetry::operation(
             "diagnostic-drag",
             || {
                 serde_json::json!({
                     "source":point_details(source,width,height),
                     "destination":point_details(destination,width,height),"button":"left",
-                    "motion_mode":format!("{mode:?}"),
-                    "diagnostic_drag_timing":format!("{timing:?}"),
-                    "planned_native_held_points":(mode==crate::freecell_route::DragMode::Absolute)
-                        .then(||held_points.map(|point|[point.x,point.y])),
-                    "intended_sequence":match mode {
-                        crate::freecell_route::DragMode::Absolute => vec!["query-select-absolute-pointer",
-                            "source-move-acknowledged","source-acknowledgement-wait","verify-motion-pointer","down",
-                            "held-phase-wait","held-source-minus-45-y-move","held-phase-wait",
-                            "held-native-midpoint-move","held-phase-wait",
-                            "held-destination-minus-45-y-move","held-phase-wait",
-                            "held-exact-destination-move","held-phase-wait","up"],
-                        crate::freecell_route::DragMode::Relative => vec!["query-select-absolute-pointer",
-                            "source-move-acknowledged","query-select-relative-pointer","wait-2000ms",
-                            "down","ten-held-motion-updates-with-2000ms-gaps","wait-2000ms","up"]
-                    },
+                    "motion_mode":"Absolute",
+                    "planned_native_held_points":Some(held_points.map(|point|[point.x,point.y])),
+                    "intended_sequence":vec!["query-select-absolute-pointer",
+                        "source-move-acknowledged","source-acknowledgement-wait","verify-motion-pointer","down",
+                        "held-phase-wait","held-source-minus-45-y-move","held-phase-wait",
+                        "held-native-midpoint-move","held-phase-wait",
+                        "held-exact-destination-move","held-phase-wait","up"],
                     "sequence_is":"planned; wire records identify phases reached and elapsed time",
-                    "planned_held_motion_updates":match mode {
-                        crate::freecell_route::DragMode::Absolute => 4,
-                        crate::freecell_route::DragMode::Relative => 10
-                    },
-                    "planned_input_requests":match mode {
-                        crate::freecell_route::DragMode::Absolute => 7,
-                        crate::freecell_route::DragMode::Relative => 13
-                    },
+                    "planned_held_motion_updates":3,
+                    "planned_input_requests":6,
                     "source_acknowledgement_minimum_wait_ms":phase_wait_ms,
                     "held_phase_minimum_wait_ms":phase_wait_ms,
-                    "motion_contract":match mode {
-                        crate::freecell_route::DragMode::Absolute => "source minus 45 native pixels vertically, floor midpoint of original source and effective destination on each native axis, destination minus 45 native pixels vertically, exact destination; six selected waits from source acknowledgement through release",
-                        crate::freecell_route::DragMode::Relative => "ten signum-times-two device-count increments; target arrival not claimed"
-                    },
-                    "route_effect_candidate":mode==crate::freecell_route::DragMode::Absolute,
+                    "motion_contract":"source minus 45 native pixels vertically, floor midpoint of original source and proved pickup-aligned destination on each native axis, exact destination; five fixed 100ms intervals from source acknowledgement through release",
+                    "route_effect_candidate":true,
                     "standalone_click":false,"effect_proved":false,
                     "on_uncertainty":"release recovery only; never repeat the transfer"
                 })
@@ -230,20 +205,13 @@ impl QmpClient {
                     }
                     allowed
                 };
-                match mode {
-                    crate::freecell_route::DragMode::Absolute => {
-                        self.transport.diagnostic_drag_path_with_timing(
-                            source,
-                            held_points,
-                            frame,
-                            timing,
-                            &mut guard,
-                        )
-                    }
-                    crate::freecell_route::DragMode::Relative => self
-                        .transport
-                        .diagnostic_relative_drag(source, destination, width, height, &mut guard),
-                }
+                self.transport.diagnostic_drag_path_with_interval(
+                    source,
+                    held_points,
+                    frame,
+                    FREECELL_ROUTE_ABS_GESTURE_INTERVAL,
+                    &mut guard,
+                )
             },
         )
     }
@@ -298,7 +266,7 @@ impl QmpClient {
 
 
     /// Send one supported key with the existing hold and release-only recovery.
-    pub(crate) fn press_key(&mut self, key: SupportedKey) -> Result<(), QmpError> {
+    pub fn press_key(&mut self, key: SupportedKey) -> Result<(), QmpError> {
         let qcode = match key {
             SupportedKey::Draw => "d",
         };

@@ -279,15 +279,15 @@ fn run_stock_empty_tail(
         .sum();
     let mut io = NativeIo {
         stop_trace: &crate::worker::pyramid_stop::StopTrace::default(),
- execution_vision: plan.acquisition.vision.for_temporal_execution(),
- source_transition: None,
-            ready_transition: None,
-            failure_progress: crate::pyramid_diagnostics::progress::FailureProgress::default(),
- removals: crate::pyramid_recon::vision::removal::RemovalHistory::from_verified_position(
+        execution_vision: plan.acquisition.vision.for_temporal_execution(),
+        source_transition: None,
+        ready_transition: None,
+        failure_progress: crate::pyramid_diagnostics::progress::FailureProgress::default(),
+        removals: crate::pyramid_recon::vision::removal::RemovalHistory::from_verified_position(
             &expected(&plan.acquisition.deal, before).unwrap().0,
         ),
-            stock_effect: None,
-            effect_settings: crate::parameters::PyramidEffectSettings::default(),
+        stock_effect: None,
+        effect_settings: crate::parameters::PyramidEffectSettings::default(),
         policy: ExecutionPolicy::Standard,
         stock_continuation: false,
         executed_recycles: 0,

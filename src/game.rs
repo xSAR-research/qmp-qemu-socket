@@ -16,7 +16,8 @@ use crate::{
 /// Shared CLASSIC blue card-back palette, independent of input authority.
 /// Geometry, occupancy, scene and source-outline guards remain caller-owned.
 pub(crate) fn is_classic_blue_back([red, green, blue]: [u8; 3]) -> bool {
-    blue >= 100 && i16::from(blue) - i16::from(red) >= 40
+    blue >= 100
+        && i16::from(blue) - i16::from(red) >= 40
         && i16::from(blue) - i16::from(green) >= 15
 }
 
@@ -42,16 +43,18 @@ pub enum GameMode {
 
 
 impl GameMode {
-
-
     /// Modes exposed in the requested selector order, independent of the default.
-    pub const AVAILABLE: [Self; 5] = [Self::Klondike, Self::Spider, Self::FreeCell, Self::Pyramid, Self::TriPeaks];
+    pub const AVAILABLE: [Self; 5] = [
+        Self::Klondike,
+        Self::Spider,
+        Self::FreeCell,
+        Self::Pyramid,
+        Self::TriPeaks,
+    ];
 
 
     /// Return the stable game name used in controls and logs.
     pub const fn label(self) -> &'static str {
-
-
         match self {
             Self::TriPeaks => "TriPeaks",
             Self::Pyramid => "Pyramid",
@@ -63,9 +66,7 @@ impl GameMode {
 
 
     /// Select the immutable geometry and detection policy for this game.
-    pub const fn profile(self) -> &'static GameProfile {
-
-
+    pub(crate) const fn profile(self) -> &'static GameProfile {
         match self {
             Self::TriPeaks => &crate::tripeaks::PROFILE,
             Self::Pyramid => &crate::pyramid::PROFILE,
@@ -78,7 +79,10 @@ impl GameMode {
 
     /// Whether this mode has enough approved evidence to send guest input.
     pub const fn input_authorised(self) -> bool {
-        matches!(self, Self::TriPeaks | Self::Pyramid | Self::Klondike | Self::FreeCell | Self::Spider)
+        matches!(
+            self,
+            Self::TriPeaks | Self::Pyramid | Self::Klondike | Self::FreeCell | Self::Spider
+        )
     }
 
 
@@ -90,8 +94,6 @@ impl GameMode {
 
 
 impl fmt::Display for GameMode {
-
-
     /// Format the game using its stable UI label.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(self.label())
@@ -197,12 +199,8 @@ pub enum ActionTarget {
 
 
 impl ActionTarget {
-
-
     /// Identify which game calibration owns this action target.
     pub const fn mode(self) -> GameMode {
-
-
         match self {
             Self::Bottom { .. } | Self::Tableau(_) => GameMode::TriPeaks,
             Self::Pyramid(_) => GameMode::Pyramid,
@@ -215,12 +213,8 @@ impl ActionTarget {
 
 
 impl fmt::Display for ActionTarget {
-
-
     /// Format the selected target with enough geometry to identify it in logs.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-
-
         match self {
             Self::Bottom { label, .. } => formatter.write_str(label),
             Self::Pyramid(kind) => write!(formatter, "Pyramid {kind}"),
@@ -318,8 +312,6 @@ pub struct GuidedAction {
 
 
 impl GuidedAction {
-
-
     /// Return the single guest-input operation associated with the recommendation.
     pub const fn operation(self) -> InputOperation {
         self.specification.operation
@@ -346,8 +338,6 @@ impl GuidedAction {
 
     /// Select the configured delay for this action class from the run settings.
     pub const fn animation_settle_delay(self, delays: AnimationSettleDelays) -> Duration {
-
-
         match self.specification.animation_class {
             AnimationClass::Draw => delays.draw,
             AnimationClass::Tableau => delays.tableau,
@@ -364,8 +354,6 @@ impl GuidedAction {
 
     /// Total the deliberate key hold or pointer settling and mouse hold time.
     pub fn intentional_input_wait(self) -> Duration {
-
-
         match self.operation() {
             InputOperation::PressDrawKey => KEY_HOLD,
             InputOperation::Click(_) => POINTER_SETTLE_DELAY + MOUSE_HOLD,
@@ -375,8 +363,6 @@ impl GuidedAction {
 
     /// Return the cursor exclusion square for click effects when the profile requests it.
     pub const fn effect_exclusion_bounds(self) -> Option<PixelRect> {
-
-
         let InputOperation::Click(click_point) = self.operation() else {
             return None;
         };
@@ -398,8 +384,6 @@ impl GuidedAction {
 
     /// Count QMP commands in one successful, unretried input sequence.
     pub const fn qmp_command_count(self) -> usize {
-
-
         match self.operation() {
             InputOperation::PressDrawKey => 2,
             InputOperation::Click(_) => 3,
@@ -409,8 +393,6 @@ impl GuidedAction {
 
     /// Count guest input events carried by one successful input sequence.
     pub const fn qmp_event_count(self) -> usize {
-
-
         match self.operation() {
             InputOperation::PressDrawKey => 2,
             InputOperation::Click(_) => 4,
@@ -457,8 +439,6 @@ pub struct GameProfile {
 
 
 impl GameProfile {
-
-
     /// Return the number of tableau rows represented by the selected mode.
     pub const fn row_count(self) -> u8 {
         self.tableau_row_count
@@ -468,8 +448,6 @@ impl GameProfile {
     /// Build the valid row-bit mask used by calibration and stale-state tests.
     #[cfg(test)]
     pub const fn valid_row_bits(self) -> u8 {
-
-
         if self.row_count() >= u8::BITS as u8 {
             u8::MAX
         } else {
@@ -555,9 +533,15 @@ mod tests {
             assert!(is_classic_blue_back(rgb), "supported CLASSIC blue {rgb:?}");
         }
         for rgb in [
-            [59, 84, 99], [61, 85, 100], [60, 86, 100],
-            [221, 67, 67], [235, 195, 90], [20, 120, 75], [255, 255, 255],
-            [0, 0, 0], [100, 100, 100],
+            [59, 84, 99],
+            [61, 85, 100],
+            [60, 86, 100],
+            [221, 67, 67],
+            [235, 195, 90],
+            [20, 120, 75],
+            [255, 255, 255],
+            [0, 0, 0],
+            [100, 100, 100],
         ] {
             assert!(!is_classic_blue_back(rgb), "outside CLASSIC blue {rgb:?}");
         }
@@ -581,14 +565,22 @@ mod tests {
 
     /// Keep the initial mode, selectable modes and authorised calibration contracts stable.
 
-
     #[test]
     fn tripeaks_remains_the_default_with_five_independent_modes() {
         let mode = GameMode::default();
         let profile = mode.profile();
 
         assert_eq!(mode, GameMode::TriPeaks);
-        assert_eq!(GameMode::AVAILABLE, [GameMode::Klondike, GameMode::Spider, GameMode::FreeCell, GameMode::Pyramid, GameMode::TriPeaks]);
+        assert_eq!(
+            GameMode::AVAILABLE,
+            [
+                GameMode::Klondike,
+                GameMode::Spider,
+                GameMode::FreeCell,
+                GameMode::Pyramid,
+                GameMode::TriPeaks
+            ]
+        );
         assert!(GameMode::TriPeaks.input_authorised());
         assert!(!GameMode::TriPeaks.calibration_only());
         assert!(GameMode::Pyramid.input_authorised());
@@ -606,7 +598,6 @@ mod tests {
 
 
     /// Keep Pyramid target analysis separate while sharing the accepted progress probe.
-
 
     #[test]
     fn pyramid_uses_its_own_detector_and_the_shared_progress_calibration() {
@@ -630,7 +621,6 @@ mod tests {
 
 
     /// Check TriPeaks repeat policies and per-action configured settling delays.
-
 
     #[test]
     fn repeated_bottom_actions_and_tableau_actions_have_distinct_policies() {

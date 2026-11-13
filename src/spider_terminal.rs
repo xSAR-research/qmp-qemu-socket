@@ -32,8 +32,6 @@ pub enum TerminalStage {
 
 
 impl fmt::Display for TerminalStage {
-
-
     /// Name the expected Spider control without inferring preceding input effect.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
@@ -48,8 +46,6 @@ impl fmt::Display for TerminalStage {
 
 /// Convert only the shared control identity; Spider retains its flow and logs.
 const fn shared_stage(stage: TerminalStage) -> SharedStage {
-
-
     match stage {
         TerminalStage::Score => SharedStage::Score,
         TerminalStage::LevelUp => SharedStage::LevelUp,
@@ -111,7 +107,10 @@ mod tests {
 
     /// Decode byte-identical native Spider terminal/deal evidence.
     fn fixture(number: u8) -> CapturedFrame {
-        let path = format!("{}/tests/fixtures/spider-SP{number:02}.png", env!("CARGO_MANIFEST_DIR"));
+        let path = format!(
+            "{}/tests/fixtures/spider-SP{number:02}.png",
+            env!("CARGO_MANIFEST_DIR")
+        );
         decode_png(&std::fs::read(path).unwrap()).unwrap()
     }
 
@@ -119,22 +118,32 @@ mod tests {
     /// Each evidenced screen admits only its own local expected control.
     #[test]
     fn native_spider_terminal_controls_and_independent_win_entry() {
-
-
-        for (number, expected) in [(15, TerminalStage::Score),
-            (17, TerminalStage::NewGame), (18, TerminalStage::Play),
-            (20, TerminalStage::LevelUp)] {
+        for (number, expected) in [
+            (15, TerminalStage::Score),
+            (17, TerminalStage::NewGame),
+            (18, TerminalStage::Play),
+            (20, TerminalStage::LevelUp),
+        ] {
             let frame = fixture(number);
 
 
-            for stage in [TerminalStage::Score, TerminalStage::LevelUp,
-                TerminalStage::NewGame, TerminalStage::Play] {
-                assert_eq!(expected_control_ready(&frame, stage).unwrap(), stage == expected,
-                    "SP{number:02} / {stage}");
+            for stage in [
+                TerminalStage::Score,
+                TerminalStage::LevelUp,
+                TerminalStage::NewGame,
+                TerminalStage::Play,
+            ] {
+                assert_eq!(
+                    expected_control_ready(&frame, stage).unwrap(),
+                    stage == expected,
+                    "SP{number:02} / {stage}"
+                );
             }
-            assert_eq!(classify_win_entry(&frame).unwrap(),
+            assert_eq!(
+                classify_win_entry(&frame).unwrap(),
                 matches!(expected, TerminalStage::Score | TerminalStage::NewGame)
-                    .then_some(expected));
+                    .then_some(expected)
+            );
         }
         assert_eq!(classify_win_entry(&fixture(19)).unwrap(), None);
     }
@@ -144,11 +153,26 @@ mod tests {
     #[test]
     fn play_layouts_use_their_games_measured_points() {
         let freecell = decode_png(include_bytes!("../tests/fixtures/freecell-FC12.png")).unwrap();
-        assert_eq!(expected_control_point(&freecell, TerminalStage::Play).unwrap(), PixelPoint::new(0, 0));
-        assert_eq!(freecell_terminal::expected_control_point(&freecell, SharedStage::Play).unwrap(), PixelPoint::new(680, 762));
-        assert_eq!(freecell_terminal::expected_control_point(&fixture(18), SharedStage::Play).unwrap(), PixelPoint::new(0, 0));
-        assert_eq!(expected_control_point(&fixture(18), TerminalStage::Play).unwrap(), PixelPoint::new(679, 862));
-        assert_eq!(expected_control_point(&fixture(17), TerminalStage::NewGame).unwrap(), PixelPoint::new(863, 862));
+        assert_eq!(
+            expected_control_point(&freecell, TerminalStage::Play).unwrap(),
+            PixelPoint::new(0, 0)
+        );
+        assert_eq!(
+            freecell_terminal::expected_control_point(&freecell, SharedStage::Play).unwrap(),
+            PixelPoint::new(680, 762)
+        );
+        assert_eq!(
+            freecell_terminal::expected_control_point(&fixture(18), SharedStage::Play).unwrap(),
+            PixelPoint::new(0, 0)
+        );
+        assert_eq!(
+            expected_control_point(&fixture(18), TerminalStage::Play).unwrap(),
+            PixelPoint::new(679, 862)
+        );
+        assert_eq!(
+            expected_control_point(&fixture(17), TerminalStage::NewGame).unwrap(),
+            PixelPoint::new(863, 862)
+        );
     }
 
 
@@ -165,14 +189,18 @@ mod tests {
     /// Native Level Up positions produce their own measured black-run clicks.
     #[test]
     fn level_up_locations_are_measured_without_win_authority() {
-        let current = decode_png(include_bytes!("../tests/fixtures/spider-level-up-505.png")).unwrap();
+        let current =
+            decode_png(include_bytes!("../tests/fixtures/spider-level-up-505.png")).unwrap();
         let legacy = decode_png(include_bytes!("../tests/fixtures/freecell-FC10.png")).unwrap();
         for (frame, expected) in [
             (legacy, PixelPoint::new(941, 822)),
             (fixture(20), PixelPoint::new(942, 803)),
             (current, PixelPoint::new(944, 771)),
         ] {
-            assert_eq!(expected_control_point(&frame, TerminalStage::LevelUp).unwrap(), expected);
+            assert_eq!(
+                expected_control_point(&frame, TerminalStage::LevelUp).unwrap(),
+                expected
+            );
             assert_eq!(classify_win_entry(&frame).unwrap(), None);
         }
     }
@@ -188,8 +216,10 @@ mod tests {
         assert!(frame.as_view().is_ok());
         assert!(SPIDER_CONTROLS.spec(Control::Ok).bounds.right() <= frame.width);
         assert!(SPIDER_CONTROLS.spec(Control::Ok).bounds.bottom() <= frame.height);
-        assert!(matches!(expected_control_point(&frame, TerminalStage::LevelUp),
-            Err(HaloDetectionError::InvalidFrameLayout)));
+        assert!(matches!(
+            expected_control_point(&frame, TerminalStage::LevelUp),
+            Err(HaloDetectionError::InvalidFrameLayout)
+        ));
     }
 
 
@@ -204,15 +234,20 @@ mod tests {
                 frame.pixels[index..index + 4].copy_from_slice(&[1, 1, 1, 255]);
             }
         }
-        assert_eq!(expected_control_point(&frame, TerminalStage::LevelUp).unwrap(), PixelPoint::new(0, 0));
+        assert_eq!(
+            expected_control_point(&frame, TerminalStage::LevelUp).unwrap(),
+            PixelPoint::new(0, 0)
+        );
         assert!(!expected_control_ready(&frame, TerminalStage::LevelUp).unwrap());
         assert_eq!(classify_win_entry(&frame).unwrap(), None);
 
         for pixel in frame.pixels.as_chunks_mut::<4>().0 {
             pixel.copy_from_slice(&[0, 0, 0, 255]);
         }
-        assert_eq!(expected_control_point(&frame, TerminalStage::LevelUp).unwrap(),
-            PixelPoint::new(bounds.x as i32, (bounds.bottom() - 1) as i32));
+        assert_eq!(
+            expected_control_point(&frame, TerminalStage::LevelUp).unwrap(),
+            PixelPoint::new(bounds.x as i32, (bounds.bottom() - 1) as i32)
+        );
         assert_eq!(classify_win_entry(&frame).unwrap(), None);
     }
 }

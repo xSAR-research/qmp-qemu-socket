@@ -124,11 +124,7 @@ fn pyramid_move_frame(with_halo: bool) -> CapturedFrame {
 
 
     for y in [169, 207, 245, 283, 321, 359] {
-
-
         for line in y..y + 2 {
-
-
             for x in 1_816..1_884 {
                 let offset = line as usize * frame.stride + x as usize * 4;
                 frame.pixels[offset..offset + 4].copy_from_slice(&[255; 4]);
@@ -143,8 +139,6 @@ fn pyramid_move_frame(with_halo: bool) -> CapturedFrame {
 
 
         for y in halo.y..halo.bottom() {
-
-
             for x in halo.x..halo.right() {
                 let offset = y as usize * frame.stride + x as usize * 4;
                 frame.pixels[offset..offset + 4].copy_from_slice(&[237, 207, 109, 255]);
@@ -162,8 +156,6 @@ fn tripeaks_stock_frame(with_halo: bool) -> CapturedFrame {
 
 
     for y in felt.y..felt.bottom() {
-
-
         for x in felt.x..felt.right() {
             let offset = y as usize * frame.stride + x as usize * 4;
             frame.pixels[offset..offset + 4].copy_from_slice(&[20, 140, 60, 255]);
@@ -201,11 +193,7 @@ fn tripeaks_level_up_frame() -> CapturedFrame {
 
 /// Erase a narrow probe without changing any other part of a fixture.
 fn erase_reward_probe(frame: &mut CapturedFrame, bounds: PixelRect) {
-
-
     for y in bounds.y..bounds.bottom() {
-
-
         for x in bounds.x..bounds.right() {
             let offset = y as usize * frame.stride + x as usize * 4;
             frame.pixels[offset..offset + 4].copy_from_slice(&[0, 0, 0, 255]);
@@ -570,8 +558,6 @@ fn initial_recovery_frame(mode: GameMode, with_halo: bool) -> CapturedFrame {
 
 
     for y in face.y..face.bottom() {
-
-
         for x in face.x..face.right() {
             let offset = y as usize * frame.stride + x as usize * 4;
             frame.pixels[offset..offset + 4].copy_from_slice(&[255; 4]);
@@ -688,11 +674,7 @@ impl InitialRecoveryIo for StartupTestIo {
 /// A target in the initial or delayed fresh frame needs no Solver setup in either mode.
 #[test]
 fn initial_no_halo_request_adopts_fresh_or_delayed_canonical_target() {
-
-
     for mode in [GameMode::TriPeaks, GameMode::Pyramid] {
-
-
         for no_halo_frames in 0..=3 {
             let mut frames: Vec<_> = (0..no_halo_frames)
                 .map(|_| initial_recovery_frame(mode, false))
@@ -716,8 +698,6 @@ fn initial_no_halo_request_adopts_fresh_or_delayed_canonical_target() {
 /// One Solver setup precedes an immediate capture; it returns one gameplay plan without spending it.
 #[test]
 fn initial_no_halo_solver_setup_then_fresh_target_preserves_step_once_budget() {
-
-
     for mode in [GameMode::TriPeaks, GameMode::Pyramid] {
         let settings = StepRunSettings::new(
             crate::parameters::AnimationSettleDelays::default(),
@@ -751,8 +731,6 @@ fn initial_no_halo_solver_setup_then_fresh_target_preserves_step_once_budget() {
 /// Persistent absence exhausts exactly eight captures, six delays and one consumed setup.
 #[test]
 fn initial_no_halo_absence_after_solver_stops_at_exact_budget() {
-
-
     for mode in [GameMode::TriPeaks, GameMode::Pyramid] {
         let frames = (0..8)
             .map(|_| initial_recovery_frame(mode, false))
@@ -774,8 +752,6 @@ fn initial_no_halo_absence_after_solver_stops_at_exact_budget() {
 /// Empty, unsupported and unknown Pyramid occupancy cannot enable Solver by row-mask inference.
 #[test]
 fn initial_no_halo_solver_requires_latest_positive_nonempty_scene() {
-
-
     for mode in [GameMode::TriPeaks, GameMode::Pyramid] {
         let empty = match mode {
             GameMode::TriPeaks => tripeaks_stock_frame(false),
@@ -793,8 +769,6 @@ fn initial_no_halo_solver_requires_latest_positive_nonempty_scene() {
 
 
             for y in slot.bounds.y + 178..slot.bounds.y + 182 {
-
-
                 for x in slot.bounds.x + 40..slot.bounds.x + 100 {
                     let offset = y as usize * unknown.stride + x as usize * 4;
                     unknown.pixels[offset..offset + 4].copy_from_slice(&[100, 100, 100, 255]);
@@ -833,11 +807,7 @@ fn initial_no_halo_solver_requires_latest_positive_nonempty_scene() {
 /// Cancellation at each startup boundary retains the latest pixels and permits no later input.
 #[test]
 fn initial_no_halo_stop_before_during_or_after_capture_and_solver_is_final() {
-
-
     for mode in [GameMode::TriPeaks, GameMode::Pyramid] {
-
-
         for boundary in 0..4 {
             let mut io = StartupTestIo::new(mode, vec![initial_recovery_frame(mode, false); 8]);
 
@@ -871,8 +841,6 @@ fn initial_no_halo_stop_before_during_or_after_capture_and_solver_is_final() {
 /// Uncertain Solver acknowledgement consumes the reservation and cannot trigger another capture/input.
 #[test]
 fn initial_no_halo_uncertain_solver_delivery_is_not_retried() {
-
-
     for mode in [GameMode::TriPeaks, GameMode::Pyramid] {
         let mut io = StartupTestIo::new(mode, vec![initial_recovery_frame(mode, false); 8]);
         io.solver_error = true;
@@ -900,8 +868,6 @@ fn initial_no_halo_fresh_target_must_be_canonical_and_unique() {
 
 
     for mode in [GameMode::TriPeaks, GameMode::Pyramid] {
-
-
         for prediction in [
             PredictedAction::Action(forged),
             PredictedAction::Action(
@@ -925,8 +891,6 @@ fn initial_no_halo_fresh_target_must_be_canonical_and_unique() {
 /// Explicit Single Step requests queue NoHighlight as recovery authority while freezing a one-action limit.
 #[test]
 fn initial_no_halo_step_once_request_reaches_worker_with_one_gameplay_slot() {
-
-
     for mode in [GameMode::TriPeaks, GameMode::Pyramid] {
         let (command_tx, command_rx) = mpsc::channel();
         let (_events, event_rx) = mpsc::channel();
@@ -1181,8 +1145,6 @@ fn freecell_native_capture_rejects_unknown_scene_and_malformed_storage() {
 /// A stale foreign preview cannot bypass Free Cell's fresh QMP acquisition boundary.
 #[test]
 fn freecell_execution_request_cannot_execute_a_foreign_preview_without_capture() {
-
-
     for operation_limit in [0, 1] {
         let (events, receiver) = mpsc::channel();
         let sink = WorkerEventSink {
@@ -1531,8 +1493,6 @@ fn dialog_observation(variants: &[PostGameControlVariant]) -> FrameObservation {
 /// Intermediate previews expose exact pixels while preserving actionable controller analysis.
 #[test]
 fn intermediate_legacy_capture_preserves_controller_prediction_without_preview_authority() {
-
-
     for (mode, frame) in [
         (GameMode::TriPeaks, tripeaks_stock_frame(true)),
         (GameMode::Pyramid, pyramid_move_frame(true)),
@@ -1579,8 +1539,6 @@ fn intermediate_legacy_capture_preserves_controller_prediction_without_preview_a
 /// Missing-HALO re-observations replace stale previews without growing an image queue.
 #[test]
 fn intermediate_legacy_missing_halo_captures_keep_only_latest_pixels() {
-
-
     for (mode, frame) in [
         (GameMode::TriPeaks, tripeaks_stock_frame(false)),
         (GameMode::Pyramid, pyramid_move_frame(false)),
@@ -1621,8 +1579,6 @@ fn intermediate_legacy_missing_halo_captures_keep_only_latest_pixels() {
 /// A decoded non-native frame remains inspectable even when calibrated analysis rejects it.
 #[test]
 fn intermediate_legacy_capture_retains_pixels_when_analysis_rejects_dimensions() {
-
-
     for mode in [GameMode::TriPeaks, GameMode::Pyramid] {
         let state = TableauScanState::for_mode(mode);
         let context = vision_context("/tmp/current-qmp.sock", mode);
@@ -2177,8 +2133,6 @@ fn post_game_retry_budgets_stop_at_the_configured_limits() {
 /// Check the initial score-skip click consumes budget and a fourth attempt is refused.
 #[test]
 fn score_skip_budget_counts_the_initial_click_and_stops_before_a_fourth() {
-
-
     for completed_attempts in 0..SCORE_SKIP_MAX_CLICK_ATTEMPTS {
         assert_eq!(require_score_skip_click_budget(completed_attempts), Ok(()));
     }
@@ -2255,8 +2209,6 @@ fn cursor_sized_change_does_not_meet_the_material_effect_floor() {
 
 
     for y in 0..48usize {
-
-
         for x in 0..32usize {
             let offset = y * after.stride + x * 4;
             after.pixels[offset..offset + 3].fill(255);
@@ -2500,12 +2452,8 @@ fn tripeaks_missing_halo_has_one_solver_refresh_and_two_bounded_budgets() {
 
 
     for _ in 0..20 {
-
-
         match recovery.next_missing_halo(true) {
             TriPeaksHaloRecoveryStep::Observe { after_solver, .. } => {
-
-
                 if after_solver {
                     delayed_after_solver += 1;
                 } else {
@@ -2586,7 +2534,6 @@ fn pyramid_move_key_plan_keeps_pointer_unchanged_and_uses_two_events() {
         "Pyramid MOVE/Recycle via qcode D; pointer unchanged",
     );
 }
-
 
 
 /// Spider capture has no inherited three-board progress or blank-frame input authority.
@@ -2774,6 +2721,7 @@ mod tripeaks_reward_qmp_regressions {
         });
         let mut operations = Session::new(io);
         operations.screen_capture().unwrap();
+        assert!(operations.io().last_timing.is_some());
         if stop_after_probe {
             assert!(matches!(
                 operations.mouse_left_click(point),

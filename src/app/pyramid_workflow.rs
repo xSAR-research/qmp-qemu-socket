@@ -6,8 +6,9 @@
 use super::*;
 use crate::pyramid_diagnostics::{PyramidDiagnostic, PyramidPhase};
 use crate::pyramid_workflow_model::{
-    ObservedGame, PlanningProgress, RouteGoal, RouteMethod, SessionCompletion, SessionPhase,
-    SessionProgress, SessionRequest, StopCondition, WorkflowMode,
+    FreeCellPlayStyle, FreeCellSessionCompletion, FreeCellSessionProgress, FreeCellSessionRequest,
+    ObservedGame, PlanningProgress, RouteGoal, RouteMethod, RunTermination, SessionCompletion,
+    SessionPhase, SessionProgress, SessionRequest, StopCondition, WorkflowMode,
 };
 
 
@@ -61,6 +62,96 @@ fn pyramid_option_pair<R>(
             add_combo(ui)
         },
     )
+}
+
+
+/// Selection transition emitted by the A* header drop-down row.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum IndependentHeaderChange {
+    /// Operator switched solving strategy (`Computer Vision` <-> `A* Route Solution`).
+    Strategy(SolvingStrategy),
+    /// Operator switched game mode while keeping the active solving strategy.
+    Game(GameMode),
+}
+
+
+/// Resolve at most one header transition, giving strategy changes precedence so switching
+/// back to `Computer Vision` never clobbers `computer_vision_game_mode`.
+pub(super) fn resolve_independent_header_change(
+    current_strategy: SolvingStrategy,
+    selected_strategy: SolvingStrategy,
+    current_game: GameMode,
+    selected_game: GameMode,
+) -> Option<IndependentHeaderChange> {
+    if selected_strategy != current_strategy {
+        Some(IndependentHeaderChange::Strategy(selected_strategy))
+    } else if selected_game != current_game {
+        Some(IndependentHeaderChange::Game(selected_game))
+    } else {
+        None
+    }
+}
+
+
+/// Render the A* header solution-method (left) and game-type (right) drop-downs in one aligned wrapping row.
+///
+/// Uses a single outer enablement gate, pre-reserved `ComboBox` cells matching `top_bar_selection`
+/// so `egui` wraps cleanly before the activity badge on narrow viewports, and identical `row_height`
+/// so both drop-downs align vertically on wide viewports.
+pub(super) fn independent_selection_row(
+    ui: &mut egui::Ui,
+    idle: bool,
+    strategy: &mut SolvingStrategy,
+    game: &mut GameMode,
+) -> [egui::Response; 2] {
+    let max_width = ui.available_width().max(0.0);
+    let combo_width = ui.spacing().combo_width.min(max_width);
+    let text_height = ui.text_style_height(&egui::TextStyle::Button);
+    let row_height = (text_height.max(ui.spacing().icon_width)
+        + 2.0 * ui.spacing().button_padding.y)
+        .max(ui.spacing().interact_size.y);
+    ui.add_enabled_ui(idle, |ui| {
+        ui.horizontal_wrapped(|ui| {
+            ui.set_row_height(row_height);
+            let strategy_response = ui
+                .allocate_ui_with_layout(
+                    egui::vec2(combo_width, row_height),
+                    egui::Layout::top_down(egui::Align::Min),
+                    |ui| {
+                        egui::ComboBox::from_id_salt("pyramid-strategy")
+                            .width(combo_width)
+                            .selected_text(strategy.label())
+                            .show_ui(ui, |ui| {
+                                for option in SolvingStrategy::AVAILABLE {
+                                    ui.selectable_value(strategy, option, option.label());
+                                }
+                            })
+                            .response
+                    },
+                )
+                .inner;
+            let game_response = ui
+                .allocate_ui_with_layout(
+                    egui::vec2(combo_width, row_height),
+                    egui::Layout::top_down(egui::Align::Min),
+                    |ui| {
+                        egui::ComboBox::from_id_salt("independent-game-type")
+                            .width(combo_width)
+                            .selected_text(game.label())
+                            .show_ui(ui, |ui| {
+                                for mode in GameMode::AVAILABLE {
+                                    ui.selectable_value(game, mode, mode.label());
+                                }
+                            })
+                            .response
+                    },
+                )
+                .inner;
+            [strategy_response, game_response]
+        })
+        .inner
+    })
+    .inner
 }
 
 
@@ -125,6 +216,43 @@ pub(super) fn pyramid_options_row(
                                 ui.selectable_value(stop_condition, option, option.label());
                             }
                         });
+                },
+            );
+        });
+    });
+}
+
+
+/// Render the Free Cell play-style (`Mode`) and transfer-policy option pairs consistently.
+pub(super) fn freecell_options_row(
+    ui: &mut egui::Ui,
+    idle: bool,
+    play_style: &mut FreeCellPlayStyle,
+    auto_mode: &mut crate::freecell_route::AutoMode,
+) {
+    ui.add_enabled_ui(idle, |ui| {
+        ui.horizontal_wrapped(|ui| {
+            pyramid_option_pair(ui, "Mode", play_style.label(), true, |ui| {
+                egui::ComboBox::from_id_salt("freecell-play-style")
+                    .selected_text(play_style.label())
+                    .wrap_mode(egui::TextWrapMode::Extend)
+                    .show_ui(ui, |ui| {
+                        for option in FreeCellPlayStyle::ALL {
+                            ui.selectable_value(play_style, option, option.label());
+                        }
+                    });
+            });
+            pyramid_option_pair(
+                ui,
+                "Transfer policy",
+                super::freecell_route::auto_mode_label(*auto_mode),
+                true,
+                |ui| {
+                    super::freecell_route::auto_mode_combo(
+                        ui,
+                        "freecell-session-auto-mode",
+                        auto_mode,
+                    );
                 },
             );
         });
@@ -871,6 +999,30 @@ pub(super) fn complete_route(
 }
 
 
+/// Reconcile generic worker readiness after an automatic session completes or is stopped.
+fn next_session_worker_state(
+    state: WorkerState,
+    termination: RunTermination,
+    failed: bool,
+    stopped: bool,
+) -> WorkerState {
+    if state == WorkerState::Detached {
+        return WorkerState::Detached;
+    }
+    if termination == RunTermination::OperatorStopped {
+        if matches!(state, WorkerState::Error | WorkerState::Uncertain) {
+            state
+        } else {
+            WorkerState::Ready
+        }
+    } else if failed || stopped {
+        WorkerState::Uncertain
+    } else {
+        WorkerState::Ready
+    }
+}
+
+
 /// Release only the current automatic session, preserving detached and STOP semantics.
 pub(super) fn complete_session(
     workflow: &mut PyramidWorkflow,
@@ -905,21 +1057,165 @@ pub(super) fn complete_session(
     workflow.session = None;
     workflow.finish_search();
     *owner = None;
-    if *state != WorkerState::Detached {
-        *state = if completion.termination
-            == crate::pyramid_workflow_model::RunTermination::OperatorStopped
-        {
-            if matches!(*state, WorkerState::Error | WorkerState::Uncertain) {
-                *state
-            } else {
-                WorkerState::Ready
-            }
-        } else if completion.result.is_err() || stopped {
-            WorkerState::Uncertain
-        } else {
-            WorkerState::Ready
-        };
+    *state = next_session_worker_state(
+        *state,
+        completion.termination,
+        completion.result.is_err(),
+        stopped,
+    );
+    true
+}
+
+
+/// Advisory UI presentation and selection state for automatic Free Cell normal-game sessions.
+#[derive(Default)]
+pub(super) struct FreeCellWorkflow {
+    /// Selected Free Cell `Mode` drop-down choice (`ContinuousNormalGames` default).
+    pub(super) play_style: FreeCellPlayStyle,
+    /// Controller identity that owns the retained session summary or active request.
+    context: Option<ControllerContext>,
+    /// Active worker session identity while [`ActiveRun::FreeCellSession`] owns the UI.
+    active_run_id: Option<u64>,
+    /// Strictly monotonic request counter, never reset on idle mode/context changes.
+    next_run_id: u64,
+    /// Most recent worker-reported Free Cell session phase.
+    phase: Option<SessionPhase>,
+    /// One-based board cycle index reported by the active or latest Free Cell session.
+    deal_generation: u64,
+    /// Verified 52-card victories completed during the active or latest session.
+    completed_games: usize,
+    /// Most recent foundation card count (`0..=52`) during search or execution.
+    foundation_cards: Option<u8>,
+    /// Latest route playback cursor `(completed, total)` during execution.
+    route_cursor: Option<(usize, usize)>,
+    /// Latest A* expanded-state count reported during planning.
+    expanded_states: Option<u64>,
+    /// Exported JSON deal path from the active or latest Recon cycle.
+    export_path: Option<std::path::PathBuf>,
+    /// Populated when Option 2A proves an untouched deal unsolvable (`< 52`) with zero clicks.
+    pub(super) unsolvable_foundation_cards: Option<u8>,
+    /// Final human-readable session summary or failure report.
+    pub(super) report: Option<String>,
+}
+
+
+impl FreeCellWorkflow {
+    /// Reset idle display fields when the active controller context changes, keeping `play_style`.
+    pub(super) fn bind(&mut self, context: &ControllerContext) {
+        if self.active_run_id.is_some() {
+            return;
+        }
+        if self.context.as_ref() != Some(context) {
+            self.context = Some(context.clone());
+            self.phase = None;
+            self.deal_generation = 0;
+            self.completed_games = 0;
+            self.foundation_cards = None;
+            self.route_cursor = None;
+            self.expanded_states = None;
+            self.export_path = None;
+            self.unsolvable_foundation_cards = None;
+            self.report = None;
+        }
     }
+
+    /// Map active session phase into the top-left badge without inferring authority.
+    pub(super) fn activity_phase(&self, context: &ControllerContext) -> Option<PyramidPhase> {
+        if self.context.as_ref() != Some(context) {
+            return None;
+        }
+        self.phase.map(session_diagnostic_phase)
+    }
+
+    /// Reserve a monotonic Free Cell session request ID and clear prior idle banners.
+    pub(super) fn begin_run(&mut self, context: &ControllerContext) -> Result<u64, String> {
+        let run_id = self
+            .next_run_id
+            .checked_add(1)
+            .ok_or("Free Cell session request identity exhausted")?;
+        self.next_run_id = run_id;
+        self.context = Some(context.clone());
+        self.active_run_id = Some(run_id);
+        self.phase = Some(SessionPhase::Entry);
+        self.deal_generation = 0;
+        self.completed_games = 0;
+        self.foundation_cards = None;
+        self.route_cursor = None;
+        self.expanded_states = None;
+        self.export_path = None;
+        self.unsolvable_foundation_cards = None;
+        self.report = None;
+        Ok(run_id)
+    }
+
+    /// Accept advisory progress only for the currently active Free Cell session and context.
+    pub(super) fn receive_session_progress(
+        &mut self,
+        progress: &FreeCellSessionProgress,
+        context: &ControllerContext,
+        owner: Option<ActiveRun>,
+    ) -> bool {
+        if owner != Some(ActiveRun::FreeCellSession)
+            || &progress.context != context
+            || self.context.as_ref() != Some(context)
+            || self.active_run_id != Some(progress.run_id)
+        {
+            return false;
+        }
+        self.phase = Some(progress.phase);
+        self.deal_generation = progress.deal_generation;
+        self.completed_games = progress.completed_games;
+        if progress.foundation_cards.is_some() {
+            self.foundation_cards = progress.foundation_cards;
+        }
+        if progress.route_cursor.is_some() {
+            self.route_cursor = progress.route_cursor;
+        }
+        if progress.expanded_states.is_some() {
+            self.expanded_states = progress.expanded_states;
+        }
+        if progress.export_path.is_some() {
+            self.export_path = progress.export_path.clone();
+        }
+        true
+    }
+}
+
+
+/// Release the active Free Cell automatic session and reconcile generic worker state.
+pub(super) fn complete_freecell_session(
+    workflow: &mut FreeCellWorkflow,
+    owner: &mut Option<ActiveRun>,
+    state: &mut WorkerState,
+    completion: &FreeCellSessionCompletion,
+    context: &ControllerContext,
+    stopped: bool,
+) -> bool {
+    if completion.context != *context
+        || workflow.context.as_ref() != Some(context)
+        || *owner != Some(ActiveRun::FreeCellSession)
+        || workflow.active_run_id != Some(completion.run_id)
+    {
+        return false;
+    }
+    workflow.active_run_id = None;
+    workflow.phase = None;
+    workflow.completed_games = completion.completed_games;
+    if completion.export_path.is_some() {
+        workflow.export_path = completion.export_path.clone();
+    }
+    workflow.unsolvable_foundation_cards = completion.unsolvable_foundation_cards;
+    workflow.report = Some(completion.result.as_ref().map_or_else(
+        |error| format!("Free Cell session stopped: {error}"),
+        Clone::clone,
+    ));
+    *owner = None;
+    *state = next_session_worker_state(
+        *state,
+        completion.termination,
+        completion.result.is_err(),
+        stopped,
+    );
     true
 }
 
@@ -1213,9 +1509,15 @@ impl QmpQemuSocketApp {
         }
         let stop_enabled =
             (self.active_run.is_some() || self.worker_state.is_busy()) && !self.stop_requested;
-        if bevel_button(ui, "STOP", STATE_RED, false, stop_enabled).clicked()
-            && let Err(error) = self.request_stop()
-        {
+        if bevel_button(ui, "STOP", STATE_RED, false, stop_enabled).clicked() {
+            self.request_independent_stop();
+        }
+    }
+
+
+    /// Share the existing STOP request and failure presentation across row controls.
+    fn request_independent_stop(&mut self) {
+        if let Err(error) = self.request_stop() {
             self.worker_state = WorkerState::Error;
             self.current_status = "Stop request failed".to_owned();
             let phase = self
@@ -1235,51 +1537,239 @@ impl QmpQemuSocketApp {
     }
 
 
+    /// Dispatch one automatic Free Cell session under the current controller context.
+    fn press_freecell_session(&mut self) {
+        let context = self.current_preview_context();
+        if !self.freecell_workflow.play_style.uses_session() {
+            return;
+        }
+        let run_id = match self.freecell_workflow.begin_run(&context) {
+            Ok(id) => id,
+            Err(error) => {
+                self.failure_window.general(
+                    "Free Cell session",
+                    &error,
+                    serde_json::json!({"mode": self.freecell_workflow.play_style.label()}),
+                );
+                return;
+            }
+        };
+        self.active_run = Some(ActiveRun::FreeCellSession);
+        self.worker_state = WorkerState::Validating;
+        self.current_status = format!(
+            "Starting Free Cell {}…",
+            self.freecell_workflow.play_style.label()
+        );
+        self.invalidate_preview();
+        let request = FreeCellSessionRequest {
+            run_id,
+            play_style: self.freecell_workflow.play_style,
+            auto_mode: self.freecell_playback.mode,
+            settle: std::time::Duration::from_millis(self.freecell_settle_ms),
+        };
+        self.push_log(format!(
+            "Explicit Free Cell {} start requested (transfer policy: {}).",
+            request.play_style.label(),
+            super::freecell_route::auto_mode_label(request.auto_mode),
+        ));
+        if let Err(error) = self.worker.start_freecell_session(context, request) {
+            self.freecell_workflow.active_run_id = None;
+            self.freecell_workflow.phase = None;
+            self.active_run = None;
+            self.worker_state = WorkerState::Error;
+            self.current_status = "Free Cell session dispatch failed".to_owned();
+            let message = format!("Free Cell session request was not accepted: {error}");
+            self.freecell_workflow.report = Some(message.clone());
+            self.push_log(message.clone());
+            self.failure_window.general(
+                "Free Cell session",
+                &message,
+                serde_json::json!({"mode": self.freecell_workflow.play_style.label()}),
+            );
+        }
+    }
+
+
+    /// Render shared cooperative `Pause`/`Continue` and `Cancel` buttons plus pause status.
+    fn session_pause_cancel_controls(&mut self, ui: &mut egui::Ui) {
+        let pause = self.worker.pause_state();
+        let label = match pause {
+            Some(state) if state.requested || state.acknowledged => "Continue",
+            _ => "Pause",
+        };
+        if bevel_button(
+            ui,
+            label,
+            SETUP_BLUE,
+            false,
+            pause.is_some() && !self.stop_requested,
+        )
+        .clicked()
+            && let Some(state) = pause
+        {
+            let request = !(state.requested || state.acknowledged);
+            if let Err(error) = self.worker.request_pause(state.epoch, request) {
+                self.push_log(error);
+            }
+        }
+        let cancel_enabled =
+            (self.active_run.is_some() || self.worker_state.is_busy()) && !self.stop_requested;
+        if bevel_button(ui, "Cancel", STATE_RED, false, cancel_enabled).clicked() {
+            self.request_independent_stop();
+        }
+        if let Some(state) = pause {
+            if state.acknowledged {
+                ui.label(format!("{} paused", state.phase.label()));
+            } else if state.requested {
+                ui.label("Pausing…");
+            }
+        }
+    }
+
+
     /// Render supported Free Cell preparation/playback or an explicit unsupported A* state.
     fn independent_game_body(&mut self, ui: &mut egui::Ui, idle: bool) {
-        ui.horizontal(|ui| {
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                self.independent_stop_exit(ui);
-                ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
-                    if bevel_button(ui, "LOG", SETUP_BLUE, false, true).clicked() {
-                        self.show_output = true;
-                    }
-                    if bevel_button(
-                        ui,
-                        "FAILURE DETAILS",
-                        SETUP_BLUE,
-                        false,
-                        self.failure_window.available(),
-                    )
-                    .clicked()
-                    {
-                        self.failure_window.reopen();
-                    }
+        if self.game_mode == GameMode::FreeCell {
+            let context = self.current_preview_context();
+            self.freecell_workflow.bind(&context);
+            freecell_options_row(
+                ui,
+                idle,
+                &mut self.freecell_workflow.play_style,
+                &mut self.freecell_playback.mode,
+            );
+            ui.small(self.freecell_workflow.play_style.description());
+            ui.horizontal(|ui| {
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    self.independent_stop_exit(ui);
+                    ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
+                        if self.freecell_workflow.play_style.uses_session() {
+                            if self.active_run == Some(ActiveRun::FreeCellSession) {
+                                if bevel_button(ui, "Stop", STATE_RED, false, !self.stop_requested)
+                                    .clicked()
+                                {
+                                    self.request_independent_stop();
+                                }
+                            } else if bevel_button(ui, "START", ACTION_GREEN, false, idle).clicked()
+                            {
+                                self.press_freecell_session();
+                            }
+                            self.session_pause_cancel_controls(ui);
+                        }
+                        if bevel_button(ui, "LOG", SETUP_BLUE, false, true).clicked() {
+                            self.show_output = true;
+                        }
+                        if bevel_button(
+                            ui,
+                            "FAILURE DETAILS",
+                            SETUP_BLUE,
+                            false,
+                            self.failure_window.available(),
+                        )
+                        .clicked()
+                        {
+                            self.failure_window.reopen();
+                        }
+                    });
                 });
             });
-        });
-        if self.game_mode == GameMode::FreeCell {
-            ui.label("Free Cell · offline calculation and guarded physical route playback");
-            ui.horizontal_wrapped(|ui| {
-                ui.add_enabled(
-                    idle,
-                    egui::TextEdit::singleline(&mut self.freecell_export_path)
-                        .hint_text("Export path (blank = unique)")
-                        .desired_width(240.0),
-                );
-                if bevel_button(ui, "RECON / Export 52 cards", SETUP_BLUE, false, idle).clicked() {
-                    self.request_freecell_recon();
+            if self.freecell_workflow.play_style.uses_session() {
+                ui.label(&self.current_status);
+                if let Some(phase) = self.freecell_workflow.phase {
+                    let foundation_text = self
+                        .freecell_workflow
+                        .foundation_cards
+                        .map_or_else(|| "—".to_owned(), |cards| format!("{cards}/52"));
+                    let cursor_text = self.freecell_workflow.route_cursor.map_or_else(
+                        || {
+                            self.freecell_workflow
+                                .expanded_states
+                                .map_or_else(String::new, |states| {
+                                    format!(" · {states} states expanded")
+                                })
+                        },
+                        |(done, total)| format!(" · {done}/{total} moves"),
+                    );
+                    ui.small(format!(
+                        "Cycle {} · {} · completed games: {} · foundations {foundation_text}{cursor_text}",
+                        self.freecell_workflow.deal_generation,
+                        phase.label(),
+                        self.freecell_workflow.completed_games,
+                    ));
+                } else if self.freecell_workflow.completed_games > 0 {
+                    ui.small(format!(
+                        "Completed games: {}",
+                        self.freecell_workflow.completed_games
+                    ));
                 }
-            });
-            self.freecell_calculation_controls(ui);
-            self.freecell_route_controls(ui);
+                if let Some(cards) = self.freecell_workflow.unsolvable_foundation_cards {
+                    ui.colored_label(
+                        egui::Color32::from_rgb(240, 196, 80),
+                        format!(
+                            "Exhaustive A* proved this untouched deal unsolvable (max {cards}/52 foundation cards; zero mid-game clicks sent). Deal a new game and press START."
+                        ),
+                    );
+                }
+                if let Some(path) = &self.freecell_workflow.export_path {
+                    ui.small(format!("Last exported deal: {}", path.display()));
+                }
+                if self.worker_state != WorkerState::Error
+                    && let Some(report) = &self.freecell_workflow.report
+                {
+                    ui.small(report.as_str());
+                }
+            } else {
+                freecell_control_group(ui, "Initial deal acquisition", |ui| {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.add_enabled(
+                            idle,
+                            egui::TextEdit::singleline(&mut self.freecell_export_path)
+                                .hint_text("Export path (blank = unique)")
+                                .desired_width(240.0),
+                        );
+                        if bevel_button(ui, "RECON / Export 52 cards", SETUP_BLUE, false, idle)
+                            .clicked()
+                        {
+                            self.request_freecell_recon();
+                        }
+                    });
+                });
+                freecell_control_group(ui, "Offline route calculation", |ui| {
+                    self.freecell_calculation_controls(ui);
+                });
+                freecell_control_group(ui, "Live route playback", |ui| {
+                    self.freecell_route_controls(ui);
+                });
+                ui.label(&self.current_status);
+            }
         } else {
+            ui.horizontal(|ui| {
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    self.independent_stop_exit(ui);
+                    ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
+                        if bevel_button(ui, "LOG", SETUP_BLUE, false, true).clicked() {
+                            self.show_output = true;
+                        }
+                        if bevel_button(
+                            ui,
+                            "FAILURE DETAILS",
+                            SETUP_BLUE,
+                            false,
+                            self.failure_window.available(),
+                        )
+                        .clicked()
+                        {
+                            self.failure_window.reopen();
+                        }
+                    });
+                });
+            });
             ui.label(format!(
                 "A* not implemented for {}; RECON, calculation and playback are unavailable.",
                 self.game_mode
             ));
+            ui.label(&self.current_status);
         }
-        ui.label(&self.current_status);
         ui.separator();
         self.preview(ui);
     }
@@ -1294,20 +1784,6 @@ impl QmpQemuSocketApp {
                 if bevel_button(ui, "RESET", SETUP_BLUE, false, self.pyramid_reset_enabled(context)).clicked() {
                     self.reset_pyramid_preferences();
                 }
-                let pause = self.worker.pause_state();
-                let label = match pause {
-                    Some(state) if state.requested || state.acknowledged => "CONTINUE",
-                    _ => "PAUSE",
-                };
-                if bevel_button(ui, label, SETUP_BLUE, false, pause.is_some() && !self.stop_requested).clicked()
-                    && let Some(state) = pause {
-                    let request = !(state.requested || state.acknowledged);
-                    if let Err(error) = self.worker.request_pause(state.epoch, request) { self.push_log(error); }
-                }
-                if let Some(state) = pause {
-                    if state.acknowledged { ui.label(format!("{} paused", state.phase.label())); }
-                    else if state.requested { ui.label("Pausing…"); }
-                }
                 ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
                     egui::ScrollArea::horizontal().id_salt("pyramid-action-row")
                         .auto_shrink([false, true]).show(ui, |ui| {
@@ -1319,10 +1795,22 @@ impl QmpQemuSocketApp {
                                         ("2. Plan route", PyramidPhase::Planning, gates.plan),
                                         ("3. Solve board", PyramidPhase::Execution, gates.solve),
                                     ] {
-                                        if bevel_button(ui, label, SETUP_BLUE, false, enabled).clicked() { self.press_pyramid_step(phase); }
+                                        let active = self.active_run.is_some()
+                                            && self.pyramid_workflow.phase == Some(phase);
+                                        if active {
+                                            if bevel_button(ui, "Stop", STATE_RED, false, !self.stop_requested).clicked() {
+                                                self.request_independent_stop();
+                                            }
+                                        } else if bevel_button(ui, label, SETUP_BLUE, false, enabled).clicked() {
+                                            self.press_pyramid_step(phase);
+                                        }
                                     }
                                 } else {
-                                    if bevel_button(ui, "START", ACTION_GREEN, false,
+                                    if self.active_run == Some(ActiveRun::PyramidSession) {
+                                        if bevel_button(ui, "Stop", STATE_RED, false, !self.stop_requested).clicked() {
+                                            self.request_independent_stop();
+                                        }
+                                    } else if bevel_button(ui, "START", ACTION_GREEN, false,
                                         session_start_enabled(self.pyramid_workflow.mode, idle, &self.computed_route_form)).clicked() {
                                         self.press_pyramid_session();
                                     }
@@ -1331,6 +1819,7 @@ impl QmpQemuSocketApp {
                                         self.press_pyramid_step(PyramidPhase::Reconnaissance);
                                     }
                                 }
+                                self.session_pause_cancel_controls(ui);
                                 let search = self.worker.pyramid_search_state();
                                 let switch_enabled = search.as_ref().is_some_and(|search| {
                                     self.pyramid_workflow.maximum_switch_available(search, context,
@@ -1419,41 +1908,29 @@ impl QmpQemuSocketApp {
     }
 
 
-    /// Show idle-gated strategy and mode selections within the left header column.
+    /// Show idle-gated strategy (left) and game-mode (right) selections within the left header column.
     ///
-    /// Selection changes retain their existing invalidation and worker requests;
-    /// operational controls and the preview remain outside this constrained width.
-    fn pyramid_selection_header(&mut self, ui: &mut egui::Ui, idle: bool) {
-        ui.horizontal_wrapped(|ui| {
-            let mut game = self.game_mode;
-            ui.add_enabled_ui(idle, |ui| {
-                egui::ComboBox::from_id_salt("independent-game-type")
-                    .selected_text(game.label())
-                    .show_ui(ui, |ui| {
-                        for mode in GameMode::AVAILABLE {
-                            ui.selectable_value(&mut game, mode, mode.label());
-                        }
-                    });
-            });
-            if game != self.game_mode {
-                self.select_game_mode(game);
+    /// Returns `true` when the operator switched `SolvingStrategy` so the caller skips
+    /// rendering a stale A* body for that frame.
+    fn pyramid_selection_header(&mut self, ui: &mut egui::Ui, idle: bool) -> bool {
+        let mut selected = self.solving_strategy;
+        let mut game = self.game_mode;
+        independent_selection_row(ui, idle, &mut selected, &mut game);
+        match resolve_independent_header_change(
+            self.solving_strategy,
+            selected,
+            self.game_mode,
+            game,
+        ) {
+            Some(IndependentHeaderChange::Strategy(strategy)) => {
+                self.select_strategy(strategy);
+                return true;
             }
-            let mut selected = self.solving_strategy;
-            ui.add_enabled_ui(idle, |ui| {
-                egui::ComboBox::from_id_salt("pyramid-strategy")
-                    .selected_text(self.solving_strategy.label())
-                    .show_ui(ui, |ui| {
-                        for strategy in SolvingStrategy::AVAILABLE {
-                            ui.selectable_value(&mut selected, strategy, strategy.label());
-                        }
-                    });
-            });
-            if selected != self.solving_strategy {
-                self.select_strategy(selected);
-            }
-        });
+            Some(IndependentHeaderChange::Game(mode)) => self.select_game_mode(mode),
+            None => {}
+        }
         if !self.uses_pyramid_workflow() {
-            return;
+            return false;
         }
         let mut mode = self.pyramid_workflow.mode;
         let mut route_goal = self.pyramid_workflow.route_goal();
@@ -1481,6 +1958,7 @@ impl QmpQemuSocketApp {
         if self.pyramid_workflow.mode == WorkflowMode::Continuous {
             ui.small(self.pyramid_workflow.stop_condition.description());
         }
+        false
     }
 
 
@@ -1494,9 +1972,9 @@ impl QmpQemuSocketApp {
             && controls_are_mutable(self.active_run, self.worker_state, self.stop_requested)
             && !self.show_snapshot_dialog
             && !self.snapshot_capture_pending;
-        activity_status::header(self, ui, |app, ui| {
-            app.pyramid_selection_header(ui, idle);
-        });
+        if activity_status::header(self, ui, |app, ui| app.pyramid_selection_header(ui, idle)) {
+            return;
+        }
         if !self.uses_pyramid_workflow() {
             self.independent_game_body(ui, idle);
             return;
@@ -1586,7 +2064,7 @@ impl QmpQemuSocketApp {
             ui.add(egui::TextEdit::singleline(self.pyramid_workflow.socket_editor(&self.qmp_socket_path))
                 .char_limit(RECON_PATH_MAX_BYTES).desired_width(f32::INFINITY));
             let mut socket_changed = false;
-            if ui.button("Apply socket change").clicked() {
+            if crate::ui_style::press_able_button(ui, "Apply socket change").clicked() {
                 match self.pyramid_workflow.socket_update(&self.qmp_socket_path) {
                     Ok(Some(path)) => {
                         self.qmp_socket_path = path;

@@ -286,14 +286,20 @@ impl RemovalHistory {
                 ),
             )?;
             let current = effect_pixels(frame, target.slot)?;
-            let measured = crate::pyramid_effect::compare_with_settings(&target.before, &current, pending.settings)?;
+            let measured = crate::pyramid_effect::compare_with_settings(
+                &target.before,
+                &current,
+                pending.settings,
+            )?;
             if !measured.exceeds_allowance() {
                 return Err(format!(
                     "execution slot {} lacks joint RGB quarter change: changed={}/{}; allowed={}; {}; {}",
                     target.slot,
                     measured.changed_pixels,
                     measured.total_pixels,
-                    measured.allowed_changes, pending.settings.description(), crate::pyramid_effect::measurement_text(measured)
+                    measured.allowed_changes,
+                    pending.settings.description(),
+                    crate::pyramid_effect::measurement_text(measured)
                 ));
             }
             let quiet_corner = corner(frame, target.slot)?;

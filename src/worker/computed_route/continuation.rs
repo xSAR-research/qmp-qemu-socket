@@ -166,11 +166,14 @@ fn observe_stock(
     for attempt in 0..super::ORDINARY_OBSERVATIONS {
         io.check()?;
         let observation = if let Some(after) = next {
-            io.failure_progress.stage = crate::pyramid_diagnostics::progress::FailureStage::InitialSource;
+            io.failure_progress.stage =
+                crate::pyramid_diagnostics::progress::FailureStage::InitialSource;
             io.failure_progress.initial_checks = attempt + 1;
             io.failure_progress.initial_limit = super::ORDINARY_OBSERVATIONS;
             io.observe_action_source(state, after)?
-        } else { io.observe_source(state)? };
+        } else {
+            io.observe_source(state)?
+        };
         match observation {
             EffectObservation::Position(true) => return Ok(None),
             EffectObservation::Challenge(proof) => return Ok(Some(DriveReport {
@@ -223,9 +226,11 @@ pub(super) fn drain_and_redeal(
             return Ok(report);
         }
         io.begin_transition(step.before, step.after, &[InputOperation::PressDrawKey])?;
-        io.failure_progress.stage = crate::pyramid_diagnostics::progress::FailureStage::InputDelivery;
+        io.failure_progress.stage =
+            crate::pyramid_diagnostics::progress::FailureStage::InputDelivery;
         io.deliver(InputOperation::PressDrawKey, step.before)?;
-        io.failure_progress.stage = crate::pyramid_diagnostics::progress::FailureStage::PostConfirmation;
+        io.failure_progress.stage =
+            crate::pyramid_diagnostics::progress::FailureStage::PostConfirmation;
         if step.operation == StockAdvance::Recycle {
             io.recycle_acknowledged()?;
         }

@@ -137,12 +137,13 @@ fn freecell_315_terminal_readiness_has_no_transfer_or_cursor_progress() {
     let fixture = fixture();
     let mut state = State::new(&fixture.deal);
     let mut io = Fake::new(fixture);
-    io.seen.push_back(Seen::ChallengeComplete);
+    io.seen.extend([Seen::Unknown; 6]);
+    io.resolve_complete = Some(Ok(true));
     assert_eq!(
         io.drive(&mut state, false).unwrap(),
         Completion::ChallengeComplete
     );
-    assert_eq!((state.cursor, io.observations), (0, 1));
+    assert_eq!((state.cursor, io.observations, io.resolve_calls), (0, 6, 1));
     assert!(io.transfers.is_empty() && io.progress.is_empty());
 }
 
@@ -155,14 +156,20 @@ fn freecell_315_terminal_after_delivery_never_advances_unproved_cursor() {
     let mut io = Fake::new(fixture);
     io.explicit = true;
     io.pair(0);
-    io.seen.push_back(Seen::ChallengeComplete);
+    io.seen.extend([Seen::Unknown; 6]);
+    io.resolve_complete = Some(Ok(true));
     assert_eq!(
         io.drive(&mut state, false).unwrap(),
         Completion::ChallengeComplete
     );
     assert_eq!(
-        (state.cursor, io.observations, io.transfers.len()),
-        (0, 3, 1)
+        (
+            state.cursor,
+            io.observations,
+            io.transfers.len(),
+            io.resolve_calls
+        ),
+        (0, 8, 1, 1)
     );
     assert_eq!(io.progress, [0]);
 }
@@ -187,16 +194,16 @@ fn freecell_315_terminal_preinput_preempts_transfer() {
 }
 
 
-/// An already observed STOP remains authoritative even when completion is queued next.
+/// An already observed STOP remains authoritative even when completion is configured.
 #[test]
 fn freecell_315_stop_preempts_pending_terminal_observation() {
     let fixture = fixture();
     let mut state = State::new(&fixture.deal);
     let mut io = Fake::new(fixture);
     io.stopped = true;
-    io.seen.push_back(Seen::ChallengeComplete);
+    io.resolve_complete = Some(Ok(true));
     assert!(io.drive(&mut state, false).unwrap_err().contains("STOP"));
-    assert_eq!((io.binds, io.observations), (0, 0));
+    assert_eq!((io.binds, io.observations, io.resolve_calls), (0, 0, 0));
     assert!(io.transfers.is_empty());
 }
 
@@ -360,8 +367,6 @@ enum Seen {
     At(usize),
     Unknown,
     StopAt(usize),
-    /// Supported game-reported terminal scene, without a route-position claim.
-    ChallengeComplete,
 }
 
 
@@ -379,10 +384,28 @@ struct Fake<'a> {
     explicit: bool,
     /// A terminal frame arrives at the transfer's fresh pre-input boundary.
     terminal_before_transfer: bool,
-    /// Separate bounded diagnostic delivery, never a route effect.
-    movement_probe: bool,
     /// Revoke only after this exact twice-proved endpoint is accepted and published.
     stop_after_progress: Option<usize>,
+    /// Observed animation waits, paired with the number of earlier explicit transfers.
+    animation_waits: Vec<(usize, std::time::Duration)>,
+    /// Revoke on this animation wait to exercise the pre-next-input fence.
+    stop_on_animation: bool,
+    /// Graceful stop is independent of the immediate STOP latch.
+    graceful_stop: bool,
+    /// Request graceful stop after this many explicit transfers have started.
+    graceful_after_transfer: Option<usize>,
+    /// Request graceful stop while the pre-transfer pause checkpoint is being handled.
+    graceful_during_transfer_check: bool,
+    /// Distinguish confirmation, transient retry and first-effect cadence.
+    frame_waits: Vec<&'static str>,
+    /// Scripted result returned by `resolve_challenge_complete` after six failed observations.
+    resolve_complete: Option<Result<bool, String>>,
+    /// Number of invocations of `resolve_challenge_complete`.
+    resolve_calls: usize,
+    /// Scripted result returned by `resolve_normal_game_win` after six unmatched goal frames.
+    resolve_win: Option<Result<bool, String>>,
+    /// Number of invocations of `resolve_normal_game_win`.
+    resolve_win_calls: usize,
 }
 
 
@@ -401,8 +424,17 @@ impl<'a> Fake<'a> {
             uncertain: false,
             explicit: false,
             terminal_before_transfer: false,
-            movement_probe: false,
             stop_after_progress: None,
+            animation_waits: Vec::new(),
+            stop_on_animation: false,
+            graceful_stop: false,
+            graceful_after_transfer: None,
+            graceful_during_transfer_check: false,
+            frame_waits: Vec::new(),
+            resolve_complete: None,
+            resolve_calls: 0,
+            resolve_win: None,
+            resolve_win_calls: 0,
         }
     }
 
@@ -459,6 +491,14 @@ impl<'a> Fake<'a> {
 impl RouteIo for Fake<'_> {
     /// STOP prohibits further transfers.
     fn check(&mut self) -> Result<(), String> {
+        if self.graceful_during_transfer_check
+            && self
+                .stages
+                .last()
+                .is_some_and(|stage| stage.phase == "transfer")
+        {
+            self.graceful_stop = true;
+        }
         if self.stopped {
             Err("test STOP".into())
         } else {
@@ -480,7 +520,6 @@ impl RouteIo for Fake<'_> {
         let cursor = match self.seen.pop_front().expect("unexpected extra capture") {
             Seen::At(n) => n,
             Seen::Unknown => return Ok(Observation::Unmatched),
-            Seen::ChallengeComplete => return Ok(Observation::ChallengeComplete),
             Seen::StopAt(n) => {
                 self.stopped = true;
                 n
@@ -513,8 +552,6 @@ impl RouteIo for Fake<'_> {
         self.transfers.push(action);
         if self.uncertain {
             Err("test uncertain drag; never replay".into())
-        } else if self.movement_probe {
-            Ok(TransferOutcome::MovementProbe)
         } else {
             Ok(TransferOutcome::Delivered)
         }
@@ -529,6 +566,42 @@ impl RouteIo for Fake<'_> {
 
     /// No real waiting is needed to exercise cancellation and evidence order.
     fn settle(&mut self) -> Result<(), String> {
+        self.frame_waits.push("retry");
+        self.check()
+    }
+
+
+    /// Record the wait between two eligible fresh endpoint observations.
+    fn confirmation_wait(&mut self) -> Result<(), String> {
+        self.frame_waits.push("confirmation");
+        self.check()
+    }
+
+
+    /// Record the initial wait after the acknowledged transfer.
+    fn post_transfer_wait(&mut self) -> Result<(), String> {
+        self.frame_waits.push("post-transfer");
+        self.check()
+    }
+
+
+    /// Observe the invocation's graceful request without changing the immediate STOP latch.
+    fn stop_after_step(&mut self) -> Result<bool, String> {
+        self.check()?;
+        Ok(self.graceful_stop
+            || self
+                .graceful_after_transfer
+                .is_some_and(|n| self.transfers.len() >= n))
+    }
+
+
+    /// Record exact AUTO delays without real sleeping in the sequencer tests.
+    fn animation_wait(&mut self, duration: std::time::Duration) -> Result<(), String> {
+        self.check()?;
+        self.animation_waits.push((self.transfers.len(), duration));
+        if self.stop_on_animation {
+            self.stopped = true;
+        }
         self.check()
     }
 
@@ -542,6 +615,53 @@ impl RouteIo for Fake<'_> {
             self.stopped = true;
         }
     }
+
+
+    /// Resolve Challenge Complete only after a full failed observation window.
+    fn resolve_challenge_complete(&mut self) -> Result<bool, String> {
+        self.resolve_calls += 1;
+        self.resolve_complete.take().unwrap_or(Ok(false))
+    }
+
+
+    /// Resolve normal-game win entry only after six unmatched final goal frames.
+    fn resolve_normal_game_win(&mut self, goal: &Position) -> Result<bool, String> {
+        assert!(goal.is_goal());
+        self.resolve_win_calls += 1;
+        self.resolve_win.take().unwrap_or(Ok(false))
+    }
+}
+
+/// Fault-gated completion runs only after six unmatched observations and grants no cursor credit.
+#[test]
+fn freecell_320_stable_polls_challenge_complete_only_after_six_unmatched_observations() {
+    let fixture = fixture();
+    let mut state = State::new(&fixture.deal);
+    let mut positive = Fake::new(fixture);
+    positive.seen.extend([Seen::Unknown; 6]);
+    positive.resolve_complete = Some(Ok(true));
+    assert_eq!(
+        positive.drive(&mut state, false).unwrap(),
+        Completion::ChallengeComplete
+    );
+    assert_eq!(
+        (state.cursor, positive.observations, positive.resolve_calls),
+        (0, 6, 1)
+    );
+    assert!(positive.transfers.is_empty() && positive.progress.is_empty());
+
+    let mut negative = Fake::new(fixture);
+    negative.seen.extend([Seen::Unknown; 6]);
+    negative.resolve_complete = Some(Ok(false));
+    assert_eq!(
+        negative.drive(&mut state, false).unwrap_err(),
+        "Free Cell physical position was not confirmed twice; no further input authorised"
+    );
+    assert_eq!(
+        (state.cursor, negative.observations, negative.resolve_calls),
+        (0, 6, 1)
+    );
+    assert!(negative.transfers.is_empty() && negative.progress.is_empty());
 }
 
 
@@ -635,6 +755,20 @@ fn freecell_319_missing_auto_effect_exhausts_six_observations_without_credit_or_
         assert_eq!(io.transfers, fixture.moves[..1]);
         assert_eq!(io.progress, [0]);
         assert_eq!(io.observations, 8);
+        if effects.iter().all(|effect| matches!(effect, Seen::At(1))) {
+            assert_eq!(
+                io.frame_waits,
+                [
+                    "confirmation",
+                    "post-transfer",
+                    "retry",
+                    "retry",
+                    "retry",
+                    "retry",
+                    "retry"
+                ]
+            );
+        }
         let stage = io.stages.last().unwrap();
         assert_eq!(
             (stage.cursor, stage.phase, stage.observation),
@@ -655,21 +789,23 @@ fn freecell_319_stop_and_terminal_during_auto_followups_keep_original_cursor() {
         let mut io = Fake::new(&fixture);
         io.pair(0);
         io.seen.push_back(Seen::At(2));
-        io.seen.push_back(if terminal {
-            Seen::ChallengeComplete
+        if terminal {
+            io.seen.extend([Seen::Unknown; 5]);
+            io.resolve_complete = Some(Ok(true));
         } else {
-            Seen::StopAt(2)
-        });
+            io.seen.push_back(Seen::StopAt(2));
+        }
         let result = ace_pair_step(&mut state, &mut io);
         if terminal {
             assert_eq!(result.unwrap(), Completion::ChallengeComplete);
+            assert_eq!((io.observations, io.resolve_calls), (8, 1));
         } else {
             assert!(result.unwrap_err().contains("STOP"));
+            assert_eq!((io.observations, io.resolve_calls), (4, 0));
         }
         assert_eq!(state.cursor, 0);
         assert_eq!(io.progress, [0]);
         assert_eq!(io.transfers, fixture.moves[..1]);
-        assert_eq!(io.observations, 4);
         assert!(io.seen.is_empty());
     }
 }
@@ -688,34 +824,6 @@ fn freecell_319_malformed_auto_prefix_cannot_grant_input() {
     );
     assert_eq!((state.cursor, io.observations, io.binds), (0, 0, 1));
     assert!(io.transfers.is_empty() && io.progress.is_empty());
-}
-
-
-/// Diagnostic motion may use an unchanged AUTO source without claiming its history.
-#[test]
-fn freecell_319_movement_probe_at_unchanged_auto_root_never_credits_route() {
-    let fixture = ace_pair_fixture();
-    let mut state = State::new(&fixture.deal);
-    let original = state.position;
-    let mut io = Fake::new(&fixture);
-    io.movement_probe = true;
-    io.pair(0);
-    assert_eq!(
-        movement_probe(
-            &mut state,
-            &fixture.deal,
-            &fixture.moves,
-            AutoMode::ObserveGame,
-            &mut io
-        )
-        .unwrap(),
-        Completion::MovementProbe
-    );
-    assert_eq!(state.cursor, 0);
-    assert!(same_physical(&state.position, &original));
-    assert_eq!(io.transfers, fixture.moves[..1]);
-    assert_eq!(io.observations, 2);
-    assert!(io.progress.is_empty() && io.seen.is_empty());
 }
 
 
@@ -866,7 +974,7 @@ fn freecell_319_explicit_records_stop_after_one_transfer_even_auto() {
 }
 
 
-/// Revocation after a proved effect reports the actual accepted cursor.
+/// Revocation after a proved effect retains its cursor and pre-empts AUTO waiting.
 #[test]
 fn freecell_312_final_check_retains_accepted_cursor() {
     let f = fixture();
@@ -882,101 +990,264 @@ fn freecell_312_final_check_retains_accepted_cursor() {
     assert_eq!(io.progress, [root, end]);
     assert_eq!((io.observations, io.transfers.len()), (4, 1));
     assert!(io.seen.is_empty());
-    let stage = io.stages.last().unwrap();
-    assert_eq!((stage.cursor, stage.phase), (end, "final-check"));
-}
-
-
-/// Local autoplay readiness never commits route progress during a bounded experiment.
-#[test]
-fn freecell_318_movement_probe_does_not_accept_initial_closure_or_edge() {
-    let f = fixture();
-    let mut state = State::new(&f.deal);
-    let original = state.position;
-    let mut io = Fake::new(f);
-    io.movement_probe = true;
-    let root = closure_end(&f.moves, 0);
-    io.pair(root);
     assert_eq!(
-        movement_probe(
-            &mut state,
-            &f.deal,
-            &f.moves,
-            AutoMode::ObserveGame,
-            &mut io
-        )
-        .unwrap(),
-        Completion::MovementProbe
+        io.animation_waits.len(),
+        f.moves[..root]
+            .iter()
+            .filter(|action| action.is_auto)
+            .count()
     );
-    assert_eq!((io.binds, io.observations, io.transfers.len()), (1, 2, 1));
-    assert_eq!(io.transfers[0], f.moves[root]);
-    assert!(io.progress.is_empty() && io.seen.is_empty());
-    assert_eq!(state.cursor, 0);
-    assert!(same_physical(&state.position, &original));
 }
 
 
-/// A probe cannot fall through into normal child observations or retry an uncertain input.
+/// Every reached AUTO record receives its own half-second animation wait.
 #[test]
-fn freecell_318_movement_probe_rejects_ordinary_delivery_and_uncertainty() {
-    let f = fixture();
-    for uncertain in [false, true] {
-        let mut state = State::new(&f.deal);
-        let mut io = Fake::new(f);
-        io.explicit = true;
-        io.uncertain = uncertain;
-        io.pair(0);
+fn freecell_3117_auto_waits_cover_explicit_followup_and_readiness_once() {
+    let fixture = ace_pair_fixture();
+    let half = std::time::Duration::from_millis(500);
+    for initial in [0, 1, 2] {
+        let mut state = State::new(&fixture.deal);
+        let mut io = Fake::new(&fixture);
+        io.pair(initial);
+        io.pair(if initial == 2 { 3 } else { 2 });
+        ace_pair_step(&mut state, &mut io).unwrap();
+        assert_eq!(io.animation_waits.len(), 2);
         assert!(
-            movement_probe(
-                &mut state,
-                &f.deal,
-                &f.moves,
-                AutoMode::ExecuteRecorded,
-                &mut io
-            )
-            .is_err()
+            io.animation_waits
+                .iter()
+                .all(|(_, duration)| *duration == half)
         );
         assert_eq!(
-            (io.observations, io.transfers.len(), state.cursor),
-            (2, 1, 0)
+            io.animation_waits
+                .iter()
+                .filter(|(transfers, _)| *transfers == 0)
+                .count(),
+            initial
         );
-        assert!(io.progress.is_empty());
+        assert_eq!(io.transfers.len(), 1);
     }
 }
 
 
-/// Existing STOP and challenge terminal observations pre-empt diagnostic input too.
+/// Explicit-record mode and continuous playback apply the same per-AUTO wait.
 #[test]
-fn freecell_318_movement_probe_readiness_stop_and_terminal_preempt_input() {
-    let f = fixture();
-    let mut state = State::new(&f.deal);
-    let mut io = Fake::new(f);
-    io.seen.push_back(Seen::ChallengeComplete);
+fn freecell_3117_continuous_explicit_auto_waits_precede_next_transfer() {
+    let fixture = ace_pair_fixture();
+    let mut state = State::new(&fixture.deal);
+    let mut io = Fake::new(&fixture);
+    io.pair(0);
+    io.pair(1);
+    io.pair(2);
+    io.pair(3);
+    let completion = drive(
+        &mut state,
+        &fixture.deal,
+        &fixture.moves,
+        Target::Partial {
+            foundation_cards: 2,
+        },
+        false,
+        AutoMode::ExecuteRecorded,
+        &mut io,
+    )
+    .unwrap();
+    assert_eq!(completion, Completion::PartialRouteExhausted);
+    assert_eq!(io.transfers, fixture.moves);
     assert_eq!(
-        movement_probe(
-            &mut state,
-            &f.deal,
-            &f.moves,
-            AutoMode::ObserveGame,
-            &mut io
-        )
-        .unwrap(),
-        Completion::ChallengeComplete
+        io.animation_waits,
+        [
+            (1, std::time::Duration::from_millis(500)),
+            (2, std::time::Duration::from_millis(500))
+        ]
     );
-    assert!(io.transfers.is_empty() && io.progress.is_empty());
-    let mut state = State::new(&f.deal);
-    let mut io = Fake::new(f);
-    io.stopped = true;
+}
+
+
+/// STOP during an AUTO animation wait prevents every following explicit transfer.
+#[test]
+fn freecell_3117_stop_during_auto_wait_preserves_proved_cursor_and_no_next_input() {
+    let fixture = ace_pair_fixture();
+    let mut state = State::new(&fixture.deal);
+    let mut io = Fake::new(&fixture);
+    io.pair(0);
+    io.pair(2);
+    io.stop_on_animation = true;
     assert!(
-        movement_probe(
+        drive(
             &mut state,
-            &f.deal,
-            &f.moves,
+            &fixture.deal,
+            &fixture.moves,
+            Target::Partial {
+                foundation_cards: 2
+            },
+            false,
             AutoMode::ObserveGame,
             &mut io
         )
         .unwrap_err()
         .contains("STOP")
     );
-    assert_eq!((io.binds, io.observations), (0, 0));
+    assert_eq!(state.cursor, 2);
+    assert_eq!(io.transfers, fixture.moves[..1]);
+    assert_eq!(io.animation_waits.len(), 1);
+}
+
+
+/// A requested graceful stop completes one effect and its AUTO closure, then can resume.
+#[test]
+fn freecell_3118_graceful_stop_finishes_current_step_and_retains_resume() {
+    let fixture = fixture();
+    let mut state = State::new(&fixture.deal);
+    let mut io = Fake::new(fixture);
+    let end = io.script(0, true);
+    io.graceful_after_transfer = Some(1);
+    assert_eq!(
+        io.drive(&mut state, false).unwrap(),
+        Completion::StepVerified
+    );
+    assert_eq!(state.cursor, end);
+    assert_eq!(io.transfers.len(), 1);
+    assert!(!io.stopped && state.bound);
+    assert_eq!(
+        io.animation_waits.len(),
+        fixture.moves[..end].iter().filter(|m| m.is_auto).count()
+    );
+    io.graceful_after_transfer = None;
+    io.script(end, true);
+    assert_eq!(
+        io.drive(&mut state, true).unwrap(),
+        Completion::StepVerified
+    );
+    assert!(state.cursor > end);
+    assert_eq!(io.transfers.len(), 2);
+}
+
+
+/// A graceful request before input leaves the twice-proved readiness endpoint resumable.
+#[test]
+fn freecell_3118_graceful_stop_before_transfer_sends_no_input() {
+    let fixture = fixture();
+    let mut state = State::new(&fixture.deal);
+    let mut io = Fake::new(fixture);
+    let root = closure_end(&fixture.moves, 0);
+    io.pair(root);
+    io.graceful_stop = true;
+    assert_eq!(
+        io.drive(&mut state, false).unwrap(),
+        Completion::StepVerified
+    );
+    assert_eq!(state.cursor, root);
+    assert!(io.transfers.is_empty() && !io.stopped && state.bound);
+}
+
+
+/// A request received during the pause checkpoint prevents the next transfer on resume.
+#[test]
+fn freecell_3118_graceful_stop_during_pre_transfer_check_sends_no_input() {
+    let fixture = fixture();
+    let mut state = State::new(&fixture.deal);
+    let mut io = Fake::new(fixture);
+    let root = closure_end(&fixture.moves, 0);
+    io.pair(root);
+    io.graceful_during_transfer_check = true;
+    assert_eq!(
+        io.drive(&mut state, false).unwrap(),
+        Completion::StepVerified
+    );
+    assert!(io.graceful_stop && !io.stopped && state.bound);
+    assert_eq!(state.cursor, root);
+    assert_eq!(io.progress, [root]);
+    assert_eq!(io.observations, 2);
+    assert!(io.transfers.is_empty() && io.seen.is_empty());
+}
+
+
+/// Only an eligible physical endpoint receives the short confirmation cadence.
+#[test]
+fn freecell_3118_confirmation_cadence_keeps_six_fresh_effect_attempts() {
+    let fixture = fixture();
+    let mut state = State::new(&fixture.deal);
+    let mut io = Fake::new(fixture);
+    let root = closure_end(&fixture.moves, 0);
+    io.pair(root);
+    io.seen.extend([Seen::Unknown; 6]);
+    assert!(io.drive(&mut state, true).is_err());
+    assert_eq!(state.cursor, root);
+    assert_eq!(io.observations, 8);
+    assert_eq!(io.transfers.len(), 1);
+    assert_eq!(
+        io.frame_waits,
+        [
+            "confirmation",
+            "post-transfer",
+            "retry",
+            "retry",
+            "retry",
+            "retry",
+            "retry"
+        ]
+    );
+}
+
+
+/// Final 52-card win animation covering `[K, K, K, K]` resolves via `resolve_normal_game_win`.
+#[test]
+fn freecell_330_normal_goal_win_entry_resolves_after_six_obscured_effect_frames() {
+    let fixture = fixture();
+    let final_explicit = fixture.moves.len() - 1;
+    let mut state = State::new(&fixture.deal);
+    state.bound = true;
+    state.cursor = final_explicit;
+    state.position = fixture.positions[final_explicit];
+    let mut io = Fake::new(fixture);
+    io.explicit = true;
+    io.pair(final_explicit);
+    io.seen.extend([Seen::Unknown; 6]);
+    io.resolve_win = Some(Ok(true));
+    assert_eq!(io.drive(&mut state, false).unwrap(), Completion::FullBoard);
+    assert_eq!(io.resolve_win_calls, 1);
+    assert_eq!(state.cursor, fixture.moves.len());
+    assert!(state.position.is_goal());
+    assert_eq!(io.progress.last().copied(), Some(fixture.moves.len()));
+}
+
+
+/// Mid-route and partial targets never invoke normal-game win resolution.
+#[test]
+fn freecell_330_non_goal_and_partial_routes_never_poll_normal_win_entry() {
+    let fixture = fixture();
+    let mut state = State::new(&fixture.deal);
+    let mut io = Fake::new(fixture);
+    io.pair(closure_end(&fixture.moves, 0));
+    io.seen.extend([Seen::Unknown; 6]);
+    io.resolve_win = Some(Ok(true));
+    assert!(io.drive(&mut state, true).is_err());
+    assert_eq!(io.resolve_win_calls, 0);
+
+    let partial_end = fixture.moves.len() - 1;
+    let partial_cards = fixture.positions[partial_end].foundation_cards();
+    assert!(partial_cards < 52);
+    let mut partial_state = State::new(&fixture.deal);
+    partial_state.bound = true;
+    partial_state.cursor = partial_end - 1;
+    partial_state.position = fixture.positions[partial_end - 1];
+    let mut partial_io = Fake::new(fixture);
+    partial_io.pair(partial_end - 1);
+    partial_io.seen.extend([Seen::Unknown; 6]);
+    partial_io.resolve_win = Some(Ok(true));
+    assert!(
+        drive(
+            &mut partial_state,
+            &fixture.deal,
+            &fixture.moves[..partial_end],
+            Target::Partial {
+                foundation_cards: partial_cards,
+            },
+            false,
+            AutoMode::ExecuteRecorded,
+            &mut partial_io,
+        )
+        .is_err()
+    );
+    assert_eq!(partial_io.resolve_win_calls, 0);
 }

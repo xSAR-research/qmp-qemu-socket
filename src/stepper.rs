@@ -21,8 +21,6 @@ pub struct PlannedInput(
 
 
 impl PlannedInput {
-
-
     /// Return the calibrated action carried by this single-input plan.
     pub const fn action(self) -> GuidedAction {
         self.0
@@ -96,8 +94,6 @@ pub struct StepPlan {
 
 
 impl StepPlan {
-
-
     /// Return the fresh prediction from which this plan was constructed.
     pub const fn before(self) -> PredictedAction {
         self.before
@@ -161,8 +157,6 @@ pub enum StepValidationError {
 
 /// Build one action from exactly one fresh prediction.
 pub fn plan_step(before: PredictedAction) -> Result<StepPlan, StepValidationError> {
-
-
     let input = match before {
         PredictedAction::CalibrationOnly { mode } => {
             return Err(StepValidationError::CalibrationOnly { mode });
@@ -171,8 +165,6 @@ pub fn plan_step(before: PredictedAction) -> Result<StepPlan, StepValidationErro
             return Err(StepValidationError::NoPreActionHighlight);
         }
         PredictedAction::Action(action) => {
-
-
             if let ActionTarget::Spider(kind) = action.target
                 && crate::spider::canonical_action(kind) != Some(action)
             {
@@ -219,8 +211,6 @@ pub fn verify_post_action(
     after: PredictedAction,
     effect_changed: bool,
 ) -> Result<PredictedAction, StepValidationError> {
-
-
     if let PredictedAction::CalibrationOnly { mode } = after {
         return Err(StepValidationError::CalibrationOnly { mode });
     }
@@ -326,14 +316,15 @@ mod tests {
 
 
         for slot in PYRAMID_TARGETS {
-
-
             if slot.kind == PyramidTargetKind::Move {
                 continue;
             }
             let action = action_for_kind(slot.kind).unwrap();
             let plan = plan_step(PredictedAction::Action(action)).unwrap();
-            assert_eq!(plan.input().operation(), InputOperation::Click(slot.click_point));
+            assert_eq!(
+                plan.input().operation(),
+                InputOperation::Click(slot.click_point)
+            );
             assert_eq!(plan.input().qmp_command_count(), 3);
             assert_eq!(plan.input().qmp_event_count(), 4);
 
@@ -539,15 +530,23 @@ mod tests {
         let plan = plan_step(PredictedAction::Action(action)).expect("fresh Spider DRAW plan");
         let delays = AnimationSettleDelays::default().with_spider_millis(450, 2_250, 900);
         assert_eq!(plan.input().operation(), InputOperation::PressDrawKey);
-        assert_eq!(plan.input().animation_settle_delay(delays), Duration::from_millis(2_250));
+        assert_eq!(
+            plan.input().animation_settle_delay(delays),
+            Duration::from_millis(2_250)
+        );
         assert_eq!(plan.input().qmp_command_count(), 2);
         assert_eq!(plan.input().qmp_event_count(), 2);
         let mut forged = action;
         forged.specification.operation = InputOperation::Click(action.anchor);
-        assert_eq!(plan_step(PredictedAction::Action(forged)), Err(StepValidationError::InvalidSpiderAction));
+        assert_eq!(
+            plan_step(PredictedAction::Action(forged)),
+            Err(StepValidationError::InvalidSpiderAction)
+        );
         forged = action;
         forged.specification.animation_class = crate::game::AnimationClass::Draw;
-        assert_eq!(plan_step(PredictedAction::Action(forged)), Err(StepValidationError::InvalidSpiderAction));
+        assert_eq!(
+            plan_step(PredictedAction::Action(forged)),
+            Err(StepValidationError::InvalidSpiderAction)
+        );
     }
-
 }

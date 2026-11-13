@@ -201,7 +201,7 @@ impl WindowChrome {
     }
 }
 
-/// A single presentation operation accepted from this frame's title controls.
+/// A single presentation operation accepted from this frame's titlebar.
 #[derive(Clone, Copy)]
 enum Command {
     /// Hide or show the body without changing visibility or its retained data.
@@ -264,7 +264,31 @@ fn paint_title(
         );
     }
 
+    // Clicks and drags have independent egui owners: leave dragging with the
+    // native titlebar, while this inset surface receives only title clicks.
+    let title_click_rect = Rect::from_min_max(
+        Pos2::new(
+            (header.min.x + interaction.resize_grab_radius_corner).min(controls_left),
+            controls_top,
+        ),
+        Pos2::new(controls_left, header.max.y),
+    );
     let mut accepted = None;
+    if title_click_rect.is_positive() {
+        let title = ui.interact(
+            title_click_rect,
+            appearance.id.with("window-title"),
+            Sense::click(),
+        );
+        // egui can select nearby small widgets; require the actual inset surface.
+        if title.double_clicked()
+            && title
+                .interact_pointer_pos()
+                .is_some_and(|position| title_click_rect.contains(position))
+        {
+            accepted = Some(Command::Maximise);
+        }
+    }
     let controls = [
         (
             0_u8,
@@ -377,6 +401,7 @@ mod tests {
             .run_ui(
                 egui::RawInput {
                     screen_rect: Some(workspace),
+                    time: Some(context.input(|input| input.time) + 0.05),
                     events,
                     ..Default::default()
                 },
@@ -404,6 +429,278 @@ mod tests {
             (actual.size() - expected.size()).length() <= 1.0,
             "size {actual:?} versus {expected:?}"
         );
+    }
+
+
+    struct TestWindow {
+        context: Context,
+        chrome: WindowChrome,
+        appearance: WindowAppearance,
+        workspace: Rect,
+    }
+
+    impl TestWindow {
+        fn new() -> Self {
+            let mut window = Self {
+                context: Context::default(),
+                chrome: WindowChrome::default(),
+                appearance: WindowAppearance {
+                    id: Id::new("title-double-click-test"),
+                    title: "PHYSICAL ROUTE",
+                    colour: Color32::from_rgb(0, 125, 148),
+                    default_size: Vec2::new(640.0, 400.0),
+                    min_size: Vec2::new(300.0, 160.0),
+                },
+                workspace: Rect::from_min_size(Pos2::ZERO, Vec2::new(1200.0, 900.0)),
+            };
+            for _ in 0..3 {
+                window.frame(vec![]);
+            }
+            window
+        }
+
+        fn frame(&mut self, events: Vec<egui::Event>) -> Rect {
+            frame(
+                &self.context,
+                &mut self.chrome,
+                self.appearance,
+                self.workspace,
+                events,
+            )
+        }
+
+        fn response(&self, suffix: &str) -> Response {
+            self.context
+                .read_response(self.appearance.id.with(suffix))
+                .expect("rendered title interaction")
+        }
+
+        fn control(&self, index: u8) -> Pos2 {
+            self.context
+                .read_response(self.appearance.id.with(("window-control", index)))
+                .expect("rendered title control")
+                .rect
+                .center()
+        }
+
+        fn click(&mut self, position: Pos2, button: egui::PointerButton) {
+            self.frame(vec![
+                egui::Event::PointerMoved(position),
+                pointer(position, button, true),
+            ]);
+            self.frame(vec![pointer(position, button, false)]);
+        }
+
+        fn double_click(&mut self, target: impl FnOnce(&Self) -> Pos2) {
+            // Separate gestures must outlast egui's triple-click interval, while
+            // the two clicks below remain inside its double-click interval.
+            self.settle();
+            // Resolve after layout settles: read_response outside run_ui can
+            // still refer to the earlier pass immediately after a mode change.
+            let position = target(self);
+            for _ in 0..2 {
+                self.click(position, egui::PointerButton::Primary);
+            }
+        }
+
+        fn settle(&mut self) -> Rect {
+            let mut outer = self.frame(vec![]);
+            for _ in 0..13 {
+                outer = self.frame(vec![]);
+            }
+            outer
+        }
+
+        fn drag(&mut self, position: Pos2, delta: Vec2) -> Rect {
+            self.frame(vec![
+                egui::Event::PointerMoved(position),
+                pointer(position, egui::PointerButton::Primary, true),
+            ]);
+            self.frame(vec![egui::Event::PointerMoved(position + delta * 0.5)]);
+            self.frame(vec![egui::Event::PointerMoved(position + delta)]);
+            self.frame(vec![pointer(
+                position + delta,
+                egui::PointerButton::Primary,
+                false,
+            )]);
+            self.frame(vec![])
+        }
+    }
+
+    fn pointer(position: Pos2, button: egui::PointerButton, pressed: bool) -> egui::Event {
+        egui::Event::PointerButton {
+            pos: position,
+            button,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        }
+    }
+
+
+    #[test]
+    fn primary_title_double_click_maximises_and_restores_saved_geometry() {
+        let mut window = TestWindow::new();
+        let normal = window.frame(vec![]);
+        window.double_click(|window| window.response("window-title").rect.center());
+        assert!(window.chrome.maximised);
+        assert!(!window.chrome.collapsed);
+        close(window.frame(vec![]), window.workspace);
+        close(window.chrome.normal_rect.unwrap(), normal);
+
+        window.double_click(|window| window.response("window-title").rect.center());
+        assert!(!window.chrome.maximised);
+        for _ in 0..2 {
+            close(window.frame(vec![]), normal);
+        }
+    }
+
+
+    #[test]
+    fn title_double_click_restores_with_existing_workspace_clamping() {
+        let mut window = TestWindow::new();
+        let normal = window.frame(vec![]);
+        window.double_click(|window| window.response("window-title").rect.center());
+        window.workspace = Rect::from_min_size(Pos2::new(10.0, 20.0), Vec2::new(500.0, 300.0));
+        window.frame(vec![]);
+        window.double_click(|window| window.response("window-title").rect.center());
+        assert!(!window.chrome.maximised);
+        let size = normal.size().min(window.workspace.size());
+        let position = normal
+            .min
+            .clamp(window.workspace.min, window.workspace.max - size);
+        close(window.frame(vec![]), Rect::from_min_size(position, size));
+    }
+
+
+    #[test]
+    fn collapsed_title_double_click_maximises_with_body_expanded() {
+        let mut window = TestWindow::new();
+        let normal = window.frame(vec![]);
+        window.click(window.control(0), egui::PointerButton::Primary);
+        assert!(window.chrome.collapsed);
+        let collapsed = window.frame(vec![]);
+        assert!(collapsed.height() < normal.height());
+        window.double_click(|window| window.response("window-title").rect.center());
+        assert!(window.chrome.maximised);
+        assert!(!window.chrome.collapsed);
+        close(window.frame(vec![]), window.workspace);
+        close(window.chrome.normal_rect.unwrap(), normal);
+        window.double_click(|window| window.response("window-title").rect.center());
+        close(window.frame(vec![]), normal);
+    }
+
+
+    #[test]
+    fn title_single_and_other_button_clicks_leave_presentation_unchanged() {
+        for button in [
+            egui::PointerButton::Primary,
+            egui::PointerButton::Secondary,
+            egui::PointerButton::Middle,
+        ] {
+            let mut window = TestWindow::new();
+            let normal = window.frame(vec![]);
+            let position = window.response("window-title").rect.center();
+            window.click(position, button);
+            if button != egui::PointerButton::Primary {
+                window.click(position, button);
+            }
+            assert!(!window.chrome.maximised);
+            assert!(!window.chrome.collapsed);
+            close(window.frame(vec![]), normal);
+        }
+    }
+
+
+    #[test]
+    fn title_drag_keeps_native_movement_and_never_maximises() {
+        let mut window = TestWindow::new();
+        let normal = window.frame(vec![]);
+        let position = window.response("window-title").rect.center();
+        let delta = Vec2::new(60.0, 40.0);
+        let moved = window.drag(position, delta);
+        assert!(!window.chrome.maximised);
+        assert!(!window.chrome.collapsed);
+        close(moved, normal.translate(delta));
+        assert_eq!(window.response("window-title").sense, Sense::click());
+        assert_eq!(
+            window.response("__title_click").sense,
+            Sense::click_and_drag()
+        );
+    }
+
+
+    #[test]
+    fn resize_edges_corners_and_body_do_not_accept_title_double_clicks() {
+        for point in 0..9 {
+            let mut window = TestWindow::new();
+            let normal = window.frame(vec![]);
+            let position = match point {
+                0 => normal.left_top() + Vec2::splat(1.0),
+                1 => normal.center_top() + Vec2::new(0.0, 1.0),
+                2 => normal.right_top() + Vec2::new(-1.0, 1.0),
+                3 => normal.left_center() + Vec2::new(1.0, 0.0),
+                4 => normal.right_center() - Vec2::new(1.0, 0.0),
+                5 => normal.left_bottom() + Vec2::new(1.0, -1.0),
+                6 => normal.center_bottom() - Vec2::new(0.0, 1.0),
+                7 => normal.right_bottom() - Vec2::splat(1.0),
+                _ => normal.center(),
+            };
+            window.double_click(|_| position);
+            assert!(!window.chrome.maximised, "point {point}");
+            assert!(!window.chrome.collapsed, "point {point}");
+            close(window.frame(vec![]), normal);
+        }
+    }
+
+
+    #[test]
+    fn title_overlay_preserves_native_top_resize_and_control_actions() {
+        let mut window = TestWindow::new();
+        let normal = window.frame(vec![]);
+        let resized = window.drag(normal.center_top(), Vec2::new(0.0, -30.0));
+        assert!(resized.height() > normal.height() + 20.0);
+        assert!(!window.chrome.maximised);
+
+        window.double_click(|window| window.control(0));
+        assert!(!window.chrome.collapsed);
+        assert!(!window.chrome.maximised);
+        assert!(!window.response("window-title").double_clicked());
+        window.click(window.control(1), egui::PointerButton::Primary);
+        assert!(window.chrome.maximised);
+        assert!(!window.response("window-title").clicked());
+        window.settle();
+        window.click(window.control(1), egui::PointerButton::Primary);
+        assert!(!window.chrome.maximised);
+        assert!(!window.response("window-title").clicked());
+        window.settle();
+
+        let close_position = window.control(2);
+        window.frame(vec![
+            egui::Event::PointerMoved(close_position),
+            pointer(close_position, egui::PointerButton::Primary, true),
+        ]);
+        let mut open = true;
+        window
+            .context
+            .run_ui(
+                egui::RawInput {
+                    screen_rect: Some(window.workspace),
+                    time: Some(window.context.input(|input| input.time) + 0.05),
+                    events: vec![pointer(close_position, egui::PointerButton::Primary, false)],
+                    ..Default::default()
+                },
+                |ui| {
+                    window
+                        .chrome
+                        .show(ui.ctx(), window.appearance, &mut open, |ui| {
+                            ui.label("Retained physical route");
+                        });
+                },
+            )
+            .drop_without_applying_deltas();
+        assert!(!open);
+        assert!(!window.chrome.maximised);
+        assert!(!window.response("window-title").clicked());
     }
 
 

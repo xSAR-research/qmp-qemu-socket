@@ -182,8 +182,12 @@ fn serve(
                         connection, 1,
                         "release recovery must not probe for another press"
                     );
-                    if scenario == Scenario::StopAfterProbe { control.stop(Some(&context), &cancel); }
-                    if scenario == Scenario::OperatorStopAfterProbe { control.operator_stop(&context, &cancel); }
+                    if scenario == Scenario::StopAfterProbe {
+                        control.stop(Some(&context), &cancel);
+                    }
+                    if scenario == Scenario::OperatorStopAfterProbe {
+                        control.operator_stop(&context, &cancel);
+                    }
                     packet(
                         &mut stream,
                         json!({"return": [{"name": "Fixture absolute tablet", "index": 0, "current": true, "absolute": true}], "id": id}),
@@ -203,8 +207,15 @@ fn serve(
                         );
                     }
                     report.inputs.push((connection, events));
-                    if matches!(scenario, Scenario::MissingDownAck | Scenario::MissingDownAckThenOperatorStop) && connection == 1 && down {
-                        if scenario == Scenario::MissingDownAckThenOperatorStop { control.operator_stop(&context, &cancel); }
+                    if matches!(
+                        scenario,
+                        Scenario::MissingDownAck | Scenario::MissingDownAckThenOperatorStop
+                    ) && connection == 1
+                        && down
+                    {
+                        if scenario == Scenario::MissingDownAckThenOperatorStop {
+                            control.operator_stop(&context, &cancel);
+                        }
                         assert!(!withheld_down, "uncertain DOWN was replayed");
                         withheld_down = true;
                     } else if withheld_down && connection == 1 && up && paired_up_seen {
@@ -273,7 +284,10 @@ fn deliver_once(operation: InputOperation, scenario: Scenario) -> Evidence {
 
 
 /// Return the actual native adapter's causal result alongside its retained wire evidence.
-fn deliver_once_causal(operation: InputOperation, scenario: Scenario) -> (Evidence, crate::pyramid_workflow_model::RunTermination) {
+fn deliver_once_causal(
+    operation: InputOperation,
+    scenario: Scenario,
+) -> (Evidence, crate::pyramid_workflow_model::RunTermination) {
     let _capture_backend = TestCaptureBackend::legacy_qmp();
     let directory = SocketDirectory(std::env::temp_dir().join(format!(
         "computed-route-wire-{}-{}",
@@ -355,13 +369,13 @@ fn deliver_once_causal(operation: InputOperation, scenario: Scenario) -> (Eviden
         .expect("real production QMP handshake with local fixture");
     let mut io = NativeIo {
         stop_trace: &crate::worker::pyramid_stop::StopTrace::default(),
-            execution_vision: plan.acquisition.vision.for_temporal_execution(),
-            source_transition: None,
-            ready_transition: None,
-            failure_progress: crate::pyramid_diagnostics::progress::FailureProgress::default(),
-            removals: Default::default(),
-            stock_effect: None,
-            effect_settings: crate::parameters::PyramidEffectSettings::default(),
+        execution_vision: plan.acquisition.vision.for_temporal_execution(),
+        source_transition: None,
+        ready_transition: None,
+        failure_progress: crate::pyramid_diagnostics::progress::FailureProgress::default(),
+        removals: Default::default(),
+        stock_effect: None,
+        effect_settings: crate::parameters::PyramidEffectSettings::default(),
         policy: ExecutionPolicy::Standard,
         stock_continuation: false,
         executed_recycles: 0,
@@ -392,10 +406,20 @@ fn deliver_once_causal(operation: InputOperation, scenario: Scenario) -> (Eviden
     let result = checked_delivery(&mut io, SearchState::initial(), &[operation]);
     let counts = io.counts;
     let captures = io.captures;
-    let termination = io.stop_trace.termination(result.is_err(), counts.attempted == counts.acknowledged);
+    let termination = io
+        .stop_trace
+        .termination(result.is_err(), counts.attempted == counts.acknowledged);
     drop(io); // Close the last client before joining its bounded local peer.
     let wire = server.join().expect("computed-route QMP fixture completed");
-    (Evidence { result, counts, captures, wire }, termination)
+    (
+        Evidence {
+            result,
+            counts,
+            captures,
+            wire,
+        },
+        termination,
+    )
 }
 
 
@@ -576,15 +600,43 @@ mod stock_empty_tests;
 #[test]
 fn stop_183_native_probe_cancellation_and_uncertain_delivery_keep_distinct_causes() {
     use crate::pyramid_workflow_model::RunTermination;
-    let (evidence, termination) = deliver_once_causal(InputOperation::PressDrawKey,Scenario::OperatorStopAfterProbe);
+    let (evidence, termination) = deliver_once_causal(
+        InputOperation::PressDrawKey,
+        Scenario::OperatorStopAfterProbe,
+    );
     assert!(evidence.result.is_err());
-    assert_eq!(termination,RunTermination::OperatorStopped);
-    assert_eq!((evidence.counts.attempted,evidence.counts.acknowledged,evidence.captures),(0,0,1));
+    assert_eq!(termination, RunTermination::OperatorStopped);
+    assert_eq!(
+        (
+            evidence.counts.attempted,
+            evidence.counts.acknowledged,
+            evidence.captures
+        ),
+        (0, 0, 1)
+    );
     assert!(evidence.wire.inputs.is_empty());
-    let (evidence, termination) = deliver_once_causal(InputOperation::PressDrawKey,Scenario::MissingDownAckThenOperatorStop);
+    let (evidence, termination) = deliver_once_causal(
+        InputOperation::PressDrawKey,
+        Scenario::MissingDownAckThenOperatorStop,
+    );
     assert!(evidence.result.is_err());
-    assert_eq!(termination,RunTermination::Failed);
-    assert_eq!((evidence.counts.attempted,evidence.counts.acknowledged),(1,0));
-    assert_eq!(transitions(&evidence.wire).iter().filter(|(_,down)|*down).count(),1,"no replay of uncertain DOWN");
-    assert!(transitions(&evidence.wire).iter().skip(1).all(|(_,down)| !down));
+    assert_eq!(termination, RunTermination::Failed);
+    assert_eq!(
+        (evidence.counts.attempted, evidence.counts.acknowledged),
+        (1, 0)
+    );
+    assert_eq!(
+        transitions(&evidence.wire)
+            .iter()
+            .filter(|(_, down)| *down)
+            .count(),
+        1,
+        "no replay of uncertain DOWN"
+    );
+    assert!(
+        transitions(&evidence.wire)
+            .iter()
+            .skip(1)
+            .all(|(_, down)| !down)
+    );
 }

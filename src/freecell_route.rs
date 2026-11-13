@@ -8,13 +8,9 @@ use xsar::games::freecell::{
 };
 
 
-/// ABS diagnostic interval copied from an explicit operator request.
-pub(crate) use xsar::qmp::DiagnosticDragTiming;
-
-
 /// Frozen application policy for recorded automatic foundation transfers.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) enum AutoMode {
+pub enum AutoMode {
     /// Transfer the next record, then observe its consecutive recorded AUTO follow-ups.
     #[default]
     ObserveGame,
@@ -23,22 +19,9 @@ pub(crate) enum AutoMode {
 }
 
 
-/// Pointer protocol selected for one explicit diagnostic SINGLE STEP invocation.
-///
-/// This selection never retries an uncertain transfer or changes normal route playback.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) enum DragMode {
-    /// Position and drag using absolute pointer events.
-    #[default]
-    Absolute,
-    /// Position absolutely, then make a bounded diagnostic motion probe in relative units.
-    Relative,
-}
-
-
 /// Independently replayed offline endpoint; maximum quality is established by search.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Target {
+pub enum Target {
     /// Every original identity must reach its foundation.
     FullBoard,
     /// Exhaustive search proved this foundation count is the maximum reachable.
@@ -51,23 +34,19 @@ pub(crate) enum Target {
 
 /// One fresh observation, with terminal evidence kept separate from route effects.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Observation {
+pub enum Observation {
     /// Index of an exact physical endpoint in the supplied candidate vector.
     Position(usize),
     /// Acquired pixels do not prove a supplied physical endpoint.
     Unmatched,
-    /// A live-bound challenge reached the supported common completion scene.
-    ChallengeComplete,
 }
 
 
 /// Delivery outcome of one pre-input fresh acquisition and guarded transfer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum TransferOutcome {
+pub enum TransferOutcome {
     /// The drag was delivered; semantic effect remains unproved.
     Delivered,
-    /// A bounded motion probe was delivered; no route effect is claimed.
-    MovementProbe,
     /// Completion pre-empted the drag and retired live authority.
     ChallengeComplete,
 }
@@ -75,11 +54,9 @@ pub(crate) enum TransferOutcome {
 
 /// Why an invocation ended successfully; only an incomplete verified step can resume.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Completion {
+pub enum Completion {
     /// One explicit transfer and its required recorded AUTO follow-ups were proved.
     StepVerified,
-    /// A bounded relative motion probe retired input without consuming any route edge.
-    MovementProbe,
     /// The complete physical route ended with all 52 foundations.
     FullBoard,
     /// The exact replayed maximum-removal endpoint was physically proved.
@@ -91,7 +68,7 @@ pub(crate) enum Completion {
 
 /// One contiguous physically replayed route endpoint supplied to observation.
 #[derive(Clone, Copy)]
-pub(crate) struct Candidate {
+pub struct Candidate {
     /// Next unapplied recorded move at this endpoint.
     pub cursor: usize,
     /// Exact physical board, never compared through canonical Position equality.
@@ -101,7 +78,7 @@ pub(crate) struct Candidate {
 
 /// Immutable diagnostic context; it never grants input or changes the cursor.
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct Stage {
+pub struct Stage {
     /// Zero-based next recorded transfer and complete route length.
     pub cursor: usize,
     /// Number of recorded transfers, including automatic records.
@@ -118,7 +95,7 @@ pub(crate) struct Stage {
 
 
 /// Existing worker I/O with one fresh observation per call and no automatic input retry.
-pub(crate) trait RouteIo {
+pub trait RouteIo {
     /// Check current owner, STOP, shutdown and cooperative pause.
     fn check(&mut self) -> Result<(), String>;
 
@@ -147,14 +124,48 @@ pub(crate) trait RouteIo {
     fn settle(&mut self) -> Result<(), String>;
 
 
+    /// Space the two eligible matching observations without extending transient retries.
+    fn confirmation_wait(&mut self) -> Result<(), String> {
+        self.settle()
+    }
+
+
+    /// Allow the delivered gesture to settle before acquiring its first effect frame.
+    fn post_transfer_wait(&mut self) -> Result<(), String> {
+        self.settle()
+    }
+
+
+    /// Read the exact invocation's request to stop after its current proved step.
+    fn stop_after_step(&mut self) -> Result<bool, String> {
+        Ok(false)
+    }
+
+
+    /// Allow recorded AUTO animation to finish while retaining STOP and owner checks.
+    fn animation_wait(&mut self, duration: std::time::Duration) -> Result<(), String>;
+
+
     /// Publish authoritative accepted route progress.
     fn progress(&mut self, cursor: usize, total: usize, position: &Position);
+
+
+    /// After board recognition fails, check challenge-mode Challenge Complete (5 frames / 4 x 1s waits).
+    fn resolve_challenge_complete(&mut self) -> Result<bool, String> {
+        Ok(false)
+    }
+
+
+    /// Poll normal-game win entry only after the final 52-foundation endpoint is obscured by GAME WIN.
+    fn resolve_normal_game_win(&mut self, _goal: &Position) -> Result<bool, String> {
+        Ok(false)
+    }
 }
 
 
 /// Same-run accepted physical state; permit ownership lives in the worker store.
 #[derive(Clone, Copy)]
-pub(crate) struct State {
+pub struct State {
     /// Immutable physical endpoint last proved twice.
     pub position: Position,
     /// Next recorded transfer; never incremented on delivery alone.
@@ -166,7 +177,7 @@ pub(crate) struct State {
 
 impl State {
     /// Start with no live authority, even for an independently replayed offline plan.
-    pub(crate) fn new(deal: &InitialDeal) -> Self {
+    pub fn new(deal: &InitialDeal) -> Self {
         Self {
             position: Position::initial(deal),
             cursor: 0,
@@ -177,7 +188,7 @@ impl State {
 
 
 /// Compare every physical sequence/slot; Position's canonical Eq is deliberately unsuitable.
-pub(crate) fn same_physical(a: &Position, b: &Position) -> bool {
+pub fn same_physical(a: &Position, b: &Position) -> bool {
     (0..8).all(|n| a.column(n) == b.column(n))
         && a.cells() == b.cells()
         && a.foundations() == b.foundations()
@@ -227,11 +238,9 @@ fn stable(
         let observed = match io.observe(choices)? {
             Observation::Position(index) => Some(index),
             Observation::Unmatched => None,
-            // The adapter has already retired input authority. No settle, capture,
-            // candidate acceptance or cursor increment follows this observation.
-            Observation::ChallengeComplete => return Ok(None),
         };
         io.check()?;
+        let mut eligible = false;
         if let Some(index) = observed {
             let candidate = choices
                 .get(index)
@@ -240,13 +249,22 @@ fn stable(
                 return Err("Irreversible Free Cell position regressed".into());
             }
             furthest = candidate.cursor;
-            let endpoint = !require_closure || index + 1 == choices.len();
-            if endpoint && previous == Some(index) {
+            eligible = !require_closure || index + 1 == choices.len();
+            if eligible && previous == Some(index) {
                 return Ok(Some(*candidate));
             }
         }
         previous = observed;
-        io.settle()?;
+        if observation < 6 {
+            if eligible {
+                io.confirmation_wait()?;
+            } else {
+                io.settle()?;
+            }
+        }
+    }
+    if io.resolve_challenge_complete()? {
+        return Ok(None);
     }
     Err("Free Cell physical position was not confirmed twice; no further input authorised".into())
 }
@@ -257,6 +275,25 @@ fn accept(state: &mut State, candidate: Candidate, total: usize, io: &mut impl R
     state.position = candidate.position;
     state.cursor = candidate.cursor;
     io.progress(state.cursor, total, &state.position);
+}
+
+
+/// Wait once for each newly reached recorded AUTO edge before another input.
+fn auto_animation(
+    io: &mut impl RouteIo,
+    moves: &[RecordedMove],
+    previous_cursor: usize,
+    cursor: usize,
+) -> Result<(), String> {
+    let reached = moves
+        .get(previous_cursor..cursor)
+        .ok_or("Invalid AUTO animation cursor range")?;
+    for _ in reached.iter().filter(|action| action.is_auto) {
+        io.check()?;
+        io.animation_wait(std::time::Duration::from_millis(500))?;
+        io.check()?;
+    }
+    Ok(())
 }
 
 
@@ -301,51 +338,13 @@ fn readiness(
 }
 
 
-/// Run one bounded motion experiment without accepting route progress or another input.
-///
-/// Readiness may observe a safe automatic closure locally. Neither it nor delivery
-/// updates the retained route cursor/position. The adapter retires its input permit
-/// before acquiring read-only diagnostic pixels and returning MovementProbe.
-pub(crate) fn movement_probe(
-    state: &mut State,
-    deal: &InitialDeal,
-    moves: &[RecordedMove],
-    mode: AutoMode,
-    io: &mut impl RouteIo,
-) -> Result<Completion, String> {
-    let (stage, initial) = readiness(state, deal, moves, mode, io)?;
-    let Some(initial) = initial else {
-        return Ok(Completion::ChallengeComplete);
-    };
-    let action = moves
-        .get(initial.cursor)
-        .copied()
-        .ok_or("No remaining Free Cell source for motion probe")?;
-    io.stage(Stage {
-        cursor: initial.cursor,
-        action: Some(action),
-        phase: "movement-probe",
-        observation: 0,
-        ..stage
-    });
-    io.check()?;
-    match io.transfer(&initial.position, action)? {
-        TransferOutcome::MovementProbe => Ok(Completion::MovementProbe),
-        TransferOutcome::ChallengeComplete => Ok(Completion::ChallengeComplete),
-        TransferOutcome::Delivered => {
-            Err("Motion probe adapter returned ordinary route delivery".into())
-        }
-    }
-}
-
-
 /// Execute one explicit transfer plus recorded AUTO follow-ups, or the verified route.
 ///
 /// The next unapplied record uses one guarded explicit-target held drag, including
 /// when it is marked AUTO. Delivery ACK remains separate from two fresh physical
 /// proofs of the child and required recorded AUTO follow-ups together. Any error
 /// permanently ends the live invocation without retrying the transfer.
-pub(crate) fn drive(
+pub fn drive(
     state: &mut State,
     deal: &InitialDeal,
     moves: &[RecordedMove],
@@ -358,8 +357,13 @@ pub(crate) fn drive(
     let Some(initial) = initial else {
         return Ok(Completion::ChallengeComplete);
     };
+    let previous_cursor = state.cursor;
     accept(state, initial, moves.len(), io);
+    auto_animation(io, moves, previous_cursor, state.cursor)?;
     while let Some(&action) = moves.get(state.cursor) {
+        if io.stop_after_step()? {
+            break;
+        }
         stage = Stage {
             cursor: state.cursor,
             action: Some(action),
@@ -378,20 +382,35 @@ pub(crate) fn drive(
             }],
         };
         io.check()?;
+        if io.stop_after_step()? {
+            break;
+        }
         match io.transfer(&state.position, action)? {
             TransferOutcome::ChallengeComplete => return Ok(Completion::ChallengeComplete),
-            TransferOutcome::MovementProbe => {
-                return Err("Motion probe cannot be accepted as a route transfer".into());
-            }
             TransferOutcome::Delivered => {}
         }
-        io.settle()?;
+        io.post_transfer_wait()?;
         stage.phase = "effect";
-        let Some(endpoint) = stable(io, &children, stage, true)? else {
-            return Ok(Completion::ChallengeComplete);
+        let endpoint = match stable(io, &children, stage, true) {
+            Ok(Some(endpoint)) => endpoint,
+            Ok(None) => return Ok(Completion::ChallengeComplete),
+            Err(error) => {
+                if target == Target::FullBoard
+                    && let Some(&final_goal) = children.last().filter(|candidate| {
+                        candidate.cursor == moves.len() && candidate.position.is_goal()
+                    })
+                    && io.resolve_normal_game_win(&final_goal.position)?
+                {
+                    accept(state, final_goal, moves.len(), io);
+                    break;
+                }
+                return Err(error);
+            }
         };
+        let previous_cursor = state.cursor;
         accept(state, endpoint, moves.len(), io);
-        if single_step {
+        auto_animation(io, moves, previous_cursor, state.cursor)?;
+        if single_step || io.stop_after_step()? {
             break;
         }
     }

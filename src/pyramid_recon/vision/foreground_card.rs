@@ -303,6 +303,38 @@ impl Family {
 }
 
 
+/// Typed outcome for one `1920×1080` top-left card corner under the shared foreground reader.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum CornerClassification {
+    /// Complete same-colour rank and suit matched uniquely.
+    Card(Card),
+    /// Multiple distinct identities matched or a within-family label gap failed.
+    Ambiguous {
+        /// Diagnostic summary of competing labels.
+        detail: String,
+    },
+    /// Crisp rank and suit ink strokes carry conflicting red/black print colours.
+    ColourDisagreement {
+        /// Diagnostic summary of opposing rank/suit ink colours.
+        detail: String,
+    },
+    /// Only one side matched a native label without the other side forming a valid label.
+    PartialLabel {
+        /// Matched rank when only the rank survived cleanly.
+        rank: Option<Rank>,
+        /// Matched suit when only the suit survived cleanly.
+        suit: Option<Suit>,
+        /// Diagnostic summary of the surviving partial evidence.
+        detail: String,
+    },
+    /// No coherent printed rank/suit label matched within absolute quality limits.
+    Unreadable {
+        /// Diagnostic summary of crop and component state.
+        detail: String,
+    },
+}
+
+
 /// Private complete-family reader enabled only by the bundled native constructor.
 #[derive(Clone, Debug)]
 pub(super) struct Reader {
@@ -396,6 +428,292 @@ impl Reader {
             }
         }
         Ok(recognised)
+    }
+
+
+    /// Classify one immutable native corner into a unique card or typed refusal without I/O.
+    pub(crate) fn classify(
+        &self,
+        view: FrameView<'_>,
+        origin: (u32, u32),
+    ) -> Result<CornerClassification, String> {
+        let pixels = corner_pixels(view, origin)?;
+        let mut matched = Vec::new();
+        let mut matched_rank = None;
+        let mut matched_suit = None;
+        let mut ambiguous_candidate = false;
+
+        for family in &self.families {
+            for corner in corners_with_ink(&pixels, None, None, family.western, family.ink) {
+                let rank_match = matching_label_with_tolerance(
+                    &corner.rank,
+                    &family.ranks,
+                    RANK_ERROR,
+                    RANK_GAP,
+                    family.native_tolerance(),
+                );
+                let suit_bank = family.suit_bank(&corner, rank_match);
+                let suit_match = matching_label_with_tolerance(
+                    &corner.suit,
+                    &suit_bank,
+                    SUIT_ERROR,
+                    SUIT_GAP,
+                    family.native_tolerance(),
+                );
+                matched_rank = matched_rank.or(rank_match);
+                matched_suit = matched_suit.or(suit_match);
+                match (rank_match, suit_match) {
+                    (Some(rank), Some(suit)) => matched.push(Card::new(rank, suit)),
+                    (Some(_), None) => {
+                        if label_failed_gap(
+                            &corner.suit,
+                            &suit_bank,
+                            SUIT_ERROR,
+                            SUIT_GAP,
+                            family.native_tolerance(),
+                        ) {
+                            ambiguous_candidate = true;
+                        }
+                    }
+                    (None, Some(_)) => {
+                        if label_failed_gap(
+                            &corner.rank,
+                            &family.ranks,
+                            RANK_ERROR,
+                            RANK_GAP,
+                            family.native_tolerance(),
+                        ) {
+                            ambiguous_candidate = true;
+                        }
+                    }
+                    (None, None) => {
+                        if label_failed_gap(
+                            &corner.rank,
+                            &family.ranks,
+                            RANK_ERROR,
+                            RANK_GAP,
+                            family.native_tolerance(),
+                        ) && label_failed_gap(
+                            &corner.suit,
+                            &suit_bank,
+                            SUIT_ERROR,
+                            SUIT_GAP,
+                            family.native_tolerance(),
+                        ) {
+                            ambiguous_candidate = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        if let Some(&first) = matched.first() {
+            if matched.iter().all(|card| *card == first) {
+                return Ok(CornerClassification::Card(first));
+            }
+            return Ok(CornerClassification::Ambiguous {
+                detail: self.failure_details(view, origin),
+            });
+        }
+        if ambiguous_candidate {
+            return Ok(CornerClassification::Ambiguous {
+                detail: self.failure_details(view, origin),
+            });
+        }
+
+        Ok(self.classify_unpaired_corner(&pixels, view, origin, matched_rank, matched_suit))
+    }
+
+
+    /// Separate conflicting red/black labels, mixed single-region ink, and partial labels.
+    fn classify_unpaired_corner(
+        &self,
+        pixels: &[[u8; 3]],
+        view: FrameView<'_>,
+        origin: (u32, u32),
+        matched_rank: Option<Rank>,
+        matched_suit: Option<Suit>,
+    ) -> CornerClassification {
+        let base_detail = || self.failure_details(view, origin);
+        let standard_components = components(pixels, None);
+        let eligible: Vec<_> = standard_components
+            .iter()
+            .filter(|component| {
+                let Some(left) = component.points.iter().map(|point| point.x).min() else {
+                    return false;
+                };
+                let right = component
+                    .points
+                    .iter()
+                    .map(|point| point.x)
+                    .max()
+                    .map_or(0, |x| x + 1);
+                let top = component
+                    .points
+                    .iter()
+                    .map(|point| point.y)
+                    .min()
+                    .unwrap_or(0);
+                let bottom = component
+                    .points
+                    .iter()
+                    .map(|point| point.y)
+                    .max()
+                    .map_or(0, |y| y + 1);
+                (left >= 3 && right <= 29 && top >= 4 && bottom <= 33)
+                    || (left >= 4 && right <= 26 && top >= 29 && bottom <= SUIT_BOTTOM)
+            })
+            .collect();
+
+        let (mut rank_black, mut rank_red, mut suit_black, mut suit_red) = (0_usize, 0, 0, 0);
+        let mut rank_points = Vec::new();
+        let mut suit_points = Vec::new();
+        for component in &eligible {
+            let right = component
+                .points
+                .iter()
+                .map(|point| point.x)
+                .max()
+                .map_or(0, |x| x + 1);
+            let top = component
+                .points
+                .iter()
+                .map(|point| point.y)
+                .min()
+                .unwrap_or(0);
+            let bottom = component
+                .points
+                .iter()
+                .map(|point| point.y)
+                .max()
+                .map_or(0, |y| y + 1);
+            let in_rank = top >= 4 && bottom <= 33 && right <= 29;
+            let in_suit = top >= 29 && bottom <= SUIT_BOTTOM && right <= 26;
+            for &point in &component.points {
+                if in_rank && point.y < 32 {
+                    rank_points.push((component.colour, point));
+                    if point.strong {
+                        match component.colour {
+                            Colour::Black => rank_black += 1,
+                            Colour::Red => rank_red += 1,
+                        }
+                    }
+                } else if in_suit && point.x < 26 {
+                    suit_points.push((component.colour, point));
+                    if point.strong {
+                        match component.colour {
+                            Colour::Black => suit_black += 1,
+                            Colour::Red => suit_red += 1,
+                        }
+                    }
+                }
+            }
+        }
+
+        let single_rank_colour = match (rank_black >= 8, rank_red >= 8) {
+            (true, false) => Some(Colour::Black),
+            (false, true) => Some(Colour::Red),
+            _ => None,
+        };
+        let single_suit_colour = match (suit_black >= 8, suit_red >= 8) {
+            (true, false) => Some(Colour::Black),
+            (false, true) => Some(Colour::Red),
+            _ => None,
+        };
+
+        if let (Some(rc), Some(sc)) = (single_rank_colour, single_suit_colour)
+            && rc != sc
+            && rank_black.min(rank_red) == 0
+            && suit_black.min(suit_red) == 0
+        {
+            return CornerClassification::ColourDisagreement {
+                detail: format!(
+                    "Rank ({rc:?}) and suit ({sc:?}) print colours disagree; {}",
+                    base_detail()
+                ),
+            };
+        }
+
+        if (rank_black > 0 && rank_red > 0) || (suit_black > 0 && suit_red > 0) {
+            return CornerClassification::Unreadable {
+                detail: format!("mixed-colour ink within corner region; {}", base_detail()),
+            };
+        }
+
+        let rank_only = matched_rank.or_else(|| {
+            let colour = single_rank_colour?;
+            let pts: Vec<_> = rank_points
+                .iter()
+                .filter(|(c, _)| *c == colour)
+                .map(|(_, p)| *p)
+                .collect();
+            let glyph = Glyph::from_points(&pts)?;
+            self.families.iter().find_map(|family| {
+                matching_label_with_tolerance(
+                    &glyph,
+                    &family.ranks,
+                    RANK_ERROR,
+                    RANK_GAP,
+                    family.native_tolerance(),
+                )
+            })
+        });
+        let suit_only = matched_suit.or_else(|| {
+            let colour = single_suit_colour?;
+            let pts: Vec<_> = suit_points
+                .iter()
+                .filter(|(c, _)| *c == colour)
+                .map(|(_, p)| *p)
+                .collect();
+            let glyph = Glyph::from_points(&pts)?;
+            self.families.iter().find_map(|family| {
+                let bank: Vec<_> = family
+                    .suits
+                    .iter()
+                    .filter(|(suit, _)| red_suit(*suit) == (colour == Colour::Red))
+                    .cloned()
+                    .collect();
+                matching_label_with_tolerance(
+                    &glyph,
+                    &bank,
+                    SUIT_ERROR,
+                    SUIT_GAP,
+                    family.native_tolerance(),
+                )
+            })
+        });
+
+        match (rank_only, suit_only) {
+            (Some(rank), None) => CornerClassification::PartialLabel {
+                rank: Some(rank),
+                suit: None,
+                detail: format!(
+                    "partial rank {rank:?} without valid suit; {}",
+                    base_detail()
+                ),
+            },
+            (None, Some(suit)) => CornerClassification::PartialLabel {
+                rank: None,
+                suit: Some(suit),
+                detail: format!(
+                    "partial suit {suit:?} without valid rank; {}",
+                    base_detail()
+                ),
+            },
+            (Some(rank), Some(suit))
+                if red_suit(suit) != (single_rank_colour == Some(Colour::Red)) =>
+            {
+                CornerClassification::ColourDisagreement {
+                    detail: format!(
+                        "Matched rank {rank:?} and suit {suit:?} print colours disagree; {}",
+                        base_detail()
+                    ),
+                }
+            }
+            _ => CornerClassification::Unreadable {
+                detail: base_detail(),
+            },
+        }
     }
 
 
@@ -590,6 +908,27 @@ fn matching_label<T: Copy + Eq>(
 }
 
 
+/// Check whether a candidate glyph meets absolute quality and native size, failing only the label gap.
+fn label_failed_gap<T: Copy>(
+    actual: &Glyph,
+    bank: &[(T, Vec<Glyph>)],
+    max_error: u64,
+    gap: u64,
+    tolerance: Option<usize>,
+) -> bool {
+    let scores = ranked_labels(actual, bank);
+    let (Some((_, best, template)), Some((_, second, _))) = (scores.first(), scores.get(1)) else {
+        return false;
+    };
+    best.within(max_error)
+        && tolerance.is_none_or(|limit| {
+            actual.width.abs_diff(template.width) <= limit
+                && actual.height.abs_diff(template.height) <= limit
+        })
+        && !best.separated(*second, gap)
+}
+
+
 /// Apply family-measured native raster bounds only after full label competition.
 fn matching_label_with_tolerance<T: Copy>(
     actual: &Glyph,
@@ -761,8 +1100,11 @@ fn components_with_ink(
             .map(|[r, g, b]| match colour {
                 Colour::Black => match policy {
                     InkPolicy::Standard => (*r).max(*g).max(*b) <= 100,
-                    InkPolicy::Sepia => *r <= UNDERWATER_BROWN_MAX
-                        && *b <= UNDERWATER_BROWN_BLUE_MAX && brown_compatible([*r, *g, *b]),
+                    InkPolicy::Sepia => {
+                        *r <= UNDERWATER_BROWN_MAX
+                            && *b <= UNDERWATER_BROWN_BLUE_MAX
+                            && brown_compatible([*r, *g, *b])
+                    }
                 },
                 Colour::Red => {
                     (*r >= 160 && r.saturating_sub(*g) >= 80 && r.saturating_sub(*b) >= 80)
@@ -812,10 +1154,11 @@ fn components_with_ink(
                 let y = index / CORNER_WIDTH;
                 supported_strong += usize::from(
                     strong[index]
-                        && (colour != Colour::Black || match policy {
-                            InkPolicy::Standard => black_compatible(pixels[index], aged),
-                            InkPolicy::Sepia => brown_compatible(pixels[index]),
-                        }),
+                        && (colour != Colour::Black
+                            || match policy {
+                                InkPolicy::Standard => black_compatible(pixels[index], aged),
+                                InkPolicy::Sepia => brown_compatible(pixels[index]),
+                            }),
                 );
                 points.push(Point {
                     x: (x + 3) as u8,
@@ -978,7 +1321,12 @@ fn corners_with_ink(
                 component.points.iter().any(|point| point.y < cut)
                     && component.points.iter().any(|point| point.y >= cut)
             });
-            let corner = Corner { rank, suit, colour, whole_separator };
+            let corner = Corner {
+                rank,
+                suit,
+                colour,
+                whole_separator,
+            };
             if !candidates.contains(&corner) {
                 candidates.push(corner);
             }
@@ -1206,7 +1554,11 @@ fn complete_family_with_ink(
             .map(|pair| Ok(super::hex(pair[0])? * 16 + super::hex(pair[1])?))
             .collect::<Result<_, String>>()?;
         let pixels = bytes.as_chunks::<3>().0.to_vec();
-        let reference_cut = if ink == InkPolicy::Sepia { Some(UNDERWATER_SEPARATOR) } else { (!western).then_some(32) };
+        let reference_cut = if ink == InkPolicy::Sepia {
+            Some(UNDERWATER_SEPARATOR)
+        } else {
+            (!western).then_some(32)
+        };
         let corner = corners_with_ink(&pixels, None, reference_cut, western, ink)
             .into_iter()
             .next()

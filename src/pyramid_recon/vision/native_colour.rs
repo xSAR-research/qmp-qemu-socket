@@ -575,7 +575,7 @@ impl ReconVision {
     /// Classic calibration remains unchanged; custom versioned policies stay frozen.
     /// No serialized/custom identifier can opt in; no input or restoration is implied.
     /// Returns embedded calibration errors before any guest interaction.
-    pub(crate) fn bundled_native_v23() -> Result<Self, String> {
+    pub fn bundled_native_v23() -> Result<Self, String> {
         let mut vision = Self::bundled_native_v22()?;
         vision.profile_id = "pyramid-native-1920-classic-v23".to_owned();
         vision.colour_independent = true;

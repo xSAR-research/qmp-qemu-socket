@@ -36,7 +36,11 @@ impl ResetPreview {
 
 
     /// Refresh after typed operator cancellation, preserving every genuine diagnostic.
-    pub(super) fn after_stop(request_id: u64, context: ControllerContext, state: WorkerState) -> Self {
+    pub(super) fn after_stop(
+        request_id: u64,
+        context: ControllerContext,
+        state: WorkerState,
+    ) -> Self {
         let mut refresh = Self::new(request_id, context);
         refresh.acknowledges_failure = false;
         refresh.preserves_failure = matches!(state, WorkerState::Error | WorkerState::Uncertain);
@@ -46,7 +50,9 @@ impl ResetPreview {
 
     /// Retain correlation across a new genuine failure and the queued disconnect.
     pub(super) fn preserve_new_failure(&mut self) -> bool {
-        if !self.pending() || self.acknowledges_failure { return false; }
+        if !self.pending() || self.acknowledges_failure {
+            return false;
+        }
         self.preserves_failure = true;
         true
     }
@@ -54,9 +60,13 @@ impl ResetPreview {
 
     /// Ignore obsolete generic progress while retaining genuine STOP-refresh failures.
     pub(super) fn suppress_event(&mut self, event: &WorkerEvent) -> bool {
-        if !self.pending() { return false; }
+        if !self.pending() {
+            return false;
+        }
         match event {
-            WorkerEvent::State(WorkerState::Error | WorkerState::Uncertain) if !self.acknowledges_failure => {
+            WorkerEvent::State(WorkerState::Error | WorkerState::Uncertain)
+                if !self.acknowledges_failure =>
+            {
                 self.preserves_failure = true;
                 false
             }
@@ -69,9 +79,13 @@ impl ResetPreview {
 
     /// Remain busy until both signals, then restore any genuine failure presentation.
     pub(super) fn worker_state(&self) -> WorkerState {
-        if self.pending() { WorkerState::Connecting }
-        else if self.preserves_failure { WorkerState::Error }
-        else { WorkerState::Ready }
+        if self.pending() {
+            WorkerState::Connecting
+        } else if self.preserves_failure {
+            WorkerState::Error
+        } else {
+            WorkerState::Ready
+        }
     }
 
 
@@ -113,9 +127,17 @@ pub(super) enum CompletionDispatch {
 
 
 /// Invoke the production preview dispatch only after accepted operator cancellation.
-pub(super) fn dispatch_completion(accepted: bool, termination: crate::pyramid_workflow_model::RunTermination, stop_preview: impl FnOnce()) -> CompletionDispatch {
-    if !accepted { return CompletionDispatch::Ignored; }
-    if termination != crate::pyramid_workflow_model::RunTermination::OperatorStopped { return CompletionDispatch::Finished; }
+pub(super) fn dispatch_completion(
+    accepted: bool,
+    termination: crate::pyramid_workflow_model::RunTermination,
+    stop_preview: impl FnOnce(),
+) -> CompletionDispatch {
+    if !accepted {
+        return CompletionDispatch::Ignored;
+    }
+    if termination != crate::pyramid_workflow_model::RunTermination::OperatorStopped {
+        return CompletionDispatch::Finished;
+    }
     stop_preview();
     CompletionDispatch::StopPreview
 }
@@ -253,9 +275,17 @@ mod tests {
             assert!(refresh.suppress_event(&WorkerEvent::State(WorkerState::Ready)));
             assert!(!refresh.suppress_event(&WorkerEvent::State(WorkerState::Error)));
             assert!(!refresh.suppress_event(&WorkerEvent::Status("real failure".to_owned())));
-            if frame_first { refresh.install(); } else { refresh.finish(); }
+            if frame_first {
+                refresh.install();
+            } else {
+                refresh.finish();
+            }
             assert_eq!(refresh.worker_state(), WorkerState::Connecting);
-            if frame_first { refresh.finish(); } else { refresh.install(); }
+            if frame_first {
+                refresh.finish();
+            } else {
+                refresh.install();
+            }
             assert_eq!(refresh.worker_state(), WorkerState::Error);
             assert!(!refresh.accepts(42, Some(&selected)));
         }
@@ -266,16 +296,34 @@ mod tests {
     /// Clean cancellation waits for both success signals; genuine prior errors survive.
     #[test]
     fn stop_183_preview_waits_in_both_orders_and_retains_prior_error() {
-        for initial in [WorkerState::Ready, WorkerState::Error, WorkerState::Uncertain] {
+        for initial in [
+            WorkerState::Ready,
+            WorkerState::Error,
+            WorkerState::Uncertain,
+        ] {
             for frame_first in [false, true] {
                 let mut refresh = ResetPreview::after_stop(42, context(), initial);
                 assert!(!refresh.acknowledges_failure);
-                if frame_first { refresh.install(); } else { refresh.finish(); }
+                if frame_first {
+                    refresh.install();
+                } else {
+                    refresh.finish();
+                }
                 assert_eq!(refresh.worker_state(), WorkerState::Connecting);
-                if frame_first { refresh.finish(); } else { refresh.install(); }
-                assert_eq!(refresh.worker_state(), if initial == WorkerState::Ready { WorkerState::Ready } else { WorkerState::Error });
+                if frame_first {
+                    refresh.finish();
+                } else {
+                    refresh.install();
+                }
+                assert_eq!(
+                    refresh.worker_state(),
+                    if initial == WorkerState::Ready {
+                        WorkerState::Ready
+                    } else {
+                        WorkerState::Error
+                    }
+                );
             }
         }
     }
-
 }

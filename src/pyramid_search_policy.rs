@@ -17,7 +17,7 @@ mod saved_deal_tests;
 /// Maximum representable allowances disable application cutoffs without reserving
 /// memory or changing reusable engine defaults. Checked arithmetic and collection
 /// reservation failures still stop explicitly; cancellation never exposes a route.
-pub(crate) fn limits() -> SearchLimits {
+pub fn limits() -> SearchLimits {
     SearchLimits {
         max_states: usize::MAX,
         max_expansions: usize::MAX,
@@ -31,7 +31,7 @@ pub(crate) fn limits() -> SearchLimits {
 ///
 /// Null allowances mean the application imposes no cutoff for that resource.
 /// Finite supplied allowances remain literal; none of these values measures RSS.
-pub(crate) fn details(limits: SearchLimits) -> serde_json::Value {
+pub fn details(limits: SearchLimits) -> serde_json::Value {
     let memory_bytes = (limits.max_memory_bytes != usize::MAX).then_some(limits.max_memory_bytes);
     serde_json::json!({
         "max_memory_bytes": memory_bytes,

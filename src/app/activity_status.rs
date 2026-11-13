@@ -25,10 +25,14 @@ pub(super) fn header<R>(
     add_contents: impl FnOnce(&mut QmpQemuSocketApp, &mut eframe::egui::Ui) -> R,
 ) -> R {
     let context = app.current_preview_context();
+    let phase = match app.active_run {
+        Some(ActiveRun::FreeCellSession) => app.freecell_workflow.activity_phase(&context),
+        _ => app.pyramid_workflow.activity_phase(&context),
+    };
     let evidence = Evidence {
         worker: app.worker_state,
         owner: app.active_run,
-        phase: app.pyramid_workflow.activity_phase(&context),
+        phase,
         failure: app
             .reset_preview
             .as_ref()
@@ -110,7 +114,9 @@ impl Evidence {
                 Status::Solve
             }
             Some(ActiveRun::FreeCellCalculation) => Status::Route,
-            Some(ActiveRun::ComputedRoute | ActiveRun::PyramidSession) => match self.phase {
+            Some(
+                ActiveRun::ComputedRoute | ActiveRun::PyramidSession | ActiveRun::FreeCellSession,
+            ) => match self.phase {
                 Some(PyramidPhase::Reconnaissance) => Status::Recon,
                 Some(PyramidPhase::Planning) => Status::Route,
                 Some(PyramidPhase::Execution) => Status::Solve,

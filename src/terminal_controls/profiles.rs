@@ -57,45 +57,90 @@ impl GameControlProfile {
 /// Free Cell's expected control rectangles, maintained independently of other games.
 pub const FREECELL_CONTROLS: GameControlProfile = GameControlProfile {
     ok_glyph_policy: OkGlyphPolicy::ExactBlack,
-    ok: SearchSpec { bounds: PixelRect::new(930, 700, 25, 151), run_length: BLACK_RUN_LENGTH },
-    new_game: SearchSpec { bounds: PixelRect::new(810, 831, 69, 49), run_length: BLACK_RUN_LENGTH },
-    play: SearchSpec { bounds: PixelRect::new(675, 740, 20, 51), run_length: BLACK_RUN_LENGTH },
+    ok: SearchSpec {
+        bounds: PixelRect::new(930, 700, 25, 151),
+        run_length: BLACK_RUN_LENGTH,
+    },
+    new_game: SearchSpec {
+        bounds: PixelRect::new(810, 831, 69, 49),
+        run_length: BLACK_RUN_LENGTH,
+    },
+    play: SearchSpec {
+        bounds: PixelRect::new(675, 740, 20, 51),
+        run_length: BLACK_RUN_LENGTH,
+    },
 };
 
 
 /// Spider's expected control rectangles, maintained independently of other games.
 pub const SPIDER_CONTROLS: GameControlProfile = GameControlProfile {
     ok_glyph_policy: OkGlyphPolicy::ExactBlack,
-    ok: SearchSpec { bounds: PixelRect::new(930, 700, 25, 151), run_length: BLACK_RUN_LENGTH },
-    new_game: SearchSpec { bounds: PixelRect::new(810, 831, 69, 49), run_length: BLACK_RUN_LENGTH },
-    play: SearchSpec { bounds: PixelRect::new(675, 840, 20, 51), run_length: BLACK_RUN_LENGTH },
+    ok: SearchSpec {
+        bounds: PixelRect::new(930, 700, 25, 151),
+        run_length: BLACK_RUN_LENGTH,
+    },
+    new_game: SearchSpec {
+        bounds: PixelRect::new(810, 831, 69, 49),
+        run_length: BLACK_RUN_LENGTH,
+    },
+    play: SearchSpec {
+        bounds: PixelRect::new(675, 840, 20, 51),
+        run_length: BLACK_RUN_LENGTH,
+    },
 };
 
 
 /// Klondike's O stripe excludes the retained pointer in native K53.
 pub const KLONDIKE_CONTROLS: GameControlProfile = GameControlProfile {
     ok_glyph_policy: OkGlyphPolicy::KlondikeCaption,
-    ok: SearchSpec { bounds: PixelRect::new(930, 700, 25, 151), run_length: BLACK_RUN_LENGTH },
-    new_game: SearchSpec { bounds: PixelRect::new(810, 831, 69, 49), run_length: BLACK_RUN_LENGTH },
-    play: SearchSpec { bounds: PixelRect::new(675, 840, 20, 51), run_length: BLACK_RUN_LENGTH },
+    ok: SearchSpec {
+        bounds: PixelRect::new(930, 700, 25, 151),
+        run_length: BLACK_RUN_LENGTH,
+    },
+    new_game: SearchSpec {
+        bounds: PixelRect::new(810, 831, 69, 49),
+        run_length: BLACK_RUN_LENGTH,
+    },
+    play: SearchSpec {
+        bounds: PixelRect::new(675, 840, 20, 51),
+        run_length: BLACK_RUN_LENGTH,
+    },
 };
 
 
 /// TriPeaks has native OK evidence; New Game and Play still need live acceptance.
 pub const TRIPEAKS_CONTROLS: GameControlProfile = GameControlProfile {
     ok_glyph_policy: OkGlyphPolicy::ExactBlack,
-    ok: SearchSpec { bounds: PixelRect::new(930, 700, 25, 151), run_length: BLACK_RUN_LENGTH },
-    new_game: SearchSpec { bounds: PixelRect::new(810, 831, 69, 49), run_length: BLACK_RUN_LENGTH },
-    play: SearchSpec { bounds: PixelRect::new(675, 885, 20, 56), run_length: BLACK_RUN_LENGTH },
+    ok: SearchSpec {
+        bounds: PixelRect::new(930, 700, 25, 151),
+        run_length: BLACK_RUN_LENGTH,
+    },
+    new_game: SearchSpec {
+        bounds: PixelRect::new(810, 831, 69, 49),
+        run_length: BLACK_RUN_LENGTH,
+    },
+    play: SearchSpec {
+        bounds: PixelRect::new(675, 885, 20, 56),
+        run_length: BLACK_RUN_LENGTH,
+    },
 };
 
 
 /// Pyramid's inherited menu calibration still requires native/live acceptance.
 pub const PYRAMID_CONTROLS: GameControlProfile = GameControlProfile {
     ok_glyph_policy: OkGlyphPolicy::ExactBlack,
-    ok: SearchSpec { bounds: PixelRect::new(930, 700, 25, 151), run_length: BLACK_RUN_LENGTH },
-    new_game: SearchSpec { bounds: PixelRect::new(810, 831, 69, 49), run_length: BLACK_RUN_LENGTH },
-    play: SearchSpec { bounds: PixelRect::new(675, 885, 20, 56), run_length: BLACK_RUN_LENGTH },
+    ok: SearchSpec {
+        bounds: PixelRect::new(930, 700, 25, 151),
+        run_length: BLACK_RUN_LENGTH,
+    },
+    new_game: SearchSpec {
+        bounds: PixelRect::new(810, 831, 69, 49),
+        run_length: BLACK_RUN_LENGTH,
+    },
+    play: SearchSpec {
+        bounds: PixelRect::new(675, 885, 20, 56),
+        run_length: BLACK_RUN_LENGTH,
+    },
 };
 
 

@@ -9,9 +9,8 @@ use crate::{
     game::{GameProfile, GameProgress, GameplaySceneProfile},
     geometry::{PixelPoint, PixelRect},
     parameters::{
-        FACE_UP_WHITE_BLOCK_MIN_WIDTH,
-        FACE_UP_WHITE_CHANNEL_MINIMUM, GOLD_CHANNEL_TOLERANCE, GOLD_RGB_CANDIDATES,
-        HALO_GOLD_LINE_OFFSET_Y, HALO_GOLD_RUN_MIN, HALO_GOLD_SCAN_HEIGHT,
+        FACE_UP_WHITE_BLOCK_MIN_WIDTH, FACE_UP_WHITE_CHANNEL_MINIMUM, GOLD_CHANNEL_TOLERANCE,
+        GOLD_RGB_CANDIDATES, HALO_GOLD_LINE_OFFSET_Y, HALO_GOLD_RUN_MIN, HALO_GOLD_SCAN_HEIGHT,
         TABLEAU_RELAXED_GOLD_BLUE_MAXIMUM, TABLEAU_RELAXED_GOLD_GREEN_BLUE_DELTA_MINIMUM,
         TABLEAU_RELAXED_GOLD_GREEN_MINIMUM, TABLEAU_RELAXED_GOLD_RED_GREEN_DELTA_MAXIMUM,
         TABLEAU_RELAXED_GOLD_RED_GREEN_DELTA_MINIMUM, TABLEAU_RELAXED_GOLD_RED_MINIMUM,
@@ -48,8 +47,6 @@ pub fn measure_game_progress_for_profile(
     frame: &CapturedFrame,
     profile: &GameProfile,
 ) -> Result<GameProgressEvidence, HaloDetectionError> {
-
-
     if !frame.is_layout_valid() {
         return Err(HaloDetectionError::InvalidFrameLayout);
     }
@@ -68,8 +65,6 @@ pub fn measure_game_progress_for_profile(
 
 
     for y in progress.right_probe.y..bottom {
-
-
         for x in progress.right_probe.x..right {
             let rgb = pixel_rgb(frame, x, y).ok_or(HaloDetectionError::InvalidFrameLayout)?;
 
@@ -131,7 +126,9 @@ pub enum HaloDetectionError {
         target: &'static str,
     },
     /// A closed Klondike stock HALO contains neither supported backs nor empty felt.
-    #[error("Klondike highlighted stock interior is unclassified: supported back={supported_back_pixels}/{total_pixels} (required 50%); felt={felt_pixels}/{total_pixels} (required 90%); no Draw or Recycle input authorised")]
+    #[error(
+        "Klondike highlighted stock interior is unclassified: supported back={supported_back_pixels}/{total_pixels} (required 50%); felt={felt_pixels}/{total_pixels} (required 90%); no Draw or Recycle input authorised"
+    )]
     UnclassifiedKlondikeStock {
         /// Pixels matching the supported card-back colours.
         supported_back_pixels: u32,
@@ -214,8 +211,6 @@ pub fn find_gold_halo_run(
     frame: &CapturedFrame,
     regions: CardRegionPixels,
 ) -> Result<Option<GoldRunHit>, HaloDetectionError> {
-
-
     if !frame.is_layout_valid() {
         return Err(HaloDetectionError::InvalidFrameLayout);
     }
@@ -246,14 +241,13 @@ pub fn find_gold_halo_run(
 
 
     for y in scan_y..scan_bottom {
-
-
         if let Some((run_start, run_length)) = find_horizontal_run(
             frame,
             regions.halo_bounds.x,
             halo_right,
             y,
             HALO_GOLD_RUN_MIN,
+            None,
             is_goldish,
         ) {
             return Ok(Some(GoldRunHit {
@@ -274,8 +268,6 @@ pub fn find_gold_run_in_bounds(
     frame: &CapturedFrame,
     bounds: PixelRect,
 ) -> Result<Option<GoldRunHit>, HaloDetectionError> {
-
-
     if !frame.is_layout_valid() {
         return Err(HaloDetectionError::InvalidFrameLayout);
     }
@@ -284,11 +276,15 @@ pub fn find_gold_run_in_bounds(
 
 
     for y in bounds.y..bottom {
-
-
-        if let Some((run_start, run_length)) =
-            find_horizontal_run(frame, bounds.x, right, y, HALO_GOLD_RUN_MIN, is_goldish)
-        {
+        if let Some((run_start, run_length)) = find_horizontal_run(
+            frame,
+            bounds.x,
+            right,
+            y,
+            HALO_GOLD_RUN_MIN,
+            None,
+            is_goldish,
+        ) {
             return Ok(Some(GoldRunHit {
                 anchor: PixelPoint::new(run_start as i32, y as i32),
                 length: run_length,
@@ -306,8 +302,6 @@ pub fn has_gameplay_felt_for_profile(
     frame: &CapturedFrame,
     profile: &GameProfile,
 ) -> Result<bool, HaloDetectionError> {
-
-
     if !frame.is_layout_valid() {
         return Err(HaloDetectionError::InvalidFrameLayout);
     }
@@ -323,11 +317,7 @@ pub fn has_gameplay_felt_for_profile(
 
 
     for y in scene.probe_bounds.y..bottom {
-
-
         for x in scene.probe_bounds.x..right {
-
-
             if pixel_rgb(frame, x, y).is_some_and(|rgb| is_gameplay_felt_green(rgb, scene)) {
                 matching_pixels += 1;
             }
@@ -351,8 +341,6 @@ pub fn find_tableau_gold_halo_run(
     regions: CardRegionPixels,
     click_offset_x: i32,
 ) -> Result<Option<GoldRunHit>, HaloDetectionError> {
-
-
     if let Some(exact_hit) = find_gold_halo_run(frame, regions)? {
         return Ok(Some(exact_hit));
     }
@@ -380,16 +368,17 @@ pub fn find_tableau_gold_halo_run(
 
 
     for y in strip_top..strip_bottom {
-
-
-        if let Some((_, run_length)) = find_horizontal_run_near_anchor(
+        let constraint = xsar::image_matching::RunStartConstraint {
+            x: canonical_x,
+            tolerance: TABLEAU_RELAXED_HALO_START_X_TOLERANCE,
+        };
+        if let Some((_, run_length)) = find_horizontal_run(
             frame,
             regions.halo_bounds.x,
             halo_right,
             y,
             HALO_GOLD_RUN_MIN,
-            canonical_x,
-            TABLEAU_RELAXED_HALO_START_X_TOLERANCE,
+            Some(constraint),
             is_relational_tableau_gold,
         ) {
             return Ok(Some(GoldRunHit {
@@ -412,8 +401,6 @@ pub fn find_face_up_white_block(
     frame: &CapturedFrame,
     probe_bounds: PixelRect,
 ) -> Result<Option<WhiteBlockHit>, HaloDetectionError> {
-
-
     if !frame.is_layout_valid() {
         return Err(HaloDetectionError::InvalidFrameLayout);
     }
@@ -429,8 +416,6 @@ pub fn find_face_up_white_block(
 
 
         if column_is_white {
-
-
             if run_width == 0 {
                 run_start = x;
             }
@@ -472,6 +457,7 @@ fn find_horizontal_run(
     right: u32,
     y: u32,
     minimum_length: u32,
+    constraint: Option<xsar::image_matching::RunStartConstraint>,
     predicate: fn([u8; 3]) -> bool,
 ) -> Option<(u32, u32)> {
     let width = right.checked_sub(left)?;
@@ -480,38 +466,10 @@ fn find_horizontal_run(
         view,
         PixelRect::new(left, y, width, 1),
         minimum_length,
-        None,
+        constraint,
         predicate,
-    ).ok()??;
-    Some((u32::try_from(hit.anchor.x).ok()?, hit.length))
-}
-
-
-/// Find a matching run whose first pixel lies within the calibrated X tolerance.
-#[allow(clippy::too_many_arguments)]
-fn find_horizontal_run_near_anchor(
-    frame: &CapturedFrame,
-    left: u32,
-    right: u32,
-    y: u32,
-    minimum_length: u32,
-    canonical_start: u32,
-    start_tolerance: u32,
-    predicate: fn([u8; 3]) -> bool,
-) -> Option<(u32, u32)> {
-    let width = right.checked_sub(left)?;
-    let view = frame.as_view().ok()?;
-    let constraint = xsar::image_matching::RunStartConstraint {
-        x: canonical_start,
-        tolerance: start_tolerance,
-    };
-    let hit = xsar::image_matching::find_horizontal_run(
-        view,
-        PixelRect::new(left, y, width, 1),
-        minimum_length,
-        Some(constraint),
-        predicate,
-    ).ok()??;
+    )
+    .ok()??;
     Some((u32::try_from(hit.anchor.x).ok()?, hit.length))
 }
 
@@ -543,8 +501,6 @@ fn checked_bounds(
     bounds: PixelRect,
     frame: &CapturedFrame,
 ) -> Result<(u32, u32), HaloDetectionError> {
-
-
     if bounds.is_empty() {
         return Err(HaloDetectionError::EmptyBounds);
     }
@@ -637,8 +593,6 @@ mod tests {
         length: u32,
         colour: [u8; 3],
     ) {
-
-
         for x in start_x..start_x + length {
             set_pixel(frame, x, y, colour);
         }
@@ -654,11 +608,7 @@ mod tests {
         height: u32,
         value: u8,
     ) {
-
-
         for y in start_y..start_y + height {
-
-
             for x in start_x..start_x + width {
                 set_pixel(frame, x, y, [value; 3]);
             }
@@ -777,8 +727,6 @@ mod tests {
 
     #[test]
     fn tableau_fallback_rejects_non_gold_channel_relationships() {
-
-
         for colour in [
             [250, 250, 250],
             [90, 160, 100],
@@ -814,8 +762,6 @@ mod tests {
 
     #[test]
     fn tableau_fallback_is_bounded_to_the_exterior_strip() {
-
-
         for accepted_y in [180, 193] {
             let mut frame = rgba_frame(220, 220);
             set_coloured_horizontal_run(&mut frame, 39, accepted_y, 100, [225, 194, 100]);
@@ -1009,8 +955,6 @@ mod tests {
 
 
         for y in SOLVER_PROGRESS_RIGHT_PROBE.y..SOLVER_PROGRESS_RIGHT_PROBE.bottom() {
-
-
             for x in SOLVER_PROGRESS_RIGHT_PROBE.x..SOLVER_PROGRESS_RIGHT_PROBE.right() {
                 set_pixel(&mut frame, x, y, [172, 142, 84]);
             }
@@ -1032,8 +976,6 @@ mod tests {
 
 
         for coloured_pixels in [11_u32, 12] {
-
-
             for offset in 0..coloured_pixels {
                 set_pixel(&mut frame, probe.x + offset, probe.y, [172, 142, 84]);
             }
@@ -1046,7 +988,10 @@ mod tests {
             };
 
 
-            for mode in [crate::game::GameMode::TriPeaks, crate::game::GameMode::Pyramid] {
+            for mode in [
+                crate::game::GameMode::TriPeaks,
+                crate::game::GameMode::Pyramid,
+            ] {
                 assert_eq!(
                     detect_game_progress_for_profile(&frame, mode.profile()),
                     Ok(expected)
@@ -1099,15 +1044,16 @@ mod tests {
 
         // The historical coordinates land on gold even on this fresh board.
         for y in 84..86 {
-
-
             for x in 1_050..1_088 {
                 assert!(pixel_rgb(&frame, x, y).unwrap()[0] > 170);
             }
         }
 
 
-        for mode in [crate::game::GameMode::TriPeaks, crate::game::GameMode::Pyramid] {
+        for mode in [
+            crate::game::GameMode::TriPeaks,
+            crate::game::GameMode::Pyramid,
+        ] {
             assert_eq!(
                 measure_game_progress_for_profile(&frame, mode.profile()),
                 Ok(GameProgressEvidence {
@@ -1123,8 +1069,6 @@ mod tests {
         // a fully filled bar. This is synthetic completion evidence, not a
         // claim that the source screenshot captured a completed game.
         for y in 87..89 {
-
-
             for offset in 0..38 {
                 let filled_rgb = pixel_rgb(&frame, 830 + offset, y).unwrap();
                 set_pixel(&mut frame, 1_050 + offset, y, filled_rgb);
@@ -1132,7 +1076,10 @@ mod tests {
         }
 
 
-        for mode in [crate::game::GameMode::TriPeaks, crate::game::GameMode::Pyramid] {
+        for mode in [
+            crate::game::GameMode::TriPeaks,
+            crate::game::GameMode::Pyramid,
+        ] {
             assert_eq!(
                 measure_game_progress_for_profile(&frame, mode.profile()),
                 Ok(GameProgressEvidence {
@@ -1153,7 +1100,10 @@ mod tests {
         truncated.pixels.truncate(4);
 
 
-        for mode in [crate::game::GameMode::TriPeaks, crate::game::GameMode::Pyramid] {
+        for mode in [
+            crate::game::GameMode::TriPeaks,
+            crate::game::GameMode::Pyramid,
+        ] {
             assert_eq!(
                 measure_game_progress_for_profile(&truncated, mode.profile()),
                 Err(HaloDetectionError::InvalidFrameLayout)

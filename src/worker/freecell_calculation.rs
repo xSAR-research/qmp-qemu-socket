@@ -168,6 +168,121 @@ impl Control {
 }
 
 
+/// Validated deal input and cancellation fences passed to [`search_deal_with_control`].
+pub(super) struct SearchInput<'a> {
+    /// Immutable initial deal validated for acquisition objective.
+    pub(super) deal: xsar::games::freecell::InitialDeal,
+    /// Origin JSON path preserved in the final immutable [`Report`].
+    pub(super) path: PathBuf,
+    /// Exact bounded JSON bytes retained in the final [`Report`].
+    pub(super) bytes: Vec<u8>,
+    /// Shared monotonic cancellation latch.
+    pub(super) cancel: &'a AtomicBool,
+    /// Event sink hosting pause-checkpoint coordination.
+    pub(super) events: &'a WorkerEventSink,
+}
+
+/// Execute A* best-effort search with pause checkpoints and cancellation fences,
+/// returning a frozen immutable `Report` without spawning a detached thread.
+pub(super) fn search_deal_with_control(
+    input: SearchInput<'_>,
+    mut check_active: impl FnMut() -> Result<bool, String>,
+    mut on_progress: impl FnMut(SearchProgress, Duration),
+) -> Result<Report, String> {
+    let SearchInput {
+        deal,
+        path,
+        bytes,
+        cancel,
+        events,
+    } = input;
+    if check_active()? {
+        return Ok(Report {
+            path,
+            deal,
+            bytes,
+            outcome: Outcome::Cancelled(xsar::search::SearchStats::default()),
+            paused: Duration::ZERO,
+        });
+    }
+    let checkpoint_error = RefCell::new(None);
+    let paused_total = Cell::new(Duration::ZERO);
+    let check_ref = RefCell::new(&mut check_active);
+    let checkpoint = || {
+        if checkpoint_error.borrow().is_some() {
+            return Duration::ZERO;
+        }
+        let callback_cancelled = Cell::new(false);
+        let check = || match (check_ref.borrow_mut())() {
+            Ok(false) => Ok(()),
+            Ok(true) => {
+                callback_cancelled.set(true);
+                Err("Free Cell search cancelled".to_owned())
+            }
+            Err(error) => Err(error),
+        };
+        let paused = match events
+            .latest_frame
+            .pause
+            .checkpoint(pyramid_pause::Phase::Search, check)
+        {
+            Ok(paused) => paused,
+            Err(error) => {
+                *checkpoint_error.borrow_mut() = Some((error.message, callback_cancelled.get()));
+                cancel.store(true, Ordering::Release);
+                error.paused
+            }
+        };
+        match paused_total.get().checked_add(paused) {
+            Some(total) => paused_total.set(total),
+            None => {
+                *checkpoint_error.borrow_mut() =
+                    Some(("Free Cell pause duration overflow".to_owned(), false));
+                cancel.store(true, Ordering::Release);
+            }
+        }
+        paused
+    };
+    let mut progress = |search| {
+        crate::single_step_telemetry::record(
+            || serde_json::json!({"event":"calculation-progress", "progress":format!("{search:?}"), "paused_ms":paused_total.get().as_millis()}),
+        );
+        on_progress(search, paused_total.get());
+    };
+    crate::single_step_telemetry::record(
+        || serde_json::json!({"event":"calculation-search-start", "objective":"complete board first; exhaustive maximum foundations if impossible", "input_frozen":true, "independent_replay_required":true}),
+    );
+    let mut outcome = xsar::games::freecell::search::solve_best_effort_with_control(
+        &deal,
+        cancel,
+        Some(&mut progress),
+        Some(&checkpoint),
+    );
+    if let Some((error, cancelled)) = checkpoint_error.into_inner()
+        && !cancelled
+    {
+        return Err(error);
+    }
+    // A final cancellation retires even an already replayed route. Actual failures win.
+    if !matches!(outcome, Outcome::Failed { .. }) {
+        match (check_ref.borrow_mut())() {
+            Ok(false) => {}
+            Ok(true) => outcome = Outcome::Cancelled(stats(&outcome)),
+            Err(error) => return Err(error),
+        }
+    }
+    crate::single_step_telemetry::record(
+        || serde_json::json!({"event":"calculation-search-finished", "outcome":match &outcome {Outcome::Solved{..}=>"solved and independently replayed", Outcome::Partial{..}=>"exhaustive maximum independently replayed", Outcome::Failed{..}=>"failed", Outcome::Cancelled(_)=>"cancelled"}, "stats":format!("{:?}", stats(&outcome)), "route_available":matches!(&outcome,Outcome::Solved{..}|Outcome::Partial{foundation_cards:1..=51,..})}),
+    );
+    Ok(Report {
+        path,
+        deal,
+        bytes,
+        outcome,
+        paused: paused_total.get(),
+    })
+}
+
 /// Load bounded input once, compute/replay offline, and publish one ordered result.
 pub(super) fn run(
     identity: Identity,
@@ -202,86 +317,27 @@ pub(super) fn run(
             || serde_json::json!({"event":"calculation-source-parsed", "deal_id":deal.metadata().deal_id(), "objective":crate::freecell_recon::objective::from_metadata(deal.metadata()).label()}),
         );
         crate::freecell_recon::objective::require_acquired(deal.metadata())?;
-        active().map_err(|e| e.to_string())?;
-        let checkpoint_error = RefCell::new(None);
-        let paused_total = Cell::new(Duration::ZERO);
-        let callback_cause = Cell::new(None);
-        let checkpoint = || {
-            if checkpoint_error.borrow().is_some() {
-                return Duration::ZERO;
-            }
-            callback_cause.set(None);
-            let check = || {
-                active().map_err(|cause| {
-                    callback_cause.set(Some(cause));
-                    cause.to_string()
-                })
-            };
-            let paused = match events
-                .latest_frame
-                .pause
-                .checkpoint(pyramid_pause::Phase::Search, check)
-            {
-                Ok(paused) => paused,
-                Err(error) => {
-                    let cancelled = callback_cause.get() == Some(ControlError::Cancelled);
-                    *checkpoint_error.borrow_mut() = Some((error.message, cancelled));
-                    cancel.store(true, Ordering::Release);
-                    error.paused
-                }
-            };
-            match paused_total.get().checked_add(paused) {
-                Some(total) => paused_total.set(total),
-                None => {
-                    *checkpoint_error.borrow_mut() =
-                        Some(("Free Cell pause duration overflow".to_owned(), false));
-                    cancel.store(true, Ordering::Release);
-                }
-            }
-            paused
-        };
-        let mut progress = |search| {
-            crate::single_step_telemetry::record(
-                || serde_json::json!({"event":"calculation-progress", "progress":format!("{search:?}"), "paused_ms":paused_total.get().as_millis()}),
-            );
-            control.publish(Progress {
-                identity: identity.clone(),
-                search,
-                paused: paused_total.get(),
-            })
-        };
-        crate::single_step_telemetry::record(
-            || serde_json::json!({"event":"calculation-search-start", "objective":"complete board first; exhaustive maximum foundations if impossible", "input_frozen":true, "independent_replay_required":true}),
-        );
-        let mut outcome = xsar::games::freecell::search::solve_best_effort_with_control(
-            &deal,
-            cancel,
-            Some(&mut progress),
-            Some(&checkpoint),
-        );
-        if let Some((error, cancelled)) = checkpoint_error.into_inner()
-            && !cancelled
-        {
-            return Err(error);
-        }
-        // A final cancellation retires even an already replayed route. Actual failures win.
-        if !matches!(outcome, Outcome::Failed { .. }) {
-            match active() {
-                Ok(()) => {}
-                Err(ControlError::Cancelled) => outcome = Outcome::Cancelled(stats(&outcome)),
-                Err(error) => return Err(error.to_string()),
-            }
-        }
-        crate::single_step_telemetry::record(
-            || serde_json::json!({"event":"calculation-search-finished", "outcome":match &outcome {Outcome::Solved{..}=>"solved and independently replayed", Outcome::Partial{..}=>"exhaustive maximum independently replayed", Outcome::Failed{..}=>"failed", Outcome::Cancelled(_)=>"cancelled"}, "stats":format!("{:?}", stats(&outcome)), "route_available":matches!(&outcome,Outcome::Solved{..}|Outcome::Partial{foundation_cards:1..=51,..})}),
-        );
-        Ok(Report {
-            path: path.to_owned(),
-            deal,
-            bytes,
-            outcome,
-            paused: paused_total.get(),
-        })
+        search_deal_with_control(
+            SearchInput {
+                deal,
+                path: path.to_owned(),
+                bytes,
+                cancel,
+                events,
+            },
+            || match active() {
+                Ok(()) => Ok(false),
+                Err(ControlError::Cancelled) => Ok(true),
+                Err(other) => Err(other.to_string()),
+            },
+            |search, paused| {
+                control.publish(Progress {
+                    identity: identity.clone(),
+                    search,
+                    paused,
+                });
+            },
+        )
     })();
     complete(identity, result, events);
 }

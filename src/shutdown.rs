@@ -7,7 +7,7 @@ use std::sync::{
 
 
 /// Own this process's SIGINT/SIGTERM registrations and its monotonic shutdown request.
-pub(crate) struct ShutdownRequest {
+pub struct ShutdownRequest {
     /// Never cleared; distinct from the reusable gameplay STOP flag.
     requested: Arc<AtomicBool>,
     /// Only this owner's handlers are unregistered on normal teardown.
@@ -19,7 +19,7 @@ pub(crate) struct ShutdownRequest {
 impl ShutdownRequest {
     /// Install flag-only handlers; return registration errors before starting the worker.
     /// SIGKILL cannot be caught. The UI polls this flag and requests cooperative STOP.
-    pub(crate) fn install() -> std::io::Result<Self> {
+    pub fn install() -> std::io::Result<Self> {
         let mut request = Self {
             requested: Arc::new(AtomicBool::new(false)),
             #[cfg(unix)]
@@ -36,19 +36,19 @@ impl ShutdownRequest {
 
 
     /// Share the irreversible request with the serial worker and UI.
-    pub(crate) fn flag(&self) -> Arc<AtomicBool> {
+    pub fn flag(&self) -> Arc<AtomicBool> {
         Arc::clone(&self.requested)
     }
 
 
     /// Whether EXIT, native close or a supported termination signal requested teardown.
-    pub(crate) fn requested(&self) -> bool {
+    pub fn requested(&self) -> bool {
         self.requested.load(Ordering::SeqCst)
     }
 
 
     /// Latch shutdown without doing I/O, taking locks or waiting for the worker.
-    pub(crate) fn request(&self) {
+    pub fn request(&self) {
         self.requested.store(true, Ordering::SeqCst);
     }
 }

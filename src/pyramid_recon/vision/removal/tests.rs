@@ -77,17 +77,22 @@ fn temporal_168_retained_corners_record_exact_joint_policy() {
             substantial(
                 &corner(&before, slot).unwrap(),
                 &corner(&after, slot).unwrap(),
-            ).unwrap(), accepted,
+            )
+            .unwrap(),
+            accepted,
             "{folder}"
         );
     }
     let before = frame("pyramid-recognition-167/initial.png");
     let after = frame("pyramid-recognition-167/last-observed.png");
     for slot in [15, 18] {
-        assert!(substantial(
-            &corner(&before, slot).unwrap(),
-            &corner(&after, slot).unwrap(),
-        ).unwrap());
+        assert!(
+            substantial(
+                &corner(&before, slot).unwrap(),
+                &corner(&after, slot).unwrap(),
+            )
+            .unwrap()
+        );
     }
 }
 
@@ -317,8 +322,20 @@ fn temporal_168_earlier_full_positions_preserve_joint_policy_refusals() {
         if folder.ends_with("request13") {
             // Preserve the historical 31-by-49 control independently of the new ROI.
             let measured = xsar::image_matching::packed_rgb::compare_packed_rgb(
-                &corner(&source,22).unwrap(), &corner(&after,22).unwrap(),26,10).unwrap();
-            assert_eq!((measured.changed_pixels,measured.total_pixels,measured.allowed_changes),(127,1519,151));
+                &corner(&source, 22).unwrap(),
+                &corner(&after, 22).unwrap(),
+                26,
+                10,
+            )
+            .unwrap();
+            assert_eq!(
+                (
+                    measured.changed_pixels,
+                    measured.total_pixels,
+                    measured.allowed_changes
+                ),
+                (127, 1519, 151)
+            );
             assert!(!measured.exceeds_allowance());
         }
         let candidate = settled(&mut history, &vision, &after, &expected);

@@ -78,24 +78,33 @@ pub(super) fn analyse_frame(
             ));
         }
         return Ok(FrameClassification {
-            prediction: PredictedAction::CalibrationOnly { mode: scan_state.mode() },
+            prediction: PredictedAction::CalibrationOnly {
+                mode: scan_state.mode(),
+            },
             observed_rows: None,
             gameplay_scene: false,
             game_progress: None,
         });
     }
 
-    let gameplay_scene = is_gameplay_scene_for_mode(frame, scan_state.mode())
-        .map_err(|error| FrameAnalysisError::Other(format!("gameplay-scene analysis failed: {error}")))?;
-    let game_progress = if matches!(scan_state.mode(), GameMode::Klondike | GameMode::FreeCell | GameMode::Spider) {
+    let gameplay_scene = is_gameplay_scene_for_mode(frame, scan_state.mode()).map_err(|error| {
+        FrameAnalysisError::Other(format!("gameplay-scene analysis failed: {error}"))
+    })?;
+    let game_progress = if matches!(
+        scan_state.mode(),
+        GameMode::Klondike | GameMode::FreeCell | GameMode::Spider
+    ) {
         None
     } else {
-        Some(detect_game_progress_for_profile(frame, profile)
-            .map_err(|error| FrameAnalysisError::Other(format!("Solver progress analysis failed: {error}")))?)
+        Some(
+            detect_game_progress_for_profile(frame, profile).map_err(|error| {
+                FrameAnalysisError::Other(format!("Solver progress analysis failed: {error}"))
+            })?,
+        )
     };
     let (prediction, observed_rows) = if gameplay_scene {
-        let analysis = analyse_frame_with_state(frame, scan_state)
-            .map_err(FrameAnalysisError::Tracker)?;
+        let analysis =
+            analyse_frame_with_state(frame, scan_state).map_err(FrameAnalysisError::Tracker)?;
         (analysis.prediction, analysis.observed_rows)
     } else {
         (PredictedAction::NoHighlight, None)
@@ -107,7 +116,12 @@ pub(super) fn analyse_frame(
             "observed_rows": format!("{observed_rows:?}"),
         })
     });
-    Ok(FrameClassification { prediction, observed_rows, gameplay_scene, game_progress })
+    Ok(FrameClassification {
+        prediction,
+        observed_rows,
+        gameplay_scene,
+        game_progress,
+    })
 }
 
 /// Rejected pixels remain inspection-only and cannot supply a proposed action.
@@ -160,7 +174,9 @@ struct QmpGeometryCapture<'a> {
 }
 
 impl GeometryCaptureIo for QmpGeometryCapture<'_> {
-    fn cancelled(&self) -> bool { self.cancel_requested.load(Ordering::Acquire) }
+    fn cancelled(&self) -> bool {
+        self.cancel_requested.load(Ordering::Acquire)
+    }
 
     fn capture(&mut self) -> Result<(CapturedFrame, CaptureTiming), String> {
         capture_screen(self.qmp, self.socket_path, self.event_tx)
@@ -172,14 +188,24 @@ impl GeometryCaptureIo for QmpGeometryCapture<'_> {
 
     fn wait(&mut self, delay: Duration) -> bool {
         match cancellable_wait(delay, self.cancel_requested) {
-            Ok(waited) => { self.profile.intentional_wait += waited; true }
-            Err(waited) => { self.profile.intentional_wait += waited; false }
+            Ok(waited) => {
+                self.profile.intentional_wait += waited;
+                true
+            }
+            Err(waited) => {
+                self.profile.intentional_wait += waited;
+                false
+            }
         }
     }
 
-    fn record_capture(&mut self, timing: CaptureTiming) { self.profile.capture.add_assign(timing); }
+    fn record_capture(&mut self, timing: CaptureTiming) {
+        self.profile.capture.add_assign(timing);
+    }
 
-    fn log(&mut self, message: String) { send_log(self.event_tx, message); }
+    fn log(&mut self, message: String) {
+        send_log(self.event_tx, message);
+    }
 }
 
 /// Capture TriPeaks post-action evidence with one action-wide geometry budget.
@@ -218,13 +244,19 @@ fn recover_capture(
         }
         let (frame, mut timing) = match io.capture() {
             Ok(captured) => captured,
-            Err(error) => return Err(CaptureFailure { message: error, observation: latest_rejected }),
+            Err(error) => {
+                return Err(CaptureFailure {
+                    message: error,
+                    observation: latest_rejected,
+                });
+            }
         };
         io.publish(frame.clone());
         if io.cancelled() {
             io.record_capture(timing);
             return Err(CaptureFailure {
-                message: "STOP was requested after TriPeaks geometry capture; no input was retried".to_owned(),
+                message: "STOP was requested after TriPeaks geometry capture; no input was retried"
+                    .to_owned(),
                 observation: Some(Box::new(diagnostic_observation(frame))),
             });
         }
@@ -234,16 +266,20 @@ fn recover_capture(
         io.record_capture(timing);
         if io.cancelled() {
             return Err(CaptureFailure {
-                message: "STOP was requested after TriPeaks geometry analysis; no input was retried".to_owned(),
+                message:
+                    "STOP was requested after TriPeaks geometry analysis; no input was retried"
+                        .to_owned(),
                 observation: Some(Box::new(diagnostic_observation(frame))),
             });
         }
         match analysis {
-            Ok(classification) => return Ok(CaptureSeries {
-                observations: vec![classification.into_observation(frame)],
-                // The adapter accounted for all captures, including rejected frames.
-                timing: CaptureTiming::default(),
-            }),
+            Ok(classification) => {
+                return Ok(CaptureSeries {
+                    observations: vec![classification.into_observation(frame)],
+                    // The adapter accounted for all captures, including rejected frames.
+                    timing: CaptureTiming::default(),
+                });
+            }
             Err(FrameAnalysisError::Tracker(error @ TrackerError::ClickOffsetMismatch { .. }))
                 if scan_state.mode() == GameMode::TriPeaks =>
             {
@@ -268,10 +304,12 @@ fn recover_capture(
                     });
                 }
             }
-            Err(error) => return Err(CaptureFailure {
-                message: error.message(),
-                observation: Some(Box::new(diagnostic_observation(frame))),
-            }),
+            Err(error) => {
+                return Err(CaptureFailure {
+                    message: error.message(),
+                    observation: Some(Box::new(diagnostic_observation(frame))),
+                });
+            }
         }
     }
 }

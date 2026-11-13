@@ -184,11 +184,11 @@ fn show(ui: &mut egui::Ui, state: Status) -> Rect {
 mod tests {
     use super::*;
 
-    /// Every state occupies the same right-aligned face and preserves downstream
-    /// controls; the actual action buttons fit below half its width and height.
+    /// Every state keeps the fixed face and leaves action buttons below its halo.
     #[test]
     fn activity_badge_keeps_geometry_and_only_active_states_pulse() {
         let context = egui::Context::default();
+        crate::ui_style::apply_dark_theme(&context);
         install_fonts(&context);
         let mut faces = Vec::new();
         for state in [
@@ -218,9 +218,8 @@ mod tests {
                                 false,
                                 true,
                             );
-                            assert!(face.width() >= response.rect.width() * 2.0);
-                            assert!(face.height() >= response.rect.height() * 2.0);
-                            assert!(response.rect.top() > face.bottom());
+                            assert!(!face.expand(HALO_MARGIN).intersects(response.rect));
+                            assert!(response.rect.top() >= face.bottom() + HALO_MARGIN);
                         }
                     });
                 },
@@ -238,12 +237,12 @@ mod tests {
     }
 
 
-
     /// Selection content begins at the top left, wraps clear of the halo and
     /// leaves subsequent operational controls the complete supported panel width.
     #[test]
     fn activity_header_keeps_selection_and_full_width_body_clear_of_badge() {
         let context = egui::Context::default();
+        crate::ui_style::apply_dark_theme(&context);
         install_fonts(&context);
         for width in [840.0, 1120.0, 1440.0] {
             let mut output = context.run_ui(
@@ -301,6 +300,7 @@ mod tests {
             ] {
                 for idle in [false, true] {
                     let context = egui::Context::default();
+                    crate::ui_style::apply_dark_theme(&context);
                     install_fonts(&context);
                     let mut mode = selected_mode;
                     let mut route_goal = RouteGoal::MaximumCardMatches;
@@ -352,7 +352,7 @@ mod tests {
                                     let exit = ui
                                         .with_layout(
                                             egui::Layout::right_to_left(egui::Align::Min),
-                                            |ui| ui.button("EXIT"),
+                                            |ui| crate::ui_style::press_able_button(ui, "EXIT"),
                                         )
                                         .inner;
                                     assert!((exit.rect.right() - panel.right()).abs() < 0.01);
@@ -369,6 +369,215 @@ mod tests {
                     }
                 }
             }
+        }
+    }
+
+
+    /// A* header puts solving strategy on the left, game type on the right, and aligns both cleanly.
+    #[test]
+    fn independent_selection_row_places_strategy_left_of_game_and_aligns_vertically() {
+        use crate::{
+            app::pyramid_workflow::independent_selection_row, game::GameMode,
+            strategy::SolvingStrategy,
+        };
+
+        let pointer = |pos, pressed| egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        };
+
+        for width in [480.0, 640.0, 840.0, 1_920.0] {
+            for idle in [false, true] {
+                let context = egui::Context::default();
+                let mut strategy = SolvingStrategy::ShortestPath;
+                let mut game = GameMode::FreeCell;
+                let run_frame = |events, strategy: &mut SolvingStrategy, game: &mut GameMode| {
+                    crate::ui_style::apply_dark_theme(&context);
+                    install_fonts(&context);
+                    let mut captured = None;
+                    let mut output = context.run_ui(
+                        egui::RawInput {
+                            screen_rect: Some(Rect::from_min_size(
+                                egui::Pos2::ZERO,
+                                egui::vec2(width, 900.0),
+                            )),
+                            events,
+                            ..Default::default()
+                        },
+                        |root_ui| {
+                            egui::CentralPanel::default().show(root_ui, |ui| {
+                                let panel = ui.available_rect_before_wrap();
+                                let (responses, face) = header(ui, Status::Waiting, |ui| {
+                                    independent_selection_row(ui, idle, strategy, game)
+                                });
+                                captured = Some((panel, face, responses));
+                            });
+                        },
+                    );
+                    let shapes = output.shapes.clone();
+                    output.textures_delta.clear();
+                    (captured.expect("header rendered"), shapes)
+                };
+                let _ = run_frame(vec![], &mut strategy, &mut game);
+                let ((panel, face, [strategy_resp, game_resp]), _) =
+                    run_frame(vec![], &mut strategy, &mut game);
+                let s_rect = strategy_resp.rect;
+                let g_rect = game_resp.rect;
+                assert!(s_rect.is_positive() && g_rect.is_positive());
+                assert_eq!(face.size(), FACE_SIZE);
+                assert!(
+                    (face.right() - (panel.right() - HALO_MARGIN)).abs() < 0.01,
+                    "width {width} idle {idle}: face={face:?} panel={panel:?} s={s_rect:?} g={g_rect:?}"
+                );
+                assert!(
+                    s_rect.left() >= panel.left() && s_rect.right() <= face.left() - HALO_MARGIN,
+                    "width {width}: strategy {s_rect:?} badge {face:?}"
+                );
+                assert!(
+                    g_rect.left() >= panel.left() && g_rect.right() <= face.left() - HALO_MARGIN,
+                    "width {width}: game {g_rect:?} badge {face:?}"
+                );
+                if width >= 840.0 {
+                    assert!(
+                        s_rect.right() <= g_rect.left(),
+                        "width {width}: strategy {s_rect:?} must sit left of game {g_rect:?}"
+                    );
+                    assert!(
+                        (s_rect.top() - g_rect.top()).abs() <= 0.5,
+                        "width {width}: top mismatch {s_rect:?} vs {g_rect:?}"
+                    );
+                    assert!(
+                        (s_rect.center().y - g_rect.center().y).abs() <= 0.5,
+                        "width {width}: center.y mismatch {s_rect:?} vs {g_rect:?}"
+                    );
+                    assert!(
+                        (s_rect.bottom() - g_rect.bottom()).abs() <= 0.5,
+                        "width {width}: bottom mismatch {s_rect:?} vs {g_rect:?}"
+                    );
+                } else {
+                    assert!(
+                        g_rect.top() >= s_rect.bottom(),
+                        "width {width}: wrapped game {g_rect:?} must sit below strategy {s_rect:?}"
+                    );
+                    assert!(
+                        (s_rect.left() - g_rect.left()).abs() <= 0.5,
+                        "width {width}: wrapped left edges {s_rect:?} vs {g_rect:?}"
+                    );
+                }
+            }
+        }
+
+        for idle in [false, true] {
+            let context = egui::Context::default();
+            let mut strategy = SolvingStrategy::ShortestPath;
+            let mut game = GameMode::FreeCell;
+            let run = |events, strategy: &mut SolvingStrategy, game: &mut GameMode| {
+                crate::ui_style::apply_dark_theme(&context);
+                install_fonts(&context);
+                let mut captured = None;
+                let mut output = context.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            egui::vec2(1_920.0, 1_080.0),
+                        )),
+                        events,
+                        ..Default::default()
+                    },
+                    |root_ui| {
+                        egui::CentralPanel::default().show(root_ui, |ui| {
+                            let (responses, _) = header(ui, Status::Waiting, |ui| {
+                                independent_selection_row(ui, idle, strategy, game)
+                            });
+                            captured = Some(responses);
+                        });
+                    },
+                );
+                let shapes = output.shapes.clone();
+                output.textures_delta.clear();
+                (captured.expect("row rendered"), shapes)
+            };
+            let _ = run(vec![], &mut strategy, &mut game);
+            let ([strategy_resp, _], _) = run(vec![], &mut strategy, &mut game);
+            let s_pos = strategy_resp.rect.center();
+            let _ = run(
+                vec![egui::Event::PointerMoved(s_pos), pointer(s_pos, true)],
+                &mut strategy,
+                &mut game,
+            );
+            let _ = run(vec![pointer(s_pos, false)], &mut strategy, &mut game);
+            assert_eq!(egui::ComboBox::is_open(&context, strategy_resp.id), idle);
+            if idle {
+                let (_, shapes) = run(vec![], &mut strategy, &mut game);
+                let target = shapes
+                    .iter()
+                    .find_map(|shape| {
+                        if let egui::Shape::Text(text) = &shape.shape
+                            && text.galley.job.text == SolvingStrategy::ComputerVision.label()
+                        {
+                            Some(Rect::from_min_size(text.pos, text.galley.size()).center())
+                        } else {
+                            None
+                        }
+                    })
+                    .expect("strategy popup option");
+                let _ = run(
+                    vec![egui::Event::PointerMoved(target), pointer(target, true)],
+                    &mut strategy,
+                    &mut game,
+                );
+                let _ = run(vec![pointer(target, false)], &mut strategy, &mut game);
+            }
+            assert_eq!(
+                strategy,
+                if idle {
+                    SolvingStrategy::ComputerVision
+                } else {
+                    SolvingStrategy::ShortestPath
+                }
+            );
+            assert_eq!(game, GameMode::FreeCell);
+
+            let ([_, game_resp], _) = run(vec![], &mut strategy, &mut game);
+            let g_pos = game_resp.rect.center();
+            let _ = run(
+                vec![egui::Event::PointerMoved(g_pos), pointer(g_pos, true)],
+                &mut strategy,
+                &mut game,
+            );
+            let _ = run(vec![pointer(g_pos, false)], &mut strategy, &mut game);
+            assert_eq!(egui::ComboBox::is_open(&context, game_resp.id), idle);
+            if idle {
+                let (_, shapes) = run(vec![], &mut strategy, &mut game);
+                let target = shapes
+                    .iter()
+                    .find_map(|shape| {
+                        if let egui::Shape::Text(text) = &shape.shape
+                            && text.galley.job.text == GameMode::Pyramid.label()
+                        {
+                            Some(Rect::from_min_size(text.pos, text.galley.size()).center())
+                        } else {
+                            None
+                        }
+                    })
+                    .expect("game popup option");
+                let _ = run(
+                    vec![egui::Event::PointerMoved(target), pointer(target, true)],
+                    &mut strategy,
+                    &mut game,
+                );
+                let _ = run(vec![pointer(target, false)], &mut strategy, &mut game);
+            }
+            assert_eq!(
+                game,
+                if idle {
+                    GameMode::Pyramid
+                } else {
+                    GameMode::FreeCell
+                }
+            );
         }
     }
 }

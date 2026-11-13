@@ -1,5 +1,44 @@
 # qmp-qemu-socket
 
+## 3.1.20 — host-qualified dark controls and 100 ms playback
+
+Dark demonstration styling and shared pressable buttons now cover application controls and dropdowns. SINGLE STEP and MULTI STEP use 100 ms ABS intervals, with one SINGLE STEP action. Active operations expose Stop beside Pause/Continue and Cancel. Calculation Stop cancels its search. MULTI Stop finishes its current proved step and retains resumable progress. Cancel uses existing immediate cancellation.
+
+All 50 fresh host gates passed, including 1,911 application, 381 library and 80 console tests. Complete suites have zero failed, ignored, measured or filtered tests. Charlie reported successful 3.1.19 guest playback at 100 ms. Fresh Windows acceptance of this styled 3.1.20 build remains pending.
+
+See [the control contract](docs/Application-Style-3.1.20.md) and [verification](docs/Verification-3.1.20.md).
+
+
+## 3.1.19 — preserve pickup anchor at Free Cell drop targets (host-qualified)
+
+A pickup at the recognised card corner plus 15 px horizontally and 20 px vertically now uses the same offset at an empty CELL, SUIT or PLAY destination. Occupied destinations retain their observed recognised-corner point. The route no longer replaces CELL/SUIT observations with slot centres. This aligns the planned cursor endpoints with the existing source anchor; it does not change calibration, recognition thresholds or physical-effect proof.
+
+The six diagnostic inputs remain source → LEFT DOWN → source minus 45 px vertically → native floor midpoint of the ORIGINAL source and effective destination → exact destination → LEFT UP. Standard SINGLE STEP retains five 500 ms gesture intervals, fast SINGLE STEP five 100 ms intervals, and MULTI STEP freezes ABS with five 200 ms intervals. Those intentional gesture waits total 2.5 s, 500 ms and 1 s respectively, excluding transport, scheduling, logging and capture costs. Every newly reached recorded AUTO edge retains its 500 ms animation wait.
+
+Calculated A* routes retain one `RecordedMove` card identity per transfer. Rules and independent replay require an exposed source and remove/place exactly one card. The user confirmed individual single-card transfers suffice. No carried-stack feature or stack regression is added; legacy Solver/HALO handling remains separate.
+
+All six fresh application gates passed with 1,908 tests and zero failed, ignored, measured or filtered tests. xSAR 0.16.2 and console 0.8.5 retain historical qualification evidence; no fresh standalone sibling gates are claimed. Fresh Windows acceptance remains pending. See [goal](docs/FREE_CELL_goal_20261111J.md), [contract](docs/FreeCell-Drop-Anchor-3.1.19.md) and [verification](docs/Verification-3.1.19.md).
+
+
+## 3.1.18 — playback timing, capture cadence and graceful stop (host-qualified)
+
+SINGLE STEP keeps five 500 ms gesture intervals. SINGLE STEP fast uses five 100 ms intervals, and MULTI STEP freezes ABS with five 200 ms intervals. The six inputs are source → LEFT DOWN → source-up45 → native floor midpoint of ORIGINAL source/effective destination → exact destination → LEFT UP. Every newly reached recorded AUTO edge retains its 500 ms animation wait.
+
+The first post-transfer wait is min(configured settle, 200 ms). After one eligible endpoint match, the confirmation wait is min(configured settle, 100 ms). Unmatched frames and intermediate AUTO endpoints use the configured retry gap. Two successive fresh exact endpoint matches are required within six captures. The sixth rejection ends immediately. At the default 750 ms configuration, an all-unmatched run reaches its six effect captures after 200, 950, 1700, 2450, 3200 and 3950 ms of intentional waiting. The prior sequence reached them after 750 through 4500 ms. The total observation window is therefore 550 ms shorter before capture/processing time, and the former final 750 ms rejection wait is removed.
+
+During active MULTI playback its button becomes STOP AFTER STEP. A direct request is bound to the exact plan and run. The current transfer, two-frame effect proof, recorded AUTO follow-ups and animation waits finish before StepVerified retains the proved cursor for resumption. A request before the next transfer, including one received at its PAUSE checkpoint, prevents that transfer. PAUSE stays independent and requires CONTINUE to proceed. Existing immediate STOP remains available for immediate revocation and release-only recovery.
+
+Successful playback dispatch releases completed RECON preview ownership for the same context. Each acquired playback frame already enters the bounded latest-frame slot before semantic interpretation, so the preview can show the newest acquired readiness, effect and failure pixels. Pending RECON and stale-context fences remain required. Frames coalesce in one slot. During a held gesture the preview displays the latest acquisition until the next existing capture, without inserting an in-flight capture or capture-only QMP connection.
+
+All six fresh application gates passed with 1,905 tests and zero failed, ignored, measured or filtered tests. xSAR 0.16.2 and console 0.8.5 retain historical qualification evidence. Fresh Windows acceptance remains pending. See [goal](docs/FREE_CELL_goal_20261111I.md), [contract](docs/FreeCell-Responsiveness-3.1.18.md) and [verification](docs/Verification-3.1.18.md).
+
+
+
+## 3.1.17 — continuous ABS playback and AUTO animation (host-qualified)
+
+Use source → DOWN → source-up45 → native original-endpoint midpoint → exact destination → UP. SINGLE STEP and MULTI STEP apply five 500 ms gesture intervals, while fast SINGLE STEP uses zero inserted gesture delay. MULTI STEP continues after each physically verified play. Every newly reached recorded AUTO step adds 500 ms for animation across all options. Adopt the additive interval-taking xSAR 0.16.2 path API. All 51 fresh paired host gates passed with 1,896 application, 381 library and 80 console tests. The full suites report zero failed, ignored, measured or filtered tests. See [contract](docs/FreeCell-Playback-3.1.17.md) and [verification](docs/Verification-3.1.17.md).
+
+
 ## 3.1.16 — source-up and native midpoint ABS trial (host-qualified)
 
 ABS Single Step holds LEFT through source-up45, the native floor midpoint of the original source and effective destination, destination-up45 and exact destination. Both two-second and half-second choices use six timing gaps across seven inputs. CELL/SUIT targets keep their canonical centres. All 51 fresh paired host gates passed with 1,893 application, 366 library and 80 console tests. The full suites report zero failed, ignored, measured or filtered tests. See [contract](docs/FreeCell-Source-Midpoint-3.1.16.md) and [verification](docs/Verification-3.1.16.md).

@@ -41,8 +41,7 @@ use crate::{
     detector::{HaloDetectionError, pixel_rgb},
     geometry::{PixelPoint, PixelRect},
     parameters::{
-        LEVEL_UP_APPEAR_DELAY,
-        POST_GAME_MOUSE_HOLD, POST_GAME_STAGE_DELAY, SCORE_SKIP_CONTROL,
+        LEVEL_UP_APPEAR_DELAY, POST_GAME_MOUSE_HOLD, POST_GAME_STAGE_DELAY, SCORE_SKIP_CONTROL,
         SHARED_SOLVER_CONTROL, SOLVER_MOUSE_HOLD,
     },
     terminal_controls::{self, Control, profiles::KLONDIKE_CONTROLS},
@@ -66,8 +65,6 @@ pub(crate) enum TerminalStage {
 
 
 impl TerminalStage {
-
-
     /// Whether the stage belongs to the completed-game portion of the sequence.
     /// Only `classify_terminal` supplies independent completed-board proof; this
     /// enum discriminator and local readiness alone cannot establish a win.
@@ -78,8 +75,6 @@ impl TerminalStage {
 
     /// Fixed controls only; searched buttons must supply their measured coordinate.
     pub(crate) const fn click_point(self) -> PixelPoint {
-
-
         match self {
             Self::ScoreCounting => SCORE_SKIP_CONTROL.click_point,
             Self::LevelUp | Self::NewGame | Self::Play => PixelPoint::new(0, 0),
@@ -90,8 +85,6 @@ impl TerminalStage {
 
     /// Existing deliberate control hold; no new input timing is inferred from PNGs.
     pub(crate) const fn mouse_hold(self) -> Duration {
-
-
         match self {
             Self::SolverReady => SOLVER_MOUSE_HOLD,
             _ => POST_GAME_MOUSE_HOLD,
@@ -101,8 +94,6 @@ impl TerminalStage {
 
     /// Existing transition delays; dealing uses the run's editable redeal setting.
     pub(crate) const fn settle_delay(self, board_redeal: Duration) -> Duration {
-
-
         match self {
             Self::ScoreCounting => LEVEL_UP_APPEAR_DELAY,
             Self::Play => board_redeal,
@@ -113,8 +104,6 @@ impl TerminalStage {
 
 
 impl fmt::Display for TerminalStage {
-
-
     /// Describe the verified control without promoting its acknowledgement to effect.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
@@ -141,8 +130,6 @@ struct RgbSample {
 
 
 impl RgbSample {
-
-
     /// Construct a fixed sample without decoding a template at runtime.
     const fn new(x: u32, y: u32, rgb: [u8; 3]) -> Self {
         Self { x, y, rgb }
@@ -514,8 +501,7 @@ const PLAY_DRAW_ONE_NUMERAL: [RgbSample; 30] = [
 
 /// K86's complete title letters match K67 two rows higher, within the original
 /// colour tolerance. Level and rank artwork do not contribute to this group.
-const LEVEL_UP_MASTER_TITLE: [RgbSample; 10] =
-    shift_sample_rows(LEVEL_UP_MEDAL_TITLE, 2, 0);
+const LEVEL_UP_MASTER_TITLE: [RgbSample; 10] = shift_sample_rows(LEVEL_UP_MEDAL_TITLE, 2, 0);
 
 
 /// The same coherent title translation retains every measured blue/white
@@ -526,8 +512,7 @@ const LEVEL_UP_MASTER_TITLE_BACKGROUND: [RgbSample; 7] =
 
 /// K86's complete printed Klondike name lies seven rows below K67. Numeric
 /// level, changing rank and reward text remain outside these letter samples.
-const LEVEL_UP_MASTER_KLONDIKE: [RgbSample; 10] =
-    shift_sample_rows(LEVEL_UP_KLONDIKE, 0, 7);
+const LEVEL_UP_MASTER_KLONDIKE: [RgbSample; 10] = shift_sample_rows(LEVEL_UP_KLONDIKE, 0, 7);
 
 
 /// Original native K86 background values between its translated game letters.
@@ -546,8 +531,7 @@ const LEVEL_UP_MASTER_KLONDIKE_BACKGROUND: [RgbSample; 8] = [
 
 
 /// K86's complete black OK caption lies two rows below the K67 caption.
-const LEVEL_UP_MASTER_OK: [RgbSample; 10] =
-    shift_sample_rows(LEVEL_UP_MEDAL_OK, 0, 2);
+const LEVEL_UP_MASTER_OK: [RgbSample; 10] = shift_sample_rows(LEVEL_UP_MEDAL_OK, 0, 2);
 
 
 /// All four inner gold contrast points share K86's measured OK translation.
@@ -562,8 +546,7 @@ const LEVEL_UP_MASTER_BUTTON_BODY: [RgbSample; 4] =
 
 /// K86's enlarged modal frame matches the complete K67 frame two rows lower,
 /// independently of the title, game label, OK control and completed board.
-const LEVEL_UP_MASTER_FRAME: [RgbSample; 8] =
-    shift_sample_rows(LEVEL_UP_MEDAL_FRAME, 0, 2);
+const LEVEL_UP_MASTER_FRAME: [RgbSample; 8] = shift_sample_rows(LEVEL_UP_MEDAL_FRAME, 0, 2);
 
 
 /// Original non-letter samples distinguish the title from a flat white patch.
@@ -731,14 +714,21 @@ fn count_samples(
     tolerance: u8,
     horizontal_offset: u32,
 ) -> usize {
-    samples.iter().filter(|sample| {
-        sample.x.checked_add(horizontal_offset)
-            .and_then(|x| pixel_rgb(frame, x, sample.y))
-            .is_some_and(|actual| {
-                actual.into_iter().zip(sample.rgb)
-                    .all(|(channel, expected)| channel.abs_diff(expected) <= tolerance)
-            })
-    }).count()
+    samples
+        .iter()
+        .filter(|sample| {
+            sample
+                .x
+                .checked_add(horizontal_offset)
+                .and_then(|x| pixel_rgb(frame, x, sample.y))
+                .is_some_and(|actual| {
+                    actual
+                        .into_iter()
+                        .zip(sample.rgb)
+                        .all(|(channel, expected)| channel.abs_diff(expected) <= tolerance)
+                })
+        })
+        .count()
 }
 
 
@@ -753,10 +743,18 @@ fn matches_samples(frame: &CapturedFrame, samples: &[RgbSample], tolerance: u8) 
 /// shifted partial signatures while retaining the original scene/control guards.
 fn level_up_label_offset(frame: &CapturedFrame) -> Option<u32> {
     LEVEL_UP_LABEL_OFFSETS.into_iter().find(|offset| {
-        count_samples(frame, &LEVEL_UP_KLONDIKE, ARTWORK_CHANNEL_TOLERANCE, *offset)
-            == LEVEL_UP_KLONDIKE.len()
-            && count_samples(frame, &LEVEL_UP_KLONDIKE_BACKGROUND,
-                ARTWORK_CHANNEL_TOLERANCE, *offset) == LEVEL_UP_KLONDIKE_BACKGROUND.len()
+        count_samples(
+            frame,
+            &LEVEL_UP_KLONDIKE,
+            ARTWORK_CHANNEL_TOLERANCE,
+            *offset,
+        ) == LEVEL_UP_KLONDIKE.len()
+            && count_samples(
+                frame,
+                &LEVEL_UP_KLONDIKE_BACKGROUND,
+                ARTWORK_CHANNEL_TOLERANCE,
+                *offset,
+            ) == LEVEL_UP_KLONDIKE_BACKGROUND.len()
     })
 }
 
@@ -782,7 +780,8 @@ fn has_completed_board_context(frame: &CapturedFrame, samples: &[RgbSample]) -> 
 /// complete OK control signatures; it cannot establish a generic modal or win.
 fn has_completed_level_up_context(frame: &CapturedFrame) -> bool {
     has_completed_board_context(frame, &LEVEL_UP_FOUNDATION_CONTEXT)
-        && LEVEL_UP_EMPTY_TABLEAU_CONTEXT.iter()
+        && LEVEL_UP_EMPTY_TABLEAU_CONTEXT
+            .iter()
             .all(|sample| matches_level_up_empty_sample(frame, sample))
 }
 
@@ -849,8 +848,6 @@ fn has_completed_congratulations(frame: &CapturedFrame) -> bool {
 /// margins. The 95% floor permits their measured edge antialiasing while excluding
 /// central court artwork from authority. Neither a back nor felt supplies paper.
 fn has_initial_face_paper(frame: &CapturedFrame, column: u32) -> bool {
-
-
     if column >= 7 {
         return false;
     }
@@ -861,9 +858,9 @@ fn has_initial_face_paper(frame: &CapturedFrame, column: u32) -> bool {
         PixelRect::new(x + 125, face_top + 18, 4, 138),
         PixelRect::new(x + 18, face_top + 3, 96, 4),
         PixelRect::new(x + 18, face_top + 169, 96, 3),
-    ].into_iter().all(|bounds| {
-        super::fraction_at_least(frame, bounds, super::is_white, 950)
-    })
+    ]
+    .into_iter()
+    .all(|bounds| super::fraction_at_least(frame, bounds, super::is_white, 950))
 }
 
 
@@ -871,9 +868,8 @@ fn has_initial_face_paper(frame: &CapturedFrame, column: u32) -> bool {
 /// Empty foundations/waste, blue stock, seven staggered faces and six back strips
 /// prevent an ordinary unresolved board from authorising Solver activation.
 fn has_fresh_deal(frame: &CapturedFrame) -> Result<bool, HaloDetectionError> {
-
-
-    if !super::is_gameplay_scene(frame)? || super::has_solver_banner(frame)
+    if !super::is_gameplay_scene(frame)?
+        || super::has_solver_banner(frame)
         || super::has_solve_control(frame)
     {
         return Ok(false);
@@ -881,19 +877,26 @@ fn has_fresh_deal(frame: &CapturedFrame) -> Result<bool, HaloDetectionError> {
 
 
     if !super::fraction_at_least(
-        frame, PixelRect::new(406, 130, 100, 139), super::is_back, 500,
+        frame,
+        PixelRect::new(406, 130, 100, 139),
+        super::is_back,
+        500,
     ) || !super::fraction_at_least(
-        frame, PixelRect::new(576, 130, 152, 139), super::is_felt, 950,
+        frame,
+        PixelRect::new(576, 130, 152, 139),
+        super::is_felt,
+        950,
     ) {
         return Ok(false);
     }
 
 
     for column in 0..4 {
-
-
         if !super::fraction_at_least(
-            frame, PixelRect::new(910 + 168 * column, 130, 100, 139), super::is_felt, 950,
+            frame,
+            PixelRect::new(910 + 168 * column, 130, 100, 139),
+            super::is_felt,
+            950,
         ) {
             return Ok(false);
         }
@@ -904,23 +907,33 @@ fn has_fresh_deal(frame: &CapturedFrame) -> Result<bool, HaloDetectionError> {
         let x = 390 + 168 * column;
 
 
-        if !has_initial_face_paper(frame, column) || !super::fraction_at_least(
-            frame, PixelRect::new(x + 18, 660, 96, 40), super::is_felt, 950,
-        ) {
+        if !has_initial_face_paper(frame, column)
+            || !super::fraction_at_least(
+                frame,
+                PixelRect::new(x + 18, 660, 96, 40),
+                super::is_felt,
+                950,
+            )
+        {
             return Ok(false);
         }
 
 
-        if column > 0 && !super::fraction_at_least(
-            frame, PixelRect::new(x + 18, 347, 96, 6), super::is_back, 900,
-        ) {
+        if column > 0
+            && !super::fraction_at_least(
+                frame,
+                PixelRect::new(x + 18, 347, 96, 6),
+                super::is_back,
+                900,
+            )
+        {
             return Ok(false);
         }
 
 
-        if super::find_tableau_source(
-            frame, PixelRect::new(x, 332, 132, super::TOOLBAR_TOP - 332),
-        )?.is_some() {
+        if super::find_tableau_source(frame, PixelRect::new(x, 332, 132, super::TOOLBAR_TOP - 332))?
+            .is_some()
+        {
             return Ok(false);
         }
     }
@@ -940,8 +953,6 @@ pub(crate) fn classify_terminal(
 
 
     if has_completed_congratulations(frame) {
-
-
         if matches_artwork(frame, &NEW_GAME_TEXT)
             && matches_artwork(frame, &NEW_GAME_HOME)
             && matches_artwork(frame, &NEW_GAME_BUTTON_BODY)
@@ -950,9 +961,7 @@ pub(crate) fn classify_terminal(
         }
 
 
-        if matches_artwork(frame, &SCORE_SKIP_CAPTION)
-            && matches_artwork(frame, &SCORE_SKIP_BODY)
-        {
+        if matches_artwork(frame, &SCORE_SKIP_CAPTION) && matches_artwork(frame, &SCORE_SKIP_BODY) {
             return Ok(Some(TerminalStage::ScoreCounting));
         }
     }
@@ -993,7 +1002,8 @@ pub(crate) fn classify_terminal(
     }
 
 
-    if matches_artwork(frame, &SOLVER_LABEL) && matches_artwork(frame, &SOLVER_KEY)
+    if matches_artwork(frame, &SOLVER_LABEL)
+        && matches_artwork(frame, &SOLVER_KEY)
         && has_fresh_deal(frame)?
     {
         return Ok(Some(TerminalStage::SolverReady));
@@ -1050,16 +1060,12 @@ pub(crate) fn expected_control_ready(
 pub(crate) fn classify_confirmed_win_entry(
     frame: &CapturedFrame,
 ) -> Result<Option<TerminalStage>, HaloDetectionError> {
-
-
     if let Some(stage) = classify_terminal(frame)? {
         return Ok(Some(stage));
     }
 
 
     for stage in [TerminalStage::LevelUp, TerminalStage::NewGame] {
-
-
         if expected_control_ready(frame, stage)? {
             return Ok(Some(stage));
         }
@@ -1079,18 +1085,17 @@ struct SignatureEvidence {
 
 
 impl SignatureEvidence {
-
-
     /// Record immutable samples without granting input or changing any tolerance.
     fn inspect(frame: &CapturedFrame, samples: &[RgbSample], tolerance: u8, offset: u32) -> Self {
-        Self { matched: count_samples(frame, samples, tolerance, offset), required: samples.len() }
+        Self {
+            matched: count_samples(frame, samples, tolerance, offset),
+            required: samples.len(),
+        }
     }
 }
 
 
 impl fmt::Display for SignatureEvidence {
-
-
     /// Keep the actual match count next to its unchanged required count.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(formatter, "{}/{}", self.matched, self.required)
@@ -1135,29 +1140,51 @@ pub(crate) struct TerminalEvidence {
 
 
 impl fmt::Display for TerminalEvidence {
-
-
     /// Surface the refused scene guard without inferring missing worker pixels.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter,
+        write!(
+            formatter,
             "Congratulations title={}/{}, frame={}, completed context={}, skip={}/{}, New Game={}/{}/{}; Level Up title={}/{}, label +0={}/{}, label +2={}/{}, OK={}/{}/{}, foundations={}, empty tableau={}; medal layout title={}/{}, label={}/{}, OK={}/{}/{}, frame={}; Master layout title={}/{}, label={}/{}, OK={}/{}/{}, frame={}; Solver word={}, key={}, fresh-deal={}",
-            self.congratulations_ribbon[0], self.congratulations_ribbon[1],
-            self.congratulations_frame, self.congratulations_context,
-            self.score_control[0], self.score_control[1],
-            self.new_game_control[0], self.new_game_control[1], self.new_game_control[2],
-            self.level_up_title[0], self.level_up_title[1],
-            self.level_up_label[0][0], self.level_up_label[0][1],
-            self.level_up_label[1][0], self.level_up_label[1][1],
-            self.level_up_control[0], self.level_up_control[1], self.level_up_control[2],
-            self.level_up_foundations, self.level_up_tableau,
-            self.level_up_medal[0], self.level_up_medal[1],
-            self.level_up_medal[2], self.level_up_medal[3],
-            self.level_up_medal[4], self.level_up_medal[5], self.level_up_medal[6],
-            self.level_up_medal[7], self.level_up_master[0], self.level_up_master[1],
-            self.level_up_master[2], self.level_up_master[3], self.level_up_master[4],
-            self.level_up_master[5], self.level_up_master[6], self.level_up_master[7],
-            self.solver_control[0], self.solver_control[1],
-            self.fresh_deal)
+            self.congratulations_ribbon[0],
+            self.congratulations_ribbon[1],
+            self.congratulations_frame,
+            self.congratulations_context,
+            self.score_control[0],
+            self.score_control[1],
+            self.new_game_control[0],
+            self.new_game_control[1],
+            self.new_game_control[2],
+            self.level_up_title[0],
+            self.level_up_title[1],
+            self.level_up_label[0][0],
+            self.level_up_label[0][1],
+            self.level_up_label[1][0],
+            self.level_up_label[1][1],
+            self.level_up_control[0],
+            self.level_up_control[1],
+            self.level_up_control[2],
+            self.level_up_foundations,
+            self.level_up_tableau,
+            self.level_up_medal[0],
+            self.level_up_medal[1],
+            self.level_up_medal[2],
+            self.level_up_medal[3],
+            self.level_up_medal[4],
+            self.level_up_medal[5],
+            self.level_up_medal[6],
+            self.level_up_medal[7],
+            self.level_up_master[0],
+            self.level_up_master[1],
+            self.level_up_master[2],
+            self.level_up_master[3],
+            self.level_up_master[4],
+            self.level_up_master[5],
+            self.level_up_master[6],
+            self.level_up_master[7],
+            self.solver_control[0],
+            self.solver_control[1],
+            self.fresh_deal
+        )
     }
 }
 
@@ -1174,40 +1201,82 @@ pub(crate) fn inspect_terminal_evidence(
         SignatureEvidence::inspect(frame, samples, ARTWORK_CHANNEL_TOLERANCE, 0)
     };
     let label = LEVEL_UP_LABEL_OFFSETS.map(|offset| {
-        [SignatureEvidence::inspect(frame, &LEVEL_UP_KLONDIKE, ARTWORK_CHANNEL_TOLERANCE, offset),
-            SignatureEvidence::inspect(frame, &LEVEL_UP_KLONDIKE_BACKGROUND,
-                ARTWORK_CHANNEL_TOLERANCE, offset)]
+        [
+            SignatureEvidence::inspect(
+                frame,
+                &LEVEL_UP_KLONDIKE,
+                ARTWORK_CHANNEL_TOLERANCE,
+                offset,
+            ),
+            SignatureEvidence::inspect(
+                frame,
+                &LEVEL_UP_KLONDIKE_BACKGROUND,
+                ARTWORK_CHANNEL_TOLERANCE,
+                offset,
+            ),
+        ]
     });
     Ok(TerminalEvidence {
-        congratulations_ribbon: [artwork(&CONGRATULATIONS_TITLE),
-            artwork(&CONGRATULATIONS_TITLE_BACKGROUND)],
+        congratulations_ribbon: [
+            artwork(&CONGRATULATIONS_TITLE),
+            artwork(&CONGRATULATIONS_TITLE_BACKGROUND),
+        ],
         congratulations_frame: artwork(&CONGRATULATIONS_FRAME),
-        congratulations_context: SignatureEvidence::inspect(frame, &COMPLETED_BOARD_CONTEXT,
-            BOARD_CONTEXT_CHANNEL_TOLERANCE, 0),
+        congratulations_context: SignatureEvidence::inspect(
+            frame,
+            &COMPLETED_BOARD_CONTEXT,
+            BOARD_CONTEXT_CHANNEL_TOLERANCE,
+            0,
+        ),
         score_control: [artwork(&SCORE_SKIP_CAPTION), artwork(&SCORE_SKIP_BODY)],
-        new_game_control: [artwork(&NEW_GAME_TEXT), artwork(&NEW_GAME_HOME),
-            artwork(&NEW_GAME_BUTTON_BODY)],
-        level_up_title: [artwork(&LEVEL_UP_TITLE), artwork(&LEVEL_UP_TITLE_BACKGROUND)],
+        new_game_control: [
+            artwork(&NEW_GAME_TEXT),
+            artwork(&NEW_GAME_HOME),
+            artwork(&NEW_GAME_BUTTON_BODY),
+        ],
+        level_up_title: [
+            artwork(&LEVEL_UP_TITLE),
+            artwork(&LEVEL_UP_TITLE_BACKGROUND),
+        ],
         level_up_label: label,
-        level_up_control: [artwork(&LEVEL_UP_OK), artwork(&LEVEL_UP_OK_BACKGROUND),
-            artwork(&LEVEL_UP_BUTTON_BODY)],
-        level_up_foundations: SignatureEvidence::inspect(frame, &LEVEL_UP_FOUNDATION_CONTEXT,
-            BOARD_CONTEXT_CHANNEL_TOLERANCE, 0),
+        level_up_control: [
+            artwork(&LEVEL_UP_OK),
+            artwork(&LEVEL_UP_OK_BACKGROUND),
+            artwork(&LEVEL_UP_BUTTON_BODY),
+        ],
+        level_up_foundations: SignatureEvidence::inspect(
+            frame,
+            &LEVEL_UP_FOUNDATION_CONTEXT,
+            BOARD_CONTEXT_CHANNEL_TOLERANCE,
+            0,
+        ),
         level_up_tableau: SignatureEvidence {
-            matched: LEVEL_UP_EMPTY_TABLEAU_CONTEXT.iter()
-                .filter(|sample| matches_level_up_empty_sample(frame, sample)).count(),
+            matched: LEVEL_UP_EMPTY_TABLEAU_CONTEXT
+                .iter()
+                .filter(|sample| matches_level_up_empty_sample(frame, sample))
+                .count(),
             required: LEVEL_UP_EMPTY_TABLEAU_CONTEXT.len(),
         },
-        level_up_medal: [artwork(&LEVEL_UP_MEDAL_TITLE),
-            artwork(&LEVEL_UP_MEDAL_TITLE_BACKGROUND), artwork(&LEVEL_UP_KLONDIKE),
-            artwork(&LEVEL_UP_MEDAL_KLONDIKE_BACKGROUND), artwork(&LEVEL_UP_MEDAL_OK),
-            artwork(&LEVEL_UP_MEDAL_OK_BACKGROUND), artwork(&LEVEL_UP_MEDAL_BUTTON_BODY),
-            artwork(&LEVEL_UP_MEDAL_FRAME)],
-        level_up_master: [artwork(&LEVEL_UP_MASTER_TITLE),
-            artwork(&LEVEL_UP_MASTER_TITLE_BACKGROUND), artwork(&LEVEL_UP_MASTER_KLONDIKE),
-            artwork(&LEVEL_UP_MASTER_KLONDIKE_BACKGROUND), artwork(&LEVEL_UP_MASTER_OK),
-            artwork(&LEVEL_UP_MASTER_OK_BACKGROUND), artwork(&LEVEL_UP_MASTER_BUTTON_BODY),
-            artwork(&LEVEL_UP_MASTER_FRAME)],
+        level_up_medal: [
+            artwork(&LEVEL_UP_MEDAL_TITLE),
+            artwork(&LEVEL_UP_MEDAL_TITLE_BACKGROUND),
+            artwork(&LEVEL_UP_KLONDIKE),
+            artwork(&LEVEL_UP_MEDAL_KLONDIKE_BACKGROUND),
+            artwork(&LEVEL_UP_MEDAL_OK),
+            artwork(&LEVEL_UP_MEDAL_OK_BACKGROUND),
+            artwork(&LEVEL_UP_MEDAL_BUTTON_BODY),
+            artwork(&LEVEL_UP_MEDAL_FRAME),
+        ],
+        level_up_master: [
+            artwork(&LEVEL_UP_MASTER_TITLE),
+            artwork(&LEVEL_UP_MASTER_TITLE_BACKGROUND),
+            artwork(&LEVEL_UP_MASTER_KLONDIKE),
+            artwork(&LEVEL_UP_MASTER_KLONDIKE_BACKGROUND),
+            artwork(&LEVEL_UP_MASTER_OK),
+            artwork(&LEVEL_UP_MASTER_OK_BACKGROUND),
+            artwork(&LEVEL_UP_MASTER_BUTTON_BODY),
+            artwork(&LEVEL_UP_MASTER_FRAME),
+        ],
         solver_control: [artwork(&SOLVER_LABEL), artwork(&SOLVER_KEY)],
         fresh_deal: has_fresh_deal(frame)?,
     })
@@ -1223,8 +1292,6 @@ mod tests {
 
     /// Decode one provenance-recorded terminal fixture; no image is fabricated here.
     fn fixture(number: usize) -> CapturedFrame {
-
-
         let png: &[u8] = match number {
             26 => include_bytes!("../tests/fixtures/klondike/K26.png"),
             27 => include_bytes!("../tests/fixtures/klondike/K27.png"),
@@ -1254,8 +1321,6 @@ mod tests {
 
 
         for y in bounds.y..bounds.y + bounds.height {
-
-
             for x in bounds.x..bounds.x + bounds.width {
                 let index = y as usize * frame.stride + x as usize * 4;
                 frame.pixels[index..index + 3].copy_from_slice(&rgb);
@@ -1293,21 +1358,39 @@ mod tests {
     /// The three body windows distinguish overlapping New Game/Play surfaces.
     #[test]
     fn confirmed_win_buttons_follow_the_expected_stage_across_native_themes() {
-        let stages = [TerminalStage::LevelUp, TerminalStage::NewGame, TerminalStage::Play];
+        let stages = [
+            TerminalStage::LevelUp,
+            TerminalStage::NewGame,
+            TerminalStage::Play,
+        ];
 
 
-        for (number, expected) in [(27, stages[0]), (49, stages[0]), (52, stages[0]),
-            (67, stages[0]), (86, stages[0]), (91, stages[0]), (28, stages[1]),
-            (53, stages[1]), (92, stages[1]), (29, stages[2]), (93, stages[2])]
-        {
+        for (number, expected) in [
+            (27, stages[0]),
+            (49, stages[0]),
+            (52, stages[0]),
+            (67, stages[0]),
+            (86, stages[0]),
+            (91, stages[0]),
+            (28, stages[1]),
+            (53, stages[1]),
+            (92, stages[1]),
+            (29, stages[2]),
+            (93, stages[2]),
+        ] {
             let frame = fixture(number);
 
 
             for stage in stages {
-                assert_eq!(expected_control_ready(&frame, stage).unwrap(), stage == expected,
-                    "K{number}, expected {expected}, checked {stage}");
+                assert_eq!(
+                    expected_control_ready(&frame, stage).unwrap(),
+                    stage == expected,
+                    "K{number}, expected {expected}, checked {stage}"
+                );
             }
-            assert!(expected_control_ready(&local_button_only(number, expected), expected).unwrap());
+            assert!(
+                expected_control_ready(&local_button_only(number, expected), expected).unwrap()
+            );
         }
     }
 
@@ -1316,36 +1399,61 @@ mod tests {
     /// Its button alone cannot enter independent completion evidence on a blank scene.
     #[test]
     fn local_expected_controls_never_prove_initial_completion() {
-
-
-        for (number, stage) in [(91, TerminalStage::LevelUp),
-            (92, TerminalStage::NewGame), (93, TerminalStage::Play)]
-        {
+        for (number, stage) in [
+            (91, TerminalStage::LevelUp),
+            (92, TerminalStage::NewGame),
+            (93, TerminalStage::Play),
+        ] {
             let frame = local_button_only(number, stage);
             assert!(expected_control_ready(&frame, stage).unwrap());
             assert_eq!(classify_terminal(&frame).unwrap(), None);
-            assert!(!super::super::completion_evidence(&frame).unwrap().complete_candidate);
+            assert!(
+                !super::super::completion_evidence(&frame)
+                    .unwrap()
+                    .complete_candidate
+            );
         }
-        assert_eq!(classify_confirmed_win_entry(&fixture(91)).unwrap(), Some(TerminalStage::LevelUp));
-        assert_eq!(classify_confirmed_win_entry(&fixture(92)).unwrap(), Some(TerminalStage::NewGame));
+        assert_eq!(
+            classify_confirmed_win_entry(&fixture(91)).unwrap(),
+            Some(TerminalStage::LevelUp)
+        );
+        assert_eq!(
+            classify_confirmed_win_entry(&fixture(92)).unwrap(),
+            Some(TerminalStage::NewGame)
+        );
     }
 
 
     /// Exact-black horizontal runs provide readiness only in the selected rectangle.
     #[test]
     fn expected_button_readiness_uses_bounded_five_pixel_runs() {
-        for stage in [TerminalStage::LevelUp, TerminalStage::NewGame, TerminalStage::Play] {
+        for stage in [
+            TerminalStage::LevelUp,
+            TerminalStage::NewGame,
+            TerminalStage::Play,
+        ] {
             let mut frame = fixture(91);
             frame.pixels.fill(255);
-            let bounds = KLONDIKE_CONTROLS.spec(searched_control(stage).unwrap()).bounds;
+            let bounds = KLONDIKE_CONTROLS
+                .spec(searched_control(stage).unwrap())
+                .bounds;
             let (x, y) = (bounds.x + 2, bounds.y + bounds.height - 2);
             paint(&mut frame, PixelRect::new(x, y, 4, 1), [0, 0, 0]);
-            assert_eq!(expected_control_point(&frame, stage).unwrap(), PixelPoint::new(0, 0));
+            assert_eq!(
+                expected_control_point(&frame, stage).unwrap(),
+                PixelPoint::new(0, 0)
+            );
             paint(&mut frame, PixelRect::new(x + 4, y, 1, 1), [0, 0, 0]);
-            assert_eq!(expected_control_point(&frame, stage).unwrap(), PixelPoint::new(x as i32, y as i32));
+            assert_eq!(
+                expected_control_point(&frame, stage).unwrap(),
+                PixelPoint::new(x as i32, y as i32)
+            );
             assert_eq!(classify_terminal(&frame).unwrap(), None);
             paint(&mut frame, PixelRect::new(x, y, 5, 1), [1, 0, 0]);
-            assert_eq!(expected_control_point(&frame, stage).unwrap(), PixelPoint::new(0, 0));
+            assert_eq!(
+                expected_control_point(&frame, stage).unwrap(),
+                PixelPoint::new(0, 0)
+            );
         }
         assert!(!expected_control_ready(&fixture(91), TerminalStage::NewGame).unwrap());
         assert!(!expected_control_ready(&fixture(92), TerminalStage::Play).unwrap());
@@ -1357,10 +1465,16 @@ mod tests {
     fn expected_button_readiness_rejects_invalid_frame_layouts() {
         let mut wrong_size = fixture(91);
         wrong_size.height = 1_079;
-        assert_eq!(expected_control_ready(&wrong_size, TerminalStage::LevelUp), Err(HaloDetectionError::BoundsOutsideFrame));
+        assert_eq!(
+            expected_control_ready(&wrong_size, TerminalStage::LevelUp),
+            Err(HaloDetectionError::BoundsOutsideFrame)
+        );
         let mut malformed = fixture(91);
         malformed.pixels.clear();
-        assert_eq!(expected_control_ready(&malformed, TerminalStage::LevelUp), Err(HaloDetectionError::InvalidFrameLayout));
+        assert_eq!(
+            expected_control_ready(&malformed, TerminalStage::LevelUp),
+            Err(HaloDetectionError::InvalidFrameLayout)
+        );
     }
 
 
@@ -1368,12 +1482,21 @@ mod tests {
     /// three independently establish the evidenced one-board game win.
     #[test]
     fn original_terminal_sequence_has_distinct_stages() {
-        let stages = [TerminalStage::ScoreCounting, TerminalStage::LevelUp,
-            TerminalStage::NewGame, TerminalStage::Play, TerminalStage::SolverReady];
+        let stages = [
+            TerminalStage::ScoreCounting,
+            TerminalStage::LevelUp,
+            TerminalStage::NewGame,
+            TerminalStage::Play,
+            TerminalStage::SolverReady,
+        ];
 
 
         for (number, stage) in (26..=30).zip(stages) {
-            assert_eq!(classify_terminal(&fixture(number)).unwrap(), Some(stage), "K{number}");
+            assert_eq!(
+                classify_terminal(&fixture(number)).unwrap(),
+                Some(stage),
+                "K{number}"
+            );
             assert_eq!(stage.demonstrates_game_win(), number <= 28);
         }
     }
@@ -1384,10 +1507,20 @@ mod tests {
     #[test]
     fn later_level_congratulations_retains_the_existing_signature() {
         let frame = fixture(43);
-        assert_eq!(classify_terminal(&frame).unwrap(), Some(TerminalStage::ScoreCounting));
+        assert_eq!(
+            classify_terminal(&frame).unwrap(),
+            Some(TerminalStage::ScoreCounting)
+        );
         let mut changed_rewards = frame.clone();
-        paint(&mut changed_rewards, PixelRect::new(640, 340, 640, 430), [0, 0, 0]);
-        assert_eq!(classify_terminal(&changed_rewards).unwrap(), Some(TerminalStage::ScoreCounting));
+        paint(
+            &mut changed_rewards,
+            PixelRect::new(640, 340, 640, 430),
+            [0, 0, 0],
+        );
+        assert_eq!(
+            classify_terminal(&changed_rewards).unwrap(),
+            Some(TerminalStage::ScoreCounting)
+        );
     }
 
 
@@ -1405,7 +1538,10 @@ mod tests {
             assert!(matches_artwork(&frame, &NEW_GAME_TEXT));
             assert!(matches_artwork(&frame, &NEW_GAME_HOME));
             assert!(matches_artwork(&frame, &NEW_GAME_BUTTON_BODY));
-            assert_eq!(classify_terminal(&frame).unwrap(), Some(TerminalStage::NewGame));
+            assert_eq!(
+                classify_terminal(&frame).unwrap(),
+                Some(TerminalStage::NewGame)
+            );
             let evidence = inspect_terminal_evidence(&frame).unwrap();
             assert_eq!(evidence.new_game_control[2].matched, 6);
             assert_eq!(matches_artwork(&frame, &discarded_body_point), number == 28);
@@ -1421,10 +1557,19 @@ mod tests {
     fn cursor_shadow_does_not_relax_the_required_new_game_body() {
         let mut shadowed = fixture(28);
         paint(&mut shadowed, PixelRect::new(990, 827, 1, 1), [10, 32, 62]);
-        assert_eq!(classify_terminal(&shadowed).unwrap(), Some(TerminalStage::NewGame));
+        assert_eq!(
+            classify_terminal(&shadowed).unwrap(),
+            Some(TerminalStage::NewGame)
+        );
         paint(&mut shadowed, PixelRect::new(1020, 827, 1, 1), [10, 32, 62]);
         assert_eq!(classify_terminal(&shadowed).unwrap(), None);
-        assert_eq!(inspect_terminal_evidence(&shadowed).unwrap().new_game_control[2].matched, 5);
+        assert_eq!(
+            inspect_terminal_evidence(&shadowed)
+                .unwrap()
+                .new_game_control[2]
+                .matched,
+            5
+        );
     }
 
 
@@ -1439,8 +1584,6 @@ mod tests {
 
 
         for y in 0..49usize {
-
-
             for x in 0..34usize {
                 let source = (794 + y) * original.stride + (959 + x) * 4;
 
@@ -1464,14 +1607,16 @@ mod tests {
     /// context cannot become New Game merely because its cursor is harmless.
     #[test]
     fn pointer_safe_new_game_requires_its_independent_scene_and_controls() {
-        let bounds = [PixelRect::new(631, 815, 310, 75),
-            PixelRect::new(974, 815, 310, 75), PixelRect::new(500, 136, 920, 12),
-            PixelRect::new(894, 112, 132, 26), PixelRect::new(700, 200, 520, 55)];
+        let bounds = [
+            PixelRect::new(631, 815, 310, 75),
+            PixelRect::new(974, 815, 310, 75),
+            PixelRect::new(500, 136, 920, 12),
+            PixelRect::new(894, 112, 132, 26),
+            PixelRect::new(700, 200, 520, 55),
+        ];
 
 
         for bounds in bounds {
-
-
             for rgb in [[0, 0, 0], [240, 190, 90], [255, 255, 255]] {
                 let mut frame = fixture(53);
                 paint(&mut frame, bounds, rgb);
@@ -1480,10 +1625,16 @@ mod tests {
         }
         let mut wrong_size = fixture(53);
         wrong_size.height = 1_079;
-        assert!(matches!(classify_terminal(&wrong_size), Err(HaloDetectionError::BoundsOutsideFrame)));
+        assert!(matches!(
+            classify_terminal(&wrong_size),
+            Err(HaloDetectionError::BoundsOutsideFrame)
+        ));
         let mut invalid_storage = fixture(53);
         invalid_storage.pixels.clear();
-        assert!(matches!(classify_terminal(&invalid_storage), Err(HaloDetectionError::InvalidFrameLayout)));
+        assert!(matches!(
+            classify_terminal(&invalid_storage),
+            Err(HaloDetectionError::InvalidFrameLayout)
+        ));
     }
 
 
@@ -1491,8 +1642,11 @@ mod tests {
     /// context. A changed level does not weaken any original evidence requirement.
     #[test]
     fn later_congratulations_requires_title_control_and_completed_context() {
-        let bounds = [PixelRect::new(700, 200, 520, 55),
-            PixelRect::new(795, 839, 332, 31), PixelRect::new(894, 112, 132, 26)];
+        let bounds = [
+            PixelRect::new(700, 200, 520, 55),
+            PixelRect::new(795, 839, 332, 31),
+            PixelRect::new(894, 112, 132, 26),
+        ];
 
 
         for bounds in bounds {
@@ -1509,11 +1663,21 @@ mod tests {
     #[test]
     fn later_level_up_with_fireworks_retains_its_control_signature() {
         let frame = fixture(49);
-        assert_eq!(classify_terminal(&frame).unwrap(), Some(TerminalStage::LevelUp));
+        assert_eq!(
+            classify_terminal(&frame).unwrap(),
+            Some(TerminalStage::LevelUp)
+        );
         assert_eq!(TerminalStage::LevelUp.click_point(), PixelPoint::new(0, 0));
         let mut changed_level = frame.clone();
-        paint(&mut changed_level, PixelRect::new(1_110, 610, 60, 38), [0, 0, 0]);
-        assert_eq!(classify_terminal(&changed_level).unwrap(), Some(TerminalStage::LevelUp));
+        paint(
+            &mut changed_level,
+            PixelRect::new(1_110, 610, 60, 38),
+            [0, 0, 0],
+        );
+        assert_eq!(
+            classify_terminal(&changed_level).unwrap(),
+            Some(TerminalStage::LevelUp)
+        );
     }
 
 
@@ -1527,14 +1691,27 @@ mod tests {
         assert!(!matches_artwork(&frame, &LEVEL_UP_OK));
         assert!(has_completed_level_up_context(&frame));
         assert!(has_completed_medal_level_up(&frame));
-        assert_eq!(classify_terminal(&frame).unwrap(), Some(TerminalStage::LevelUp));
+        assert_eq!(
+            classify_terminal(&frame).unwrap(),
+            Some(TerminalStage::LevelUp)
+        );
         assert_eq!(pixel_rgb(&frame, 960, 795), Some([253, 248, 223]));
         assert_eq!(TerminalStage::LevelUp.click_point(), PixelPoint::new(0, 0));
         assert_eq!(TerminalStage::LevelUp.mouse_hold(), POST_GAME_MOUSE_HOLD);
-        assert_eq!(TerminalStage::LevelUp.settle_delay(Duration::ZERO), POST_GAME_STAGE_DELAY);
+        assert_eq!(
+            TerminalStage::LevelUp.settle_delay(Duration::ZERO),
+            POST_GAME_STAGE_DELAY
+        );
         let evidence = inspect_terminal_evidence(&frame).unwrap();
-        assert!(evidence.level_up_medal.iter().all(|guard| guard.matched == guard.required));
-        assert!(evidence.to_string().contains("medal layout title=10/10/7/7, label=10/10/8/8, OK=10/10/4/4/4/4, frame=8/8"));
+        assert!(
+            evidence
+                .level_up_medal
+                .iter()
+                .all(|guard| guard.matched == guard.required)
+        );
+        assert!(evidence.to_string().contains(
+            "medal layout title=10/10/7/7, label=10/10/8/8, OK=10/10/4/4/4/4, frame=8/8"
+        ));
     }
 
 
@@ -1548,15 +1725,28 @@ mod tests {
         assert!(has_completed_master_medal_level_up(&frame));
         assert!(has_completed_level_up_context(&frame));
         assert_eq!(pixel_rgb(&frame, 960, 795), Some([253, 248, 223]));
-        assert_eq!(classify_terminal(&frame).unwrap(), Some(TerminalStage::LevelUp));
+        assert_eq!(
+            classify_terminal(&frame).unwrap(),
+            Some(TerminalStage::LevelUp)
+        );
         assert_eq!(TerminalStage::LevelUp.click_point(), PixelPoint::new(0, 0));
         assert_eq!(TerminalStage::LevelUp.mouse_hold(), POST_GAME_MOUSE_HOLD);
-        assert_eq!(TerminalStage::LevelUp.settle_delay(Duration::ZERO), POST_GAME_STAGE_DELAY);
+        assert_eq!(
+            TerminalStage::LevelUp.settle_delay(Duration::ZERO),
+            POST_GAME_STAGE_DELAY
+        );
         let evidence = inspect_terminal_evidence(&frame).unwrap();
-        assert!(evidence.level_up_master.iter().all(|guard| guard.matched == guard.required));
+        assert!(
+            evidence
+                .level_up_master
+                .iter()
+                .all(|guard| guard.matched == guard.required)
+        );
         assert_eq!(evidence.level_up_medal[0].matched, 7);
         assert_eq!(evidence.level_up_medal[4].matched, 6);
-        assert!(evidence.to_string().contains("Master layout title=10/10/7/7, label=10/10/8/8, OK=10/10/4/4/4/4, frame=8/8"));
+        assert!(evidence.to_string().contains(
+            "Master layout title=10/10/7/7, label=10/10/8/8, OK=10/10/4/4/4/4, frame=8/8"
+        ));
     }
 
 
@@ -1565,28 +1755,37 @@ mod tests {
     /// click authority, even with all remaining native scene pixels intact.
     #[test]
     fn master_medal_level_up_requires_complete_scene_and_control_artwork() {
-        let bounds = [PixelRect::new(804, 177, 315, 55),
-            PixelRect::new(758, 616, 220, 35), PixelRect::new(839, 780, 241, 80),
-            PixelRect::new(456, 710, 110, 52)];
+        let bounds = [
+            PixelRect::new(804, 177, 315, 55),
+            PixelRect::new(758, 616, 220, 35),
+            PixelRect::new(839, 780, 241, 80),
+            PixelRect::new(456, 710, 110, 52),
+        ];
 
 
         for bounds in bounds {
-
-
             for rgb in [[0, 0, 0], [255, 255, 255], [240, 190, 90]] {
                 let mut frame = fixture(86);
                 paint(&mut frame, bounds, rgb);
-                assert_eq!(classify_terminal(&frame).unwrap(), None,
-                    "missing K86 artwork {bounds:?} {rgb:?}");
+                assert_eq!(
+                    classify_terminal(&frame).unwrap(),
+                    None,
+                    "missing K86 artwork {bounds:?} {rgb:?}"
+                );
             }
         }
 
 
-        for samples in [&LEVEL_UP_MASTER_TITLE[..], &LEVEL_UP_MASTER_TITLE_BACKGROUND[..],
-            &LEVEL_UP_MASTER_KLONDIKE[..], &LEVEL_UP_MASTER_KLONDIKE_BACKGROUND[..],
-            &LEVEL_UP_MASTER_OK[..], &LEVEL_UP_MASTER_OK_BACKGROUND[..],
-            &LEVEL_UP_MASTER_BUTTON_BODY[..], &LEVEL_UP_MASTER_FRAME[..]]
-        {
+        for samples in [
+            &LEVEL_UP_MASTER_TITLE[..],
+            &LEVEL_UP_MASTER_TITLE_BACKGROUND[..],
+            &LEVEL_UP_MASTER_KLONDIKE[..],
+            &LEVEL_UP_MASTER_KLONDIKE_BACKGROUND[..],
+            &LEVEL_UP_MASTER_OK[..],
+            &LEVEL_UP_MASTER_OK_BACKGROUND[..],
+            &LEVEL_UP_MASTER_BUTTON_BODY[..],
+            &LEVEL_UP_MASTER_FRAME[..],
+        ] {
             let sample = samples[0];
             let contrast = if sample.rgb.iter().all(|channel| *channel > 200) {
                 [0, 0, 0]
@@ -1594,9 +1793,18 @@ mod tests {
                 [255, 255, 255]
             };
             let mut frame = fixture(86);
-            paint(&mut frame, PixelRect::new(sample.x, sample.y, 1, 1), contrast);
-            assert_eq!(classify_terminal(&frame).unwrap(), None,
-                "missing K86 sample ({}, {})", sample.x, sample.y);
+            paint(
+                &mut frame,
+                PixelRect::new(sample.x, sample.y, 1, 1),
+                contrast,
+            );
+            assert_eq!(
+                classify_terminal(&frame).unwrap(),
+                None,
+                "missing K86 sample ({}, {})",
+                sample.x,
+                sample.y
+            );
         }
     }
 
@@ -1605,13 +1813,10 @@ mod tests {
     /// foundation or independent empty-tableau context sample is missing.
     #[test]
     fn master_medal_level_up_requires_each_completed_board_context_point() {
-
-
-        for sample in LEVEL_UP_FOUNDATION_CONTEXT.into_iter()
+        for sample in LEVEL_UP_FOUNDATION_CONTEXT
+            .into_iter()
             .chain(LEVEL_UP_EMPTY_TABLEAU_CONTEXT)
         {
-
-
             for rgb in [[0, 0, 0], [255, 255, 255]] {
                 let mut frame = fixture(86);
                 paint(&mut frame, PixelRect::new(sample.x, sample.y, 1, 1), rgb);
@@ -1650,13 +1855,18 @@ mod tests {
         let mut frame = fixture(86);
 
 
-        for bounds in [PixelRect::new(740, 330, 440, 273),
-            PixelRect::new(1_110, 610, 60, 45), PixelRect::new(900, 652, 140, 41),
-            PixelRect::new(790, 702, 370, 39)]
-        {
+        for bounds in [
+            PixelRect::new(740, 330, 440, 273),
+            PixelRect::new(1_110, 610, 60, 45),
+            PixelRect::new(900, 652, 140, 41),
+            PixelRect::new(790, 702, 370, 39),
+        ] {
             paint(&mut frame, bounds, [0, 0, 0]);
         }
-        assert_eq!(classify_terminal(&frame).unwrap(), Some(TerminalStage::LevelUp));
+        assert_eq!(
+            classify_terminal(&frame).unwrap(),
+            Some(TerminalStage::LevelUp)
+        );
     }
 
 
@@ -1664,8 +1874,6 @@ mod tests {
     /// from the new Master signature. Native frame validation runs first.
     #[test]
     fn master_medal_level_up_rejects_unknown_and_malformed_native_frames() {
-
-
         for rgb in [[0, 0, 0], [255, 255, 255], [240, 190, 90], [20, 120, 70]] {
             let mut frame = fixture(86);
             paint(&mut frame, PixelRect::new(0, 0, 1_920, 1_080), rgb);
@@ -1673,10 +1881,16 @@ mod tests {
         }
         let mut wrong_size = fixture(86);
         wrong_size.height = 1_079;
-        assert!(matches!(classify_terminal(&wrong_size), Err(HaloDetectionError::BoundsOutsideFrame)));
+        assert!(matches!(
+            classify_terminal(&wrong_size),
+            Err(HaloDetectionError::BoundsOutsideFrame)
+        ));
         let mut malformed = fixture(86);
         malformed.pixels.clear();
-        assert!(matches!(classify_terminal(&malformed), Err(HaloDetectionError::InvalidFrameLayout)));
+        assert!(matches!(
+            classify_terminal(&malformed),
+            Err(HaloDetectionError::InvalidFrameLayout)
+        ));
     }
 
 
@@ -1688,12 +1902,17 @@ mod tests {
         let mut frame = fixture(67);
 
 
-        for bounds in [PixelRect::new(1_110, 610, 60, 38),
-            PixelRect::new(920, 652, 85, 41), PixelRect::new(790, 702, 370, 39)]
-        {
+        for bounds in [
+            PixelRect::new(1_110, 610, 60, 38),
+            PixelRect::new(920, 652, 85, 41),
+            PixelRect::new(790, 702, 370, 39),
+        ] {
             paint(&mut frame, bounds, [0, 0, 0]);
         }
-        assert_eq!(classify_terminal(&frame).unwrap(), Some(TerminalStage::LevelUp));
+        assert_eq!(
+            classify_terminal(&frame).unwrap(),
+            Some(TerminalStage::LevelUp)
+        );
     }
 
 
@@ -1702,18 +1921,23 @@ mod tests {
     /// cannot substitute for any one of these positively observed scene groups.
     #[test]
     fn medal_level_up_requires_complete_scene_and_control_artwork() {
-        let bounds = [PixelRect::new(804, 185, 315, 46),
-            PixelRect::new(760, 610, 220, 35), PixelRect::new(839, 780, 241, 76),
-            PixelRect::new(456, 710, 110, 50)];
+        let bounds = [
+            PixelRect::new(804, 185, 315, 46),
+            PixelRect::new(760, 610, 220, 35),
+            PixelRect::new(839, 780, 241, 76),
+            PixelRect::new(456, 710, 110, 50),
+        ];
 
 
         for bounds in bounds {
-
-
             for rgb in [[0, 0, 0], [255, 255, 255], [240, 190, 90]] {
                 let mut frame = fixture(67);
                 paint(&mut frame, bounds, rgb);
-                assert_eq!(classify_terminal(&frame).unwrap(), None, "missing K67 artwork {bounds:?} {rgb:?}");
+                assert_eq!(
+                    classify_terminal(&frame).unwrap(),
+                    None,
+                    "missing K67 artwork {bounds:?} {rgb:?}"
+                );
             }
         }
 
@@ -1725,9 +1949,16 @@ mod tests {
             } else {
                 [255, 255, 255]
             };
-            paint(&mut frame, PixelRect::new(sample.x, sample.y, 1, 1), contrast);
+            paint(
+                &mut frame,
+                PixelRect::new(sample.x, sample.y, 1, 1),
+                contrast,
+            );
             assert!(!matches_artwork(&frame, &LEVEL_UP_TITLE));
-            assert_eq!(inspect_terminal_evidence(&frame).unwrap().level_up_medal[7].matched, 7);
+            assert_eq!(
+                inspect_terminal_evidence(&frame).unwrap().level_up_medal[7].matched,
+                7
+            );
             assert_eq!(classify_terminal(&frame).unwrap(), None);
         }
     }
@@ -1737,13 +1968,10 @@ mod tests {
     /// independently empty side-tableau point lacks the existing completed board.
     #[test]
     fn medal_level_up_requires_each_completed_board_context_point() {
-
-
-        for sample in LEVEL_UP_FOUNDATION_CONTEXT.into_iter()
+        for sample in LEVEL_UP_FOUNDATION_CONTEXT
+            .into_iter()
             .chain(LEVEL_UP_EMPTY_TABLEAU_CONTEXT)
         {
-
-
             for rgb in [[0, 0, 0], [255, 255, 255]] {
                 let mut frame = fixture(67);
                 paint(&mut frame, PixelRect::new(sample.x, sample.y, 1, 1), rgb);
@@ -1778,8 +2006,6 @@ mod tests {
     /// signature. Native bounds/storage validation runs before reading any sample.
     #[test]
     fn medal_level_up_rejects_unknown_and_malformed_native_frames() {
-
-
         for rgb in [[0, 0, 0], [255, 255, 255], [240, 190, 90], [20, 120, 70]] {
             let mut frame = fixture(67);
             paint(&mut frame, PixelRect::new(0, 0, 1_920, 1_080), rgb);
@@ -1787,10 +2013,16 @@ mod tests {
         }
         let mut wrong_size = fixture(67);
         wrong_size.height = 1_079;
-        assert!(matches!(classify_terminal(&wrong_size), Err(HaloDetectionError::BoundsOutsideFrame)));
+        assert!(matches!(
+            classify_terminal(&wrong_size),
+            Err(HaloDetectionError::BoundsOutsideFrame)
+        ));
         let mut malformed = fixture(67);
         malformed.pixels.clear();
-        assert!(matches!(classify_terminal(&malformed), Err(HaloDetectionError::InvalidFrameLayout)));
+        assert!(matches!(
+            classify_terminal(&malformed),
+            Err(HaloDetectionError::InvalidFrameLayout)
+        ));
     }
 
 
@@ -1808,11 +2040,21 @@ mod tests {
         assert!(matches_artwork(&frame, &LEVEL_UP_OK_BACKGROUND));
         assert!(matches_artwork(&frame, &LEVEL_UP_BUTTON_BODY));
         assert!(has_completed_level_up_context(&frame));
-        assert_eq!(classify_terminal(&frame).unwrap(), Some(TerminalStage::LevelUp));
+        assert_eq!(
+            classify_terminal(&frame).unwrap(),
+            Some(TerminalStage::LevelUp)
+        );
         assert_eq!(TerminalStage::LevelUp.click_point(), PixelPoint::new(0, 0));
         let mut changed_level = frame.clone();
-        paint(&mut changed_level, PixelRect::new(1_110, 610, 60, 38), [0, 0, 0]);
-        assert_eq!(classify_terminal(&changed_level).unwrap(), Some(TerminalStage::LevelUp));
+        paint(
+            &mut changed_level,
+            PixelRect::new(1_110, 610, 60, 38),
+            [0, 0, 0],
+        );
+        assert_eq!(
+            classify_terminal(&changed_level).unwrap(),
+            Some(TerminalStage::LevelUp)
+        );
     }
 
 
@@ -1825,16 +2067,31 @@ mod tests {
 
 
         for sample in LEVEL_UP_KLONDIKE {
-            paint(&mut frame, PixelRect::new(sample.x, sample.y, 1, 1), sample.rgb);
+            paint(
+                &mut frame,
+                PixelRect::new(sample.x, sample.y, 1, 1),
+                sample.rgb,
+            );
         }
 
 
         for sample in LEVEL_UP_KLONDIKE_BACKGROUND {
-            paint(&mut frame, PixelRect::new(sample.x + 2, sample.y, 1, 1), sample.rgb);
+            paint(
+                &mut frame,
+                PixelRect::new(sample.x + 2, sample.y, 1, 1),
+                sample.rgb,
+            );
         }
         assert!(matches_artwork(&frame, &LEVEL_UP_KLONDIKE));
-        assert_eq!(count_samples(&frame, &LEVEL_UP_KLONDIKE_BACKGROUND,
-            ARTWORK_CHANNEL_TOLERANCE, 2), LEVEL_UP_KLONDIKE_BACKGROUND.len());
+        assert_eq!(
+            count_samples(
+                &frame,
+                &LEVEL_UP_KLONDIKE_BACKGROUND,
+                ARTWORK_CHANNEL_TOLERANCE,
+                2
+            ),
+            LEVEL_UP_KLONDIKE_BACKGROUND.len()
+        );
         assert_eq!(level_up_label_offset(&frame), None);
         assert_eq!(classify_terminal(&frame).unwrap(), None);
     }
@@ -1866,14 +2123,15 @@ mod tests {
     /// foundation or empty-tableau guard. These are controlled adverse derivatives.
     #[test]
     fn shifted_label_still_requires_every_independent_scene_guard() {
-        let bounds = [PixelRect::new(804, 185, 315, 46),
-            PixelRect::new(760, 610, 222, 35), PixelRect::new(930, 800, 50, 24),
-            PixelRect::new(840, 775, 240, 75)];
+        let bounds = [
+            PixelRect::new(804, 185, 315, 46),
+            PixelRect::new(760, 610, 222, 35),
+            PixelRect::new(930, 800, 50, 24),
+            PixelRect::new(840, 775, 240, 75),
+        ];
 
 
         for bounds in bounds {
-
-
             for rgb in [[0, 0, 0], [255, 255, 255]] {
                 let mut frame = fixture(52);
                 paint(&mut frame, bounds, rgb);
@@ -1884,14 +2142,22 @@ mod tests {
 
         for sample in LEVEL_UP_FOUNDATION_CONTEXT {
             let mut frame = fixture(52);
-            paint(&mut frame, PixelRect::new(sample.x, sample.y, 1, 1), [0, 0, 0]);
+            paint(
+                &mut frame,
+                PixelRect::new(sample.x, sample.y, 1, 1),
+                [0, 0, 0],
+            );
             assert_eq!(classify_terminal(&frame).unwrap(), None);
         }
 
 
         for sample in LEVEL_UP_EMPTY_TABLEAU_CONTEXT {
             let mut frame = fixture(52);
-            paint(&mut frame, PixelRect::new(sample.x, sample.y, 1, 1), [255, 255, 255]);
+            paint(
+                &mut frame,
+                PixelRect::new(sample.x, sample.y, 1, 1),
+                [255, 255, 255],
+            );
             assert_eq!(classify_terminal(&frame).unwrap(), None);
         }
     }
@@ -1905,16 +2171,30 @@ mod tests {
         let evidence = inspect_terminal_evidence(&frame).unwrap();
         assert_eq!(evidence.level_up_title[0].matched, LEVEL_UP_TITLE.len());
         assert_eq!(evidence.level_up_label[0][0].matched, 6);
-        assert_eq!(evidence.level_up_label[1][0].matched, LEVEL_UP_KLONDIKE.len());
-        assert_eq!(evidence.level_up_label[1][1].matched, LEVEL_UP_KLONDIKE_BACKGROUND.len());
+        assert_eq!(
+            evidence.level_up_label[1][0].matched,
+            LEVEL_UP_KLONDIKE.len()
+        );
+        assert_eq!(
+            evidence.level_up_label[1][1].matched,
+            LEVEL_UP_KLONDIKE_BACKGROUND.len()
+        );
         assert_eq!(evidence.level_up_control[0].matched, LEVEL_UP_OK.len());
-        assert_eq!(evidence.level_up_foundations.matched, LEVEL_UP_FOUNDATION_CONTEXT.len());
-        assert_eq!(evidence.level_up_tableau.matched, LEVEL_UP_EMPTY_TABLEAU_CONTEXT.len());
+        assert_eq!(
+            evidence.level_up_foundations.matched,
+            LEVEL_UP_FOUNDATION_CONTEXT.len()
+        );
+        assert_eq!(
+            evidence.level_up_tableau.matched,
+            LEVEL_UP_EMPTY_TABLEAU_CONTEXT.len()
+        );
         assert!(evidence.to_string().contains("label +2=10/10/8/8"));
         let mut invalid = frame;
         invalid.pixels.clear();
-        assert!(matches!(inspect_terminal_evidence(&invalid),
-            Err(HaloDetectionError::InvalidFrameLayout)));
+        assert!(matches!(
+            inspect_terminal_evidence(&invalid),
+            Err(HaloDetectionError::InvalidFrameLayout)
+        ));
     }
 
 
@@ -1927,12 +2207,19 @@ mod tests {
 
 
         for sample in LEVEL_UP_EMPTY_TABLEAU_CONTEXT {
-            paint(&mut frame, PixelRect::new(sample.x, sample.y, 1, 1), sample.rgb);
+            paint(
+                &mut frame,
+                PixelRect::new(sample.x, sample.y, 1, 1),
+                sample.rgb,
+            );
         }
         let discarded_shadow = [RgbSample::new(884, 632, [1, 2, 3])];
         assert!(!matches_artwork(&frame, &discarded_shadow));
         assert!(has_completed_level_up_context(&frame));
-        assert_eq!(classify_terminal(&frame).unwrap(), Some(TerminalStage::LevelUp));
+        assert_eq!(
+            classify_terminal(&frame).unwrap(),
+            Some(TerminalStage::LevelUp)
+        );
     }
 
 
@@ -1940,9 +2227,12 @@ mod tests {
     /// Klondike label, OK glyph, gold control or any occupied-foundation sample.
     #[test]
     fn later_level_up_requires_its_independent_title_control_and_foundations() {
-        let bounds = [PixelRect::new(804, 185, 315, 46),
-            PixelRect::new(760, 610, 220, 35), PixelRect::new(930, 800, 50, 24),
-            PixelRect::new(840, 775, 240, 75)];
+        let bounds = [
+            PixelRect::new(804, 185, 315, 46),
+            PixelRect::new(760, 610, 220, 35),
+            PixelRect::new(930, 800, 50, 24),
+            PixelRect::new(840, 775, 240, 75),
+        ];
 
 
         for bounds in bounds {
@@ -1954,7 +2244,11 @@ mod tests {
 
         for sample in LEVEL_UP_FOUNDATION_CONTEXT {
             let mut frame = fixture(49);
-            paint(&mut frame, PixelRect::new(sample.x, sample.y, 1, 1), [0, 0, 0]);
+            paint(
+                &mut frame,
+                PixelRect::new(sample.x, sample.y, 1, 1),
+                [0, 0, 0],
+            );
             assert_eq!(classify_terminal(&frame).unwrap(), None);
         }
 
@@ -1971,19 +2265,37 @@ mod tests {
     /// lighting limits. Black, white and isolated blue patches cannot grant OK.
     #[test]
     fn fireworks_context_rejects_outside_measured_colour_support() {
-
-
         for sample in LEVEL_UP_EMPTY_TABLEAU_CONTEXT {
-            let unsupported = [[0, 0, 0], [255, 255, 255], [0, 0, sample.rgb[2]],
-                [sample.rgb[0] + LEVEL_UP_FIREWORK_RED_INCREASE + 1, sample.rgb[1], sample.rgb[2]],
-                [sample.rgb[0], sample.rgb[1] + LEVEL_UP_FIREWORK_GREEN_INCREASE + 1, sample.rgb[2]],
-                [sample.rgb[0], sample.rgb[1], sample.rgb[2] + BOARD_CONTEXT_CHANNEL_TOLERANCE + 1]];
+            let unsupported = [
+                [0, 0, 0],
+                [255, 255, 255],
+                [0, 0, sample.rgb[2]],
+                [
+                    sample.rgb[0] + LEVEL_UP_FIREWORK_RED_INCREASE + 1,
+                    sample.rgb[1],
+                    sample.rgb[2],
+                ],
+                [
+                    sample.rgb[0],
+                    sample.rgb[1] + LEVEL_UP_FIREWORK_GREEN_INCREASE + 1,
+                    sample.rgb[2],
+                ],
+                [
+                    sample.rgb[0],
+                    sample.rgb[1],
+                    sample.rgb[2] + BOARD_CONTEXT_CHANNEL_TOLERANCE + 1,
+                ],
+            ];
 
 
             for rgb in unsupported {
                 let mut frame = fixture(49);
                 paint(&mut frame, PixelRect::new(sample.x, sample.y, 1, 1), rgb);
-                assert_eq!(classify_terminal(&frame).unwrap(), None, "unsupported context {rgb:?}");
+                assert_eq!(
+                    classify_terminal(&frame).unwrap(),
+                    None,
+                    "unsupported context {rgb:?}"
+                );
             }
         }
     }
@@ -1992,15 +2304,23 @@ mod tests {
     /// Removing the visible control/caption never authorises an inferred click.
     #[test]
     fn every_stage_requires_its_own_visible_control() {
-        let bounds = [PixelRect::new(795, 839, 332, 31), PixelRect::new(840, 775, 240, 75),
-            PixelRect::new(631, 815, 310, 75), PixelRect::new(602, 825, 214, 70),
-            PixelRect::new(560, 1_000, 95, 30)];
+        let bounds = [
+            PixelRect::new(795, 839, 332, 31),
+            PixelRect::new(840, 775, 240, 75),
+            PixelRect::new(631, 815, 310, 75),
+            PixelRect::new(602, 825, 214, 70),
+            PixelRect::new(560, 1_000, 95, 30),
+        ];
 
 
         for (number, bounds) in (26..=30).zip(bounds) {
             let mut frame = fixture(number);
             paint(&mut frame, bounds, [0, 0, 0]);
-            assert_eq!(classify_terminal(&frame).unwrap(), None, "control missing K{number}");
+            assert_eq!(
+                classify_terminal(&frame).unwrap(),
+                None,
+                "control missing K{number}"
+            );
         }
     }
 
@@ -2008,14 +2328,22 @@ mod tests {
     /// Missing title or wrong Draw selector invalidates its otherwise intact button.
     #[test]
     fn dialog_titles_and_draw_one_selector_are_required() {
-        let bounds = [PixelRect::new(700, 200, 520, 55), PixelRect::new(760, 610, 220, 35),
-            PixelRect::new(700, 200, 520, 55), PixelRect::new(648, 300, 245, 30)];
+        let bounds = [
+            PixelRect::new(700, 200, 520, 55),
+            PixelRect::new(760, 610, 220, 35),
+            PixelRect::new(700, 200, 520, 55),
+            PixelRect::new(648, 300, 245, 30),
+        ];
 
 
         for (number, bounds) in (26..=29).zip(bounds) {
             let mut frame = fixture(number);
             paint(&mut frame, bounds, [0, 0, 0]);
-            assert_eq!(classify_terminal(&frame).unwrap(), None, "title missing K{number}");
+            assert_eq!(
+                classify_terminal(&frame).unwrap(),
+                None,
+                "title missing K{number}"
+            );
         }
     }
 
@@ -2023,14 +2351,22 @@ mod tests {
     /// Flat white title patches cannot satisfy the original mixed artwork pattern.
     #[test]
     fn white_title_blocks_are_not_recognised_as_text() {
-        let bounds = [PixelRect::new(700, 200, 520, 55), PixelRect::new(804, 185, 315, 46),
-            PixelRect::new(700, 200, 520, 55), PixelRect::new(674, 175, 153, 27)];
+        let bounds = [
+            PixelRect::new(700, 200, 520, 55),
+            PixelRect::new(804, 185, 315, 46),
+            PixelRect::new(700, 200, 520, 55),
+            PixelRect::new(674, 175, 153, 27),
+        ];
 
 
         for (number, bounds) in (26..=29).zip(bounds) {
             let mut frame = fixture(number);
             paint(&mut frame, bounds, [255, 255, 255]);
-            assert_eq!(classify_terminal(&frame).unwrap(), None, "white title K{number}");
+            assert_eq!(
+                classify_terminal(&frame).unwrap(),
+                None,
+                "white title K{number}"
+            );
         }
     }
 
@@ -2038,8 +2374,6 @@ mod tests {
     /// Changing the displayed level number does not change terminal authority.
     #[test]
     fn changing_numeric_level_text_is_outside_the_signature() {
-
-
         for number in 26..=28 {
             let mut frame = fixture(number);
 
@@ -2050,7 +2384,10 @@ mod tests {
                 PixelRect::new(1_004, 584, 62, 37)
             };
             paint(&mut frame, numeric_bounds, [0, 0, 0]);
-            assert_eq!(classify_terminal(&frame).unwrap(), classify_terminal(&fixture(number)).unwrap());
+            assert_eq!(
+                classify_terminal(&frame).unwrap(),
+                classify_terminal(&fixture(number)).unwrap()
+            );
         }
     }
 
@@ -2058,12 +2395,14 @@ mod tests {
     /// Empty or erased foundation context cannot establish a completed game.
     #[test]
     fn win_dialogs_require_the_completed_klondike_board_context() {
-
-
         for number in 26..=28 {
             let mut frame = fixture(number);
             paint(&mut frame, PixelRect::new(894, 112, 132, 26), [0, 0, 0]);
-            assert_eq!(classify_terminal(&frame).unwrap(), None, "foundation missing K{number}");
+            assert_eq!(
+                classify_terminal(&frame).unwrap(),
+                None,
+                "foundation missing K{number}"
+            );
         }
     }
 
@@ -2073,13 +2412,27 @@ mod tests {
     fn solver_ready_accepts_native_initial_court_card_geometry() {
         let frame = fixture(77);
         assert!(!super::super::fraction_at_least(
-            &frame, PixelRect::new(408, 360, 96, 110), super::super::is_white, 300,
+            &frame,
+            PixelRect::new(408, 360, 96, 110),
+            super::super::is_white,
+            300,
         ));
-        assert_eq!(classify_terminal(&frame).unwrap(), Some(TerminalStage::SolverReady));
-        assert_eq!(classify_terminal(&fixture(30)).unwrap(), Some(TerminalStage::SolverReady));
+        assert_eq!(
+            classify_terminal(&frame).unwrap(),
+            Some(TerminalStage::SolverReady)
+        );
+        assert_eq!(
+            classify_terminal(&fixture(30)).unwrap(),
+            Some(TerminalStage::SolverReady)
+        );
         let evidence = inspect_terminal_evidence(&frame).unwrap();
         assert!(evidence.fresh_deal);
-        assert!(evidence.solver_control.iter().all(|guard| guard.matched == guard.required));
+        assert!(
+            evidence
+                .solver_control
+                .iter()
+                .all(|guard| guard.matched == guard.required)
+        );
         assert!(!has_initial_face_paper(&frame, 7));
         assert!(!has_initial_face_paper(&frame, u32::MAX));
     }
@@ -2088,11 +2441,7 @@ mod tests {
     /// Each side, top and bottom margin independently protects the initial face.
     #[test]
     fn solver_ready_requires_all_seven_complete_paper_perimeters() {
-
-
         for number in [30, 77] {
-
-
             for column in 0..7 {
                 let x = 390 + 168 * column;
                 let top = 342 + 35 * column / 2;
@@ -2106,8 +2455,12 @@ mod tests {
                 ] {
                     let mut erased = fixture(number);
                     paint(&mut erased, bounds, [20, 120, 70]);
-                    assert_eq!(classify_terminal(&erased).unwrap(), None,
-                        "K{number} column {} erased {bounds:?}", column + 1);
+                    assert_eq!(
+                        classify_terminal(&erased).unwrap(),
+                        None,
+                        "K{number} column {} erased {bounds:?}",
+                        column + 1
+                    );
                     assert!(!inspect_terminal_evidence(&erased).unwrap().fresh_deal);
                 }
             }
@@ -2118,8 +2471,6 @@ mod tests {
     /// A genuinely dealt board still needs empty upper piles and its Solver control.
     #[test]
     fn native_court_card_deal_retains_solver_and_topology_guards() {
-
-
         for bounds in [
             PixelRect::new(406, 130, 100, 139),
             PixelRect::new(576, 130, 152, 139),
@@ -2138,8 +2489,11 @@ mod tests {
         ] {
             let mut erased = fixture(77);
             paint(&mut erased, bounds, [0, 0, 0]);
-            assert_eq!(classify_terminal(&erased).unwrap(), None,
-                "K77 erased required fresh-deal/control guard {bounds:?}");
+            assert_eq!(
+                classify_terminal(&erased).unwrap(),
+                None,
+                "K77 erased required fresh-deal/control guard {bounds:?}"
+            );
         }
         let mut active = fixture(77);
         paint(&mut active, PixelRect::new(828, 36, 263, 1), [240, 190, 90]);
@@ -2162,10 +2516,18 @@ mod tests {
     #[test]
     fn solver_ready_requires_the_initial_deal_geometry() {
         let mut missing_back = fixture(30);
-        paint(&mut missing_back, PixelRect::new(576, 347, 96, 6), [0, 0, 0]);
+        paint(
+            &mut missing_back,
+            PixelRect::new(576, 347, 96, 6),
+            [0, 0, 0],
+        );
         assert_eq!(classify_terminal(&missing_back).unwrap(), None);
         let mut occupied_foundation = fixture(30);
-        paint(&mut occupied_foundation, PixelRect::new(910, 130, 100, 139), [255, 255, 255]);
+        paint(
+            &mut occupied_foundation,
+            PixelRect::new(910, 130, 100, 139),
+            [255, 255, 255],
+        );
         assert_eq!(classify_terminal(&occupied_foundation).unwrap(), None);
     }
 
@@ -2174,8 +2536,6 @@ mod tests {
     /// separate Solver control readiness check in the terminal classifier.
     #[test]
     fn fresh_deal_tableau_checks_ignore_pixels_at_and_below_toolbar() {
-
-
         for number in [30, 77] {
             let native = fixture(number);
             assert!(has_fresh_deal(&native).unwrap());
@@ -2183,9 +2543,20 @@ mod tests {
 
             for rgb in [[0, 0, 0], [255, 255, 255], [220, 180, 100], [12, 82, 45]] {
                 let mut changed = native.clone();
-                paint(&mut changed, PixelRect::new(0, crate::klondike::TOOLBAR_TOP,
-                    native.width, native.height - crate::klondike::TOOLBAR_TOP), rgb);
-                assert!(has_fresh_deal(&changed).unwrap(), "K{number} toolbar {rgb:?}");
+                paint(
+                    &mut changed,
+                    PixelRect::new(
+                        0,
+                        crate::klondike::TOOLBAR_TOP,
+                        native.width,
+                        native.height - crate::klondike::TOOLBAR_TOP,
+                    ),
+                    rgb,
+                );
+                assert!(
+                    has_fresh_deal(&changed).unwrap(),
+                    "K{number} toolbar {rgb:?}"
+                );
             }
         }
     }
@@ -2194,8 +2565,6 @@ mod tests {
     /// Unknown uniform colours, storage and dimensions cannot grant terminal input.
     #[test]
     fn unknown_or_malformed_frames_are_rejected() {
-
-
         for rgb in [[0, 0, 0], [255, 255, 255], [240, 190, 90], [20, 120, 70]] {
             let mut frame = fixture(26);
             paint(&mut frame, PixelRect::new(0, 0, 1_920, 1_080), rgb);
@@ -2203,18 +2572,22 @@ mod tests {
         }
         let mut wrong_size = fixture(26);
         wrong_size.width = 1_919;
-        assert!(matches!(classify_terminal(&wrong_size), Err(HaloDetectionError::BoundsOutsideFrame)));
+        assert!(matches!(
+            classify_terminal(&wrong_size),
+            Err(HaloDetectionError::BoundsOutsideFrame)
+        ));
         let mut invalid_storage = fixture(26);
         invalid_storage.pixels.clear();
-        assert!(matches!(classify_terminal(&invalid_storage), Err(HaloDetectionError::InvalidFrameLayout)));
+        assert!(matches!(
+            classify_terminal(&invalid_storage),
+            Err(HaloDetectionError::InvalidFrameLayout)
+        ));
     }
 
 
     /// Shifted screenshots must not preserve a control's old native click authority.
     #[test]
     fn shifted_native_scenes_do_not_authorise_old_coordinates() {
-
-
         for number in [26, 27, 28, 29, 30, 67] {
             let original = fixture(number);
             let mut shifted = original.clone();
@@ -2227,7 +2600,11 @@ mod tests {
                 shifted.pixels[destination..destination + (1_920 - 16) * 4]
                     .copy_from_slice(&original.pixels[source..source + (1_920 - 16) * 4]);
             }
-            assert_eq!(classify_terminal(&shifted).unwrap(), None, "shifted K{number}");
+            assert_eq!(
+                classify_terminal(&shifted).unwrap(),
+                None,
+                "shifted K{number}"
+            );
         }
     }
 
@@ -2235,14 +2612,29 @@ mod tests {
     /// Controls retain measured points and existing delays, including editable deal wait.
     #[test]
     fn measured_actions_reuse_existing_hold_and_settle_contracts() {
-        assert_eq!(TerminalStage::ScoreCounting.click_point(), PixelPoint::new(960, 540));
+        assert_eq!(
+            TerminalStage::ScoreCounting.click_point(),
+            PixelPoint::new(960, 540)
+        );
         assert_eq!(TerminalStage::LevelUp.click_point(), PixelPoint::new(0, 0));
         assert_eq!(TerminalStage::NewGame.click_point(), PixelPoint::new(0, 0));
         assert_eq!(TerminalStage::Play.click_point(), PixelPoint::new(0, 0));
-        assert_eq!(TerminalStage::SolverReady.click_point(), PixelPoint::new(602, 977));
-        assert_eq!(TerminalStage::ScoreCounting.settle_delay(Duration::ZERO), LEVEL_UP_APPEAR_DELAY);
-        assert_eq!(TerminalStage::NewGame.settle_delay(Duration::ZERO), POST_GAME_STAGE_DELAY);
-        assert_eq!(TerminalStage::Play.settle_delay(Duration::from_millis(1_234)), Duration::from_millis(1_234));
+        assert_eq!(
+            TerminalStage::SolverReady.click_point(),
+            PixelPoint::new(602, 977)
+        );
+        assert_eq!(
+            TerminalStage::ScoreCounting.settle_delay(Duration::ZERO),
+            LEVEL_UP_APPEAR_DELAY
+        );
+        assert_eq!(
+            TerminalStage::NewGame.settle_delay(Duration::ZERO),
+            POST_GAME_STAGE_DELAY
+        );
+        assert_eq!(
+            TerminalStage::Play.settle_delay(Duration::from_millis(1_234)),
+            Duration::from_millis(1_234)
+        );
         assert_eq!(TerminalStage::Play.mouse_hold(), POST_GAME_MOUSE_HOLD);
         assert_eq!(TerminalStage::SolverReady.mouse_hold(), SOLVER_MOUSE_HOLD);
     }

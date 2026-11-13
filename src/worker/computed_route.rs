@@ -80,10 +80,13 @@ fn completed_search_failure(
     boards: bool,
 ) -> bool {
     match outcome {
-        BestEffortOutcome::Stopped { reason, .. } => {
-            *reason != xsar::search::SearchStop::Cancelled
-        }
-        BestEffortOutcome::Partial { actions, score, proof, .. } => {
+        BestEffortOutcome::Stopped { reason, .. } => *reason != xsar::search::SearchStop::Cancelled,
+        BestEffortOutcome::Partial {
+            actions,
+            score,
+            proof,
+            ..
+        } => {
             if shortest || boards {
                 *proof != PartialProof::Exhaustive
             } else {
@@ -412,12 +415,26 @@ pub(super) fn record_acquisition(
     default_method: Option<RouteMethod>,
     observed_game: crate::pyramid_workflow_model::ObservedGame,
 ) -> Result<(), String> {
-    record_acquisition_causal(context, events, cancel, deal, vision, output, challenge_progress, default_method, observed_game, &super::pyramid_stop::StopTrace::default())
+    record_acquisition_causal(
+        context,
+        events,
+        cancel,
+        deal,
+        vision,
+        output,
+        challenge_progress,
+        default_method,
+        observed_game,
+        &super::pyramid_stop::StopTrace::default(),
+    )
 }
 
 
 /// Preserve the exact failing authority cause for the owning run.
-#[expect(clippy::too_many_arguments, reason = "Existing ownership parameters plus run-local cancellation provenance")]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Existing ownership parameters plus run-local cancellation provenance"
+)]
 pub(super) fn record_acquisition_causal(
     context: &ControllerContext,
     events: &WorkerEventSink,
@@ -481,7 +498,13 @@ pub(super) fn reuse_metadata(
     events: &WorkerEventSink,
     cancel: &AtomicBool,
 ) -> Result<(ReconVision, Option<ChallengeProgress>), String> {
-    reuse_metadata_causal(context, path, events, cancel, &super::pyramid_stop::StopTrace::default())
+    reuse_metadata_causal(
+        context,
+        path,
+        events,
+        cancel,
+        &super::pyramid_stop::StopTrace::default(),
+    )
 }
 
 
@@ -518,7 +541,13 @@ pub(super) fn acquisition_default(
     events: &WorkerEventSink,
     cancel: &AtomicBool,
 ) -> Result<Option<RouteMethod>, String> {
-    acquisition_default_causal(context, path, events, cancel, &super::pyramid_stop::StopTrace::default())
+    acquisition_default_causal(
+        context,
+        path,
+        events,
+        cancel,
+        &super::pyramid_stop::StopTrace::default(),
+    )
 }
 
 
@@ -556,7 +585,13 @@ pub(super) fn acquisition_observed(
     events: &WorkerEventSink,
     cancel: &AtomicBool,
 ) -> Result<crate::pyramid_workflow_model::ObservedGame, String> {
-    acquisition_observed_causal(context, path, events, cancel, &super::pyramid_stop::StopTrace::default())
+    acquisition_observed_causal(
+        context,
+        path,
+        events,
+        cancel,
+        &super::pyramid_stop::StopTrace::default(),
+    )
 }
 
 
@@ -586,19 +621,26 @@ pub(super) fn acquisition_observed_causal(
 }
 
 
-
-
-
 /// Preserve operator cancellation and receipt epoch from the same authority snapshot.
-fn check_acquisition_causal(acquisition: &Acquisition, context: &ControllerContext, events: &WorkerEventSink, cancel: &AtomicBool, trace: &super::pyramid_stop::StopTrace) -> Result<(), String> {
+fn check_acquisition_causal(
+    acquisition: &Acquisition,
+    context: &ControllerContext,
+    events: &WorkerEventSink,
+    cancel: &AtomicBool,
+    trace: &super::pyramid_stop::StopTrace,
+) -> Result<(), String> {
     if acquisition.context != *context {
-        return Err("Acquisition receipt is stale; prepare and acquire a restored deal again".to_owned());
+        return Err(
+            "Acquisition receipt is stale; prepare and acquire a restored deal again".to_owned(),
+        );
     }
-    trace.check_receipt(&events.latest_frame.reconnaissance, context, cancel, acquisition.epoch)
+    trace.check_receipt(
+        &events.latest_frame.reconnaissance,
+        context,
+        cancel,
+        acquisition.epoch,
+    )
 }
-
-
-
 
 
 /// Preserve typed intentional cancellation through the dedicated owner completion.
@@ -613,7 +655,9 @@ fn finish_causal(
     events.latest_frame.reconnaissance.finish();
     send_state(
         events,
-        if result.is_ok() || termination == crate::pyramid_workflow_model::RunTermination::OperatorStopped {
+        if result.is_ok()
+            || termination == crate::pyramid_workflow_model::RunTermination::OperatorStopped
+        {
             WorkerState::Ready
         } else {
             WorkerState::Uncertain
@@ -664,7 +708,17 @@ pub(super) fn calculate_with_method(
     cancel: &AtomicBool,
 ) {
     let stop_trace = super::pyramid_stop::StopTrace::default();
-    let result = calculate_owned_causal(context, run_id, path, method, 0, events, cancel, false, &stop_trace);
+    let result = calculate_owned_causal(
+        context,
+        run_id,
+        path,
+        method,
+        0,
+        events,
+        cancel,
+        false,
+        &stop_trace,
+    );
     let termination = stop_trace.termination(result.is_err(), true);
     let retained_recon = result.as_ref().is_ok_and(|report| !report.card_route);
     if retained_recon && let Ok(mut store) = events.latest_frame.computed_route.lock() {
@@ -757,12 +811,25 @@ pub(super) fn calculate_owned_with_policy(
     cancel: &AtomicBool,
     ignore_challenge: bool,
 ) -> Result<PlanningReport, String> {
-    calculate_owned_causal(context, run_id, path, method, board_generation, events, cancel, ignore_challenge, &super::pyramid_stop::StopTrace::default())
+    calculate_owned_causal(
+        context,
+        run_id,
+        path,
+        method,
+        board_generation,
+        events,
+        cancel,
+        ignore_challenge,
+        &super::pyramid_stop::StopTrace::default(),
+    )
 }
 
 
 /// Preserve the exact failing authority cause for the owning run.
-#[expect(clippy::too_many_arguments, reason = "Existing ownership parameters plus run-local cancellation provenance")]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Existing ownership parameters plus run-local cancellation provenance"
+)]
 pub(super) fn calculate_owned_causal(
     context: &ControllerContext,
     run_id: u64,
@@ -927,27 +994,30 @@ pub(super) fn calculate_owned_causal(
             };
             let checkpoint_error = std::cell::RefCell::new(None);
             let checkpoint = || {
-                if checkpoint_error.borrow().is_some() { return Duration::ZERO; }
+                if checkpoint_error.borrow().is_some() {
+                    return Duration::ZERO;
+                }
                 match events.latest_frame.pause.checkpoint_interruptible(
-                super::pyramid_pause::Phase::Search,
-                || check_acquisition_causal(&acquisition, context, events, cancel, stop_trace),
-                || search_work.maximum_requested(),
-            ) {
-                Ok(super::pyramid_pause::Checkpoint::Ready(paused)) => paused,
-                Ok(super::pyramid_pause::Checkpoint::Interrupted(paused)) => {
-                    local_cancel.store(true, std::sync::atomic::Ordering::Release);
-                    paused
-                }
-                Err(error) => {
-                    if checkpoint_error.borrow().is_none() {
-                        *checkpoint_error.borrow_mut() = Some(error.message.clone());
+                    super::pyramid_pause::Phase::Search,
+                    || check_acquisition_causal(&acquisition, context, events, cancel, stop_trace),
+                    || search_work.maximum_requested(),
+                ) {
+                    Ok(super::pyramid_pause::Checkpoint::Ready(paused)) => paused,
+                    Ok(super::pyramid_pause::Checkpoint::Interrupted(paused)) => {
+                        local_cancel.store(true, std::sync::atomic::Ordering::Release);
+                        paused
                     }
-                    // Preserve the first callback refusal before any later STOP.
-                    cancel.store(true, std::sync::atomic::Ordering::Release);
-                    local_cancel.store(true, std::sync::atomic::Ordering::Release);
-                    error.paused
+                    Err(error) => {
+                        if checkpoint_error.borrow().is_none() {
+                            *checkpoint_error.borrow_mut() = Some(error.message.clone());
+                        }
+                        // Preserve the first callback refusal before any later STOP.
+                        cancel.store(true, std::sync::atomic::Ordering::Release);
+                        local_cancel.store(true, std::sync::atomic::Ordering::Release);
+                        error.paused
+                    }
                 }
-            }};
+            };
             let outcome = search::solve_best_effort_with_cost_and_control(
                 &acquisition.deal,
                 limits,
@@ -957,7 +1027,9 @@ pub(super) fn calculate_owned_causal(
                 Some(&mut progress),
                 Some(&checkpoint),
             );
-            if let Some(error) = checkpoint_error.borrow_mut().take() { return Err(error); }
+            if let Some(error) = checkpoint_error.borrow_mut().take() {
+                return Err(error);
+            }
             let failed_before_stop = completed_search_failure(
                 &outcome,
                 route_goal == RouteGoal::ShortestRoute,
@@ -971,7 +1043,9 @@ pub(super) fn calculate_owned_causal(
                 search_work.finish().unwrap_or(false)
             } else {
                 checkpoint();
-                if let Some(error) = checkpoint_error.borrow_mut().take() { return Err(error); }
+                if let Some(error) = checkpoint_error.borrow_mut().take() {
+                    return Err(error);
+                }
                 check_acquisition_causal(&acquisition, context, events, cancel, stop_trace)?;
                 search_work.finish()?
             };
@@ -1066,7 +1140,13 @@ pub(super) fn calculate_owned_causal(
                                 );
                             }
                             continuation::NoWinAction::MaximumMatches => {
-                                check_acquisition_causal(&acquisition, context, events, cancel, stop_trace)?;
+                                check_acquisition_causal(
+                                    &acquisition,
+                                    context,
+                                    events,
+                                    cancel,
+                                    stop_trace,
+                                )?;
                                 send_status(events, "No winning Shortest route. Switching to Maximum card matches using existing Recon for this board only.".to_owned());
                                 send_log(events, "Automatic current-board fallback: Shortest route → Maximum card matches; same Recon receipt retained.".to_owned());
                                 method = RouteMethod::Fast;
@@ -1210,7 +1290,9 @@ pub(super) fn calculate_owned_causal(
         })
     })();
     if let Err(error) = &result
-        && stop_trace.termination(true, true) != crate::pyramid_workflow_model::RunTermination::OperatorStopped {
+        && stop_trace.termination(true, true)
+            != crate::pyramid_workflow_model::RunTermination::OperatorStopped
+    {
         publish_pyramid_failure(
             events,
             FailureEvidence {
@@ -1726,11 +1808,22 @@ fn drive(plan: &Prepared, io: &mut impl RouteIo) -> Result<DriveReport, String> 
                             },
                         )?;
                     }
-                    io.record_stage(if is_effect { crate::pyramid_diagnostics::progress::FailureStage::PostConfirmation } else { crate::pyramid_diagnostics::progress::FailureStage::InitialSource }, action_index + 1, plan.trace.len(), phase_observations);
+                    io.record_stage(
+                        if is_effect {
+                            crate::pyramid_diagnostics::progress::FailureStage::PostConfirmation
+                        } else {
+                            crate::pyramid_diagnostics::progress::FailureStage::InitialSource
+                        },
+                        action_index + 1,
+                        plan.trace.len(),
+                        phase_observations,
+                    );
                     let observation = if is_effect {
                         io.observe_effect(state, final_effect)?
                     } else {
-                        let after = *states.get(action_index + 1).ok_or("Missing upcoming state")?;
+                        let after = *states
+                            .get(action_index + 1)
+                            .ok_or("Missing upcoming state")?;
                         io.observe_action_source(state, after)?
                     };
                     io.check()?;
@@ -1799,10 +1892,17 @@ fn drive(plan: &Prepared, io: &mut impl RouteIo) -> Result<DriveReport, String> 
                             .get(action_index)
                             .ok_or("Missing input action")?
                             .action;
-                        let after = *states.get(action_index + 1).ok_or("Missing post-input state")?;
+                        let after = *states
+                            .get(action_index + 1)
+                            .ok_or("Missing post-input state")?;
                         io.begin_transition(state, after, &operations(action)?)?;
                     }
-                    io.record_stage(crate::pyramid_diagnostics::progress::FailureStage::InputDelivery, action_index + 1, plan.trace.len(), 0);
+                    io.record_stage(
+                        crate::pyramid_diagnostics::progress::FailureStage::InputDelivery,
+                        action_index + 1,
+                        plan.trace.len(),
+                        0,
+                    );
                     let before = io.counts();
                     let delivery = io.deliver(operation, state);
                     let after = io.counts();
@@ -1976,7 +2076,11 @@ struct NativeIo<'a> {
     /// Source identities and successive fresh disappearance checks for one action.
     source_transition: Option<crate::pyramid_recon::vision::source_transition::SourceTransition>,
     /// Prepared source tracker bound to an exact unchanged input/capture boundary.
-    ready_transition: Option<(cadence::SourceProof, SearchState, crate::pyramid_recon::vision::source_transition::SourceTransition)>,
+    ready_transition: Option<(
+        cadence::SourceProof,
+        SearchState,
+        crate::pyramid_recon::vision::source_transition::SourceTransition,
+    )>,
     /// Current controller stage, independent of saved image provenance.
     failure_progress: crate::pyramid_diagnostics::progress::FailureProgress,
     /// Before images and committed fixed-slot removal history for this route only.
@@ -2160,8 +2264,17 @@ impl NativeIo<'_> {
         }
         self.captures += 1;
         send_state(self.events, WorkerState::Capturing);
-        let (frame, _) = capture_screen_causal(&mut self.qmp, &self.context.socket_path, self.events)
-            .map_err(|error| self.stop_trace.capture_error(error, &self.events.latest_frame.reconnaissance, self.context, self.cancel))?;
+        let (frame, _) =
+            capture_screen_causal(&mut self.qmp, &self.context.socket_path, self.events).map_err(
+                |error| {
+                    self.stop_trace.capture_error(
+                        error,
+                        &self.events.latest_frame.reconnaissance,
+                        self.context,
+                        self.cancel,
+                    )
+                },
+            )?;
         // One bounded native copy preserves the last observation even after UI consumption.
         self.latest_frame = Some(frame.clone());
         self.latest_observation = Some(diagnostics::Observation {
@@ -2321,17 +2434,27 @@ impl NativeIo<'_> {
             if source_mode {
                 if disappearance? {
                     self.removals.confirm_source_transition(&tableau);
-                    self.execution_vision.set_temporal_removals(self.removals.proof());
+                    self.execution_vision
+                        .set_temporal_removals(self.removals.proof());
                     Ok(())
                 } else {
-                    Err("original source disappearance requires two successive fresh checks".to_owned())
+                    Err(
+                        "original source disappearance requires two successive fresh checks"
+                            .to_owned(),
+                    )
                 }
             } else {
-                self.removals.commit(removal.map_err(|error| error.to_owned())?).map(|()| { self.stock_effect=None; })
+                self.removals
+                    .commit(removal.map_err(|error| error.to_owned())?)
+                    .map(|()| {
+                        self.stock_effect = None;
+                    })
             }
         } else {
             self.removals.reject();
-            if let Some(transition) = &mut self.source_transition { transition.reset(); }
+            if let Some(transition) = &mut self.source_transition {
+                transition.reset();
+            }
             observed
         };
         let reason = observed.as_ref().err().or_else(|| guarded.as_ref().err());
@@ -2376,7 +2499,8 @@ impl NativeIo<'_> {
             FrameGuardOutcome::Pending if allow_pending_header => {
                 matched = false;
                 if let Some(observation) = &mut self.latest_observation {
-                    observation.mismatch = Some("Same-frame series witness unreadable; effect pending".to_owned());
+                    observation.mismatch =
+                        Some("Same-frame series witness unreadable; effect pending".to_owned());
                 }
                 send_log(self.events, "Computed-route effect pending: same-frame series witness unreadable; no input authorised".to_owned());
             }
@@ -2401,11 +2525,13 @@ impl NativeIo<'_> {
                 Some(current) if current.follows(previous) => {
                     self.check()?;
                     self.challenge = Some(current);
-                },
+                }
                 None if allow_pending_header => {
                     matched = false;
                     if let Some(observation) = &mut self.latest_observation {
-                        observation.mismatch = Some("Bound challenge counter unreadable; final effect pending".to_owned());
+                        observation.mismatch = Some(
+                            "Bound challenge counter unreadable; final effect pending".to_owned(),
+                        );
                     }
                     send_log(self.events, "Computed-route final effect pending: bound challenge counter unreadable; no input authorised".to_owned());
                 }
@@ -2434,7 +2560,6 @@ impl NativeIo<'_> {
         }
         Ok(ready)
     }
-
 }
 
 
@@ -2597,9 +2722,9 @@ impl RouteIo for NativeIo<'_> {
             && self
                 .verify_final_clear_alternatives(frame, &tableau, left, right)
                 .is_ok();
-        let completion =
-            self.final_confirmation
-                .observe(&self.execution_vision, frame, clear)?;
+        let completion = self
+            .final_confirmation
+            .observe(&self.execution_vision, frame, clear)?;
         self.check()?;
         Ok(completion)
     }
@@ -2779,16 +2904,16 @@ impl RouteIo for NativeIo<'_> {
         } else {
             (|| {
                 let sources = self.action_sources(before, after)?;
-            let frame = self
-                .latest_frame
-                .as_ref()
-                .ok_or("Missing checked source frame")?;
-            crate::pyramid_recon::vision::source_transition::SourceTransition::begin(
-                &self.execution_vision,
-                frame,
-                sources,
-                self.captures,
-            )
+                let frame = self
+                    .latest_frame
+                    .as_ref()
+                    .ok_or("Missing checked source frame")?;
+                crate::pyramid_recon::vision::source_transition::SourceTransition::begin(
+                    &self.execution_vision,
+                    frame,
+                    sources,
+                    self.captures,
+                )
             })()
         };
         match source {
@@ -2874,7 +2999,11 @@ impl RouteIo for NativeIo<'_> {
         let started = Instant::now();
         let result = cancellable_wait(delay, self.cancel)
             .map_err(|_| {
-                let _ = self.stop_trace.check(&self.events.latest_frame.reconnaissance, self.context, self.cancel);
+                let _ = self.stop_trace.check(
+                    &self.events.latest_frame.reconnaissance,
+                    self.context,
+                    self.cancel,
+                );
                 "STOP during route wait; no cleanup input".to_owned()
             })
             .and_then(|_| self.check());
@@ -2931,10 +3060,26 @@ pub(super) fn execute(
     events: &WorkerEventSink,
     cancel: &AtomicBool,
 ) {
-    let report = execute_owned_causal(context, run_id, plan_id, confirmed, 0, None, ExecutionPolicy::Standard, events, cancel);
+    let report = execute_owned_causal(
+        context,
+        run_id,
+        plan_id,
+        confirmed,
+        0,
+        None,
+        ExecutionPolicy::Standard,
+        events,
+        cancel,
+    );
     let (result, termination) = match report {
-        Ok(report) if report.completion == BoardCompletion::DeliveredUnconfirmed => (Err(report.message), crate::pyramid_workflow_model::RunTermination::Failed),
-        Ok(report) => (Ok(report.message), crate::pyramid_workflow_model::RunTermination::Completed),
+        Ok(report) if report.completion == BoardCompletion::DeliveredUnconfirmed => (
+            Err(report.message),
+            crate::pyramid_workflow_model::RunTermination::Failed,
+        ),
+        Ok(report) => (
+            Ok(report.message),
+            crate::pyramid_workflow_model::RunTermination::Completed,
+        ),
         Err(failure) => (Err(failure.message), failure.termination),
     };
     finish_causal(events, run_id, None, result, false, termination);
@@ -2970,12 +3115,6 @@ pub(super) fn execute_owned(
 }
 
 
-
-
-
-
-
-
 /// Consume one plan and retain existing execution/diagnostic bounds with an optional guard.
 ///
 /// The borrowed predicate cannot outlive this execution. Existing callers use
@@ -3000,8 +3139,18 @@ fn execute_owned_guarded(
     events: &WorkerEventSink,
     cancel: &AtomicBool,
 ) -> Result<ExecutionReport, String> {
-    execute_owned_causal(context, run_id, plan_id, confirmed, board_generation, frame_guard, policy, events, cancel)
-        .map_err(|failure| failure.message)
+    execute_owned_causal(
+        context,
+        run_id,
+        plan_id,
+        confirmed,
+        board_generation,
+        frame_guard,
+        policy,
+        events,
+        cancel,
+    )
+    .map_err(|failure| failure.message)
 }
 
 
@@ -3015,12 +3164,25 @@ pub(super) fn execute_session_causal(
     events: &WorkerEventSink,
     cancel: &AtomicBool,
 ) -> Result<ExecutionReport, super::pyramid_stop::ExecutionFailure> {
-    execute_owned_causal(context, run_id, run_id, true, board_generation, frame_guard, policy, events, cancel)
+    execute_owned_causal(
+        context,
+        run_id,
+        run_id,
+        true,
+        board_generation,
+        frame_guard,
+        policy,
+        events,
+        cancel,
+    )
 }
 
 
 /// Single engine for legacy string callers and typed completion owners.
-#[expect(clippy::too_many_arguments, reason = "preserves the consumed route and caller-owned guard")]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "preserves the consumed route and caller-owned guard"
+)]
 fn execute_owned_causal(
     context: &ControllerContext,
     run_id: u64,
@@ -3221,12 +3383,14 @@ fn execute_owned_causal(
             serde_json::json!(counts.last_acknowledged_at.map(|time| time.as_secs_f64())),
         );
         latest_frame = io.latest_frame.take();
-        let operator_stopped = stop_trace.termination(result.is_err(), counts.attempted == counts.acknowledged)
+        let operator_stopped = stop_trace
+            .termination(result.is_err(), counts.attempted == counts.acknowledged)
             == crate::pyramid_workflow_model::RunTermination::OperatorStopped;
-        let diagnostic_failure = !operator_stopped && (result.is_err()
-            || result
-                .as_ref()
-                .is_ok_and(|report| report.completion == BoardCompletion::DeliveredUnconfirmed));
+        let diagnostic_failure = !operator_stopped
+            && (result.is_err()
+                || result.as_ref().is_ok_and(|report| {
+                    report.completion == BoardCompletion::DeliveredUnconfirmed
+                }));
         let mut result = result;
         if diagnostic_failure {
             if let Some(observation) = &io.latest_observation {
@@ -3290,9 +3454,12 @@ fn execute_owned_causal(
         })
     })();
     let result = result.map_err(|e| format!("{}: {}; gestures attempted={}, acknowledged={}; logical effect may be incomplete. Inspect and reacquire before another execution; no cleanup input sent.", if counts.attempted == 0 { "Route refused before input" } else { "Route execution stopped" }, RouteError::Refused(e), counts.attempted, counts.acknowledged));
-    let termination = stop_trace.termination(result.is_err(), counts.attempted == counts.acknowledged);
+    let termination =
+        stop_trace.termination(result.is_err(), counts.attempted == counts.acknowledged);
     let diagnostic_error = match &result {
-        Err(_) if termination == crate::pyramid_workflow_model::RunTermination::OperatorStopped => None,
+        Err(_) if termination == crate::pyramid_workflow_model::RunTermination::OperatorStopped => {
+            None
+        }
         Err(error) => Some(error.as_str()),
         Ok(report) if report.completion == BoardCompletion::DeliveredUnconfirmed => {
             Some(report.message.as_str())
@@ -3325,7 +3492,10 @@ fn execute_owned_causal(
             },
         );
     }
-    result.map_err(|message| super::pyramid_stop::ExecutionFailure { message, termination })
+    result.map_err(|message| super::pyramid_stop::ExecutionFailure {
+        message,
+        termination,
+    })
 }
 
 

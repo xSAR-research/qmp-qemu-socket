@@ -2,7 +2,10 @@
 
 use std::{
     io::{BufRead, BufReader, Write},
-    os::unix::{fs::DirBuilderExt, net::{UnixListener, UnixStream}},
+    os::unix::{
+        fs::DirBuilderExt,
+        net::{UnixListener, UnixStream},
+    },
     sync::atomic::AtomicU64,
 };
 
@@ -35,8 +38,11 @@ struct TestDirectory(
 impl TestDirectory {
     /// Create a new private root without resetting any pre-existing path.
     fn new() -> Self {
-        let path = std::env::temp_dir().join(format!("qmp-image-worker-{}-{}",
-            std::process::id(), NEXT_DIRECTORY.fetch_add(1, Ordering::Relaxed)));
+        let path = std::env::temp_dir().join(format!(
+            "qmp-image-worker-{}-{}",
+            std::process::id(),
+            NEXT_DIRECTORY.fetch_add(1, Ordering::Relaxed)
+        ));
         fs::DirBuilder::new().mode(0o700).create(&path).unwrap();
         Self(path)
     }
@@ -69,10 +75,13 @@ impl DiagnosticsRestore {
     /// Install enabled diagnostics with an observable startup-relative clock.
     fn install(directory: PathBuf) -> Self {
         let config = ImageDiagnostics {
-            started_at: Instant::now() - Duration::from_secs(5), directory: Some(directory),
+            started_at: Instant::now() - Duration::from_secs(5),
+            directory: Some(directory),
         };
-        Self(WORKER_IMAGE_DIAGNOSTICS.with(|slot|
-            slot.replace(Some(WorkerImageDiagnostics::new(config)))))
+        Self(
+            WORKER_IMAGE_DIAGNOSTICS
+                .with(|slot| slot.replace(Some(WorkerImageDiagnostics::new(config)))),
+        )
     }
 }
 
@@ -88,16 +97,24 @@ impl Drop for DiagnosticsRestore {
 /// Capture normal production notifications without running the UI receiver.
 fn sink() -> (WorkerEventSink, Receiver<ContextualWorkerEvent>) {
     let (events, receiver) = mpsc::channel();
-    (WorkerEventSink {
-        events, latest_frame: LatestFrameSlot::default(), capture_context: Mutex::new(None),
-    }, receiver)
+    (
+        WorkerEventSink {
+            events,
+            latest_frame: LatestFrameSlot::default(),
+            capture_context: Mutex::new(None),
+        },
+        receiver,
+    )
 }
 
 
 /// Sort recorded images by their padded capture time and sequence number.
 fn png_paths(directory: &Path) -> Vec<PathBuf> {
-    let mut paths: Vec<_> = fs::read_dir(directory).unwrap().map(|entry| entry.unwrap().path())
-        .filter(|path| path.extension().is_some_and(|extension| extension == "png")).collect();
+    let mut paths: Vec<_> = fs::read_dir(directory)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.extension().is_some_and(|extension| extension == "png"))
+        .collect();
     paths.sort();
     paths
 }
@@ -124,23 +141,36 @@ fn serve_captures(listener: UnixListener, images: Vec<&'static [u8]>) -> usize {
             Err(error) => panic!("mock QMP accept failed: {error}"),
         }
     };
-    stream.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
+    stream
+        .set_read_timeout(Some(Duration::from_secs(3)))
+        .unwrap();
     let mut reader = BufReader::new(stream.try_clone().unwrap());
-    packet(&mut stream, json!({"QMP": {"version": {"qemu": {"major": 11, "minor": 0, "micro": 0}}, "capabilities": []}}));
+    packet(
+        &mut stream,
+        json!({"QMP": {"version": {"qemu": {"major": 11, "minor": 0, "micro": 0}}, "capabilities": []}}),
+    );
     let mut captures = 0usize;
     loop {
         let mut line = String::new();
-        if reader.read_line(&mut line).unwrap() == 0 { break; }
+        if reader.read_line(&mut line).unwrap() == 0 {
+            break;
+        }
         let request: Value = serde_json::from_str(&line).unwrap();
         match request["execute"].as_str().unwrap() {
-            "qmp_capabilities" => {},
+            "qmp_capabilities" => {}
             "screendump" => {
                 assert_eq!(request["arguments"]["format"], "png");
                 let path = request["arguments"]["filename"].as_str().unwrap();
-                fs::write(path, images.get(captures).expect("unexpected extra QMP capture")).unwrap();
+                fs::write(
+                    path,
+                    images.get(captures).expect("unexpected extra QMP capture"),
+                )
+                .unwrap();
                 captures += 1;
-            },
-            command => panic!("image recording must not request input or other QMP work: {command}"),
+            }
+            command => {
+                panic!("image recording must not request input or other QMP work: {command}")
+            }
         }
         packet(&mut stream, json!({"return": {}, "id": request["id"]}));
     }
@@ -166,7 +196,9 @@ impl ServerJoin {
 impl Drop for ServerJoin {
     /// Reap the timeout-bounded server when an earlier assertion unwinds.
     fn drop(&mut self) {
-        if let Some(handle) = self.0.take() { let _ = handle.join(); }
+        if let Some(handle) = self.0.take() {
+            let _ = handle.join();
+        }
     }
 }
 
@@ -183,12 +215,19 @@ fn original_qmp_pngs_are_scoped_through_ready_then_ordinary_play_is_unsaved() {
     let socket = root.0.join("capture.sock");
     let listener = UnixListener::bind(&socket).unwrap();
     listener.set_nonblocking(true).unwrap();
-    let server = ServerJoin(Some(thread::spawn(move ||
-        serve_captures(listener, vec![ENTRY_PNG, LEVEL_UP_PNG, READY_PNG, ORDINARY_PNG]))));
+    let server = ServerJoin(Some(thread::spawn(move || {
+        serve_captures(
+            listener,
+            vec![ENTRY_PNG, LEVEL_UP_PNG, READY_PNG, ORDINARY_PNG],
+        )
+    })));
     let mut qmp = QmpClient::connect(&socket).unwrap();
 
     capture_screen(&mut qmp, &socket, &events).unwrap();
-    assert!(png_paths(&images).is_empty(), "ordinary acquisition only caches the possible entry");
+    assert!(
+        png_paths(&images).is_empty(),
+        "ordinary acquisition only caches the possible entry"
+    );
     {
         let _outer = begin_game_win_images(&events).unwrap();
         assert!(game_win_images_active());
@@ -196,10 +235,16 @@ fn original_qmp_pngs_are_scoped_through_ready_then_ordinary_play_is_unsaved() {
             let _inner = begin_game_win_images(&events).unwrap();
             capture_screen(&mut qmp, &socket, &events).unwrap();
         }
-        assert!(game_win_images_active(), "inner scope cannot stop the outer transition");
+        assert!(
+            game_win_images_active(),
+            "inner scope cannot stop the outer transition"
+        );
         let (ready, _) = capture_screen(&mut qmp, &socket, &events).unwrap();
         assert!(is_gameplay_scene_for_mode(&ready, GameMode::FreeCell).unwrap());
-        assert!(matches!(crate::freecell::analyse(&ready).unwrap().prediction, PredictedAction::Action(_)));
+        assert!(matches!(
+            crate::freecell::analyse(&ready).unwrap().prediction,
+            PredictedAction::Action(_)
+        ));
     }
     assert!(!game_win_images_active());
     capture_screen(&mut qmp, &socket, &events).unwrap();
@@ -209,12 +254,25 @@ fn original_qmp_pngs_are_scoped_through_ready_then_ordinary_play_is_unsaved() {
     let paths = png_paths(&images);
     assert_eq!(paths.len(), 3);
     for (path, expected) in paths.iter().zip([ENTRY_PNG, LEVEL_UP_PNG, READY_PNG]) {
-        assert_eq!(fs::read(path).unwrap(), expected, "original PNG bytes must remain unchanged");
+        assert_eq!(
+            fs::read(path).unwrap(),
+            expected,
+            "original PNG bytes must remain unchanged"
+        );
     }
     let notifications: Vec<_> = receiver.try_iter().collect();
-    assert!(notifications.iter().all(|event| event.emitted_at.is_some_and(|elapsed| elapsed >= Duration::from_secs(5))));
-    let image_logs = notifications.iter().filter(|event| matches!(&event.event,
-        WorkerEvent::Log(message) if message.starts_with("GAME WIN PNG ("))).count();
+    assert!(notifications.iter().all(|event| {
+        event
+            .emitted_at
+            .is_some_and(|elapsed| elapsed >= Duration::from_secs(5))
+    }));
+    let image_logs = notifications
+        .iter()
+        .filter(|event| {
+            matches!(&event.event,
+        WorkerEvent::Log(message) if message.starts_with("GAME WIN PNG ("))
+        })
+        .count();
     assert_eq!(image_logs, 3);
 }
 
@@ -234,7 +292,14 @@ fn game_win_scope_closes_on_error_and_cancellation() {
             wait_or_stop(Duration::ZERO, &AtomicBool::new(cancelled), "injected STOP")?;
             Err("injected transition error".to_owned())
         })();
-        assert_eq!(stopped.unwrap_err(), if cancelled { "injected STOP" } else { "injected transition error" });
+        assert_eq!(
+            stopped.unwrap_err(),
+            if cancelled {
+                "injected STOP"
+            } else {
+                "injected transition error"
+            }
+        );
         assert!(!game_win_images_active());
         record_game_win_png(ORDINARY_PNG, Some(Duration::from_secs(6)), &events).unwrap();
         let paths = png_paths(&images);
@@ -252,15 +317,23 @@ fn entry_filename_and_worker_event_keep_their_original_timestamps() {
     let _restore = DiagnosticsRestore::install(images.clone());
     let (events, receiver) = sink();
     record_game_win_png(ENTRY_PNG, Some(Duration::from_millis(4_321)), &events).unwrap();
-    { let _finite_win = begin_game_win_images(&events).unwrap(); }
+    {
+        let _finite_win = begin_game_win_images(&events).unwrap();
+    }
     assert!(!game_win_images_active());
     send_log(&events, "queued source-time marker".to_owned());
 
-    WORKER_IMAGE_DIAGNOSTICS.with(|slot|
-        slot.borrow_mut().as_mut().unwrap().started_at = Instant::now() - Duration::from_secs(100));
+    WORKER_IMAGE_DIAGNOSTICS.with(|slot| {
+        slot.borrow_mut().as_mut().unwrap().started_at = Instant::now() - Duration::from_secs(100)
+    });
     let notifications: Vec<_> = receiver.try_iter().collect();
-    let marker = notifications.iter().find(|event| matches!(&event.event,
-        WorkerEvent::Log(message) if message == "queued source-time marker")).unwrap();
+    let marker = notifications
+        .iter()
+        .find(|event| {
+            matches!(&event.event,
+        WorkerEvent::Log(message) if message == "queued source-time marker")
+        })
+        .unwrap();
     let emitted = marker.emitted_at.unwrap();
     assert!(emitted >= Duration::from_secs(5) && emitted < Duration::from_secs(100));
     assert!(worker_elapsed().unwrap() >= Duration::from_secs(100));

@@ -21,7 +21,11 @@
 
 mod diagnostics;
 
-use std::{path::Path, sync::atomic::{AtomicBool, Ordering}, time::{Duration, Instant}};
+use std::{
+    path::Path,
+    sync::atomic::{AtomicBool, Ordering},
+    time::{Duration, Instant},
+};
 
 use super::{
     FrameObservation, WorkerEvent, WorkerEventSink, WorkerState, analyse_captured_frame,
@@ -77,8 +81,6 @@ struct SolverRecovery {
 
 /// Accept continuous zero or a finite gameplay-action budget before connecting or clearing STOP.
 pub(super) fn validate_operation_limit(limit: usize) -> Result<(), String> {
-
-
     if limit > KLONDIKE_MAX_MULTI_STEP_ACTIONS {
         return Err(format!(
             "Klondike requires 0 for continuous play or 1..={KLONDIKE_MAX_MULTI_STEP_ACTIONS} gameplay actions; requested {limit}"
@@ -104,8 +106,6 @@ enum CaptureResult {
 
 /// Private boundary for deterministic controller tests using the production state machine.
 trait KlondikeIo {
-
-
     /// Acquire and classify exactly one new frame, checking cancellation.
     fn capture(&mut self) -> Result<CaptureResult, String>;
 
@@ -135,7 +135,10 @@ trait KlondikeIo {
 
 
     /// Enter terminal flow only after independent game-win confirmation.
-    fn terminal_stage(&mut self, frame: &CapturedFrame) -> Result<Option<klondike::terminal::TerminalStage>, String> {
+    fn terminal_stage(
+        &mut self,
+        frame: &CapturedFrame,
+    ) -> Result<Option<klondike::terminal::TerminalStage>, String> {
         klondike::terminal::classify_terminal(frame)
             .map_err(|error| format!("Klondike terminal analysis failed: {error}"))
     }
@@ -157,7 +160,11 @@ trait KlondikeIo {
 
 
     /// Send exactly one click at the coordinate measured on the current frame.
-    fn terminal_input(&mut self, stage: klondike::terminal::TerminalStage, point: PixelPoint) -> Result<(), String>;
+    fn terminal_input(
+        &mut self,
+        stage: klondike::terminal::TerminalStage,
+        point: PixelPoint,
+    ) -> Result<(), String>;
 
 
     /// Wait in cancellable slices when ordinary gameplay or re-observation needs settling.
@@ -183,8 +190,6 @@ struct QmpKlondikeIo<'a> {
 
 
 impl KlondikeIo for QmpKlondikeIo<'_> {
-
-
     fn capture(&mut self) -> Result<CaptureResult, String> {
         require_running(self.cancel_requested)?;
         let started = Instant::now();
@@ -212,21 +217,33 @@ impl KlondikeIo for QmpKlondikeIo<'_> {
                 self.diagnostics.capture(frame, timing, None)
             }
         }
-        send_log(self.event_tx, format!(
-            "PROFILE Klondike observation: acquisition and classification={:.1} ms; request={:.1} ms, receive/read={:.1} ms, convert/decode={:.1} ms, png-encode={:.1} ms.",
-            milliseconds(started.elapsed()), milliseconds(timing.screendump), milliseconds(timing.file_read), milliseconds(timing.decode), milliseconds(timing.png_encode),
-        ));
+        send_log(
+            self.event_tx,
+            format!(
+                "PROFILE Klondike observation: acquisition and classification={:.1} ms; request={:.1} ms, receive/read={:.1} ms, convert/decode={:.1} ms, png-encode={:.1} ms.",
+                milliseconds(started.elapsed()),
+                milliseconds(timing.screendump),
+                milliseconds(timing.file_read),
+                milliseconds(timing.decode),
+                milliseconds(timing.png_encode),
+            ),
+        );
 
 
         if let CaptureResult::Classified(observation) = &result {
-
-
             match klondike::inspect_solve_control(&observation.frame) {
-                Ok(evidence) => send_log(self.event_tx, format!(
-                    "Klondike Solve evidence: {evidence}; gameplay scene={}; selected={}",
-                    observation.gameplay_scene, format_prediction_target(observation.prediction),
-                )),
-                Err(error) => send_log(self.event_tx, format!("Klondike Solve diagnostic unavailable: {error}")),
+                Ok(evidence) => send_log(
+                    self.event_tx,
+                    format!(
+                        "Klondike Solve evidence: {evidence}; gameplay scene={}; selected={}",
+                        observation.gameplay_scene,
+                        format_prediction_target(observation.prediction),
+                    ),
+                ),
+                Err(error) => send_log(
+                    self.event_tx,
+                    format!("Klondike Solve diagnostic unavailable: {error}"),
+                ),
             }
         }
         Ok(result)
@@ -246,14 +263,20 @@ impl KlondikeIo for QmpKlondikeIo<'_> {
     fn completion(&mut self, frame: &CapturedFrame) -> Result<bool, String> {
         let evidence = klondike::completion_evidence(frame)
             .map_err(|error| format!("Klondike completion analysis failed: {error}"))?;
-        send_log(self.event_tx, format!("Klondike completion evidence: {evidence}"));
+        send_log(
+            self.event_tx,
+            format!("Klondike completion evidence: {evidence}"),
+        );
         Ok(evidence.complete_candidate)
     }
 
 
     fn probe(&mut self) -> Result<(), String> {
         require_running(self.cancel_requested)?;
-        let probe = self.qmp.probe().map_err(|error| format!("Klondike pre-input probe failed: {error}"))?;
+        let probe = self
+            .qmp
+            .probe()
+            .map_err(|error| format!("Klondike pre-input probe failed: {error}"))?;
         validate_probe(&probe)?;
 
 
@@ -269,10 +292,14 @@ impl KlondikeIo for QmpKlondikeIo<'_> {
         self.diagnostics.attempt(format!("Gameplay {plan:?}"));
         let result = execute_planned_input(self.qmp, plan, self.cancel_requested);
         self.diagnostics.acknowledged(result.is_ok());
-        send_log(self.event_tx, format!(
-            "PROFILE Klondike input: {:.1} ms through QMP response handling; acknowledged={}; guest effect requires the next observation.",
-            milliseconds(started.elapsed()), result.is_ok(),
-        ));
+        send_log(
+            self.event_tx,
+            format!(
+                "PROFILE Klondike input: {:.1} ms through QMP response handling; acknowledged={}; guest effect requires the next observation.",
+                milliseconds(started.elapsed()),
+                result.is_ok(),
+            ),
+        );
         result
     }
 
@@ -281,30 +308,49 @@ impl KlondikeIo for QmpKlondikeIo<'_> {
         require_running(self.cancel_requested)?;
         self.diagnostics
             .attempt("Solver activation/refresh".to_owned());
-        let result = self.qmp.click_with_hold(
-            klondike::SOLVER_CLICK,
-            NOMINAL_FRAME_WIDTH,
-            NOMINAL_FRAME_HEIGHT,
-            SOLVER_MOUSE_HOLD,
-        ).map_err(|error| format!("Klondike Solver input is uncertain: {error}; no retry is permitted"));
+        let result = self
+            .qmp
+            .click_with_hold(
+                klondike::SOLVER_CLICK,
+                NOMINAL_FRAME_WIDTH,
+                NOMINAL_FRAME_HEIGHT,
+                SOLVER_MOUSE_HOLD,
+            )
+            .map_err(|error| {
+                format!("Klondike Solver input is uncertain: {error}; no retry is permitted")
+            });
         self.diagnostics.acknowledged(result.is_ok());
         result
     }
 
 
-    fn terminal_stage(&mut self, frame: &CapturedFrame) -> Result<Option<klondike::terminal::TerminalStage>, String> {
+    fn terminal_stage(
+        &mut self,
+        frame: &CapturedFrame,
+    ) -> Result<Option<klondike::terminal::TerminalStage>, String> {
         let stage = klondike::terminal::classify_terminal(frame)
             .map_err(|error| format!("Klondike terminal analysis failed: {error}"))?;
 
 
-        send_log(self.event_tx, format!("Klondike already-confirmed GAME WIN entry={stage:?}; button readiness does not declare the initial win"));
+        send_log(
+            self.event_tx,
+            format!(
+                "Klondike already-confirmed GAME WIN entry={stage:?}; button readiness does not declare the initial win"
+            ),
+        );
 
 
         match klondike::terminal::inspect_terminal_evidence(frame) {
-            Ok(evidence) => send_log(self.event_tx, format!(
-                "Klondike independent terminal diagnostic: {evidence}; selected={stage:?}; guard counts do not grant input authority",
-            )),
-            Err(error) => send_log(self.event_tx, format!("Klondike terminal diagnostic unavailable: {error}")),
+            Ok(evidence) => send_log(
+                self.event_tx,
+                format!(
+                    "Klondike independent terminal diagnostic: {evidence}; selected={stage:?}; guard counts do not grant input authority",
+                ),
+            ),
+            Err(error) => send_log(
+                self.event_tx,
+                format!("Klondike terminal diagnostic unavailable: {error}"),
+            ),
         }
         Ok(stage)
     }
@@ -321,9 +367,19 @@ impl KlondikeIo for QmpKlondikeIo<'_> {
         }
         self.diagnostics
             .attempt(format!("Terminal {stage}: {point:?}"));
-        let result = self.qmp.click_with_hold(
-            point, NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT, stage.mouse_hold(),
-        ).map_err(|error| format!("Klondike {stage} input outcome is uncertain: {error}; no retry is permitted"));
+        let result = self
+            .qmp
+            .click_with_hold(
+                point,
+                NOMINAL_FRAME_WIDTH,
+                NOMINAL_FRAME_HEIGHT,
+                stage.mouse_hold(),
+            )
+            .map_err(|error| {
+                format!(
+                    "Klondike {stage} input outcome is uncertain: {error}; no retry is permitted"
+                )
+            });
         self.diagnostics.acknowledged(result.is_ok());
         result
     }
@@ -334,7 +390,8 @@ impl KlondikeIo for QmpKlondikeIo<'_> {
             duration,
             self.cancel_requested,
             "STOP was requested during Klondike settling; no input was retried",
-        ).map(|_| ())
+        )
+        .map(|_| ())
     }
 }
 
@@ -404,16 +461,19 @@ pub(super) fn run_klondike_steps(
             diagnostics: &mut diagnostics,
         };
         drive_run(
-            &mut io, approved_prediction, settings, event_tx, cancel_requested,
-            &mut latest, &mut input_attempted,
+            &mut io,
+            approved_prediction,
+            settings,
+            event_tx,
+            cancel_requested,
+            &mut latest,
+            &mut input_attempted,
         )
     })();
 
 
     match result {
         Ok(RunOutcome::Completed { verified, halo }) => {
-
-
             if let Some(observation) = latest {
                 let prediction = observation.prediction;
                 event_tx.publish_frame(observation.frame, prediction, false);
@@ -426,34 +486,67 @@ pub(super) fn run_klondike_steps(
             }
             send_state(event_tx, WorkerState::Ready);
             send_status(event_tx, "Ready".to_owned());
-            send_log(event_tx, format!("Klondike bounded run complete: {halo} acknowledged gameplay action(s) from fresh Solver targets; independently verified effects={verified}. The final fresh frame is retained; no completion or restart inferred."));
+            send_log(
+                event_tx,
+                format!(
+                    "Klondike bounded run complete: {halo} acknowledged gameplay action(s) from fresh Solver targets; independently verified effects={verified}. The final fresh frame is retained; no completion or restart inferred."
+                ),
+            );
         }
-        Ok(RunOutcome::GameWon { previous_verified, previous_halo }) => {
-
-
+        Ok(RunOutcome::GameWon {
+            previous_verified,
+            previous_halo,
+        }) => {
             if let Some(observation) = latest {
                 event_tx.publish_diagnostic_frame(observation.frame);
             }
             send_state(event_tx, WorkerState::Ready);
-            send_status(event_tx, "Klondike game won — no automatic restart".to_owned());
-            send_log(event_tx, format!("Klondike GAME WIN confirmed by two fresh mode-owned completion observations after {previous_verified} verified gameplay action(s) and {previous_halo} fresh-evidence continuations. One Klondike board equals one game. This endpoint sent no terminal, restart or new-game input."));
+            send_status(
+                event_tx,
+                "Klondike game won — no automatic restart".to_owned(),
+            );
+            send_log(
+                event_tx,
+                format!(
+                    "Klondike GAME WIN confirmed by two fresh mode-owned completion observations after {previous_verified} verified gameplay action(s) and {previous_halo} fresh-evidence continuations. One Klondike board equals one game. This endpoint sent no terminal, restart or new-game input."
+                ),
+            );
         }
-        Ok(RunOutcome::SolveRequested { previous_verified, previous_halo }) => {
-
-
+        Ok(RunOutcome::SolveRequested {
+            previous_verified,
+            previous_halo,
+        }) => {
             if let Some(observation) = latest {
                 event_tx.publish_diagnostic_frame(observation.frame);
             }
             send_state(event_tx, WorkerState::Uncertain);
             send_status(event_tx, "Solve requested — inspect result".to_owned());
-            send_log(event_tx, format!("Klondike Solve requested once after {previous_verified} independently verified gameplay action(s) and {previous_halo} fresh-evidence continuations. Completion was not established within the bounded read-only observations; the latest result is diagnostic only. No further guest input was sent."));
+            send_log(
+                event_tx,
+                format!(
+                    "Klondike Solve requested once after {previous_verified} independently verified gameplay action(s) and {previous_halo} fresh-evidence continuations. Completion was not established within the bounded read-only observations; the latest result is diagnostic only. No further guest input was sent."
+                ),
+            );
         }
         Err(error) => {
-            match diagnostics.persist(latest.as_ref().map(|o| &o.frame), context.as_ref(), settings, started_at, &error) {
-                Ok(path) => send_log(event_tx, format!("Klondike exact failure packet: {}", path.display())),
-                Err(persistence) => send_log(event_tx, format!("Klondike telemetry persistence failed; original refusal retained: {persistence}")),
+            match diagnostics.persist(
+                latest.as_ref().map(|o| &o.frame),
+                context.as_ref(),
+                settings,
+                started_at,
+                &error,
+            ) {
+                Ok(path) => send_log(
+                    event_tx,
+                    format!("Klondike exact failure packet: {}", path.display()),
+                ),
+                Err(persistence) => send_log(
+                    event_tx,
+                    format!(
+                        "Klondike telemetry persistence failed; original refusal retained: {persistence}"
+                    ),
+                ),
             }
-
 
 
             if let Some(observation) = latest {
@@ -468,7 +561,12 @@ pub(super) fn run_klondike_steps(
                 input_attempted,
                 error: error.clone(),
             }));
-            send_log(event_tx, format!("Klondike stopped: {error}; guest input attempted={input_attempted}. No uncertain gameplay, Solver or terminal input was retried; the latest available frame was retained for inspection."));
+            send_log(
+                event_tx,
+                format!(
+                    "Klondike stopped: {error}; guest input attempted={input_attempted}. No uncertain gameplay, Solver or terminal input was retried; the latest available frame was retained for inspection."
+                ),
+            );
         }
     }
 }
@@ -495,19 +593,34 @@ fn drive_run(
     require_running(cancel_requested)?;
     require_klondike_prediction(approved_prediction, true)?;
     let delays = settings.animation_delays();
-    let requested_actions = settings.bounded_operation_limit()
-        .map_or_else(|| "continuous until STOP, uncertainty or game win".to_owned(), |limit| format!("{limit} gameplay action(s)"));
-    send_log(event_tx, format!(
-        "Klondike requested {requested_actions}, settle={} ms, Solve animation settle={} ms, reobserve={} ms. The preview is advisory: each input requires a fresh supported scene and canonical Solver target. Draw uses qcode D; recycle and card sources use one click. Each acknowledged gameplay action consumes one budget slot; card matching and changed-pixel thresholds are not used. Missing HALOs receive at most {REOBSERVATION_LIMIT} delayed input-free captures, then independent completion review, then at most one Solver refresh on a positively recognised gameplay scene. Solver captures immediately and waits at most {REOBSERVATION_LIMIT} further delayed observations. Solve remains one click plus up to {SOLVE_COMPLETION_REOBSERVATION_LIMIT} delayed completion captures; two consecutive positives establish one-board game win. Only continuous Multi-Step 0 advances recognised terminal controls.",
-        delays.klondike_settle.as_millis(), delays.klondike_solve.as_millis(), delays.klondike_reobserve.as_millis(),
-    ));
-    send_log(event_tx, format!(
-        "Klondike input intervals: pointer settle={} ms, gameplay mouse hold={} ms, Draw key hold={} ms. The editable action settle={} ms begins after input acknowledgement; observation time is additional.",
-        POINTER_SETTLE_DELAY.as_millis(), MOUSE_HOLD.as_millis(), KEY_HOLD.as_millis(),
-        delays.klondike_settle.as_millis(),
-    ));
+    let requested_actions = settings.bounded_operation_limit().map_or_else(
+        || "continuous until STOP, uncertainty or game win".to_owned(),
+        |limit| format!("{limit} gameplay action(s)"),
+    );
+    send_log(
+        event_tx,
+        format!(
+            "Klondike requested {requested_actions}, settle={} ms, Solve animation settle={} ms, reobserve={} ms. The preview is advisory: each input requires a fresh supported scene and canonical Solver target. Draw uses qcode D; recycle and card sources use one click. Each acknowledged gameplay action consumes one budget slot; card matching and changed-pixel thresholds are not used. Missing HALOs receive at most {REOBSERVATION_LIMIT} delayed input-free captures, then independent completion review, then at most one Solver refresh on a positively recognised gameplay scene. Solver captures immediately and waits at most {REOBSERVATION_LIMIT} further delayed observations. Solve remains one click plus up to {SOLVE_COMPLETION_REOBSERVATION_LIMIT} delayed completion captures; two consecutive positives establish one-board game win. Only continuous Multi-Step 0 advances recognised terminal controls.",
+            delays.klondike_settle.as_millis(),
+            delays.klondike_solve.as_millis(),
+            delays.klondike_reobserve.as_millis(),
+        ),
+    );
+    send_log(
+        event_tx,
+        format!(
+            "Klondike input intervals: pointer settle={} ms, gameplay mouse hold={} ms, Draw key hold={} ms. The editable action settle={} ms begins after input acknowledgement; observation time is additional.",
+            POINTER_SETTLE_DELAY.as_millis(),
+            MOUSE_HOLD.as_millis(),
+            KEY_HOLD.as_millis(),
+            delays.klondike_settle.as_millis(),
+        ),
+    );
     send_state(event_tx, WorkerState::Validating);
-    send_status(event_tx, "Observing fresh Klondike Solver target".to_owned());
+    send_status(
+        event_tx,
+        "Observing fresh Klondike Solver target".to_owned(),
+    );
     capture_latest(io, latest, event_tx)?;
     let mut recovery = SolverRecovery::default();
     let mut completed_operations = 0usize;
@@ -518,27 +631,48 @@ fn drive_run(
         require_running(cancel_requested)?;
 
 
-        if settings.bounded_operation_limit().is_some_and(|limit| completed_operations >= limit) {
-            return Ok(RunOutcome::Completed { verified: 0, halo: halo_operations });
+        if settings
+            .bounded_operation_limit()
+            .is_some_and(|limit| completed_operations >= limit)
+        {
+            return Ok(RunOutcome::Completed {
+                verified: 0,
+                halo: halo_operations,
+            });
         }
 
 
         if await_playable_context(
-            io, latest, &mut recovery, settings,
-            event_tx, cancel_requested, input_attempted,
+            io,
+            latest,
+            &mut recovery,
+            settings,
+            event_tx,
+            cancel_requested,
+            input_attempted,
         )? {
-
-
             if settings.is_unbounded() {
-                resume_after_win(io, latest, settings, event_tx, cancel_requested, input_attempted)?;
+                resume_after_win(
+                    io,
+                    latest,
+                    settings,
+                    event_tx,
+                    cancel_requested,
+                    input_attempted,
+                )?;
                 recovery.refreshed = false;
                 continue;
             }
             let _game_win_images = super::begin_game_win_images(event_tx)?;
-            return Ok(RunOutcome::GameWon { previous_verified: 0, previous_halo: halo_operations });
+            return Ok(RunOutcome::GameWon {
+                previous_verified: 0,
+                previous_halo: halo_operations,
+            });
         }
         await_pending_solve(io, latest, settings, event_tx, cancel_requested)?;
-        let observation = latest.as_ref().ok_or_else(|| "Klondike planning frame is missing".to_owned())?;
+        let observation = latest
+            .as_ref()
+            .ok_or_else(|| "Klondike planning frame is missing".to_owned())?;
         require_scene(observation)?;
         require_klondike_prediction(observation.prediction, true)?;
 
@@ -549,46 +683,85 @@ fn drive_run(
             continue;
         }
         let operation_index = next_counter(completed_operations, "gameplay action")?;
-        let plan = plan_step(observation.prediction).map_err(|error| format!("Klondike plan rejected: {error}"))?;
+        let plan = plan_step(observation.prediction)
+            .map_err(|error| format!("Klondike plan rejected: {error}"))?;
         send_log(event_tx, format_step_plan(plan)?);
-        let solve_requested = matches!(plan.input().action().target, ActionTarget::Klondike(klondike::KlondikeTarget::Solve));
+        let solve_requested = matches!(
+            plan.input().action().target,
+            ActionTarget::Klondike(klondike::KlondikeTarget::Solve)
+        );
         io.probe()?;
         require_running(cancel_requested)?;
         send_state(event_tx, WorkerState::Acting);
         send_status(event_tx, format_action_status(plan.before()));
         *input_attempted = true;
-        io.input(plan).map_err(|error| format!("gameplay input outcome is uncertain: {error}"))?;
+        io.input(plan)
+            .map_err(|error| format!("gameplay input outcome is uncertain: {error}"))?;
         completed_operations = operation_index;
         recovery.refreshed = false;
-        io.wait(if solve_requested { delays.klondike_solve } else { delays.klondike_settle })?;
+        io.wait(if solve_requested {
+            delays.klondike_solve
+        } else {
+            delays.klondike_settle
+        })?;
         send_state(event_tx, WorkerState::Verifying);
-        send_status(event_tx, if solve_requested { "Capturing Solve result" } else { "Observing next Klondike Solver target" }.to_owned());
+        send_status(
+            event_tx,
+            if solve_requested {
+                "Capturing Solve result"
+            } else {
+                "Observing next Klondike Solver target"
+            }
+            .to_owned(),
+        );
 
 
         if solve_requested {
             // Only independent completion evidence can advance this one-shot input.
             let complete = await_completion(
-                io, latest, settings, event_tx, cancel_requested, CompletionWait::AfterSolve,
+                io,
+                latest,
+                settings,
+                event_tx,
+                cancel_requested,
+                CompletionWait::AfterSolve,
             )?;
 
 
             if complete && settings.is_unbounded() {
-                resume_after_win(io, latest, settings, event_tx, cancel_requested, input_attempted)?;
+                resume_after_win(
+                    io,
+                    latest,
+                    settings,
+                    event_tx,
+                    cancel_requested,
+                    input_attempted,
+                )?;
                 continue;
             }
             return Ok(if complete {
                 let _game_win_images = super::begin_game_win_images(event_tx)?;
-                RunOutcome::GameWon { previous_verified: 0, previous_halo: halo_operations }
+                RunOutcome::GameWon {
+                    previous_verified: 0,
+                    previous_halo: halo_operations,
+                }
             } else {
-                RunOutcome::SolveRequested { previous_verified: 0, previous_halo: halo_operations }
+                RunOutcome::SolveRequested {
+                    previous_verified: 0,
+                    previous_halo: halo_operations,
+                }
             });
         }
         capture_latest(io, latest, event_tx)?;
         require_running(cancel_requested)?;
         halo_operations = next_counter(halo_operations, "acknowledged Solver action")?;
         report_acknowledged_action(
-            event_tx, latest.as_ref().expect("fresh acknowledged-action result"), plan,
-            operation_index, settings, recovery.refreshes,
+            event_tx,
+            latest.as_ref().expect("fresh acknowledged-action result"),
+            plan,
+            operation_index,
+            settings,
+            recovery.refreshes,
         );
     }
 }
@@ -611,17 +784,20 @@ fn await_playable_context(
     cancel_requested: &AtomicBool,
     input_attempted: &mut bool,
 ) -> Result<bool, String> {
-
-
     if await_fresh_target(io, latest, settings, event_tx, cancel_requested)? {
         return Ok(false);
     }
 
 
     if io.completion(&latest.as_ref().expect("bounded planning observation").frame)? {
-
-
-        if await_completion(io, latest, settings, event_tx, cancel_requested, CompletionWait::ConfirmCandidate)? {
+        if await_completion(
+            io,
+            latest,
+            settings,
+            event_tx,
+            cancel_requested,
+            CompletionWait::ConfirmCandidate,
+        )? {
             return Ok(true);
         }
         return Err("completion candidate was not confirmed within bounded read-only observations; no gameplay or Solver input retried".to_owned());
@@ -633,7 +809,15 @@ fn await_playable_context(
         return Err("Klondike unresolved context already refreshed Solver once; no further input authorised".to_owned());
     }
     recovery.refreshed = true;
-    refresh_solver(io, latest, &mut recovery.refreshes, settings, event_tx, cancel_requested, input_attempted)?;
+    refresh_solver(
+        io,
+        latest,
+        &mut recovery.refreshes,
+        settings,
+        event_tx,
+        cancel_requested,
+        input_attempted,
+    )?;
 
 
     if await_fresh_target(io, latest, settings, event_tx, cancel_requested)? {
@@ -642,9 +826,14 @@ fn await_playable_context(
 
 
     if io.completion(&latest.as_ref().expect("bounded Solver observation").frame)? {
-
-
-        if await_completion(io, latest, settings, event_tx, cancel_requested, CompletionWait::ConfirmCandidate)? {
+        if await_completion(
+            io,
+            latest,
+            settings,
+            event_tx,
+            cancel_requested,
+            CompletionWait::ConfirmCandidate,
+        )? {
             return Ok(true);
         }
         return Err("completion after Solver refresh was not confirmed within bounded read-only observations; no further input authorised".to_owned());
@@ -664,11 +853,11 @@ fn await_fresh_target(
     event_tx: &WorkerEventSink,
     cancel_requested: &AtomicBool,
 ) -> Result<bool, String> {
-
-
     for delayed in 0..=REOBSERVATION_LIMIT {
         require_running(cancel_requested)?;
-        let current = latest.as_ref().ok_or_else(|| "Klondike planning context has no fresh frame".to_owned())?;
+        let current = latest
+            .as_ref()
+            .ok_or_else(|| "Klondike planning context has no fresh frame".to_owned())?;
         require_klondike_prediction(current.prediction, true)?;
 
 
@@ -681,12 +870,20 @@ fn await_fresh_target(
             return Ok(false);
         }
         send_state(event_tx, WorkerState::Verifying);
-        send_status(event_tx, "Waiting for fresh Klondike Solver target".to_owned());
-        send_log(event_tx, format!(
-            "Klondike target re-observation {}/{REOBSERVATION_LIMIT}: scene={}, target={}; waiting {} ms before a fresh input-free capture; no gameplay, Solver or terminal input authorised",
-            delayed + 1, current.gameplay_scene, format_prediction_target(current.prediction),
-            settings.animation_delays().klondike_reobserve.as_millis(),
-        ));
+        send_status(
+            event_tx,
+            "Waiting for fresh Klondike Solver target".to_owned(),
+        );
+        send_log(
+            event_tx,
+            format!(
+                "Klondike target re-observation {}/{REOBSERVATION_LIMIT}: scene={}, target={}; waiting {} ms before a fresh input-free capture; no gameplay, Solver or terminal input authorised",
+                delayed + 1,
+                current.gameplay_scene,
+                format_prediction_target(current.prediction),
+                settings.animation_delays().klondike_reobserve.as_millis(),
+            ),
+        );
         io.wait(settings.animation_delays().klondike_reobserve)?;
         capture_latest(io, latest, event_tx)?;
     }
@@ -712,15 +909,23 @@ fn await_pending_solve(
 
     loop {
         require_running(cancel_requested)?;
-        let current = latest.as_ref().ok_or_else(|| "Klondike Solve settling has no fresh planning frame".to_owned())?;
+        let current = latest
+            .as_ref()
+            .ok_or_else(|| "Klondike Solve settling has no fresh planning frame".to_owned())?;
         require_scene(current)?;
         require_klondike_prediction(current.prediction, true)?;
 
 
-        if !matches!(current.prediction, PredictedAction::Action(GuidedAction {
-            target: ActionTarget::Klondike(klondike::KlondikeTarget::Tableau { .. }
-                | klondike::KlondikeTarget::Foundation { .. }), ..
-        })) {
+        if !matches!(
+            current.prediction,
+            PredictedAction::Action(GuidedAction {
+                target: ActionTarget::Klondike(
+                    klondike::KlondikeTarget::Tableau { .. }
+                        | klondike::KlondikeTarget::Foundation { .. }
+                ),
+                ..
+            })
+        ) {
             return Ok(());
         }
         let evidence = klondike::inspect_solve_control(&current.frame)
@@ -739,11 +944,15 @@ fn await_pending_solve(
         }
         send_state(event_tx, WorkerState::Verifying);
         send_status(event_tx, "Waiting for Klondike Solve artwork".to_owned());
-        send_log(event_tx, format!(
-            "Klondike pending Solve re-observation {}/{REOBSERVATION_LIMIT}: {evidence}; lower-priority target {} deferred; waiting {} ms; guest input sent=0",
-            delayed_observations + 1, format_prediction_target(current.prediction),
-            settings.animation_delays().klondike_reobserve.as_millis(),
-        ));
+        send_log(
+            event_tx,
+            format!(
+                "Klondike pending Solve re-observation {}/{REOBSERVATION_LIMIT}: {evidence}; lower-priority target {} deferred; waiting {} ms; guest input sent=0",
+                delayed_observations + 1,
+                format_prediction_target(current.prediction),
+                settings.animation_delays().klondike_reobserve.as_millis(),
+            ),
+        );
         delayed_observations += 1;
         io.wait(settings.animation_delays().klondike_reobserve)?;
         capture_latest(io, latest, event_tx)?;
@@ -779,14 +988,27 @@ fn resume_after_win(
         require_running(cancel_requested)?;
         send_state(event_tx, WorkerState::Acting);
         send_status(event_tx, format!("Klondike {current}"));
-        send_log(event_tx, format!("Klondike GAME WIN terminal control {current}: one fresh recognised click at {:?}; no retry is authorised", point));
+        send_log(
+            event_tx,
+            format!(
+                "Klondike GAME WIN terminal control {current}: one fresh recognised click at {:?}; no retry is authorised",
+                point
+            ),
+        );
         *input_attempted = true;
         io.terminal_input(current, point)?;
         io.wait(current.settle_delay(settings.animation_delays().board_redeal))?;
         send_state(event_tx, WorkerState::Verifying);
         capture_latest(io, latest, event_tx)?;
         require_running(cancel_requested)?;
-        stage = await_terminal_stage(io, latest, settings, event_tx, cancel_requested, Some(current))?;
+        stage = await_terminal_stage(
+            io,
+            latest,
+            settings,
+            event_tx,
+            cancel_requested,
+            Some(current),
+        )?;
     }
     send_log(event_tx, "Klondike one-board terminal cycle complete: the next Draw 1 Solver board was freshly classified with a canonical actionable target. Continuous gameplay resumes from that result frame.".to_owned());
     require_running(cancel_requested)?;
@@ -826,12 +1048,17 @@ fn await_terminal_stage(
 
 
     let mut reobservation_limit = match previous {
-        None | Some(TerminalStage::ScoreCounting | TerminalStage::LevelUp | TerminalStage::NewGame) => TERMINAL_CONTROL_SEARCH_ATTEMPTS - 1,
+        None
+        | Some(TerminalStage::ScoreCounting | TerminalStage::LevelUp | TerminalStage::NewGame) => {
+            TERMINAL_CONTROL_SEARCH_ATTEMPTS - 1
+        }
         Some(TerminalStage::Play | TerminalStage::SolverReady) => REOBSERVATION_LIMIT,
     };
     let mut delayed_observations = 0usize;
     let mut final_ok_confirmation = false;
-    let mut expected_lookup = expected.flatten().and_then(klondike::terminal::searched_control)
+    let mut expected_lookup = expected
+        .flatten()
+        .and_then(klondike::terminal::searched_control)
         .map(|control| ControlLookup::new("Klondike", &KLONDIKE_CONTROLS, control, event_tx));
     let mut entry_ok = None;
     let mut entry_new_game = None;
@@ -839,12 +1066,17 @@ fn await_terminal_stage(
 
     loop {
         if let Err(error) = require_running(cancel_requested) {
-            for lookup in [&mut expected_lookup, &mut entry_ok, &mut entry_new_game].into_iter().flatten() {
+            for lookup in [&mut expected_lookup, &mut entry_ok, &mut entry_new_game]
+                .into_iter()
+                .flatten()
+            {
                 lookup.set_outcome("cancelled");
             }
             return Err(error);
         }
-        let current = latest.as_ref().ok_or_else(|| "Klondike terminal flow has no fresh frame".to_owned())?;
+        let current = latest
+            .as_ref()
+            .ok_or_else(|| "Klondike terminal flow has no fresh frame".to_owned())?;
 
 
         if previous == Some(TerminalStage::SolverReady)
@@ -867,15 +1099,21 @@ fn await_terminal_stage(
             // This reserved frame may confirm only the pending OK. Classifying
             // entry Score/New Game or searching a later control would grant a
             // fourth observation to an unrelated stage.
-            let lookup = expected_lookup.as_mut().or(entry_ok.as_mut())
+            let lookup = expected_lookup
+                .as_mut()
+                .or(entry_ok.as_mut())
                 .expect("the final OK confirmation retains its owning lookup");
-            let raw_point = io.expected_terminal_control(&current.frame, TerminalStage::LevelUp, Some(lookup))?;
+            let raw_point =
+                io.expected_terminal_control(&current.frame, TerminalStage::LevelUp, Some(lookup))?;
             let point = lookup.confirm_ok(&current.frame, raw_point)?;
             (point != PixelPoint::new(0, 0)).then_some((TerminalStage::LevelUp, point))
         } else if let Some(Some(stage)) = expected {
-            let point = io.expected_terminal_control(&current.frame, stage, expected_lookup.as_mut())?;
+            let point =
+                io.expected_terminal_control(&current.frame, stage, expected_lookup.as_mut())?;
             let point = if stage == TerminalStage::LevelUp {
-                expected_lookup.as_mut().expect("Level Up owns an OK lookup")
+                expected_lookup
+                    .as_mut()
+                    .expect("Level Up owns an OK lookup")
                     .confirm_ok(&current.frame, point)?
             } else {
                 point
@@ -883,29 +1121,60 @@ fn await_terminal_stage(
             (point != PixelPoint::new(0, 0)).then_some((stage, point))
         } else if previous.is_none() {
             match io.terminal_stage(&current.frame)? {
-                Some(TerminalStage::ScoreCounting) => Some((TerminalStage::ScoreCounting, TerminalStage::ScoreCounting.click_point())),
+                Some(TerminalStage::ScoreCounting) => Some((
+                    TerminalStage::ScoreCounting,
+                    TerminalStage::ScoreCounting.click_point(),
+                )),
                 Some(stage) if !stage.demonstrates_game_win() => {
-                    return Err(format!("Klondike terminal flow saw unexpected {stage} after {previous:?}; no new control input authorised"));
+                    return Err(format!(
+                        "Klondike terminal flow saw unexpected {stage} after {previous:?}; no new control input authorised"
+                    ));
                 }
                 stage => {
                     // A confirmed win can enter directly at OK or New Game. Both
                     // bounded lookups retain their own metrics across both fresh retries.
-                    let ok_lookup = entry_ok.get_or_insert_with(|| ControlLookup::new("Klondike", &KLONDIKE_CONTROLS, Control::Ok, event_tx));
-                    let raw_ok = io.expected_terminal_control(&current.frame, TerminalStage::LevelUp, Some(ok_lookup))?;
+                    let ok_lookup = entry_ok.get_or_insert_with(|| {
+                        ControlLookup::new("Klondike", &KLONDIKE_CONTROLS, Control::Ok, event_tx)
+                    });
+                    let raw_ok = io.expected_terminal_control(
+                        &current.frame,
+                        TerminalStage::LevelUp,
+                        Some(ok_lookup),
+                    )?;
                     let ok = ok_lookup.confirm_ok(&current.frame, raw_ok)?;
-                    let new_game = if stage == Some(TerminalStage::LevelUp) && raw_ok != PixelPoint::new(0, 0) {
+                    let new_game = if stage == Some(TerminalStage::LevelUp)
+                        && raw_ok != PixelPoint::new(0, 0)
+                    {
                         PixelPoint::new(0, 0)
                     } else {
-                        let lookup = entry_new_game.get_or_insert_with(|| ControlLookup::new("Klondike", &KLONDIKE_CONTROLS, Control::NewGame, event_tx));
-                        io.expected_terminal_control(&current.frame, TerminalStage::NewGame, Some(lookup))?
+                        let lookup = entry_new_game.get_or_insert_with(|| {
+                            ControlLookup::new(
+                                "Klondike",
+                                &KLONDIKE_CONTROLS,
+                                Control::NewGame,
+                                event_tx,
+                            )
+                        });
+                        io.expected_terminal_control(
+                            &current.frame,
+                            TerminalStage::NewGame,
+                            Some(lookup),
+                        )?
                     };
-                    match (raw_ok != PixelPoint::new(0, 0), new_game != PixelPoint::new(0, 0)) {
+                    match (
+                        raw_ok != PixelPoint::new(0, 0),
+                        new_game != PixelPoint::new(0, 0),
+                    ) {
                         (true, false) => {
-                            if let Some(lookup) = entry_new_game.as_mut() { lookup.set_outcome("not_required"); }
+                            if let Some(lookup) = entry_new_game.as_mut() {
+                                lookup.set_outcome("not_required");
+                            }
                             (ok != PixelPoint::new(0, 0)).then_some((TerminalStage::LevelUp, ok))
                         }
                         (false, true) if ok_lookup.has_ok_panel() => {
-                            if let Some(lookup) = entry_new_game.as_mut() { lookup.set_outcome("blocked-by-ok-panel"); }
+                            if let Some(lookup) = entry_new_game.as_mut() {
+                                lookup.set_outcome("blocked-by-ok-panel");
+                            }
                             None
                         }
                         (false, true) => {
@@ -915,7 +1184,9 @@ fn await_terminal_stage(
                         (false, false) => None,
                         (true, true) => {
                             ok_lookup.set_outcome("ambiguous");
-                            if let Some(lookup) = entry_new_game.as_mut() { lookup.set_outcome("ambiguous"); }
+                            if let Some(lookup) = entry_new_game.as_mut() {
+                                lookup.set_outcome("ambiguous");
+                            }
                             return Err("Klondike confirmed-win entry has both OK and New Game matches; no control input authorised".to_owned());
                         }
                     }
@@ -932,27 +1203,49 @@ fn await_terminal_stage(
             {
                 return Ok(Some((stage, point)));
             }
-            return Err(format!("Klondike terminal flow saw unexpected {stage} after {previous:?}; no new control input authorised"));
+            return Err(format!(
+                "Klondike terminal flow saw unexpected {stage} after {previous:?}; no new control input authorised"
+            ));
         }
 
 
         if delayed_observations >= reobservation_limit {
-            let reserved = expected_lookup.as_mut().or(entry_ok.as_mut())
-                .is_some_and(|lookup| lookup.reserve_final_ok_confirmation(delayed_observations + 1));
+            let reserved = expected_lookup
+                .as_mut()
+                .or(entry_ok.as_mut())
+                .is_some_and(|lookup| {
+                    lookup.reserve_final_ok_confirmation(delayed_observations + 1)
+                });
             if reserved {
                 final_ok_confirmation = true;
                 reobservation_limit += 1;
             } else {
-                return Err(format!("Klondike terminal advancement exhausted {delayed_observations} delayed read-only captures after {previous:?}; the last control was not retried"));
+                return Err(format!(
+                    "Klondike terminal advancement exhausted {delayed_observations} delayed read-only captures after {previous:?}; the last control was not retried"
+                ));
             }
         }
         delayed_observations += 1;
         let normal_delay = settings.animation_delays().klondike_reobserve;
-        let retry_delay = expected_lookup.as_ref().or(entry_ok.as_ref())
+        let retry_delay = expected_lookup
+            .as_ref()
+            .or(entry_ok.as_ref())
             .map_or(normal_delay, |lookup| lookup.retry_delay(normal_delay));
-        send_log(event_tx, format!("Klondike terminal re-observation {delayed_observations}/{reobservation_limit}: prior={previous:?}, expected={expected:?}, ready={observed:?}; wait_ms={}; guest input sent=0", retry_delay.as_millis()));
-        if let Err(error) = io.wait(retry_delay).and_then(|()| require_running(cancel_requested)) {
-            for lookup in [&mut expected_lookup, &mut entry_ok, &mut entry_new_game].into_iter().flatten() {
+        send_log(
+            event_tx,
+            format!(
+                "Klondike terminal re-observation {delayed_observations}/{reobservation_limit}: prior={previous:?}, expected={expected:?}, ready={observed:?}; wait_ms={}; guest input sent=0",
+                retry_delay.as_millis()
+            ),
+        );
+        if let Err(error) = io
+            .wait(retry_delay)
+            .and_then(|()| require_running(cancel_requested))
+        {
+            for lookup in [&mut expected_lookup, &mut entry_ok, &mut entry_new_game]
+                .into_iter()
+                .flatten()
+            {
                 lookup.set_outcome("cancelled-or-wait-error");
             }
             return Err(error);
@@ -964,7 +1257,10 @@ fn await_terminal_stage(
             lookup.note_recapture();
         }
         if let Err(error) = capture_latest(io, latest, event_tx) {
-            for lookup in [&mut expected_lookup, &mut entry_ok, &mut entry_new_game].into_iter().flatten() {
+            for lookup in [&mut expected_lookup, &mut entry_ok, &mut entry_new_game]
+                .into_iter()
+                .flatten()
+            {
                 lookup.set_outcome("capture-error");
             }
             return Err(error);
@@ -996,12 +1292,17 @@ fn report_acknowledged_action(
         changed_pixels: 0,
         continued_from_halo: true,
     });
-    let run_bound = settings.bounded_operation_limit()
+    let run_bound = settings
+        .bounded_operation_limit()
         .map_or_else(|| "continuous".to_owned(), |limit| limit.to_string());
-    send_log(event_tx, format!(
-        "Klondike action {operation_index}/{run_bound} acknowledged from a fresh canonical Solver target; {} -> {}; pixel difference not measured, previous effect remains unproven; Solver refreshes={solver_refreshes}. One action budget slot consumed. Only a fresh supported target authorises the next action; no card transfer, completion or restart inferred.",
-        format_prediction_target(plan.before()), format_prediction_target(current.prediction),
-    ));
+    send_log(
+        event_tx,
+        format!(
+            "Klondike action {operation_index}/{run_bound} acknowledged from a fresh canonical Solver target; {} -> {}; pixel difference not measured, previous effect remains unproven; Solver refreshes={solver_refreshes}. One action budget slot consumed. Only a fresh supported target authorises the next action; no card transfer, completion or restart inferred.",
+            format_prediction_target(plan.before()),
+            format_prediction_target(current.prediction),
+        ),
+    );
 }
 
 
@@ -1021,8 +1322,6 @@ fn await_completion(
     cancel_requested: &AtomicBool,
     context: CompletionWait,
 ) -> Result<bool, String> {
-
-
     let (known_candidate, reobservation_limit) = match context {
         CompletionWait::ConfirmCandidate => (true, REOBSERVATION_LIMIT),
         CompletionWait::AfterSolve => (false, SOLVE_COMPLETION_REOBSERVATION_LIMIT),
@@ -1044,9 +1343,12 @@ fn await_completion(
         require_running(cancel_requested)?;
         let candidate = io.completion(&latest.as_ref().expect("fresh completion frame").frame)?;
         consecutive = if candidate { consecutive + 1 } else { 0 };
-        send_log(event_tx, format!(
-            "Klondike completion observation: candidate={candidate}, consecutive={consecutive}/2; delayed captures={delayed_observations}/{reobservation_limit}; guest input sent=0",
-        ));
+        send_log(
+            event_tx,
+            format!(
+                "Klondike completion observation: candidate={candidate}, consecutive={consecutive}/2; delayed captures={delayed_observations}/{reobservation_limit}; guest input sent=0",
+            ),
+        );
 
 
         if consecutive >= 2 {
@@ -1065,7 +1367,8 @@ fn await_completion(
 
 /// Advance a cumulative diagnostic counter without permitting wraparound during continuous play.
 fn next_counter(current: usize, label: &str) -> Result<usize, String> {
-    current.checked_add(1)
+    current
+        .checked_add(1)
         .ok_or_else(|| format!("Klondike {label} counter exhausted; stopping before further input"))
 }
 
@@ -1084,7 +1387,9 @@ fn refresh_solver(
     cancel_requested: &AtomicBool,
     input_attempted: &mut bool,
 ) -> Result<(), String> {
-    let current = latest.as_ref().ok_or_else(|| "Solver refresh has no fresh frame".to_owned())?;
+    let current = latest
+        .as_ref()
+        .ok_or_else(|| "Solver refresh has no fresh frame".to_owned())?;
     require_scene(current)?;
 
 
@@ -1093,7 +1398,10 @@ fn refresh_solver(
     }
 
 
-    if settings.bounded_operation_limit().is_some_and(|limit| *refreshes > limit) {
+    if settings
+        .bounded_operation_limit()
+        .is_some_and(|limit| *refreshes > limit)
+    {
         return Err("Klondike total Solver-refresh budget exhausted".to_owned());
     }
     let next_refresh = next_counter(*refreshes, "Solver refresh")?;
@@ -1105,7 +1413,12 @@ fn refresh_solver(
     send_state(event_tx, WorkerState::Acting);
     send_status(event_tx, "Refreshing Klondike Solver".to_owned());
     io.solver()?;
-    send_log(event_tx, format!("Klondike Solver refresh {refreshes}: acknowledged once; capturing immediately, with no post-click settle delay."));
+    send_log(
+        event_tx,
+        format!(
+            "Klondike Solver refresh {refreshes}: acknowledged once; capturing immediately, with no post-click settle delay."
+        ),
+    );
     send_state(event_tx, WorkerState::Verifying);
     capture_latest(io, latest, event_tx)?;
     Ok(())
@@ -1121,8 +1434,6 @@ fn classify_captured_result(
     scan_state: &TableauScanState,
     cancel_requested: &AtomicBool,
 ) -> CaptureResult {
-
-
     if let Err(reason) = require_running(cancel_requested) {
         return CaptureResult::Diagnostic { frame, reason };
     }
@@ -1131,8 +1442,6 @@ fn classify_captured_result(
 
     match analysed {
         Ok((observation, _detection)) => {
-
-
             if let Err(reason) = require_running(cancel_requested) {
                 CaptureResult::Diagnostic { frame, reason }
             } else {
@@ -1165,8 +1474,6 @@ fn capture_latest(
     latest: &mut Option<FrameObservation>,
     event_tx: &WorkerEventSink,
 ) -> Result<(), String> {
-
-
     let (observation, result) = match io.capture()? {
         CaptureResult::Classified(observation) => (observation, Ok(())),
         CaptureResult::Diagnostic { frame, reason } => (diagnostic_observation(frame), Err(reason)),
@@ -1179,8 +1486,6 @@ fn capture_latest(
 
 /// Refuse unknown scenes before both gameplay and Solver recovery.
 fn require_scene(observation: &FrameObservation) -> Result<(), String> {
-
-
     if !observation.gameplay_scene {
         return Err("unsupported Klondike scene; latest frame retained for inspection".to_owned());
     }
@@ -1189,23 +1494,27 @@ fn require_scene(observation: &FrameObservation) -> Result<(), String> {
 
 
 /// Reject ambiguous targets, other modes and fabricated plans before input.
-fn require_klondike_prediction(prediction: PredictedAction, allow_missing: bool) -> Result<(), String> {
-
-
+fn require_klondike_prediction(
+    prediction: PredictedAction,
+    allow_missing: bool,
+) -> Result<(), String> {
     match prediction {
         PredictedAction::Action(action) if matches!(action.target, ActionTarget::Klondike(_)) => {
-            plan_step(prediction).map(|_| ()).map_err(|error| format!("Klondike target rejected: {error}"))
+            plan_step(prediction)
+                .map(|_| ())
+                .map_err(|error| format!("Klondike target rejected: {error}"))
         }
         PredictedAction::NoHighlight if allow_missing => Ok(()),
-        _ => Err(format!("Klondike prediction has no input authority: {}", format_prediction_target(prediction))),
+        _ => Err(format!(
+            "Klondike prediction has no input authority: {}",
+            format_prediction_target(prediction)
+        )),
     }
 }
 
 
 /// Check STOP at controller boundaries as well as inside real I/O operations.
 fn require_running(cancel_requested: &AtomicBool) -> Result<(), String> {
-
-
     if cancel_requested.load(Ordering::Acquire) {
         return Err("STOP was requested".to_owned());
     }

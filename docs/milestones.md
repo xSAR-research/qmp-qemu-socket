@@ -1,5 +1,136 @@
 # Milestone Tracker & Baseline Receipt — qmp-qemu-socket
 
+## 3.3.0 — Continuous normal games mode for A* Free Cell and ABS drag standardisation, 2026-11-14
+
+- **Outcome:** Delivered worker-owned continuous normal games mode for independent A* Free Cell (`src/worker/freecell_session.rs`, `StartFreeCellSession`), reused `post_game::RestartPolicy::IndependentFreeCell` across `GAME WIN` -> optional `LEVEL-UP!` `OK` -> `NEW GAME` -> `PLAY` -> `verify_independent_start`, implemented Option 2A clean unsolvable exit, removed all superseded `REL` (`DragMode`) drag code/controls in favour of ABS-only dragging, and added the Free Cell `Mode` (`Continuous normal games` default, `Single board`, `Manual`) + `Transfer policy` row in `src/app/pyramid_workflow.rs`. `../xsar` is promoted at `0.16.3` (commit `067ce26`, `067ce26419f02802780a5497d9227dc0764c1c62`).
+- **Host Verification (Beast):**
+  - `cargo fmt --package qmp-qemu-socket -- --check`: Pass
+  - `cargo clippy --workspace --lib --bins -- -D warnings -D clippy::unwrap_used -D clippy::dbg_macro -D clippy::todo`: Pass
+  - `cargo clippy --workspace --all-targets -- -D warnings`: Pass
+  - `RUSTDOCFLAGS="-D warnings" cargo doc --locked --offline --package qmp-qemu-socket --no-deps --document-private-items`: Pass
+  - `cargo test --workspace`: `1,757` passed, `0` failed, `185` ignored (`src/lib.rs`; `0` in `src/main.rs`, `0` doc-tests)
+  - `cargo test --locked --offline --package qmp-qemu-socket -- --include-ignored`: `1,942` passed, `0` failed, `0` ignored (`src/lib.rs`; `0` in `src/main.rs`, `0` doc-tests)
+  - `cargo build --locked --offline --release --package qmp-qemu-socket --target x86_64-unknown-linux-gnu`: Pass (`16,922,304` bytes, mode `0755`, SHA-256 `3e8727fa13abd0d98a1c6a9768a6cf4c2a8f06e7152104d3349b4d4f72b92e97`)
+- **Live Guest Acceptance:** Pending operator launch on Beast against Windows 11 QEMU guest (`cargo run --release` and `cargo run --release -- --no-image`).
+
+### Code Analysis
+
+- **Guarded Free Cell post-win guest input authority:** `post_game::RestartPolicy::IndependentFreeCell` and `src/worker/freecell_terminal.rs` enforce settled-control detection (`Score` `Skip`/`Continue`, `has_settled_level_up_ok` checking red/crimson `OK` pixel clusters and layout geometry, `New Game`, `Play`) under `STOP`/Pause fences, followed by `verify_independent_start` requiring two consecutive distinct-timestamp fresh board captures proving a new normal 52-card deal without pressing any in-game Solver button.
+- **Option 2A zero-input unsolvable gate & `FullBoard` fence:** `freecell_session` rejects non-`Objective::FullBoard` scenes before issuing guest input and returns cleanly (`RunTermination::Completed`, `unsolvable_foundation_cards: Some(...)`, `WorkerState::Ready`) with zero mid-game clicks or synthetic error packets whenever exhaustive A* proves a normal deal unsolvable.
+- **ABS-only dragging & clean offline cancellation:** All relative pointer drag (`REL` / `DragMode`) paths and UI selectors were removed so card drags map solely through checked integer `pixel * 32767 / extent` ABS coordinates; `disconnect` / `Cancel` cancels offline A* search cleanly before joining worker state.
+
+## 3.2.1 — A* header selector order and vertical alignment, 2026-11-13
+
+Reversed the A* solution screen header drop-downs in `src/app/pyramid_workflow.rs` (`independent_selection_row`) so the solving strategy (`"pyramid-strategy"`) renders on the left and game type (`"independent-game-type"`) renders on the right in one wrapping `left_to_right(Align::Min)` row with pre-reserved native `ComboBox` row height, single outer `idle` enablement, width bounded inside the header column ahead of the activity badge, and strategy-precedence transition handling (`resolve_independent_header_change`). Covered by headless `egui` geometry/popup tests (`independent_selection_row_places_strategy_left_of_game_and_aligns_vertically`) and unit transition checks (`astar_header_transition_gives_strategy_switch_precedence_over_stale_game_value`). `xSAR` stays untouched at `0.16.3`; guest I/O, Free Cell `game_controls`, and Pyramid mechanics are unchanged.
+
+Tier 2 host verification on Beast (`xsar 0.16.3` unchanged):
+
+- `cargo fmt --package qmp-qemu-socket -- --check`: pass
+- `cargo clippy --workspace --lib --bins -- -D warnings -D clippy::unwrap_used -D clippy::dbg_macro -D clippy::todo`: pass
+- `cargo clippy --workspace --all-targets -- -D warnings`: pass
+- `cargo test --workspace`: `1,755` passed, `0` failed, `184` ignored (`src/lib.rs`; `0` in `src/main.rs`, `0` doc-tests)
+- `cargo test --locked --offline --package qmp-qemu-socket -- --include-ignored`: `1,939` passed, `0` failed, `0` ignored (`src/lib.rs`; `0` in `src/main.rs`, `0` doc-tests)
+- `RUSTDOCFLAGS="-D warnings" cargo doc --locked --offline --package qmp-qemu-socket --no-deps --document-private-items`: pass
+- `cargo build --locked --offline --release --package qmp-qemu-socket --target x86_64-unknown-linux-gnu`: pass (`target/x86_64-unknown-linux-gnu/release/qmp-qemu-socket`, `16,829,624` bytes, SHA-256 `af730e31638db8be84d9a2c716a042e40f834ab8696a306fa6dc9720f7506b69`)
+
+Live desktop UI inspection of the A* header drop-down order/alignment and Windows guest acceptance on Beast remain pending operator launch.
+
+## 3.2.0 — shared foreground card reader and fault-gated Challenge Complete, 2026-11-13
+
+Extracted the shared foreground card-reading engine (`pyramid_recon::vision::foreground_card`) behind `src/game_controls.rs` (`pub mod game_controls;` in `src/lib.rs`, `LocationRequest { game, kind, row, column }` with variable Free Cell `PLAY` depth `1..=19` and consolidated `scan_freecell_play_corners`), split the crate into a library root (`src/lib.rs`, `qmp_qemu_socket`) and thin binary entrypoint (`src/main.rs`) with zero `#[allow(...)]` attributes, and migrated Free Cell 52-card RECON acquisition, fresh live initial binding and exposed-pile position proofs (`src/freecell_recon.rs`, `src/freecell_recon/position.rs`) onto it, retiring the 47-template 1-bit bank and `src/freecell_completion.rs`. Calibrated the native empty-slot stroke red-channel floor (`r >= 50` to `r >= 45`) and ordered interior card-paper checks before the four green outline strokes in `game_controls::freecell_empty_slot_error`. Added `freecell_terminal::classify_challenge_handoff` (Option 1A) so fault-gated Challenge Complete polling that sees 5 captures without settled **Continue** still retires cleanly with zero clicks when the 5th capture shows active XP counting (`XpCounting`) or settled `LEVEL-UP! [OK]` (`LevelUp`). Pyramid card recognition tolerances and runtime behaviour remain unchanged. Retained native fixtures confirm resolution of `8♦`, `9♦`, `3♦` (`freecell-sixes-three-diamond-20261113.png`, `3,606,073` bytes, SHA-256 `bee877905098ff91411b8958d3c005cc86384e2a70f2373e9707945a46d07864`), `8♣` (`freecell-solve-eight-club-20261113.png`, `3,604,913` bytes, SHA-256 `3ab9ff1e0be11fe62ecf06d2201124b44ef7ef606714ea86287525029db293be`), live crimson-ribbon XP-counting Challenge Complete overlay (`freecell-challenge-complete-xp-20261113.png`, `1,805,464` bytes, SHA-256 `aca1db86d94c5a7a5f1c598c6a13d8fe26f3cbd22602097b73ba53efa9433037`), settled **Continue** overlay (`freecell-challenge-complete-continue-20261113.png`, `1,841,128` bytes, SHA-256 `5759759c666c1dd7e6dfa5303365ebe8ab688a0bbc4d429e2efcbaf390bb8590`), and live Fours Challenge mid-game empty `PLAY 1` (`freecell-empty-play1-fours-20261113.png`, `3,543,657` bytes, SHA-256 `beb7f800b282e14ad2936185b74fb9138c84ccd5a662e9592f66a713f1cf9c23`). See [game-controls-challenge-completion.md](game-controls-challenge-completion.md).
+
+Tier 2 host verification on Beast (`xsar 0.16.3` unchanged):
+
+- `cargo fmt --package qmp-qemu-socket -- --check`: pass
+- `cargo clippy --workspace --lib --bins -- -D warnings -D clippy::unwrap_used -D clippy::dbg_macro -D clippy::todo`: pass
+- `cargo clippy --workspace --all-targets -- -D warnings`: pass
+- `cargo test --workspace`: `1,753` passed, `0` failed, `184` ignored (`src/lib.rs`; `0` in `src/main.rs`, `0` doc-tests)
+- `cargo test --locked --offline --package qmp-qemu-socket -- --include-ignored`: `1,937` passed, `0` failed, `0` ignored (`src/lib.rs`; `0` in `src/main.rs`, `0` doc-tests)
+- `RUSTDOCFLAGS="-D warnings" cargo doc --locked --offline --package qmp-qemu-socket --no-deps --document-private-items`: pass
+- `cargo build --locked --offline --release --package qmp-qemu-socket --target x86_64-unknown-linux-gnu`: pass (`target/x86_64-unknown-linux-gnu/release/qmp-qemu-socket`, `16,828,520` bytes, SHA-256 `08c18a314b702218bc51a4fb9090e0a28db51cc2f7ad37a1bd83d886cd48e155`)
+
+Fresh live Windows guest acceptance on Beast remains pending operator launch.
+
+### Code Analysis
+
+- **Guest-input authority invariance:** `game_controls::read_card`, `game_controls::challenge_complete`, `game_controls::wait_for_challenge_complete`, and `freecell_terminal::classify_challenge_handoff` send zero QMP input and never click **Continue**, `Skip`, or `OK`. Challenge-mode completion polling runs only when BOTH `challenge_mode` (`objective::from_metadata(..) == Objective::Unresolved`) is active AND a fresh board-recognition step faults (`transfer` pre-input proof fault, `finish_movement_probe` post-drag scene fault, or after 6 unmatched `stable` observations via `RouteIo::resolve_challenge_complete`). `Ok(true)` or a positive Option 1A handoff (`XpCounting` or settled `LevelUp`) retires playback authority cleanly without advancing the route cursor or card counts; `Ok(false)` with `None` preserves the original board-recognition fault and `first-unmatched` diagnostic frame; ordinary `Objective::ClearBoard` games never poll Challenge Complete.
+- **Zero-tolerance Challenge Complete pixel contract:** `is_challenge_complete_frame` inspects `CHALLENGE_LL_RECTS` (`(766, 204, 8, 15)` and `(785, 204, 7, 15)`, `225` pixels required RGB `[255, 255, 255]`) in **Challenge** and `CONTINUE_BLACK_RECTS` (8 segments totalling `149` unique pixels required RGB `[0, 0, 0]`) in **Continue** on the same freshly acquired `1920×1080` frame with zero channel tolerance and zero ribbon or panel-colour dependency. On a 5-frame poll miss, `freecell_terminal::classify_challenge_handoff` matches `XpCounting` only when white `ll` stems, a non-white ribbon gap (`min_rgb_max <= 96`), and `CHALLENGE_SKIP` (`Click anywhere to skip` at `(796, 864, 328×36)`) all hold, and matches `LevelUp` only when white `LEVEL-UP!` banner lettering and a settled-size `ExpectedControlSpec::LevelUp` gold `OK` button (`validate_settled_button` at `[190, 224]` with central black ink) hold.
+- **Shared foreground card-reader boundary:** `LocationRequest { game, kind, row, column }` enforces 1-based physical coordinates (`FreeCell` `PLAY` `1..=19`, `CELL`/`SUIT` `1..=4`; `Pyramid` `PLAY` `1..=7`, `DRAW` `1..=2`). `foreground_card::Reader` error/gap limits and Pyramid recognition remain untouched; Free Cell fixed corners and exposed-pile vertical scans (`scan_freecell_play_corners`) apply the same foreground classifier with `Corner::matched_last` pickup anchoring (`+15, +20`), rejecting `Ambiguous`, `ColourDisagreement` and `PartialLabel` corners without expected-card shortcuts or inventory elimination. `xSAR` stays untouched at `0.16.3`; no `unsafe` Rust or new crate dependency is introduced.
+
+### Planned Next Milestones & Future Review Items
+
+- **Completed (`3.3.0`) — Continuous Independent Free Cell Mode (`Option 2A`):** Implemented above for ordinary independent Free Cell play (`SingleBoard` and `ContinuousNormalGames`), keeping Challenge handling single-board / fault-gated.
+- **Future Review Item (not a set milestone — Decision #4):** Review after Free Cell Challenge handling is proven in live guest runs whether consolidating Pyramid runtime card recognition onto `game_controls` adds concrete value; Pyramid's working runtime mechanics stay untouched for now.
+
+## 3.1.21 — destination synchronisation, 2026-11-13
+
+Applied the approved 19 replacements to this checkout and freshly passed formatting, locked
+check, all 1,923 tests including ignored cases, warning-denying private rustdoc, strict Clippy
+and the release build. xSAR remains 0.16.3. Accepted sibling changes and Git indices are preserved.
+The earlier Sentinel failure and interrupted compilation log are retained. Fresh Windows acceptance
+and the saved 3D/8C ambiguities remain pending.
+
+[Destination qualification](../Evidence/FreeCell/Validation/sync-321-20261113-_1zupweo/qualification-summary.json) records exact commands and source/toolchain/artifact bindings.
+
+<!-- isolated 3.1.21 entry begins -->
+
+## 3.1.21 — isolated native rank calibration and control clarity
+
+The shared Free Cell recognition bank adds rank-only native 8D and 9D prototypes. Its 44 original templates and existing native 6D prototype now form one 47-template bank for RECON, fresh initial binding and exposed position proofs. Rank distance 48/gap 20 and suit distance 16/gap 12 remain unchanged; supplemental samples retain their original suit masks and colours.
+
+Shared in-application window titles accept a primary-button double-click to maximise or restore saved geometry, preserving native egui dragging, resizing and existing controls. Calculation shows Stop and Pause/Continue; the redundant Cancel is removed because Stop already requests cooperative search cancellation. Active MULTI labels its graceful action Stop after step, beside Pause/Continue and immediate Cancel. Header selectors reserve native ComboBox row height before placing their labels and wrap as complete selectors.
+
+All six final isolated application gates passed, including 1,923 tests with zero failed, ignored, measured or filtered tests.
+
+This is an isolated application 3.1.21 candidate under `/home/charlie/tmp/qmp-321-isolated-2thcbuw_/qmp-qemu-socket`. The original checkout application remains blocked by recorded sibling baseline drift; no original-checkout application or promotion is claimed. Copied xSAR 0.16.3 source, manifests, lockfile and configuration are unchanged. Fresh Windows acceptance is pending.
+
+### Code Analysis
+
+Newly calibrated rank appearances can satisfy the existing printed-identity reader. Every same-colour label still competes, without an expected-card shortcut or inventory completion. UI controls use existing scoped cancellation and stop-after-step requests. Guest-input fencing, physical effect proof, checked coordinate mapping, transport framing and release-only recovery retain their existing contracts. No unsafe Rust or new dependency is introduced.
+
+See [verification](Verification-3.1.21.md).
+
+<!-- isolated 3.1.21 entry ends -->
+
+## 3.1.20 — host-qualified dark controls and 100 ms playback
+
+Dark demonstration styling and shared pressable buttons now cover application controls and dropdowns. SINGLE STEP and MULTI STEP use 100 ms ABS intervals, with one SINGLE STEP action. Active operations expose Stop beside Pause/Continue and Cancel. Calculation Stop cancels its search. MULTI Stop finishes its current proved step and retains resumable progress. Cancel uses existing immediate cancellation.
+
+All 50 fresh host gates passed, including 1,911 application, 381 library and 80 console tests. Complete suites have zero failed, ignored, measured or filtered tests. Charlie reported successful 3.1.19 guest playback at 100 ms. Fresh Windows acceptance of this styled 3.1.20 build remains pending.
+
+See [the control contract](Application-Style-3.1.20.md) and [verification](Verification-3.1.20.md).
+
+
+## 3.1.19 — preserve pickup anchor at Free Cell drop targets (host-qualified)
+
+A pickup at the recognised card corner plus 15 px horizontally and 20 px vertically now uses the same offset at an empty CELL, SUIT or PLAY destination. Occupied destinations retain their observed recognised-corner point. The route no longer replaces CELL/SUIT observations with slot centres. This aligns the planned cursor endpoints with the existing source anchor; it does not change calibration, recognition thresholds or physical-effect proof.
+
+The six diagnostic inputs remain source → LEFT DOWN → source minus 45 px vertically → native floor midpoint of the ORIGINAL source and effective destination → exact destination → LEFT UP. Standard SINGLE STEP retains five 500 ms gesture intervals, fast SINGLE STEP five 100 ms intervals, and MULTI STEP freezes ABS with five 200 ms intervals. Those intentional gesture waits total 2.5 s, 500 ms and 1 s respectively, excluding transport, scheduling, logging and capture costs. Every newly reached recorded AUTO edge retains its 500 ms animation wait.
+
+Calculated A* routes retain one `RecordedMove` card identity per transfer. Rules and independent replay require an exposed source and remove/place exactly one card. The user confirmed individual single-card transfers suffice. No carried-stack feature or stack regression is added; legacy Solver/HALO handling remains separate.
+
+All six fresh application gates passed with 1,908 tests and zero failed, ignored, measured or filtered tests. xSAR 0.16.2 and console 0.8.5 retain historical qualification evidence; no fresh standalone sibling gates are claimed. Fresh Windows acceptance remains pending. See [goal](FREE_CELL_goal_20261111J.md), [contract](FreeCell-Drop-Anchor-3.1.19.md) and [verification](Verification-3.1.19.md).
+
+
+## 3.1.18 — playback timing, capture cadence and graceful stop (host-qualified)
+
+SINGLE STEP keeps five 500 ms gesture intervals. SINGLE STEP fast uses five 100 ms intervals, and MULTI STEP freezes ABS with five 200 ms intervals. The six inputs are source → LEFT DOWN → source-up45 → native floor midpoint of ORIGINAL source/effective destination → exact destination → LEFT UP. Every newly reached recorded AUTO edge retains its 500 ms animation wait.
+
+The first post-transfer wait is min(configured settle, 200 ms). After one eligible endpoint match, the confirmation wait is min(configured settle, 100 ms). Unmatched frames and intermediate AUTO endpoints use the configured retry gap. Two successive fresh exact endpoint matches are required within six captures. The sixth rejection ends immediately. At the default 750 ms configuration, an all-unmatched run reaches its six effect captures after 200, 950, 1700, 2450, 3200 and 3950 ms of intentional waiting. The prior sequence reached them after 750 through 4500 ms. The total observation window is therefore 550 ms shorter before capture/processing time, and the former final 750 ms rejection wait is removed.
+
+During active MULTI playback its button becomes STOP AFTER STEP. A direct request is bound to the exact plan and run. The current transfer, two-frame effect proof, recorded AUTO follow-ups and animation waits finish before StepVerified retains the proved cursor for resumption. A request before the next transfer, including one received at its PAUSE checkpoint, prevents that transfer. PAUSE stays independent and requires CONTINUE to proceed. Existing immediate STOP remains available for immediate revocation and release-only recovery.
+
+Successful playback dispatch releases completed RECON preview ownership for the same context. Each acquired playback frame already enters the bounded latest-frame slot before semantic interpretation, so the preview can show the newest acquired readiness, effect and failure pixels. Pending RECON and stale-context fences remain required. Frames coalesce in one slot. During a held gesture the preview displays the latest acquisition until the next existing capture, without inserting an in-flight capture or capture-only QMP connection.
+
+All six fresh application gates passed with 1,905 tests and zero failed, ignored, measured or filtered tests. xSAR 0.16.2 and console 0.8.5 retain historical qualification evidence. Fresh Windows acceptance remains pending. See [goal](FREE_CELL_goal_20261111I.md), [contract](FreeCell-Responsiveness-3.1.18.md) and [verification](Verification-3.1.18.md).
+
+
+
+## 3.1.17 — continuous ABS playback and AUTO animation (host-qualified)
+
+Use source → DOWN → source-up45 → native original-endpoint midpoint → exact destination → UP. SINGLE STEP and MULTI STEP apply five 500 ms gesture intervals, while fast SINGLE STEP uses zero inserted gesture delay. MULTI STEP continues after each physically verified play. Every newly reached recorded AUTO step adds 500 ms for animation across all options. Adopt the additive interval-taking xSAR 0.16.2 path API. All 51 fresh paired host gates passed with 1,896 application, 381 library and 80 console tests. The full suites report zero failed, ignored, measured or filtered tests. See [contract](FreeCell-Playback-3.1.17.md) and [verification](Verification-3.1.17.md).
+
+
 ## 3.1.16 — source-up and native midpoint ABS trial (host-qualified)
 
 ABS Single Step holds LEFT through source-up45, the native floor midpoint of the original source and effective destination, destination-up45 and exact destination. Both two-second and half-second choices use six timing gaps across seven inputs. CELL/SUIT targets keep their canonical centres. All 51 fresh paired host gates passed with 1,893 application, 366 library and 80 console tests. The full suites report zero failed, ignored, measured or filtered tests. See [contract](FreeCell-Source-Midpoint-3.1.16.md) and [verification](Verification-3.1.16.md).

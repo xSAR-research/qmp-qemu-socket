@@ -20,12 +20,8 @@ enum Case {
     Both,
     /// Prove two occupied PLAY corners and retain the observed destination point.
     PlayDestination,
-    /// Bind a complete native deal and execute the frozen queued REL mode.
-    Relative,
-    /// A real truncated response follows the acknowledged, retired probe.
-    RelativeCaptureFailure,
-    /// STOP arrives after permit retirement, before the read-only after-frame.
-    RelativeStopAfterAck,
+    /// Reproduce the retained JC pickup and empty CELL4 target after the actual prefix.
+    ReturnedJackToCellFour,
     Stop,
     Revoke,
     DownError,
@@ -33,33 +29,8 @@ enum Case {
     CompleteAfterDrag,
     /// Ordinary effect pixels do not prove any permitted route endpoint.
     UnsupportedAfterDrag,
-    /// The paced REL experiment observes STOP before its first held motion.
-    StopDuringHeldWait,
     /// The paced ABS experiment observes STOP after DOWN ACK, before destination motion.
     AbsoluteStopDuringHeldWait,
-}
-
-
-impl Case {
-    /// Select only the separately queued bounded REL diagnostic cases.
-    fn relative_probe(self) -> bool {
-        matches!(
-            self,
-            Self::Relative
-                | Self::RelativeCaptureFailure
-                | Self::RelativeStopAfterAck
-                | Self::StopDuringHeldWait
-        )
-    }
-
-
-    /// Select STOP injected at either diagnostic's first intentional held wait.
-    fn stops_during_held_wait(self) -> bool {
-        matches!(
-            self,
-            Self::StopDuringHeldWait | Self::AbsoluteStopDuringHeldWait
-        )
-    }
 }
 
 
@@ -116,6 +87,19 @@ fn qmp_server(
     cancel: Arc<AtomicBool>,
     expected: CapturedFrame,
 ) -> thread::JoinHandle<(Vec<Value>, usize)> {
+    qmp_server_for_parents(path, case, latest, context, cancel, vec![expected])
+}
+
+
+/// Confirm each fresh transfer probe against its own synthetic physical parent.
+fn qmp_server_for_parents(
+    path: &std::path::Path,
+    case: Case,
+    latest: LatestFrameSlot,
+    context: ControllerContext,
+    cancel: Arc<AtomicBool>,
+    expected: Vec<CapturedFrame>,
+) -> thread::JoinHandle<(Vec<Value>, usize)> {
     let listener = UnixListener::bind(path).unwrap();
     listener.set_nonblocking(true).unwrap();
     thread::spawn(move || {
@@ -162,7 +146,11 @@ fn qmp_server(
                         .take()
                         .expect("each probe needs fresh acquired pixels");
                     assert_eq!(frame.context.as_ref(), Some(&context));
-                    assert_eq!(frame.frame.pixels, expected.pixels);
+                    let expected_parent = expected
+                        .get(captures)
+                        .or_else(|| expected.last())
+                        .expect("each local probe has an expected physical parent");
+                    assert_eq!(frame.frame.pixels, expected_parent.pixels);
                     captures += 1;
                     json!({"running":true,"status":"running"})
                 }
@@ -174,27 +162,12 @@ fn qmp_server(
                         Case::Revoke => latest.freecell_route.lock().unwrap().revoke(),
                         _ => {}
                     };
-                    if case.relative_probe() {
-                        json!([
-                            {"name":"QEMU HID Tablet","index":0,"current":!relative_current,"absolute":true},
-                            {"name":"QEMU PS/2 Mouse","index":1,"current":relative_current,"absolute":false}
-                        ])
-                    } else {
-                        json!([{"name":"QEMU HID Tablet","index":0,"current":true,"absolute":true}])
-                    }
+                    json!([{"name":"QEMU HID Tablet","index":0,"current":true,"absolute":true}])
                 }
                 "human-monitor-command" => {
                     let command = request["arguments"]["command-line"].as_str().unwrap();
                     match command {
-                        "mouse_set 1" => {
-                            assert!(!relative_current || stopped_during_hold);
-                            relative_current = true;
-                        }
                         "mouse_set 0" => {
-                            assert!(
-                                !stopped_during_hold || !case.relative_probe(),
-                                "STOP must not restore ordinary routing"
-                            );
                             relative_current = false;
                         }
                         other => panic!("unexpected HMP command: {other}"),
@@ -204,15 +177,6 @@ fn qmp_server(
                 }
                 "input-send-event" => {
                     let events = request["arguments"]["events"].as_array().unwrap();
-                    if case.relative_probe() {
-                        for event in events {
-                            match event["type"].as_str().unwrap() {
-                                "abs" => assert!(!relative_current),
-                                "rel" | "btn" => assert!(relative_current),
-                                other => panic!("unexpected input type: {other}"),
-                            }
-                        }
-                    }
                     if case == Case::DownError
                         && events
                             .iter()
@@ -232,7 +196,7 @@ fn qmp_server(
                 json!({"return":response,"id":request["id"]})
             };
             requests.push(request);
-            let stop_after_down = case.stops_during_held_wait()
+            let stop_after_down = case == Case::AbsoluteStopDuringHeldWait
                 && requests.last().is_some_and(|request| {
                     request["execute"] == "input-send-event"
                         && request["arguments"]["events"]
@@ -244,16 +208,12 @@ fn qmp_server(
             if stop_after_down {
                 assert!(!stopped_during_hold);
                 stopped_during_hold = true;
-                if case.relative_probe() {
-                    // The REL held wait supplies the causal boundary before any motion.
-                    latest.reconnaissance.operator_stop(&context, &cancel);
-                }
             }
             let delivered = packet(&mut stream, response);
             if (case == Case::DownError && rejected && requests.len() > 5)
-                || (case.stops_during_held_wait()
+                || (case == Case::AbsoluteStopDuringHeldWait
                     && stopped_during_hold
-                    && (case.relative_probe() || !stop_after_down))
+                    && !stop_after_down)
             {
                 // Recovery can close this stream after consuming the earlier DOWN ACK.
                 // Exact old-UP and fresh capabilities/UP traffic is asserted below.
@@ -262,27 +222,12 @@ fn qmp_server(
                 delivered.unwrap();
             }
             if stop_after_down && case == Case::AbsoluteStopDuringHeldWait {
-                // DOWN is acknowledged before STOP arrives inside either selected held wait.
-                thread::sleep(Duration::from_millis(100));
+                // DOWN is acknowledged before STOP arrives inside the fixed 100ms held wait.
+                thread::sleep(Duration::from_millis(20));
                 latest.reconnaissance.operator_stop(&context, &cancel);
             }
         }
-        if case.relative_probe() && !stopped_during_hold {
-            assert_eq!(
-                mouse_selections,
-                ["mouse_set 0", "mouse_set 1", "mouse_set 0"]
-            );
-            assert!(!relative_current, "original tablet restored after release");
-        } else if stopped_during_hold && case.relative_probe() {
-            assert_eq!(
-                mouse_selections,
-                ["mouse_set 0", "mouse_set 1", "mouse_set 1"]
-            );
-            assert!(
-                relative_current,
-                "STOP keeps the captured release target selected"
-            );
-        } else if stopped_during_hold {
+        if stopped_during_hold {
             assert_eq!(mouse_selections, ["mouse_set 0", "mouse_set 0"]);
             assert!(!relative_current, "ABS release retains the captured tablet");
         }
@@ -322,21 +267,10 @@ fn qmp_server(
                 assert_eq!(request["execute"], *expected_command);
                 let value = match *expected_command {
                     "query-mice" => {
-                        let release_relative = stopped_during_hold && case.relative_probe();
-                        json!([
-                            {"name":"QEMU HID Tablet","index":0,"current":!release_relative,"absolute":true},
-                            {"name":"QEMU PS/2 Mouse","index":1,"current":release_relative,"absolute":false}
-                        ])
+                        json!([{"name":"QEMU HID Tablet","index":0,"current":true,"absolute":true}])
                     }
                     "human-monitor-command" => {
-                        assert_eq!(
-                            request["arguments"]["command-line"],
-                            if case.relative_probe() {
-                                "mouse_set 1"
-                            } else {
-                                "mouse_set 0"
-                            }
-                        );
+                        assert_eq!(request["arguments"]["command-line"], "mouse_set 0");
                         json!("")
                     }
                     "input-send-event" => {
@@ -381,22 +315,273 @@ fn button(request: &Value, down: bool) {
 }
 
 
-/// Test Native's transport boundary, not a search result or guest movement effect.
-fn exercise(case: Case, diagnostic_step: bool) {
-    exercise_with_timing(
-        case,
-        diagnostic_step,
-        route::DiagnosticDragTiming::TwoSeconds,
+/// Consume the exact acquired advisory pixels without asking either peer for another frame.
+fn assert_native_preview(
+    latest: &LatestFrameSlot,
+    expected: &CapturedFrame,
+    context: &ControllerContext,
+) {
+    let preview = latest
+        .take()
+        .expect("every native acquisition publishes a preview");
+    assert_eq!(preview.context.as_ref(), Some(context));
+    assert!(preview.diagnostic);
+    assert!(preview.prediction.is_none() && !preview.log_prediction);
+    assert_eq!(
+        (
+            preview.frame.width,
+            preview.frame.height,
+            preview.frame.stride
+        ),
+        (expected.width, expected.height, expected.stride)
+    );
+    assert_eq!(preview.frame.pixels, expected.pixels);
+    assert!(
+        latest.take().is_none(),
+        "only the latest preview is retained"
     );
 }
 
 
-/// Exercise the frozen ABS interval through real local peers without guest input.
-fn exercise_with_timing(
-    case: Case,
-    diagnostic_step: bool,
-    drag_timing: route::DiagnosticDragTiming,
+/// Replay the incident's 29 deliberate and ten AUTO edges from its authentic initial deal.
+///
+/// The unchanged returned-card frame supplies only the requested physical pile proof;
+/// the complete hidden inventory comes from this checked 39-edge history.
+fn returned_jack_fixture() -> (
+    CapturedFrame,
+    Arc<freecell_calculation::Report>,
+    Position,
+    RecordedMove,
 ) {
+    let initial = crate::capture::decode_png(include_bytes!(
+        "../../../../tests/fixtures/freecell-sixes-decorative-20261111.png"
+    ))
+    .unwrap();
+    let deal = crate::freecell_recon::recognise(
+        &initial,
+        Metadata::new("native-returned-JC", "1920x1080", "unit").unwrap(),
+    )
+    .unwrap();
+    use Pile::{Cascade as P, Cell as C, Foundation as F};
+    let prefix = [
+        (36, P(5), C(0), false),
+        (20, P(5), C(1), false),
+        (27, P(5), C(2), false),
+        (26, P(5), F(2), true),
+        (27, C(2), F(2), true),
+        (15, P(5), P(1), false),
+        (40, P(6), P(1), false),
+        (11, P(6), C(2), false),
+        (44, P(6), C(3), false),
+        (29, P(0), P(3), false),
+        (37, P(2), P(0), false),
+        (10, P(5), P(0), false),
+        (24, P(2), P(5), false),
+        (49, P(2), P(5), false),
+        (13, P(2), F(1), true),
+        (14, P(6), F(1), true),
+        (45, P(6), P(2), false),
+        (39, P(6), F(3), true),
+        (40, P(1), F(3), true),
+        (15, P(1), F(1), false),
+        (16, P(7), F(1), false),
+        (38, P(7), P(6), false),
+        (11, C(2), P(6), false),
+        (29, P(3), C(2), false),
+        (36, C(0), P(6), false),
+        (43, P(3), C(0), false),
+        (42, P(3), P(7), false),
+        (41, P(3), F(3), true),
+        (42, P(7), F(3), false),
+        (43, C(0), F(3), false),
+        (44, C(3), F(3), false),
+        (17, P(7), F(1), false),
+        (0, P(7), F(0), true),
+        (1, P(7), F(0), true),
+        (18, P(3), F(1), false),
+        (32, P(3), C(0), false),
+        (51, P(3), C(3), false),
+        (28, P(3), F(2), true),
+        (51, C(3), P(3), false),
+    ]
+    .map(|(card_id, from, to, is_auto)| RecordedMove {
+        card_id,
+        from,
+        to,
+        is_auto,
+    });
+    let replay = xsar::games::freecell::replay::verify_prefix_with_control(
+        &deal,
+        &prefix,
+        &AtomicBool::new(false),
+    )
+    .unwrap();
+    assert_eq!((replay.deliberate, replay.automatic), (29, 10));
+    let mut parent = Position::initial(&deal);
+    for action in prefix {
+        if action.is_auto {
+            assert_eq!(parent.automatic(), Some(action));
+        }
+        parent = parent.apply(action).unwrap();
+    }
+    assert_eq!(parent.column(0).unwrap(), &[46, 2, 22, 19, 6, 12, 37, 10]);
+    assert_eq!(parent.cells(), [Some(32), Some(20), Some(29), None]);
+    assert_eq!(parent.foundations(), &[2, 6, 3, 6]);
+    let original = crate::capture::decode_png(include_bytes!(
+        "../../../../tests/fixtures/freecell-jc-cell4-returned-20261111.png"
+    ))
+    .unwrap();
+    let action = RecordedMove {
+        card_id: 10,
+        from: P(0),
+        to: C(3),
+        is_auto: false,
+    };
+    let child = parent.apply(action).unwrap();
+    let rejection =
+        position::verify_piles(&original, &child, &[action.from, action.to], &mut || Ok(()))
+            .unwrap_err();
+    assert!(rejection.contains("PLAY 1: Exposed identity differs from physical position"));
+    assert!(rejection.contains("observed 10") && rejection.contains("expected 37"));
+    let mut moves = prefix.to_vec();
+    moves.push(action);
+    let closed = xsar::games::freecell::replay::verify_prefix_with_control(
+        &deal,
+        &moves,
+        &AtomicBool::new(false),
+    )
+    .unwrap();
+    assert_eq!((closed.deliberate, closed.automatic), (30, 10));
+    assert!(child.automatic().is_none());
+    for (column, stack) in closed.endpoint.cascades().iter().enumerate() {
+        assert_eq!(
+            stack
+                .iter()
+                .map(xsar::games::freecell::rules::card_id)
+                .collect::<Vec<_>>(),
+            child.column(column).unwrap()
+        );
+    }
+    assert_eq!(
+        closed
+            .endpoint
+            .cells()
+            .map(|card| card.map(xsar::games::freecell::rules::card_id)),
+        child.cells()
+    );
+    assert_eq!(closed.endpoint.foundations(), child.foundations());
+    let report = Arc::new(freecell_calculation::Report {
+        path: PathBuf::from("native-returned-JC-closed-prefix.json"),
+        deal,
+        bytes: Vec::new(),
+        paused: Duration::ZERO,
+        outcome: Outcome::Partial {
+            moves: moves.into_boxed_slice(),
+            stats: Default::default(),
+            deliberate_moves: closed.deliberate,
+            automatic_moves: closed.automatic,
+            foundation_cards: child.foundations().iter().copied().map(u32::from).sum(),
+        },
+    });
+    (original, report, parent, action)
+}
+
+
+/// All empty CELL and canonical C,D,H,S targets use the occupied-card pickup inset.
+#[test]
+fn freecell_3119_native_empty_upper_slots_preserve_pickup_offset() {
+    let original = crate::capture::decode_png(include_bytes!(
+        "../../../../tests/fixtures/freecell-FC13.png"
+    ))
+    .unwrap();
+    let deal = crate::freecell_recon::recognise(
+        &original,
+        Metadata::new("native-empty-upper-anchors", "FC13", "unit").unwrap(),
+    )
+    .unwrap();
+    let parent = Position::initial(&deal);
+    let expected = [
+        (Pile::Cell(0), PixelPoint::new(181, 132)),
+        (Pile::Cell(1), PixelPoint::new(373, 132)),
+        (Pile::Cell(2), PixelPoint::new(566, 132)),
+        (Pile::Cell(3), PixelPoint::new(758, 132)),
+        (Pile::Foundation(0), PixelPoint::new(1248, 132)),
+        (Pile::Foundation(1), PixelPoint::new(1440, 132)),
+        (Pile::Foundation(2), PixelPoint::new(1056, 132)),
+        (Pile::Foundation(3), PixelPoint::new(1633, 132)),
+    ];
+    let piles = expected.map(|(pile, _)| pile);
+    let geometry = position::verify_piles(&original, &parent, &piles, &mut || Ok(())).unwrap();
+    for (pile, anchor) in expected {
+        assert_eq!(geometry.point(pile).unwrap(), anchor);
+        assert_eq!(
+            diagnostic_abs_path(PixelPoint::new(233, 722), anchor, pile, (1920, 1080)).unwrap()[2],
+            anchor
+        );
+    }
+}
+
+
+/// Positively outlined synthetic empty PLAY targets retain the same native pickup inset.
+///
+/// Only the requested empty piles are proved; a legally solved complete deal supplies
+/// their empty state. Composed pixels establish host geometry, never guest effects.
+#[test]
+fn freecell_3119_native_empty_play_targets_preserve_pickup_offset() {
+    let original = crate::capture::decode_png(include_bytes!(
+        "../../../../tests/fixtures/freecell-FC13.png"
+    ))
+    .unwrap();
+    let mut empty = original.clone();
+    let felt = original.as_view().unwrap().pixel_rgb(174, 120).unwrap();
+    for x in crate::freecell::PLAY_X {
+        for y in 331..947 {
+            for pixel_x in x..x + 137 {
+                let offset = usize::try_from(y).unwrap() * empty.stride
+                    + usize::try_from(pixel_x).unwrap() * 4;
+                empty.pixels[offset..offset + 4].copy_from_slice(&[felt[0], felt[1], felt[2], 255]);
+            }
+        }
+        fixture_blit(
+            &mut empty,
+            &original,
+            PixelRect::new(166, 112, 137, 182),
+            (x, 331),
+        );
+    }
+    let report = report();
+    let mut parent = Position::initial(&report.deal);
+    for _ in 0..52 {
+        let Some(action) = parent.automatic() else {
+            break;
+        };
+        parent = parent.apply(action).unwrap();
+    }
+    assert_eq!(parent.foundations(), &[13; 4]);
+    let piles = std::array::from_fn::<_, 8, _>(|n| Pile::Cascade(n as u8));
+    let geometry = position::verify_piles(&empty, &parent, &piles, &mut || Ok(())).unwrap();
+    for (pile, x) in piles
+        .into_iter()
+        .zip([233, 425, 618, 810, 1003, 1195, 1388, 1580])
+    {
+        let anchor = PixelPoint::new(x, 351);
+        assert_eq!(geometry.point(pile).unwrap(), anchor);
+        assert_eq!(
+            diagnostic_abs_path(PixelPoint::new(233, 722), anchor, pile, (1920, 1080)).unwrap()[2],
+            anchor
+        );
+    }
+}
+
+
+/// Test Native's transport boundary, not a search result or guest movement effect.
+fn exercise(case: Case, diagnostic_step: bool) {
+    exercise_with_cadence(case, diagnostic_step, false);
+}
+
+
+/// Optionally measure bounded frame waits through the exact active native owner.
+fn exercise_with_cadence(case: Case, diagnostic_step: bool, verify_cadence: bool) {
     let root = Socket::new();
     let mut id = plan(31);
     id.context = ControllerContext::new(
@@ -405,22 +590,46 @@ fn exercise_with_timing(
         SolvingStrategy::ShortestPath,
         7,
     );
-    let original = crate::capture::decode_png(include_bytes!(
-        "../../../../tests/fixtures/freecell-FC13.png"
-    ))
-    .unwrap();
-    let deal = crate::freecell_recon::recognise(
-        &original,
-        Metadata::new("native-bridge", "FC13", "unit").unwrap(),
-    )
-    .unwrap();
-    let parent = Position::initial(&deal);
-    let mut action = RecordedMove {
-        card_id: *parent.column(0).unwrap().last().unwrap(),
-        from: Pile::Cascade(0),
-        to: Pile::Cell(0),
-        is_auto: false,
+    let (original, report, parent, mut action) = if case == Case::ReturnedJackToCellFour {
+        returned_jack_fixture()
+    } else if case == Case::CompleteAfterDrag {
+        let original = crate::capture::decode_png(include_bytes!(
+            "../../../../tests/fixtures/freecell-challenge-highlight-20261109.png"
+        ))
+        .unwrap();
+        let deal = crate::freecell_recon::recognise(
+            &original,
+            Metadata::new("native-bridge", "challenge", "unit").unwrap(),
+        )
+        .unwrap();
+        let parent = Position::initial(&deal);
+        let action = RecordedMove {
+            card_id: *parent.column(0).unwrap().last().unwrap(),
+            from: Pile::Cascade(0),
+            to: Pile::Cell(0),
+            is_auto: false,
+        };
+        (original, prefix_report(deal), parent, action)
+    } else {
+        let original = crate::capture::decode_png(include_bytes!(
+            "../../../../tests/fixtures/freecell-FC13.png"
+        ))
+        .unwrap();
+        let deal = crate::freecell_recon::recognise(
+            &original,
+            Metadata::new("native-bridge", "FC13", "unit").unwrap(),
+        )
+        .unwrap();
+        let parent = Position::initial(&deal);
+        let action = RecordedMove {
+            card_id: *parent.column(0).unwrap().last().unwrap(),
+            from: Pile::Cascade(0),
+            to: Pile::Cell(0),
+            is_auto: false,
+        };
+        (original, prefix_report(deal), parent, action)
     };
+    let deal = report.deal.clone();
     if case == Case::PlayDestination {
         action = (0..8)
             .flat_map(|from| (0..8).map(move |to| (from, to)))
@@ -436,7 +645,17 @@ fn exercise_with_timing(
             .expect("native fixture has a legal PLAY transfer");
     }
     parent.apply(action).unwrap();
-    let geometry = position::verify(&original, &parent, &mut || Ok(())).unwrap();
+    let geometry = if case == Case::ReturnedJackToCellFour {
+        position::verify_piles(
+            &original,
+            &parent,
+            &[action.from, action.to],
+            &mut || Ok(()),
+        )
+    } else {
+        position::verify(&original, &parent, &mut || Ok(()))
+    }
+    .unwrap();
     let from = geometry.point(action.from).unwrap();
     let to = geometry.point(action.to).unwrap();
     let boundary_case = matches!(case, Case::CompleteAfterDrag | Case::UnsupportedAfterDrag);
@@ -448,30 +667,19 @@ fn exercise_with_timing(
         frames.insert(0, V3Reply::Frame(original.clone()));
     }
     if boundary_case {
-        let after_drag = if case == Case::CompleteAfterDrag {
-            // Shared terminal appearance is a local mock, not live Free Cell evidence.
-            crate::capture::decode_png(include_bytes!(
-                "../../../../tests/fixtures/pyramid-objectives/fours-complete.png"
+        if case == Case::CompleteAfterDrag {
+            let after_drag = crate::capture::decode_png(include_bytes!(
+                "../../../../tests/fixtures/pyramid-objectives/boards-complete-continue.png"
             ))
-            .unwrap()
+            .unwrap();
+            frames.push(V3Reply::Frame(after_drag.clone()));
+            frames.push(V3Reply::Frame(after_drag));
         } else {
-            let mut frame = original.clone();
-            for pixel in frame.pixels.as_chunks_mut::<4>().0 {
+            let mut after_drag = original.clone();
+            for pixel in after_drag.pixels.as_chunks_mut::<4>().0 {
                 *pixel = [0, 0, 0, 255];
             }
-            frame
-        };
-        frames.push(V3Reply::Frame(after_drag));
-    }
-    if case.relative_probe() {
-        // Original binding, two independent parent confirmations, fresh pre-input parent.
-        frames = (0..4).map(|_| V3Reply::Frame(original.clone())).collect();
-        if case == Case::RelativeCaptureFailure {
-            frames.push(V3Reply::Truncated);
-        } else if !matches!(case, Case::RelativeStopAfterAck | Case::StopDuringHeldWait) {
-            let mut after = original.clone();
-            after.pixels[..4].copy_from_slice(&[17, 29, 43, 255]);
-            frames.push(V3Reply::Frame(after));
+            frames.push(V3Reply::Frame(after_drag));
         }
     }
     let count = frames.len();
@@ -491,71 +699,29 @@ fn exercise_with_timing(
     let capture_scope = tcp_capture::WorkerCaptureScope::install(&sink);
     sink.set_capture_context(Some(id.context.clone()));
     latest.reconnaissance.select(&id.context, &cancel).unwrap();
-    if !case.relative_probe() {
-        latest
-            .reconnaissance
-            .queue_reconnaissance(&id.context, &cancel, || Ok(()))
-            .unwrap();
-    }
     latest
-        .freecell_route
-        .lock()
-        .unwrap()
-        .prepare(id.clone(), prefix_report(deal.clone()))
+        .reconnaissance
+        .queue_reconnaissance(&id.context, &cancel, || Ok(()))
         .unwrap();
-    // Keep the real handle alive: dropping it requests STOP even without a worker thread.
-    let mut queued_handle = None;
-    let mut command_scope = None;
-    let mut drag_mode = route::DragMode::Absolute;
-    let run_id = if case.relative_probe() {
-        let (command_tx, command_rx) = mpsc::channel();
-        let (_, event_rx) = mpsc::channel();
-        let handle = WorkerHandle {
-            command_tx,
-            event_rx,
-            latest_frame: latest.clone(),
-            join: None,
-            cancel_requested: Arc::clone(&cancel),
-            shutdown_requested: Arc::new(AtomicBool::new(false)),
-        };
-        let reserved = handle
-            .execute_freecell_route(
-                id.clone(),
-                true,
-                route::AutoMode::ExecuteRecorded,
-                route::DragMode::Relative,
-                Duration::ZERO,
-            )
-            .unwrap();
-        let command = command_rx.try_recv().unwrap();
-        command_scope = Some(crate::worker::qmp_wire::CommandScope::install(&command));
-        let WorkerCommand::ExecuteFreeCellRoute {
-            plan: queued_plan,
-            run_id: queued_run,
-            single_step,
-            drag_mode: queued_mode,
-            drag_timing: queued_timing,
-            settle,
-        } = command
-        else {
-            panic!("expected one exact Free Cell playback command");
-        };
-        assert_eq!(queued_plan, id);
-        assert_eq!(queued_run, reserved);
-        assert!(single_step);
-        assert_eq!(settle, Duration::ZERO);
-        assert_eq!(queued_mode, route::DragMode::Relative);
-        assert_eq!(queued_timing, route::DiagnosticDragTiming::TwoSeconds);
-        drag_mode = queued_mode;
-        assert!(matches!(
-            command_rx.try_recv(),
-            Err(mpsc::TryRecvError::Empty)
-        ));
-        queued_handle = Some(handle);
-        reserved
-    } else {
-        latest.freecell_route.lock().unwrap().reserve(&id).unwrap()
-    };
+    {
+        let mut store = latest.freecell_route.lock().unwrap();
+        store.prepare(id.clone(), report).unwrap();
+        if case == Case::ReturnedJackToCellFour {
+            let cached = store.cached.as_ref().unwrap();
+            let (moves, _) = recorded_route(&cached.report.outcome).unwrap();
+            assert_eq!(moves.len(), 40);
+            assert_eq!(moves[39], action);
+            // Transport seam: replay owns this parent; no fresh original binding is claimed.
+            let mut state = State::new(&deal);
+            state.position = parent;
+            state.cursor = 39;
+            store.live = Some(Live {
+                state,
+                mode: route::AutoMode::ObserveGame,
+            });
+        }
+    }
+    let run_id = latest.freecell_route.lock().unwrap().reserve(&id).unwrap();
     let server = qmp_server(
         &root.path(),
         case,
@@ -583,139 +749,41 @@ fn exercise_with_timing(
         counts: (0, 0),
         settle: Duration::ZERO,
         completion_bound: false,
+        challenge_mode: false,
         completion_observed: false,
         diagnostic_step,
-        drag_mode,
-        drag_timing,
-        probe_delivered: false,
-        probe_evidence: None,
     };
     if bind_initial {
         native.bind(&deal).unwrap();
         assert!(native.completion_bound);
+        assert_native_preview(&latest, native.latest.as_ref().unwrap(), &id.context);
     }
-    let retired_seen = Arc::new(AtomicBool::new(false));
-    let retired_flag = Arc::clone(&retired_seen);
-    let stopped_latest = latest.clone();
-    let stopped_context = id.context.clone();
-    let stopped_cancel = Arc::clone(&cancel);
+    let planned_gesture = Arc::new(Mutex::new(None));
+    let planned_trace = Arc::clone(&planned_gesture);
+    let waits = Arc::new(Mutex::new(Vec::new()));
+    let wait_trace = Arc::clone(&waits);
     let _probe_trace = crate::single_step_telemetry::Scope::freecell(
         json!({"native_case":format!("{case:?}")}),
         move |line| {
-            if line.contains("\"event\":\"motion-probe-input-retired\"") {
-                let store = stopped_latest.freecell_route.lock().unwrap();
-                assert!(store.live.is_none() && store.running.is_some());
-                drop(store);
-                retired_flag.store(true, Ordering::SeqCst);
-                if case == Case::RelativeStopAfterAck {
-                    stopped_latest
-                        .reconnaissance
-                        .operator_stop(&stopped_context, &stopped_cancel);
-                }
+            let event: Value =
+                serde_json::from_str(line.strip_prefix("FREE_CELL ").unwrap()).unwrap();
+            if event["detail"]["event"] == "transport-attempt"
+                && event["detail"]["operation"] == "diagnostic-drag"
+            {
+                *planned_trace.lock().unwrap() = Some(event["detail"]["details"].clone());
+            }
+            if event["detail"]["event"] == "playback-wait" {
+                wait_trace.lock().unwrap().push(event["detail"].clone());
             }
         },
     );
-    let mut probe_state = State::new(&deal);
-    let result = if case.relative_probe() {
-        route::movement_probe(
-            &mut probe_state,
-            &deal,
-            &[action],
-            route::AutoMode::ExecuteRecorded,
-            &mut native,
-        )
-        .map(|completion| match completion {
-            route::Completion::MovementProbe => route::TransferOutcome::MovementProbe,
-            route::Completion::ChallengeComplete => route::TransferOutcome::ChallengeComplete,
-            other => panic!("unexpected probe completion {other:?}"),
-        })
-    } else {
-        native.transfer(&parent, action)
-    };
+    let result = native.transfer(&parent, action);
     match case {
-        Case::Both | Case::PlayDestination | Case::Relative => {
+        Case::Both | Case::PlayDestination | Case::ReturnedJackToCellFour => {
             let outcome = result.unwrap();
-            assert_eq!(
-                outcome,
-                if case.relative_probe() {
-                    route::TransferOutcome::MovementProbe
-                } else {
-                    route::TransferOutcome::Delivered
-                }
-            );
+            assert_eq!(outcome, route::TransferOutcome::Delivered);
             assert_eq!(native.frozen, Some((action, from, to)));
             assert_eq!(native.counts, (1, 1));
-            if case.relative_probe() {
-                assert!(native.completion_bound);
-                assert_eq!(
-                    native.capture_serial, 5,
-                    "binding, two readiness frames, pre-input parent and one retired after-frame"
-                );
-                assert_eq!(native.drag_mode, route::DragMode::Relative);
-                assert!(!native.completion_observed);
-                let store = latest.freecell_route.lock().unwrap();
-                assert_eq!(store.running.as_ref(), Some(&(id.clone(), run_id)));
-                assert!(store.live.is_none() && store.progress.is_none());
-                assert_eq!(probe_state.cursor, 0);
-                assert!(route::same_physical(&probe_state.position, &parent));
-                assert!(retired_seen.load(Ordering::SeqCst));
-                drop(store);
-                let receipt = native.probe_evidence.as_ref().unwrap();
-                assert_eq!(receipt.capture_serial, 5);
-                let directory = receipt.directory.as_ref().unwrap();
-                let retained = crate::capture::decode_png(
-                    &std::fs::read(directory.join("last-observed.png")).unwrap(),
-                )
-                .unwrap();
-                assert_eq!(retained.pixels, native.latest.as_ref().unwrap().pixels);
-                assert_eq!(&retained.pixels[..4], &[17, 29, 43, 255]);
-                let metadata: Value = serde_json::from_slice(
-                    &std::fs::read(directory.join("error-state.json")).unwrap(),
-                )
-                .unwrap();
-                assert_eq!(
-                    metadata["details"]["artifact_kind"],
-                    "successful motion-probe acquisition evidence"
-                );
-                latest
-                    .freecell_route
-                    .lock()
-                    .unwrap()
-                    .finish(
-                        &id,
-                        run_id,
-                        Some(probe_state),
-                        Some(route::Completion::MovementProbe),
-                    )
-                    .unwrap();
-                assert!(!latest.freecell_route.lock().unwrap().available(&id));
-            }
-        }
-        Case::RelativeCaptureFailure | Case::RelativeStopAfterAck => {
-            let error = result.unwrap_err();
-            assert_eq!(native.counts, (1, 1));
-            assert!(native.probe_delivered && retired_seen.load(Ordering::SeqCst));
-            assert_eq!(native.capture_serial, 4);
-            assert_eq!(native.details()["motion_probe_delivered"], true);
-            assert!(native.probe_evidence.is_none());
-            assert_eq!(probe_state.cursor, 0);
-            if case == Case::RelativeStopAfterAck {
-                assert_eq!(
-                    trace.termination(true, true),
-                    crate::pyramid_workflow_model::RunTermination::OperatorStopped
-                );
-            } else {
-                assert!(!error.is_empty());
-            }
-            let mut store = latest.freecell_route.lock().unwrap();
-            assert!(store.live.is_none());
-            assert_eq!(store.running.as_ref(), Some(&(id.clone(), run_id)));
-            if case == Case::RelativeStopAfterAck {
-                // The real worker's final authority check invalidates STOP before finish.
-                store.revoke();
-            }
-            store.finish(&id, run_id, None, None).unwrap();
-            assert_eq!(store.available(&id), case == Case::RelativeCaptureFailure);
         }
         Case::Stop => {
             assert!(result.is_err());
@@ -754,10 +822,15 @@ fn exercise_with_timing(
                         position: parent.apply(action).unwrap()
                     }])
                     .unwrap(),
-                route::Observation::ChallengeComplete
+                route::Observation::Unmatched
             ));
+            assert!(!native.completion_observed);
+            assert!(native.first.is_some());
+            assert!(native.resolve_challenge_complete().unwrap());
+            assert_eq!(native.capture_serial, 4);
             assert!(native.completion_observed);
             assert_eq!(native.counts, (1, 1));
+            assert_native_preview(&latest, native.latest.as_ref().unwrap(), &id.context);
             let store = latest.freecell_route.lock().unwrap();
             assert!(store.live.is_none());
             assert_eq!(store.running.as_ref(), Some(&(id.clone(), run_id)));
@@ -780,6 +853,7 @@ fn exercise_with_timing(
             assert!(native.first_rejection.is_some() && native.last_rejection.is_some());
             assert!(!native.completion_observed);
             assert_eq!(native.counts, (1, 1));
+            assert_native_preview(&latest, native.latest.as_ref().unwrap(), &id.context);
             assert_eq!(
                 latest
                     .freecell_route
@@ -793,14 +867,11 @@ fn exercise_with_timing(
                 0
             );
         }
-        Case::StopDuringHeldWait | Case::AbsoluteStopDuringHeldWait => {
+        Case::AbsoluteStopDuringHeldWait => {
             assert!(result.is_err());
             assert!(cancel.load(Ordering::SeqCst));
             assert_eq!(native.counts, (1, 0));
-            assert_eq!(
-                native.capture_serial,
-                if case.relative_probe() { 4 } else { 1 }
-            );
+            assert_eq!(native.capture_serial, 1);
             assert!(!native.completion_observed);
             assert_eq!(
                 trace.termination(true, true),
@@ -820,7 +891,41 @@ fn exercise_with_timing(
             assert!(!store.available(&id));
         }
     }
-    if !case.relative_probe() && case != Case::Both && !case.stops_during_held_wait() {
+    if verify_cadence {
+        assert_eq!(case, Case::Both);
+        for configured_ms in [750, 40, 0] {
+            native.settle = Duration::from_millis(configured_ms);
+            native.post_transfer_wait().unwrap();
+            native.confirmation_wait().unwrap();
+            native.settle().unwrap();
+        }
+        let waits = waits.lock().unwrap();
+        assert_eq!(waits.len(), 9);
+        for (wait, (configured_ms, chosen_ms)) in waits.iter().zip([
+            (750, 200),
+            (750, 100),
+            (750, 750),
+            (40, 40),
+            (40, 40),
+            (40, 40),
+            (0, 0),
+            (0, 0),
+            (0, 0),
+        ]) {
+            assert_eq!(wait["configured_ms"], configured_ms);
+            assert_eq!(wait["chosen_ms"], chosen_ms);
+            assert!(wait["elapsed_us"].as_u64().unwrap() >= chosen_ms * 1_000);
+            assert_eq!(wait["additional_captures"], 0);
+            assert_eq!(wait["interrupted"], false);
+        }
+        assert_eq!(native.capture_serial, 1);
+        assert_eq!(native.counts, (1, 1));
+        assert!(
+            latest.take().is_none(),
+            "waiting cannot manufacture preview frames"
+        );
+    }
+    if case != Case::Both && case != Case::AbsoluteStopDuringHeldWait {
         let mut store = latest.freecell_route.lock().unwrap();
         if case == Case::Stop {
             store.revoke();
@@ -853,21 +958,11 @@ fn exercise_with_timing(
             "human-monitor-command",
             "query-mice",
             "input-send-event",
+            "query-mice",
+            "input-send-event",
         ]);
-        if case.relative_probe() {
-            expected.extend([
-                "query-mice",
-                "query-mice",
-                "human-monitor-command",
-                "query-mice",
-            ]);
-        }
-        expected.extend(["query-mice", "input-send-event"]);
-        if !case.stops_during_held_wait() {
-            expected.extend(std::iter::repeat_n(
-                "input-send-event",
-                if case.relative_probe() { 11 } else { 5 },
-            ));
+        if case != Case::AbsoluteStopDuringHeldWait {
+            expected.extend(std::iter::repeat_n("input-send-event", 4));
         } else {
             expected.extend([
                 "human-monitor-command",
@@ -878,9 +973,6 @@ fn exercise_with_timing(
                 "query-mice",
                 "input-send-event",
             ]);
-        }
-        if case.relative_probe() && !case.stops_during_held_wait() {
-            expected.extend(["query-mice", "human-monitor-command", "query-mice"]);
         }
     } else if matches!(case, Case::Both | Case::DownError) {
         expected.extend(["input-send-event"; 4]);
@@ -893,25 +985,7 @@ fn exercise_with_timing(
         .iter()
         .filter(|r| r["execute"] == "input-send-event")
         .collect();
-    if case.relative_probe() && !case.stops_during_held_wait() {
-        assert_eq!(
-            inputs.len(),
-            13,
-            "one source, one DOWN, ten tiny REL updates, one UP; no extra click"
-        );
-        movement(inputs[0], from);
-        button(inputs[1], true);
-        for request in &inputs[2..12] {
-            assert_eq!(
-                request["arguments"],
-                json!({"events":[
-                    {"type":"rel","data":{"axis":"x","value":(to.x-from.x).signum()*2}},
-                    {"type":"rel","data":{"axis":"y","value":(to.y-from.y).signum()*2}}
-                ]})
-            );
-        }
-        button(inputs[12], false);
-    } else if case.stops_during_held_wait() {
+    if case == Case::AbsoluteStopDuringHeldWait {
         assert_eq!(inputs.len(), 4);
         movement(inputs[0], from);
         button(inputs[1], true);
@@ -923,19 +997,26 @@ fn exercise_with_timing(
             case,
             Case::Both
                 | Case::PlayDestination
+                | Case::ReturnedJackToCellFour
                 | Case::CompleteAfterDrag
                 | Case::UnsupportedAfterDrag
         )
     {
         assert_eq!(
             inputs.len(),
-            7,
-            "source then one held DOWN/source-lift/midpoint/destination-lift/destination/UP gesture; no extra click"
+            6,
+            "source then one held DOWN/source-lift/midpoint/destination/UP gesture; no extra click"
         );
-        if case != Case::PlayDestination {
+        if case == Case::ReturnedJackToCellFour {
+            assert_eq!(from, PixelPoint::new(233, 724));
+            assert_eq!(to, PixelPoint::new(758, 132));
+            movement(inputs[2], PixelPoint::new(233, 679));
+            movement(inputs[3], PixelPoint::new(495, 428));
+            movement(inputs[4], PixelPoint::new(758, 132));
+        } else if case != Case::PlayDestination {
             assert_eq!(from.x, 233);
             assert!((668..=673).contains(&from.y));
-            assert_eq!(to, PixelPoint::new(234, 203));
+            assert_eq!(to, PixelPoint::new(181, 132));
         } else {
             assert!(matches!(action.to, Pile::Cascade(_)));
         }
@@ -946,9 +1027,20 @@ fn exercise_with_timing(
             inputs[3],
             PixelPoint::new((from.x + to.x) / 2, (from.y + to.y) / 2),
         );
-        movement(inputs[4], PixelPoint::new(to.x, to.y - 45));
-        movement(inputs[5], to);
-        button(inputs[6], false);
+        movement(inputs[4], to);
+        button(inputs[5], false);
+        let planned = planned_gesture.lock().unwrap();
+        let planned = planned.as_ref().unwrap();
+        assert_eq!(planned["planned_input_requests"], 6);
+        assert_eq!(planned["planned_held_motion_updates"], 3);
+        assert_eq!(
+            planned["source_acknowledgement_minimum_wait_ms"],
+            json!(crate::parameters::FREECELL_ROUTE_ABS_GESTURE_INTERVAL.as_millis())
+        );
+        assert_eq!(
+            planned["held_phase_minimum_wait_ms"],
+            json!(crate::parameters::FREECELL_ROUTE_ABS_GESTURE_INTERVAL.as_millis())
+        );
     } else if case == Case::Both || case == Case::DownError {
         assert_eq!(inputs.len(), if case == Case::Both { 4 } else { 6 });
         movement(inputs[0], from);
@@ -961,9 +1053,13 @@ fn exercise_with_timing(
         assert!(inputs.is_empty());
     }
     if diagnostic_step
-        && (matches!(case, Case::Both | Case::PlayDestination)
-            || case.relative_probe()
-            || case.stops_during_held_wait())
+        && matches!(
+            case,
+            Case::Both
+                | Case::PlayDestination
+                | Case::ReturnedJackToCellFour
+                | Case::AbsoluteStopDuringHeldWait
+        )
     {
         let mut input_connections = Vec::new();
         let writes: Vec<_> = receiver
@@ -978,23 +1074,6 @@ fn exercise_with_timing(
                 };
                 let raw = packet_line.lines().last().unwrap();
                 let packet: Value = serde_json::from_str(raw).unwrap();
-                if case.relative_probe() && !case.stops_during_held_wait() {
-                    let metadata: Value =
-                        serde_json::from_str(metadata.strip_prefix("QMP_WIRE ").unwrap()).unwrap();
-                    assert_eq!(metadata["owner"]["diagnostic_drag_mode"], "Relative");
-                    assert_eq!(metadata["owner"]["run_id"], run_id);
-                    assert_eq!(metadata["owner"]["request_id"], id.request_id);
-                    assert_eq!(metadata["connection_kind"], "primary");
-                    let observed = requests
-                        .iter()
-                        .find(|request| request["id"] == packet["id"])
-                        .unwrap();
-                    assert_eq!(
-                        &packet, observed,
-                        "readable packet is the one read by the peer"
-                    );
-                    assert_eq!(raw, serde_json::to_string(observed).unwrap());
-                }
                 (packet["execute"] == "input-send-event").then(|| {
                     let metadata: Value =
                         serde_json::from_str(metadata.strip_prefix("QMP_WIRE ").unwrap()).unwrap();
@@ -1006,54 +1085,38 @@ fn exercise_with_timing(
             .collect();
         assert_eq!(
             writes.len(),
-            if case.stops_during_held_wait() {
+            if case == Case::AbsoluteStopDuringHeldWait {
                 4
-            } else if case.relative_probe() {
-                13
             } else {
-                7
+                6
             }
         );
-        let abs_wait_us = match drag_timing {
-            route::DiagnosticDragTiming::TwoSeconds => 2_000_000,
-            route::DiagnosticDragTiming::HalfSecond => 500_000,
-        };
-        if case.stops_during_held_wait() {
-            let source_wait_us = if case.relative_probe() {
-                2_000_000
-            } else {
-                abs_wait_us
-            };
+        let abs_wait_us =
+            u64::try_from(crate::parameters::FREECELL_ROUTE_ABS_GESTURE_INTERVAL.as_micros())
+                .unwrap();
+        if case == Case::AbsoluteStopDuringHeldWait {
             assert!(
-                writes[1] - writes[0] >= source_wait_us,
+                writes[1] - writes[0] >= abs_wait_us,
                 "source-to-DOWN pacing completes before STOP in the held wait"
             );
             assert_eq!(
                 input_connections,
                 ["primary", "primary", "primary", "release-recovery"]
             );
-        } else if case.relative_probe() {
-            for pair in writes.windows(2) {
-                assert!(
-                    pair[1] - pair[0] >= 2_000_000,
-                    "each REL held-drag phase has the requested two-second wait"
-                );
-            }
         } else {
             for pair in writes.windows(2) {
                 assert!(
                     pair[1] - pair[0] >= abs_wait_us,
-                    "all six ABS intervals use the frozen selected wait"
+                    "all five ABS intervals use the fixed 100ms wait"
                 );
             }
             assert!(
-                writes[6] - writes[0] >= 6 * abs_wait_us,
-                "ABS source through release includes all six selected waits"
+                writes[5] - writes[0] >= 5 * abs_wait_us,
+                "ABS source through release includes all five selected intervals"
             );
         }
     }
-    drop(command_scope);
-    drop(queued_handle);
+    let _ = receiver.try_iter().count();
 }
 
 
@@ -1062,6 +1125,17 @@ fn exercise_with_timing(
 #[ignore = "requires local AF_UNIX and TCP sockets"]
 fn freecell_312_native_compound_capture_probe_input_order() {
     exercise(Case::Both, false);
+}
+
+
+/// The retained returned JC sends the corrected six-event ABS packet through local peers.
+///
+/// The authentic 39-edge parent fixes source(233,724), lift(233,679), midpoint(495,428)
+/// and CELL4 destination(758,132). Acknowledgements establish delivery only.
+#[test]
+#[ignore = "requires local AF_UNIX and TCP sockets"]
+fn freecell_3119_native_returned_jc_to_cell4_keeps_pickup_offset_and_exact_path() {
+    exercise(Case::ReturnedJackToCellFour, true);
 }
 
 
@@ -1186,12 +1260,9 @@ fn freecell_3114_native_sixes_binds52_and_proves_only_jh_source_and_empty_cell()
         counts: (0, 0),
         settle: Duration::ZERO,
         completion_bound: false,
+        challenge_mode: false,
         completion_observed: false,
         diagnostic_step: false,
-        drag_mode: route::DragMode::Absolute,
-        drag_timing: route::DiagnosticDragTiming::TwoSeconds,
-        probe_delivered: false,
-        probe_evidence: None,
     };
     native.bind(&deal).unwrap();
     assert!(native.completion_bound);
@@ -1205,7 +1276,7 @@ fn freecell_3114_native_sixes_binds52_and_proves_only_jh_source_and_empty_cell()
     assert_eq!(frozen, action);
     assert_eq!(from.x, 1195);
     assert!((615..=620).contains(&from.y));
-    assert_eq!(to, PixelPoint::new(234, 203));
+    assert_eq!(to, PixelPoint::new(181, 132));
     assert_eq!(native.capture_serial, 2);
     assert_eq!(native.counts, (1, 1));
     assert!(!native.completion_observed);
@@ -1245,155 +1316,93 @@ fn freecell_3114_native_sixes_binds52_and_proves_only_jh_source_and_empty_cell()
 }
 
 
-/// Both explicit ABS timings are copied into one queued command and remain frozen.
+/// A single playback request is frozen with its owner before queueing; duplicate work is refused.
 #[test]
-fn freecell_3112_each_abs_timing_is_frozen_before_queue() {
-    for timing in [
-        route::DiagnosticDragTiming::TwoSeconds,
-        route::DiagnosticDragTiming::HalfSecond,
-    ] {
-        let (command_tx, command_rx) = mpsc::channel();
-        let (_, event_rx) = mpsc::channel();
-        let latest_frame = LatestFrameSlot::default();
-        let id = plan(3112);
-        latest_frame
-            .freecell_route
-            .lock()
-            .unwrap()
-            .prepare(id.clone(), report())
-            .unwrap();
-        let handle = WorkerHandle {
-            command_tx,
-            event_rx,
-            latest_frame,
-            join: None,
-            cancel_requested: Arc::new(AtomicBool::new(false)),
-            shutdown_requested: Arc::new(AtomicBool::new(false)),
-        };
-        assert!(
-            handle
-                .execute_freecell_route_with_timing(
-                    id.clone(),
-                    true,
-                    route::AutoMode::ObserveGame,
-                    route::DragMode::Relative,
-                    route::DiagnosticDragTiming::HalfSecond,
-                    Duration::ZERO,
-                )
-                .unwrap_err()
-                .contains("requires ABS")
-        );
-        assert!(handle.freecell_route_available(&id));
-        assert!(matches!(
-            command_rx.try_recv(),
-            Err(mpsc::TryRecvError::Empty)
-        ));
-        let run_id = handle
-            .execute_freecell_route_with_timing(
-                id.clone(),
-                true,
-                route::AutoMode::ObserveGame,
-                route::DragMode::Absolute,
-                timing,
-                Duration::ZERO,
-            )
-            .unwrap();
-        let command = command_rx.try_recv().unwrap();
-        let WorkerCommand::ExecuteFreeCellRoute {
-            plan,
-            run_id: queued_run,
-            single_step,
-            drag_mode,
-            drag_timing,
-            settle,
-        } = command
-        else {
-            panic!("expected one frozen ABS request")
-        };
-        assert_eq!(plan, id);
-        assert_eq!(queued_run, run_id);
-        assert!(single_step);
-        assert_eq!(drag_mode, route::DragMode::Absolute);
-        assert_eq!(drag_timing, timing);
-        assert_eq!(settle, Duration::ZERO);
-        let other_timing = match timing {
-            route::DiagnosticDragTiming::TwoSeconds => route::DiagnosticDragTiming::HalfSecond,
-            route::DiagnosticDragTiming::HalfSecond => route::DiagnosticDragTiming::TwoSeconds,
-        };
-        assert!(
-            handle
-                .execute_freecell_route_with_timing(
-                    id,
-                    true,
-                    route::AutoMode::ObserveGame,
-                    route::DragMode::Absolute,
-                    other_timing,
-                    Duration::ZERO,
-                )
-                .is_err()
-        );
-        assert_eq!(drag_timing, timing);
-        assert!(matches!(
-            command_rx.try_recv(),
-            Err(mpsc::TryRecvError::Empty)
-        ));
-    }
+fn freecell_3120_diagnostic_mode_is_frozen_before_queue_with_fixed_abs_interval() {
+    assert_eq!(
+        crate::parameters::FREECELL_ROUTE_ABS_GESTURE_INTERVAL,
+        Duration::from_millis(100)
+    );
+    let (command_tx, command_rx) = mpsc::channel();
+    let (_, event_rx) = mpsc::channel();
+    let latest_frame = LatestFrameSlot::default();
+    let id = plan(3120);
+    latest_frame
+        .freecell_route
+        .lock()
+        .unwrap()
+        .prepare(id.clone(), report())
+        .unwrap();
+    let handle = WorkerHandle {
+        command_tx,
+        event_rx,
+        latest_frame,
+        join: None,
+        cancel_requested: Arc::new(AtomicBool::new(false)),
+        shutdown_requested: Arc::new(AtomicBool::new(false)),
+    };
+    let run_id = handle
+        .execute_freecell_route(
+            id.clone(),
+            true,
+            route::AutoMode::ObserveGame,
+            Duration::ZERO,
+        )
+        .unwrap();
+    let WorkerCommand::ExecuteFreeCellRoute {
+        plan,
+        run_id: queued_run,
+        single_step,
+        settle,
+    } = command_rx.try_recv().unwrap()
+    else {
+        panic!("expected one frozen diagnostic request")
+    };
+    assert_eq!(plan, id);
+    assert_eq!(queued_run, run_id);
+    assert!(single_step);
+    assert_eq!(settle, Duration::ZERO);
+    assert!(
+        handle
+            .execute_freecell_route(id, true, route::AutoMode::ObserveGame, Duration::ZERO)
+            .is_err()
+    );
+    assert!(matches!(
+        command_rx.try_recv(),
+        Err(mpsc::TryRecvError::Empty)
+    ));
 }
 
 
-/// ABS diagnostics send seven exact packets with six two-second gaps at an upper slot.
+/// SINGLE STEP sends six exact packets with five 100-millisecond gaps at an upper slot.
 #[test]
 #[ignore = "requires local AF_UNIX and TCP sockets"]
-fn freecell_3116_native_abs_single_step_has_six_two_second_gaps_and_lift_midpoint_path() {
+fn freecell_3120_native_abs_single_step_has_five_100ms_gaps_and_lift_midpoint_path() {
     exercise(Case::Both, true);
 }
 
 
-/// The fast ABS button uses six half-second gaps and the same native lift/midpoint path.
+/// Only confirmation and first-effect waits are capped; retry and smaller settings survive.
 #[test]
 #[ignore = "requires local AF_UNIX and TCP sockets"]
-fn freecell_3116_native_abs_half_second_has_six_selected_gaps_and_lift_midpoint_path() {
-    exercise_with_timing(Case::Both, true, route::DiagnosticDragTiming::HalfSecond);
+fn freecell_3118_native_frame_cadence_keeps_retry_horizon_and_uses_no_extra_captures() {
+    exercise_with_cadence(Case::Both, true, true);
 }
 
 
 /// A native PLAY transfer preserves its proved corner as the final exact destination.
 #[test]
 #[ignore = "requires local AF_UNIX and TCP sockets"]
-fn freecell_3116_native_abs_play_target_has_six_half_second_gaps_and_lift_midpoint_path() {
-    exercise_with_timing(
-        Case::PlayDestination,
-        true,
-        route::DiagnosticDragTiming::HalfSecond,
-    );
+fn freecell_3120_native_abs_play_target_has_five_100ms_gaps_and_lift_midpoint_path() {
+    exercise(Case::PlayDestination, true);
 }
 
 
-/// STOP after ABS DOWN ACK permits only old/fresh safety UP before destination motion.
+/// STOP during the 100-millisecond held wait permits release recovery without destination motion.
 #[test]
 #[ignore = "requires local AF_UNIX and TCP sockets"]
-fn freecell_3112_native_abs_stop_during_held_wait_releases_without_motion_or_replay() {
+fn freecell_3120_native_abs_100ms_stop_releases_without_motion_or_replay() {
     exercise(Case::AbsoluteStopDuringHeldWait, true);
-}
-
-
-/// STOP during the half-second held wait permits release recovery without destination motion.
-#[test]
-#[ignore = "requires local AF_UNIX and TCP sockets"]
-fn freecell_3112_native_abs_half_second_stop_releases_without_motion_or_replay() {
-    exercise_with_timing(
-        Case::AbsoluteStopDuringHeldWait,
-        true,
-        route::DiagnosticDragTiming::HalfSecond,
-    );
-}
-
-
-/// A queued REL mode binds all52, selects one handler and restores it without another click.
-#[test]
-#[ignore = "requires local AF_UNIX and TCP sockets"]
-fn freecell_317_native_rel_single_step_uses_queued_mode_and_restores_without_extra_click() {
-    exercise(Case::Relative, true);
 }
 
 
@@ -1410,14 +1419,6 @@ fn freecell_317_native_post_drag_terminal_retires_without_extra_input() {
 #[ignore = "requires local AF_UNIX and TCP sockets"]
 fn freecell_317_native_post_drag_unknown_does_not_accept_effect() {
     exercise(Case::UnsupportedAfterDrag, true);
-}
-
-
-/// STOP during REL's intentional held wait permits only same-target old/fresh safety UP.
-#[test]
-#[ignore = "requires local AF_UNIX and TCP sockets"]
-fn freecell_3110_native_rel_stop_during_held_wait_releases_without_motion_or_restore() {
-    exercise(Case::StopDuringHeldWait, true);
 }
 
 
@@ -1510,7 +1511,7 @@ fn terminal_boundary(preinput: bool, unbound: bool, recording: Recording) {
     ))
     .unwrap();
     let terminal = crate::capture::decode_png(include_bytes!(
-        "../../../../tests/fixtures/pyramid-objectives/fours-complete.png"
+        "../../../../tests/fixtures/pyramid-objectives/boards-complete-continue.png"
     ))
     .unwrap();
     let deal = crate::freecell_recon::recognise(
@@ -1523,7 +1524,11 @@ fn terminal_boundary(preinput: bool, unbound: bool, recording: Recording) {
     let frames = if unbound {
         vec![V3Reply::Frame(terminal)]
     } else {
-        vec![V3Reply::Frame(original.clone()), V3Reply::Frame(terminal)]
+        vec![
+            V3Reply::Frame(original.clone()),
+            V3Reply::Frame(terminal.clone()),
+            V3Reply::Frame(terminal),
+        ]
     };
     let count = frames.len();
     let (address, tcp) = v3_server(vec![frames]);
@@ -1577,12 +1582,9 @@ fn terminal_boundary(preinput: bool, unbound: bool, recording: Recording) {
         counts: (0, 0),
         settle: Duration::ZERO,
         completion_bound: false,
+        challenge_mode: false,
         completion_observed: false,
         diagnostic_step: false,
-        drag_mode: route::DragMode::Absolute,
-        drag_timing: route::DiagnosticDragTiming::TwoSeconds,
-        probe_delivered: false,
-        probe_evidence: None,
     };
     if unbound {
         assert!(native.bind(&deal).is_err());
@@ -1603,7 +1605,7 @@ fn terminal_boundary(preinput: bool, unbound: bool, recording: Recording) {
             .unwrap();
     } else {
         native.bind(&deal).unwrap();
-        assert!(native.completion_bound);
+        assert!(native.completion_bound && native.challenge_mode);
         if preinput {
             let action = parent
                 .automatic()
@@ -1612,32 +1614,52 @@ fn terminal_boundary(preinput: bool, unbound: bool, recording: Recording) {
                 native.transfer(&parent, action).unwrap(),
                 route::TransferOutcome::ChallengeComplete
             );
-        } else if recording == Recording::InvalidDestination {
-            let error = native
-                .observe(&[Candidate {
-                    cursor: 0,
-                    position: parent,
-                }])
-                .unwrap_err();
-            assert_eq!(
-                error,
-                format!(
-                    "GAME WIN entry PNG could not be saved: Image diagnostics destination is not a real directory: {}; no further transition input authorised",
-                    images.display()
-                )
-            );
-            assert!(native.completion_observed);
-            assert_eq!(native.details()["game_reported_challenge_complete"], true);
+            assert!(native.first.is_some());
         } else {
-            assert_eq!(
-                native
-                    .observe(&[Candidate {
-                        cursor: 0,
-                        position: parent
-                    }])
-                    .unwrap(),
-                route::Observation::ChallengeComplete
-            );
+            native.stage(route::Stage {
+                cursor: 0,
+                total: 1,
+                mode: route::AutoMode::ObserveGame,
+                phase: "readiness",
+                observation: 1,
+                action: parent.automatic(),
+            });
+            if recording == Recording::InvalidDestination {
+                assert_eq!(
+                    native
+                        .observe(&[Candidate {
+                            cursor: 0,
+                            position: parent,
+                        }])
+                        .unwrap(),
+                    route::Observation::Unmatched
+                );
+                assert!(native.first.is_some());
+                assert!(!native.completion_observed);
+                let error = native.resolve_challenge_complete().unwrap_err();
+                assert_eq!(
+                    error,
+                    format!(
+                        "GAME WIN entry PNG could not be saved: Image diagnostics destination is not a real directory: {}; no further transition input authorised",
+                        images.display()
+                    )
+                );
+                assert!(native.completion_observed);
+                assert_eq!(native.details()["game_reported_challenge_complete"], true);
+            } else {
+                assert_eq!(
+                    native
+                        .observe(&[Candidate {
+                            cursor: 0,
+                            position: parent
+                        }])
+                        .unwrap(),
+                    route::Observation::Unmatched
+                );
+                assert!(native.first.is_some());
+                assert!(!native.completion_observed);
+                assert!(native.resolve_challenge_complete().unwrap());
+            }
         }
         assert!(native.active().is_err());
         let mut store = latest.freecell_route.lock().unwrap();
@@ -1695,6 +1717,249 @@ fn terminal_boundary(preinput: bool, unbound: bool, recording: Recording) {
 }
 
 
+/// Ordinary `FullBoard` mode ignores Challenge Complete even when `boards-complete-continue.png` appears.
+#[test]
+#[ignore = "requires local AF_UNIX and TCP sockets"]
+fn freecell_320_ordinary_game_ignores_challenge_complete_on_recognition_fault() {
+    let root = Socket::new();
+    let mut id = plan(3201);
+    id.context = ControllerContext::new(
+        root.path(),
+        GameMode::FreeCell,
+        SolvingStrategy::ShortestPath,
+        3201,
+    );
+    let original = crate::capture::decode_png(include_bytes!(
+        "../../../../tests/fixtures/freecell-FC13.png"
+    ))
+    .unwrap();
+    let terminal = crate::capture::decode_png(include_bytes!(
+        "../../../../tests/fixtures/pyramid-objectives/boards-complete-continue.png"
+    ))
+    .unwrap();
+    let deal = crate::freecell_recon::recognise(
+        &original,
+        Metadata::new(
+            "native320",
+            "ordinary",
+            crate::freecell_recon::objective::FULL_BOARD_SOURCE,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let parent = Position::initial(&deal);
+    let action = RecordedMove {
+        card_id: *parent.column(0).unwrap().last().unwrap(),
+        from: Pile::Cascade(0),
+        to: Pile::Cell(0),
+        is_auto: false,
+    };
+    let frames = vec![
+        V3Reply::Frame(original.clone()),
+        V3Reply::Frame(terminal.clone()),
+    ];
+    let (address, tcp) = v3_server(vec![frames]);
+    let _backend = TestCaptureBackend::tcp_mode(address, CaptureMode::PersistentBgrV3);
+    let latest = LatestFrameSlot::default();
+    let (events, _receiver) = mpsc::channel();
+    let sink = WorkerEventSink {
+        events,
+        latest_frame: latest.clone(),
+        capture_context: Mutex::new(None),
+    };
+    let cancel = Arc::new(AtomicBool::new(false));
+    let _recording = RecordingRestore(WORKER_IMAGE_DIAGNOSTICS.with(|slot| slot.replace(None)));
+    let cancel_scope = tcp_capture::CancellationScope::install(Arc::clone(&cancel));
+    let capture_scope = tcp_capture::WorkerCaptureScope::install(&sink);
+    sink.set_capture_context(Some(id.context.clone()));
+    latest.reconnaissance.select(&id.context, &cancel).unwrap();
+    latest
+        .reconnaissance
+        .queue_reconnaissance(&id.context, &cancel, || Ok(()))
+        .unwrap();
+    let run_id = {
+        let mut store = latest.freecell_route.lock().unwrap();
+        store
+            .prepare(id.clone(), prefix_report(deal.clone()))
+            .unwrap();
+        store.reserve(&id).unwrap()
+    };
+    let server = qmp_server(
+        &root.path(),
+        Case::Both,
+        latest.clone(),
+        id.context.clone(),
+        Arc::clone(&cancel),
+        original,
+    );
+    let trace = pyramid_stop::StopTrace::default();
+    let mut native = Native {
+        plan: &id,
+        run_id,
+        qmp: QmpClient::connect(&root.path()).unwrap(),
+        events: &sink,
+        cancel: &cancel,
+        trace: &trace,
+        latest: None,
+        first: None,
+        frozen: None,
+        stage: None,
+        capture_serial: 0,
+        first_rejection: None,
+        last_rejection: None,
+        counts: (0, 0),
+        settle: Duration::ZERO,
+        completion_bound: false,
+        challenge_mode: false,
+        completion_observed: false,
+        diagnostic_step: false,
+    };
+    native.bind(&deal).unwrap();
+    assert!(native.completion_bound && !native.challenge_mode);
+    let fault = native.transfer(&parent, action).unwrap_err();
+    assert!(!fault.is_empty());
+    assert!(!native.completion_observed);
+    assert_eq!(native.capture_serial, 2);
+    assert!(!native.resolve_challenge_complete().unwrap());
+    assert_eq!(native.capture_serial, 2);
+    assert_eq!(native.first.as_ref().unwrap().pixels, terminal.pixels);
+    latest
+        .freecell_route
+        .lock()
+        .unwrap()
+        .reject(&id, run_id)
+        .unwrap();
+    drop(native);
+    drop(capture_scope);
+    drop(cancel_scope);
+    let (_requests, probes) = server.join().unwrap();
+    assert_eq!(probes, 0);
+    assert_eq!(tcp.finish(), 2);
+}
+
+
+/// Negative 5-frame Challenge Complete polling preserves original recognition fault and `first`.
+#[test]
+#[ignore = "requires local AF_UNIX and TCP sockets"]
+fn freecell_320_negative_challenge_complete_poll_preserves_original_fault_and_first_frame() {
+    let root = Socket::new();
+    let mut id = plan(3202);
+    id.context = ControllerContext::new(
+        root.path(),
+        GameMode::FreeCell,
+        SolvingStrategy::ShortestPath,
+        3202,
+    );
+    let original = crate::capture::decode_png(include_bytes!(
+        "../../../../tests/fixtures/freecell-challenge-highlight-20261109.png"
+    ))
+    .unwrap();
+    let mut damaged = original.clone();
+    for y in 656..696_u32 {
+        for x in 219..248_u32 {
+            let offset = y as usize * damaged.stride + x as usize * 4;
+            damaged.pixels[offset..offset + 4].copy_from_slice(&[255, 255, 255, 255]);
+        }
+    }
+    let miss = crate::capture::decode_png(include_bytes!(
+        "../../../../tests/fixtures/pyramid-objectives/fours-complete-animating.png"
+    ))
+    .expect("fours-complete-animating png");
+    let deal = crate::freecell_recon::recognise(
+        &original,
+        Metadata::new("native320", "challenge-miss", "unit").unwrap(),
+    )
+    .unwrap();
+    let parent = Position::initial(&deal);
+    let action = RecordedMove {
+        card_id: *parent.column(0).unwrap().last().unwrap(),
+        from: Pile::Cascade(0),
+        to: Pile::Cell(0),
+        is_auto: false,
+    };
+    let mut frames = vec![
+        V3Reply::Frame(original.clone()),
+        V3Reply::Frame(damaged.clone()),
+    ];
+    for _ in 0..5 {
+        frames.push(V3Reply::Frame(miss.clone()));
+    }
+    let (address, tcp) = v3_server_with_read_timeout(vec![frames], Duration::from_secs(60));
+    let _backend = TestCaptureBackend::tcp_mode(address, CaptureMode::PersistentBgrV3);
+    let latest = LatestFrameSlot::default();
+    let (events, _receiver) = mpsc::channel();
+    let sink = WorkerEventSink {
+        events,
+        latest_frame: latest.clone(),
+        capture_context: Mutex::new(None),
+    };
+    let cancel = Arc::new(AtomicBool::new(false));
+    let _recording = RecordingRestore(WORKER_IMAGE_DIAGNOSTICS.with(|slot| slot.replace(None)));
+    let cancel_scope = tcp_capture::CancellationScope::install(Arc::clone(&cancel));
+    let capture_scope = tcp_capture::WorkerCaptureScope::install(&sink);
+    sink.set_capture_context(Some(id.context.clone()));
+    latest.reconnaissance.select(&id.context, &cancel).unwrap();
+    latest
+        .reconnaissance
+        .queue_reconnaissance(&id.context, &cancel, || Ok(()))
+        .unwrap();
+    let run_id = {
+        let mut store = latest.freecell_route.lock().unwrap();
+        store
+            .prepare(id.clone(), prefix_report(deal.clone()))
+            .unwrap();
+        store.reserve(&id).unwrap()
+    };
+    let server = qmp_server(
+        &root.path(),
+        Case::Both,
+        latest.clone(),
+        id.context.clone(),
+        Arc::clone(&cancel),
+        original,
+    );
+    let trace = pyramid_stop::StopTrace::default();
+    let mut native = Native {
+        plan: &id,
+        run_id,
+        qmp: QmpClient::connect(&root.path()).unwrap(),
+        events: &sink,
+        cancel: &cancel,
+        trace: &trace,
+        latest: None,
+        first: None,
+        frozen: None,
+        stage: None,
+        capture_serial: 0,
+        first_rejection: None,
+        last_rejection: None,
+        counts: (0, 0),
+        settle: Duration::ZERO,
+        completion_bound: false,
+        challenge_mode: false,
+        completion_observed: false,
+        diagnostic_step: false,
+    };
+    native.bind(&deal).unwrap();
+    assert!(native.completion_bound && native.challenge_mode);
+    let fault = native.transfer(&parent, action).unwrap_err();
+    assert!(fault.contains("PLAY 1"), "unexpected fault: {fault}");
+    assert!(!native.completion_observed);
+    assert_eq!(native.capture_serial, 7);
+    assert_eq!(native.first.as_ref().unwrap().pixels, damaged.pixels);
+    let mut store = latest.freecell_route.lock().unwrap();
+    assert!(store.live.is_some());
+    store.reject(&id, run_id).unwrap();
+    drop(store);
+    drop(native);
+    drop(capture_scope);
+    drop(cancel_scope);
+    let (_requests, probes) = server.join().unwrap();
+    assert_eq!(probes, 0);
+    assert_eq!(tcp.finish(), 7);
+}
+
+
 /// STOP after probing sends no input packet.
 #[test]
 #[ignore = "requires local AF_UNIX and TCP sockets"]
@@ -1716,22 +1981,6 @@ fn freecell_312_native_revoke_after_probe() {
 #[ignore = "requires local AF_UNIX and TCP sockets"]
 fn freecell_312_native_uncertain_down_release_only() {
     exercise(Case::DownError, false);
-}
-
-
-/// A post-ACK capture error cannot re-enable or replay the retired motion probe.
-#[test]
-#[ignore = "requires local AF_UNIX and TCP sockets"]
-fn freecell_318_native_probe_capture_failure_keeps_ack_and_retired_owner() {
-    exercise(Case::RelativeCaptureFailure, true);
-}
-
-
-/// STOP after successful delivery and retirement prevents the read-only after-frame.
-#[test]
-#[ignore = "requires local AF_UNIX and TCP sockets"]
-fn freecell_318_native_probe_stop_after_ack_skips_capture_and_all_further_input() {
-    exercise(Case::RelativeStopAfterAck, true);
 }
 
 
@@ -1981,7 +2230,6 @@ fn recorded_followup_boundary(parent_changed: bool) {
             id.clone(),
             true,
             route::AutoMode::ObserveGame,
-            route::DragMode::Absolute,
             Duration::ZERO,
         )
         .unwrap();
@@ -1991,8 +2239,6 @@ fn recorded_followup_boundary(parent_changed: bool) {
         plan,
         run_id: queued_run,
         single_step,
-        drag_mode,
-        drag_timing,
         settle,
     } = command
     else {
@@ -2001,7 +2247,6 @@ fn recorded_followup_boundary(parent_changed: bool) {
     assert_eq!(plan, id);
     assert_eq!(queued_run, run_id);
     assert!(single_step);
-    assert_eq!(drag_mode, route::DragMode::Absolute);
     let observations = Arc::new(Mutex::new(Vec::new()));
     let observed = Arc::clone(&observations);
     let _telemetry = crate::single_step_telemetry::Scope::freecell(
@@ -2022,15 +2267,7 @@ fn recorded_followup_boundary(parent_changed: bool) {
         Arc::clone(&cancel),
         fixture.initial,
     );
-    run(
-        plan,
-        queued_run,
-        single_step,
-        (drag_mode, drag_timing),
-        settle,
-        &sink,
-        &cancel,
-    );
+    run(plan, queued_run, single_step, settle, &sink, &cancel);
     let (context, progress, termination) = receiver
         .try_iter()
         .find_map(|event| match event.event {
@@ -2114,8 +2351,8 @@ fn recorded_followup_boundary(parent_changed: bool) {
         assert_eq!(requests.len(), 1);
     } else {
         assert_eq!(probes, 1);
-        assert_eq!(inputs.len(), 7);
-        let to = PixelPoint::new(1301, 203);
+        assert_eq!(inputs.len(), 6);
+        let to = PixelPoint::new(1248, 132);
         movement(inputs[0], from);
         button(inputs[1], true);
         movement(inputs[2], PixelPoint::new(from.x, from.y - 45));
@@ -2123,9 +2360,8 @@ fn recorded_followup_boundary(parent_changed: bool) {
             inputs[3],
             PixelPoint::new((from.x + to.x) / 2, (from.y + to.y) / 2),
         );
-        movement(inputs[4], PixelPoint::new(to.x, to.y - 45));
-        movement(inputs[5], to);
-        button(inputs[6], false);
+        movement(inputs[4], to);
+        button(inputs[5], false);
         assert_eq!(
             inputs
                 .iter()
@@ -2160,6 +2396,196 @@ fn freecell_319_native_single_step_auto_record_and_followup_stop_at_cursor_two()
 #[ignore = "requires local AF_UNIX and TCP sockets"]
 fn freecell_319_native_late_auto_before_transfer_refuses_stale_parent_without_input() {
     recorded_followup_boundary(true);
+}
+
+
+/// MULTI fixes ABS/100ms and proves both native transfers before accepting the endpoint.
+#[test]
+#[ignore = "requires local AF_UNIX and TCP sockets"]
+fn freecell_3120_native_multi_step_uses_two_verified_100ms_six_event_abs_gestures() {
+    let fixture = club_followup_fixture();
+    let report = prefix_report(fixture.report.deal.clone());
+    let (moves, _) = recorded_route(&report.outcome).unwrap();
+    assert_eq!(moves.len(), 2);
+    let parent = Position::initial(&report.deal);
+    let after_first = parent.apply(moves[0]).unwrap();
+    let sources = [
+        position::verify(&fixture.initial, &parent, &mut || Ok(()))
+            .unwrap()
+            .point(moves[0].from)
+            .unwrap(),
+        position::verify(&fixture.explicit, &after_first, &mut || Ok(()))
+            .unwrap()
+            .point(moves[1].from)
+            .unwrap(),
+    ];
+    let root = Socket::new();
+    let mut id = plan(3117);
+    id.context = ControllerContext::new(
+        root.path(),
+        GameMode::FreeCell,
+        SolvingStrategy::ShortestPath,
+        3117,
+    );
+    let mut frames: Vec<_> = (0..4)
+        .map(|_| V3Reply::Frame(fixture.initial.clone()))
+        .collect();
+    frames.extend((0..3).map(|_| V3Reply::Frame(fixture.explicit.clone())));
+    frames.extend((0..2).map(|_| V3Reply::Frame(fixture.combined.clone())));
+    let (address, tcp) = v3_server_with_read_timeout(vec![frames], Duration::from_secs(60));
+    let _backend = TestCaptureBackend::tcp_mode(address, CaptureMode::PersistentBgrV3);
+    let latest = LatestFrameSlot::default();
+    let (events, receiver) = mpsc::channel();
+    let sink = WorkerEventSink {
+        events,
+        latest_frame: latest.clone(),
+        capture_context: Mutex::new(None),
+    };
+    let cancel = Arc::new(AtomicBool::new(false));
+    let _wire_scope = crate::worker::qmp_wire::WorkerScope::install(&sink);
+    let _recording = RecordingRestore(WORKER_IMAGE_DIAGNOSTICS.with(|slot| slot.replace(None)));
+    let cancel_scope = tcp_capture::CancellationScope::install(Arc::clone(&cancel));
+    let capture_scope = tcp_capture::WorkerCaptureScope::install(&sink);
+    sink.set_capture_context(Some(id.context.clone()));
+    latest
+        .freecell_route
+        .lock()
+        .unwrap()
+        .prepare(id.clone(), report)
+        .unwrap();
+    let (command_tx, command_rx) = mpsc::channel();
+    let (_, event_rx) = mpsc::channel();
+    let handle = WorkerHandle {
+        command_tx,
+        event_rx,
+        latest_frame: latest.clone(),
+        join: None,
+        cancel_requested: Arc::clone(&cancel),
+        shutdown_requested: Arc::new(AtomicBool::new(false)),
+    };
+    let run_id = handle
+        .execute_freecell_route(
+            id.clone(),
+            false,
+            route::AutoMode::ExecuteRecorded,
+            Duration::ZERO,
+        )
+        .unwrap();
+    let command = command_rx.try_recv().unwrap();
+    let _command_scope = crate::worker::qmp_wire::CommandScope::install(&command);
+    let WorkerCommand::ExecuteFreeCellRoute {
+        plan,
+        run_id: queued_run,
+        single_step,
+        settle,
+    } = command
+    else {
+        panic!("expected one MULTI STEP playback command")
+    };
+    assert_eq!(plan, id);
+    assert_eq!(queued_run, run_id);
+    assert!(!single_step);
+    let server = qmp_server_for_parents(
+        &root.path(),
+        Case::Both,
+        latest.clone(),
+        id.context.clone(),
+        Arc::clone(&cancel),
+        vec![fixture.initial, fixture.explicit],
+    );
+    run(plan, queued_run, single_step, settle, &sink, &cancel);
+    let events: Vec<_> = receiver.try_iter().collect();
+    let progress = events
+        .iter()
+        .find_map(|event| {
+            if let WorkerEvent::FreeCellRouteFinished {
+                plan,
+                run_id: finished,
+                result,
+                termination,
+            } = &event.event
+            {
+                assert_eq!(plan, &id);
+                assert_eq!(*finished, run_id);
+                assert_eq!(
+                    *termination,
+                    crate::pyramid_workflow_model::RunTermination::Completed
+                );
+                Some(
+                    result
+                        .as_ref()
+                        .unwrap_or_else(|failure| panic!("{}: {}", failure.error, failure.details)),
+                )
+            } else {
+                None
+            }
+        })
+        .unwrap();
+    assert_eq!(
+        progress.completion,
+        Some(route::Completion::PartialRouteExhausted)
+    );
+    assert_eq!((progress.cursor, progress.total), (2, 2));
+    assert_eq!((progress.attempted, progress.acknowledged), (2, 2));
+    assert_eq!(progress.foundation_cards, 2);
+    assert!(!latest.freecell_route.lock().unwrap().available(&id));
+    drop(capture_scope);
+    drop(cancel_scope);
+    let (requests, probes) = server.join().unwrap();
+    assert_eq!(probes, 2);
+    assert_eq!(tcp.finish(), 9);
+    let inputs: Vec<_> = requests
+        .iter()
+        .filter(|request| request["execute"] == "input-send-event")
+        .collect();
+    assert_eq!(inputs.len(), 12);
+    for (gesture, source) in inputs.as_chunks::<6>().0.iter().zip(sources) {
+        let to = PixelPoint::new(1248, 132);
+        movement(gesture[0], source);
+        button(gesture[1], true);
+        movement(gesture[2], PixelPoint::new(source.x, source.y - 45));
+        movement(
+            gesture[3],
+            PixelPoint::new((source.x + to.x) / 2, (source.y + to.y) / 2),
+        );
+        movement(gesture[4], to);
+        button(gesture[5], false);
+    }
+    let writes: Vec<_> = events
+        .iter()
+        .filter_map(|event| {
+            let WorkerEvent::QmpWireLog {
+                metadata,
+                packet_line,
+            } = &event.event
+            else {
+                return None;
+            };
+            let packet: Value = serde_json::from_str(packet_line.lines().last().unwrap()).unwrap();
+            if packet["execute"] != "input-send-event" {
+                return None;
+            }
+            let metadata: Value =
+                serde_json::from_str(metadata.strip_prefix("QMP_WIRE ").unwrap()).unwrap();
+            assert_eq!(metadata["owner"]["single_step"], false);
+            assert_eq!(metadata["owner"]["diagnostic_drag_mode"], "Absolute");
+            assert_eq!(metadata["owner"]["gesture_phase_wait_ms"], 100);
+            Some(metadata["wire_elapsed_us"].as_u64().unwrap())
+        })
+        .collect();
+    assert_eq!(writes.len(), 12);
+    for gesture in writes.as_chunks::<6>().0 {
+        assert!(gesture.windows(2).all(|pair| pair[1] - pair[0] >= 100_000));
+    }
+    assert!(
+        writes[6] - writes[5] >= 500_000,
+        "the proved AUTO record waits at least 500ms before the next source event"
+    );
+    assert!(matches!(
+        command_rx.try_recv(),
+        Err(mpsc::TryRecvError::Empty)
+    ));
+    drop(handle);
 }
 
 
@@ -2198,7 +2624,7 @@ fn freecell_3110_native_failed_route_retry_rebinds_all52_and_preserves_failure_p
     let (address, tcp) = v3_server_with_read_timeout(
         vec![
             failed_frames,
-            vec![V3Reply::Frame(different)],
+            vec![V3Reply::Frame(different.clone())],
             restored_frames,
         ],
         Duration::from_secs(60),
@@ -2243,13 +2669,7 @@ fn freecell_3110_native_failed_route_retry_rebinds_all52_and_preserves_failure_p
         let cancel_scope = tcp_capture::CancellationScope::install(Arc::clone(&cancel));
         let capture_scope = tcp_capture::WorkerCaptureScope::install(&sink);
         let run_id = handle
-            .execute_freecell_route(
-                id.clone(),
-                single_step,
-                mode,
-                route::DragMode::Absolute,
-                Duration::ZERO,
-            )
+            .execute_freecell_route(id.clone(), single_step, mode, Duration::ZERO)
             .unwrap();
         {
             let store = latest.freecell_route.lock().unwrap();
@@ -2267,8 +2687,6 @@ fn freecell_3110_native_failed_route_retry_rebinds_all52_and_preserves_failure_p
             plan,
             run_id: queued_run,
             single_step,
-            drag_mode,
-            drag_timing,
             settle,
         } = command
         else {
@@ -2283,15 +2701,7 @@ fn freecell_3110_native_failed_route_retry_rebinds_all52_and_preserves_failure_p
             Arc::clone(&cancel),
             fixture.initial.clone(),
         );
-        run(
-            plan,
-            queued_run,
-            single_step,
-            (drag_mode, drag_timing),
-            settle,
-            &sink,
-            &cancel,
-        );
+        run(plan, queued_run, single_step, settle, &sink, &cancel);
         let (result, termination) = receiver
             .try_iter()
             .find_map(|event| match event.event {
@@ -2333,6 +2743,7 @@ fn freecell_3110_native_failed_route_retry_rebinds_all52_and_preserves_failure_p
     let packet = failed.directory.as_ref().unwrap().join("error-state.json");
     let original_packet = std::fs::read(&packet).unwrap();
     let original_details = failed.details.clone();
+    assert_native_preview(&latest, &fixture.initial, &id.context);
     {
         let store = latest.freecell_route.lock().unwrap();
         assert!(store.available(&id) && store.live.is_none());
@@ -2359,6 +2770,7 @@ fn freecell_3110_native_failed_route_retry_rebinds_all52_and_preserves_failure_p
             .any(|request| request["execute"] == "input-send-event")
     );
     assert!(handle.freecell_route_available(&id));
+    assert_native_preview(&latest, &different, &id.context);
     let (restored_run, restored, termination, _, probes) =
         invoke(true, route::AutoMode::ObserveGame);
     let restored =
@@ -2375,6 +2787,7 @@ fn freecell_3110_native_failed_route_retry_rebinds_all52_and_preserves_failure_p
     assert_eq!(std::fs::read(packet).unwrap(), original_packet);
     assert_eq!(failed.details, original_details);
     assert_eq!(tcp.finish(), 17);
+    assert_native_preview(&latest, &fixture.combined, &id.context);
     assert!(handle.freecell_route_available(&id));
     assert!(Arc::ptr_eq(
         &latest
@@ -2387,4 +2800,289 @@ fn freecell_3110_native_failed_route_retry_rebinds_all52_and_preserves_failure_p
             .report,
         &fixture.report
     ));
+}
+
+/// Option 1A Challenge Complete handoffs (`XpCounting` and `LevelUp`) retire cleanly after 5-frame poll with zero input.
+#[test]
+#[ignore = "requires local AF_UNIX and TCP sockets"]
+fn freecell_320_xp_counting_and_level_up_retire_after_five_frame_poll_without_input() {
+    let original = crate::capture::decode_png(include_bytes!(
+        "../../../../tests/fixtures/freecell-challenge-highlight-20261109.png"
+    ))
+    .expect("original challenge png");
+    let mut damaged = original.clone();
+    for y in 656..696_u32 {
+        for x in 219..248_u32 {
+            let offset = y as usize * damaged.stride + x as usize * 4;
+            damaged.pixels[offset..offset + 4].copy_from_slice(&[255, 255, 255, 255]);
+        }
+    }
+    let deal = crate::freecell_recon::recognise(
+        &original,
+        Metadata::new("native320", "challenge-1a", "unit").expect("valid metadata"),
+    )
+    .expect("recognise challenge deal");
+    let parent = Position::initial(&deal);
+    let action = RecordedMove {
+        card_id: *parent.column(0).expect("col 0").last().expect("last card"),
+        from: Pile::Cascade(0),
+        to: Pile::Cell(0),
+        is_auto: false,
+    };
+
+    for (idx, (label, bytes, expected_log)) in [
+        (
+            "xp",
+            include_bytes!(
+                "../../../../tests/fixtures/freecell-challenge-complete-xp-20261113.png"
+            )
+            .as_slice(),
+            "XP counting active after 5 observations",
+        ),
+        (
+            "level_up",
+            include_bytes!("../../../../tests/fixtures/freecell-FC10.png").as_slice(),
+            "Level Up OK modal active",
+        ),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let root = Socket::new();
+        let mut id = plan(3210 + u64::try_from(idx).expect("idx fits u64"));
+        id.context = ControllerContext::new(
+            root.path(),
+            GameMode::FreeCell,
+            SolvingStrategy::ShortestPath,
+            id.request_id,
+        );
+        let handoff_frame = crate::capture::decode_png(bytes).expect("handoff png");
+        let mut frames = vec![
+            V3Reply::Frame(original.clone()),
+            V3Reply::Frame(damaged.clone()),
+        ];
+        for _ in 0..5 {
+            frames.push(V3Reply::Frame(handoff_frame.clone()));
+        }
+        let (address, tcp) = v3_server_with_read_timeout(vec![frames], Duration::from_secs(60));
+        let _backend = TestCaptureBackend::tcp_mode(address, CaptureMode::PersistentBgrV3);
+        let latest = LatestFrameSlot::default();
+        let (events, receiver) = mpsc::channel();
+        let sink = WorkerEventSink {
+            events,
+            latest_frame: latest.clone(),
+            capture_context: Mutex::new(None),
+        };
+        let cancel = Arc::new(AtomicBool::new(false));
+        let _recording = RecordingRestore(WORKER_IMAGE_DIAGNOSTICS.with(|slot| slot.replace(None)));
+        let cancel_scope = tcp_capture::CancellationScope::install(Arc::clone(&cancel));
+        let capture_scope = tcp_capture::WorkerCaptureScope::install(&sink);
+        sink.set_capture_context(Some(id.context.clone()));
+        latest
+            .reconnaissance
+            .select(&id.context, &cancel)
+            .expect("select recon");
+        latest
+            .reconnaissance
+            .queue_reconnaissance(&id.context, &cancel, || Ok(()))
+            .expect("queue recon");
+        let run_id = {
+            let mut store = latest.freecell_route.lock().expect("lock store");
+            store
+                .prepare(id.clone(), prefix_report(deal.clone()))
+                .expect("prepare route");
+            store.reserve(&id).expect("reserve route")
+        };
+        let server = qmp_server(
+            &root.path(),
+            Case::Both,
+            latest.clone(),
+            id.context.clone(),
+            Arc::clone(&cancel),
+            original.clone(),
+        );
+        let trace = pyramid_stop::StopTrace::default();
+        let mut native = Native {
+            plan: &id,
+            run_id,
+            qmp: QmpClient::connect(&root.path()).expect("connect qmp"),
+            events: &sink,
+            cancel: &cancel,
+            trace: &trace,
+            latest: None,
+            first: None,
+            frozen: None,
+            stage: None,
+            capture_serial: 0,
+            first_rejection: None,
+            last_rejection: None,
+            counts: (0, 0),
+            settle: Duration::ZERO,
+            completion_bound: true,
+            challenge_mode: false,
+            completion_observed: false,
+            diagnostic_step: false,
+        };
+        native.bind(&deal).expect("bind deal");
+        assert!(native.completion_bound && native.challenge_mode);
+        let outcome = native
+            .transfer(&parent, action)
+            .unwrap_or_else(|err| panic!("{label} transfer failed: {err}"));
+        assert_eq!(outcome, route::TransferOutcome::ChallengeComplete);
+        assert!(native.completion_observed);
+        assert_eq!(native.capture_serial, 7);
+        assert_eq!(native.counts, (0, 0));
+        let mut saw_handoff_log = false;
+        while let Ok(event) = receiver.try_recv() {
+            if let WorkerEvent::Log(line) = event.event
+                && line.contains(expected_log)
+            {
+                saw_handoff_log = true;
+            }
+        }
+        assert!(
+            saw_handoff_log,
+            "{label} missing expected handoff log substring {expected_log}"
+        );
+        latest
+            .freecell_route
+            .lock()
+            .expect("lock store")
+            .reject(&id, run_id)
+            .expect("reject route");
+        drop(native);
+        drop(capture_scope);
+        drop(cancel_scope);
+        let (requests, probes) = server.join().expect("join qmp");
+        assert_eq!(probes, 0, "{label} must send zero QMP probes");
+        assert!(
+            !requests
+                .iter()
+                .any(|request| request["execute"] == "input-send-event"),
+            "{label} must send zero QMP inputs"
+        );
+        assert_eq!(tcp.finish(), 7, "{label} capture count");
+    }
+}
+
+
+/// Native `resolve_normal_game_win` requires two consecutive terminal frames on normal deals
+/// and refuses both challenge deals and non-terminal frames without mutating `first`.
+#[test]
+#[ignore = "requires local AF_UNIX and TCP sockets"]
+fn freecell_330_native_normal_game_win_poll_requires_two_consecutive_matches_and_respects_challenge_mode()
+ {
+    for challenge_mode in [false, true] {
+        let root = Socket::new();
+        let mut id = plan(3301);
+        id.context = ControllerContext::new(
+            root.path(),
+            GameMode::FreeCell,
+            SolvingStrategy::ShortestPath,
+            3301,
+        );
+        let original = crate::capture::decode_png(include_bytes!(
+            "../../../../tests/fixtures/freecell-FC13.png"
+        ))
+        .expect("decode FC13");
+        let win_frame = crate::capture::decode_png(include_bytes!(
+            "../../../../tests/fixtures/freecell-FC09.png"
+        ))
+        .expect("decode FC09");
+        let meta = if challenge_mode {
+            Metadata::new("native330", "challenge", "unit").expect("meta")
+        } else {
+            Metadata::new("native330", "normal", "unit").expect("meta")
+        };
+        let deal = crate::freecell_recon::recognise(&original, meta).expect("recognise FC13");
+        let goal = Position::initial(&deal);
+        let frames = if challenge_mode {
+            vec![V3Reply::Frame(original.clone())]
+        } else {
+            // Miss once, then return two consecutive FC09 GAME WIN frames.
+            vec![
+                V3Reply::Frame(original.clone()),
+                V3Reply::Frame(original.clone()),
+                V3Reply::Frame(win_frame.clone()),
+                V3Reply::Frame(win_frame.clone()),
+            ]
+        };
+        let expected_captures = frames.len();
+        let (address, tcp) = v3_server_with_read_timeout(vec![frames], Duration::from_secs(60));
+        let _backend = TestCaptureBackend::tcp_mode(address, CaptureMode::PersistentBgrV3);
+        let latest = LatestFrameSlot::default();
+        let (events, _receiver) = mpsc::channel();
+        let sink = WorkerEventSink {
+            events,
+            latest_frame: latest.clone(),
+            capture_context: Mutex::new(None),
+        };
+        let cancel = Arc::new(AtomicBool::new(false));
+        let cancel_scope = tcp_capture::CancellationScope::install(Arc::clone(&cancel));
+        let capture_scope = tcp_capture::WorkerCaptureScope::install(&sink);
+        sink.set_capture_context(Some(id.context.clone()));
+        latest.reconnaissance.select(&id.context, &cancel).unwrap();
+        latest
+            .reconnaissance
+            .queue_reconnaissance(&id.context, &cancel, || Ok(()))
+            .unwrap();
+        let run_id = {
+            let mut store = latest.freecell_route.lock().unwrap();
+            store
+                .prepare(id.clone(), prefix_report(deal.clone()))
+                .unwrap();
+            store.reserve(&id).unwrap()
+        };
+        let server = qmp_server(
+            &root.path(),
+            Case::Both,
+            latest.clone(),
+            id.context.clone(),
+            Arc::clone(&cancel),
+            original.clone(),
+        );
+        let trace = pyramid_stop::StopTrace::default();
+        let mut native = Native {
+            plan: &id,
+            run_id,
+            qmp: QmpClient::connect(&root.path()).unwrap(),
+            events: &sink,
+            cancel: &cancel,
+            trace: &trace,
+            latest: None,
+            first: Some(original.clone()),
+            frozen: None,
+            stage: None,
+            capture_serial: 0,
+            first_rejection: None,
+            last_rejection: None,
+            counts: (0, 0),
+            settle: Duration::ZERO,
+            completion_bound: true,
+            challenge_mode: false,
+            completion_observed: false,
+            diagnostic_step: true,
+        };
+        native.bind(&deal).unwrap();
+        native.challenge_mode = challenge_mode;
+        let resolved = native.resolve_normal_game_win(&goal).unwrap();
+        assert_eq!(resolved, !challenge_mode);
+        assert_eq!(native.first.as_ref().unwrap().pixels, original.pixels);
+        latest
+            .freecell_route
+            .lock()
+            .unwrap()
+            .reject(&id, run_id)
+            .unwrap();
+        drop(native);
+        drop(capture_scope);
+        drop(cancel_scope);
+        let (requests, _probes) = server.join().unwrap();
+        assert!(
+            !requests
+                .iter()
+                .any(|request| request["execute"] == "input-send-event")
+        );
+        assert_eq!(tcp.finish(), expected_captures);
+    }
 }

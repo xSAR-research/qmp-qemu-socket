@@ -289,7 +289,6 @@ fn native_158_underwater_mixed_print_is_refused() {
 }
 
 
-
 /// The calibrated source must remain the unchanged complete native corner.
 #[test]
 fn native_158_spade_reference_matches_its_original_pixels() {

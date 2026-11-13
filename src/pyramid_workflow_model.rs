@@ -301,3 +301,106 @@ pub(crate) struct PlanningProgress {
     /// True for the search's final notification, before independent replay/reporting.
     pub(crate) finished: bool,
 }
+
+/// Operator-selected play mode for independent A* Free Cell.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum FreeCellPlayStyle {
+    /// Automatically loop normal deals across Recon, A* search, execution, and post-win restart.
+    #[default]
+    ContinuousNormalGames,
+    /// Acquire, solve, and execute one untouched normal deal, leaving `GAME WIN` untouched.
+    SingleBoard,
+    /// Expose manual 3-step `RECON`, `Calculate route`, and `Execute` buttons.
+    Manual,
+}
+
+impl FreeCellPlayStyle {
+    /// Fixed selector order rendered in the Free Cell `Mode` drop-down.
+    pub const ALL: [Self; 3] = [Self::ContinuousNormalGames, Self::SingleBoard, Self::Manual];
+
+    /// Concise selector label displayed in the Free Cell `Mode` drop-down.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::ContinuousNormalGames => "Continuous normal games",
+            Self::SingleBoard => "Single board",
+            Self::Manual => "Manual",
+        }
+    }
+
+    /// Plain summary rendered below the Free Cell `Mode` drop-down.
+    pub const fn description(self) -> &'static str {
+        match self {
+            Self::ContinuousNormalGames => {
+                "Solves normal deals back-to-back, dismissing post-win screens until an unsolvable deal or STOP."
+            }
+            Self::SingleBoard => {
+                "Solves one untouched normal deal and stops at GAME WIN without starting a new game."
+            }
+            Self::Manual => {
+                "Manual 52-card export, offline A* calculation, and step/route playback controls."
+            }
+        }
+    }
+
+    /// Whether pressing `START` runs the worker-owned automatic Free Cell session.
+    pub const fn uses_session(self) -> bool {
+        !matches!(self, Self::Manual)
+    }
+}
+
+/// Immutable request dispatched by the UI to run one worker-owned Free Cell session.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct FreeCellSessionRequest {
+    /// Monotonic request identity, never reused across sessions.
+    pub(crate) run_id: u64,
+    /// Automatic stopping policy (`ContinuousNormalGames` or `SingleBoard`).
+    pub(crate) play_style: FreeCellPlayStyle,
+    /// Card transfer policy applied to every executed board in this session.
+    pub(crate) auto_mode: crate::freecell_route::AutoMode,
+    /// Post-transfer animation settle delay passed to Free Cell playback.
+    pub(crate) settle: std::time::Duration,
+}
+
+/// Advisory progress emitted by the worker during an automatic Free Cell session.
+#[derive(Clone, Debug)]
+pub struct FreeCellSessionProgress {
+    /// Controller identity that owns this automatic session.
+    pub(crate) context: ControllerContext,
+    /// Monotonic session identity matching the dispatched request.
+    pub(crate) run_id: u64,
+    /// One-based board cycle counter within this session.
+    pub(crate) deal_generation: u64,
+    /// Number of 52-card Free Cell victories verified in this session so far.
+    pub(crate) completed_games: usize,
+    /// Current worker-owned lifecycle phase.
+    pub(crate) phase: SessionPhase,
+    /// Most recent foundation card count observed during search or execution.
+    pub(crate) foundation_cards: Option<u8>,
+    /// Current route execution cursor `(completed_moves, total_moves)` during execution.
+    pub(crate) route_cursor: Option<(usize, usize)>,
+    /// Cumulative A* expanded states reported while searching the current deal.
+    pub(crate) expanded_states: Option<u64>,
+    /// Exported deal JSON path for the active board when already published.
+    pub(crate) export_path: Option<std::path::PathBuf>,
+    /// Concise status summary for operator visibility.
+    pub(crate) message: String,
+}
+
+/// Final completion event releasing automatic Free Cell session ownership in the UI.
+#[derive(Clone, Debug)]
+pub struct FreeCellSessionCompletion {
+    /// Exact controller identity under which this Free Cell session ran.
+    pub(crate) context: ControllerContext,
+    /// Session identity that must still own the UI.
+    pub(crate) run_id: u64,
+    /// Number of completed normal Free Cell games verified during this session.
+    pub(crate) completed_games: usize,
+    /// Causal completion classification, never inferred from final UI text.
+    pub(crate) termination: RunTermination,
+    /// Populated on Option 2A clean exit (`foundation_cards < 52`) with zero mid-game clicks.
+    pub(crate) unsolvable_foundation_cards: Option<u8>,
+    /// Last exported 52-card deal JSON path, when published in this session.
+    pub(crate) export_path: Option<std::path::PathBuf>,
+    /// Final human-readable summary or causal error message.
+    pub(crate) result: Result<String, String>,
+}

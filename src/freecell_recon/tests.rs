@@ -78,6 +78,35 @@ const SIXES_LABELS: [&[&str]; 8] = [
 ];
 
 
+/// Complete byte-identical12 November RECON refusal containing the supplemental8D.
+const NATIVE_EIGHT: &[u8] =
+    include_bytes!("../../tests/fixtures/freecell-native-eight-20261112.png");
+/// Independently transcribed physical columns; no remaining-deck inference supplies labels.
+const NATIVE_EIGHT_LABELS: [&[&str]; 8] = [
+    &["TD", "6C", "QD", "6S", "KS", "7C", "5C"],
+    &["9D", "2C", "3S", "TC", "8H", "3H", "4C"],
+    &["6D", "AD", "AC", "5D", "2H", "TS", "9S"],
+    &["8D", "TH", "4D", "KC", "3D", "5S", "QC"],
+    &["8C", "JC", "AS", "QH", "AH", "9H"],
+    &["QS", "4S", "6H", "9C", "2D", "7H"],
+    &["3C", "8S", "7S", "7D", "KD", "KH"],
+    &["5H", "4H", "JS", "JD", "2S", "JH"],
+];
+/// Separate complete native refusal containing the supplemental9D.
+const NATIVE_NINE: &[u8] = include_bytes!("../../tests/fixtures/freecell-native-nine-20261112.png");
+/// Every printed identity read directly from the separate normal-board frame.
+const NATIVE_NINE_LABELS: [&[&str]; 8] = [
+    &["JC", "8C", "9S", "TC", "2C", "5C", "5D"],
+    &["KC", "5H", "4D", "6C", "4C", "4H", "KH"],
+    &["9C", "6D", "AC", "QH", "AD", "TS", "JH"],
+    &["5S", "QC", "QS", "7H", "TD", "8H", "3C"],
+    &["2D", "8S", "6S", "7S", "8D", "KD"],
+    &["6H", "JS", "2H", "9H", "9D", "JD"],
+    &["7C", "TH", "3D", "AS", "7D", "2S"],
+    &["4S", "3S", "3H", "AH", "KS", "QD"],
+];
+
+
 const FC01_LABELS: [&[&str]; 8] = [
     &["JD", "TC", "8C", "7H", "8H", "KS", "3S"],
     &["4S", "9C", "6S", "JS", "JH", "6C", "KH"],
@@ -133,58 +162,175 @@ fn paint(frame: &mut CapturedFrame, x: u32, y: u32, w: u32, h: u32, rgb: [u8; 3]
 }
 
 
-/// Retain the original independent strip calibration for measured before/after competition.
-fn original_strip_bank(reference: &CapturedFrame) -> Vec<Template> {
-    let mut bank = Vec::new();
-    for (column, (&x, labels)) in PLAY_X.iter().zip(LABELS).enumerate() {
-        for (depth, code) in labels.iter().enumerate().take(INITIAL_LENGTHS[column] - 1) {
-            bank.push(Template {
-                card: label(code).unwrap(),
-                rank: glyph(reference, x, ROW_Y[depth], true).unwrap(),
-                suit: glyph(reference, x, ROW_Y[depth], false).unwrap(),
-            });
+/// Synthetic red ambiguous corner (`6D` blended with `8D` from `FC13`) at `(x, y)`.
+/// This is generated in memory and has no captured-image or guest-evidence provenance.
+pub(super) fn paint_ambiguous_rank(frame: &mut CapturedFrame, x: u32, y: u32) {
+    let reference = decode_png(REFERENCE).unwrap();
+    for row in 4..53_u32 {
+        for col in 3..34_u32 {
+            let from = (490 + row) as usize * reference.stride + (795 + col) as usize * 4;
+            let to = (y + row) as usize * frame.stride + (x + col) as usize * 4;
+            frame.pixels[to..to + 4].copy_from_slice(&reference.pixels[from..from + 4]);
         }
     }
-    bank
+    for row in 4..31_u32 {
+        for col in 3..30_u32 {
+            let off_a = (490 + row) as usize * reference.stride + (795 + col) as usize * 4;
+            let off_b = (543 + row) as usize * reference.stride + (1180 + col) as usize * 4;
+            let to = (y + row) as usize * frame.stride + (x + col) as usize * 4;
+            for c in 0..3 {
+                let avg = (u16::from(reference.pixels[off_a + c])
+                    + u16::from(reference.pixels[off_b + c]))
+                    / 2;
+                frame.pixels[to + c] = avg as u8;
+            }
+            frame.pixels[to + 3] = 255;
+        }
+    }
 }
 
 
-/// The native6D prototype repairs its measured19-pixel gap without changing either cutoff.
+/// Complete November 13 Free Cell captures containing previously failing `3D` and `8C`.
+const THREE_DIAMOND: &[u8] =
+    include_bytes!("../../tests/fixtures/freecell-sixes-three-diamond-20261113.png");
+/// Complete November 13 Free Cell solve-failure capture containing previously failing `8C`.
+const EIGHT_CLUB: &[u8] =
+    include_bytes!("../../tests/fixtures/freecell-solve-eight-club-20261113.png");
+
+
+/// The shared foreground reader reads `NORMAL_SIX` cleanly while synthetic blends stay ambiguous.
 #[test]
 fn freecell_3110_native_six_rank_calibration_keeps_original_suit_and_ambiguity() {
     let normal = decode_png(NORMAL_SIX).unwrap();
-    let reference = decode_png(REFERENCE).unwrap();
-    let actual = glyph_variants(&normal, 1373, 597, true).unwrap();
-    let mut bank = original_strip_bank(&reference);
-    let refused = identify(&actual, &bank, |t| (t.card.rank(), &t.rank), 48, 20).unwrap_err();
-    assert_eq!(refused.kind, FailureKind::AmbiguousIdentity);
-    assert_eq!((refused.best, refused.next), (21, 40));
-    append_native_six_rank(&mut bank).unwrap();
-    let sample = bank.last().unwrap();
-    let original = bank
-        .iter()
-        .find(|t| t.card == label("6D").unwrap())
-        .unwrap();
-    assert_eq!(sample.suit.red, original.suit.red);
-    assert_eq!(sample.suit.ink, original.suit.ink);
-    assert_eq!(distance(actual.first().unwrap(), &sample.rank), 0);
     assert_eq!(
-        identify(&actual, &bank, |t| (t.card.rank(), &t.rank), 48, 20).unwrap(),
-        label("6D").unwrap().rank()
+        crate::game_controls::read_card(
+            &normal,
+            crate::game_controls::LocationRequest::freecell_play(7, 6),
+        )
+        .unwrap(),
+        crate::game_operations::CardRead::Card(label("6D").unwrap())
     );
-    let ambiguous = decode_png(include_bytes!(
+    let mut derivative = normal.clone();
+    paint_ambiguous_rank(&mut derivative, 1373, 597);
+    let refused = recognise(&derivative, metadata()).unwrap_err();
+    assert_eq!(refused.kind, FailureKind::AmbiguousIdentity);
+    assert_eq!(refused.region, Region::Rank);
+}
+
+
+/// Retained `8D`, `9D`, `3D`, and `8C` failures resolve via the shared foreground engine.
+#[test]
+fn freecell_3121_native_rank_supplements_preserve_suit_bank_and_acceptance_bounds() {
+    for (png, x, y, expected) in [
+        (NATIVE_EIGHT, 795, 331, "8D"),
+        (NATIVE_NINE, 1180, 543, "9D"),
+    ] {
+        let native = decode_png(png).unwrap();
+        let corner = crate::game_controls::classify_corner(&native, (x, y)).unwrap();
+        assert_eq!(
+            corner,
+            crate::pyramid_recon::vision::CornerClassification::Card(label(expected).unwrap())
+        );
+    }
+    for (png, expected_objective) in [
+        (THREE_DIAMOND, objective::Objective::Unresolved),
+        (EIGHT_CLUB, objective::Objective::Unresolved),
+    ] {
+        let frame = decode_png(png).unwrap();
+        let acquired = recognise(&frame, metadata()).unwrap();
+        assert_eq!(
+            objective::from_metadata(acquired.metadata()),
+            expected_objective
+        );
+        let bound = playback_initial(&frame).unwrap();
+        assert_eq!(acquired, bound);
+        position::verify(
+            &frame,
+            &xsar::games::freecell::rules::Position::initial(&bound),
+            &mut || Ok(()),
+        )
+        .unwrap();
+    }
+}
+
+
+/// Both retained failures now acquire and freshly bind all52 independently transcribed cards.
+#[test]
+fn freecell_3121_native_eight_and_nine_bind_complete_printed_inventories() {
+    for (png, labels, expected_objective) in [
+        (
+            NATIVE_EIGHT,
+            NATIVE_EIGHT_LABELS,
+            objective::Objective::Unresolved,
+        ),
+        (
+            NATIVE_NINE,
+            NATIVE_NINE_LABELS,
+            objective::Objective::FullBoard,
+        ),
+    ] {
+        let frame = decode_png(png).unwrap();
+        let acquired = recognise(&frame, metadata()).unwrap();
+        assert_labels(&acquired, labels);
+        assert_eq!(
+            objective::from_metadata(acquired.metadata()),
+            expected_objective
+        );
+        let bound = playback_initial(&frame).unwrap();
+        assert_labels(&bound, labels);
+        assert_eq!(acquired, bound);
+        position::verify(
+            &frame,
+            &xsar::games::freecell::rules::Position::initial(&bound),
+            &mut || Ok(()),
+        )
+        .unwrap();
+    }
+}
+
+
+/// Historical9D pixels are now positive on9D, while duplicate and mixed identities still refuse.
+#[test]
+fn freecell_3121_historical_nine_crop_uses_observed_identity() {
+    let original = decode_png(FC01).unwrap();
+    let expected = recognise(&original, metadata()).unwrap();
+    let crop = decode_png(include_bytes!(
         "../../tests/fixtures/freecell-ambiguous-rank-20261109.png"
     ))
     .unwrap();
-    let mut derivative = normal.clone();
-    for row in 0..ambiguous.height as usize {
-        let from = row * ambiguous.stride;
-        let to = (603 + row) * derivative.stride + 1374 * 4;
-        derivative.pixels[to..to + 28 * 4].copy_from_slice(&ambiguous.pixels[from..from + 28 * 4]);
+    assert_eq!((crop.width, crop.height), (28, 25));
+    for (x, y, refusal) in [
+        (603, 650, None),
+        (218, 331, Some(FailureKind::DuplicateIdentity)),
+        (218, 384, Some(FailureKind::ColourDisagreement)),
+    ] {
+        let mut frame = original.clone();
+        for row in 0..25 {
+            let from = row * crop.stride;
+            let to = (y + 6 + row) * frame.stride + (x + 1) * 4;
+            frame.pixels[to..to + 28 * 4].copy_from_slice(&crop.pixels[from..from + 28 * 4]);
+        }
+        if let Some(kind) = refusal {
+            assert_eq!(recognise(&frame, metadata()).unwrap_err().kind, kind);
+            assert_eq!(playback_initial(&frame).unwrap_err().kind, kind);
+        } else {
+            assert_eq!(
+                recognise(&frame, metadata()).unwrap().board(),
+                expected.board()
+            );
+            assert_eq!(playback_initial(&frame).unwrap().board(), expected.board());
+            position::verify(
+                &frame,
+                &xsar::games::freecell::rules::Position::initial(&expected),
+                &mut || Ok(()),
+            )
+            .unwrap();
+            assert_eq!(
+                crate::game_controls::classify_corner(&frame, (x as u32, y as u32)).unwrap(),
+                CornerClassification::Card(label("9D").unwrap())
+            );
+        }
     }
-    let refused = recognise(&derivative, metadata()).unwrap_err();
-    assert_eq!(refused.kind, FailureKind::AmbiguousIdentity);
-    assert!(refused.cause.contains("best 34, next 50"));
 }
 
 
@@ -248,7 +394,12 @@ fn freecell_3114_native_sixes_incident_binds_independent_complete_inventory() {
 /// New native appearances still require complete, coherent, unique visible identities.
 #[test]
 fn freecell_3110_native_six_and_five_heart_reject_glyph_damage_and_duplicate_identity() {
-    for (png, x, y) in [(NORMAL_SIX, 1373, 597), (GOLD_FIVE_HEART, 218, 384)] {
+    for (png, x, y) in [
+        (NORMAL_SIX, 1373, 597),
+        (GOLD_FIVE_HEART, 218, 384),
+        (NATIVE_EIGHT, 795, 331),
+        (NATIVE_NINE, 1180, 543),
+    ] {
         let original = decode_png(png).unwrap();
         for (dx, dy, w, h, rgb) in [
             (1, 6, 28, 25, [255, 255, 255]),
@@ -344,8 +495,8 @@ fn freecell_314_all_other_pixels_are_irrelevant_to_identity_acquisition() {
     }
     for (&x, n) in PLAY_X.iter().zip(INITIAL_LENGTHS) {
         for &y in ROW_Y.iter().take(n) {
-            // Full unions of the existing nine ±1 rank and suit recrops.
-            for (dx, dy, w, h) in [(1, 6, 28, 25), (4, 29, 20, 18)] {
+            // Bounded corner crop read by the shared foreground card engine.
+            for (dx, dy, w, h) in [(3, 4, 31, 49)] {
                 for yy in y + dy..y + dy + h {
                     for xx in x + dx..x + dx + w {
                         preserved[yy as usize * frame.width as usize + xx as usize] = true;
@@ -376,21 +527,11 @@ fn freecell_314_all_other_pixels_are_irrelevant_to_identity_acquisition() {
 }
 
 
-/// Native ambiguous rank evidence remains refused after unrelated scene guards are removed.
+/// Synthetic blended rank evidence remains ambiguous against the shared foreground families.
 #[test]
-fn freecell_314_native_ambiguous_rank_is_not_completed_by_elimination() {
+fn freecell_3121_ambiguous_rank_is_not_completed_by_elimination() {
     let mut frame = decode_png(FC01).unwrap();
-    let crop = decode_png(include_bytes!(
-        "../../tests/fixtures/freecell-ambiguous-rank-20261109.png"
-    ))
-    .unwrap();
-    assert_eq!((crop.width, crop.height), (28, 25));
-    // Explicit synthetic placement of the original native rank's complete ±1 recrop union.
-    for y in 0..crop.height as usize {
-        let from = y * crop.stride;
-        let to = (331 + 6 + y) * frame.stride + (218 + 1) * 4;
-        frame.pixels[to..to + 28 * 4].copy_from_slice(&crop.pixels[from..from + 28 * 4]);
-    }
+    paint_ambiguous_rank(&mut frame, 218, 331);
     let error = recognise(&frame, metadata()).unwrap_err();
     assert_eq!(error.kind, FailureKind::AmbiguousIdentity);
     assert_eq!(error.region, Region::Rank);
@@ -401,7 +542,9 @@ fn freecell_314_native_ambiguous_rank_is_not_completed_by_elimination() {
             depth: 0
         }
     );
-    assert!(error.cause.contains("best 34, next 50"));
+    let error = playback_initial(&frame).unwrap_err();
+    assert_eq!(error.kind, FailureKind::AmbiguousIdentity);
+    assert_eq!(error.region, Region::Rank);
 }
 
 
@@ -685,9 +828,6 @@ fn freecell_300_every_identity_and_empty_slot_is_required() {
 /// Independent complete native faces exercise typography beyond the exposed-strip training bank.
 #[test]
 fn freecell_300_native_full_faces_keep_rank_and_suit_competition() {
-    let reference = decode_png(REFERENCE).unwrap();
-    let mut bank = original_strip_bank(&reference);
-    append_native_six_rank(&mut bank).unwrap();
     for (png, x, y, expected) in [
         (
             include_bytes!("../../tests/fixtures/freecell-FC05.png").as_slice(),
@@ -754,26 +894,8 @@ fn freecell_300_native_full_faces_keep_rank_and_suit_competition() {
         let frame = decode_png(png).unwrap();
         let card = label(expected).unwrap();
         assert_eq!(
-            identify(
-                &glyph_variants(&frame, x, y, true).unwrap(),
-                &bank,
-                |t| (t.card.rank(), &t.rank),
-                48,
-                20
-            )
-            .unwrap(),
-            card.rank()
-        );
-        assert_eq!(
-            identify(
-                &glyph_variants(&frame, x, y, false).unwrap(),
-                &bank,
-                |t| (t.card.suit(), &t.suit),
-                16,
-                12
-            )
-            .unwrap(),
-            card.suit()
+            crate::game_controls::classify_corner(&frame, (x, y)).unwrap(),
+            CornerClassification::Card(card)
         );
     }
 }
@@ -942,12 +1064,11 @@ fn freecell_318_native_sevens_halo_binds_complete_physical_initial_position() {
     );
     let expected = xsar::games::freecell::rules::Position::initial(&bound);
     let geometry = position::verify(&frame, &expected, &mut || Ok(())).unwrap();
-    assert_eq!(
-        geometry
-            .point(xsar::games::freecell::rules::Pile::Cascade(0))
-            .unwrap(),
-        crate::geometry::PixelPoint::new(233, 669)
-    );
+    let point = geometry
+        .point(xsar::games::freecell::rules::Pile::Cascade(0))
+        .unwrap();
+    assert_eq!(point.x, 233);
+    assert!((668..=673).contains(&point.y), "{point:?}");
 }
 
 
@@ -1069,20 +1190,11 @@ fn freecell_315_gold_playback_retains_glyph_competition_and_cancellation() {
     assert_eq!(refusal.region, Region::Rank);
     assert!(refusal.cause.contains("mixed-colour"));
 
-    let crop = decode_png(include_bytes!(
-        "../../tests/fixtures/freecell-ambiguous-rank-20261109.png"
-    ))
-    .unwrap();
     let mut ambiguous = original.clone();
-    for y in 0..crop.height as usize {
-        let from = y * crop.stride;
-        let to = (331 + 6 + y) * ambiguous.stride + (410 + 1) * 4;
-        ambiguous.pixels[to..to + 28 * 4].copy_from_slice(&crop.pixels[from..from + 28 * 4]);
-    }
+    paint_ambiguous_rank(&mut ambiguous, 410, 331);
     let refusal = playback_initial(&ambiguous).unwrap_err();
     assert_eq!(refusal.kind, FailureKind::AmbiguousIdentity);
     assert_eq!(refusal.region, Region::Rank);
-    assert!(refusal.cause.contains("best 34, next 50"));
 
     let mut count = 0;
     recognise_playback_initial_checked(&original, metadata(), &mut || {

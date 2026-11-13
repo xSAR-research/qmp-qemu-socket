@@ -17,8 +17,6 @@ pub(crate) enum StartingReadiness {
 
 
 impl ReconVision {
-
-
     /// Check a post-handoff starting frame without interpreting challenge headers.
     ///
     /// A ready result still needs an equal fresh observation and normal Recon.
@@ -82,7 +80,6 @@ impl ReconVision {
         }
         Ok(true)
     }
-
 }
 
 

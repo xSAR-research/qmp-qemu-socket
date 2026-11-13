@@ -23,12 +23,8 @@ pub struct SnapshotArtifact {
 
 
 impl SnapshotArtifact {
-
-
     /// Reserve a private, uniquely named file in an existing snapshot directory.
     pub fn reserve(directory: &Path, label: &str) -> Result<Self, String> {
-
-
         if !directory.is_dir() {
             return Err(format!(
                 "snapshot directory does not exist: {}",
@@ -73,8 +69,6 @@ impl SnapshotArtifact {
 
     /// Write the original PNG bytes, synchronise them and retain the completed file.
     pub fn save(mut self, png: &[u8]) -> Result<PathBuf, String> {
-
-
         if png.is_empty() || png.len() > SNAPSHOT_MAX_PNG_BYTES {
             return Err(format!(
                 "captured PNG must be between 1 and {SNAPSHOT_MAX_PNG_BYTES} bytes"
@@ -96,12 +90,8 @@ impl SnapshotArtifact {
 
 
 impl Drop for SnapshotArtifact {
-
-
     /// Remove an unfinished reservation after closing its file handle.
     fn drop(&mut self) {
-
-
         if !self.committed {
             drop(self.file.take());
             let _ = fs::remove_file(&self.path);
@@ -116,8 +106,6 @@ fn safe_label(raw: &str) -> String {
 
 
     for ch in raw.chars().take(SNAPSHOT_LABEL_MAX_CHARS) {
-
-
         if ch.is_ascii_alphanumeric() || ch == '_' {
             label.push(ch);
         } else if !label.is_empty() && !label.ends_with('-') {
@@ -130,8 +118,6 @@ fn safe_label(raw: &str) -> String {
 
 /// Combine the timestamp, sanitised label and collision suffix.
 fn snapshot_filename(timestamp: &str, label: &str, attempt: usize) -> String {
-
-
     let name = if label.is_empty() {
         format!("qmp-qemu-socket {timestamp}")
     } else {

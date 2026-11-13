@@ -46,7 +46,10 @@ fn newest_post_game_frame_remains_diagnostic_after_coalescing_and_uncertain_stat
     send_state(&sink, WorkerState::Uncertain);
 
     let notification = receiver.try_recv().expect("post-game failure state");
-    assert!(matches!(notification.event, WorkerEvent::State(WorkerState::Uncertain)));
+    assert!(matches!(
+        notification.event,
+        WorkerEvent::State(WorkerState::Uncertain)
+    ));
     assert_eq!(notification.context, Some(context.clone()));
     let newest = sink.latest_frame.take().expect("newest post-game preview");
     assert_eq!(newest.frame.pixels, [33, 33, 33, 255]);
@@ -75,10 +78,15 @@ fn already_consumed_post_game_preview_has_no_prediction_when_stop_arrives() {
         capture_context: Mutex::new(Some(context.clone())),
     };
     publish_post_game_observation(&sink, &observation(44));
-    let displayed = sink.latest_frame.take().expect("UI consumes transition preview");
+    let displayed = sink
+        .latest_frame
+        .take()
+        .expect("UI consumes transition preview");
     send_state(&sink, WorkerState::Uncertain);
-    assert!(matches!(receiver.try_recv().unwrap().event,
-        WorkerEvent::State(WorkerState::Uncertain)));
+    assert!(matches!(
+        receiver.try_recv().unwrap().event,
+        WorkerEvent::State(WorkerState::Uncertain)
+    ));
     assert_eq!(displayed.frame.pixels, [44, 44, 44, 255]);
     assert_eq!(displayed.context, Some(context));
     assert!(displayed.diagnostic);

@@ -2,12 +2,15 @@
 
 ## Current independent identity and live binding boundary
 
-RECON and live initial binding read all52 fixed physical rank/suit corners with
-the same local contrast, coherent ink, competing-label quality/separation and
-unique-inventory checks. Live binding additionally requires a valid native frame,
-positive Menu/Back controls, Solver exclusion and actual initially empty top
-slots. The caller separately compares the freshly read physical deal with the
-frozen source; a cached deal does not authenticate UNDO ALL or a new board.
+RECON, live initial binding and exposed-pile position proofs now share the
+foreground card-reading engine (`pyramid_recon::vision::foreground_card` via
+`game_controls`), replacing the retired 47-template 1-bit matcher while keeping
+local contrast, coherent ink, competing-label quality/separation and
+unique-inventory checks without expected-card shortcuts or relaxed tolerances.
+Live binding additionally requires a valid native frame, positive Menu/Back
+controls, Solver exclusion and actual initially empty top slots. The caller
+separately compares the freshly read physical deal with the frozen source; a
+cached deal does not authenticate UNDO ALL or a new board.
 
 Paper colour, gold decoration, complete card borders/rails and lower face
 artwork no longer add gameplay vetoes. Historical edge-envelope measurements
@@ -101,9 +104,14 @@ whose original SHA256 is
 The derivative is 1,374 bytes, SHA256
 `faef5a47ac4f2185d9415b1c145713a2466511e80cd644c7c3465463ff7cb908`.
 It includes every ±1 rank recrop around that original PLAY 3 depth 5 corner.
-An explicitly synthetic in-memory placement onto FC01 preserves the actual
-ambiguous 9 = 34 versus 5 = 50 result. The separation of 16 remains below the
-required 20, so RECON must refuse without completing the card by elimination.
+Before the 3.1.21 supplemental native 9 calibration, an explicitly synthetic
+in-memory placement onto FC01 scored 9 = 34 versus 5 = 50 and correctly refused
+the separation of 16. With the augmented bank it scores 9 = 4 versus 5 = 50.
+It is now positive when placed on FC01's actual 9D, a duplicate-identity
+negative on its JD and a colour-disagreement negative on its TC. Its filename
+records its historical role; the retained PNG bytes remain unchanged. The
+separate synthetic 6/5 tie below preserves a real ambiguity regression against
+the current bank without using inventory elimination.
 
 Other 3.1.4 derivatives are made only in memory and are explicitly synthetic:
 changing all pixels outside the objective and the complete rank/suit recrop
@@ -336,8 +344,9 @@ the derivative's suit supplies no additional suit calibration.
 The original44-strip bank scores the actual normal6D as6=21 versus5=40, a gap
 of19 below the unchanged20 requirement. The added native appearance scores6=0
 versus5=40. It competes with every distinct same-colour rank; it grants no
-expected-card shortcut or inventory inference. The earlier ambiguous9D remains
-9=34 versus5=50 and must still refuse. Rank48/20 and suit16/12 bounds, relative
+expected-card shortcut or inventory inference. At that revision, the earlier9D
+crop remained9=34 versus5=50 and correctly refused. The3.1.21 bank below now
+recognises it independently. Rank48/20 and suit16/12 bounds, relative
 contrast, colour coherence, complete crops, ±1 recrops and unique52 inventory
 remain unchanged. The normal frame's6D is calibration evidence. The separate
 5H challenge and retained FC05/FC08/FC14/FC18/FC20/FC21 native faces exercise
@@ -356,9 +365,144 @@ when printed glyphs and actual slot evidence remain readable.
 
 Synthetic derivatives are made only in memory and labelled by their tests:
 erased/unknown/mixed glyphs, a native black suit beside an unchanged red rank,
-duplicated printed identities, occluded identity corners and the retained
-ambiguous rank remain negative cases. Decorative5H top/rail changes no longer
+duplicated printed identities, occluded identity corners and synthetic ambiguous
+rank evidence remain negative cases. Decorative5H top/rail changes no longer
 veto printed identities. Complete acquisition and fresh initial binding still
 check all52 printed cards using local contrast; an objective or HALO never
 supplies identity or input authority. These saved-frame
 regressions do not establish fresh live gameplay, drag delivery or route success.
+
+## Native 8D and 9D rank calibration in 3.1.21
+
+These complete native RGBA images were copied byte-for-byte from the retained
+RECON failures. Both are 1920×1080 and include the complete game, toolbar and
+Windows taskbar. The source packets remain unchanged.
+
+| Fixture | Source | Bytes | SHA256 |
+|---|---|---:|---|
+| `freecell-native-eight-20261112.png` | `/home/charlie/tmp/pyramid-error-1794454780365-1451120-1/first-unmatched.png` | 3,667,090 | `83f04c34ce70b2e3c1c215d22119d1207f0f8094fa4761022ed333826bec889c` |
+| `freecell-native-nine-20261112.png` | `/home/charlie/tmp/pyramid-error-1794456196473-1451120-3/first-unmatched.png` | 3,700,950 | `7b78640222a30000ed02d51a61650fc8a9802d10b32c5c5956f2f1f34e0c5dd9` |
+
+The first image shows “Solve the deck”; the second shows Game #146692. All 52
+printed identities in each frame were transcribed directly, in physical
+top-to-bottom order, without completing cards from the remaining inventory:
+
+| PLAY | Native 8D frame | Native 9D frame |
+|---|---|---|
+| 1 | TD, 6C, QD, 6S, KS, 7C, 5C | JC, 8C, 9S, TC, 2C, 5C, 5D |
+| 2 | 9D, 2C, 3S, TC, 8H, 3H, 4C | KC, 5H, 4D, 6C, 4C, 4H, KH |
+| 3 | 6D, AD, AC, 5D, 2H, TS, 9S | 9C, 6D, AC, QH, AD, TS, JH |
+| 4 | 8D, TH, 4D, KC, 3D, 5S, QC | 5S, QC, QS, 7H, TD, 8H, 3C |
+| 5 | 8C, JC, AS, QH, AH, 9H | 2D, 8S, 6S, 7S, 8D, KD |
+| 6 | QS, 4S, 6H, 9C, 2D, 7H | 6H, JS, 2H, 9H, 9D, JD |
+| 7 | 3C, 8S, 7S, 7D, KD, KH | 7C, TH, 3D, AS, 7D, 2S |
+| 8 | 5H, 4H, JS, JD, 2S, JH | 4S, 3S, 3H, AH, KS, QD |
+
+The two 30×48 corner PNGs are explicit native calibration derivatives, not
+complete frames or held-out rank tests. Each retains the full 26×23 rank at
+local (2,7), while its suit supplies no additional calibration.
+
+| Derivative | Source rectangle | Bytes | SHA256 |
+|---|---|---:|---|
+| `freecell-native-eight-rank-corner-20261112.png` | (795,331), 30×48 in the native 8D frame | 2,448 | `0a795d516edd9719ece0e3a1f095ebfb36be1c84d1b117ef845fbdb81724c8ad` |
+| `freecell-native-nine-rank-corner-20261112.png` | (1180,543), 30×48 in the native 9D frame | 2,405 | `3be894c09766a919238e96d42d6c87eea7a8dcf424de5030b4e42a258ff91f6e` |
+
+The existing 44 original strips plus native 6 sample score the new 8D as
+8 = 26 versus 6 = 44, and the new 9D as 9 = 32 versus 5 = 50. Both separations
+of 18 correctly refuse the unchanged required gap of 20. Adding these two rank
+appearances gives 8 = 0 versus 6 = 44 and 9 = 0 versus 5 = 50. The shared
+47-template bank serves acquisition, fresh initial binding and exposed position
+proofs. Each supplemental 6D, 8D and 9D template repeats its original FC13 suit
+bitmap and colour exactly; no suit is retrained. Every distinct same-colour
+label still competes under rank 48/gap 20 and suit 16/gap 12, including the same
+integer ±1 recrops. No expected identity or inventory elimination supplies a
+rank.
+
+The new ambiguity regression is explicitly synthetic and generated in memory.
+It starts with the native 6 rank mask and changes the first 31 raster-order
+pixels that differ from FC13's red 5D at (795,597) to that 5 mask. White paper
+and coherent red ink render the complete rank and ±1 union. Against the
+augmented bank, competition across all nine recrops produces best 31 / next 31, which must
+return `AmbiguousIdentity`. Acquisition and fresh binding reject it; position
+tests also place it below a valid matching upper card and require refusal
+instead of skipping the unreadable lower corner. Damaged ranks, damaged suits,
+duplicate identities and colour disagreement remain negative cases for the
+new calibration appearances.
+
+These regressions qualify saved-frame recognition only when their host checks
+pass. The two source rank corners are calibration evidence; the remaining
+cards and retained earlier native faces provide independent comparisons. They
+do not establish fresh guest input delivery, gameplay or human acceptance.
+
+## Retained JC to CELL4 drop incident in 3.1.19
+
+`freecell-jc-cell4-returned-20261111.png` is the complete byte-identical
+`/home/charlie/tmp/pyramid-error-1794397492303-1326849-3/last-observed.png`.
+It is 3,676,267 bytes, 1920×1080 RGBA, SHA256
+`bc2e29d7d37830482c12f94b69bb64401415c577ca3c78e84a86affbea916d53`.
+The original 3.1.18 failure packet and session log remain unchanged.
+
+The frame follows run61/request1/source-generation1, route cursor39
+(transfer40 of87): JC was picked up from PLAY1, sent towards empty CELL4 and
+returned to PLAY1. The regression independently recognises the authentic initial
+Sixes fixture above, then legally replays the 29 deliberate and ten AUTO edges
+recorded before this transfer. The retained frame proves the requested exposed
+JC and positively empty CELL4; replay owns the complete hidden inventory.
+
+The source's recognised corner anchor is (233,722) under the legacy 1-bit bank
+and (233,724) under `3.2.0` `matched_last` foreground anchoring, with the
+existing native pickup inset (+15,+20). The corrected destination retains that
+inset at (758,132) for CELL4's fixed origin (743,112). The former centre
+(811,203) changed the inset by (+53,+71). The local peer regression requires
+the unchanged six-event sequence with lift (233,679), original-endpoint midpoint
+(495,428) and exact destination (758,132) under `3.2.0`. Its acknowledged packets
+establish host transport delivery, not a measured physical card edge, live
+landing or guest acceptance. Other in-memory empty PLAY compositions are
+explicitly synthetic.
+
+## Shared foreground card reader and Challenge Complete in 3.2.0
+
+Five complete 1920×1080 RGBA frames are retained verbatim from saved operator
+diagnostics to cover the shared foreground Free Cell card reader and input-free
+Challenge Complete detection:
+
+| Fixture | Scope | Bytes | SHA256 |
+|---|---|---:|---|
+| `freecell-sixes-three-diamond-20261113.png` | Sixes `0/3` native tableau with exposed-stack `3♦` (`PLAY 7` row 6) | 3,606,073 | `bee877905098ff91411b8958d3c005cc86384e2a70f2373e9707945a46d07864` |
+| `freecell-solve-eight-club-20261113.png` | Solve the Deal `0/1` native tableau with `8♣` (`PLAY 1` row 1) | 3,604,913 | `3ab9ff1e0be11fe62ecf06d2201124b44ef7ef606714ea86287525029db293be` |
+| `freecell-challenge-complete-xp-20261113.png` | Live Free Cell crimson-ribbon XP-counting `Challenge Complete!` overlay | 1,805,464 | `aca1db86d94c5a7a5f1c598c6a13d8fe26f3cbd22602097b73ba53efa9433037` |
+| `freecell-empty-play1-fours-20261113.png` | Live Fours `0/3` mid-game (`last-observed.png` from packet `pyramid-error-1794528785307-252895-4`): empty `PLAY 1` after `3♥` → `SUIT Hearts`, `CELL 1..4` occupied | 3,543,657 | `beb7f800b282e14ad2936185b74fb9138c84ccd5a662e9592f66a713f1cf9c23` |
+| `freecell-challenge-complete-continue-20261113.png` | Settled live Free Cell crimson-ribbon `Challenge Complete!` overlay with **Continue** button visible | 1,841,128 | `5759759c666c1dd7e6dfa5303365ebe8ab688a0bbc4d429e2efcbaf390bb8590` |
+
+- `freecell-sixes-three-diamond-20261113.png` resolves the legacy 1-bit `3♦`
+  ambiguity across full 52-card RECON, fresh live initial binding and
+  exposed-pile position proof (`PLAY 7` row 6). Mid-card court artwork scanned
+  during vertical cascade sweeps returns `CornerClassification::Unreadable` so
+  exposed-pile scanning continues to the true corner, while `Ambiguous`,
+  `ColourDisagreement` and `PartialLabel` corners still fail.
+- `freecell-solve-eight-club-20261113.png` resolves the legacy 1-bit `8♣`
+  ambiguity across full 52-card RECON, fresh live initial binding and
+  exposed-pile position proofs.
+- `freecell-challenge-complete-xp-20261113.png` captures the active XP-counting
+  crimson-ribbon overlay before **Continue** appears (`is_challenge_complete_frame`
+  returns `false`, while Option 1A `freecell_terminal::classify_challenge_handoff`
+  identifies `ChallengeTerminalHandoff::XpCounting` via white `ll` stems,
+  non-white ribbon gap, and **Click anywhere to skip** so fault-gated route
+  polling retires cleanly after 5 frames with zero input).
+- `freecell-challenge-complete-continue-20261113.png` verifies zero-tolerance
+  `Challenge Complete!` detection (`is_challenge_complete_frame` returns `true`)
+  using both `ll` lower limbs in **Challenge** (`(766, 204, 8×15)` and
+  `(785, 204, 7×15)`, RGB `[255, 255, 255]`) and eight black `[0, 0, 0]` segments
+  in **Continue**, independent of ribbon or panel colour and without clicking
+  **Continue** or authorising any QMP input.
+- `freecell-empty-play1-fours-20261113.png` is the complete byte-identical
+  `last-observed.png` from `pyramid-error-1794528785307-252895-4` after 19 legal
+  transfers emptied `PLAY 1`. Two felt-tinted pixels `(277, 508)` and
+  `(279, 508)` on `PLAY 1`'s bottom green outline stroke measure
+  `RGB = [49, 151, 110]`, previously leaving `286 / 288 = 993‰ < 995‰` under
+  `r >= 50`. Lowering the native empty-slot stroke red-channel floor from `50`
+  to `45` (matching measured `46..81` across all 188 native empty slots while
+  keeping bare felt `<= 22‰`) achieves `1000‰` across all four strokes. Checking
+  interior card paper before the four outline strokes ensures occupied slots
+  such as `CELL 1` (`9♦`) report `"Card paper interrupts empty-slot interior"`
+  instead of `"Positive native empty-slot outline unavailable"`.

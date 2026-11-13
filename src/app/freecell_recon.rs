@@ -70,6 +70,18 @@ impl FreeCellReconState {
             || self.stopped_preview.as_ref() == Some(context)
     }
 
+    /// Hand the advisory preview to playback while preserving an unfinished RECON.
+    pub(super) fn release_for_playback(&mut self, context: &ControllerContext) -> bool {
+        if self.pending.is_some() {
+            return false;
+        }
+        if self.stopped_preview.as_ref() == Some(context) {
+            self.stopped_preview = None;
+        }
+        true
+    }
+
+
     /// Explicit new capture or selection retires the previous inspection marker.
     pub(super) fn clear_preview(&mut self) {
         self.stopped_preview = None;
@@ -213,5 +225,37 @@ mod tests {
             state.clear_preview();
             assert!(!state.retain_after_detach(&context));
         }
+    }
+}
+
+
+#[cfg(test)]
+mod playback_tests {
+    use super::*;
+    use crate::{game::GameMode, strategy::SolvingStrategy};
+
+
+    /// Playback releases only completed same-context RECON ownership; pending work stays fenced.
+    #[test]
+    fn freecell_3118_playback_preview_releases_completed_recon_only() {
+        let context = ControllerContext::new(
+            "/tmp/freecell-preview318.sock".into(),
+            GameMode::FreeCell,
+            SolvingStrategy::ShortestPath,
+            9,
+        );
+        let mut state = FreeCellReconState::default();
+        let request = state.reserve(context.clone()).unwrap();
+        assert!(!state.release_for_playback(&context));
+        assert!(state.owns_preview(&context));
+        assert!(state.finish(&context, request, RunTermination::Completed));
+        let mut other = context.clone();
+        other.generation += 1;
+        assert!(state.release_for_playback(&other));
+        assert!(state.owns_preview(&context));
+        assert!(state.release_for_playback(&context));
+        assert!(!state.owns_preview(&context));
+        assert!(!state.finish(&context, request, RunTermination::Failed));
+        assert!(!state.owns_preview(&context));
     }
 }

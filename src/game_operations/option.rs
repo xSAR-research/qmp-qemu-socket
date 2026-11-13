@@ -10,7 +10,7 @@ use xsar::image_matching::find_horizontal_run;
 
 /// Inclusive native-display endpoints; conversion uses checked widened geometry.
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct InclusiveBounds {
+pub struct InclusiveBounds {
     /// First included x coordinate.
     pub left: u32,
     /// First included y coordinate.
@@ -24,7 +24,7 @@ pub(crate) struct InclusiveBounds {
 
 /// Measured pixels only; this value grants no game or input authority.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct DetectedOption {
+pub struct DetectedOption {
     /// Interior point on the unique recognised run, including valid display origin.
     pub point: PixelPoint,
     /// Complete maximal horizontal run length.
@@ -34,7 +34,7 @@ pub(crate) struct DetectedOption {
 
 /// Explicit absence and multiple groups differ from invalid frame/configuration.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum OptionDetection {
+pub enum OptionDetection {
     /// No maximal run meets the inclusive minimum.
     NotFound,
     /// At least two maximal runs qualify, including separate adjacent rows.
@@ -49,7 +49,7 @@ pub(crate) enum OptionDetection {
 /// Alpha and row padding are ignored by xSAR's RGB view. Thick two-dimensional
 /// lettering is deliberately not grouped: each maximal horizontal run is one
 /// candidate. The caller chooses a region that isolates its specified option.
-pub(crate) fn detect_option(
+pub fn detect_option(
     frame: &CapturedFrame,
     bounds: InclusiveBounds,
     minimum_length: u32,

@@ -5,7 +5,12 @@
 //! requiring decorative card outlines, rails, paper colours or full faces.
 
 use super::*;
-use crate::geometry::{PixelPoint, PixelRect};
+use crate::game_controls::{PlayCorner as Corner, scan_freecell_play_corners};
+#[cfg(test)]
+use crate::game_controls::{corner_candidate, corner_identity};
+use crate::geometry::PixelPoint;
+#[cfg(test)]
+use crate::geometry::PixelRect;
 use xsar::games::freecell::rules::{Pile, Position, card_id};
 
 
@@ -13,20 +18,24 @@ use xsar::games::freecell::rules::{Pile, Position, card_id};
 const SCREEN_SUITS: [usize; 4] = [2, 0, 1, 3];
 /// First native tableau top, independent of subsequent compressed fan spacing.
 const TABLEAU_TOP: u32 = 331;
-/// Latest possible printed-corner origin whose complete crop stays above toolbar947.
-const LAST_CORNER_TOP: u32 = 900;
-/// Maximum separation of neighbouring native ±1 recrops of one printed corner.
-const RECROP_SEPARATION: u32 = 2;
+
+
+/// Native pointer x inset from a proved corner or positively outlined slot origin.
+const PICKUP_X_INSET: u32 = 15;
+
+
+/// Native pointer y inset shared by occupied and empty source/destination anchors.
+const PICKUP_Y_INSET: u32 = 20;
 
 
 /// Authenticated click points, populated only for the piles requested in this proof.
 #[derive(Debug)]
 pub(crate) struct Geometry {
-    /// Physical PLAY corners, or positively outlined empty-slot centres.
+    /// Physical PLAY corners, or equally inset positively outlined empty slots.
     play: [Option<PixelPoint>; 8],
-    /// Physical CELL corners, or positively outlined empty-slot centres.
+    /// Physical CELL corners, or equally inset positively outlined empty slots.
     cells: [Option<PixelPoint>; 4],
-    /// Canonical C,D,H,S corners, or positively outlined empty-slot centres.
+    /// Canonical C,D,H,S corners, or equally inset positively outlined empty slots.
     foundations: [Option<PixelPoint>; 4],
 }
 
@@ -47,393 +56,52 @@ impl Geometry {
 }
 
 
-/// Reuse the original labelled strips and supplementary native6 rank once per frame.
-fn bank(reference: &CapturedFrame) -> Result<Vec<Template>, String> {
-    let mut bank = Vec::new();
-    for ((&x, labels), &length) in PLAY_X.iter().zip(LABELS).zip(INITIAL_LENGTHS.iter()) {
-        for (depth, code) in labels.iter().enumerate().take(length - 1) {
-            let y = *ROW_Y.get(depth).ok_or("Calibration depth invalid")?;
-            bank.push(Template {
-                card: label(code)?,
-                rank: glyph(reference, x, y, true)?,
-                suit: glyph(reference, x, y, false)?,
-            });
-        }
-    }
-    append_native_six_rank(&mut bank)?;
-    Ok(bank)
-}
-
-
-/// Require every selected pixel; invalid bounds/storage is always an error.
-fn all(
-    frame: &CapturedFrame,
-    rect: PixelRect,
-    predicate: impl Fn([u8; 3]) -> bool,
-) -> Result<bool, String> {
-    let view = frame.as_view().map_err(|e| e.to_string())?;
-    view.checked_bounds(rect).map_err(|e| e.to_string())?;
-    for y in rect.y..rect.y + rect.height {
-        for x in rect.x..rect.x + rect.width {
-            if !predicate(view.pixel_rgb(x, y).ok_or("Position pixel outside frame")?) {
-                return Ok(false);
-            }
-        }
-    }
-    Ok(true)
-}
-
-
-/// Require measured coverage without masking or sampling a failed empty-slot stroke.
-fn coverage(
-    frame: &CapturedFrame,
-    rect: PixelRect,
-    predicate: impl Fn([u8; 3]) -> bool,
-    per_mille: u64,
-) -> Result<bool, String> {
-    let view = frame.as_view().map_err(|e| e.to_string())?;
-    view.checked_bounds(rect).map_err(|e| e.to_string())?;
-    let mut matching = 0_u64;
-    for y in rect.y..rect.y + rect.height {
-        for x in rect.x..rect.x + rect.width {
-            if predicate(view.pixel_rgb(x, y).ok_or("Missing coverage pixel")?) {
-                matching += 1;
-            }
-        }
-    }
-    Ok(matching * 1000 >= u64::from(rect.width) * u64::from(rect.height) * per_mille)
-}
-
-
-/// Prove the four native empty-slot strokes, independently of interior canvas RGB.
-fn empty_outline(frame: &CapturedFrame, x: u32, y: u32) -> Result<(), String> {
-    let green = |[r, g, b]: [u8; 3]| {
-        r >= 50
-            && g >= 140
-            && b >= 100
-            && i16::from(g) - i16::from(r) >= 50
-            && i16::from(g) - i16::from(b) >= 20
-    };
-    for rect in [
-        PixelRect::new(x + 20, y + 1, 96, 3),
-        PixelRect::new(x + 20, y + 176, 96, 3),
-        PixelRect::new(x + 1, y + 19, 3, 140),
-        PixelRect::new(x + 130, y + 19, 3, 140),
-    ] {
-        if !coverage(frame, rect, green, 995)? {
-            return Err("Positive native empty-slot outline unavailable".to_owned());
-        }
-    }
-    Ok(())
-}
-
-
-/// Refuse native bright card paper inside a positively outlined empty slot.
-fn no_card_paper(frame: &CapturedFrame, rect: PixelRect) -> Result<(), String> {
-    if !all(frame, rect, |[r, g, b]| r.min(g).min(b) < 245)? {
-        return Err("Card paper interrupts empty-slot interior".to_owned());
-    }
-    Ok(())
-}
-
-
 /// Prove an empty upper slot from its four strokes and absence of native card paper.
 pub(super) fn empty_top(frame: &CapturedFrame, x: u32) -> Result<(), String> {
-    empty_outline(frame, x, 112)?;
-    no_card_paper(frame, PixelRect::new(x + 8, 120, 120, 160))
+    crate::game_controls::freecell_empty_slot_error(frame, x, 112)
+        .map_err(|error| error.to_string())?
 }
 
 
 /// Prove an empty PLAY slot without comparing surrounding felt or decoration.
 fn empty_play(frame: &CapturedFrame, x: u32) -> Result<(), String> {
-    empty_outline(frame, x, TABLEAU_TOP)?;
-    no_card_paper(frame, PixelRect::new(x + 8, 340, 120, 160))
+    crate::game_controls::freecell_empty_slot_error(frame, x, TABLEAU_TOP)
+        .map_err(|error| error.to_string())?
 }
 
 
-/// Independent label evidence, including an ambiguous but absolutely qualified shape.
-struct LabelEvidence<T> {
-    /// Unique label and colour, or the unchanged recognition refusal.
-    value: Result<(T, bool), String>,
-    /// Absolute shape quality passed; ambiguity still forbids assigning an identity.
-    shape: bool,
-}
-
-
-impl<T> LabelEvidence<T> {
-    /// Retain typed ambiguity as evidence of printed ink without accepting its label.
-    fn matched(red: bool, matched: Result<T, MatchFailure>) -> Self {
-        let shape = matched.is_ok()
-            || matched
-                .as_ref()
-                .is_err_and(|cause| cause.kind == FailureKind::AmbiguousIdentity);
-        Self {
-            value: matched
-                .map(|value| (value, red))
-                .map_err(|cause| cause.to_string()),
-            shape,
+/// Observe one printed corner identity against all complete foreground families.
+fn observed_identity(frame: &CapturedFrame, x: u32, y: u32) -> Result<u8, String> {
+    match crate::game_controls::classify_corner(frame, (x, y)).map_err(|error| error.to_string())? {
+        CornerClassification::Card(card) => Ok(card_id(card)),
+        CornerClassification::Ambiguous { detail } => Err(format!("AmbiguousIdentity: {detail}")),
+        CornerClassification::ColourDisagreement { detail } => {
+            Err(format!("Visible rank/suit colour disagreement: {detail}"))
         }
-    }
-
-
-    /// Missing or incoherent ink cannot establish either a label or a printed shape.
-    fn missing(cause: String) -> Self {
-        Self {
-            value: Err(cause),
-            shape: false,
-        }
+        CornerClassification::PartialLabel { detail, .. }
+        | CornerClassification::Unreadable { detail } => Err(detail),
     }
 }
 
 
-/// Independently compete a complete printed rank against all same-colour rank labels.
-fn observed_rank(frame: &CapturedFrame, bank: &[Template], x: u32, y: u32) -> LabelEvidence<Rank> {
-    let ranks = match glyph_variants_with_policy(frame, x, y, true, PaperPolicy::ReadOnlyRecon) {
-        Ok(ranks) => ranks,
-        Err(cause) => return LabelEvidence::missing(cause),
-    };
-    let Some(rank) = ranks.first() else {
-        return LabelEvidence::missing("Missing rank crop".to_owned());
-    };
-    LabelEvidence::matched(
-        rank.red,
-        identify(&ranks, bank, |t| (t.card.rank(), &t.rank), 48, 20),
-    )
-}
-
-
-/// Independently compete a complete printed suit against all same-colour suit labels.
-fn observed_suit(frame: &CapturedFrame, bank: &[Template], x: u32, y: u32) -> LabelEvidence<Suit> {
-    let suits = match glyph_variants_with_policy(frame, x, y, false, PaperPolicy::ReadOnlyRecon) {
-        Ok(suits) => suits,
-        Err(cause) => return LabelEvidence::missing(cause),
-    };
-    let Some(suit) = suits.first() else {
-        return LabelEvidence::missing("Missing suit crop".to_owned());
-    };
-    LabelEvidence::matched(
-        suit.red,
-        identify(&suits, bank, |t| (t.card.suit(), &t.suit), 16, 12),
-    )
-}
-
-
-/// Observe both complete labels against every same-colour label, never only expected.
-fn observed_identity(
-    frame: &CapturedFrame,
-    bank: &[Template],
-    x: u32,
-    y: u32,
-) -> Result<u8, String> {
-    let (rank, rank_red) = observed_rank(frame, bank, x, y).value?;
-    let (suit, suit_red) = observed_suit(frame, bank, x, y).value?;
-    if rank_red != suit_red {
-        return Err("Visible rank/suit colour disagreement".to_owned());
-    }
-    Ok(card_id(Card::new(rank, suit)))
-}
-
-
-/// Threshold one complete glyph region against its own90th-percentile background.
-/// The native45% contrast predicate matches `ReadOnlyRecon`; colour/label acceptance
-/// remains the independent reader's responsibility. Fixed arrays bound scan storage.
-fn local_ink<const N: usize>(frame: &CapturedFrame, rect: PixelRect) -> Result<[bool; N], String> {
-    let count = usize::try_from(rect.width)
-        .ok()
-        .and_then(|width| {
-            usize::try_from(rect.height)
-                .ok()
-                .and_then(|height| width.checked_mul(height))
-        })
-        .ok_or("Glyph support area overflow")?;
-    if count != N {
-        return Err("Glyph support dimensions differ from native crop".to_owned());
-    }
-    let view = frame.as_view().map_err(|cause| cause.to_string())?;
-    view.checked_bounds(rect)
-        .map_err(|cause| cause.to_string())?;
-    let mut samples = [0_u8; N];
-    for (sample, (x, y)) in samples.iter_mut().zip(
-        (rect.y..rect.y + rect.height)
-            .flat_map(|y| (rect.x..rect.x + rect.width).map(move |x| (x, y))),
-    ) {
-        let [r, g, b] = view
-            .pixel_rgb(x, y)
-            .ok_or("Missing local glyph support pixel")?;
-        *sample = r.min(g).min(b);
-    }
-    let mut background = samples;
-    background.sort_unstable();
-    let percentile = N.checked_mul(9).ok_or("Glyph percentile overflow")? / 10;
-    let paper = u32::from(
-        *background
-            .get(percentile)
-            .ok_or("Missing local glyph background")?,
-    );
-    Ok(samples.map(|value| 100 * paper.saturating_sub(u32::from(value)) > 45 * paper))
-}
-
-
-/// Locate printed-corner support cheaply before allocating the nine RGB recrops.
-/// A quiet local top margin bounds the corner; no card border/paper colour is tested.
-/// Partial/mixed glyphs remain candidates so failed lower identities cannot be skipped.
-fn corner_candidate(frame: &CapturedFrame, x: u32, y: u32) -> Result<bool, String> {
-    let view = frame.as_view().map_err(|e| e.to_string())?;
-    view.checked_bounds(PixelRect::new(x + 2, y + 3, 26, 43))
-        .map_err(|e| e.to_string())?;
-    let minimum = |xx, yy| -> Result<u8, String> {
-        let [r, g, b] = view.pixel_rgb(xx, yy).ok_or("Missing corner pixel")?;
-        Ok(r.min(g).min(b))
-    };
-    let mut background = [0_u8; 80];
-    for (slot, (xx, yy)) in background
-        .iter_mut()
-        .zip((y + 3..y + 7).flat_map(|yy| (x + 5..x + 25).map(move |xx| (xx, yy))))
-    {
-        *slot = minimum(xx, yy)?;
-    }
-    background.sort_unstable();
-    let paper = u32::from(*background.get(72).ok_or("Missing corner background")?);
-    let ink = |xx, yy| -> Result<bool, String> {
-        Ok(100 * paper.saturating_sub(u32::from(minimum(xx, yy)?)) > 45 * paper)
-    };
-    let mut gutter_ink = 0;
-    for yy in y + 3..y + 7 {
-        for xx in x + 5..x + 25 {
-            gutter_ink += usize::from(ink(xx, yy)?);
-        }
-    }
-    if gutter_ink > 8 {
-        return Ok(false);
-    }
-    let ranks = local_ink::<{ 26 * 23 }>(frame, PixelRect::new(x + 2, y + 7, 26, 23))?;
-    let rank_ink = ranks.iter().filter(|ink| **ink).count();
-    let rank_top = ranks.iter().take(26 * 5).filter(|ink| **ink).count();
-    let rank_bottom = ranks
-        .iter()
-        .skip(26 * 17)
-        .take(26 * 3)
-        .filter(|ink| **ink)
-        .count();
-    let suits = local_ink::<{ 18 * 16 }>(frame, PixelRect::new(x + 5, y + 30, 18, 16))?;
-    let suit_ink = suits.iter().filter(|ink| **ink).count();
-    let rank = rank_ink >= 30 && rank_top >= 2 && rank_bottom >= 2;
-    Ok(rank || suit_ink >= 20)
-}
-
-
-/// Retain a partial corner when an independently qualified label shape establishes
-/// its layout. Ambiguous labels are blocking evidence only, never accepted identity.
-/// Incidental ink without a qualified all-label shape supplies no printed corner.
-fn corner_identity(
-    frame: &CapturedFrame,
-    bank: &[Template],
-    x: u32,
-    y: u32,
-) -> Option<Result<u8, String>> {
-    let rank = observed_rank(frame, bank, x, y);
-    let suit = observed_suit(frame, bank, x, y);
-    let printed_shape = rank.shape || suit.shape;
-    match (rank.value, suit.value) {
-        (Ok((rank, red)), Ok((suit, suit_red))) => Some(if red == suit_red {
-            Ok(card_id(Card::new(rank, suit)))
-        } else {
-            Err("Visible rank/suit colour disagreement".to_owned())
-        }),
-        (Err(cause), Ok(_)) => Some(Err(format!("Unreadable printed rank: {cause}"))),
-        (Ok(_), Err(cause)) => Some(Err(format!("Unreadable printed suit: {cause}"))),
-        (Err(rank), Err(suit)) if printed_shape => Some(Err(format!(
-            "Unreadable printed labels: rank {rank}; suit {suit}"
-        ))),
-        (Err(_), Err(_)) => None,
-    }
-}
-
-
-/// Nearby recrops of one physical corner, including unreadable candidate evidence.
-struct Corner {
-    /// First candidate origin in this connected ±1 recrop cluster.
-    first: u32,
-    /// Last candidate origin in this cluster.
-    last: u32,
-    /// Independently observed identity, if any candidate passed all-label matching.
-    id: Option<u8>,
-    /// Last failed candidate diagnostic, retained if no crop supplies an identity.
-    failure: Option<String>,
-}
-
-
-impl Corner {
-    /// Merge one neighbouring crop, refusing contradictory identities in one corner.
-    fn add(&mut self, y: u32, observed: Result<u8, String>) -> Result<(), String> {
-        self.last = y;
-        match observed {
-            Ok(id) => {
-                if self.id.is_some_and(|previous| previous != id) {
-                    return Err("Ambiguous identities within one printed corner".to_owned());
-                }
-                self.id = Some(id);
-            }
-            Err(cause) => self.failure = Some(cause),
-        }
-        Ok(())
-    }
-
-
-    /// Centre the connected native recrop origins without claiming a measured card edge.
-    fn top(&self) -> u32 {
-        self.first + (self.last - self.first) / 2
-    }
-}
-
-
-/// Scan bounded native origins; hidden cards and fan pitch are deliberately unmeasured.
+/// Scan bounded native origins via shared `game_controls`; hidden cards and fan pitch are deliberately unmeasured.
 fn corners(
     frame: &CapturedFrame,
-    bank: &[Template],
     x: u32,
     check: &mut impl FnMut() -> Result<(), String>,
 ) -> Result<Vec<Corner>, String> {
-    let mut result: Vec<Corner> = Vec::new();
-    for y in TABLEAU_TOP..=LAST_CORNER_TOP {
-        if (y - TABLEAU_TOP).is_multiple_of(8) {
-            check()?;
-        }
-        if !corner_candidate(frame, x, y)? {
-            continue;
-        }
-        let Some(observed) = corner_identity(frame, bank, x, y) else {
-            continue;
-        };
-        if let Some(previous) = result.last_mut()
-            && y - previous.last <= RECROP_SEPARATION
-        {
-            previous.add(y, observed)?;
-        } else {
-            let mut corner = Corner {
-                first: y,
-                last: y,
-                id: None,
-                failure: None,
-            };
-            corner.add(y, observed)?;
-            result.push(corner);
-        }
-    }
-    check()?;
-    Ok(result)
+    scan_freecell_play_corners(frame, x, check)
 }
 
 
 /// Prove the bottommost supported printed corner and its expected exposed identity.
 fn occupied_play(
     frame: &CapturedFrame,
-    bank: &[Template],
     x: u32,
     expected: u8,
     check: &mut impl FnMut() -> Result<(), String>,
 ) -> Result<PixelPoint, String> {
-    let observed = corners(frame, bank, x, check)?;
+    let observed = corners(frame, x, check)?;
     let last = observed
         .last()
         .ok_or("Exposed printed corner unavailable")?;
@@ -457,20 +125,18 @@ fn occupied_play(
     {
         return Err("Duplicate exposed identity in physical column".to_owned());
     }
-    Ok(PixelPoint::new((x + 15) as i32, (last.top() + 20) as i32))
+    Ok(PixelPoint::new(
+        (x + PICKUP_X_INSET) as i32,
+        (last.top() + PICKUP_Y_INSET) as i32,
+    ))
 }
 
 
 /// Independently read one upper-slot corner at the two calibrated native x origins.
-fn occupied_top(
-    frame: &CapturedFrame,
-    bank: &[Template],
-    x: u32,
-    expected: u8,
-) -> Result<PixelPoint, String> {
+fn occupied_top(frame: &CapturedFrame, x: u32, expected: u8) -> Result<PixelPoint, String> {
     let mut found = None;
     for origin in [Some(x), x.checked_sub(1)].into_iter().flatten() {
-        if let Ok(id) = observed_identity(frame, bank, origin, 112) {
+        if let Ok(id) = observed_identity(frame, origin, 112) {
             if found.is_some_and(|(_, previous)| previous != id) {
                 return Err("Ambiguous occupied top-slot identity".to_owned());
             }
@@ -481,7 +147,10 @@ fn occupied_top(
     if id != expected {
         return Err("Occupied top-slot identity differs from physical position".to_owned());
     }
-    Ok(PixelPoint::new((origin + 15) as i32, 132))
+    Ok(PixelPoint::new(
+        (origin + PICKUP_X_INSET) as i32,
+        (112 + PICKUP_Y_INSET) as i32,
+    ))
 }
 
 
@@ -505,7 +174,6 @@ pub(crate) fn verify_piles(
     check()?;
     let reference = decode_png(REFERENCE).map_err(|e| e.to_string())?;
     supported_scene(frame, &reference, check).map_err(|e| e.to_string())?;
-    let bank = bank(&reference)?;
     let mut geometry = Geometry {
         play: [None; 8],
         cells: [None; 4],
@@ -519,11 +187,14 @@ pub(crate) fn verify_piles(
                 let &x = PLAY_X.get(column).ok_or("Invalid requested cascade")?;
                 let ids = expected.column(column).ok_or("Invalid expected cascade")?;
                 let point = if let Some(&id) = ids.last() {
-                    occupied_play(frame, &bank, x, id, check)
+                    occupied_play(frame, x, id, check)
                 } else {
                     empty_play(frame, x).and_then(|()| {
-                        if corners(frame, &bank, x, check)?.is_empty() {
-                            Ok(PixelPoint::new((x + 67) as i32, 421))
+                        if corners(frame, x, check)?.is_empty() {
+                            Ok(PixelPoint::new(
+                                (x + PICKUP_X_INSET) as i32,
+                                (TABLEAU_TOP + PICKUP_Y_INSET) as i32,
+                            ))
                         } else {
                             Err("Printed card interrupts empty physical column".to_owned())
                         }
@@ -541,9 +212,11 @@ pub(crate) fn verify_piles(
                     .copied()
                     .ok_or("Invalid expected cell")?;
                 let point = if let Some(id) = id {
-                    occupied_top(frame, &bank, x, id)
+                    occupied_top(frame, x, id)
                 } else {
-                    empty_top(frame, x).map(|()| PixelPoint::new((x + 68) as i32, 203))
+                    empty_top(frame, x).map(|()| {
+                        PixelPoint::new((x + PICKUP_X_INSET) as i32, (112 + PICKUP_Y_INSET) as i32)
+                    })
                 }
                 .map_err(|cause| format!("CELL {}: {cause}", cell + 1))?;
                 (geometry.cells.get_mut(cell), point)
@@ -562,9 +235,11 @@ pub(crate) fn verify_piles(
                     .get(suit)
                     .ok_or("Invalid expected foundation")?;
                 let point = if rank > 0 {
-                    occupied_top(frame, &bank, x, n * 13 + rank - 1)
+                    occupied_top(frame, x, n * 13 + rank - 1)
                 } else {
-                    empty_top(frame, x).map(|()| PixelPoint::new((x + 68) as i32, 203))
+                    empty_top(frame, x).map(|()| {
+                        PixelPoint::new((x + PICKUP_X_INSET) as i32, (112 + PICKUP_Y_INSET) as i32)
+                    })
                 }
                 .map_err(|cause| format!("SUIT {}: {cause}", screen + 1))?;
                 (geometry.foundations.get_mut(suit), point)

@@ -17,8 +17,8 @@ use crate::{
     detector::measure_game_progress_for_profile,
     game::{ActionTarget, GameMode, GameProgress},
     parameters::{
-        ACTION_CHANGE_CHANNEL_THRESHOLD,
-        POST_GAME_MAX_OBSERVATION_ROUNDS, SOLVER_MOUSE_HOLD, StepRunSettings,
+        ACTION_CHANGE_CHANNEL_THRESHOLD, POST_GAME_MAX_OBSERVATION_ROUNDS, SOLVER_MOUSE_HOLD,
+        StepRunSettings,
     },
     pyramid::{self, PyramidTargetKind},
     qmp::QmpClient,
@@ -133,7 +133,8 @@ pub(super) fn verify_pyramid_action(
                     "Pyramid result observation {observation_rounds} (phase {phase_round}/{observation_limit}); one fresh capture, no replay of the previous card or Move input."
                 ),
             );
-            let mut series = capture_series(qmp, socket_path, scan_state, event_tx, cancel_requested)?;
+            let mut series =
+                capture_series(qmp, socket_path, scan_state, event_tx, cancel_requested)?;
             profile.capture.add_assign(series.timing);
             last_observation = series.observations.pop();
             let observation = last_observation
@@ -149,15 +150,16 @@ pub(super) fn verify_pyramid_action(
 
 
                 let terminal_visible = if board_completed || expected_final_transition {
-
-
-                    match post_game::level_up_overrides_board_progress(true, observation,
-                        &crate::terminal_controls::profiles::PYRAMID_CONTROLS) {
+                    match post_game::level_up_overrides_board_progress(
+                        true,
+                        observation,
+                        &crate::terminal_controls::profiles::PYRAMID_CONTROLS,
+                    ) {
                         Ok(true) => true,
-                        Ok(false) => {
-                            post_game::new_game_visible_while_awaiting_level_up(observation,
-                                &crate::terminal_controls::profiles::PYRAMID_CONTROLS)?
-                        }
+                        Ok(false) => post_game::new_game_visible_while_awaiting_level_up(
+                            observation,
+                            &crate::terminal_controls::profiles::PYRAMID_CONTROLS,
+                        )?,
                         Err(error) => return Err(error),
                     }
                 } else {
@@ -178,8 +180,6 @@ pub(super) fn verify_pyramid_action(
                 send_log(event_tx,
                     "Pyramid result is not a recognised gameplay scene; observing the transition without guest input.".to_owned());
             } else {
-
-
                 if !board_completed
                     && expected_final_transition
                     && pyramid::redeal_after_final_tableau_action(
@@ -189,8 +189,6 @@ pub(super) fn verify_pyramid_action(
                     )
                     .map_err(|error| format!("Pyramid redeal analysis failed: {error}"))?
                 {
-
-
                     // A progress reading during the deal animation is not final.
                     // Require two consecutive fresh frames with restored cards AND
                     // AnotherBoard, without replaying input while they disagree.
@@ -237,8 +235,17 @@ pub(super) fn verify_pyramid_action(
 
 
                 if !effect_verified {
-                    effect_verified = source_transition.observe(&source_vision, &observation.frame, observation_rounds)?;
-                    send_log(event_tx, format!("Pyramid source disappearance for {kind:?}: two fresh checks verified={effect_verified}"));
+                    effect_verified = source_transition.observe(
+                        &source_vision,
+                        &observation.frame,
+                        observation_rounds,
+                    )?;
+                    send_log(
+                        event_tx,
+                        format!(
+                            "Pyramid source disappearance for {kind:?}: two fresh checks verified={effect_verified}"
+                        ),
+                    );
 
 
                     if effect_verified {
@@ -333,11 +340,7 @@ pub(super) fn verify_pyramid_action(
                         send_log(event_tx,
                             "WAITING: the final-apex effect is verified, but board/game completion is not yet verified. Ignoring transitional halos and recapturing without input.".to_owned());
                     } else if !awaiting_redeal {
-
-
                         if matches!(observation.prediction, PredictedAction::Action(_)) {
-
-
                             let after = if board_completed {
                                 plan_step(observation.prediction).map(|next| next.before())
                             } else {
@@ -411,12 +414,9 @@ pub(super) fn verify_pyramid_action(
                     expected_final_transition,
                     board_completed,
                     awaiting_redeal,
-                ) && effect_verified && pyramid::has_repeated_pile_pair(
-                    &before.frame,
-                    &observation.frame,
-                    kind,
-                )
-                .map_err(|error| format!("Pyramid fresh-pair analysis failed: {error}"))?
+                ) && effect_verified
+                    && pyramid::has_repeated_pile_pair(&before.frame, &observation.frame, kind)
+                        .map_err(|error| format!("Pyramid fresh-pair analysis failed: {error}"))?
                 {
                     let next = plan_step(observation.prediction)
                         .map_err(|error| format!("Pyramid fresh-pair plan failed: {error}"))?;
@@ -538,14 +538,10 @@ pub(super) struct PyramidRedealConfirmation {
 
 
 impl PyramidRedealConfirmation {
-
-
     /// Count consecutive fresh frames showing restored cards and AnotherBoard progress.
     ///
     /// Reset on contradictory or missing evidence; report confirmation after two matches.
     pub(super) fn observe(&mut self, restored_cards: bool, progress: Option<GameProgress>) -> bool {
-
-
         self.matching_captures = if restored_cards && progress == Some(GameProgress::AnotherBoard) {
             self.matching_captures.saturating_add(1).min(2)
         } else {

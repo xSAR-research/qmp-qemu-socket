@@ -86,8 +86,20 @@ fn retained_failure_case(
     if name == "coral" {
         // This corner-only historical control is not the new quarter-card decision.
         let measured = xsar::image_matching::packed_rgb::compare_packed_rgb(
-            &corner(&before_frame,22).unwrap(), &corner(&after_frame,22).unwrap(),26,10).unwrap();
-        assert_eq!((measured.changed_pixels,measured.total_pixels,measured.allowed_changes),(147,1519,151));
+            &corner(&before_frame, 22).unwrap(),
+            &corner(&after_frame, 22).unwrap(),
+            26,
+            10,
+        )
+        .unwrap();
+        assert_eq!(
+            (
+                measured.changed_pixels,
+                measured.total_pixels,
+                measured.allowed_changes
+            ),
+            (147, 1519, 151)
+        );
         assert!(!measured.exceeds_allowance());
     }
     let stock = crate::pyramid_effect::StockBefore::capture(&before_frame).unwrap();

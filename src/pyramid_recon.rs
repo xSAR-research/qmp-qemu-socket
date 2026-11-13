@@ -75,8 +75,6 @@ pub struct ReconRequest {
 
 
 impl ReconRequest {
-
-
     /// Validate caller-controlled fields before connecting or resetting STOP.
     ///
     /// # Errors
@@ -84,8 +82,6 @@ impl ReconRequest {
     /// profile paths, and empty, oversized or unnamed output paths. Bundled profile
     /// selection requires no path and grants no input authority by itself.
     pub fn validate(&self) -> Result<(), String> {
-
-
         if !self.initial_board_confirmed {
             return Err("Confirm an untouched Pyramid deal with Solver not engaged (unavailable is allowed) before reconnaissance".to_owned());
         }
@@ -266,8 +262,6 @@ impl<Adapter: ReconIo> crate::game_operations::restoration::UndoAllIo
 
 
 impl<Adapter: ReconIo> Runner<'_, Adapter> {
-
-
     /// Check cooperative cancellation and the elapsed-time budget.
     fn active(&self) -> Result<(), String> {
         self.io.check_active()?;
@@ -340,8 +334,6 @@ impl<Adapter: ReconIo> Runner<'_, Adapter> {
 
 
         if operation == ReconInput::Draw {
-
-
             if self.progress.draws >= MAX_DRAWS {
                 return Err("Reconnaissance D budget exhausted; recycling is forbidden".to_owned());
             }
@@ -354,8 +346,6 @@ impl<Adapter: ReconIo> Runner<'_, Adapter> {
 
     /// Record an actually recognised stock identity only once and in observation order.
     fn append_stock(&mut self, card: Card) -> Result<(), String> {
-
-
         if self.progress.stock.len() >= 24 {
             return Err(
                 "Unexpected extra stock card; the single-deck inventory is full".to_owned(),
@@ -467,8 +457,6 @@ impl<Adapter: ReconIo> Runner<'_, Adapter> {
                     return Ok(observed);
                 }
                 StockFace::Empty => {
-
-
                     if self.progress.stock.len() != MAX_DRAWS {
                         return Err(
                             "LEFT became empty before all 24 stock identities were recognised"
@@ -572,8 +560,6 @@ impl<Adapter: ReconIo> Runner<'_, Adapter> {
 
 /// Require a supported card-bearing scene rather than borrowing dialog authority.
 fn board(scene: ReconScene) -> Result<BoardObservation, String> {
-
-
     match scene {
         ReconScene::Board(observation) => Ok(observation),
         _ => Err("Expected a supported Pyramid board".to_owned()),
@@ -583,8 +569,6 @@ fn board(scene: ReconScene) -> Result<BoardObservation, String> {
 
 /// Read the actual current LEFT identity; empty is not an implicit next card.
 fn card_in_left(observation: &BoardObservation) -> Result<Card, String> {
-
-
     match observation.left {
         StockFace::Card(card) => Ok(card),
         StockFace::Empty => Err("Expected a recognised initial/current LEFT card".to_owned()),
@@ -594,11 +578,7 @@ fn card_in_left(observation: &BoardObservation) -> Result<Card, String> {
 
 /// Reject duplicate tableau identities without substituting unobserved cards.
 fn validate_tableau(tableau: &[Card; 28]) -> Result<(), String> {
-
-
     for (index, card) in tableau.iter().enumerate() {
-
-
         if tableau[..index].contains(card) {
             return Err(format!(
                 "Duplicate tableau identity {card} at logical slot {index}"
@@ -762,8 +742,6 @@ mod tests {
 
 
     impl FakeIo {
-
-
         /// Create an adapter with no authority failures or external effects.
         fn new(scenes: Vec<ReconScene>) -> Self {
             Self {
@@ -791,8 +769,6 @@ mod tests {
 
 
     impl ReconIo for FakeIo {
-
-
         /// Inject STOP/context loss at an exact check boundary.
         fn check_active(&self) -> Result<(), String> {
             let count = self.checks.get() + 1;
@@ -817,8 +793,6 @@ mod tests {
 
         /// Consume precisely one scripted observation, never reuse stale evidence.
         fn observe(&mut self) -> Result<ReconScene, String> {
-
-
             if matches!(self.inputs.last(), Some(ReconInput::UndoAll(_))) {
                 self.confirmation_capture_checks.push(self.checks.get());
             }
@@ -1513,8 +1487,6 @@ mod tests {
     /// No D, Undo All or OK is repeated when its delivery becomes uncertain.
     #[test]
     fn every_uncertain_input_stops_without_replay_or_cleanup() {
-
-
         for attempted in 1..=26 {
             let mut adapter = FakeIo::new(happy_scenes());
             adapter.fail_input = Some(attempted);

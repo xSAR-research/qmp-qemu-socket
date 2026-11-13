@@ -483,10 +483,15 @@ fn run_with_entry_revocation(
     });
     let mut qmp = QmpClient::connect(&socket).expect("actual local QMP handshake");
     let result = match entry {
-        TestRestartEntry::Challenge(proof) => {
-            finish_pyramid_challenge(&completion_context, &initial.frame, proof, &sink, &cancel, None)
-                .map(|()| PostGameOutcome::Completed)
-        }
+        TestRestartEntry::Challenge(proof) => finish_pyramid_challenge(
+            &completion_context,
+            &initial.frame,
+            proof,
+            &sink,
+            &cancel,
+            None,
+        )
+        .map(|()| PostGameOutcome::Completed),
         TestRestartEntry::Independent => run_independent_pyramid_restart_retaining_frame(
             &mut qmp,
             &socket,
@@ -497,7 +502,8 @@ fn run_with_entry_revocation(
             &cancel,
             &vision,
             &mut latest_frame,
-         None),
+            None,
+        ),
         TestRestartEntry::ComputerVision | TestRestartEntry::ComputerVisionNormal => {
             run_post_game_restart(
                 &mut qmp,
@@ -523,7 +529,8 @@ fn run_with_entry_revocation(
                 &cancel,
                 &vision,
                 &mut latest_frame,
-             None)
+                None,
+            )
         }
         TestRestartEntry::WitnessedUncertain => run_witnessed_pyramid_restart_retaining_frame(
             &mut qmp,
@@ -536,7 +543,8 @@ fn run_with_entry_revocation(
             &cancel,
             &vision,
             &mut latest_frame,
-         None),
+            None,
+        ),
     }
     .map(|outcome| matches!(outcome, PostGameOutcome::Restarted(_)));
     drop(qmp);
@@ -568,7 +576,6 @@ fn wire_point(point: PixelPoint) -> (i64, i64) {
         i64::from(point.y) * 32_767 / 1_080,
     )
 }
-
 
 
 /// Compose an explicit transport-stage simulation from real Fours and Continue pixels.

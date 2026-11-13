@@ -203,12 +203,16 @@ fn exhausted_left_winning_suffix_keeps_match_then_king_without_redeal() {
                     EffectObservation::Position(true)
                 ));
                 let operations = operations(actions[index]).unwrap();
-                io.begin_transition(states[index], states[index + 1], &operations).unwrap();
+                io.begin_transition(states[index], states[index + 1], &operations)
+                    .unwrap();
                 for operation in operations {
                     io.deliver(operation, states[index]).unwrap();
                 }
                 for _ in 0..1 {
-                    assert!(matches!(io.observe_effect(states[index + 1], index == 51).unwrap(), EffectObservation::Position(false)));
+                    assert!(matches!(
+                        io.observe_effect(states[index + 1], index == 51).unwrap(),
+                        EffectObservation::Position(false)
+                    ));
                 }
                 let observation = io.observe_effect(states[index + 1], index == 51).unwrap();
                 assert!(

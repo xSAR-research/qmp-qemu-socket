@@ -675,7 +675,9 @@ fn run(operation: Operation, frames: Vec<Vec<u8>>, revocation: Revocation) -> Ep
             progress: None,
             standard_three: false,
         }),
-        Operation::BoundTransition(bound) | Operation::ColourBoundTransition(bound) | Operation::ClearTransition(bound) => {
+        Operation::BoundTransition(bound)
+        | Operation::ColourBoundTransition(bound)
+        | Operation::ClearTransition(bound) => {
             adapter.challenge_progress = Some(bound);
             if matches!(operation, Operation::ClearTransition(_)) {
                 adapter.original_tableau =
@@ -716,9 +718,9 @@ fn run(operation: Operation, frames: Vec<Vec<u8>>, revocation: Revocation) -> Ep
         Operation::Entry | Operation::CardEntry | Operation::ColourEntry => {
             adapter.observed_entry()
         }
-        Operation::NoChallengeEntry | Operation::SingleBoardEntry | Operation::NormalColourEntry => {
-            adapter.entry(fixture.request.mode)
-        }
+        Operation::NoChallengeEntry
+        | Operation::SingleBoardEntry
+        | Operation::NormalColourEntry => adapter.entry(fixture.request.mode),
         Operation::Transition => adapter.transition(),
     };
     let retained_frame = adapter.latest.is_some();
@@ -2335,7 +2337,6 @@ fn native_150_clear_transition_requires_distinct_original_tableau() {
     assert_eq!(redeal.result, Ok(Entry::Challenge(bound)));
     assert_eq!(redeal.wire.captures, 2);
 }
-
 
 
 /// Retired normal ACKs observe distinct equal frames without input, restart receipts or a third clear.

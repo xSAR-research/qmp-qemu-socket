@@ -237,10 +237,18 @@ fn quarter_170_retained_picture_suits_remain_distinct() {
         assert_eq!(measured.allowed_changes, 293, "{label}");
         assert!(measured.exceeds_allowance(), "{label}");
         let tightened = region_counts(
-            &a, &b, card_bounds((759, 678)).unwrap(), &[], Default::default(),
-        ).unwrap();
+            &a,
+            &b,
+            card_bounds((759, 678)).unwrap(),
+            &[],
+            Default::default(),
+        )
+        .unwrap();
         assert_eq!(tightened.compared_pixels, 5874, "{label}");
-        assert!(tightened.changed_pixels >= measured.changed_pixels, "{label}");
+        assert!(
+            tightened.changed_pixels >= measured.changed_pixels,
+            "{label}"
+        );
         assert!(tightened.exceeds_allowance(), "{label}");
         assert!(
             !compare_with_settings(

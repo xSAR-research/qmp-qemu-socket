@@ -27,8 +27,6 @@ pub(crate) struct SessionLog {
 
 
 impl SessionLog {
-
-
     /// Reserves a private session file in the configured log directory.
     ///
     /// Existing names are never overwritten. A bounded suffix search handles
@@ -44,8 +42,6 @@ impl SessionLog {
 
 
         for attempt in 0..SESSION_LOG_NAME_ATTEMPTS {
-
-
             let collision_suffix = if attempt == 0 {
                 String::new()
             } else {

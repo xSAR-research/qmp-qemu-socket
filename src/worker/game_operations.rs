@@ -1,7 +1,5 @@
 //! Native operation adapter over retained worker capture, QMP and STOP timing.
 
-#![allow(dead_code)]
-
 use super::{
     CaptureTiming, QmpClient, WorkerEventSink, cancellable_wait, capture_screen, validate_probe,
 };

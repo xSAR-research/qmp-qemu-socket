@@ -97,7 +97,9 @@ pub(super) const LABELS: [Label; 10] = [
         kind: ChallengeKind::Score,
         patch: HeaderPatch {
             bounds: PixelRect::new(814, 48, 132, 32),
-            rgb: include_bytes!("../../../tests/fixtures/pyramid-testing-156/label-score-entry.rgb"),
+            rgb: include_bytes!(
+                "../../../tests/fixtures/pyramid-testing-156/label-score-entry.rgb"
+            ),
         },
     },
 ];

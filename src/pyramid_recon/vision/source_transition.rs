@@ -223,17 +223,10 @@ impl ReconVision {
         let (reader, origin) = match location {
             PyramidTargetKind::Left => (&self.stock_reader, (LEFT_BOUNDS.x, LEFT_BOUNDS.y)),
             PyramidTargetKind::Right => (&self.stock_reader, (RIGHT_BOUNDS.x, RIGHT_BOUNDS.y)),
-            PyramidTargetKind::Card { row, column } => {
-                let index = xsar::games::pyramid::planning::tableau_index(
-                    usize::from(row),
-                    usize::from(column),
-                )
-                .ok_or("invalid source coordinate")?;
-                (
-                    &self.tableau_reader,
-                    *TABLEAU_ORIGINS.get(index).ok_or("invalid source slot")?,
-                )
-            }
+            PyramidTargetKind::Card { row, column } => (
+                &self.tableau_reader,
+                super::pyramid_tableau_origin(row, column).ok_or("invalid source coordinate")?,
+            ),
             PyramidTargetKind::Move => return Err("Move control is not a card source".to_owned()),
         };
         reader.recognise(view, origin)

@@ -183,7 +183,7 @@ impl FailureWindow {
             },
             &mut self.open,
             |ui| {
-                if ui.button("Copy all").clicked() {
+                if crate::ui_style::press_able_button(ui, "Copy all").clicked() {
                     ui.ctx().copy_text(self.text.clone());
                 }
                 egui::ScrollArea::both()

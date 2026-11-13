@@ -1,33 +1,36 @@
-# Active handoff — application 3.1.16 / xSAR 0.16.1
+# Current handoff — application 3.3.0, xSAR 0.16.3
 
-All 51 fresh paired host gates passed with 1,893 application, 366 library and 80 console tests. The full suites report zero failed, ignored, measured or filtered tests. See [goal](FREE_CELL_goal_20261111G.md), [contract](FreeCell-Source-Midpoint-3.1.16.md) and [verification](Verification-3.1.16.md). The held ABS path is source-up45, the native floor midpoint of original source/effective destination, destination-up45 and exact destination, followed by UP. Both two-second and 500 ms choices use six waits. Fresh Windows acceptance is pending operator trial.
+Application `3.3.0` builds on `3.2.1` by adding worker-owned **Continuous normal games** and **Single board** session automation for independent A* Free Cell (`src/worker/freecell_session.rs`, `WorkerCommand::StartFreeCellSession`), reusing parameterised `post_game::RestartPolicy::IndependentFreeCell` (`GAME WIN` score skip preserving default win-sequence recording unless `--no-image` is passed -> optional `LEVEL-UP!` `OK` -> `NEW GAME` -> `PLAY` -> `verify_independent_start` 2-capture fresh deal proof), implementing Option 2A clean unsolvable exit (`RunTermination::Completed` with zero mid-game clicks), removing all superseded relative-coordinate (`REL` / `DragMode`) drag code to standardise exclusively on checked integer ABS dragging, and adding the Free Cell `Mode` (`Continuous normal games` default, `Single board`, `Manual`) + `Transfer policy` controls in `src/app/pyramid_workflow.rs` while keeping `Manual` 3-step controls intact. `xSAR` is aligned at `0.16.3` (commit `067ce26`).
 
-## Qualified executable and content
+## Tier 2 host verification summary (Beast)
 
-Capsule `Evidence/FreeCell/Validation/freecell-source-midpoint-316-20261111/` contains the 1,057-input final seal `5979ab6e76503cf04bd821870d3274639001bf4175afaf9e6717aae48f1d425c`, exact command/toolchain/configuration records, first-failure evidence, final suites and compilation-context artifacts.
+| Gate | Command | Result |
+| --- | --- | --- |
+| Format | `cargo fmt --package qmp-qemu-socket -- --check` | Pass |
+| Lib/bin strict Clippy | `cargo clippy --workspace --lib --bins -- -D warnings -D clippy::unwrap_used -D clippy::dbg_macro -D clippy::todo` | Pass |
+| All-targets Clippy | `cargo clippy --workspace --all-targets -- -D warnings` | Pass |
+| Default tests | `cargo test --workspace` | `1,757` passed, `0` failed, `185` ignored (`src/lib.rs`; `0` in `src/main.rs`, `0` doc-tests) |
+| Full tests | `cargo test --locked --offline --package qmp-qemu-socket -- --include-ignored` | `1,942` passed, `0` failed, `0` ignored (`src/lib.rs`; `0` in `src/main.rs`, `0` doc-tests) |
+| Rustdoc | `RUSTDOCFLAGS="-D warnings" cargo doc --locked --offline --package qmp-qemu-socket --no-deps --document-private-items` | Pass |
+| Release build | `cargo build --locked --offline --release --package qmp-qemu-socket --target x86_64-unknown-linux-gnu` | Pass |
 
-Executable `/home/charlie/repo/RUST/qmp-qemu-socket/target/x86_64-unknown-linux-gnu/release/qmp-qemu-socket` is version 3.1.16, 16831760 bytes, mode 0755, SHA-256 `c1f48045c41583b0a2646d1ec92edd82d59de7cdf4cf2f18bbcbcd0427ade699`. This is the mutable Cargo artifact. All four histories, index bytes and staged diffs are preserved.
-
-Launch this qualified Cargo artifact with the following command.
+- **Release executable:** `target/x86_64-unknown-linux-gnu/release/qmp-qemu-socket` (`16,922,304` bytes, mode `0755`, SHA-256 `3e8727fa13abd0d98a1c6a9768a6cf4c2a8f06e7152104d3349b4d4f72b92e97`)
+- **Live acceptance status:** Live Windows 11 guest verification on Beast covering `Continuous normal games` multi-board transitions (`GAME WIN` -> optional `LEVEL-UP!` `OK` -> `NEW GAME` -> `PLAY` -> fresh 52-card deal recon), default `GAME WIN` frame capture vs `--no-image`, `Single board` / `Manual` Free Cell modes, ABS-only card dragging, and Option 2A unsolvable-deal handling remains pending operator launch:
 
 ```sh
-/home/charlie/repo/RUST/qmp-qemu-socket/target/x86_64-unknown-linux-gnu/release/qmp-qemu-socket
+cargo run --release
 ```
 
-A normal Cargo launch from the repository root can rebuild the mutable artifact.
+Use `cargo run --release -- --no-image` to disable `GAME WIN` sequence recording while keeping failure diagnostics.
 
-```sh
-cd -- /home/charlie/repo/RUST/qmp-qemu-socket && cargo run --release
-```
+## Continuity check
 
-## Destination Sentinel
+External `--expected-closeout` Python sentinel scripts are retired from `3.2.0` onwards per operator direction (the prior `3.1.21` sentinel requirement was waived). Continuity relies on repository state in `Cargo.toml`, `Cargo.lock`, `CHANGELOG.md`, `docs/milestones.md`, `git status --short`, and locked Cargo checks.
 
-The prior 3.1.15 scoped sentinel passed before edits with independent expected closeout digest `d543b183ee3e5e2dc5bdc740b1f23adba1ae0c594df5c0d28c3962c4261ed9c0`, exactly `HANDOFF VERIFIED (scoped source/evidence; no cached build claim)`. The new 3.1.16 sentinel awaits its independent expected digest.
+<details>
+<summary>Archival 3.1.21 and 3.1.20 handoff notes (historical reference only)</summary>
 
-Before the next authorised mutation run `python3 ./verify-source-midpoint.py --expected-closeout <independent-approved-delivery-digest>` from this capsule. Obtain that expected digest from Charlie’s delivery/approval record. Add `--check-artifacts --check-toolchain` when claiming current cached qualification. Stop on the exact reported discrepancy. The capsule becomes immutable after final documentation, scans and closeout.
+- `3.1.21` qualified the destination synchronisation package (`1,923` tests, `xSAR 0.16.3`) with `3♦` and `8♣` ambiguities noted as pending (resolved in `3.2.0`).
+- Historical `3.1.21` destination receipt: `Evidence/FreeCell/Validation/sync-321-20261113-_1zupweo/qualification-summary.json`.
 
-## Remaining acceptance and authority
-
-Operator Windows acceptance remains pending. Each playback invocation requires fresh original-52 binding and relevant source/target/AUTO proofs, VM/pointer checks, STOP/context/source/run ownership and two fresh recorded endpoint matches. Ordinary failures can retain the immutable calculated report for an explicit manual UNDO ALL/fresh-52 restart. Positive terminal/probe completion and explicit revocation retire its authority.
-
-Charlie has standing approval for PATCH increases in both repositories during DRAG debugging. Each instruction group still defines its implementation scope. GitHub publication commands and detailed cumulative messages are prepared for Charlie to execute.
+</details>

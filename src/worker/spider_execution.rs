@@ -50,8 +50,6 @@ use crate::{
 
 /// Reject invalid finite budgets before connecting or changing cancellation.
 pub(super) fn validate_operation_limit(limit: usize) -> Result<(), String> {
-
-
     if limit > SPIDER_MAX_MULTI_STEP_ACTIONS {
         return Err(format!(
             "Spider requires 0 for continuous play or 1..={SPIDER_MAX_MULTI_STEP_ACTIONS} actions; requested {limit}"
@@ -63,8 +61,6 @@ pub(super) fn validate_operation_limit(limit: usize) -> Result<(), String> {
 
 /// I/O injection leaves all gameplay and terminal authority in production classifiers.
 trait SpiderIo {
-
-
     /// Acquire one new decoded frame; no classifier result is fabricated here.
     fn capture(&mut self) -> Result<CapturedFrame, String>;
 
@@ -108,8 +104,6 @@ struct QmpSpiderIo<'a> {
 
 
 impl SpiderIo for QmpSpiderIo<'_> {
-
-
     fn capture(&mut self) -> Result<CapturedFrame, String> {
         require_running(self.cancel_requested)?;
         let started = Instant::now();
@@ -264,8 +258,6 @@ pub(super) fn run_spider_steps(
 
     match result {
         Ok(RunOutcome::Completed(actions)) => {
-
-
             if let Some(observation) = latest {
                 let prediction = observation.prediction;
                 event_tx.publish_frame(observation.frame, prediction, false);
@@ -286,8 +278,6 @@ pub(super) fn run_spider_steps(
             );
         }
         Ok(RunOutcome::GameWon(actions)) => {
-
-
             if let Some(observation) = latest {
                 event_tx.publish_diagnostic_frame(observation.frame);
             }
@@ -305,8 +295,6 @@ pub(super) fn run_spider_steps(
             );
         }
         Err(error) => {
-
-
             if let Some(observation) = latest {
                 event_tx.publish_diagnostic_frame(observation.frame);
             }
@@ -491,8 +479,6 @@ fn await_context(
 
 
         if observation.gameplay_scene {
-
-
             if let PredictedAction::Action(_) = observation.prediction {
                 require_source(observation.prediction)?;
                 return Ok(None);
@@ -510,8 +496,6 @@ fn await_context(
 
 
             if !solver_active && !activation_reserved {
-
-
                 if !start_observed {
                     start_observed = true;
                     send_status(
@@ -905,8 +889,6 @@ fn capture_latest(
 
 /// Require fresh Spider action metadata and the shared canonical input plan.
 fn require_source(prediction: PredictedAction) -> Result<(), String> {
-
-
     match prediction {
         PredictedAction::Action(action) if matches!(action.target, ActionTarget::Spider(_)) => {
             plan_step(prediction)
@@ -920,8 +902,6 @@ fn require_source(prediction: PredictedAction) -> Result<(), String> {
 
 /// Advisory previews may be empty, but another mode's action cannot cross this boundary.
 fn require_preview_mode(prediction: PredictedAction) -> Result<(), String> {
-
-
     match prediction {
         PredictedAction::NoHighlight
         | PredictedAction::CalibrationOnly {
@@ -953,8 +933,6 @@ fn guard_input(io: &mut impl SpiderIo, cancel_requested: &AtomicBool) -> Result<
 
 /// STOP also covers mode/socket invalidation; uncertain inputs are never replayed.
 fn require_running(cancel_requested: &AtomicBool) -> Result<(), String> {
-
-
     if cancel_requested.load(Ordering::Acquire) {
         return Err("STOP requested".to_owned());
     }
@@ -1057,8 +1035,6 @@ mod tests {
 
 
     impl SpiderIo for FakeIo<'_> {
-
-
         fn capture(&mut self) -> Result<CapturedFrame, String> {
             self.calls.push(IoCall::Capture);
             self.captures += 1;
@@ -1274,8 +1250,6 @@ mod tests {
 
 
         for y in 90..spider::TOOLBAR_TOP {
-
-
             for x in 280..445 {
                 let offset = y as usize * frame.stride + x * 4;
                 frame.pixels[offset..offset + 3].copy_from_slice(&[20, 100, 75]);
@@ -1361,8 +1335,6 @@ mod tests {
     /// overlap; identical settled frames do not trigger card-pixel effect proof.
     #[test]
     fn fresh_native_single_cards_runs_and_same_position_consume_one_action() {
-
-
         for number in [2, 3, 4, 5, 6, 7, 10, 11, 12, 13, 14] {
             let cancel = AtomicBool::new(false);
             let mut io = fake(vec![fixture(number), fixture(number)], &cancel);
@@ -1467,8 +1439,6 @@ mod tests {
     /// repeating the acknowledged source, settling or recapturing.
     #[test]
     fn parking_failure_and_stop_after_source_do_not_replay_source() {
-
-
         for fault in [Fault::Park, Fault::StopAfterSource, Fault::StopAtParkProbe] {
             let cancel = AtomicBool::new(false);
             let mut io = fake(vec![fixture(3)], &cancel);
@@ -1536,8 +1506,6 @@ mod tests {
     /// activation; a source already appearing during the wait skips activation.
     #[test]
     fn fresh_deal_wait_precedes_solver_and_fresh_capture_can_skip_activation() {
-
-
         for activate in [true, false] {
             let cancel = AtomicBool::new(false);
             let mut frames = vec![fixture(1)];
@@ -1613,8 +1581,6 @@ mod tests {
     /// already consumed before activation remain charged to this context.
     #[test]
     fn inactive_solver_activates_once_without_resetting_observation_allowance() {
-
-
         for delayed_before_activation in [false, true] {
             let cancel = AtomicBool::new(false);
             let frames = if delayed_before_activation {
@@ -1687,8 +1653,6 @@ mod tests {
     /// editable deal; only an inactive Solver receives activation.
     #[test]
     fn continuous_win_restart_handles_optional_level_up_and_spider_play() {
-
-
         for level_up_fixture in [Some("FC10"), Some("SP20"), Some("505"), None] {
             let with_level_up = level_up_fixture.is_some();
 

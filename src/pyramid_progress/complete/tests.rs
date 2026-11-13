@@ -48,7 +48,6 @@ fn target_completion_unknown_control_has_neither_continue_nor_skip_authority() {
 }
 
 
-
 /// Real settled Fours terminal captured before the planned route had ended.
 const FOURS: &[u8] =
     include_bytes!("../../../tests/fixtures/pyramid-objectives/fours-complete.png");

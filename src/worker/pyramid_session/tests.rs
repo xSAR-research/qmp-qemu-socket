@@ -53,8 +53,6 @@ mod challenges;
 mod target_completion_tests;
 
 
-
-
 /// Read genuine finite native completion evidence for controller tests, without guest I/O.
 fn fours_completion() -> ChallengeCompletion {
     let frame = crate::capture::decode_png(include_bytes!(
@@ -1361,7 +1359,6 @@ fn native_150_challenge_ack_handoff_preserves_counter_rules_and_stop() {
     assert!(challenge::drive(&mut io).is_err());
     assert!(!io.calls.contains(&Call::Transition));
 }
-
 
 
 /// Normal ACK handoff requires exactly the next count; ACKs alone never open third-board restart.

@@ -2,7 +2,10 @@
 
 use std::cell::Cell;
 
-use super::{pyramid_reconnaissance::{AuthorityError, ReconControl}, *};
+use super::{
+    pyramid_reconnaissance::{AuthorityError, ReconControl},
+    *,
+};
 use crate::pyramid_workflow_model::RunTermination;
 
 
@@ -18,13 +21,24 @@ pub(super) struct StopTrace {
 
 impl StopTrace {
     /// Check reserved authority, retaining the typed cause before legacy string propagation.
-    pub(super) fn check(&self, control: &ReconControl, context: &ControllerContext, cancel: &AtomicBool) -> Result<(), String> {
+    pub(super) fn check(
+        &self,
+        control: &ReconControl,
+        context: &ControllerContext,
+        cancel: &AtomicBool,
+    ) -> Result<(), String> {
         self.retain(control.check_active_causal(context, cancel))
     }
 
 
     /// Preserve the cause from one atomic active-owner/receipt-epoch check.
-    pub(super) fn check_receipt(&self, control: &ReconControl, context: &ControllerContext, cancel: &AtomicBool, epoch: u64) -> Result<(), String> {
+    pub(super) fn check_receipt(
+        &self,
+        control: &ReconControl,
+        context: &ControllerContext,
+        cancel: &AtomicBool,
+        epoch: u64,
+    ) -> Result<(), String> {
         self.retain(control.check_receipt_causal(context, cancel, Some(epoch)))
     }
 
@@ -34,17 +48,27 @@ impl StopTrace {
         result.map_err(|error| {
             if matches!(error, AuthorityError::OperatorStop) {
                 self.operator.set(true);
-            } else { self.fatal.set(true); }
+            } else {
+                self.fatal.set(true);
+            }
             error.to_string()
         })
     }
 
 
     /// Classify only transport's typed cancellation, never a coincident genuine capture error.
-    pub(super) fn capture_error(&self, error: CaptureFailure, control: &ReconControl, context: &ControllerContext, cancel: &AtomicBool) -> String {
+    pub(super) fn capture_error(
+        &self,
+        error: CaptureFailure,
+        control: &ReconControl,
+        context: &ControllerContext,
+        cancel: &AtomicBool,
+    ) -> String {
         if error.cancelled {
             let _ = self.check(control, context, cancel);
-        } else { self.fatal.set(true); }
+        } else {
+            self.fatal.set(true);
+        }
         error.message
     }
 
@@ -86,7 +110,10 @@ pub(super) struct CaptureFailure {
 impl From<String> for CaptureFailure {
     /// Non-cancellation backend, layout, PNG and recording errors remain genuine failures.
     fn from(message: String) -> Self {
-        Self { message, cancelled: false }
+        Self {
+            message,
+            cancelled: false,
+        }
     }
 }
 

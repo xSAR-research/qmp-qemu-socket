@@ -13,7 +13,10 @@ use std::{
 };
 
 #[cfg(unix)]
-use std::{fs::OpenOptions, os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt}};
+use std::{
+    fs::OpenOptions,
+    os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt},
+};
 
 
 /// The sole production destination, reset once after startup arguments validate.
@@ -22,7 +25,7 @@ const IMAGE_DIRECTORY: &str = "/home/charlie/tmp/images";
 
 /// Validated startup intent; parsing itself performs no filesystem operations.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum StartupOptions {
+pub enum StartupOptions {
     /// Start the application with diagnostics enabled or disabled.
     Run {
         /// Record existing captures only during GAME WIN sequences.
@@ -38,9 +41,7 @@ pub(crate) enum StartupOptions {
 /// Recording is enabled unless `--no-image` is supplied. Help does not bypass
 /// invalid or duplicated arguments. Call startup reset
 /// only after this function has returned a successful `Run` decision.
-pub(crate) fn parse_args(
-    args: impl IntoIterator<Item = OsString>,
-) -> Result<StartupOptions, String> {
+pub fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<StartupOptions, String> {
     let mut images = true;
     let mut help = false;
     for argument in args {
@@ -49,16 +50,24 @@ pub(crate) fn parse_args(
             Some("--no-image") => return Err("Duplicate startup option --no-image.".to_owned()),
             Some("--help" | "-h") if !help => help = true,
             Some("--help" | "-h") => return Err("Duplicate startup help option.".to_owned()),
-            _ => return Err(format!("Unsupported startup argument {argument:?}; use --help.")),
+            _ => {
+                return Err(format!(
+                    "Unsupported startup argument {argument:?}; use --help."
+                ));
+            }
         }
     }
-    Ok(if help { StartupOptions::Help } else { StartupOptions::Run { images } })
+    Ok(if help {
+        StartupOptions::Help
+    } else {
+        StartupOptions::Run { images }
+    })
 }
 
 
 /// Shared startup origin and optional private diagnostics destination.
 #[derive(Clone, Debug)]
-pub(crate) struct ImageDiagnostics {
+pub struct ImageDiagnostics {
     /// Origin shared with worker log prefixes and capture-completion timestamps.
     pub started_at: Instant,
     /// Present only after an enabled startup has prepared the private directory.
@@ -68,7 +77,7 @@ pub(crate) struct ImageDiagnostics {
 
 impl ImageDiagnostics {
     /// Reset the exact production directory, recreating it only when enabled.
-    pub(crate) fn prepare(images: bool) -> io::Result<Self> {
+    pub fn prepare(images: bool) -> io::Result<Self> {
         Self::prepare_in(Path::new(IMAGE_DIRECTORY), images)
     }
 
@@ -81,7 +90,10 @@ impl ImageDiagnostics {
                 if metadata.file_type().is_symlink() || !metadata.is_dir() {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
-                        format!("Image diagnostics path is not a real directory: {}", root.display()),
+                        format!(
+                            "Image diagnostics path is not a real directory: {}",
+                            root.display()
+                        ),
                     ));
                 }
                 fs::remove_dir_all(root)?;
@@ -95,7 +107,10 @@ impl ImageDiagnostics {
         } else {
             None
         };
-        Ok(Self { started_at, directory })
+        Ok(Self {
+            started_at,
+            directory,
+        })
     }
 }
 
@@ -139,7 +154,12 @@ pub(crate) struct ImageRecorder {
 impl ImageRecorder {
     /// Construct an inactive recorder without creating or resetting directories.
     pub(crate) fn new(config: ImageDiagnostics) -> Self {
-        Self { config, latest: None, active: false, sequence: 0 }
+        Self {
+            config,
+            latest: None,
+            active: false,
+            sequence: 0,
+        }
     }
 
 
@@ -160,17 +180,22 @@ impl ImageRecorder {
         }
         if let Some(cached) = self.latest.as_mut() {
             let additional = png.len().saturating_sub(cached.png.len());
-            cached.png.try_reserve_exact(additional).map_err(|error|
-                io::Error::other(format!("Cannot cache the latest diagnostic PNG: {error}")))?;
+            cached.png.try_reserve_exact(additional).map_err(|error| {
+                io::Error::other(format!("Cannot cache the latest diagnostic PNG: {error}"))
+            })?;
             cached.png.clear();
             cached.png.extend_from_slice(png);
             cached.elapsed = elapsed;
         } else {
             let mut bytes = Vec::new();
-            bytes.try_reserve_exact(png.len()).map_err(|error|
-                io::Error::other(format!("Cannot cache the latest diagnostic PNG: {error}")))?;
+            bytes.try_reserve_exact(png.len()).map_err(|error| {
+                io::Error::other(format!("Cannot cache the latest diagnostic PNG: {error}"))
+            })?;
             bytes.extend_from_slice(png);
-            self.latest = Some(CachedImage { png: bytes, elapsed });
+            self.latest = Some(CachedImage {
+                png: bytes,
+                elapsed,
+            });
         }
         Ok(None)
     }
@@ -185,11 +210,17 @@ impl ImageRecorder {
             return Ok(None);
         }
         if self.active {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput,
-                "Image diagnostics sequence is already active."));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Image diagnostics sequence is already active.",
+            ));
         }
-        let cached = self.latest.take().ok_or_else(|| io::Error::new(
-            io::ErrorKind::InvalidInput, "Image diagnostics entry has no cached capture."))?;
+        let cached = self.latest.take().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Image diagnostics entry has no cached capture.",
+            )
+        })?;
         match self.record(&cached.png, cached.elapsed) {
             Ok(recorded) => {
                 self.active = true;
@@ -215,23 +246,43 @@ impl ImageRecorder {
 
     /// Allocate a unique name and preserve all earlier evidence on failure.
     fn record(&mut self, png: &[u8], elapsed: Duration) -> io::Result<RecordedImage> {
-        let directory = self.config.directory.as_ref().ok_or_else(|| io::Error::new(
-            io::ErrorKind::InvalidInput, "Image diagnostics recording is disabled."))?;
-        let sequence = self.sequence.checked_add(1)
+        let directory = self.config.directory.as_ref().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Image diagnostics recording is disabled.",
+            )
+        })?;
+        let sequence = self
+            .sequence
+            .checked_add(1)
             .ok_or_else(|| io::Error::other("Image diagnostics sequence counter exhausted."))?;
         self.sequence = sequence;
         let write_started = Instant::now();
         let milliseconds = elapsed.as_millis();
-        let filename = format!("{:06}.{:03}_{sequence:06}.png", milliseconds / 1_000, milliseconds % 1_000);
+        let filename = format!(
+            "{:06}.{:03}_{sequence:06}.png",
+            milliseconds / 1_000,
+            milliseconds % 1_000
+        );
         let path = directory.join(filename);
         let metadata = fs::symlink_metadata(directory)?;
         if metadata.file_type().is_symlink() || !metadata.is_dir() {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput,
-                format!("Image diagnostics destination is not a real directory: {}", directory.display())));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "Image diagnostics destination is not a real directory: {}",
+                    directory.display()
+                ),
+            ));
         }
         let file = create_private_file(&path)?;
         write_original_bytes(file, &path, png)?;
-        Ok(RecordedImage { path, elapsed, sequence, write_duration: write_started.elapsed() })
+        Ok(RecordedImage {
+            path,
+            elapsed,
+            sequence,
+            write_duration: write_started.elapsed(),
+        })
     }
 }
 
@@ -248,15 +299,21 @@ fn create_private_directory(path: &Path) -> io::Result<()> {
 /// Refuse enabled diagnostics where the requested Unix permissions are unavailable.
 #[cfg(not(unix))]
 fn create_private_directory(_path: &Path) -> io::Result<()> {
-    Err(io::Error::new(io::ErrorKind::Unsupported,
-        "Image diagnostics requires Unix directory and file permissions."))
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "Image diagnostics requires Unix directory and file permissions.",
+    ))
 }
 
 
 /// Create a new owner-only file; never overwrite existing evidence or a symlink.
 #[cfg(unix)]
 fn create_private_file(path: &Path) -> io::Result<File> {
-    let file = OpenOptions::new().write(true).create_new(true).mode(0o600).open(path)?;
+    let file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(path)?;
     if let Err(error) = file.set_permissions(fs::Permissions::from_mode(0o600)) {
         drop(file);
         return Err(remove_failed_file(path, error));
@@ -268,8 +325,10 @@ fn create_private_file(path: &Path) -> io::Result<File> {
 /// Match the enabled-diagnostics refusal on hosts without Unix permissions.
 #[cfg(not(unix))]
 fn create_private_file(_path: &Path) -> io::Result<File> {
-    Err(io::Error::new(io::ErrorKind::Unsupported,
-        "Image diagnostics requires Unix directory and file permissions."))
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "Image diagnostics requires Unix directory and file permissions.",
+    ))
 }
 
 
@@ -291,8 +350,13 @@ fn remove_failed_file(path: &Path, original: io::Error) -> io::Error {
     match fs::remove_file(path) {
         Ok(()) => original,
         Err(cleanup) if cleanup.kind() == io::ErrorKind::NotFound => original,
-        Err(cleanup) => io::Error::new(original.kind(), format!(
-            "{original}; cannot remove partial diagnostic image {}: {cleanup}", path.display())),
+        Err(cleanup) => io::Error::new(
+            original.kind(),
+            format!(
+                "{original}; cannot remove partial diagnostic image {}: {cleanup}",
+                path.display()
+            ),
+        ),
     }
 }
 
@@ -333,7 +397,9 @@ mod tests {
         fn new() -> Self {
             let serial = TEST_SEQUENCE.fetch_add(1, Ordering::Relaxed);
             let path = std::env::temp_dir().join(format!(
-                "qmp-qemu-image-diagnostics-{}-{serial}", std::process::id()));
+                "qmp-qemu-image-diagnostics-{}-{serial}",
+                std::process::id()
+            ));
             create_private_directory(&path).unwrap();
             Self(path)
         }
@@ -406,7 +472,12 @@ mod tests {
         let config = ImageDiagnostics::prepare_in(&images, false).unwrap();
         assert!(config.directory.is_none());
         assert!(!images.exists());
-        assert!(ImageDiagnostics::prepare_in(&images, false).unwrap().directory.is_none());
+        assert!(
+            ImageDiagnostics::prepare_in(&images, false)
+                .unwrap()
+                .directory
+                .is_none()
+        );
         assert!(!images.exists());
     }
 
@@ -421,7 +492,10 @@ mod tests {
         let config = ImageDiagnostics::prepare_in(&images, true).unwrap();
         assert_eq!(config.directory.as_ref(), Some(&images));
         assert_eq!(fs::read_dir(&images).unwrap().count(), 0);
-        assert_eq!(fs::metadata(&images).unwrap().permissions().mode() & 0o777, 0o700);
+        assert_eq!(
+            fs::metadata(&images).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
     }
 
 
@@ -435,9 +509,18 @@ mod tests {
         let images = root.images();
         symlink(&foreign, &images).unwrap();
         for enabled in [false, true] {
-            assert_eq!(ImageDiagnostics::prepare_in(&images, enabled).unwrap_err().kind(),
-                io::ErrorKind::InvalidInput);
-            assert!(fs::symlink_metadata(&images).unwrap().file_type().is_symlink());
+            assert_eq!(
+                ImageDiagnostics::prepare_in(&images, enabled)
+                    .unwrap_err()
+                    .kind(),
+                io::ErrorKind::InvalidInput
+            );
+            assert!(
+                fs::symlink_metadata(&images)
+                    .unwrap()
+                    .file_type()
+                    .is_symlink()
+            );
             assert_eq!(fs::read(foreign.join("keep.png")).unwrap(), ENTRY_BYTES);
         }
     }
@@ -449,8 +532,12 @@ mod tests {
         let root = TestRoot::new();
         let images = root.images();
         fs::write(&images, ENTRY_BYTES).unwrap();
-        assert_eq!(ImageDiagnostics::prepare_in(&images, true).unwrap_err().kind(),
-            io::ErrorKind::InvalidInput);
+        assert_eq!(
+            ImageDiagnostics::prepare_in(&images, true)
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::InvalidInput
+        );
         assert_eq!(fs::read(&images).unwrap(), ENTRY_BYTES);
     }
 
@@ -460,8 +547,14 @@ mod tests {
     fn disabled_recorder_does_not_cache_or_write() {
         let root = TestRoot::new();
         let images = root.images();
-        let mut recorder = ImageRecorder::new(ImageDiagnostics::prepare_in(&images, false).unwrap());
-        assert!(recorder.observe_png(ENTRY_BYTES, Duration::ZERO).unwrap().is_none());
+        let mut recorder =
+            ImageRecorder::new(ImageDiagnostics::prepare_in(&images, false).unwrap());
+        assert!(
+            recorder
+                .observe_png(ENTRY_BYTES, Duration::ZERO)
+                .unwrap()
+                .is_none()
+        );
         assert!(recorder.begin().unwrap().is_none());
         assert!(recorder.latest.is_none());
         assert!(!recorder.active);
@@ -475,7 +568,9 @@ mod tests {
         let root = TestRoot::new();
         let images = root.images();
         let mut recorder = ImageRecorder::new(ImageDiagnostics::prepare_in(&images, true).unwrap());
-        recorder.observe_png(ENTRY_BYTES, Duration::from_secs(1)).unwrap();
+        recorder
+            .observe_png(ENTRY_BYTES, Duration::from_secs(1))
+            .unwrap();
         let elapsed = Duration::from_micros(113_310_999);
         recorder.observe_png(NEXT_BYTES, elapsed).unwrap();
         assert_eq!(fs::read_dir(&images).unwrap().count(), 0);
@@ -484,8 +579,14 @@ mod tests {
         assert_eq!(recorded.elapsed, elapsed);
         assert_eq!(recorded.sequence, 1);
         assert_eq!(fs::read(&recorded.path).unwrap(), NEXT_BYTES);
-        assert_eq!(fs::metadata(&recorded.path).unwrap().permissions().mode() & 0o777, 0o600);
-        assert_eq!(recorder.begin().unwrap_err().kind(), io::ErrorKind::InvalidInput);
+        assert_eq!(
+            fs::metadata(&recorded.path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        assert_eq!(
+            recorder.begin().unwrap_err().kind(),
+            io::ErrorKind::InvalidInput
+        );
         assert_eq!(fs::read_dir(&images).unwrap().count(), 1);
     }
 
@@ -496,7 +597,10 @@ mod tests {
         let root = TestRoot::new();
         let images = root.images();
         let mut recorder = ImageRecorder::new(ImageDiagnostics::prepare_in(&images, true).unwrap());
-        assert_eq!(recorder.begin().unwrap_err().kind(), io::ErrorKind::InvalidInput);
+        assert_eq!(
+            recorder.begin().unwrap_err().kind(),
+            io::ErrorKind::InvalidInput
+        );
         assert!(!recorder.active);
         assert_eq!(fs::read_dir(&images).unwrap().count(), 0);
     }
@@ -508,20 +612,42 @@ mod tests {
         let root = TestRoot::new();
         let images = root.images();
         let mut recorder = ImageRecorder::new(ImageDiagnostics::prepare_in(&images, true).unwrap());
-        recorder.observe_png(ENTRY_BYTES, Duration::from_millis(1)).unwrap();
+        recorder
+            .observe_png(ENTRY_BYTES, Duration::from_millis(1))
+            .unwrap();
         let first = recorder.begin().unwrap().unwrap();
-        let second = recorder.observe_png(NEXT_BYTES, Duration::from_millis(2)).unwrap().unwrap();
-        let third = recorder.observe_png(ENTRY_BYTES, Duration::from_millis(3)).unwrap().unwrap();
-        assert!(recorder.latest.is_none(), "active recording retains no extra full-PNG copy");
+        let second = recorder
+            .observe_png(NEXT_BYTES, Duration::from_millis(2))
+            .unwrap()
+            .unwrap();
+        let third = recorder
+            .observe_png(ENTRY_BYTES, Duration::from_millis(3))
+            .unwrap()
+            .unwrap();
+        assert!(
+            recorder.latest.is_none(),
+            "active recording retains no extra full-PNG copy"
+        );
         recorder.end();
-        assert_eq!(recorder.begin().unwrap_err().kind(), io::ErrorKind::InvalidInput);
-        assert!(recorder.observe_png(NEXT_BYTES, Duration::from_millis(4)).unwrap().is_none());
+        assert_eq!(
+            recorder.begin().unwrap_err().kind(),
+            io::ErrorKind::InvalidInput
+        );
+        assert!(
+            recorder
+                .observe_png(NEXT_BYTES, Duration::from_millis(4))
+                .unwrap()
+                .is_none()
+        );
         assert_eq!(fs::read_dir(&images).unwrap().count(), 3);
         let fourth = recorder.begin().unwrap().unwrap();
         assert_eq!(fourth.sequence, 4);
-        for (record, expected) in [(&first, ENTRY_BYTES), (&second, NEXT_BYTES),
-            (&third, ENTRY_BYTES), (&fourth, NEXT_BYTES)]
-        {
+        for (record, expected) in [
+            (&first, ENTRY_BYTES),
+            (&second, NEXT_BYTES),
+            (&third, ENTRY_BYTES),
+            (&fourth, NEXT_BYTES),
+        ] {
             assert_eq!(fs::read(&record.path).unwrap(), expected);
         }
         recorder.end();
@@ -558,8 +684,15 @@ mod tests {
         let retained = root.0.join("retained");
         fs::rename(&images, &retained).unwrap();
         fs::write(&images, b"not a directory").unwrap();
-        assert!(recorder.observe_png(NEXT_BYTES, Duration::from_secs(1)).is_err());
-        assert_eq!(fs::read(retained.join(first.path.file_name().unwrap())).unwrap(), ENTRY_BYTES);
+        assert!(
+            recorder
+                .observe_png(NEXT_BYTES, Duration::from_secs(1))
+                .is_err()
+        );
+        assert_eq!(
+            fs::read(retained.join(first.path.file_name().unwrap())).unwrap(),
+            ENTRY_BYTES
+        );
         assert_eq!(fs::read(&images).unwrap(), b"not a directory");
     }
 
@@ -577,10 +710,18 @@ mod tests {
         fs::rename(&images, &retained).unwrap();
         fs::create_dir(&foreign).unwrap();
         symlink(&foreign, &images).unwrap();
-        assert_eq!(recorder.observe_png(NEXT_BYTES, Duration::from_secs(1)).unwrap_err().kind(),
-            io::ErrorKind::InvalidInput);
+        assert_eq!(
+            recorder
+                .observe_png(NEXT_BYTES, Duration::from_secs(1))
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::InvalidInput
+        );
         assert_eq!(fs::read_dir(&foreign).unwrap().count(), 0);
-        assert_eq!(fs::read(retained.join(first.path.file_name().unwrap())).unwrap(), ENTRY_BYTES);
+        assert_eq!(
+            fs::read(retained.join(first.path.file_name().unwrap())).unwrap(),
+            ENTRY_BYTES
+        );
     }
 
 
@@ -593,7 +734,10 @@ mod tests {
         recorder.observe_png(ENTRY_BYTES, Duration::ZERO).unwrap();
         let existing = images.join("000000.000_000001.png");
         fs::write(&existing, NEXT_BYTES).unwrap();
-        assert_eq!(recorder.begin().unwrap_err().kind(), io::ErrorKind::AlreadyExists);
+        assert_eq!(
+            recorder.begin().unwrap_err().kind(),
+            io::ErrorKind::AlreadyExists
+        );
         assert!(!recorder.active);
         assert_eq!(fs::read(&existing).unwrap(), NEXT_BYTES);
         let recovered = recorder.begin().unwrap().unwrap();
@@ -637,7 +781,10 @@ mod tests {
         let previous = root.0.join("previous.png");
         fs::write(&previous, NEXT_BYTES).unwrap();
         let partial = root.0.join("partial.png");
-        let writer = FailAfterPrefix { file: create_private_file(&partial).unwrap(), remaining: 8 };
+        let writer = FailAfterPrefix {
+            file: create_private_file(&partial).unwrap(),
+            remaining: 8,
+        };
         assert!(write_original_bytes(writer, &partial, ENTRY_BYTES).is_err());
         assert!(!partial.exists());
         assert_eq!(fs::read(previous).unwrap(), NEXT_BYTES);

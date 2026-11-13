@@ -9,34 +9,35 @@ use xsar::games::{
 };
 
 
-/// Occupied and empty top slots share one centre after the source lift and native midpoint.
+/// Every upper slot preserves its proved pickup anchor, including the allowed x recrop.
 #[test]
-fn freecell_3116_abs_top_targets_use_fixed_centres_for_occupied_and_empty_slots() {
+fn freecell_3119_abs_top_targets_preserve_pickup_anchors_for_occupied_and_empty_slots() {
     let source = PixelPoint::new(233, 671);
-    for (target, x, centre_x, midpoint_x) in [
-        (Pile::Cell(0), 166, 234, 233),
-        (Pile::Cell(1), 358, 426, 329),
-        (Pile::Cell(2), 551, 619, 426),
-        (Pile::Cell(3), 743, 811, 522),
-        (Pile::Foundation(0), 1233, 1301, 767),
-        (Pile::Foundation(1), 1425, 1493, 863),
-        (Pile::Foundation(2), 1041, 1109, 671),
-        (Pile::Foundation(3), 1618, 1686, 959),
+    for (target, x, anchor_x, midpoint_x) in [
+        (Pile::Cell(0), 166, 181, 207),
+        (Pile::Cell(1), 358, 373, 303),
+        (Pile::Cell(2), 551, 566, 399),
+        (Pile::Cell(3), 743, 758, 495),
+        (Pile::Foundation(0), 1233, 1248, 740),
+        (Pile::Foundation(1), 1425, 1440, 836),
+        (Pile::Foundation(2), 1041, 1056, 644),
+        (Pile::Foundation(3), 1618, 1633, 933),
     ] {
-        let centre = PixelPoint::new(centre_x, 203);
+        let anchor = PixelPoint::new(anchor_x, 132);
         let expected = [
             PixelPoint::new(233, 626),
-            PixelPoint::new(midpoint_x, 437),
-            PixelPoint::new(centre_x, 158),
-            centre,
+            PixelPoint::new(midpoint_x, 401),
+            anchor,
         ];
         let slot = crate::geometry::PixelRect::new(x, 112, 137, 182);
-        for observed in [PixelPoint::new(x as i32 + 15, 131), centre] {
-            let path = diagnostic_abs_path(source, observed, target, (1920, 1080)).unwrap();
-            assert_eq!(path, expected);
-            assert!(path[2..].iter().all(|point| slot.contains(*point)));
-            assert!(!slot.contains(path[0]) && !slot.contains(path[1]));
-        }
+        let path = diagnostic_abs_path(source, anchor, target, (1920, 1080)).unwrap();
+        assert_eq!(path, expected);
+        assert!(slot.contains(path[2]));
+        assert!(!slot.contains(path[0]) && !slot.contains(path[1]));
+        let recrop = PixelPoint::new(anchor_x - 1, 132);
+        let recrop_path = diagnostic_abs_path(source, recrop, target, (1920, 1080)).unwrap();
+        assert_eq!(recrop_path[2], recrop);
+        assert!(slot.contains(recrop_path[2]));
     }
 }
 
@@ -51,7 +52,6 @@ fn freecell_3116_abs_play_target_keeps_observed_point_and_exact_lift_midpoint_pa
         [
             PixelPoint::new(233, 626),
             PixelPoint::new(714, 644),
-            PixelPoint::new(1195, 573),
             destination,
         ]
     );
@@ -72,7 +72,6 @@ fn freecell_3116_abs_midpoint_rounds_odd_native_sums_down() {
         [
             PixelPoint::new(234, 626),
             PixelPoint::new(714, 644),
-            PixelPoint::new(1195, 573),
             PixelPoint::new(1195, 618),
         ]
     );
@@ -89,7 +88,6 @@ fn freecell_3116_abs_midpoint_avoids_native_endpoint_sum_overflow() {
         [
             PixelPoint::new(i32::MAX - 2, i32::MAX - 47),
             PixelPoint::new(i32::MAX - 1, i32::MAX - 1),
-            PixelPoint::new(i32::MAX, i32::MAX - 45),
             destination,
         ]
     );
@@ -134,7 +132,7 @@ fn freecell_3116_abs_path_rejects_invalid_bounds_and_piles_without_fallback() {
         ),
         (
             source,
-            PixelPoint::new(0, 44),
+            PixelPoint::new(0, -1),
             Pile::Cascade(5),
             (1920, 1080),
         ),
@@ -169,7 +167,6 @@ fn freecell_3116_abs_path_rejects_invalid_bounds_and_piles_without_fallback() {
         [
             PixelPoint::new(233, 626),
             PixelPoint::new(116, 358),
-            PixelPoint::new(0, 0),
             PixelPoint::new(0, 45),
         ]
     );
@@ -184,83 +181,191 @@ fn freecell_3116_abs_path_rejects_invalid_bounds_and_piles_without_fallback() {
         [
             PixelPoint::new(0, 0),
             PixelPoint::new(0, 45),
-            PixelPoint::new(0, 0),
             PixelPoint::new(0, 45),
+        ]
+    );
+    assert_eq!(
+        diagnostic_abs_path(
+            source,
+            PixelPoint::new(0, 0),
+            Pile::Cascade(0),
+            (1920, 1080)
+        )
+        .unwrap(),
+        [
+            PixelPoint::new(233, 626),
+            PixelPoint::new(116, 335),
+            PixelPoint::new(0, 0),
         ]
     );
 }
 
 
-/// Each explicit choice queues one immutable mode and refuses another run until completion.
+/// A single-owner playback queues once and refuses another run until completion.
 #[test]
-fn freecell_317_each_drag_choice_queues_once_without_starting_a_worker() {
-    for drag_mode in [route::DragMode::Absolute, route::DragMode::Relative] {
-        let (command_tx, command_rx) = mpsc::channel();
-        let (_, event_rx) = mpsc::channel();
-        let latest_frame = LatestFrameSlot::default();
-        let identity = plan(317);
-        latest_frame
+fn freecell_317_playback_queues_once_without_starting_a_worker() {
+    let (command_tx, command_rx) = mpsc::channel();
+    let (_, event_rx) = mpsc::channel();
+    let latest_frame = LatestFrameSlot::default();
+    let identity = plan(317);
+    latest_frame
+        .freecell_route
+        .lock()
+        .unwrap()
+        .prepare(identity.clone(), report())
+        .unwrap();
+    let handle = WorkerHandle {
+        command_tx,
+        event_rx,
+        latest_frame,
+        join: None,
+        cancel_requested: Arc::new(AtomicBool::new(false)),
+        shutdown_requested: Arc::new(AtomicBool::new(false)),
+    };
+    let settle = Duration::from_millis(317);
+    let run_id = handle
+        .execute_freecell_route(identity.clone(), true, route::AutoMode::ObserveGame, settle)
+        .unwrap();
+    match command_rx.try_recv().unwrap() {
+        WorkerCommand::ExecuteFreeCellRoute {
+            plan,
+            run_id: queued_run,
+            single_step,
+            settle: queued_settle,
+        } => {
+            assert_eq!(plan, identity);
+            assert_eq!(queued_run, run_id);
+            assert!(single_step);
+            assert_eq!(queued_settle, settle);
+        }
+        _ => panic!("Unexpected queued command"),
+    }
+    assert!(
+        handle
+            .execute_freecell_route(identity, true, route::AutoMode::ObserveGame, settle)
+            .is_err()
+    );
+    assert!(matches!(
+        command_rx.try_recv(),
+        Err(mpsc::TryRecvError::Empty)
+    ));
+}
+
+
+/// A resumable stop is scoped to an exact run, clears at completion and preserves its cursor.
+#[test]
+fn freecell_3118_stop_after_step_is_exact_idempotent_and_resets_before_resume() {
+    let identity = plan(3118);
+    let report = report();
+    let mut store = Store::default();
+    assert!(store.request_stop_after_step(&identity, 1).is_err());
+    store
+        .prepare(identity.clone(), Arc::clone(&report))
+        .unwrap();
+    let run_id = store.reserve(&identity).unwrap();
+    assert!(!store.stop_after_step);
+    assert!(store.request_stop_after_step(&plan(3119), run_id).is_err());
+    assert!(
+        store
+            .request_stop_after_step(&identity, run_id + 1)
+            .is_err()
+    );
+    assert!(!store.stop_after_step);
+    store.request_stop_after_step(&identity, run_id).unwrap();
+    store.request_stop_after_step(&identity, run_id).unwrap();
+    assert!(store.stop_after_step);
+    let mut state = store.live.as_ref().unwrap().state;
+    let (moves, _) = recorded_route(&report.outcome).unwrap();
+    state.position = state.position.apply(moves[0]).unwrap();
+    state.cursor = 1;
+    state.bound = true;
+    store
+        .finish(
+            &identity,
+            run_id,
+            Some(state),
+            Some(route::Completion::StepVerified),
+        )
+        .unwrap();
+    assert!(!store.stop_after_step);
+    assert!(store.available(&identity));
+    let resumed = store.reserve(&identity).unwrap();
+    assert!(resumed > run_id);
+    assert_eq!(store.live.as_ref().unwrap().state.cursor, 1);
+    assert!(!store.stop_after_step);
+    assert!(store.request_stop_after_step(&identity, run_id).is_err());
+    assert!(!store.stop_after_step);
+    store.request_stop_after_step(&identity, resumed).unwrap();
+    store.revoke();
+    assert!(!store.stop_after_step);
+    assert!(store.request_stop_after_step(&identity, resumed).is_err());
+    store.reject(&identity, resumed).unwrap();
+}
+
+
+/// The UI updates the exact active owner without queueing input or changing global STOP.
+#[test]
+fn freecell_3118_worker_stop_after_step_is_direct_and_does_not_latch_global_stop() {
+    let (command_tx, command_rx) = mpsc::channel();
+    let (_, event_rx) = mpsc::channel();
+    let latest_frame = LatestFrameSlot::default();
+    let identity = plan(3118);
+    latest_frame
+        .freecell_route
+        .lock()
+        .unwrap()
+        .prepare(identity.clone(), report())
+        .unwrap();
+    let handle = WorkerHandle {
+        command_tx,
+        event_rx,
+        latest_frame,
+        join: None,
+        cancel_requested: Arc::new(AtomicBool::new(false)),
+        shutdown_requested: Arc::new(AtomicBool::new(false)),
+    };
+    let run_id = handle
+        .execute_freecell_route(
+            identity.clone(),
+            false,
+            route::AutoMode::ObserveGame,
+            Duration::from_millis(750),
+        )
+        .unwrap();
+    let WorkerCommand::ExecuteFreeCellRoute { single_step, .. } = command_rx.try_recv().unwrap()
+    else {
+        panic!("Only the explicit playback command may be queued")
+    };
+    assert!(!single_step);
+    assert!(
+        handle
+            .request_freecell_stop_after_step(&identity, run_id + 1)
+            .is_err()
+    );
+    assert!(
+        !handle
+            .latest_frame
             .freecell_route
             .lock()
             .unwrap()
-            .prepare(identity.clone(), report())
-            .unwrap();
-        let handle = WorkerHandle {
-            command_tx,
-            event_rx,
-            latest_frame,
-            join: None,
-            cancel_requested: Arc::new(AtomicBool::new(false)),
-            shutdown_requested: Arc::new(AtomicBool::new(false)),
-        };
-        let settle = Duration::from_millis(317);
-        let run_id = handle
-            .execute_freecell_route(
-                identity.clone(),
-                true,
-                route::AutoMode::ObserveGame,
-                drag_mode,
-                settle,
-            )
-            .unwrap();
-        match command_rx.try_recv().unwrap() {
-            WorkerCommand::ExecuteFreeCellRoute {
-                plan,
-                run_id: queued_run,
-                single_step,
-                drag_mode: queued_mode,
-                drag_timing,
-                settle: queued_settle,
-            } => {
-                assert_eq!(plan, identity);
-                assert_eq!(queued_run, run_id);
-                assert!(single_step);
-                assert_eq!(queued_mode, drag_mode);
-                assert_eq!(drag_timing, route::DiagnosticDragTiming::TwoSeconds);
-                assert_eq!(queued_settle, settle);
-            }
-            _ => panic!("Unexpected queued command"),
-        }
-        let other_mode = match drag_mode {
-            route::DragMode::Absolute => route::DragMode::Relative,
-            route::DragMode::Relative => route::DragMode::Absolute,
-        };
-        assert!(
-            handle
-                .execute_freecell_route(
-                    identity,
-                    true,
-                    route::AutoMode::ObserveGame,
-                    other_mode,
-                    settle,
-                )
-                .is_err()
-        );
-        assert!(matches!(
-            command_rx.try_recv(),
-            Err(mpsc::TryRecvError::Empty)
-        ));
-    }
+            .stop_after_step
+    );
+    handle
+        .request_freecell_stop_after_step(&identity, run_id)
+        .unwrap();
+    assert!(
+        handle
+            .latest_frame
+            .freecell_route
+            .lock()
+            .unwrap()
+            .stop_after_step
+    );
+    assert!(!handle.cancel_requested.load(Ordering::Acquire));
+    assert!(matches!(
+        command_rx.try_recv(),
+        Err(mpsc::TryRecvError::Empty)
+    ));
 }
 
 
@@ -776,13 +881,7 @@ fn freecell_3110_worker_invalidation_prevents_cached_retry_resurrection() {
         assert!(!handle.freecell_route_available(&id));
         assert!(
             handle
-                .execute_freecell_route(
-                    id,
-                    true,
-                    route::AutoMode::ObserveGame,
-                    route::DragMode::Absolute,
-                    Duration::ZERO
-                )
+                .execute_freecell_route(id, true, route::AutoMode::ObserveGame, Duration::ZERO)
                 .is_err()
         );
         assert!(
@@ -819,28 +918,6 @@ fn freecell_312_stage_details_name_incident_action() {
     assert_eq!(value["action"]["card"], "2H");
     assert_eq!(value["action"]["from"], "PLAY 4");
     assert_eq!(value["action"]["to"], "CELL 3");
-}
-
-
-/// A retired motion permit keeps only its exact outstanding completion owner.
-#[test]
-fn freecell_318_movement_probe_completion_cannot_restore_route_authority() {
-    let id = plan(318);
-    let mut store = Store::default();
-    store.prepare(id.clone(), report()).unwrap();
-    let run = store.reserve(&id).unwrap();
-    store.revoke();
-    assert!(
-        store
-            .finish(&id, run + 1, None, Some(route::Completion::MovementProbe))
-            .is_err()
-    );
-    assert_eq!(store.running.as_ref(), Some(&(id.clone(), run)));
-    store
-        .finish(&id, run, None, Some(route::Completion::MovementProbe))
-        .unwrap();
-    assert!(!store.available(&id) && store.live.is_none() && store.running.is_none());
-    assert!(store.reserve(&id).is_err());
 }
 
 

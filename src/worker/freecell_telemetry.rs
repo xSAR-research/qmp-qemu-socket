@@ -19,16 +19,14 @@ fn identity(command: &WorkerCommand) -> Option<(&ControllerContext, Value)> {
             plan,
             run_id,
             single_step,
-            drag_mode,
-            drag_timing,
             settle,
         } => (
             &plan.context,
             json!({"command":"playback", "request_id":plan.request_id,
                 "source_generation":plan.source_generation,"run_id":run_id,
                 "single_step":single_step,
-                "diagnostic_drag_mode":single_step.then(||format!("{drag_mode:?}")),
-                "diagnostic_drag_timing":single_step.then(||format!("{drag_timing:?}")),
+                "diagnostic_drag_mode":"Absolute",
+                "gesture_phase_wait_ms":crate::parameters::FREECELL_ROUTE_ABS_GESTURE_INTERVAL.as_millis(),
                 "settle_ms":settle.as_millis()}),
         ),
         WorkerCommand::ReconnoitreFreeCell {
@@ -39,6 +37,13 @@ fn identity(command: &WorkerCommand) -> Option<(&ControllerContext, Value)> {
             context,
             json!({"command":"RECON", "request_id":request_id,
                 "export":request.destination}),
+        ),
+        WorkerCommand::StartFreeCellSession { context, request } => (
+            context,
+            json!({"command":"freecell-session","run_id":request.run_id,
+                "play_style":request.play_style.label(),
+                "autoplay_mode":format!("{:?}",request.auto_mode),
+                "settle_ms":request.settle.as_millis()}),
         ),
         WorkerCommand::ListFreeCellSources {
             context,
@@ -135,6 +140,20 @@ pub(super) fn event(event: &WorkerEvent) {
             ..
         } => json!({"event":"recon-result","request_id":request_id,
                 "termination":format!("{termination:?}"),"completed":result.is_ok()}),
+        WorkerEvent::FreeCellSessionProgress(progress) => {
+            json!({"event":"freecell-session-progress","run_id":progress.run_id,
+                "deal_generation":progress.deal_generation,"completed_games":progress.completed_games,
+                "phase":progress.phase.label(),"foundation_cards":progress.foundation_cards,
+                "expanded_states":progress.expanded_states})
+        }
+        WorkerEvent::FreeCellSessionFinished(completion) => {
+            json!({"event":"freecell-session-finished","run_id":completion.run_id,
+                "completed_games":completion.completed_games,
+                "termination":format!("{:?}",completion.termination),
+                "unsolvable_foundation_cards":completion.unsolvable_foundation_cards,
+                "completed":completion.result.is_ok(),
+                "error":completion.result.as_ref().err()})
+        }
         WorkerEvent::FreeCellRouteFinished {
             plan,
             run_id,
@@ -144,10 +163,7 @@ pub(super) fn event(event: &WorkerEvent) {
                 "termination":format!("{termination:?}"),"completed":result.is_ok(),
                 "progress":result.as_ref().ok().map(|p|json!({"proved_cursor":p.cursor,
                     "total":p.total,"attempted":p.attempted,"acknowledged":p.acknowledged,
-                    "completion":p.completion.map(|reason|format!("{reason:?}")),
-                    "probe_evidence":p.probe_evidence.as_ref().map(|evidence|json!({
-                        "capture_serial":evidence.capture_serial,"directory":evidence.directory,
-                        "persistence_error":evidence.persistence_error}))})),
+                    "completion":p.completion.map(|reason|format!("{reason:?}"))})),
                 "error":result.as_ref().err().map(|failure| &failure.error)}),
         WorkerEvent::SnapshotPrepared {
             request_id,

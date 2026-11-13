@@ -81,8 +81,6 @@ pub const SNAPSHOT_MAX_PNG_BYTES: usize = 32 * 1024 * 1024;
 /// 2. `$HOME/tmp` if that directory exists
 /// 3. Standard temporary directory (`/tmp` or `$TMPDIR`)
 pub fn session_log_directory() -> PathBuf {
-
-
     if let Some(dir) = env::var_os("QMP_SESSION_LOG_DIR").filter(|d| !d.is_empty()) {
         return PathBuf::from(dir);
     }
@@ -108,8 +106,6 @@ pub fn session_log_directory() -> PathBuf {
 /// 3. `$HOME/Pictures` if it exists
 /// 4. Standard temporary directory (`/tmp` or `$TMPDIR`)
 pub fn snapshot_directory() -> PathBuf {
-
-
     if let Some(dir) = env::var_os("QMP_SNAPSHOT_DIR").filter(|d| !d.is_empty()) {
         return PathBuf::from(dir);
     }
@@ -450,8 +446,6 @@ pub struct TableauRowScanProfile {
 
 
 impl TableauRowScanProfile {
-
-
     /// Return the exclusive slot index at the end of this row.
     pub const fn card_end_index(self) -> usize {
         self.first_card_index.saturating_add(self.card_count)
@@ -569,8 +563,6 @@ pub struct PostGameTarget {
 
 
 impl PostGameTarget {
-
-
     /// Associate one post-game stage with its recognised layouts and scene gate.
     pub const fn new(
         stage: PostGameStage,
@@ -589,8 +581,6 @@ impl PostGameTarget {
 
 
 impl PostGameControlVariant {
-
-
     /// Pair an observed or calibrated region with its authorised guest-pixel point.
     pub const fn new(
         label: &'static str,
@@ -607,8 +597,6 @@ impl PostGameControlVariant {
 
 
 impl ControlTarget {
-
-
     /// Construct a calibrated control definition without granting permission to click.
     pub const fn new(bounds: PixelRect, click_point: PixelPoint) -> Self {
         Self {
@@ -947,6 +935,11 @@ pub const SCORE_SKIP_MAX_CLICK_ATTEMPTS: usize = 3;
 pub const POINTER_SETTLE_DELAY: Duration = xsar::parameters::POINTER_SETTLE_DELAY;
 
 
+/// Fixed ABS Free Cell route interval between its six acknowledged gesture events.
+/// Five 100-millisecond waits apply equally to SINGLE STEP and MULTI STEP.
+pub const FREECELL_ROUTE_ABS_GESTURE_INTERVAL: Duration = Duration::from_millis(100);
+
+
 /// Ordinary gameplay mouse-button hold duration.
 pub const MOUSE_HOLD: Duration = xsar::parameters::MOUSE_HOLD;
 
@@ -1118,8 +1111,6 @@ pub struct AnimationSettleDelays {
 
 
 impl AnimationSettleDelays {
-
-
     /// Set TriPeaks and redeal durations, retaining the other modes' defaults.
     pub const fn from_millis(draw_ms: u64, tableau_ms: u64, board_redeal_ms: u64) -> Self {
         Self {
@@ -1245,8 +1236,6 @@ impl AnimationSettleDelays {
 
 
 impl Default for AnimationSettleDelays {
-
-
     /// Return per-mode defaults, including the observed Klondike action interval.
     fn default() -> Self {
         Self {
@@ -1362,8 +1351,6 @@ pub struct StepRunSettings {
 
 
 impl StepRunSettings {
-
-
     /// Freeze timing and operation authority for one guarded run.
     pub const fn new(animation_delays: AnimationSettleDelays, operation_limit: usize) -> Self {
         Self {
@@ -1435,8 +1422,6 @@ impl StepRunSettings {
 
     /// Return a finite operation count, or None for an unbounded run.
     pub const fn bounded_operation_limit(self) -> Option<usize> {
-
-
         if self.is_unbounded() {
             None
         } else {
@@ -1447,8 +1432,6 @@ impl StepRunSettings {
 
 
 impl Default for StepRunSettings {
-
-
     /// Return the calibrated default values for a newly created settings snapshot.
     fn default() -> Self {
         Self::new(AnimationSettleDelays::default(), DEFAULT_MULTI_STEP_ACTIONS)
@@ -1462,8 +1445,6 @@ pub const QMP_SOCKET_FILENAME: &str = "qmp-qemu-socket.sock";
 
 /// Resolve QMP_SOCKET_PATH first, then runtime-directory and temporary fallbacks.
 pub fn default_qmp_socket_path() -> PathBuf {
-
-
     // An explicit path keeps an existing QEMU launch usable during the socket
     // rename; otherwise use this application's own socket filename.
     if let Some(path) = env::var_os("QMP_SOCKET_PATH").filter(|path| !path.is_empty()) {
@@ -1474,8 +1455,6 @@ pub fn default_qmp_socket_path() -> PathBuf {
         .filter(|runtime_dir| !runtime_dir.is_empty())
         .map(PathBuf::from)
         .unwrap_or_else(|| {
-
-
             if let Some(dir) = env::var_os("QMP_RUNTIME_DIR").filter(|d| !d.is_empty()) {
                 PathBuf::from(dir)
             } else if let Some(home) = env::var_os("HOME").filter(|h| !h.is_empty()) {
@@ -2069,8 +2048,6 @@ mod tests {
     /// Verify that each TriPeaks halo anchor maps to its calibrated card centre.
     #[test]
     fn every_tableau_slot_preserves_the_anchor_to_click_invariant() {
-
-
         for regions in TABLEAU_CARD_REGIONS {
             let anchor = PixelPoint::new(
                 regions.card_bounds.x as i32 + 7,
@@ -2087,8 +2064,6 @@ mod tests {
     /// Verify card-region containment and QMP mapping for all calibrated slots.
     #[test]
     fn every_card_rank_halo_and_click_fits_the_frame() {
-
-
         for pixels in TABLEAU_CARD_REGIONS
             .iter()
             .chain([&STOCK_CARD_REGION, &WASTE_CARD_REGION])
@@ -2243,5 +2218,4 @@ mod tests {
             FREECELL_DEFAULT_OBSERVATION_LIMIT
         );
     }
-
 }

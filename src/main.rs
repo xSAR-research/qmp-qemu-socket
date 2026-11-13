@@ -1,47 +1,13 @@
-//! Desktop QMP controller with shared capture/input and per-game HALO policies.
+//! Thin native desktop entrypoint for the `qmp-qemu-socket` controller.
 
 #![warn(missing_docs, clippy::missing_docs_in_private_items)]
 
-mod app;
-mod capture;
-mod cards;
-mod detector;
-mod freecell;
-mod freecell_completion;
-mod freecell_recon;
-mod freecell_route;
-mod freecell_terminal;
-mod game;
-mod game_operations;
-mod geometry;
-mod image_diagnostics;
-mod image_evidence;
-mod klondike;
-mod parameters;
-mod pyramid;
-mod pyramid_diagnostics;
-mod pyramid_effect;
-mod pyramid_progress;
-mod pyramid_recon;
-mod pyramid_search_policy;
-mod pyramid_workflow_model;
-mod qmp;
-mod session_log;
-mod shutdown;
-mod single_step_telemetry;
-mod snapshot;
-mod spider;
-mod spider_terminal;
-mod stepper;
-mod strategy;
-mod terminal_controls;
-mod tracker;
-mod tripeaks;
-mod worker;
-
-use app::QmpQemuSocketApp;
 use eframe::egui;
-use parameters::{APP_NAME, INITIAL_WINDOW_HEIGHT, INITIAL_WINDOW_WIDTH, RELEASE_LABEL};
+use qmp_qemu_socket::{
+    APP_NAME, INITIAL_WINDOW_HEIGHT, INITIAL_WINDOW_WIDTH, QmpQemuSocketApp, RELEASE_LABEL,
+    image_diagnostics::{self, ImageDiagnostics, StartupOptions},
+    shutdown::ShutdownRequest,
+};
 
 
 /// Configure the native window and run the controller until its viewport closes.
@@ -54,19 +20,18 @@ fn main() -> eframe::Result {
             std::process::exit(2);
         });
     let images = match options {
-        image_diagnostics::StartupOptions::Run { images } => images,
-        image_diagnostics::StartupOptions::Help => {
+        StartupOptions::Run { images } => images,
+        StartupOptions::Help => {
             println!(
                 "Usage: qmp-qemu-socket [--no-image]\n\nSave GAME WIN sequence PNGs in /home/charlie/tmp/images by default.\nSuccessful ordinary gameplay captures are not saved; Pyramid failures may retain existing evidence in private error packets.\n\n--no-image  Disable GAME WIN image storage.\nEach application start removes that directory; default startup recreates it.\n--help      Show this help without starting the application."
             );
             return Ok(());
         }
     };
-    let diagnostics =
-        image_diagnostics::ImageDiagnostics::prepare(images).unwrap_or_else(|error| {
-            eprintln!("{APP_NAME}: cannot reset /home/charlie/tmp/images: {error}");
-            std::process::exit(1);
-        });
+    let diagnostics = ImageDiagnostics::prepare(images).unwrap_or_else(|error| {
+        eprintln!("{APP_NAME}: cannot reset /home/charlie/tmp/images: {error}");
+        std::process::exit(1);
+    });
     let window_title = format!("{APP_NAME} — {RELEASE_LABEL}");
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -84,7 +49,7 @@ fn main() -> eframe::Result {
             Ok(Box::new(QmpQemuSocketApp::new(
                 creation_context,
                 diagnostics,
-                shutdown::ShutdownRequest::install()?,
+                ShutdownRequest::install()?,
             )))
         }),
     )

@@ -180,6 +180,85 @@ impl QmpQemuSocketApp {
     }
 
 
+    /// Apply advisory progress emitted by the worker-owned automatic Free Cell session.
+    pub(super) fn apply_freecell_session_progress(
+        &mut self,
+        progress: crate::pyramid_workflow_model::FreeCellSessionProgress,
+    ) {
+        let selected = self.current_preview_context();
+        if self
+            .freecell_workflow
+            .receive_session_progress(&progress, &selected, self.active_run)
+        {
+            self.current_status = progress.message;
+        } else {
+            self.push_log("Ignored Free Cell session progress from an earlier request.");
+        }
+    }
+
+
+    /// Reconcile the terminal Free Cell automatic session event and release UI ownership.
+    pub(super) fn apply_freecell_session_finished(
+        &mut self,
+        completion: crate::pyramid_workflow_model::FreeCellSessionCompletion,
+    ) {
+        let selected = self.current_preview_context();
+        let accepted = pyramid_workflow::complete_freecell_session(
+            &mut self.freecell_workflow,
+            &mut self.active_run,
+            &mut self.worker_state,
+            &completion,
+            &selected,
+            self.stop_requested,
+        );
+        if !accepted {
+            self.push_log(format!(
+                "Ignored Free Cell session completion for inactive request {}.",
+                completion.run_id
+            ));
+            return;
+        }
+        if super::reset_preview::dispatch_completion(accepted, completion.termination, || {
+            self.current_status = "Waiting".to_owned();
+            if let Some(report) = self.freecell_workflow.report.clone() {
+                self.push_log(report);
+            }
+            self.begin_stop_preview(selected.clone());
+        }) == super::reset_preview::CompletionDispatch::StopPreview
+        {
+            return;
+        }
+        if let Err(error) = &completion.result {
+            self.failure_window.general(
+                "Free Cell session",
+                error,
+                serde_json::json!({
+                    "run_id": completion.run_id,
+                    "completed_games": completion.completed_games,
+                    "export_path": completion.export_path,
+                }),
+            );
+        }
+        self.current_status = if completion.result.is_err() {
+            "Free Cell session stopped — inspect the board"
+        } else if let Some(cards) = completion.unsolvable_foundation_cards {
+            let _ = cards;
+            "Unsolvable deal proved — deal a new game and press START"
+        } else if self.stop_requested {
+            "Free Cell session finished after STOP — no resume"
+        } else {
+            "Free Cell session finished"
+        }
+        .to_owned();
+        if let Some(report) = self.freecell_workflow.report.clone() {
+            self.push_log(report);
+        }
+        if self.worker_state == WorkerState::Detached {
+            self.stop_requested = false;
+        }
+    }
+
+
     /// Reconcile a matching calculation or execution completion without resume authority.
     pub(super) fn apply_computed_route_finished(
         &mut self,

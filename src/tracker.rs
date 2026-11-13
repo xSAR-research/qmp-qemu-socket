@@ -29,8 +29,6 @@ pub struct RowMask(
 
 
 impl RowMask {
-
-
     /// No selected rows; usable as an accumulator but not an active scan state.
     pub const EMPTY: Self = Self(0);
 
@@ -38,8 +36,6 @@ impl RowMask {
     /// Build a single-row mask for fixtures, rejecting zero and rows outside the profile.
     #[cfg(test)]
     pub const fn single_for(row: u8, row_count: u8) -> Option<Self> {
-
-
         if row == 0 || row > row_count || row > u8::BITS as u8 {
             None
         } else {
@@ -50,8 +46,6 @@ impl RowMask {
 
     /// Set every supported one-based row bit, with at most eight rows represented.
     pub const fn all_for(row_count: u8) -> Self {
-
-
         if row_count >= u8::BITS as u8 {
             Self(u8::MAX)
         } else if row_count == 0 {
@@ -77,8 +71,6 @@ impl RowMask {
 
     /// Test a one-based row, returning false for rows outside the eight-bit mask.
     pub const fn contains(self, row: u8) -> bool {
-
-
         if row == 0 || row > u8::BITS as u8 {
             false
         } else {
@@ -89,8 +81,6 @@ impl RowMask {
 
     /// Add a supported row and report whether the mask changed.
     pub fn insert(&mut self, row: u8) -> bool {
-
-
         if row == 0 || row > u8::BITS as u8 {
             return false;
         }
@@ -119,8 +109,6 @@ impl RowMask {
 
 
         while row <= row_count {
-
-
             if self.contains(row) {
                 return Some(row);
             }
@@ -136,8 +124,6 @@ impl RowMask {
 
 
         while row > 0 {
-
-
             if self.contains(row) {
                 return Some(row);
             }
@@ -171,8 +157,6 @@ pub struct TableauScanState {
 
 
 impl TableauScanState {
-
-
     /// TriPeaks starts with only the bottom row face-up.
     pub const fn initial() -> Self {
         Self::for_mode(GameMode::TriPeaks)
@@ -223,8 +207,6 @@ impl TableauScanState {
 
     /// Upper bound derived from the non-empty active mask.
     pub const fn row_upper(self) -> u8 {
-
-
         match self
             .active_rows
             .row_upper_for(self.mode.profile().row_count())
@@ -237,8 +219,6 @@ impl TableauScanState {
 
     /// Lower bound derived from the non-empty active mask.
     pub const fn row_lower(self) -> u8 {
-
-
         match self
             .active_rows
             .row_lower_for(self.mode.profile().row_count())
@@ -256,8 +236,6 @@ impl TableauScanState {
     /// still required before input. The one fresh observation may update this
     /// hint without becoming click authority.
     pub fn reconcile_observation(&mut self, observed: Option<RowMask>) -> bool {
-
-
         let Some(observed) = observed else {
             return false;
         };
@@ -274,8 +252,6 @@ impl TableauScanState {
 
 
 impl Default for TableauScanState {
-
-
     /// Start with the default TriPeaks bottom-row scan hint.
     fn default() -> Self {
         Self::initial()
@@ -474,33 +450,27 @@ pub fn analyse_frame_with_state(
 
     if state.mode() == GameMode::Spider {
         validate_frame(frame, profile)?;
-        return crate::spider::analyse(frame).map_err(|source| {
-            TrackerError::HaloDetection {
-                target: "Spider targets",
-                source,
-            }
+        return crate::spider::analyse(frame).map_err(|source| TrackerError::HaloDetection {
+            target: "Spider targets",
+            source,
         });
     }
 
 
     if state.mode() == GameMode::FreeCell {
         validate_frame(frame, profile)?;
-        return crate::freecell::analyse(frame).map_err(|source| {
-            TrackerError::HaloDetection {
-                target: "Free Cell targets",
-                source,
-            }
+        return crate::freecell::analyse(frame).map_err(|source| TrackerError::HaloDetection {
+            target: "Free Cell targets",
+            source,
         });
     }
 
 
     if state.mode() == GameMode::Klondike {
         validate_frame(frame, profile)?;
-        return crate::klondike::analyse(frame).map_err(|source| {
-            TrackerError::HaloDetection {
-                target: "Klondike targets",
-                source,
-            }
+        return crate::klondike::analyse(frame).map_err(|source| TrackerError::HaloDetection {
+            target: "Klondike targets",
+            source,
         });
     }
 
@@ -609,8 +579,6 @@ fn analyse_tripeaks_frame_for_profile(
 
 
     for row in inactive_rows.rows_lower_to_upper(row_count) {
-
-
         if row_has_face_up_card(frame, profile, row)? {
             observed_rows.insert(row);
         }
@@ -644,8 +612,6 @@ fn analyse_tripeaks_frame_for_profile(
     // only plausible rows, while stale hints and imperfect white evidence fail
     // safe rather than hiding a target.
     if candidates.is_empty() {
-
-
         for row in all_rows
             .difference(scanned_rows)
             .rows_lower_to_upper(row_count)
@@ -747,8 +713,6 @@ fn scan_tableau_row(
     halo_rows: &mut RowMask,
     candidates: &mut Vec<GuidedAction>,
 ) -> Result<(), TrackerError> {
-
-
     if scanned_rows.contains(row) {
         return Ok(());
     }
@@ -814,8 +778,6 @@ fn tableau_candidate(
 
 /// Require the selected profile's exact dimensions and a complete pixel layout.
 fn validate_frame(frame: &CapturedFrame, profile: &GameProfile) -> Result<(), TrackerError> {
-
-
     if (frame.width, frame.height) != (profile.frame_width, profile.frame_height) {
         return Err(TrackerError::UnexpectedFrameDimensions {
             expected_width: profile.frame_width,
@@ -839,8 +801,6 @@ fn calibrated_tableau_halo_anchor(
     regions: CardRegionPixels,
     click_offset_x: i32,
 ) -> Result<Option<PixelPoint>, TrackerError> {
-
-
     let Some(hit) =
         find_tableau_gold_halo_run(frame, regions, click_offset_x).map_err(|source| {
             TrackerError::HaloDetection {
@@ -959,11 +919,7 @@ mod tests {
 
     /// Fill a fixture rectangle for scene and colour-probe checks.
     fn fill_rect(frame: &mut CapturedFrame, bounds: crate::geometry::PixelRect, rgb: [u8; 3]) {
-
-
         for y in bounds.y..bounds.bottom() {
-
-
             for x in bounds.x..bounds.right() {
                 set_pixel(frame, x, y, rgb);
             }
@@ -1024,8 +980,6 @@ mod tests {
 
 
         for y in bounds.y..bounds.bottom() {
-
-
             for x in start_x..start_x + crate::parameters::FACE_UP_WHITE_BLOCK_MIN_WIDTH {
                 set_pixel(frame, x, y, [255; 3]);
             }
@@ -1041,8 +995,6 @@ mod tests {
 
 
         for y in profile.face_probe_bounds.y..profile.face_probe_bounds.bottom() {
-
-
             for x in start_x..start_x + crate::parameters::FACE_UP_WHITE_BLOCK_MIN_WIDTH {
                 set_pixel(frame, x, y, [255; 3]);
             }

@@ -271,7 +271,6 @@ impl Gate {
             })
             .map_err(|message| CheckpointError { message, paused })
     }
-
 }
 
 
@@ -619,5 +618,4 @@ mod tests {
         assert!(retained.requested);
         assert!(!retained.acknowledged);
     }
-
 }

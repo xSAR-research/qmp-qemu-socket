@@ -432,9 +432,7 @@ fn run_episode(frames: Vec<Vec<u8>>, operation: Operation, stop_after_draw: bool
         Operation::RestoredBoundary => {
             restored_boundary(&context, &request, guard, &events, &cancel)
         }
-        Operation::JointBaseline => {
-            joint_baseline_boundary(&context, &request, &events, &cancel)
-        }
+        Operation::JointBaseline => joint_baseline_boundary(&context, &request, &events, &cancel),
     };
     let wire = server.join().expect("local guard QMP server");
     let diagnostic = fs::read_dir(&directory.0)

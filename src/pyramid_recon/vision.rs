@@ -5,7 +5,7 @@
 //! is excluded: the caller owns explicit operator consent, freshness, cancellation,
 //! context, inventory, restoration and publication.
 
-use std::{collections::BTreeSet, fs::File, io::Read, path::Path};
+use std::{collections::BTreeSet, fs::File, io::Read, path::Path, sync::OnceLock};
 
 use serde_json::{Map, Value};
 use xsar::{
@@ -21,6 +21,7 @@ use crate::{
 
 mod card_paper;
 mod foreground_card;
+pub(crate) use foreground_card::CornerClassification;
 mod graded_glyph;
 
 
@@ -66,8 +67,6 @@ mod native_v21_tests;
 
 #[cfg(test)]
 mod native_v22_tests;
-
-
 
 
 /// Maximum encoded calibration size, before any JSON tree is allocated.
@@ -1285,6 +1284,20 @@ impl CardReader {
     }
 
 
+    /// Expose the foreground card reader classification when this CardReader uses v23 foreground matching.
+    fn classify(
+        &self,
+        view: FrameView<'_>,
+        origin: (u32, u32),
+    ) -> Result<CornerClassification, String> {
+        let reader = self
+            .foreground
+            .as_ref()
+            .ok_or_else(|| "Foreground card reader unavailable on legacy CardReader".to_owned())?;
+        reader.classify(view, origin)
+    }
+
+
     /// Return only an independently matched identity; absent and ambiguous differ.
     fn recognise(&self, view: FrameView<'_>, origin: (u32, u32)) -> Result<Option<Card>, String> {
         if let Some(reader) = &self.foreground {
@@ -1309,6 +1322,70 @@ impl CardReader {
 
         Ok(recognised)
     }
+}
+
+
+/// Cached compiled `native-v23` vision reader shared across pure read-only queries.
+fn cached_native_v23() -> Result<&'static ReconVision, String> {
+    static READER: OnceLock<Result<ReconVision, String>> = OnceLock::new();
+    READER
+        .get_or_init(ReconVision::bundled_native_v23)
+        .as_ref()
+        .map_err(Clone::clone)
+}
+
+
+/// Classify one native `1920×1080` top-left card corner using the shared foreground reader.
+pub(crate) fn classify_foreground_corner(
+    frame: &CapturedFrame,
+    origin: (u32, u32),
+) -> Result<CornerClassification, String> {
+    let vision = cached_native_v23()?;
+    let view = frame.as_view().map_err(|error| error.to_string())?;
+    vision.tableau_reader.classify(view, origin)
+}
+
+
+/// Return the native top-left pixel origin for one 1-based Pyramid tableau card (`1 <= column <= row <= 7`).
+pub(crate) fn pyramid_tableau_origin(row: u8, column: u8) -> Option<(u32, u32)> {
+    if !(1..=7).contains(&row) || !(1..=row).contains(&column) {
+        return None;
+    }
+    let zero_row = usize::from(row - 1);
+    let zero_col = usize::from(column - 1);
+    let index = zero_row * (zero_row + 1) / 2 + zero_col;
+    TABLEAU_ORIGINS.get(index).copied()
+}
+
+
+/// Classify one Pyramid `DRAW` pile (`right == false` for left/`1`, `right == true` for right/`2`) without scene gates.
+pub(crate) fn read_pyramid_draw_card(
+    frame: &CapturedFrame,
+    right: bool,
+) -> Result<crate::game_operations::CardRead, String> {
+    use crate::game_operations::CardRead;
+    let vision = cached_native_v23()?;
+    let view = frame.as_view().map_err(|error| error.to_string())?;
+    let (bounds, empty_pattern) = if right {
+        (RIGHT_BOUNDS, &vision.board.right_empty)
+    } else {
+        (LEFT_BOUNDS, &vision.board.left_empty)
+    };
+    let corner = vision.stock_reader.classify(view, (bounds.x, bounds.y))?;
+    let empty = vision.native_empty(view, bounds, empty_pattern)?;
+    Ok(match (corner, empty) {
+        (CornerClassification::Card(card), false) => CardRead::Card(card),
+        (CornerClassification::Ambiguous { .. }, _) | (CornerClassification::Card(_), true) => {
+            CardRead::Ambiguous
+        }
+        (_, true) => CardRead::Empty,
+        (
+            CornerClassification::ColourDisagreement { .. }
+            | CornerClassification::PartialLabel { .. }
+            | CornerClassification::Unreadable { .. },
+            false,
+        ) => CardRead::Unreadable,
+    })
 }
 
 
@@ -2398,7 +2475,6 @@ mod tests {
         for pattern in &vision.board.scene {
             paint(&mut frame, pattern, (0, 0));
         }
-
 
 
         if enabled_undo {

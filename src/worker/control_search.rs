@@ -74,10 +74,18 @@ impl<'a> ControlLookup<'a> {
         events: &'a WorkerEventSink,
     ) -> Self {
         Self {
-            game: game.into(), control, spec: profile.spec(control), events, started: Instant::now(),
+            game: game.into(),
+            control,
+            spec: profile.spec(control),
+            events,
+            started: Instant::now(),
             ok_glyph_policy: profile.ok_glyph_policy,
-            searches: 0, recaptures: 0, pixels: 0, rows: 0,
-            scan_total: Duration::ZERO, outcome: "not-searched",
+            searches: 0,
+            recaptures: 0,
+            pixels: 0,
+            rows: 0,
+            scan_total: Duration::ZERO,
+            outcome: "not-searched",
             ok_readiness: terminal_controls::ok_readiness::OkReadiness::new(),
             ok_panel: false,
             ok_confirmation_pending: false,
@@ -96,34 +104,61 @@ impl<'a> ControlLookup<'a> {
         self.ok_panel = false;
         self.searches += 1;
         let bounds = self.spec.bounds;
-        let right = bounds.width.checked_sub(1).and_then(|offset| bounds.x.checked_add(offset))
+        let right = bounds
+            .width
+            .checked_sub(1)
+            .and_then(|offset| bounds.x.checked_add(offset))
             .map_or_else(|| "invalid".to_owned(), |edge| edge.to_string());
-        let bottom = bounds.height.checked_sub(1).and_then(|offset| bounds.y.checked_add(offset))
+        let bottom = bounds
+            .height
+            .checked_sub(1)
+            .and_then(|offset| bounds.y.checked_add(offset))
             .map_or_else(|| "invalid".to_owned(), |edge| edge.to_string());
         let prefix = format!(
             "{} {} search {}: X={}..={}, Y={}..={} inclusive; bottom-to-top rows, left-to-right pixels; {} consecutive RGB(0,0,0)",
-            self.game, self.control.label(), self.searches,
-            bounds.x, right, bounds.y, bottom, self.spec.run_length,
+            self.game,
+            self.control.label(),
+            self.searches,
+            bounds.x,
+            right,
+            bounds.y,
+            bottom,
+            self.spec.run_length,
         );
         match terminal_controls::search(frame, self.spec) {
             Ok(result) => {
                 self.pixels += result.pixels_examined;
                 self.rows += u64::from(result.rows_examined);
                 self.scan_total += result.scan_time;
-                self.outcome = if result.point == PixelPoint::new(0, 0) { "missing" } else { "found" };
-                send_log(self.events, format!(
-                    "{prefix}; result=({}, {}); pixels={}; rows={}; scan_ms={:.3}.",
-                    result.point.x, result.point.y, result.pixels_examined,
-                    result.rows_examined, milliseconds(result.scan_time),
-                ));
+                self.outcome = if result.point == PixelPoint::new(0, 0) {
+                    "missing"
+                } else {
+                    "found"
+                };
+                send_log(
+                    self.events,
+                    format!(
+                        "{prefix}; result=({}, {}); pixels={}; rows={}; scan_ms={:.3}.",
+                        result.point.x,
+                        result.point.y,
+                        result.pixels_examined,
+                        result.rows_examined,
+                        milliseconds(result.scan_time),
+                    ),
+                );
                 Ok(result.point)
             }
             Err(error) => {
                 self.forget_ok_geometry();
                 self.outcome = "error";
-                let message = format!("{prefix}; result=error: {error}; pixels=0; rows=0; scan_ms=0.000.");
+                let message =
+                    format!("{prefix}; result=error: {error}; pixels=0; rows=0; scan_ms=0.000.");
                 send_log(self.events, message);
-                Err(format!("{} {} search failed: {error}", self.game, self.control.label()))
+                Err(format!(
+                    "{} {} search failed: {error}",
+                    self.game,
+                    self.control.label()
+                ))
             }
         }
     }
@@ -166,24 +201,41 @@ impl<'a> ControlLookup<'a> {
         self.ok_confirmation_pending = observation.confirmation_pending;
         self.ok_interrupted_confirmation = observation.interrupted_confirmation;
         self.ok_body_confirmation_pending = observation.body_confirmation_pending;
-        self.outcome = if observation.ready { "found" } else if point == PixelPoint::new(0, 0) {
+        self.outcome = if observation.ready {
+            "found"
+        } else if point == PixelPoint::new(0, 0) {
             "missing"
         } else {
             "awaiting-settled-OK"
         };
-        send_log(self.events, format!(
-            "{} OK readiness: raw=({}, {}); selected=({}, {}); button={:?}; caption_present={}; caption_y={:?}; geometry_stable={}; glyph_bounds={:?}; glyph_evidence={:?}; ready={}; confirmation_pending={}; interrupted_confirmation={}; body_confirmation_pending={}; reason={}; readiness_pixels={}/{}; readiness_ms={:.3}; caption_gate=false; normal_search_budget={}; final_OK_reserve={}; reserve_consumed={}; guest input sent=0.",
-            self.game, point.x, point.y, observation.point.x, observation.point.y,
-            observation.button, observation.caption_present, observation.caption_y,
-            observation.geometry_stable, observation.glyph_bounds, observation.glyph_evidence,
-            observation.ready, observation.confirmation_pending, observation.interrupted_confirmation,
-            observation.body_confirmation_pending,
-            observation.reason, observation.pixels_examined,
-            terminal_controls::ok_readiness::MAX_READINESS_PIXEL_COMPARISONS,
-            milliseconds(started.elapsed()),
-            TERMINAL_CONTROL_SEARCH_ATTEMPTS, TERMINAL_OK_FINAL_CONFIRMATIONS,
-            self.final_ok_confirmation_reserved,
-        ));
+        send_log(
+            self.events,
+            format!(
+                "{} OK readiness: raw=({}, {}); selected=({}, {}); button={:?}; caption_present={}; caption_y={:?}; geometry_stable={}; glyph_bounds={:?}; glyph_evidence={:?}; ready={}; confirmation_pending={}; interrupted_confirmation={}; body_confirmation_pending={}; reason={}; readiness_pixels={}/{}; readiness_ms={:.3}; caption_gate=false; normal_search_budget={}; final_OK_reserve={}; reserve_consumed={}; guest input sent=0.",
+                self.game,
+                point.x,
+                point.y,
+                observation.point.x,
+                observation.point.y,
+                observation.button,
+                observation.caption_present,
+                observation.caption_y,
+                observation.geometry_stable,
+                observation.glyph_bounds,
+                observation.glyph_evidence,
+                observation.ready,
+                observation.confirmation_pending,
+                observation.interrupted_confirmation,
+                observation.body_confirmation_pending,
+                observation.reason,
+                observation.pixels_examined,
+                terminal_controls::ok_readiness::MAX_READINESS_PIXEL_COMPARISONS,
+                milliseconds(started.elapsed()),
+                TERMINAL_CONTROL_SEARCH_ATTEMPTS,
+                TERMINAL_OK_FINAL_CONFIRMATIONS,
+                self.final_ok_confirmation_reserved,
+            ),
+        );
         Ok(observation.point)
     }
 
@@ -213,13 +265,22 @@ impl<'a> ControlLookup<'a> {
         } else {
             "normal retry"
         };
-        send_log(self.events, format!(
-            "{} {} retry wait: chosen_ms={:.0}; normal_ms={:.0}; confirmation_pending={}; policy={}; normal_search_budget={}; interrupted_confirmation={}; body_confirmation_pending={}; reserve_consumed={}; guest input sent=0.",
-            self.game, self.control.label(), milliseconds(delay), milliseconds(normal), confirmation, policy,
-            TERMINAL_CONTROL_SEARCH_ATTEMPTS, self.ok_interrupted_confirmation,
-            self.ok_body_confirmation_pending,
-            self.final_ok_confirmation_reserved,
-        ));
+        send_log(
+            self.events,
+            format!(
+                "{} {} retry wait: chosen_ms={:.0}; normal_ms={:.0}; confirmation_pending={}; policy={}; normal_search_budget={}; interrupted_confirmation={}; body_confirmation_pending={}; reserve_consumed={}; guest input sent=0.",
+                self.game,
+                self.control.label(),
+                milliseconds(delay),
+                milliseconds(normal),
+                confirmation,
+                policy,
+                TERMINAL_CONTROL_SEARCH_ATTEMPTS,
+                self.ok_interrupted_confirmation,
+                self.ok_body_confirmation_pending,
+                self.final_ok_confirmation_reserved,
+            ),
+        );
         delay
     }
 
@@ -231,23 +292,31 @@ impl<'a> ControlLookup<'a> {
     /// Consuming the reserve survives recaptures, geometry resets and errors.
     pub(super) fn reserve_final_ok_confirmation(&mut self, observations: usize) -> bool {
         let granted = self.control == Control::Ok
-            && (self.ok_confirmation_pending || self.ok_interrupted_confirmation
+            && (self.ok_confirmation_pending
+                || self.ok_interrupted_confirmation
                 || self.ok_body_confirmation_pending)
             && observations == TERMINAL_CONTROL_SEARCH_ATTEMPTS
             && !self.final_ok_confirmation_reserved;
         if granted {
             self.final_ok_confirmation_reserved = true;
         }
-        send_log(self.events, format!(
-            "{} {} final OK confirmation reserve: granted={}; observations={}; normal_budget={}; allowance={}; consumed={}; maximum_observations={}; confirmation_pending={}; interrupted_confirmation={}; body_confirmation_pending={}; guest input sent=0. A granted reserve permits one fresh observation, not an OK click.",
-            self.game, self.control.label(), granted, observations,
-            TERMINAL_CONTROL_SEARCH_ATTEMPTS, TERMINAL_OK_FINAL_CONFIRMATIONS,
-            self.final_ok_confirmation_reserved,
-            TERMINAL_CONTROL_SEARCH_ATTEMPTS + TERMINAL_OK_FINAL_CONFIRMATIONS,
-            self.ok_confirmation_pending,
-            self.ok_interrupted_confirmation,
-            self.ok_body_confirmation_pending,
-        ));
+        send_log(
+            self.events,
+            format!(
+                "{} {} final OK confirmation reserve: granted={}; observations={}; normal_budget={}; allowance={}; consumed={}; maximum_observations={}; confirmation_pending={}; interrupted_confirmation={}; body_confirmation_pending={}; guest input sent=0. A granted reserve permits one fresh observation, not an OK click.",
+                self.game,
+                self.control.label(),
+                granted,
+                observations,
+                TERMINAL_CONTROL_SEARCH_ATTEMPTS,
+                TERMINAL_OK_FINAL_CONFIRMATIONS,
+                self.final_ok_confirmation_reserved,
+                TERMINAL_CONTROL_SEARCH_ATTEMPTS + TERMINAL_OK_FINAL_CONFIRMATIONS,
+                self.ok_confirmation_pending,
+                self.ok_interrupted_confirmation,
+                self.ok_body_confirmation_pending,
+            ),
+        );
         granted
     }
 
@@ -302,13 +371,23 @@ impl Drop for ControlLookup<'_> {
             return;
         }
         let wall_time = self.started.elapsed();
-        send_log(self.events, format!(
-            "{} {} search summary: searches={}; recaptures={}; second_grab={}; pixels={}; rows={}; scan_total_ms={:.3}; wall_ms={:.3}; final_OK_reserve_consumed={}; outcome={}.",
-            self.game, self.control.label(), self.searches, self.recaptures,
-            self.recaptures != 0, self.pixels, self.rows,
-            milliseconds(self.scan_total), milliseconds(wall_time), self.final_ok_confirmation_reserved,
-            self.outcome,
-        ));
+        send_log(
+            self.events,
+            format!(
+                "{} {} search summary: searches={}; recaptures={}; second_grab={}; pixels={}; rows={}; scan_total_ms={:.3}; wall_ms={:.3}; final_OK_reserve_consumed={}; outcome={}.",
+                self.game,
+                self.control.label(),
+                self.searches,
+                self.recaptures,
+                self.recaptures != 0,
+                self.pixels,
+                self.rows,
+                milliseconds(self.scan_total),
+                milliseconds(wall_time),
+                self.final_ok_confirmation_reserved,
+                self.outcome,
+            ),
+        );
     }
 }
 
@@ -317,8 +396,8 @@ impl Drop for ControlLookup<'_> {
 mod tests {
     //! Search diagnostics retain per-attempt and final-summary evidence.
 
-    use super::*;
     use super::super::{LatestFrameSlot, WorkerEvent};
+    use super::*;
     use crate::{
         capture::{PixelFormat, decode_png},
         game::GameMode,
@@ -548,8 +627,11 @@ mod tests {
             assert!(lookup.has_ok_panel());
             lookup.set_outcome(outcome);
             assert!(lookup.has_ok_panel());
-            assert!(!lookup.ok_confirmation_pending && !lookup.ok_interrupted_confirmation
-                && !lookup.ok_body_confirmation_pending);
+            assert!(
+                !lookup.ok_confirmation_pending
+                    && !lookup.ok_interrupted_confirmation
+                    && !lookup.ok_body_confirmation_pending
+            );
             assert_eq!(inspect_ok(&mut lookup, &washed), PixelPoint::new(0, 0));
             assert!(!lookup.ok_interrupted_confirmation);
             assert!(lookup.ok_body_confirmation_pending);
@@ -611,37 +693,58 @@ mod tests {
             latest_frame: LatestFrameSlot::default(),
             capture_context: std::sync::Mutex::new(None),
         };
-        let entering = decode_png(include_bytes!("../../tests/fixtures/freecell-confirmation-20261016/entering.png")).unwrap();
-        let tinted = decode_png(include_bytes!("../../tests/fixtures/freecell-confirmation-20261016/tinted.png")).unwrap();
-        let clean = decode_png(include_bytes!("../../tests/fixtures/freecell-confirmation-20261016/clean.png")).unwrap();
+        let entering = decode_png(include_bytes!(
+            "../../tests/fixtures/freecell-confirmation-20261016/entering.png"
+        ))
+        .unwrap();
+        let tinted = decode_png(include_bytes!(
+            "../../tests/fixtures/freecell-confirmation-20261016/tinted.png"
+        ))
+        .unwrap();
+        let clean = decode_png(include_bytes!(
+            "../../tests/fixtures/freecell-confirmation-20261016/clean.png"
+        ))
+        .unwrap();
         for game in GameMode::AVAILABLE {
-            let mut lookup = ControlLookup::new(format!("{game:?}"), for_game(game), Control::Ok, &events);
+            let mut lookup =
+                ControlLookup::new(format!("{game:?}"), for_game(game), Control::Ok, &events);
             for frame in [&entering, &tinted, &clean] {
                 let point = lookup.search(frame).unwrap();
-                assert_eq!(lookup.confirm_ok(frame, point).unwrap(), PixelPoint::new(0, 0));
+                assert_eq!(
+                    lookup.confirm_ok(frame, point).unwrap(),
+                    PixelPoint::new(0, 0)
+                );
             }
             assert!(!lookup.reserve_final_ok_confirmation(1));
             assert!(!lookup.reserve_final_ok_confirmation(2));
             assert!(!lookup.reserve_final_ok_confirmation(4));
             assert!(lookup.reserve_final_ok_confirmation(TERMINAL_CONTROL_SEARCH_ATTEMPTS));
-            assert_eq!(lookup.retry_delay(Duration::from_secs(1)), LEVEL_UP_CONFIRMATION_DELAY);
+            assert_eq!(
+                lookup.retry_delay(Duration::from_secs(1)),
+                LEVEL_UP_CONFIRMATION_DELAY
+            );
             assert!(!lookup.reserve_final_ok_confirmation(TERMINAL_CONTROL_SEARCH_ATTEMPTS));
             lookup.note_recapture();
             // Repeated clean pixels model a fresh static capture, not observed live 200 ms timing.
             let point = lookup.search(&clean).unwrap();
-            assert_eq!(lookup.confirm_ok(&clean, point).unwrap(), PixelPoint::new(942, 770));
+            assert_eq!(
+                lookup.confirm_ok(&clean, point).unwrap(),
+                PixelPoint::new(942, 770)
+            );
             assert!(!lookup.reserve_final_ok_confirmation(4));
             assert_eq!(lookup.searches, 4);
         }
-        let logs: Vec<_> = receiver.try_iter().filter_map(|event| match event.event {
-            WorkerEvent::Log(message) => Some(message),
-            _ => None,
-        }).collect();
+        let logs: Vec<_> = receiver
+            .try_iter()
+            .filter_map(|event| match event.event {
+                WorkerEvent::Log(message) => Some(message),
+                _ => None,
+            })
+            .collect();
         assert_eq!(logs.iter().filter(|line| line.contains(
             "final OK confirmation reserve: granted=true; observations=3; normal_budget=3; allowance=1; consumed=true; maximum_observations=4"
         )).count(), GameMode::AVAILABLE.len());
     }
-
 
 
     /// Late bodies reserve a fresh response; Klondike's complete caption requests geometry only.
@@ -655,21 +758,24 @@ mod tests {
         };
         let reward = decode_png(include_bytes!(
             "../../tests/fixtures/spider-late-ok-20261018/reward.png"
-        )).unwrap();
+        ))
+        .unwrap();
         let entering = decode_png(include_bytes!(
             "../../tests/fixtures/spider-late-ok-20261018/entering.png"
-        )).unwrap();
+        ))
+        .unwrap();
         let near_black = decode_png(include_bytes!(
             "../../tests/fixtures/spider-late-ok-20261018/near-black.png"
-        )).unwrap();
+        ))
+        .unwrap();
         // This pre-existing native image is a controlled fourth response, not a live recording.
         let fresh = decode_png(include_bytes!(
             "../../tests/fixtures/spider-game-win-20261015/grey-caption.png"
-        )).unwrap();
+        ))
+        .unwrap();
         for game in GameMode::AVAILABLE {
-            let mut lookup = ControlLookup::new(
-                format!("{game:?}"), for_game(game), Control::Ok, &events,
-            );
+            let mut lookup =
+                ControlLookup::new(format!("{game:?}"), for_game(game), Control::Ok, &events);
             for frame in [&reward, &entering, &near_black] {
                 assert_eq!(inspect_ok(&mut lookup, frame), PixelPoint::new(0, 0));
             }
@@ -690,7 +796,10 @@ mod tests {
                 assert!(!lookup.reserve_final_ok_confirmation(observations));
             }
             assert!(lookup.reserve_final_ok_confirmation(TERMINAL_CONTROL_SEARCH_ATTEMPTS));
-            assert_eq!(lookup.retry_delay(Duration::from_secs(2)), LEVEL_UP_CONFIRMATION_DELAY);
+            assert_eq!(
+                lookup.retry_delay(Duration::from_secs(2)),
+                LEVEL_UP_CONFIRMATION_DELAY
+            );
             assert!(!lookup.reserve_final_ok_confirmation(TERMINAL_CONTROL_SEARCH_ATTEMPTS));
             lookup.note_recapture();
             assert!(!lookup.ok_body_confirmation_pending);
@@ -698,13 +807,19 @@ mod tests {
             assert!(!lookup.reserve_final_ok_confirmation(4));
             assert_eq!(lookup.searches, 4);
         }
-        let logs: Vec<_> = receiver.try_iter().filter_map(|event| match event.event {
-            WorkerEvent::Log(message) => Some(message),
-            _ => None,
-        }).collect();
-        assert_eq!(logs.iter().filter(|line| line.contains(
-            "policy=reserved late OK body confirmation"
-        )).count(), GameMode::AVAILABLE.len() - 1);
+        let logs: Vec<_> = receiver
+            .try_iter()
+            .filter_map(|event| match event.event {
+                WorkerEvent::Log(message) => Some(message),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            logs.iter()
+                .filter(|line| line.contains("policy=reserved late OK body confirmation"))
+                .count(),
+            GameMode::AVAILABLE.len() - 1
+        );
         assert!(logs.iter().any(|line| line.contains(
             "Klondike OK retry wait: chosen_ms=200; normal_ms=2000; confirmation_pending=true; policy=fresh OK geometry confirmation"
         )));
@@ -722,13 +837,16 @@ mod tests {
         };
         let reward = decode_png(include_bytes!(
             "../../tests/fixtures/spider-late-ok-20261018/reward.png"
-        )).unwrap();
+        ))
+        .unwrap();
         let entering = decode_png(include_bytes!(
             "../../tests/fixtures/spider-late-ok-20261018/entering.png"
-        )).unwrap();
+        ))
+        .unwrap();
         let near_black = decode_png(include_bytes!(
             "../../tests/fixtures/spider-late-ok-20261018/near-black.png"
-        )).unwrap();
+        ))
+        .unwrap();
         let mut lookup = ControlLookup::new("Spider", &SPIDER_CONTROLS, Control::Ok, &events);
         for frame in [&reward, &entering, &near_black] {
             assert_eq!(inspect_ok(&mut lookup, frame), PixelPoint::new(0, 0));
@@ -749,7 +867,6 @@ mod tests {
     }
 
 
-
     /// A previously full-size modal moving without ink is not late first-body evidence.
     #[test]
     fn late_body_confirmation_rejects_a_moved_previously_settled_body() {
@@ -761,13 +878,15 @@ mod tests {
         };
         let reward = decode_png(include_bytes!(
             "../../tests/fixtures/spider-late-ok-20261018/reward.png"
-        )).unwrap();
+        ))
+        .unwrap();
         let near_black = decode_png(include_bytes!(
             "../../tests/fixtures/spider-late-ok-20261018/near-black.png"
-        )).unwrap();
-        let displaced = washed_ok(&decode_png(include_bytes!(
-            "../../tests/fixtures/freecell-FC10.png"
-        )).unwrap());
+        ))
+        .unwrap();
+        let displaced = washed_ok(
+            &decode_png(include_bytes!("../../tests/fixtures/freecell-FC10.png")).unwrap(),
+        );
         let mut lookup = ControlLookup::new("Spider", &SPIDER_CONTROLS, Control::Ok, &events);
         for frame in [&reward, &near_black, &displaced] {
             assert_eq!(inspect_ok(&mut lookup, frame), PixelPoint::new(0, 0));
@@ -776,7 +895,10 @@ mod tests {
         assert!(!lookup.ok_confirmation_pending && !lookup.ok_interrupted_confirmation);
         assert!(!lookup.ok_body_confirmation_pending);
         assert!(!lookup.reserve_final_ok_confirmation(TERMINAL_CONTROL_SEARCH_ATTEMPTS));
-        assert_eq!(lookup.retry_delay(Duration::from_secs(1)), Duration::from_secs(1));
+        assert_eq!(
+            lookup.retry_delay(Duration::from_secs(1)),
+            Duration::from_secs(1)
+        );
     }
 
 
@@ -798,24 +920,46 @@ mod tests {
         ];
         for bytes in cases {
             let frame = decode_png(bytes).unwrap();
-            let mut lookup = ControlLookup::new("Free Cell", for_game(GameMode::FreeCell), Control::Ok, &events);
+            let mut lookup = ControlLookup::new(
+                "Free Cell",
+                for_game(GameMode::FreeCell),
+                Control::Ok,
+                &events,
+            );
             for _ in 0..TERMINAL_CONTROL_SEARCH_ATTEMPTS {
                 let point = lookup.search(&frame).unwrap();
-                assert_eq!(lookup.confirm_ok(&frame, point).unwrap(), PixelPoint::new(0, 0));
+                assert_eq!(
+                    lookup.confirm_ok(&frame, point).unwrap(),
+                    PixelPoint::new(0, 0)
+                );
             }
             assert!(!lookup.reserve_final_ok_confirmation(TERMINAL_CONTROL_SEARCH_ATTEMPTS));
             assert!(!lookup.final_ok_confirmation_reserved);
         }
-        let clean = decode_png(include_bytes!("../../tests/fixtures/freecell-confirmation-20261016/clean.png")).unwrap();
+        let clean = decode_png(include_bytes!(
+            "../../tests/fixtures/freecell-confirmation-20261016/clean.png"
+        ))
+        .unwrap();
         for control in [Control::NewGame, Control::Play] {
-            let mut lookup = ControlLookup::new("Free Cell", for_game(GameMode::FreeCell), control, &events);
-            lookup.confirm_ok(&clean, PixelPoint::new(942, 770)).unwrap();
+            let mut lookup =
+                ControlLookup::new("Free Cell", for_game(GameMode::FreeCell), control, &events);
+            lookup
+                .confirm_ok(&clean, PixelPoint::new(942, 770))
+                .unwrap();
             assert!(!lookup.reserve_final_ok_confirmation(TERMINAL_CONTROL_SEARCH_ATTEMPTS));
             assert!(!lookup.final_ok_confirmation_reserved);
         }
-        let mut ready = ControlLookup::new("Free Cell", for_game(GameMode::FreeCell), Control::Ok, &events);
+        let mut ready = ControlLookup::new(
+            "Free Cell",
+            for_game(GameMode::FreeCell),
+            Control::Ok,
+            &events,
+        );
         ready.confirm_ok(&clean, PixelPoint::new(942, 770)).unwrap();
-        assert_eq!(ready.confirm_ok(&clean, PixelPoint::new(942, 770)).unwrap(), PixelPoint::new(942, 770));
+        assert_eq!(
+            ready.confirm_ok(&clean, PixelPoint::new(942, 770)).unwrap(),
+            PixelPoint::new(942, 770)
+        );
         assert!(!ready.reserve_final_ok_confirmation(TERMINAL_CONTROL_SEARCH_ATTEMPTS));
     }
 
@@ -829,34 +973,62 @@ mod tests {
             latest_frame: LatestFrameSlot::default(),
             capture_context: std::sync::Mutex::new(None),
         };
-        let clean = decode_png(include_bytes!("../../tests/fixtures/freecell-confirmation-20261016/clean.png")).unwrap();
+        let clean = decode_png(include_bytes!(
+            "../../tests/fixtures/freecell-confirmation-20261016/clean.png"
+        ))
+        .unwrap();
         let point = PixelPoint::new(942, 770);
         let mut malformed = clean.clone();
         malformed.pixels.clear();
-        let mut lookup = ControlLookup::new("Free Cell", for_game(GameMode::FreeCell), Control::Ok, &events);
+        let mut lookup = ControlLookup::new(
+            "Free Cell",
+            for_game(GameMode::FreeCell),
+            Control::Ok,
+            &events,
+        );
         lookup.confirm_ok(&clean, point).unwrap();
         assert!(lookup.reserve_final_ok_confirmation(TERMINAL_CONTROL_SEARCH_ATTEMPTS));
         lookup.note_recapture();
         lookup.forget_ok_geometry();
         assert!(!lookup.reserve_final_ok_confirmation(TERMINAL_CONTROL_SEARCH_ATTEMPTS));
-        assert_eq!(lookup.confirm_ok(&clean, point).unwrap(), PixelPoint::new(0, 0));
-        assert_eq!(lookup.retry_delay(Duration::from_secs(1)), LEVEL_UP_CONFIRMATION_DELAY);
+        assert_eq!(
+            lookup.confirm_ok(&clean, point).unwrap(),
+            PixelPoint::new(0, 0)
+        );
+        assert_eq!(
+            lookup.retry_delay(Duration::from_secs(1)),
+            LEVEL_UP_CONFIRMATION_DELAY
+        );
         assert!(!lookup.reserve_final_ok_confirmation(TERMINAL_CONTROL_SEARCH_ATTEMPTS));
 
         assert!(lookup.search(&malformed).is_err());
-        assert_eq!(lookup.confirm_ok(&clean, point).unwrap(), PixelPoint::new(0, 0));
+        assert_eq!(
+            lookup.confirm_ok(&clean, point).unwrap(),
+            PixelPoint::new(0, 0)
+        );
         assert!(!lookup.reserve_final_ok_confirmation(TERMINAL_CONTROL_SEARCH_ATTEMPTS));
         assert!(lookup.confirm_ok(&malformed, point).is_err());
-        assert_eq!(lookup.confirm_ok(&clean, point).unwrap(), PixelPoint::new(0, 0));
+        assert_eq!(
+            lookup.confirm_ok(&clean, point).unwrap(),
+            PixelPoint::new(0, 0)
+        );
         assert!(!lookup.reserve_final_ok_confirmation(TERMINAL_CONTROL_SEARCH_ATTEMPTS));
         lookup.set_outcome("capture-error");
         lookup.forget_ok_geometry();
-        assert_eq!(lookup.confirm_ok(&clean, point).unwrap(), PixelPoint::new(0, 0));
+        assert_eq!(
+            lookup.confirm_ok(&clean, point).unwrap(),
+            PixelPoint::new(0, 0)
+        );
         assert!(!lookup.reserve_final_ok_confirmation(TERMINAL_CONTROL_SEARCH_ATTEMPTS));
         assert!(!lookup.reserve_final_ok_confirmation(4));
         assert!(lookup.final_ok_confirmation_reserved);
 
-        let mut next_stage = ControlLookup::new("Free Cell", for_game(GameMode::FreeCell), Control::Ok, &events);
+        let mut next_stage = ControlLookup::new(
+            "Free Cell",
+            for_game(GameMode::FreeCell),
+            Control::Ok,
+            &events,
+        );
         next_stage.confirm_ok(&clean, point).unwrap();
         assert!(next_stage.reserve_final_ok_confirmation(TERMINAL_CONTROL_SEARCH_ATTEMPTS));
     }
@@ -871,13 +1043,20 @@ mod tests {
             latest_frame: LatestFrameSlot::default(),
             capture_context: std::sync::Mutex::new(None),
         };
-        let frame = decode_png(include_bytes!("../../tests/fixtures/spider-level-up-505.png")).unwrap();
+        let frame = decode_png(include_bytes!(
+            "../../tests/fixtures/spider-level-up-505.png"
+        ))
+        .unwrap();
         for game in GameMode::AVAILABLE {
             for normal in [Duration::from_secs(1), Duration::from_secs(2)] {
-                let mut lookup = ControlLookup::new(format!("{game:?}"), for_game(game), Control::Ok, &events);
+                let mut lookup =
+                    ControlLookup::new(format!("{game:?}"), for_game(game), Control::Ok, &events);
                 assert_eq!(lookup.retry_delay(normal), normal);
                 let first = lookup.search(&frame).unwrap();
-                assert_eq!(lookup.confirm_ok(&frame, first).unwrap(), PixelPoint::new(0, 0));
+                assert_eq!(
+                    lookup.confirm_ok(&frame, first).unwrap(),
+                    PixelPoint::new(0, 0)
+                );
                 assert_eq!(lookup.retry_delay(normal), LEVEL_UP_CONFIRMATION_DELAY);
                 lookup.note_recapture();
                 assert_eq!(lookup.retry_delay(normal), normal);
@@ -886,13 +1065,19 @@ mod tests {
                 assert_eq!(lookup.retry_delay(normal), normal);
             }
         }
-        let logs: Vec<_> = receiver.try_iter().filter_map(|event| match event.event {
-            WorkerEvent::Log(message) => Some(message),
-            _ => None,
-        }).collect();
-        assert_eq!(logs.iter().filter(|line| line.contains(
-            "chosen_ms=200; normal_ms="
-        )).count(), GameMode::AVAILABLE.len() * 2);
+        let logs: Vec<_> = receiver
+            .try_iter()
+            .filter_map(|event| match event.event {
+                WorkerEvent::Log(message) => Some(message),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            logs.iter()
+                .filter(|line| line.contains("chosen_ms=200; normal_ms="))
+                .count(),
+            GameMode::AVAILABLE.len() * 2
+        );
         assert!(logs.iter().any(|line| line.contains(
             "confirmation_pending=true; policy=fresh OK geometry confirmation; normal_search_budget=3"
         )));
@@ -920,14 +1105,25 @@ mod tests {
             let mut lookup = ControlLookup::new("Spider", &SPIDER_CONTROLS, Control::Ok, &events);
             for _ in 0..2 {
                 let point = lookup.search(&frame).unwrap();
-                assert_eq!(lookup.confirm_ok(&frame, point).unwrap(), PixelPoint::new(0, 0));
+                assert_eq!(
+                    lookup.confirm_ok(&frame, point).unwrap(),
+                    PixelPoint::new(0, 0)
+                );
                 assert_eq!(lookup.retry_delay(normal), normal);
             }
         }
-        let frame = decode_png(include_bytes!("../../tests/fixtures/spider-level-up-505.png")).unwrap();
+        let frame = decode_png(include_bytes!(
+            "../../tests/fixtures/spider-level-up-505.png"
+        ))
+        .unwrap();
         for control in [Control::NewGame, Control::Play] {
             let mut lookup = ControlLookup::new("Spider", &SPIDER_CONTROLS, control, &events);
-            assert_eq!(lookup.confirm_ok(&frame, PixelPoint::new(944, 771)).unwrap(), PixelPoint::new(944, 771));
+            assert_eq!(
+                lookup
+                    .confirm_ok(&frame, PixelPoint::new(944, 771))
+                    .unwrap(),
+                PixelPoint::new(944, 771)
+            );
             assert_eq!(lookup.retry_delay(normal), normal);
         }
     }
@@ -942,32 +1138,47 @@ mod tests {
             latest_frame: LatestFrameSlot::default(),
             capture_context: std::sync::Mutex::new(None),
         };
-        let frame = decode_png(include_bytes!("../../tests/fixtures/spider-level-up-505.png")).unwrap();
+        let frame = decode_png(include_bytes!(
+            "../../tests/fixtures/spider-level-up-505.png"
+        ))
+        .unwrap();
         let point = PixelPoint::new(944, 771);
         let normal = Duration::from_secs(2);
         let mut malformed = frame.clone();
         malformed.pixels.clear();
         let mut lookup = ControlLookup::new("Spider", &SPIDER_CONTROLS, Control::Ok, &events);
 
-        assert_eq!(lookup.confirm_ok(&frame, point).unwrap(), PixelPoint::new(0, 0));
+        assert_eq!(
+            lookup.confirm_ok(&frame, point).unwrap(),
+            PixelPoint::new(0, 0)
+        );
         assert_eq!(lookup.retry_delay(normal), LEVEL_UP_CONFIRMATION_DELAY);
         lookup.forget_ok_geometry();
         assert_eq!(lookup.retry_delay(normal), normal);
         assert!(!lookup.has_ok_panel());
 
-        assert_eq!(lookup.confirm_ok(&frame, point).unwrap(), PixelPoint::new(0, 0));
+        assert_eq!(
+            lookup.confirm_ok(&frame, point).unwrap(),
+            PixelPoint::new(0, 0)
+        );
         assert_eq!(lookup.retry_delay(normal), LEVEL_UP_CONFIRMATION_DELAY);
         assert!(lookup.search(&malformed).is_err());
         assert_eq!(lookup.retry_delay(normal), normal);
         assert!(!lookup.has_ok_panel());
 
-        assert_eq!(lookup.confirm_ok(&frame, point).unwrap(), PixelPoint::new(0, 0));
+        assert_eq!(
+            lookup.confirm_ok(&frame, point).unwrap(),
+            PixelPoint::new(0, 0)
+        );
         assert_eq!(lookup.retry_delay(normal), LEVEL_UP_CONFIRMATION_DELAY);
         assert!(lookup.confirm_ok(&malformed, point).is_err());
         assert_eq!(lookup.retry_delay(normal), normal);
         assert!(!lookup.has_ok_panel());
 
-        assert_eq!(lookup.confirm_ok(&frame, point).unwrap(), PixelPoint::new(0, 0));
+        assert_eq!(
+            lookup.confirm_ok(&frame, point).unwrap(),
+            PixelPoint::new(0, 0)
+        );
         assert_eq!(lookup.retry_delay(normal), LEVEL_UP_CONFIRMATION_DELAY);
         lookup.set_outcome("capture-error");
         assert_eq!(lookup.retry_delay(normal), normal);
@@ -984,22 +1195,30 @@ mod tests {
             capture_context: std::sync::Mutex::new(None),
         };
         let missing = decode_png(include_bytes!("../../tests/fixtures/spider-SP15.png")).unwrap();
-        let found = decode_png(include_bytes!("../../tests/fixtures/spider-level-up-505.png")).unwrap();
+        let found = decode_png(include_bytes!(
+            "../../tests/fixtures/spider-level-up-505.png"
+        ))
+        .unwrap();
         {
             let mut lookup = ControlLookup::new("Spider", &SPIDER_CONTROLS, Control::Ok, &events);
             assert_eq!(lookup.search(&missing).unwrap(), PixelPoint::new(0, 0));
             lookup.note_recapture();
             assert_eq!(lookup.search(&found).unwrap(), PixelPoint::new(944, 771));
         }
-        let logs: Vec<_> = receiver.try_iter().filter_map(|event| match event.event {
-            WorkerEvent::Log(message) => Some(message),
-            _ => None,
-        }).collect();
+        let logs: Vec<_> = receiver
+            .try_iter()
+            .filter_map(|event| match event.event {
+                WorkerEvent::Log(message) => Some(message),
+                _ => None,
+            })
+            .collect();
         assert_eq!(logs.len(), 3);
         assert!(logs[0].contains("Spider OK search 1: X=930..=954, Y=700..=850"));
         assert!(logs[0].contains("result=(0, 0); pixels=3775; rows=151; scan_ms="));
         assert!(logs[1].contains("result=(944, 771); pixels=1994; rows=80; scan_ms="));
-        assert!(logs[2].contains("searches=2; recaptures=1; second_grab=true; pixels=5769; rows=231;"));
+        assert!(
+            logs[2].contains("searches=2; recaptures=1; second_grab=true; pixels=5769; rows=231;")
+        );
         assert!(logs[2].contains("scan_total_ms="));
         assert!(logs[2].contains("wall_ms="));
         assert!(logs[2].ends_with("outcome=found."));
@@ -1016,17 +1235,23 @@ mod tests {
             capture_context: std::sync::Mutex::new(None),
         };
         let malformed = CapturedFrame {
-            width: 1920, height: 1080, stride: 7680,
-            format: PixelFormat::Rgba8, pixels: Vec::new(),
+            width: 1920,
+            height: 1080,
+            stride: 7680,
+            format: PixelFormat::Rgba8,
+            pixels: Vec::new(),
         };
         {
             let mut lookup = ControlLookup::new("Spider", &SPIDER_CONTROLS, Control::Play, &events);
             assert!(lookup.search(&malformed).is_err());
         }
-        let logs: Vec<_> = receiver.try_iter().filter_map(|event| match event.event {
-            WorkerEvent::Log(message) => Some(message),
-            _ => None,
-        }).collect();
+        let logs: Vec<_> = receiver
+            .try_iter()
+            .filter_map(|event| match event.event {
+                WorkerEvent::Log(message) => Some(message),
+                _ => None,
+            })
+            .collect();
         assert_eq!(logs.len(), 2);
         assert!(logs[0].contains("result=error:"));
         assert!(logs[1].contains("searches=1; recaptures=0; second_grab=false; pixels=0; rows=0;"));
@@ -1047,10 +1272,13 @@ mod tests {
             let mut lookup = ControlLookup::new("Spider", &SPIDER_CONTROLS, Control::Ok, &events);
             lookup.set_outcome("capture-error");
         }
-        let logs: Vec<_> = receiver.try_iter().filter_map(|event| match event.event {
-            WorkerEvent::Log(message) => Some(message),
-            _ => None,
-        }).collect();
+        let logs: Vec<_> = receiver
+            .try_iter()
+            .filter_map(|event| match event.event {
+                WorkerEvent::Log(message) => Some(message),
+                _ => None,
+            })
+            .collect();
         assert_eq!(logs.len(), 1);
         assert!(logs[0].contains("searches=0; recaptures=0; second_grab=false; pixels=0; rows=0;"));
         assert!(logs[0].contains("wall_ms="));

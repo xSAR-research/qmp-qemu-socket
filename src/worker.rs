@@ -11,7 +11,9 @@ pub(crate) mod freecell_calculation;
 mod freecell_execution;
 pub(crate) mod freecell_reconnaissance;
 pub(crate) mod freecell_route;
+mod freecell_session;
 mod freecell_telemetry;
+#[cfg(test)]
 mod game_operations;
 #[cfg(test)]
 mod image_recording_tests;
@@ -58,6 +60,7 @@ use crate::{
     pyramid,
     pyramid_diagnostics::{FailureEvidence, PyramidDiagnostic, PyramidPhase, persist_failure},
     pyramid_workflow_model::{
+        FreeCellSessionCompletion, FreeCellSessionProgress, FreeCellSessionRequest,
         PlanningProgress, RouteGoal, RouteMethod, SessionCompletion, SessionProgress,
         SessionRequest, WorkflowMode,
     },
@@ -228,10 +231,6 @@ enum WorkerCommand {
         run_id: u64,
         /// One deliberate transfer plus observed automatic closure, or the remaining route.
         single_step: bool,
-        /// Pointer protocol frozen for this SINGLE STEP; normal routes ignore this setting.
-        drag_mode: crate::freecell_route::DragMode,
-        /// ABS diagnostic interval copied from the explicit button invocation.
-        drag_timing: crate::freecell_route::DiagnosticDragTiming,
         /// Frozen central animation setting.
         settle: Duration,
     },
@@ -296,6 +295,13 @@ enum WorkerCommand {
         context: ControllerContext,
         /// Validated automatic mode, first acquisition and fixed search preference.
         request: Box<SessionRequest>,
+    },
+    /// Hold one reservation across Free Cell Recon, A* planning, execution, and post-win restart.
+    StartFreeCellSession {
+        /// Immutable socket, game, strategy and selection generation.
+        context: ControllerContext,
+        /// Validated play style, transfer policy, and post-transfer animation settle delay.
+        request: Box<FreeCellSessionRequest>,
     },
     /// Calculate using only a same-session restored acquisition.
     CalculateRoute {
@@ -397,6 +403,10 @@ pub enum WorkerEvent {
     PyramidSessionProgress(SessionProgress),
     /// Sole automatic completion event, emitted after the session releases its run.
     PyramidSessionFinished(SessionCompletion),
+    /// Advisory progress emitted during a worker-owned automatic Free Cell session.
+    FreeCellSessionProgress(FreeCellSessionProgress),
+    /// Sole automatic completion event emitted after an automatic Free Cell session retires.
+    FreeCellSessionFinished(FreeCellSessionCompletion),
     /// Detailed diagnostic text for visible and session logs.
     Log(String),
     /// Extended Single step evidence persisted only in the private session log.
@@ -1115,34 +1125,30 @@ impl WorkerHandle {
     }
 
 
-    /// Reserve a distinct live invocation; no transport runs on the UI thread.
+    /// End only the exact active invocation at its next verified step, preserving its route.
+    pub(crate) fn request_freecell_stop_after_step(
+        &self,
+        plan: &freecell_calculation::Identity,
+        run_id: u64,
+    ) -> Result<(), String> {
+        self.check_accepting_requests()?;
+        self.latest_frame
+            .reconnaissance
+            .check_active(&plan.context, &self.cancel_requested)?;
+        self.latest_frame
+            .freecell_route
+            .lock()
+            .map_err(|_| "Free Cell playback store poisoned".to_owned())?
+            .request_stop_after_step(plan, run_id)
+    }
+
+
+    /// Reserve one live invocation; all ABS route gestures use the fixed 100ms interval.
     pub(crate) fn execute_freecell_route(
         &self,
         plan: freecell_calculation::Identity,
         single_step: bool,
         mode: crate::freecell_route::AutoMode,
-        drag_mode: crate::freecell_route::DragMode,
-        settle: Duration,
-    ) -> Result<u64, String> {
-        self.execute_freecell_route_with_timing(
-            plan,
-            single_step,
-            mode,
-            drag_mode,
-            crate::freecell_route::DiagnosticDragTiming::TwoSeconds,
-            settle,
-        )
-    }
-
-
-    /// Freeze one explicit ABS interval before reserving or queuing live work.
-    pub(crate) fn execute_freecell_route_with_timing(
-        &self,
-        plan: freecell_calculation::Identity,
-        single_step: bool,
-        mode: crate::freecell_route::AutoMode,
-        drag_mode: crate::freecell_route::DragMode,
-        drag_timing: crate::freecell_route::DiagnosticDragTiming,
         settle: Duration,
     ) -> Result<u64, String> {
         self.check_accepting_requests()?;
@@ -1151,12 +1157,6 @@ impl WorkerHandle {
             || plan.context.strategy != SolvingStrategy::ShortestPath
         {
             return Err("Independent Free Cell route only".into());
-        }
-        if single_step
-            && drag_mode == crate::freecell_route::DragMode::Relative
-            && drag_timing == crate::freecell_route::DiagnosticDragTiming::HalfSecond
-        {
-            return Err("Single Step 0.5s requires ABS drag mode".into());
         }
         let run_id = self
             .latest_frame
@@ -1177,8 +1177,6 @@ impl WorkerHandle {
                             plan: plan.clone(),
                             run_id,
                             single_step,
-                            drag_mode,
-                            drag_timing,
                             settle,
                         })
                         .map_err(|e| format!("Worker unavailable: {e}"))
@@ -1582,6 +1580,51 @@ impl WorkerHandle {
     }
 
 
+    /// Start one explicitly authorised automatic Free Cell session (`Continuous normal games`
+    /// or `Single board`) under one worker reservation.
+    ///
+    /// # Errors
+    /// Rejects non-Free-Cell / non-A* contexts, `Manual` mode, missing TCPv3 capture,
+    /// overlapping runs, poisoned route stores, and closed command channels.
+    pub(crate) fn start_freecell_session(
+        &self,
+        context: ControllerContext,
+        request: FreeCellSessionRequest,
+    ) -> Result<(), String> {
+        self.check_accepting_requests()?;
+        context.validate()?;
+        if context.game_mode != GameMode::FreeCell
+            || context.strategy != SolvingStrategy::ShortestPath
+        {
+            return Err("Free Cell automatic session requires independent A* Free Cell".to_owned());
+        }
+        if !request.play_style.uses_session() {
+            return Err(
+                "Select Continuous normal games or Single board before starting a Free Cell session"
+                    .to_owned(),
+            );
+        }
+        freecell_reconnaissance::backend()?;
+        self.latest_frame
+            .reconnaissance
+            .select(&context, &self.cancel_requested)?;
+        self.latest_frame.reconnaissance.queue_reconnaissance(
+            &context,
+            &self.cancel_requested,
+            || {
+                self.latest_frame.freecell_calculation.cancel(None);
+                self.revoke_freecell_route();
+                self.command_tx
+                    .send(WorkerCommand::StartFreeCellSession {
+                        context: context.clone(),
+                        request: Box::new(request),
+                    })
+                    .map_err(|error| format!("Free Cell session worker unavailable: {error}"))
+            },
+        )
+    }
+
+
     /// Queue one independently replayed plan with explicit no-interference confirmation.
     ///
     /// # Errors
@@ -1662,6 +1705,7 @@ impl WorkerHandle {
         self.latest_frame
             .reconnaissance
             .operator_stop(&context, &self.cancel_requested);
+        self.latest_frame.freecell_calculation.cancel(None);
         self.revoke_freecell_route();
         self.latest_frame.pause.abort();
         self.latest_frame.search_control.abort();
@@ -1779,9 +1823,9 @@ fn run_worker(
         let _wire_command = qmp_wire::CommandScope::install(&command);
         let _freecell_telemetry = freecell_telemetry::scope(&command, &event_tx);
         let phase = match &command {
-            WorkerCommand::Reconnoitre { .. } | WorkerCommand::StartPyramidSession { .. } => {
-                Some(pyramid_pause::Phase::Recon)
-            }
+            WorkerCommand::Reconnoitre { .. }
+            | WorkerCommand::StartPyramidSession { .. }
+            | WorkerCommand::StartFreeCellSession { .. } => Some(pyramid_pause::Phase::Recon),
             WorkerCommand::CalculateRoute { .. } | WorkerCommand::CalculateFreeCell { .. } => {
                 Some(pyramid_pause::Phase::Search)
             }
@@ -1841,8 +1885,6 @@ fn run_worker(
                 plan,
                 run_id,
                 single_step,
-                drag_mode,
-                drag_timing,
                 settle,
             } => {
                 if let Some(error) = pause_failure {
@@ -1855,7 +1897,6 @@ fn run_worker(
                         plan,
                         run_id,
                         single_step,
-                        (drag_mode, drag_timing),
                         settle,
                         &event_tx,
                         &cancel_requested,
@@ -2043,6 +2084,28 @@ fn run_worker(
                     tcp_capture::CancellationScope::install(Arc::clone(&cancel_requested));
                 event_tx.set_capture_context(Some(context.clone()));
                 pyramid_session::run(&context, &request, &event_tx, &cancel_requested);
+            }
+            WorkerCommand::StartFreeCellSession { context, request } => {
+                let _capture_cancel =
+                    tcp_capture::CancellationScope::install(Arc::clone(&cancel_requested));
+                event_tx.set_capture_context(Some(context.clone()));
+                if let Some(error) = pause_failure {
+                    event_tx.latest_frame.reconnaissance.finish();
+                    send_state(&event_tx, WorkerState::Uncertain);
+                    let _ = event_tx.send(WorkerEvent::FreeCellSessionFinished(
+                        FreeCellSessionCompletion {
+                            context,
+                            run_id: request.run_id,
+                            completed_games: 0,
+                            termination: crate::pyramid_workflow_model::RunTermination::Failed,
+                            unsolvable_foundation_cards: None,
+                            export_path: None,
+                            result: Err(error),
+                        },
+                    ));
+                } else {
+                    freecell_session::run(&context, &request, &event_tx, &cancel_requested);
+                }
             }
             WorkerCommand::CalculateRoute {
                 context,
@@ -3447,12 +3510,35 @@ fn execute_guarded_action(
             let sources = kinds
                 .into_iter()
                 .map(|location| {
+                    let request = match location {
+                        crate::pyramid::PyramidTargetKind::Left => {
+                            crate::game_controls::LocationRequest::pyramid_draw(1)
+                        }
+                        crate::pyramid::PyramidTargetKind::Right => {
+                            crate::game_controls::LocationRequest::pyramid_draw(2)
+                        }
+                        crate::pyramid::PyramidTargetKind::Card { row, column } => {
+                            crate::game_controls::LocationRequest::pyramid_play(row, column)
+                        }
+                        crate::pyramid::PyramidTargetKind::Move => {
+                            return Err("Move control is not a card source".to_owned());
+                        }
+                    };
+                    let card = match crate::game_controls::read_card(frame, request)
+                        .map_err(|error| error.to_string())?
+                    {
+                        crate::game_operations::CardRead::Card(card) => card,
+                        _ => {
+                            return Err(
+                                "Pyramid source rank/suit is not identified; no input authorised"
+                                    .to_owned(),
+                            );
+                        }
+                    };
                     Ok(
                         crate::pyramid_recon::vision::source_transition::SourceCard {
                             location,
-                            card: vision.source_identity(frame, location)?.ok_or(
-                                "Pyramid source rank/suit is not identified; no input authorised",
-                            )?,
+                            card,
                         },
                     )
                 })

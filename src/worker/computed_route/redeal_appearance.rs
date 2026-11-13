@@ -46,7 +46,6 @@ impl Before {
     ) -> Result<usize, String> {
         Ok(self.pixels.measure(frame, settings)?.changed_pixels)
     }
-
 }
 
 

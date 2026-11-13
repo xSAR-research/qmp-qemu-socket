@@ -15,7 +15,7 @@ use std::time::Duration;
 
 /// One supported application input; transport ACK does not prove its effect.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Input {
+pub enum Input {
     /// One complete checked press/release at native guest pixels.
     MouseLeft(PixelPoint),
     /// One typed key with existing QMP timing.
@@ -25,7 +25,7 @@ pub(crate) enum Input {
 
 /// Input delivery record, retained even when a post-delivery guard fails.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct Delivery {
+pub struct Delivery {
     /// Frame generation consumed before this input attempt.
     pub frame_serial: u64,
     /// Acknowledged input; semantic completion remains caller-owned.
@@ -34,7 +34,7 @@ pub(crate) struct Delivery {
 
 
 /// Native adapters retain context, capture accounting and existing timing policy.
-pub(crate) trait OperationIo {
+pub trait OperationIo {
     /// Check STOP, shutdown, deadline and exact selected controller context.
     fn check_active(&mut self) -> Result<(), OperationError>;
     /// Acquire one new frame via the selected existing capture backend.
@@ -51,7 +51,7 @@ pub(crate) trait OperationIo {
 
 
 /// Own fresh pixels and permanently fence an uncertain input in this run.
-pub(crate) struct Session<I> {
+pub struct Session<I> {
     /// Borrowed or owned adapter; no new thread/client architecture is introduced.
     io: I,
     /// Latest successfully validated capture; taken before any input attempt.
@@ -67,7 +67,7 @@ pub(crate) struct Session<I> {
 
 impl<I: OperationIo> Session<I> {
     /// Start without pixels or input authority; does not clear adapter STOP/latches.
-    pub(crate) fn new(io: I) -> Self {
+    pub fn new(io: I) -> Self {
         Self {
             io,
             frame: None,
@@ -78,8 +78,14 @@ impl<I: OperationIo> Session<I> {
     }
 
 
+    /// Borrow the underlying operation I/O adapter without granting input authority.
+    pub const fn io(&self) -> &I {
+        &self.io
+    }
+
+
     /// Acquire once; any failure retires the previous capture before returning.
-    pub(crate) fn screen_capture(&mut self) -> Result<&CapturedFrame, OperationError> {
+    pub fn screen_capture(&mut self) -> Result<&CapturedFrame, OperationError> {
         self.frame = None;
         self.io.check_active()?;
         self.serial = self
@@ -97,25 +103,19 @@ impl<I: OperationIo> Session<I> {
 
 
     /// Send one checked native click after same-frame game authority and fresh probe.
-    pub(crate) fn mouse_left_click(
-        &mut self,
-        point: PixelPoint,
-    ) -> Result<Delivery, OperationError> {
+    pub fn mouse_left_click(&mut self, point: PixelPoint) -> Result<Delivery, OperationError> {
         self.input(Input::MouseLeft(point))
     }
 
 
     /// Send one typed supported key; no arbitrary integer keycode or qcode parsing.
-    pub(crate) fn send_key_stroke(
-        &mut self,
-        key: SupportedKey,
-    ) -> Result<Delivery, OperationError> {
+    pub fn send_key_stroke(&mut self, key: SupportedKey) -> Result<Delivery, OperationError> {
         self.input(Input::Key(key))
     }
 
 
     /// Redetect one unique run in the current frame, then use the ordinary guard.
-    pub(crate) fn click_option(
+    pub fn click_option(
         &mut self,
         bounds: InclusiveBounds,
         minimum_length: u32,
@@ -132,13 +132,13 @@ impl<I: OperationIo> Session<I> {
 
 
     /// Expose acknowledged delivery separately from effect or subsequent failure.
-    pub(crate) fn last_delivery(&self) -> Option<Delivery> {
+    pub fn last_delivery(&self) -> Option<Delivery> {
         self.last_delivery
     }
 
 
     /// Cancellable bounded wait chosen by the game adapter, without granting input.
-    pub(crate) fn wait(&mut self, duration: Duration) -> Result<(), OperationError> {
+    pub fn wait(&mut self, duration: Duration) -> Result<(), OperationError> {
         self.frame = None;
         self.io.check_active()?;
         self.io.wait(duration)?;

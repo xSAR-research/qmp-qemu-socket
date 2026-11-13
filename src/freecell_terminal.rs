@@ -30,10 +30,17 @@ pub enum TerminalStage {
     Play,
 }
 
+/// Non-gameplay terminal modal observed when a Challenge Complete 5-frame poll ends before Continue appears.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ChallengeTerminalHandoff {
+    /// Challenge Complete modal is still counting XP (`ll` banner + `Click anywhere to skip`).
+    XpCounting,
+    /// Level Up modal (`LEVEL-UP!` banner + settled `OK` button) opened over Challenge Complete.
+    LevelUp,
+}
+
 
 impl fmt::Display for TerminalStage {
-
-
     /// Name the expected control without claiming the preceding input had effect.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
@@ -59,12 +66,8 @@ enum CaptionInk {
 
 
 impl CaptionInk {
-
-
     /// Broad foreground classes preserve antialiasing without matching artwork.
     fn contains(self, rgb: [u8; 3]) -> bool {
-
-
         match self {
             Self::Bright => rgb.into_iter().all(|channel| channel >= 180),
             Self::Muted => rgb.into_iter().all(|channel| channel >= 125),
@@ -128,6 +131,13 @@ const SCORE_SKIP: Caption = Caption {
     ],
 };
 
+/// Challenge Complete XP-counting `Click anywhere to skip` caption (28px lower than Score panel).
+const CHALLENGE_SKIP: Caption = Caption {
+    bounds: PixelRect::new(796, 864, 328, 36),
+    ink: CaptionInk::Muted,
+    rows: SCORE_SKIP.rows,
+};
+
 
 /// FC11's New Game caption, excluding the neighbouring Home control.
 const NEW_GAME: Caption = Caption {
@@ -149,8 +159,6 @@ const NEW_GAME: Caption = Caption {
 
 /// Reject malformed storage and unsupported native geometry before probing.
 fn validate_frame(frame: &CapturedFrame) -> Result<(), HaloDetectionError> {
-
-
     if !frame.is_layout_valid() {
         return Err(HaloDetectionError::InvalidFrameLayout);
     }
@@ -185,8 +193,6 @@ fn caption_at(
 
 
             for cell_y in 0..4 {
-
-
                 for cell_x in 0..4 {
                     let x = caption.bounds.x as i32 + dx + (column * 4 + cell_x) as i32;
                     let y = caption.bounds.y as i32 + dy + (row * 4 + cell_y) as i32;
@@ -212,14 +218,8 @@ fn caption_at(
 /// The whole word shifts together; no artwork samples or individual glyph points
 /// are aligned independently, and the eventual click coordinate remains fixed.
 fn caption_ready(frame: &CapturedFrame, caption: &Caption) -> Result<bool, HaloDetectionError> {
-
-
     for dy in (-8..=8).step_by(2) {
-
-
         for dx in (-4..=4).step_by(2) {
-
-
             if caption_at(frame, caption, dx, dy)? {
                 return Ok(true);
             }
@@ -244,8 +244,6 @@ fn button_body_ready(frame: &CapturedFrame, bounds: PixelRect) -> Result<bool, H
 
 
     for y in bounds.y..bounds.bottom() {
-
-
         for x in bounds.x..bounds.right() {
             let rgb = pixel_rgb(frame, x, y).ok_or(HaloDetectionError::BoundsOutsideFrame)?;
             gold += u32::from(is_button_gold(rgb));
@@ -309,7 +307,8 @@ pub fn classify_win_entry(
 
 
     if button_body_ready(frame, PixelRect::new(640, 824, 291, 56))?
-        && caption_ready(frame, &NEW_GAME)? {
+        && caption_ready(frame, &NEW_GAME)?
+    {
         return Ok(Some(TerminalStage::NewGame));
     }
 
@@ -317,6 +316,109 @@ pub fn classify_win_entry(
     if caption_ready(frame, &SCORE_SKIP)? {
         return Ok(Some(TerminalStage::Score));
     }
+    Ok(None)
+}
+
+/// Check every pixel inside `rect` against `predicate` with bounds validation.
+fn rect_matches(
+    frame: &CapturedFrame,
+    rect: PixelRect,
+    predicate: impl Fn([u8; 3]) -> bool,
+) -> Result<bool, HaloDetectionError> {
+    for y in rect.y..rect.bottom() {
+        for x in rect.x..rect.right() {
+            let rgb = pixel_rgb(frame, x, y).ok_or(HaloDetectionError::BoundsOutsideFrame)?;
+            if !predicate(rgb) {
+                return Ok(false);
+            }
+        }
+    }
+    Ok(true)
+}
+
+/// Match the invariant white stems and dark ribbon gaps of the **LEVEL-UP!** banner.
+fn has_level_up_banner(frame: &CapturedFrame) -> Result<bool, HaloDetectionError> {
+    for y in 180..=265 {
+        let stems_ok = [
+            PixelRect::new(810, y, 7, 13),
+            PixelRect::new(842, y, 8, 13),
+            PixelRect::new(921, y, 8, 13),
+            PixelRect::new(956, y, 7, 13),
+            PixelRect::new(1062, y, 8, 13),
+        ]
+        .into_iter()
+        .try_fold(true, |acc, rect| {
+            Ok::<_, HaloDetectionError>(
+                acc && rect_matches(frame, rect, |[r, g, b]| r >= 250 && g >= 250 && b >= 250)?,
+            )
+        })?;
+        if !stems_ok {
+            continue;
+        }
+        let gaps_ok = [PixelRect::new(836, y, 4, 13), PixelRect::new(947, y, 7, 13)]
+            .into_iter()
+            .try_fold(true, |acc, rect| {
+                Ok::<_, HaloDetectionError>(
+                    acc && rect_matches(frame, rect, |[r, g, b]| r.min(g).min(b) <= 120)?,
+                )
+            })?;
+        if gaps_ok {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+/// Positively recognise a settled Free Cell **LEVEL-UP!** modal with an active bounded **OK** control.
+pub(crate) fn has_settled_level_up_ok(frame: &CapturedFrame) -> Result<bool, HaloDetectionError> {
+    validate_frame(frame)?;
+    if !has_level_up_banner(frame)? {
+        return Ok(false);
+    }
+    let raw = expected_control_point(frame, TerminalStage::LevelUp)?;
+    if raw == PixelPoint::new(0, 0) {
+        return Ok(false);
+    }
+    let obs = crate::terminal_controls::ok_readiness::OkReadiness::new().observe(frame, raw)?;
+    Ok(obs.confirmation_pending)
+}
+
+/// Positively recognise a supported Free Cell post-win terminal panel
+/// (Score skip, Level Up OK, or Congratulations + New Game).
+pub(crate) fn is_recognised_terminal(frame: &CapturedFrame) -> Result<bool, HaloDetectionError> {
+    Ok(classify_win_entry(frame)?.is_some() || has_settled_level_up_ok(frame)?)
+}
+
+/// Classify an active XP-counting Challenge Complete or settled Level Up modal after a 5-frame poll miss.
+///
+/// Used only when Challenge Complete `Continue` did not settle within 5 captures so the worker
+/// can release control to the operator cleanly with zero guest input, without falsely matching
+/// plain white gameplay card paper (`FC19` et al.).
+pub(crate) fn classify_challenge_handoff(
+    frame: &CapturedFrame,
+) -> Result<Option<ChallengeTerminalHandoff>, HaloDetectionError> {
+    validate_frame(frame)?;
+
+    let ll_white = crate::game_controls::CHALLENGE_LL_RECTS
+        .into_iter()
+        .try_fold(true, |acc, rect| {
+            Ok::<_, HaloDetectionError>(
+                acc && rect_matches(frame, rect, |rgb| rgb == [255, 255, 255])?,
+            )
+        })?;
+    if ll_white
+        && rect_matches(frame, PixelRect::new(776, 204, 7, 15), |[r, g, b]| {
+            r.min(g).min(b) <= 180
+        })?
+        && caption_ready(frame, &CHALLENGE_SKIP)?
+    {
+        return Ok(Some(ChallengeTerminalHandoff::XpCounting));
+    }
+
+    if has_settled_level_up_ok(frame)? {
+        return Ok(Some(ChallengeTerminalHandoff::LevelUp));
+    }
+
     Ok(None)
 }
 
@@ -388,7 +490,10 @@ mod tests {
             (15, TerminalStage::NewGame, PixelPoint::new(863, 861)),
             (12, TerminalStage::Play, PixelPoint::new(680, 762)),
         ] {
-            assert_eq!(expected_control_point(&fixture(number), stage).unwrap(), point);
+            assert_eq!(
+                expected_control_point(&fixture(number), stage).unwrap(),
+                point
+            );
         }
     }
 
@@ -431,13 +536,8 @@ mod tests {
     /// Level, rank, medal, fireworks, modal frame and completed cards cannot gate it.
     #[test]
     fn decorative_artwork_is_not_expected_control_authority() {
-
-
         for (number, stage, bounds) in [
-            (
-	    	9, 
-	    	TerminalStage::Score,
-		PixelRect::new(790, 826, 340, 56)),
+            (9, TerminalStage::Score, PixelRect::new(790, 826, 340, 56)),
             (
                 10,
                 TerminalStage::LevelUp,
@@ -458,21 +558,13 @@ mod tests {
                 TerminalStage::NewGame,
                 PixelRect::new(630, 814, 311, 76),
             ),
-            (
-	    	12,
-	    	TerminalStage::Play,
-		PixelRect::new(600, 725, 218, 72)
-	    ),
+            (12, TerminalStage::Play, PixelRect::new(600, 725, 218, 72)),
         ] {
             let mut frame = fixture(number);
 
 
             for y in 0..frame.height {
-
-
                 for x in 0..frame.width {
-
-
                     if !bounds.contains(PixelPoint::new(x as i32, y as i32)) {
                         let index = y as usize * frame.stride + x as usize * 4;
                         frame.pixels[index..index + 4].copy_from_slice(&[250, 0, 250, 255]);
@@ -493,8 +585,15 @@ mod tests {
             for pixel in frame.pixels.as_chunks_mut::<4>().0 {
                 pixel.copy_from_slice(&[rgb[0], rgb[1], rgb[2], 255]);
             }
-            for stage in [TerminalStage::LevelUp, TerminalStage::NewGame, TerminalStage::Play] {
-                assert_eq!(expected_control_ready(&frame, stage).unwrap(), rgb == [0, 0, 0]);
+            for stage in [
+                TerminalStage::LevelUp,
+                TerminalStage::NewGame,
+                TerminalStage::Play,
+            ] {
+                assert_eq!(
+                    expected_control_ready(&frame, stage).unwrap(),
+                    rgb == [0, 0, 0]
+                );
             }
             assert!(!expected_control_ready(&frame, TerminalStage::Score).unwrap());
             assert_eq!(classify_win_entry(&frame).unwrap(), None);
@@ -505,8 +604,6 @@ mod tests {
     /// Button colour gradients may change while the same local black label remains.
     #[test]
     fn warm_button_palette_changes_preserve_expected_caption_readiness() {
-
-
         for (number, stage, bounds) in [
             (
                 10,
@@ -534,8 +631,6 @@ mod tests {
 
 
             for y in bounds.y..bounds.bottom() {
-
-
                 for x in bounds.x..bounds.right() {
                     let index = y as usize * frame.stride + x as usize * 4;
                     let rgb = pixel_rgb(&frame, x, y).unwrap();
@@ -575,5 +670,112 @@ mod tests {
             classify_win_entry(&frame),
             Err(HaloDetectionError::BoundsOutsideFrame)
         );
+    }
+
+    /// Classify Challenge Complete XP counting and settled `LEVEL-UP!` handoffs cleanly without false positives.
+    #[test]
+    fn challenge_handoff_classifies_xp_counting_and_level_up_without_false_positives() {
+        for (name, bytes, expected) in [
+            (
+                "freecell-challenge-complete-xp-20261113.png",
+                include_bytes!("../tests/fixtures/freecell-challenge-complete-xp-20261113.png")
+                    .as_slice(),
+                Some(ChallengeTerminalHandoff::XpCounting),
+            ),
+            (
+                "fours-complete.png",
+                include_bytes!("../tests/fixtures/pyramid-objectives/fours-complete.png")
+                    .as_slice(),
+                Some(ChallengeTerminalHandoff::XpCounting),
+            ),
+            (
+                "freecell-confirmation-20261016/clean.png",
+                include_bytes!("../tests/fixtures/freecell-confirmation-20261016/clean.png")
+                    .as_slice(),
+                Some(ChallengeTerminalHandoff::LevelUp),
+            ),
+            (
+                "freecell-challenge-complete-continue-20261113.png",
+                include_bytes!(
+                    "../tests/fixtures/freecell-challenge-complete-continue-20261113.png"
+                )
+                .as_slice(),
+                None,
+            ),
+            (
+                "freecell-FC19.png",
+                include_bytes!("../tests/fixtures/freecell-FC19.png").as_slice(),
+                None,
+            ),
+            (
+                "entering.png",
+                include_bytes!("../tests/fixtures/freecell-confirmation-20261016/entering.png")
+                    .as_slice(),
+                None,
+            ),
+            (
+                "tinted.png",
+                include_bytes!("../tests/fixtures/freecell-confirmation-20261016/tinted.png")
+                    .as_slice(),
+                None,
+            ),
+            (
+                "fours-complete-animating.png",
+                include_bytes!("../tests/fixtures/pyramid-objectives/fours-complete-animating.png")
+                    .as_slice(),
+                None,
+            ),
+        ] {
+            let frame = decode_png(bytes).expect("decode challenge handoff fixture");
+            assert_eq!(
+                classify_challenge_handoff(&frame).expect("valid native frame"),
+                expected,
+                "{name}"
+            );
+        }
+
+        for (number, expected) in [
+            (9, None),
+            (10, Some(ChallengeTerminalHandoff::LevelUp)),
+            (11, None),
+            (12, None),
+            (13, None),
+            (15, None),
+            (22, Some(ChallengeTerminalHandoff::LevelUp)),
+            (23, Some(ChallengeTerminalHandoff::LevelUp)),
+        ] {
+            let frame = fixture(number);
+            assert_eq!(
+                classify_challenge_handoff(&frame).expect("valid terminal fixture"),
+                expected,
+                "FC{number:02}"
+            );
+        }
+    }
+
+    #[test]
+    fn freecell_330_normal_terminal_and_level_up_classification_matches_fixtures() {
+        for (number, expected_terminal, expected_level_up) in [
+            (9, true, false),
+            (10, true, true),
+            (11, true, false),
+            (12, false, false),
+            (13, false, false),
+            (15, true, false),
+            (22, true, true),
+            (23, true, true),
+        ] {
+            let frame = fixture(number);
+            assert_eq!(
+                is_recognised_terminal(&frame).expect("valid terminal fixture"),
+                expected_terminal,
+                "terminal FC{number:02}"
+            );
+            assert_eq!(
+                has_settled_level_up_ok(&frame).expect("valid terminal fixture"),
+                expected_level_up,
+                "level-up FC{number:02}"
+            );
+        }
     }
 }

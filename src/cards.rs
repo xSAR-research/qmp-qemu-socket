@@ -35,8 +35,6 @@ pub struct CardRegionPixels {
 
 
 impl CardRegionPixels {
-
-
     /// Group the independently calibrated rectangles and click point.
     pub const fn new(
         card_bounds: PixelRect,
