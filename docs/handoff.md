@@ -1,6 +1,9 @@
-# Current handoff — application 3.3.0, xSAR 0.16.3
+# Current handoff — application 3.3.2, xSAR 0.16.3
 
-Application `3.3.0` builds on `3.2.1` by adding worker-owned **Continuous normal games** and **Single board** session automation for independent A* Free Cell (`src/worker/freecell_session.rs`, `WorkerCommand::StartFreeCellSession`), reusing parameterised `post_game::RestartPolicy::IndependentFreeCell` (`GAME WIN` score skip preserving default win-sequence recording unless `--no-image` is passed -> optional `LEVEL-UP!` `OK` -> `NEW GAME` -> `PLAY` -> `verify_independent_start` 2-capture fresh deal proof), implementing Option 2A clean unsolvable exit (`RunTermination::Completed` with zero mid-game clicks), removing all superseded relative-coordinate (`REL` / `DragMode`) drag code to standardise exclusively on checked integer ABS dragging, and adding the Free Cell `Mode` (`Continuous normal games` default, `Single board`, `Manual`) + `Transfer policy` controls in `src/app/pyramid_workflow.rs` while keeping `Manual` 3-step controls intact. `xSAR` is aligned at `0.16.3` (commit `067ce26`).
+Application `3.3.2` builds on `3.3.1` with three approved updates while keeping `xSAR` untouched at `0.16.3` (commit `067ce26`):
+- Restored `FREECELL_ROUTE_ABS_GESTURE_INTERVAL` (`src/parameters.rs`) from `100 ms` to `200 ms` across all five inter-event waits of six-event held ABS Free Cell drags (`SINGLE STEP` and `MULTI STEP`) so guest compositor frame stalls up to `163.9 ms` do not coalesce held motion into Tap-to-Move clicks.
+- Displayed captured board images immediately on `START` during `Single board` / session `RECON` and `Planning` via an immediate `on_frame` hook in `freecell_reconnaissance::run_checked_with_deal` + `press_freecell_session` releasing prior completed `Manual` `FreeCellReconState` preview locks + `FreeCellWorkflow::retain_after_detach`.
+- Consolidated live A* search counters (`Paused`, active time, expanded/generated/retained/peak frontier, best foundations `X/52`) and final determined `Report` statistics (`outcome_summary_message`, `Final`, `Paused`, `Frozen source`) across `Manual` Calculation and `Single board` / session modes via shared helpers in `src/worker/freecell_calculation.rs`, `src/app/freecell_calculation.rs`, `src/pyramid_workflow_model.rs`, `src/worker/freecell_session.rs`, and `src/app/pyramid_workflow.rs`.
 
 ## Tier 2 host verification summary (Beast)
 
@@ -9,13 +12,13 @@ Application `3.3.0` builds on `3.2.1` by adding worker-owned **Continuous normal
 | Format | `cargo fmt --package qmp-qemu-socket -- --check` | Pass |
 | Lib/bin strict Clippy | `cargo clippy --workspace --lib --bins -- -D warnings -D clippy::unwrap_used -D clippy::dbg_macro -D clippy::todo` | Pass |
 | All-targets Clippy | `cargo clippy --workspace --all-targets -- -D warnings` | Pass |
-| Default tests | `cargo test --workspace` | `1,757` passed, `0` failed, `185` ignored (`src/lib.rs`; `0` in `src/main.rs`, `0` doc-tests) |
-| Full tests | `cargo test --locked --offline --package qmp-qemu-socket -- --include-ignored` | `1,942` passed, `0` failed, `0` ignored (`src/lib.rs`; `0` in `src/main.rs`, `0` doc-tests) |
+| Default tests | `cargo test --workspace --offline --locked` | `1,761` passed, `0` failed, `185` ignored (`src/lib.rs`; `0` in `src/main.rs`, `0` doc-tests) |
+| Full tests | `cargo test --locked --offline --package qmp-qemu-socket -- --include-ignored` | `1,946` passed, `0` failed, `0` ignored (`src/lib.rs`; `0` in `src/main.rs`, `0` doc-tests) |
 | Rustdoc | `RUSTDOCFLAGS="-D warnings" cargo doc --locked --offline --package qmp-qemu-socket --no-deps --document-private-items` | Pass |
 | Release build | `cargo build --locked --offline --release --package qmp-qemu-socket --target x86_64-unknown-linux-gnu` | Pass |
 
-- **Release executable:** `target/x86_64-unknown-linux-gnu/release/qmp-qemu-socket` (`16,922,304` bytes, mode `0755`, SHA-256 `3e8727fa13abd0d98a1c6a9768a6cf4c2a8f06e7152104d3349b4d4f72b92e97`)
-- **Live acceptance status:** Live Windows 11 guest verification on Beast covering `Continuous normal games` multi-board transitions (`GAME WIN` -> optional `LEVEL-UP!` `OK` -> `NEW GAME` -> `PLAY` -> fresh 52-card deal recon), default `GAME WIN` frame capture vs `--no-image`, `Single board` / `Manual` Free Cell modes, ABS-only card dragging, and Option 2A unsolvable-deal handling remains pending operator launch:
+- **Release executable:** `target/x86_64-unknown-linux-gnu/release/qmp-qemu-socket` (`16,943,152` bytes, mode `0755`, SHA-256 `cc1792528ccce6d32f2a7639776d5c8def615f1adefb578987c54f0723412cdc`)
+- **Live acceptance status:** Live Windows 11 guest verification on Beast covering `Single board` live board preview from `START` through `RECON`/`ROUTE`/execution, matching live & determined `Manual`-style calculation statistics, `200 ms` held ABS drag reliability under `MULTI STEP` (including `8♦ PLAY 1 -> PLAY 4` challenge boards), `Continuous normal games`, Option 2A unsolvable-deal reporting, and default `GAME WIN` frame capture vs `--no-image` remains pending operator launch:
 
 ```sh
 cargo run --release

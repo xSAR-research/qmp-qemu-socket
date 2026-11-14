@@ -266,7 +266,7 @@ impl QmpQemuSocketApp {
             }
         });
         ui.label("Expected AUTOs still require observed board proof. Missing or different effects stop within six observations. After failure or changing transfer policy, manually UNDO ALL before the next explicit request: the cached original route restarts only after fresh recognition of the same 52-card board.");
-        ui.label("ABS sends six separately acknowledged events: source, LEFT down, 45 native pixels above the source, the midpoint of the original source and destination (each native axis rounded down), exact destination, LEFT up. Every destination preserves the source pickup inset: 15 native pixels right and 20 down from its proved corner or empty-slot origin. SINGLE STEP and MULTI STEP both use five 100-millisecond intervals (at least 0.5 seconds per transfer). Fresh acquisition and effect proof still apply.");
+        ui.label("ABS sends six separately acknowledged events: source, LEFT down, 45 native pixels above the source, the midpoint of the original source and destination (each native axis rounded down), exact destination, LEFT up. Every destination preserves the source pickup inset: 15 native pixels right and 20 down from its proved corner or empty-slot origin. SINGLE STEP and MULTI STEP both use five 200-millisecond intervals (at least 1.0 second per transfer). Fresh acquisition and effect proof still apply.");
         ui.label("The original deal must match. Each step verifies the resulting physical board; unsupported or obscured positions stop playback.");
         let active = self.active_run == Some(ActiveRun::FreeCellRoute);
         let mutable = !self.stop_requested && !self.exiting;

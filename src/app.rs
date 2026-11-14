@@ -1192,6 +1192,9 @@ impl QmpQemuSocketApp {
                             .retain_after_detach(&self.current_preview_context())
                             && self.freecell_playback.retained.as_ref()
                                 != Some(&self.current_preview_context())
+                            && !self
+                                .freecell_workflow
+                                .retain_after_detach(&self.current_preview_context())
                         {
                             self.invalidate_preview();
                         }
@@ -1665,6 +1668,7 @@ impl QmpQemuSocketApp {
     fn invalidate_preview(&mut self) {
         self.freecell_recon_state.clear_preview();
         self.freecell_playback.retained = None;
+        self.freecell_workflow.clear_preview();
         self.capture_texture = None;
         self.captured_dimensions = None;
         self.preview_context = None;

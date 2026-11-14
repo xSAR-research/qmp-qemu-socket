@@ -1,17 +1,18 @@
 //! Worker-owned automatic Free Cell session across Recon, A* planning, execution, and post-win restart.
 //!
-//! Only normal 52-card deals are played automatically. Post-win restarts reuse the
+//! `Continuous normal games` plays `Objective::FullBoard` deals back-to-back and reuses the
 //! parameterised [`post_game`] controller (`GAME WIN` -> optional `LEVEL UP` -> `NEW GAME` -> `PLAY`)
-//! with no Solver or CV clicks. Exhaustively unsolvable deals (`Option 2A`) end cleanly
-//! with zero mid-game guest input and no manufactured error packet.
+//! with no Solver or CV clicks. `Single board` plays one untouched normal or challenge deal
+//! (`RECON -> SOLVE -> MULTI STEP`) and stops cleanly without starting a new game. Exhaustively
+//! unsolvable normal deals (`Option 2A`) end cleanly with zero mid-game guest input and no manufactured error packet.
 
 use super::*;
 use crate::{
     freecell_recon::objective::{self, Objective},
     geometry::PixelPoint,
     pyramid_workflow_model::{
-        FreeCellPlayStyle, FreeCellSessionCompletion, FreeCellSessionProgress,
-        FreeCellSessionRequest, RunTermination, SessionPhase,
+        FreeCellPlanningSnapshot, FreeCellPlayStyle, FreeCellSessionCompletion,
+        FreeCellSessionProgress, FreeCellSessionRequest, RunTermination, SessionPhase,
     },
 };
 use std::{cell::Cell, io::Read};
@@ -20,8 +21,8 @@ use xsar::games::freecell::search::BestEffortOutcome as Outcome;
 /// Number of cards on all four Free Cell foundations at a complete 52-card victory.
 const COMPLETE_FOUNDATION_CARDS: u32 = 52;
 
-/// Number of completed boards before emitting progress throttle updates during A* search.
-const PROGRESS_EXPANSION_INTERVAL: u64 = 10_000;
+/// Minimum interval between periodic live A* planning progress snapshots.
+const PLANNING_PROGRESS_INTERVAL: Duration = Duration::from_millis(100);
 
 /// Immutable 52-card Free Cell deal captured and exported during one session cycle.
 #[derive(Clone, Debug)]
@@ -32,6 +33,8 @@ struct AcquiredDeal {
     bytes: Vec<u8>,
     /// Recognised immutable 52-card starting deal.
     deal: xsar::games::freecell::InitialDeal,
+    /// Provenance objective classified from the captured frame (`FullBoard` or `Unresolved`).
+    objective: Objective,
 }
 
 /// Socket-free A* planning outcome passed back into [`drive_session`].
@@ -80,11 +83,20 @@ trait SessionIo {
     /// Inspect cold session entry and advance past any already-finished terminal/PLAY screen.
     fn prepare_entry(&mut self) -> Result<(), String>;
 
-    /// Capture, recognise, verify `Objective::FullBoard`, and publish one untouched 52-card deal.
-    fn acquire(&mut self, generation: u64) -> Result<AcquiredDeal, String>;
+    /// Capture, recognise, verify mode objective policy, and publish one untouched 52-card deal.
+    fn acquire(
+        &mut self,
+        generation: u64,
+        style: FreeCellPlayStyle,
+    ) -> Result<AcquiredDeal, String>;
 
-    /// Exhaustively search one immutable normal deal, surfacing Option 2A when unsolvable.
-    fn plan(&mut self, generation: u64, acquired: &AcquiredDeal) -> Result<PlanDecision, String>;
+    /// Search one immutable deal, executing partial routes only when `Single board` accepts `Unresolved`.
+    fn plan(
+        &mut self,
+        generation: u64,
+        style: FreeCellPlayStyle,
+        acquired: &AcquiredDeal,
+    ) -> Result<PlanDecision, String>;
 
     /// Execute one verified full-board Free Cell plan and return its proved board outcome.
     fn execute(
@@ -102,6 +114,34 @@ trait SessionIo {
     ) -> Result<(), String>;
 }
 
+/// Verify retained objective provenance and restrict `Continuous normal games` to `FullBoard`.
+fn check_acquired_objective(
+    style: FreeCellPlayStyle,
+    deal: &xsar::games::freecell::InitialDeal,
+) -> Result<Objective, String> {
+    objective::require_acquired(deal.metadata())?;
+    let objective = objective::from_metadata(deal.metadata());
+    if style == FreeCellPlayStyle::ContinuousNormalGames && objective != Objective::FullBoard {
+        return Err(format!(
+            "Free Cell continuous normal games only plays FullBoard normal deals; acquired objective was {} (switch Mode to Single board or Manual to play challenge boards)",
+            objective.label()
+        ));
+    }
+    Ok(objective)
+}
+
+/// Only `Single board` challenge deals (`Unresolved`) execute non-empty partial A* routes.
+const fn allows_partial_execution(
+    style: FreeCellPlayStyle,
+    objective: Objective,
+    moves_len: usize,
+) -> bool {
+    matches!(
+        (style, objective),
+        (FreeCellPlayStyle::SingleBoard, Objective::Unresolved)
+    ) && moves_len > 0
+}
+
 /// Execute the Free Cell automatic lifecycle (`ContinuousNormalGames` or `SingleBoard`).
 fn drive_session(
     style: FreeCellPlayStyle,
@@ -114,9 +154,11 @@ fn drive_session(
         );
     }
     io.check()?;
-    io.phase(0, SessionPhase::Entry);
-    io.check()?;
-    io.prepare_entry()?;
+    if style == FreeCellPlayStyle::ContinuousNormalGames {
+        io.phase(0, SessionPhase::Entry);
+        io.check()?;
+        io.prepare_entry()?;
+    }
 
     let mut generation = 0_u64;
     let mut completed_games = 0_usize;
@@ -127,12 +169,12 @@ fn drive_session(
             .ok_or("Free Cell board generation exhausted")?;
         io.phase(generation, SessionPhase::Reconnaissance);
         io.check()?;
-        let acquired = io.acquire(generation)?;
+        let acquired = io.acquire(generation, style)?;
         io.check()?;
 
         io.phase(generation, SessionPhase::Planning);
         io.check()?;
-        let prepared = match io.plan(generation, &acquired)? {
+        let prepared = match io.plan(generation, style, &acquired)? {
             PlanDecision::Solved(prepared) => prepared,
             PlanDecision::UnsolvablePartial {
                 foundation_cards,
@@ -156,6 +198,61 @@ fn drive_session(
         io.check()?;
         let executed = io.execute(generation, &acquired, prepared)?;
         io.check()?;
+        if style == FreeCellPlayStyle::SingleBoard {
+            let summary = match (
+                executed.completion,
+                executed.foundation_cards,
+                acquired.objective,
+            ) {
+                (
+                    Some(crate::freecell_route::Completion::FullBoard),
+                    COMPLETE_FOUNDATION_CARDS,
+                    _,
+                ) => {
+                    completed_games = completed_games
+                        .checked_add(1)
+                        .ok_or("Completed Free Cell game counter exhausted")?;
+                    format!(
+                        "Single board complete — 52/52 cards cleared (board {generation}, export: {}); leaving GAME WIN untouched.",
+                        acquired.path.display()
+                    )
+                }
+                (
+                    Some(crate::freecell_route::Completion::ChallengeComplete),
+                    foundations,
+                    Objective::Unresolved,
+                ) => {
+                    completed_games = completed_games
+                        .checked_add(1)
+                        .ok_or("Completed Free Cell game counter exhausted")?;
+                    format!(
+                        "Single board challenge complete ({foundations}/52 foundations, board {generation}, export: {}); stopped without starting a new game.",
+                        acquired.path.display()
+                    )
+                }
+                (
+                    Some(crate::freecell_route::Completion::PartialRouteExhausted),
+                    foundations,
+                    Objective::Unresolved,
+                ) => format!(
+                    "Single board challenge partial route finished ({foundations}/52 foundations, board {generation}, export: {}); stopped without starting a new game.",
+                    acquired.path.display()
+                ),
+                (completion, foundations, _) => {
+                    return Err(format!(
+                        "Free Cell route ended without a proved 52-card victory ({completion:?}, {foundations}/52); no restart input authorised"
+                    ));
+                }
+            };
+            io.phase(generation, SessionPhase::Completion);
+            return Ok(SessionOutcome {
+                completed_games,
+                unsolvable_foundation_cards: None,
+                export_path: Some(acquired.path),
+                summary,
+            });
+        }
+
         if executed.completion != Some(crate::freecell_route::Completion::FullBoard)
             || executed.foundation_cards != COMPLETE_FOUNDATION_CARDS
         {
@@ -169,19 +266,6 @@ fn drive_session(
             .checked_add(1)
             .ok_or("Completed Free Cell game counter exhausted")?;
         io.phase(generation, SessionPhase::Completion);
-
-        if style == FreeCellPlayStyle::SingleBoard {
-            let summary = format!(
-                "Single board complete — 52/52 cards cleared (board {generation}, export: {}); leaving GAME WIN untouched.",
-                acquired.path.display()
-            );
-            return Ok(SessionOutcome {
-                completed_games,
-                unsolvable_foundation_cards: None,
-                export_path: Some(acquired.path),
-                summary,
-            });
-        }
 
         io.check()?;
         io.phase(generation, SessionPhase::Restart);
@@ -212,13 +296,24 @@ struct Native<'a> {
     completed_games: usize,
     /// Most recent exported JSON path for failure diagnostics and UI display.
     export_path: Option<PathBuf>,
+    /// Most recent determined A* calculation report for the active board cycle.
+    latest_calculation: Option<Arc<freecell_calculation::Report>>,
     /// Latest captured frame retained for cold entry and post-win restarts.
     latest: Option<CapturedFrame>,
     /// Set when an inner worker (Recon/Execution) already persisted a failure packet.
     failure_saved: bool,
+    /// Reserved failure diagnostic directory captured from inner workers or session persistence.
+    failure_directory: Option<PathBuf>,
 }
 
 impl Native<'_> {
+    /// Send one structured Free Cell session progress event onto the UI channel.
+    fn send_progress_event(&self, progress: FreeCellSessionProgress) {
+        let _ = self
+            .events
+            .send(WorkerEvent::FreeCellSessionProgress(progress));
+    }
+
     /// Emit structured UI progress for the active cycle while preserving existing fields.
     fn emit_progress(
         &self,
@@ -227,20 +322,45 @@ impl Native<'_> {
         expanded_states: Option<u64>,
         message: String,
     ) {
-        let _ = self.events.send(WorkerEvent::FreeCellSessionProgress(
-            FreeCellSessionProgress {
-                context: self.context.clone(),
-                run_id: self.request.run_id,
-                deal_generation: self.generation,
-                completed_games: self.completed_games,
-                phase: self.phase,
-                foundation_cards,
-                route_cursor,
-                expanded_states,
-                export_path: self.export_path.clone(),
-                message,
-            },
-        ));
+        self.send_progress_event(FreeCellSessionProgress {
+            context: self.context.clone(),
+            run_id: self.request.run_id,
+            deal_generation: self.generation,
+            completed_games: self.completed_games,
+            phase: self.phase,
+            foundation_cards,
+            route_cursor,
+            expanded_states,
+            planning_progress: None,
+            calculation_report: None,
+            export_path: self.export_path.clone(),
+            message,
+        });
+    }
+
+    /// Retain and emit the final determined A* calculation report for UI inspection.
+    fn record_determined_calculation(
+        &mut self,
+        generation: u64,
+        foundation_cards: u8,
+        expanded_states: u64,
+        report: &Arc<freecell_calculation::Report>,
+    ) {
+        self.latest_calculation = Some(Arc::clone(report));
+        self.send_progress_event(FreeCellSessionProgress {
+            context: self.context.clone(),
+            run_id: self.request.run_id,
+            deal_generation: generation,
+            completed_games: self.completed_games,
+            phase: SessionPhase::Planning,
+            foundation_cards: Some(foundation_cards),
+            route_cursor: None,
+            expanded_states: Some(expanded_states),
+            planning_progress: None,
+            calculation_report: Some(Arc::clone(report)),
+            export_path: self.export_path.clone(),
+            message: freecell_calculation::outcome_summary_message(&report.outcome),
+        });
     }
 
     /// Capture one frame via the causal TCP pipeline so the PNG cache stays populated
@@ -288,6 +408,9 @@ impl SessionIo for Native<'_> {
     fn phase(&mut self, generation: u64, phase: SessionPhase) {
         self.generation = generation;
         self.phase = phase;
+        if phase == SessionPhase::Reconnaissance {
+            self.latest_calculation = None;
+        }
         let pause_phase = match phase {
             SessionPhase::Planning => Some(super::pyramid_pause::Phase::Search),
             SessionPhase::Reconnaissance | SessionPhase::Entry => {
@@ -385,7 +508,11 @@ impl SessionIo for Native<'_> {
         }
     }
 
-    fn acquire(&mut self, generation: u64) -> Result<AcquiredDeal, String> {
+    fn acquire(
+        &mut self,
+        generation: u64,
+        style: FreeCellPlayStyle,
+    ) -> Result<AcquiredDeal, String> {
         self.check()?;
         let destination = self.next_export_destination(generation);
         let deal_id = format!("freecell-session-{}-g{generation}", self.request.run_id);
@@ -394,6 +521,7 @@ impl SessionIo for Native<'_> {
             deal_id,
         };
         let mut acquisition = freecell_reconnaissance::Acquisition::new(self.request.run_id);
+        let events = self.events;
         send_state(self.events, WorkerState::Capturing);
         let (report, deal) = freecell_reconnaissance::run_checked_with_deal(
             self.context,
@@ -402,8 +530,12 @@ impl SessionIo for Native<'_> {
             self.cancel,
             &self.stop_trace,
             &mut acquisition,
+            |frame| events.publish_diagnostic_frame(frame.clone()),
         )
         .map_err(|failure| {
+            if let Some(frame) = acquisition.frame.clone() {
+                self.latest = Some(frame);
+            }
             let report = freecell_reconnaissance::failure_report(
                 self.context,
                 &request,
@@ -411,16 +543,14 @@ impl SessionIo for Native<'_> {
                 failure,
             );
             self.failure_saved = true;
+            self.failure_directory = report.directory;
             report.error
         })?;
-        self.export_path = Some(report.destination.clone());
-        let objective = objective::from_metadata(deal.metadata());
-        if objective != Objective::FullBoard {
-            return Err(format!(
-                "Free Cell automatic normal games only plays FullBoard normal deals; acquired objective was {} (no planning or guest input authorised)",
-                objective.label()
-            ));
+        if let Some(frame) = acquisition.frame {
+            self.latest = Some(frame);
         }
+        self.export_path = Some(report.destination.clone());
+        let objective = check_acquired_objective(style, &deal)?;
         let file = std::fs::File::open(&report.destination).map_err(|error| {
             format!(
                 "Free Cell exported deal read failed ({}): {error}",
@@ -437,10 +567,15 @@ impl SessionIo for Native<'_> {
                 xsar::freecell_json::MAX_DOCUMENT_BYTES
             ));
         }
+        let objective_summary = if objective == Objective::Unresolved {
+            "challenge deal (unresolved objective; full-board-first route)"
+        } else {
+            "normal FullBoard deal"
+        };
         send_log(
             self.events,
             format!(
-                "Free Cell Recon complete (cycle {generation}): normal FullBoard deal exported to {}.",
+                "Free Cell Recon complete (cycle {generation}): {objective_summary} exported to {}.",
                 report.destination.display()
             ),
         );
@@ -448,23 +583,29 @@ impl SessionIo for Native<'_> {
             Some(0),
             None,
             None,
-            format!("Acquired normal 52-card deal (cycle {generation})."),
+            format!("Acquired 52-card deal (cycle {generation})."),
         );
         Ok(AcquiredDeal {
             path: report.destination,
             bytes,
             deal,
+            objective,
         })
     }
 
-    fn plan(&mut self, generation: u64, acquired: &AcquiredDeal) -> Result<PlanDecision, String> {
+    fn plan(
+        &mut self,
+        generation: u64,
+        style: FreeCellPlayStyle,
+        acquired: &AcquiredDeal,
+    ) -> Result<PlanDecision, String> {
         self.check()?;
         let identity = freecell_calculation::Identity {
             context: self.context.clone(),
             request_id: self.request.run_id,
             source_generation: generation,
         };
-        let last_emitted_expanded = Cell::new(0_u64);
+        let last_emitted_at = Cell::new(None::<Instant>);
         let last_emitted_foundations = Cell::new(0_u8);
         let events = self.events;
         let stop_trace = &self.stop_trace;
@@ -474,7 +615,7 @@ impl SessionIo for Native<'_> {
         let run_id = self.request.run_id;
         let export_path = &self.export_path;
 
-        let report = freecell_calculation::search_deal_with_control(
+        let report = Arc::new(freecell_calculation::search_deal_with_control(
             freecell_calculation::SearchInput {
                 deal: acquired.deal.clone(),
                 path: acquired.path.clone(),
@@ -487,15 +628,18 @@ impl SessionIo for Native<'_> {
                 Err(_) if cancel.load(Ordering::Acquire) => Ok(true),
                 Err(error) => Err(error),
             },
-            |search, _paused| {
+            |search, paused| {
                 let foundations = u8::try_from(search.best_foundation_cards).unwrap_or(u8::MAX);
                 let expanded = u64::try_from(search.search.stats.expanded).unwrap_or(u64::MAX);
+                let now = Instant::now();
                 let should_emit = expanded == 0
+                    || search.search.finished
                     || foundations > last_emitted_foundations.get()
-                    || expanded.saturating_sub(last_emitted_expanded.get())
-                        >= PROGRESS_EXPANSION_INTERVAL;
+                    || last_emitted_at.get().is_none_or(|prev| {
+                        now.saturating_duration_since(prev) >= PLANNING_PROGRESS_INTERVAL
+                    });
                 if should_emit {
-                    last_emitted_expanded.set(expanded);
+                    last_emitted_at.set(Some(now));
                     last_emitted_foundations.set(foundations);
                     let _ = events.send(WorkerEvent::FreeCellSessionProgress(
                         FreeCellSessionProgress {
@@ -507,6 +651,8 @@ impl SessionIo for Native<'_> {
                             foundation_cards: Some(foundations),
                             route_cursor: None,
                             expanded_states: Some(expanded),
+                            planning_progress: Some(FreeCellPlanningSnapshot { search, paused }),
+                            calculation_report: None,
                             export_path: export_path.clone(),
                             message: format!(
                                 "Searching Free Cell cycle {generation}: {foundations}/52 best foundations ({expanded} expanded)",
@@ -515,10 +661,11 @@ impl SessionIo for Native<'_> {
                     ));
                 }
             },
-        )?;
+        )?);
 
         match &report.outcome {
             Outcome::Solved { moves, stats, .. } => {
+                let expanded_states = u64::try_from(stats.expanded).unwrap_or(u64::MAX);
                 send_log(
                     self.events,
                     format!(
@@ -527,12 +674,13 @@ impl SessionIo for Native<'_> {
                         stats.expanded
                     ),
                 );
-                let prepared =
-                    freecell_route::Prepared::new(identity, Arc::new(report), self.cancel)
-                        .map_err(|error| error.to_string())?;
+                self.record_determined_calculation(generation, 52, expanded_states, &report);
+                let prepared = freecell_route::Prepared::new(identity, report, self.cancel)
+                    .map_err(|error| error.to_string())?;
                 Ok(PlanDecision::Solved(prepared))
             }
             Outcome::Partial {
+                moves,
                 foundation_cards,
                 stats,
                 ..
@@ -540,6 +688,24 @@ impl SessionIo for Native<'_> {
                 let foundation_cards = u8::try_from(*foundation_cards)
                     .map_err(|_| "Invalid Free Cell foundation count".to_owned())?;
                 let expanded_states = u64::try_from(stats.expanded).unwrap_or(u64::MAX);
+                self.record_determined_calculation(
+                    generation,
+                    foundation_cards,
+                    expanded_states,
+                    &report,
+                );
+                if allows_partial_execution(style, acquired.objective, moves.len()) {
+                    send_log(
+                        self.events,
+                        format!(
+                            "Free Cell A* built partial challenge route for cycle {generation} ({} moves, max {foundation_cards}/52 foundations across {expanded_states} expanded states); executing MULTI STEP like Manual mode.",
+                            moves.len(),
+                        ),
+                    );
+                    let prepared = freecell_route::Prepared::new(identity, report, self.cancel)
+                        .map_err(|error| error.to_string())?;
+                    return Ok(PlanDecision::Solved(prepared));
+                }
                 send_log(
                     self.events,
                     format!(
@@ -619,6 +785,7 @@ impl SessionIo for Native<'_> {
             }
             Err(failure) => {
                 self.failure_saved = true;
+                self.failure_directory = failure.directory;
                 Err(failure.error)
             }
         }
@@ -688,8 +855,10 @@ pub(super) fn run(
         generation: 0,
         completed_games: 0,
         export_path: None,
+        latest_calculation: None,
         latest: None,
         failure_saved: false,
+        failure_directory: None,
     };
     send_log(
         events,
@@ -716,9 +885,8 @@ pub(super) fn run(
             | SessionPhase::Completion
             | SessionPhase::Restart => crate::pyramid_diagnostics::PyramidPhase::Execution,
         };
-        publish_pyramid_failure(
-            events,
-            FailureEvidence {
+        let diagnostic = crate::pyramid_diagnostics::persist_failure(
+            crate::pyramid_diagnostics::FailureEvidence {
                 progress: None,
                 context,
                 phase,
@@ -737,6 +905,22 @@ pub(super) fn run(
                 latest_frame: io.latest.as_ref(),
             },
         );
+        if let Some(directory) = &diagnostic.directory {
+            send_log(
+                events,
+                format!(
+                    "Saved Free Cell failure evidence packet to {}.",
+                    directory.display()
+                ),
+            );
+            io.failure_directory = Some(directory.clone());
+        }
+        if let Some(persistence_error) = &diagnostic.persistence_error {
+            send_log(
+                events,
+                format!("Failed to persist Free Cell failure evidence packet: {persistence_error}"),
+            );
+        }
     }
     match events.latest_frame.freecell_route.lock() {
         Ok(mut store) => store.revoke(),
@@ -755,6 +939,11 @@ pub(super) fn run(
             WorkerState::Uncertain
         },
     );
+    let failure_directory = if outcome.is_err() {
+        io.failure_directory
+    } else {
+        None
+    };
     let (completed_games, unsolvable_foundation_cards, export_path, result) = match outcome {
         Ok(done) => (
             done.completed_games,
@@ -777,7 +966,9 @@ pub(super) fn run(
             completed_games,
             termination,
             unsolvable_foundation_cards,
+            calculation_report: io.latest_calculation,
             export_path,
+            failure_directory,
             result,
         },
     ));
@@ -791,7 +982,7 @@ mod tests {
     use xsar::games::cards::{Rank, Suit};
     use xsar::games::freecell::{BoardState, CascadeStack, InitialDeal, Metadata};
 
-    fn test_deal(seed: u8) -> InitialDeal {
+    fn test_deal_with_source(seed: u8, source: &str) -> InitialDeal {
         let mut cards = Vec::with_capacity(52);
         for suit in [Suit::Clubs, Suit::Diamonds, Suit::Hearts, Suit::Spades] {
             for rank in 1_u8..=13 {
@@ -810,7 +1001,7 @@ mod tests {
         let metadata = Metadata::new(
             format!("session-test-{seed}"),
             "freecell-session-test",
-            crate::freecell_recon::objective::FULL_BOARD_SOURCE,
+            source,
         )
         .unwrap();
         InitialDeal::new(
@@ -865,14 +1056,24 @@ mod tests {
     }
 
     impl ScriptedIo {
-        fn make_acquired(seed: u8) -> AcquiredDeal {
-            let deal = test_deal(seed);
+        fn make_acquired_with_objective(seed: u8, objective: Objective) -> AcquiredDeal {
+            let source = match objective {
+                Objective::FullBoard => crate::freecell_recon::objective::FULL_BOARD_SOURCE,
+                Objective::Unresolved => crate::freecell_recon::objective::UNRESOLVED_SOURCE,
+                Objective::Unverified => "legacy-unverified",
+            };
+            let deal = test_deal_with_source(seed, source);
             let bytes = freecell_json::to_vec(&deal).unwrap();
             AcquiredDeal {
                 path: PathBuf::from(format!("/tmp/freecell-session-script-{seed}.json")),
                 bytes,
                 deal,
+                objective,
             }
+        }
+
+        fn make_acquired(seed: u8) -> AcquiredDeal {
+            Self::make_acquired_with_objective(seed, Objective::FullBoard)
         }
     }
 
@@ -890,7 +1091,11 @@ mod tests {
             Ok(())
         }
 
-        fn acquire(&mut self, generation: u64) -> Result<AcquiredDeal, String> {
+        fn acquire(
+            &mut self,
+            generation: u64,
+            _style: FreeCellPlayStyle,
+        ) -> Result<AcquiredDeal, String> {
             self.events.push(format!("acquire:{generation}"));
             self.acquires
                 .pop_front()
@@ -900,6 +1105,7 @@ mod tests {
         fn plan(
             &mut self,
             generation: u64,
+            _style: FreeCellPlayStyle,
             acquired: &AcquiredDeal,
         ) -> Result<PlanDecision, String> {
             self.events.push(format!("plan:{generation}"));
@@ -995,6 +1201,7 @@ mod tests {
         let outcome = drive_session(FreeCellPlayStyle::SingleBoard, &mut io).unwrap();
         assert_eq!(outcome.completed_games, 1);
         assert_eq!(outcome.unsolvable_foundation_cards, None);
+        assert!(!io.events.contains(&"prepare_entry".to_owned()));
         assert!(!io.events.iter().any(|event| event.starts_with("restart:")));
     }
 
@@ -1049,5 +1256,285 @@ mod tests {
             drive_session(FreeCellPlayStyle::ContinuousNormalGames, &mut cold_fail).unwrap_err();
         assert!(cold_err.contains("Level Up OK"));
         assert!(!cold_fail.events.iter().any(|e| e.starts_with("acquire:")));
+    }
+
+    #[test]
+    fn freecell_331_single_board_plays_unresolved_challenge_deals_and_stops_cleanly() {
+        let full_deal =
+            test_deal_with_source(1, crate::freecell_recon::objective::FULL_BOARD_SOURCE);
+        let challenge_deal =
+            test_deal_with_source(2, crate::freecell_recon::objective::UNRESOLVED_SOURCE);
+        let unverified_deal = test_deal_with_source(3, "legacy-unverified");
+
+        assert_eq!(
+            check_acquired_objective(FreeCellPlayStyle::ContinuousNormalGames, &full_deal).unwrap(),
+            Objective::FullBoard
+        );
+        let cont_err =
+            check_acquired_objective(FreeCellPlayStyle::ContinuousNormalGames, &challenge_deal)
+                .unwrap_err();
+        assert!(cont_err.contains("continuous normal games"));
+        assert!(cont_err.contains("Single board"));
+        assert_eq!(
+            check_acquired_objective(FreeCellPlayStyle::SingleBoard, &challenge_deal).unwrap(),
+            Objective::Unresolved
+        );
+        assert_eq!(
+            check_acquired_objective(FreeCellPlayStyle::SingleBoard, &full_deal).unwrap(),
+            Objective::FullBoard
+        );
+        assert!(
+            check_acquired_objective(FreeCellPlayStyle::SingleBoard, &unverified_deal)
+                .unwrap_err()
+                .contains("reacquire")
+        );
+
+        assert!(allows_partial_execution(
+            FreeCellPlayStyle::SingleBoard,
+            Objective::Unresolved,
+            3
+        ));
+        assert!(!allows_partial_execution(
+            FreeCellPlayStyle::SingleBoard,
+            Objective::Unresolved,
+            0
+        ));
+        assert!(!allows_partial_execution(
+            FreeCellPlayStyle::SingleBoard,
+            Objective::FullBoard,
+            3
+        ));
+        assert!(!allows_partial_execution(
+            FreeCellPlayStyle::ContinuousNormalGames,
+            Objective::Unresolved,
+            3
+        ));
+
+        let mut challenge_win = ScriptedIo::default();
+        challenge_win
+            .acquires
+            .push_back(Ok(ScriptedIo::make_acquired_with_objective(
+                10,
+                Objective::Unresolved,
+            )));
+        challenge_win.plans.push_back(Ok(ScriptedPlan::Solve));
+        challenge_win.executions.push_back(Ok(ExecutedBoard {
+            completion: Some(crate::freecell_route::Completion::ChallengeComplete),
+            foundation_cards: 28,
+        }));
+        let win_outcome =
+            drive_session(FreeCellPlayStyle::SingleBoard, &mut challenge_win).unwrap();
+        assert_eq!(win_outcome.completed_games, 1);
+        assert!(win_outcome.summary.contains("challenge complete (28/52"));
+        assert!(!challenge_win.events.contains(&"prepare_entry".to_owned()));
+        assert!(
+            !challenge_win
+                .events
+                .iter()
+                .any(|e| e.starts_with("restart:"))
+        );
+
+        let mut challenge_full = ScriptedIo::default();
+        challenge_full
+            .acquires
+            .push_back(Ok(ScriptedIo::make_acquired_with_objective(
+                11,
+                Objective::Unresolved,
+            )));
+        challenge_full.plans.push_back(Ok(ScriptedPlan::Solve));
+        challenge_full.executions.push_back(Ok(ExecutedBoard {
+            completion: Some(crate::freecell_route::Completion::FullBoard),
+            foundation_cards: 52,
+        }));
+        let full_outcome =
+            drive_session(FreeCellPlayStyle::SingleBoard, &mut challenge_full).unwrap();
+        assert_eq!(full_outcome.completed_games, 1);
+        assert!(full_outcome.summary.contains("52/52 cards cleared"));
+        assert!(!challenge_full.events.contains(&"prepare_entry".to_owned()));
+        assert!(
+            !challenge_full
+                .events
+                .iter()
+                .any(|e| e.starts_with("restart:"))
+        );
+
+        let mut challenge_partial = ScriptedIo::default();
+        challenge_partial
+            .acquires
+            .push_back(Ok(ScriptedIo::make_acquired_with_objective(
+                12,
+                Objective::Unresolved,
+            )));
+        challenge_partial.plans.push_back(Ok(ScriptedPlan::Solve));
+        challenge_partial.executions.push_back(Ok(ExecutedBoard {
+            completion: Some(crate::freecell_route::Completion::PartialRouteExhausted),
+            foundation_cards: 35,
+        }));
+        let partial_outcome =
+            drive_session(FreeCellPlayStyle::SingleBoard, &mut challenge_partial).unwrap();
+        assert_eq!(partial_outcome.completed_games, 0);
+        assert!(
+            partial_outcome
+                .summary
+                .contains("partial route finished (35/52")
+        );
+        assert!(
+            !challenge_partial
+                .events
+                .contains(&"prepare_entry".to_owned())
+        );
+        assert!(
+            !challenge_partial
+                .events
+                .iter()
+                .any(|e| e.starts_with("restart:"))
+        );
+
+        let mut normal_challenge_mismatch = ScriptedIo::default();
+        normal_challenge_mismatch
+            .acquires
+            .push_back(Ok(ScriptedIo::make_acquired(13)));
+        normal_challenge_mismatch
+            .plans
+            .push_back(Ok(ScriptedPlan::Solve));
+        normal_challenge_mismatch
+            .executions
+            .push_back(Ok(ExecutedBoard {
+                completion: Some(crate::freecell_route::Completion::ChallengeComplete),
+                foundation_cards: 28,
+            }));
+        let mismatch_err = drive_session(
+            FreeCellPlayStyle::SingleBoard,
+            &mut normal_challenge_mismatch,
+        )
+        .unwrap_err();
+        assert!(mismatch_err.contains("52-card victory"));
+        assert!(
+            !normal_challenge_mismatch
+                .events
+                .iter()
+                .any(|e| e.starts_with("restart:"))
+        );
+    }
+
+    #[test]
+    fn freecell_332_native_plan_emits_live_progress_and_determined_calculation_report() {
+        let context = ControllerContext {
+            socket_path: PathBuf::from("/tmp/freecell-session-plan-test.sock"),
+            game_mode: GameMode::FreeCell,
+            strategy: SolvingStrategy::ShortestPath,
+            generation: 332,
+        };
+        let request = FreeCellSessionRequest {
+            run_id: 9,
+            play_style: FreeCellPlayStyle::SingleBoard,
+            auto_mode: crate::freecell_route::AutoMode::ObserveGame,
+            settle: Duration::ZERO,
+        };
+        let mut columns: [Vec<xsar::games::cards::Card>; 8] = std::array::from_fn(|_| Vec::new());
+        for (i, card) in (1_u8..=13)
+            .rev()
+            .flat_map(|rank| {
+                [Suit::Clubs, Suit::Diamonds, Suit::Hearts, Suit::Spades].map(|suit| {
+                    xsar::games::cards::Card::new(Rank::from_value(rank).unwrap(), suit)
+                })
+            })
+            .enumerate()
+        {
+            columns[i % 8].push(card);
+        }
+        let deal = InitialDeal::new(
+            BoardState::new(
+                columns.map(|column| CascadeStack::from_cards(column).unwrap()),
+                [None; 4],
+                [0; 4],
+            )
+            .unwrap(),
+            Metadata::new(
+                "freecell-332-plan",
+                "freecell-session-test",
+                crate::freecell_recon::objective::FULL_BOARD_SOURCE,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let bytes = freecell_json::to_vec(&deal).unwrap();
+        let acquired = AcquiredDeal {
+            path: PathBuf::from("/tmp/freecell-332-plan.json"),
+            bytes,
+            deal,
+            objective: Objective::FullBoard,
+        };
+        let (tx, rx) = mpsc::channel();
+        let events = WorkerEventSink {
+            events: tx,
+            latest_frame: LatestFrameSlot::default(),
+            capture_context: Mutex::new(None),
+        };
+        let cancel = AtomicBool::new(false);
+        events
+            .latest_frame
+            .reconnaissance
+            .select(&context, &cancel)
+            .unwrap();
+        events
+            .latest_frame
+            .reconnaissance
+            .queue_reconnaissance(&context, &cancel, || Ok(()))
+            .unwrap();
+
+        let mut io = Native {
+            stop_trace: Default::default(),
+            phase_error: None,
+            context: &context,
+            request: &request,
+            events: &events,
+            cancel: &cancel,
+            phase: SessionPhase::Planning,
+            generation: 1,
+            completed_games: 0,
+            export_path: Some(acquired.path.clone()),
+            latest_calculation: None,
+            latest: None,
+            failure_saved: false,
+            failure_directory: None,
+        };
+        let decision = io
+            .plan(1, FreeCellPlayStyle::SingleBoard, &acquired)
+            .unwrap();
+        assert!(matches!(decision, PlanDecision::Solved(_)));
+        assert!(io.latest_calculation.is_some());
+
+        let progress_events: Vec<_> = rx
+            .try_iter()
+            .filter_map(|tagged| match tagged.event {
+                WorkerEvent::FreeCellSessionProgress(progress) => Some(progress),
+                _ => None,
+            })
+            .collect();
+        assert!(
+            progress_events
+                .iter()
+                .any(|progress| progress.planning_progress.is_some()),
+            "planning must emit live search progress snapshots"
+        );
+        let determined = progress_events
+            .iter()
+            .filter_map(|progress| {
+                progress
+                    .calculation_report
+                    .as_ref()
+                    .map(|report| (report, &progress.message))
+            })
+            .next_back()
+            .expect("planning must emit determined calculation report");
+        assert!(matches!(determined.0.outcome, Outcome::Solved { .. }));
+        assert_eq!(
+            determined.1,
+            &freecell_calculation::outcome_summary_message(&determined.0.outcome)
+        );
+
+        io.phase(2, SessionPhase::Reconnaissance);
+        assert!(io.latest_calculation.is_none());
     }
 }

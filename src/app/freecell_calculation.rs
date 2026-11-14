@@ -151,32 +151,8 @@ impl Calculation {
         self.pending = None;
         match result {
             Ok(report) => {
-                use xsar::games::freecell::search::BestEffortOutcome as Outcome;
-                self.message = match &report.outcome {
-                    Outcome::Solved { moves, replay, .. } => format!(
-                        "Complete route independently replayed: {} transfers; {} deliberate, {} automatic; 52 foundation cards",
-                        moves.len(),
-                        replay.deliberate,
-                        replay.automatic
-                    ),
-                    Outcome::Partial {
-                        moves,
-                        deliberate_moves,
-                        automatic_moves,
-                        foundation_cards,
-                        ..
-                    } => format!(
-                        "Proved maximum partial route: {foundation_cards}/52 foundation cards; {} transfers, {deliberate_moves} deliberate, {automatic_moves} automatic; search graph exhausted; independently replayed{}",
-                        moves.len(),
-                        if moves.is_empty() {
-                            "; no foundation progress is reachable"
-                        } else {
-                            ""
-                        }
-                    ),
-                    Outcome::Cancelled(_) => "Calculation cancelled; no usable route".to_owned(),
-                    Outcome::Failed { failure, .. } => format!("Calculation failed: {failure}"),
-                };
+                self.message =
+                    crate::worker::freecell_calculation::outcome_summary_message(&report.outcome);
                 self.report = Some(report);
             }
             Err(error) => self.message = error,
@@ -193,6 +169,55 @@ impl Calculation {
             self.progress = Some(progress);
         }
     }
+}
+
+
+/// Render live A* calculation counters using the same format across Manual and Session modes.
+pub(super) fn render_live_calculation_stats(
+    ui: &mut egui::Ui,
+    search: &xsar::games::freecell::search::Progress,
+    paused: std::time::Duration,
+) {
+    let stats = &search.search.stats;
+    ui.label(format!("Paused {:.1}s", paused.as_secs_f64()));
+    ui.label(format!(
+        "{:.1}s active · {} expanded · {} generated · {} retained · {} peak frontier · best foundations {}/52{}",
+        stats.elapsed.as_secs_f64(),
+        stats.expanded,
+        stats.generated,
+        stats.states,
+        stats.peak_frontier,
+        search.best_foundation_cards,
+        if search.search.finished {
+            " · checking final replay"
+        } else {
+            ""
+        }
+    ));
+}
+
+
+/// Render final determined route/max-card statistics shared by Manual and Session modes.
+pub(super) fn render_determined_calculation_stats(
+    ui: &mut egui::Ui,
+    report: &crate::worker::freecell_calculation::Report,
+) {
+    let stats = crate::worker::freecell_calculation::stats(&report.outcome);
+    ui.label(format!(
+        "Final: {:.2}s active · {} expanded · {} generated · {} retained · {} peak frontier",
+        stats.elapsed.as_secs_f64(),
+        stats.expanded,
+        stats.generated,
+        stats.states,
+        stats.peak_frontier
+    ));
+    ui.label(format!("Paused {:.2}s", report.paused.as_secs_f64()));
+    ui.label(format!(
+        "Frozen source {} · {} bytes · deal {}",
+        report.path.display(),
+        report.bytes.len(),
+        report.deal.metadata().deal_id()
+    ));
 }
 
 
@@ -534,21 +559,11 @@ impl QmpQemuSocketApp {
             .as_ref()
             .filter(|_| self.freecell_calculation.pending.is_some())
         {
-            let stats = &progress.search.search.stats;
-            ui.label(format!("Paused {:.1}s", progress.paused.as_secs_f64()));
-            ui.label(format!("{:.1}s active · {} expanded · {} generated · {} retained · {} peak frontier · best foundations {}/52{}", stats.elapsed.as_secs_f64(), stats.expanded, stats.generated, stats.states, stats.peak_frontier, progress.search.best_foundation_cards, if progress.search.search.finished { " · checking final replay" } else { "" }));
+            render_live_calculation_stats(ui, &progress.search, progress.paused);
         }
         ui.label(&self.freecell_calculation.message);
         if let Some(report) = &self.freecell_calculation.report {
-            let stats = crate::worker::freecell_calculation::stats(&report.outcome);
-            ui.label(format!("Final: {:.2}s active · {} expanded · {} generated · {} retained · {} peak frontier", stats.elapsed.as_secs_f64(), stats.expanded, stats.generated, stats.states, stats.peak_frontier));
-            ui.label(format!("Paused {:.2}s", report.paused.as_secs_f64()));
-            ui.label(format!(
-                "Frozen source {} · {} bytes · deal {}",
-                report.path.display(),
-                report.bytes.len(),
-                report.deal.metadata().deal_id()
-            ));
+            render_determined_calculation_stats(ui, report);
             if route_moves(&report.outcome).is_some()
                 && ui
                     .add(PressableButton::new("Inspect physical route"))

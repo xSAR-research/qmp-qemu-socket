@@ -977,6 +977,72 @@ fn freecell_300_tcp_recon_exports_one_frame_and_retains_refusals() {
     }
 }
 
+/// Session-mode Free Cell RECON publishes the diagnostic board preview immediately upon capture,
+/// before recognition or JSON export finishes, even if recognition subsequently fails.
+#[test]
+fn freecell_332_recon_with_deal_publishes_frame_immediately_before_recognition_or_publication() {
+    use super::freecell_reconnaissance::{Acquisition, Request, run_checked_with_deal};
+    for malformed in [false, true] {
+        let root = TestDirectory::new();
+        let _diagnostics = DiagnosticsRestore::install(None);
+        let mut original =
+            decode_png(include_bytes!("../../tests/fixtures/freecell-FC01.png")).unwrap();
+        if malformed {
+            for y in 338..361 {
+                let first = y * original.stride + 220 * 4;
+                original.pixels[first..first + 26 * 4].fill(255);
+            }
+        }
+        let (address, tcp) = v3_server(vec![vec![V3Reply::Frame(original.clone())]]);
+        let _backend = TestCaptureBackend::tcp_mode(address, CaptureMode::PersistentBgrV3);
+        let (events, _receiver) = sink();
+        let _capture_scope = tcp_capture::WorkerCaptureScope::install(&events);
+        let context = ControllerContext::new(
+            root.0.join("qmp.sock"),
+            GameMode::FreeCell,
+            SolvingStrategy::ShortestPath,
+            332,
+        );
+        let cancel = Arc::new(AtomicBool::new(false));
+        let _cancel_scope = tcp_capture::CancellationScope::install(Arc::clone(&cancel));
+        events.set_capture_context(Some(context.clone()));
+        events
+            .latest_frame
+            .reconnaissance
+            .select(&context, &cancel)
+            .unwrap();
+        events
+            .latest_frame
+            .reconnaissance
+            .queue_reconnaissance(&context, &cancel, || Ok(()))
+            .unwrap();
+        let request = Request {
+            destination: root.0.join("freecell-session-preview.json"),
+            deal_id: "session-preview".to_owned(),
+        };
+        let trace = pyramid_stop::StopTrace::default();
+        let mut acquisition = Acquisition::new(7);
+        let result = run_checked_with_deal(
+            &context,
+            &request,
+            &events,
+            &cancel,
+            &trace,
+            &mut acquisition,
+            |frame| events.publish_diagnostic_frame(frame.clone()),
+        );
+        let published = events
+            .latest_frame
+            .take()
+            .expect("session RECON must publish board preview immediately after capture");
+        assert!(published.diagnostic);
+        assert_frame(&published.frame, &original);
+        assert_eq!(result.is_ok(), !malformed);
+        drop(_capture_scope);
+        assert_eq!(tcp.finish(), 1);
+    }
+}
+
 /// Consecutive explicit requests retain their own exact pixels with recording disabled.
 #[test]
 fn freecell_313_recon_completion_keeps_each_fresh_frame_and_original_failure() {

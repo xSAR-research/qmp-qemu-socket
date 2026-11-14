@@ -222,7 +222,7 @@ fn qmp_server_for_parents(
                 delivered.unwrap();
             }
             if stop_after_down && case == Case::AbsoluteStopDuringHeldWait {
-                // DOWN is acknowledged before STOP arrives inside the fixed 100ms held wait.
+                // DOWN is acknowledged before STOP arrives inside the fixed 200ms held wait.
                 thread::sleep(Duration::from_millis(20));
                 latest.reconnaissance.operator_stop(&context, &cancel);
             }
@@ -1107,7 +1107,7 @@ fn exercise_with_cadence(case: Case, diagnostic_step: bool, verify_cadence: bool
             for pair in writes.windows(2) {
                 assert!(
                     pair[1] - pair[0] >= abs_wait_us,
-                    "all five ABS intervals use the fixed 100ms wait"
+                    "all five ABS intervals use the fixed 200ms wait"
                 );
             }
             assert!(
@@ -1321,7 +1321,7 @@ fn freecell_3114_native_sixes_binds52_and_proves_only_jh_source_and_empty_cell()
 fn freecell_3120_diagnostic_mode_is_frozen_before_queue_with_fixed_abs_interval() {
     assert_eq!(
         crate::parameters::FREECELL_ROUTE_ABS_GESTURE_INTERVAL,
-        Duration::from_millis(100)
+        Duration::from_millis(200)
     );
     let (command_tx, command_rx) = mpsc::channel();
     let (_, event_rx) = mpsc::channel();
@@ -1374,7 +1374,7 @@ fn freecell_3120_diagnostic_mode_is_frozen_before_queue_with_fixed_abs_interval(
 }
 
 
-/// SINGLE STEP sends six exact packets with five 100-millisecond gaps at an upper slot.
+/// SINGLE STEP sends six exact packets with five 200-millisecond gaps at an upper slot.
 #[test]
 #[ignore = "requires local AF_UNIX and TCP sockets"]
 fn freecell_3120_native_abs_single_step_has_five_100ms_gaps_and_lift_midpoint_path() {
@@ -1398,7 +1398,7 @@ fn freecell_3120_native_abs_play_target_has_five_100ms_gaps_and_lift_midpoint_pa
 }
 
 
-/// STOP during the 100-millisecond held wait permits release recovery without destination motion.
+/// STOP during the 200-millisecond held wait permits release recovery without destination motion.
 #[test]
 #[ignore = "requires local AF_UNIX and TCP sockets"]
 fn freecell_3120_native_abs_100ms_stop_releases_without_motion_or_replay() {
@@ -2399,7 +2399,7 @@ fn freecell_319_native_late_auto_before_transfer_refuses_stale_parent_without_in
 }
 
 
-/// MULTI fixes ABS/100ms and proves both native transfers before accepting the endpoint.
+/// MULTI fixes ABS/200ms and proves both native transfers before accepting the endpoint.
 #[test]
 #[ignore = "requires local AF_UNIX and TCP sockets"]
 fn freecell_3120_native_multi_step_uses_two_verified_100ms_six_event_abs_gestures() {
@@ -2569,13 +2569,13 @@ fn freecell_3120_native_multi_step_uses_two_verified_100ms_six_event_abs_gesture
                 serde_json::from_str(metadata.strip_prefix("QMP_WIRE ").unwrap()).unwrap();
             assert_eq!(metadata["owner"]["single_step"], false);
             assert_eq!(metadata["owner"]["diagnostic_drag_mode"], "Absolute");
-            assert_eq!(metadata["owner"]["gesture_phase_wait_ms"], 100);
+            assert_eq!(metadata["owner"]["gesture_phase_wait_ms"], 200);
             Some(metadata["wire_elapsed_us"].as_u64().unwrap())
         })
         .collect();
     assert_eq!(writes.len(), 12);
     for gesture in writes.as_chunks::<6>().0 {
-        assert!(gesture.windows(2).all(|pair| pair[1] - pair[0] >= 100_000));
+        assert!(gesture.windows(2).all(|pair| pair[1] - pair[0] >= 200_000));
     }
     assert!(
         writes[6] - writes[5] >= 500_000,

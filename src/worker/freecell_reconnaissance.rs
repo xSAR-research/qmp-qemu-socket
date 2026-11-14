@@ -280,12 +280,13 @@ pub(super) fn run_checked(
     trace: &StopTrace,
     acquisition: &mut Acquisition,
 ) -> Result<Report, Failure> {
-    run_checked_with_deal(context, request, events, cancel, trace, acquisition)
+    run_checked_with_deal(context, request, events, cancel, trace, acquisition, |_| {})
         .map(|(report, _deal)| report)
 }
 
 /// Capture, recognise, and export once under the current reservation, retaining the
-/// validated immutable deal for worker-owned sessions.
+/// validated immutable deal for worker-owned sessions and notifying `on_frame` as soon
+/// as a raw board screenshot is acquired.
 pub(super) fn run_checked_with_deal(
     context: &ControllerContext,
     request: &Request,
@@ -293,6 +294,7 @@ pub(super) fn run_checked_with_deal(
     cancel: &AtomicBool,
     trace: &StopTrace,
     acquisition: &mut Acquisition,
+    on_frame: impl FnOnce(&CapturedFrame),
 ) -> Result<(Report, xsar::games::freecell::InitialDeal), Failure> {
     acquisition.stage("request validation");
     request.validate(context).map_err(Failure::Request)?;
@@ -311,6 +313,7 @@ pub(super) fn run_checked_with_deal(
     // Retain exactly these pixels even if recognition, context or publication subsequently refuses.
     acquisition.frame = Some(frame.clone());
     acquisition.identity = timing.identity;
+    on_frame(&frame);
     acquisition.stage("post-capture authority");
     trace
         .check(&events.latest_frame.reconnaissance, context, cancel)

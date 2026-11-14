@@ -354,6 +354,36 @@ pub(crate) fn stats(outcome: &Outcome) -> xsar::search::SearchStats {
 }
 
 
+/// Format the shared Free Cell calculation summary line for both Manual and Session modes.
+pub(crate) fn outcome_summary_message(outcome: &Outcome) -> String {
+    match outcome {
+        Outcome::Solved { moves, replay, .. } => format!(
+            "Complete route independently replayed: {} transfers; {} deliberate, {} automatic; 52 foundation cards",
+            moves.len(),
+            replay.deliberate,
+            replay.automatic
+        ),
+        Outcome::Partial {
+            moves,
+            deliberate_moves,
+            automatic_moves,
+            foundation_cards,
+            ..
+        } => format!(
+            "Proved maximum partial route: {foundation_cards}/52 foundation cards; {} transfers, {deliberate_moves} deliberate, {automatic_moves} automatic; search graph exhausted; independently replayed{}",
+            moves.len(),
+            if moves.is_empty() {
+                "; no foundation progress is reachable"
+            } else {
+                ""
+            }
+        ),
+        Outcome::Cancelled(_) => "Calculation cancelled; no usable route".to_owned(),
+        Outcome::Failed { failure, .. } => format!("Calculation failed: {failure}"),
+    }
+}
+
+
 /// Retire the exact reservation before publishing one immutable final outcome.
 pub(super) fn complete(
     identity: Identity,

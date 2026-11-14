@@ -1143,7 +1143,7 @@ impl WorkerHandle {
     }
 
 
-    /// Reserve one live invocation; all ABS route gestures use the fixed 100ms interval.
+    /// Reserve one live invocation; all ABS route gestures use the fixed 200ms interval.
     pub(crate) fn execute_freecell_route(
         &self,
         plan: freecell_calculation::Identity,
@@ -2099,7 +2099,9 @@ fn run_worker(
                             completed_games: 0,
                             termination: crate::pyramid_workflow_model::RunTermination::Failed,
                             unsolvable_foundation_cards: None,
+                            calculation_report: None,
                             export_path: None,
+                            failure_directory: None,
                             result: Err(error),
                         },
                     ));

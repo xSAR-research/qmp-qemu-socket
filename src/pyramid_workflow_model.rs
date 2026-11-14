@@ -334,7 +334,7 @@ impl FreeCellPlayStyle {
                 "Solves normal deals back-to-back, dismissing post-win screens until an unsolvable deal or STOP."
             }
             Self::SingleBoard => {
-                "Solves one untouched normal deal and stops at GAME WIN without starting a new game."
+                "Solves one untouched normal or challenge deal (RECON -> SOLVE -> MULTI STEP) and stops cleanly without starting a new game."
             }
             Self::Manual => {
                 "Manual 52-card export, offline A* calculation, and step/route playback controls."
@@ -361,6 +361,15 @@ pub(crate) struct FreeCellSessionRequest {
     pub(crate) settle: std::time::Duration,
 }
 
+/// Replaceable live A* calculation snapshot emitted while planning a Free Cell session board.
+#[derive(Clone, Debug)]
+pub(crate) struct FreeCellPlanningSnapshot {
+    /// Engine counters and best foundation count observed so far.
+    pub(crate) search: xsar::games::freecell::search::Progress,
+    /// Cumulative intentional pause duration during the current search.
+    pub(crate) paused: std::time::Duration,
+}
+
 /// Advisory progress emitted by the worker during an automatic Free Cell session.
 #[derive(Clone, Debug)]
 pub struct FreeCellSessionProgress {
@@ -380,6 +389,11 @@ pub struct FreeCellSessionProgress {
     pub(crate) route_cursor: Option<(usize, usize)>,
     /// Cumulative A* expanded states reported while searching the current deal.
     pub(crate) expanded_states: Option<u64>,
+    /// Full live search progress snapshot matching Manual Calculation stats.
+    pub(crate) planning_progress: Option<FreeCellPlanningSnapshot>,
+    /// Final determined route/max-card report once A* finishes for the active board.
+    pub(crate) calculation_report:
+        Option<std::sync::Arc<crate::worker::freecell_calculation::Report>>,
     /// Exported deal JSON path for the active board when already published.
     pub(crate) export_path: Option<std::path::PathBuf>,
     /// Concise status summary for operator visibility.
@@ -399,8 +413,13 @@ pub struct FreeCellSessionCompletion {
     pub(crate) termination: RunTermination,
     /// Populated on Option 2A clean exit (`foundation_cards < 52`) with zero mid-game clicks.
     pub(crate) unsolvable_foundation_cards: Option<u8>,
+    /// Last determined route/max-card report captured during the session, if any.
+    pub(crate) calculation_report:
+        Option<std::sync::Arc<crate::worker::freecell_calculation::Report>>,
     /// Last exported 52-card deal JSON path, when published in this session.
     pub(crate) export_path: Option<std::path::PathBuf>,
+    /// Retained private failure evidence packet directory, when diagnostics were saved.
+    pub(crate) failure_directory: Option<std::path::PathBuf>,
     /// Final human-readable summary or causal error message.
     pub(crate) result: Result<String, String>,
 }

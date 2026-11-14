@@ -13,7 +13,7 @@ pub(crate) const BOUNDS: PixelRect = PixelRect::new(800, 33, 320, 62);
 /// Explicit complete-board provenance written only after a blank native objective proof.
 pub(crate) const FULL_BOARD_SOURCE: &str = "single-frame-tcp-v3;objective=full-board";
 /// Visible objective content whose semantic target and completion policy are unsupported.
-const UNRESOLVED_SOURCE: &str = "single-frame-tcp-v3;objective=unresolved";
+pub(crate) const UNRESOLVED_SOURCE: &str = "single-frame-tcp-v3;objective=unresolved";
 
 
 /// Acquisition objective classification, separate from the recognised card inventory.

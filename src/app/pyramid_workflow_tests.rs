@@ -1912,6 +1912,8 @@ fn freecell_330_session_lifecycle_accepts_option_2a_and_stop_preview_once() {
         foundation_cards: Some(12),
         route_cursor: None,
         expanded_states: Some(100),
+        planning_progress: None,
+        calculation_report: None,
         export_path: None,
         message: "stale".to_owned(),
     };
@@ -1926,6 +1928,8 @@ fn freecell_330_session_lifecycle_accepts_option_2a_and_stop_preview_once() {
         foundation_cards: Some(24),
         route_cursor: None,
         expanded_states: Some(10_000),
+        planning_progress: None,
+        calculation_report: None,
         export_path: Some(std::path::PathBuf::from("/tmp/fc-deal-2.json")),
         message: "searching".to_owned(),
     };
@@ -1935,13 +1939,21 @@ fn freecell_330_session_lifecycle_accepts_option_2a_and_stop_preview_once() {
         Some(PyramidPhase::Planning)
     );
 
+    assert!(
+        crate::pyramid_workflow_model::FreeCellPlayStyle::SingleBoard
+            .description()
+            .contains("normal or challenge deal (RECON -> SOLVE -> MULTI STEP)")
+    );
+
     let option_2a = FreeCellSessionCompletion {
         context: selected.clone(),
         run_id,
         completed_games: 1,
         termination: RunTermination::Completed,
         unsolvable_foundation_cards: Some(41),
+        calculation_report: None,
         export_path: Some(std::path::PathBuf::from("/tmp/fc-deal-2.json")),
+        failure_directory: None,
         result: Ok("Exhaustive A* proved 41/52 max".to_owned()),
     };
     assert!(complete_freecell_session(
@@ -1966,7 +1978,9 @@ fn freecell_330_session_lifecycle_accepts_option_2a_and_stop_preview_once() {
         completed_games: 0,
         termination: RunTermination::OperatorStopped,
         unsolvable_foundation_cards: None,
+        calculation_report: None,
         export_path: None,
+        failure_directory: None,
         result: Err("Operator STOP".to_owned()),
     };
     let accepted = complete_freecell_session(
@@ -1987,4 +2001,256 @@ fn freecell_330_session_lifecycle_accepts_option_2a_and_stop_preview_once() {
     assert_eq!(dispatched, 1);
     assert!(stop_owner.is_none());
     assert_eq!(stop_state, WorkerState::Ready);
+}
+
+
+/// Collect all rendered text labels from a headless `egui` paint pass for exact parity checks.
+fn collect_egui_text(shapes: &[eframe::egui::epaint::ClippedShape], out: &mut Vec<String>) {
+    fn walk_shape(shape: &eframe::egui::epaint::Shape, out: &mut Vec<String>) {
+        match shape {
+            eframe::egui::epaint::Shape::Text(text) => out.push(text.galley.text().to_owned()),
+            eframe::egui::epaint::Shape::Vec(children) => {
+                for child in children {
+                    walk_shape(child, out);
+                }
+            }
+            _ => {}
+        }
+    }
+    for clipped in shapes {
+        walk_shape(&clipped.shape, out);
+    }
+}
+
+
+/// Single board releases prior Manual RECON locks, shows live/final Calculation stats, and resets per cycle.
+#[test]
+fn freecell_332_single_board_displays_live_and_determined_calculation_stats_and_retains_preview() {
+    use super::freecell_recon::FreeCellReconState;
+    use crate::pyramid_workflow_model::{
+        FreeCellPlanningSnapshot, FreeCellPlayStyle, FreeCellSessionCompletion,
+        FreeCellSessionProgress, RunTermination,
+    };
+    use std::{sync::Arc, time::Duration};
+    use xsar::games::cards::{Card, Rank, Suit};
+    use xsar::games::freecell::{
+        BoardState, CascadeStack, InitialDeal, Metadata, search as fc_search,
+    };
+    use xsar::search::{SearchProgress, SearchStats};
+
+    let mut selected = context();
+    selected.game_mode = GameMode::FreeCell;
+
+    let mut recon_state = FreeCellReconState::default();
+    let recon_id = recon_state.reserve(selected.clone()).unwrap();
+    assert!(recon_state.finish(&selected, recon_id, RunTermination::Completed));
+    assert!(recon_state.owns_preview(&selected));
+    assert!(recon_state.release_for_playback(&selected));
+    assert!(
+        !recon_state.owns_preview(&selected),
+        "starting Single board session must release prior completed Manual RECON preview ownership"
+    );
+
+    let mut workflow = FreeCellWorkflow::default();
+    workflow.play_style = FreeCellPlayStyle::SingleBoard;
+    let run_id = workflow.begin_run(&selected).unwrap();
+    assert_eq!(
+        workflow.activity_phase(&selected),
+        Some(PyramidPhase::Reconnaissance)
+    );
+    assert!(!workflow.retain_after_detach(&selected));
+
+    let snapshot = FreeCellPlanningSnapshot {
+        search: fc_search::Progress {
+            search: SearchProgress {
+                stats: SearchStats {
+                    expanded: 12,
+                    generated: 34,
+                    states: 56,
+                    peak_frontier: 7,
+                    elapsed: Duration::from_secs(3),
+                },
+                finished: false,
+            },
+            best_foundation_cards: 18,
+        },
+        paused: Duration::from_millis(1500),
+    };
+    let mut owner = Some(ActiveRun::FreeCellSession);
+    let mut worker_state = WorkerState::Validating;
+    let live_progress = FreeCellSessionProgress {
+        context: selected.clone(),
+        run_id,
+        deal_generation: 1,
+        completed_games: 0,
+        phase: SessionPhase::Planning,
+        foundation_cards: Some(18),
+        route_cursor: None,
+        expanded_states: Some(12),
+        planning_progress: Some(snapshot.clone()),
+        calculation_report: None,
+        export_path: Some(std::path::PathBuf::from("/tmp/fc-332.json")),
+        message: "Searching Free Cell cycle 1".to_owned(),
+    };
+    assert!(workflow.receive_session_progress(&live_progress, &selected, owner));
+    assert!(workflow.planning_progress.is_some());
+    assert!(workflow.calculation_report.is_none());
+
+    let ctx = eframe::egui::Context::default();
+    let mut live_texts = Vec::new();
+    let live_output = ctx.run_ui(
+        eframe::egui::RawInput {
+            screen_rect: Some(eframe::egui::Rect::from_min_size(
+                eframe::egui::Pos2::ZERO,
+                eframe::egui::vec2(820.0, 220.0),
+            )),
+            ..Default::default()
+        },
+        |ui| {
+            super::freecell_calculation::render_live_calculation_stats(
+                ui,
+                &snapshot.search,
+                snapshot.paused,
+            );
+        },
+    );
+    collect_egui_text(&live_output.shapes, &mut live_texts);
+    live_output.drop_without_applying_deltas();
+    assert!(live_texts.iter().any(|t| t == "Paused 1.5s"));
+    assert!(
+        live_texts
+            .iter()
+            .any(|t| t == "3.0s active · 12 expanded · 34 generated · 56 retained · 7 peak frontier · best foundations 18/52")
+    );
+
+    let mut cards = Vec::with_capacity(52);
+    for suit in [Suit::Clubs, Suit::Diamonds, Suit::Hearts, Suit::Spades] {
+        for rank in 1_u8..=13 {
+            cards.push(Card::new(Rank::from_value(rank).unwrap(), suit));
+        }
+    }
+    let mut iter = cards.into_iter();
+    let columns = std::array::from_fn(|column| {
+        let count = if column < 4 { 7 } else { 6 };
+        CascadeStack::from_cards(iter.by_ref().take(count).collect::<Vec<_>>()).unwrap()
+    });
+    let deal = InitialDeal::new(
+        BoardState::new(columns, [None; 4], [0; 4]).unwrap(),
+        Metadata::new(
+            "deal-332-ui",
+            "test",
+            crate::freecell_recon::objective::FULL_BOARD_SOURCE,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let report = Arc::new(crate::worker::freecell_calculation::Report {
+        path: std::path::PathBuf::from("/tmp/fc-332.json"),
+        deal,
+        bytes: vec![0; 128],
+        outcome: fc_search::BestEffortOutcome::Partial {
+            moves: Box::new([]),
+            stats: SearchStats {
+                expanded: 120,
+                generated: 340,
+                states: 99,
+                peak_frontier: 15,
+                elapsed: Duration::from_millis(4250),
+            },
+            deliberate_moves: 0,
+            automatic_moves: 0,
+            foundation_cards: 41,
+        },
+        paused: Duration::from_millis(500),
+    });
+
+    let determined_progress = FreeCellSessionProgress {
+        context: selected.clone(),
+        run_id,
+        deal_generation: 1,
+        completed_games: 0,
+        phase: SessionPhase::Planning,
+        foundation_cards: Some(41),
+        route_cursor: None,
+        expanded_states: Some(120),
+        planning_progress: None,
+        calculation_report: Some(Arc::clone(&report)),
+        export_path: Some(std::path::PathBuf::from("/tmp/fc-332.json")),
+        message: crate::worker::freecell_calculation::outcome_summary_message(&report.outcome),
+    };
+    assert!(workflow.receive_session_progress(&determined_progress, &selected, owner));
+    assert!(workflow.planning_progress.is_none());
+    assert!(workflow.calculation_report.is_some());
+
+    let mut final_texts = Vec::new();
+    let final_output = ctx.run_ui(
+        eframe::egui::RawInput {
+            screen_rect: Some(eframe::egui::Rect::from_min_size(
+                eframe::egui::Pos2::ZERO,
+                eframe::egui::vec2(820.0, 220.0),
+            )),
+            ..Default::default()
+        },
+        |ui| {
+            ui.label(crate::worker::freecell_calculation::outcome_summary_message(&report.outcome));
+            super::freecell_calculation::render_determined_calculation_stats(ui, &report);
+        },
+    );
+    collect_egui_text(&final_output.shapes, &mut final_texts);
+    final_output.drop_without_applying_deltas();
+    assert!(
+        final_texts
+            .iter()
+            .any(|t| t == "Proved maximum partial route: 41/52 foundation cards; 0 transfers, 0 deliberate, 0 automatic; search graph exhausted; independently replayed; no foundation progress is reachable")
+    );
+    assert!(final_texts.iter().any(|t| t
+        == "Final: 4.25s active · 120 expanded · 340 generated · 99 retained · 15 peak frontier"));
+    assert!(final_texts.iter().any(|t| t == "Paused 0.50s"));
+    assert!(
+        final_texts
+            .iter()
+            .any(|t| t == "Frozen source /tmp/fc-332.json · 128 bytes · deal deal-332-ui")
+    );
+
+    let next_cycle = FreeCellSessionProgress {
+        context: selected.clone(),
+        run_id,
+        deal_generation: 2,
+        completed_games: 1,
+        phase: SessionPhase::Reconnaissance,
+        foundation_cards: None,
+        route_cursor: None,
+        expanded_states: None,
+        planning_progress: None,
+        calculation_report: None,
+        export_path: None,
+        message: "Free Cell session cycle 2: RECON".to_owned(),
+    };
+    assert!(workflow.receive_session_progress(&next_cycle, &selected, owner));
+    assert!(workflow.planning_progress.is_none());
+    assert!(workflow.calculation_report.is_none());
+
+    let completion = FreeCellSessionCompletion {
+        context: selected.clone(),
+        run_id,
+        completed_games: 1,
+        termination: RunTermination::Completed,
+        unsolvable_foundation_cards: Some(41),
+        calculation_report: Some(Arc::clone(&report)),
+        export_path: Some(std::path::PathBuf::from("/tmp/fc-332.json")),
+        failure_directory: None,
+        result: Ok("Complete".to_owned()),
+    };
+    assert!(complete_freecell_session(
+        &mut workflow,
+        &mut owner,
+        &mut worker_state,
+        &completion,
+        &selected,
+        false,
+    ));
+    assert!(workflow.retain_after_detach(&selected));
+    assert!(workflow.calculation_report.is_some());
+    workflow.clear_preview();
+    assert!(!workflow.retain_after_detach(&selected));
 }

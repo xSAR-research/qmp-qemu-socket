@@ -236,6 +236,7 @@ impl QmpQemuSocketApp {
                     "run_id": completion.run_id,
                     "completed_games": completion.completed_games,
                     "export_path": completion.export_path,
+                    "evidence_directory": completion.failure_directory,
                 }),
             );
         }

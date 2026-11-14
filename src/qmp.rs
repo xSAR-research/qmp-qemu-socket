@@ -186,7 +186,7 @@ impl QmpClient {
                     "planned_input_requests":6,
                     "source_acknowledgement_minimum_wait_ms":phase_wait_ms,
                     "held_phase_minimum_wait_ms":phase_wait_ms,
-                    "motion_contract":"source minus 45 native pixels vertically, floor midpoint of original source and proved pickup-aligned destination on each native axis, exact destination; five fixed 100ms intervals from source acknowledgement through release",
+                    "motion_contract":format!("source minus 45 native pixels vertically, floor midpoint of original source and proved pickup-aligned destination on each native axis, exact destination; five fixed {phase_wait_ms}ms intervals from source acknowledgement through release"),
                     "route_effect_candidate":true,
                     "standalone_click":false,"effect_proved":false,
                     "on_uncertainty":"release recovery only; never repeat the transfer"

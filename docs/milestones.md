@@ -1,5 +1,41 @@
 # Milestone Tracker & Baseline Receipt — qmp-qemu-socket
 
+## 3.3.2 — Free Cell Single board live preview, calculation statistics, and 200 ms ABS drag cadence, 2026-11-14
+
+- **Outcome:** Restored `FREECELL_ROUTE_ABS_GESTURE_INTERVAL` from `100 ms` to `200 ms` (`src/parameters.rs`) for all six-event held ABS Free Cell drags so guest compositor stalls up to `163.9 ms` no longer coalesce held motion into Tap-to-Move clicks; published fresh session `RECON` screenshots immediately on capture via `run_checked_with_deal`'s `on_frame` callback (`src/worker/freecell_reconnaissance.rs`, `src/worker/freecell_session.rs`) while releasing prior completed `Manual` `FreeCellReconState` preview locks in `press_freecell_session` (`src/app/pyramid_workflow.rs`) and retaining completed session previews across `WorkerState::Detached` (`src/app.rs`); and consolidated live search + determined `Report` statistics (`outcome_summary_message`, `render_live_calculation_stats`, `render_determined_calculation_stats`) between `Manual` Calculation and `Single board` / session execution (`src/worker/freecell_calculation.rs`, `src/app/freecell_calculation.rs`, `src/pyramid_workflow_model.rs`). Added `freecell_332_recon_with_deal_publishes_frame_immediately_before_recognition_or_publication`, `freecell_332_native_plan_emits_live_progress_and_determined_calculation_report`, and `freecell_332_single_board_displays_live_and_determined_calculation_stats_and_retains_preview`. `../xsar` remains untouched at `0.16.3` (commit `067ce26`).
+- **Host Verification (Beast):**
+  - `cargo fmt --package qmp-qemu-socket -- --check`: Pass
+  - `cargo clippy --workspace --lib --bins -- -D warnings -D clippy::unwrap_used -D clippy::dbg_macro -D clippy::todo`: Pass
+  - `cargo clippy --workspace --all-targets -- -D warnings`: Pass
+  - `RUSTDOCFLAGS="-D warnings" cargo doc --locked --offline --package qmp-qemu-socket --no-deps --document-private-items`: Pass
+  - `cargo test --workspace --offline --locked`: `1,761` passed, `0` failed, `185` ignored (`src/lib.rs`; `0` in `src/main.rs`, `0` doc-tests)
+  - `cargo test --locked --offline --package qmp-qemu-socket -- --include-ignored`: `1,946` passed, `0` failed, `0` ignored (`src/lib.rs`; `0` in `src/main.rs`, `0` doc-tests)
+  - `cargo build --locked --offline --release --package qmp-qemu-socket --target x86_64-unknown-linux-gnu`: Pass (`16,943,152` bytes, mode `0755`, SHA-256 `cc1792528ccce6d32f2a7639776d5c8def615f1adefb578987c54f0723412cdc`)
+- **Live Guest Acceptance:** Pending operator launch on Beast against Windows 11 QEMU guest (`cargo run --release` and `cargo run --release -- --no-image`).
+
+### Code Analysis
+
+- **Guest-input ABS drag cadence (`FREECELL_ROUTE_ABS_GESTURE_INTERVAL`):** Live `3.3.1` QMP wire telemetry and captures in `pyramid-error-1794635954921-1112441-4` showed Windows 11 guest compositor frame intervals reaching `163.9 ms` (`95th percentile 137.0 ms`), allowing `100 ms` held ABS pointer updates to coalesce and trigger UWP Tap-to-Move on legal foundation candidates (observed on `8♦ PLAY 1 -> PLAY 4` flying to `SUIT Diamonds`). Raising `FREECELL_ROUTE_ABS_GESTURE_INTERVAL` to `200 ms` across all five inter-event waits (`>= 1.0 s` per explicit drag) preserves the six-event checked integer `pixel * 32767 / extent` ABS path, `STOP`/Pause fences between every phase, targeted release-only recovery on interruption, and strict post-drag two-frame physical confirmation without adding retries or mid-route replanning.
+- **Session preview publication and context fencing:** `freecell_reconnaissance::run_checked_with_deal` invokes its `on_frame` callback only after `tcp_capture::capture_causal` succeeds and `ControllerContext` reservation has passed, publishing a read-only `diagnostic: true` frame for `FreeCellSession` while keeping standalone `Manual` `run_checked` preview isolation (`owns_preview`) intact; `press_freecell_session` releases only completed `Manual` `FreeCellReconState` inspection locks and clears stale session preview retention before launching the worker.
+
+## 3.3.1 — Free Cell Single board challenge play and session diagnostic cleanup, 2026-11-14
+
+- **Outcome:** Updated Free Cell `Single board` mode (`FreeCellPlayStyle::SingleBoard`) in `src/worker/freecell_session.rs` so it follows `Manual` `RECON -> SOLVE -> MULTI STEP` semantics on both normal (`Objective::FullBoard`) and challenge (`Objective::Unresolved`) deals while skipping cold-entry `prepare_entry`, executing non-empty `Outcome::Partial` challenge routes, and stopping cleanly without starting a new game on `FullBoard` (`52/52`), `ChallengeComplete` (`Unresolved`), or `PartialRouteExhausted` (`Unresolved`). Kept `Continuous normal games` gated strictly on `Objective::FullBoard`, updated `FreeCellPlayStyle::SingleBoard::description` in `src/pyramid_workflow_model.rs`, replaced `publish_pyramid_failure` with direct `pyramid_diagnostics::persist_failure` + `FreeCellSessionCompletion.failure_directory` (`"evidence_directory"` in `src/app/pyramid_requests.rs`), and added `freecell_331_single_board_plays_unresolved_challenge_deals_and_stops_cleanly`. `../xsar` remains untouched at `0.16.3` (commit `067ce26`).
+- **Host Verification (Beast):**
+  - `cargo fmt --package qmp-qemu-socket -- --check`: Pass
+  - `cargo clippy --workspace --lib --bins -- -D warnings -D clippy::unwrap_used -D clippy::dbg_macro -D clippy::todo`: Pass
+  - `cargo clippy --workspace --all-targets -- -D warnings`: Pass
+  - `RUSTDOCFLAGS="-D warnings" cargo doc --locked --offline --package qmp-qemu-socket --no-deps --document-private-items`: Pass
+  - `cargo test --workspace --offline --locked`: `1,758` passed, `0` failed, `185` ignored (`src/lib.rs`; `0` in `src/main.rs`, `0` doc-tests)
+  - `cargo test --locked --offline --package qmp-qemu-socket -- --include-ignored`: `1,943` passed, `0` failed, `0` ignored (`src/lib.rs`; `0` in `src/main.rs`, `0` doc-tests)
+  - `cargo build --locked --offline --release --package qmp-qemu-socket --target x86_64-unknown-linux-gnu`: Pass (`16,926,720` bytes, mode `0755`, SHA-256 `f7aa91b14e508ebbc0edac3c684e5904d71c12ae2eaf6f4b4aac013ee2424676`)
+- **Live Guest Acceptance:** Pending operator launch on Beast against Windows 11 QEMU guest (`cargo run --release` and `cargo run --release -- --no-image`).
+
+### Code Analysis
+
+- **Session objective & completion authority (`SingleBoard` vs `ContinuousNormalGames`):** No QMP pointer mapping, coordinate transformation, or per-step physical verification primitives changed (`execute_for_session` continues binding `challenge_mode = objective::from_metadata(...) == Objective::Unresolved` under existing STOP/Pause fences and `freecell_route::Prepared` replay verification). `SingleBoard` bypasses cold-entry `prepare_entry` auto-restart clicks, accepts `ChallengeComplete` and `PartialRouteExhausted` exits strictly when `acquired.objective == Objective::Unresolved`, refuses `ChallengeComplete` on `Objective::FullBoard`, and never issues post-game restart input; `ContinuousNormalGames` continues requiring `Objective::FullBoard` before planning or guest input and directs operators to `Single board` or `Manual` when a challenge banner is visible.
+- **Session diagnostic boundary:** Direct `pyramid_diagnostics::persist_failure` persistence and captured RECON/execution failure packet directories populate `FreeCellSessionCompletion.failure_directory` (`"evidence_directory"` in `failure_window.general`) on worker failure without publishing unrelated `WorkerEvent::PyramidDiagnostic` events.
+
 ## 3.3.0 — Continuous normal games mode for A* Free Cell and ABS drag standardisation, 2026-11-14
 
 - **Outcome:** Delivered worker-owned continuous normal games mode for independent A* Free Cell (`src/worker/freecell_session.rs`, `StartFreeCellSession`), reused `post_game::RestartPolicy::IndependentFreeCell` across `GAME WIN` -> optional `LEVEL-UP!` `OK` -> `NEW GAME` -> `PLAY` -> `verify_independent_start`, implemented Option 2A clean unsolvable exit, removed all superseded `REL` (`DragMode`) drag code/controls in favour of ABS-only dragging, and added the Free Cell `Mode` (`Continuous normal games` default, `Single board`, `Manual`) + `Transfer policy` row in `src/app/pyramid_workflow.rs`. `../xsar` is promoted at `0.16.3` (commit `067ce26`, `067ce26419f02802780a5497d9227dc0764c1c62`).

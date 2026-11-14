@@ -936,8 +936,8 @@ pub const POINTER_SETTLE_DELAY: Duration = xsar::parameters::POINTER_SETTLE_DELA
 
 
 /// Fixed ABS Free Cell route interval between its six acknowledged gesture events.
-/// Five 100-millisecond waits apply equally to SINGLE STEP and MULTI STEP.
-pub const FREECELL_ROUTE_ABS_GESTURE_INTERVAL: Duration = Duration::from_millis(100);
+/// Five 200-millisecond waits apply equally to SINGLE STEP and MULTI STEP.
+pub const FREECELL_ROUTE_ABS_GESTURE_INTERVAL: Duration = Duration::from_millis(200);
 
 
 /// Ordinary gameplay mouse-button hold duration.

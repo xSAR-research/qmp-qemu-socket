@@ -6,9 +6,10 @@
 use super::*;
 use crate::pyramid_diagnostics::{PyramidDiagnostic, PyramidPhase};
 use crate::pyramid_workflow_model::{
-    FreeCellPlayStyle, FreeCellSessionCompletion, FreeCellSessionProgress, FreeCellSessionRequest,
-    ObservedGame, PlanningProgress, RouteGoal, RouteMethod, RunTermination, SessionCompletion,
-    SessionPhase, SessionProgress, SessionRequest, StopCondition, WorkflowMode,
+    FreeCellPlanningSnapshot, FreeCellPlayStyle, FreeCellSessionCompletion,
+    FreeCellSessionProgress, FreeCellSessionRequest, ObservedGame, PlanningProgress, RouteGoal,
+    RouteMethod, RunTermination, SessionCompletion, SessionPhase, SessionProgress, SessionRequest,
+    StopCondition, WorkflowMode,
 };
 
 
@@ -1090,10 +1091,17 @@ pub(super) struct FreeCellWorkflow {
     route_cursor: Option<(usize, usize)>,
     /// Latest A* expanded-state count reported during planning.
     expanded_states: Option<u64>,
+    /// Live A* calculation progress matching Manual Calculation statistics.
+    pub(super) planning_progress: Option<FreeCellPlanningSnapshot>,
+    /// Determined route or exhaustive max-card report for the active/latest board cycle.
+    pub(super) calculation_report:
+        Option<std::sync::Arc<crate::worker::freecell_calculation::Report>>,
     /// Exported JSON deal path from the active or latest Recon cycle.
     export_path: Option<std::path::PathBuf>,
     /// Populated when Option 2A proves an untouched deal unsolvable (`< 52`) with zero clicks.
     pub(super) unsolvable_foundation_cards: Option<u8>,
+    /// Retain the last session frame across `Detached` until an explicit new capture/reset.
+    retained_preview: Option<ControllerContext>,
     /// Final human-readable session summary or failure report.
     pub(super) report: Option<String>,
 }
@@ -1113,10 +1121,23 @@ impl FreeCellWorkflow {
             self.foundation_cards = None;
             self.route_cursor = None;
             self.expanded_states = None;
+            self.planning_progress = None;
+            self.calculation_report = None;
             self.export_path = None;
             self.unsolvable_foundation_cards = None;
+            self.retained_preview = None;
             self.report = None;
         }
+    }
+
+    /// Clear session preview retention on explicit preview invalidation.
+    pub(super) fn clear_preview(&mut self) {
+        self.retained_preview = None;
+    }
+
+    /// Retain a completed session preview frame across a transient worker `Detached` event.
+    pub(super) fn retain_after_detach(&self, context: &ControllerContext) -> bool {
+        self.retained_preview.as_ref() == Some(context)
     }
 
     /// Map active session phase into the top-left badge without inferring authority.
@@ -1136,14 +1157,23 @@ impl FreeCellWorkflow {
         self.next_run_id = run_id;
         self.context = Some(context.clone());
         self.active_run_id = Some(run_id);
-        self.phase = Some(SessionPhase::Entry);
+        self.phase = Some(
+            if self.play_style == FreeCellPlayStyle::ContinuousNormalGames {
+                SessionPhase::Entry
+            } else {
+                SessionPhase::Reconnaissance
+            },
+        );
         self.deal_generation = 0;
         self.completed_games = 0;
         self.foundation_cards = None;
         self.route_cursor = None;
         self.expanded_states = None;
+        self.planning_progress = None;
+        self.calculation_report = None;
         self.export_path = None;
         self.unsolvable_foundation_cards = None;
+        self.retained_preview = None;
         self.report = None;
         Ok(run_id)
     }
@@ -1162,6 +1192,15 @@ impl FreeCellWorkflow {
         {
             return false;
         }
+        if progress.deal_generation != self.deal_generation
+            || progress.phase == SessionPhase::Reconnaissance
+        {
+            self.foundation_cards = None;
+            self.route_cursor = None;
+            self.expanded_states = None;
+            self.planning_progress = None;
+            self.calculation_report = None;
+        }
         self.phase = Some(progress.phase);
         self.deal_generation = progress.deal_generation;
         self.completed_games = progress.completed_games;
@@ -1173,6 +1212,16 @@ impl FreeCellWorkflow {
         }
         if progress.expanded_states.is_some() {
             self.expanded_states = progress.expanded_states;
+        }
+        if let Some(snapshot) = &progress.planning_progress {
+            self.planning_progress = Some(snapshot.clone());
+        }
+        if let Some(report) = &progress.calculation_report {
+            self.calculation_report = Some(std::sync::Arc::clone(report));
+            self.planning_progress = None;
+        }
+        if progress.phase != SessionPhase::Planning {
+            self.planning_progress = None;
         }
         if progress.export_path.is_some() {
             self.export_path = progress.export_path.clone();
@@ -1200,11 +1249,16 @@ pub(super) fn complete_freecell_session(
     }
     workflow.active_run_id = None;
     workflow.phase = None;
+    workflow.planning_progress = None;
     workflow.completed_games = completion.completed_games;
+    if let Some(report) = &completion.calculation_report {
+        workflow.calculation_report = Some(std::sync::Arc::clone(report));
+    }
     if completion.export_path.is_some() {
         workflow.export_path = completion.export_path.clone();
     }
     workflow.unsolvable_foundation_cards = completion.unsolvable_foundation_cards;
+    workflow.retained_preview = (!stopped).then(|| context.clone());
     workflow.report = Some(completion.result.as_ref().map_or_else(
         |error| format!("Free Cell session stopped: {error}"),
         Clone::clone,
@@ -1560,6 +1614,7 @@ impl QmpQemuSocketApp {
             "Starting Free Cell {}…",
             self.freecell_workflow.play_style.label()
         );
+        let _ = self.freecell_recon_state.release_for_playback(&context);
         self.invalidate_preview();
         let request = FreeCellSessionRequest {
             run_id,
@@ -1701,6 +1756,24 @@ impl QmpQemuSocketApp {
                         "Completed games: {}",
                         self.freecell_workflow.completed_games
                     ));
+                }
+                if self.freecell_workflow.phase == Some(SessionPhase::Planning)
+                    && let Some(progress) = &self.freecell_workflow.planning_progress
+                {
+                    super::freecell_calculation::render_live_calculation_stats(
+                        ui,
+                        &progress.search,
+                        progress.paused,
+                    );
+                }
+                if let Some(report) = &self.freecell_workflow.calculation_report {
+                    let summary = crate::worker::freecell_calculation::outcome_summary_message(
+                        &report.outcome,
+                    );
+                    if self.current_status != summary {
+                        ui.label(summary);
+                    }
+                    super::freecell_calculation::render_determined_calculation_stats(ui, report);
                 }
                 if let Some(cards) = self.freecell_workflow.unsolvable_foundation_cards {
                     ui.colored_label(
