@@ -47,6 +47,7 @@ pub use app::QmpQemuSocketApp;
 pub use game::GameMode;
 pub use parameters::{APP_NAME, INITIAL_WINDOW_HEIGHT, INITIAL_WINDOW_WIDTH, RELEASE_LABEL};
 pub use qmp::{QmpClient, QmpError, QmpProbe, SupportedKey};
+pub use worker::tripeaks_reconnaissance;
 
 #[cfg(test)]
 mod tests {

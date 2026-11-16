@@ -32,6 +32,7 @@ mod tcp_capture;
 #[cfg(test)]
 mod tcp_capture_tests;
 mod tripeaks_geometry;
+pub mod tripeaks_reconnaissance;
 mod tripeaks_terminal;
 
 use std::{

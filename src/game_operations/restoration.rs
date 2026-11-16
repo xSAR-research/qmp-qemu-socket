@@ -18,6 +18,15 @@ pub enum ControlAvailability {
 }
 
 
+/// Whether `Undo All` requires a secondary `OK` confirmation modal or may unwind directly.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ConfirmationPolicy {
+    /// Require a twice-observed confirmation modal before verifying restoration (Pyramid).
+    Required,
+    /// Permit direct confirmation-less restoration (TriPeaks on Beast) or a twice-observed modal.
+    DirectOrConfirmed,
+}
+
 /// Restoration input vocabulary; each variant represents exactly one attempt.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UndoInput {
@@ -39,6 +48,8 @@ pub enum UndoScene<B> {
         /// Measured current OK point.
         ok: PixelPoint,
     },
+    /// Supported gameplay scene while cards are actively unwinding in flight; grants no input authority.
+    Animating,
     /// Unsupported or incomplete scene; no input is authorised.
     Unknown,
 }
@@ -48,6 +59,10 @@ pub enum UndoScene<B> {
 pub trait UndoAllIo {
     /// Physical-position snapshot, excluding accumulated knowledge and toolbar state.
     type Board;
+    /// Select whether this game's `Undo All` requires a modal `OK` click or unwinds directly.
+    fn confirmation_policy(&self) -> ConfirmationPolicy {
+        ConfirmationPolicy::Required
+    }
     /// Capture once and recognise a complete board or complete confirmation.
     fn observe(&mut self) -> Result<UndoScene<Self::Board>, OperationError>;
     /// Fresh probe and STOP/context checks around one non-replayable input.
@@ -57,48 +72,15 @@ pub trait UndoAllIo {
 }
 
 
-/// Restore the original position while preserving the established Recon trace.
-///
-/// The caller proves acquisition completeness and owns the known Undo All control.
-/// Only a twice-observed complete confirmation permits OK. ACK is followed by
-/// exactly one settle; two consecutive original snapshots prove restoration.
-pub fn undo_all<I: UndoAllIo>(
+/// Confirm the `Undo All` modal twice, deliver `Confirm(ok)`, and prove original restoration twice.
+fn confirm_and_verify_restoration<I: UndoAllIo>(
     io: &mut I,
     original: &I::Board,
     current: &I::Board,
-    control: PixelPoint,
-    same: impl Fn(&I::Board, &I::Board) -> bool,
+    ok: PixelPoint,
+    same: &impl Fn(&I::Board, &I::Board) -> bool,
     max_observations: usize,
 ) -> Result<(), OperationError> {
-    if max_observations < 2 {
-        return Err(OperationError::Invalid(
-            "restoration needs at least two observations".to_owned(),
-        ));
-    }
-    io.input(UndoInput::UndoAll(control))?;
-    let mut confirmation_target = None;
-    for observation in 0..max_observations {
-        match io.observe()? {
-            UndoScene::Confirmation { ok } => {
-                confirmation_target = Some(ok);
-                break;
-            }
-            UndoScene::Board(observed) if same(current, &observed) => {}
-            _ => {
-                return Err(OperationError::Verification(
-                    "Unexpected scene after Undo All; confirmation input withheld".to_owned(),
-                ));
-            }
-        }
-        if observation + 1 < max_observations {
-            io.settle()?;
-        }
-    }
-    let ok = confirmation_target.ok_or_else(|| {
-        OperationError::Verification(
-            "Undo All confirmation did not appear within the observation budget".to_owned(),
-        )
-    })?;
     if !matches!(io.observe()?, UndoScene::Confirmation { ok: fresh } if fresh == ok) {
         return Err(OperationError::Verification(
             "Undo All confirmation signature changed before OK; input withheld".to_owned(),
@@ -106,6 +88,7 @@ pub fn undo_all<I: UndoAllIo>(
     }
     io.input(UndoInput::Confirm(ok))?;
     io.settle()?;
+    let direct_animating = io.confirmation_policy() == ConfirmationPolicy::DirectOrConfirmed;
     let mut restored = 0;
     for observation in 0..max_observations {
         match io.observe()? {
@@ -115,7 +98,10 @@ pub fn undo_all<I: UndoAllIo>(
                     return Ok(());
                 }
             }
-            UndoScene::Board(observed) if same(current, &observed) => {
+            UndoScene::Board(observed) if direct_animating || same(current, &observed) => {
+                restored = 0;
+            }
+            UndoScene::Animating if direct_animating => {
                 restored = 0;
             }
             UndoScene::Confirmation { ok: fresh } if fresh == ok => {
@@ -133,6 +119,94 @@ pub fn undo_all<I: UndoAllIo>(
     }
     Err(OperationError::Verification(
         "OK delivery did not prove original-board restoration twice; no complete JSON published"
+            .to_owned(),
+    ))
+}
+
+
+/// Restore the original position while preserving the established Recon trace.
+///
+/// The caller proves acquisition completeness and owns the known Undo All control.
+/// Depending on [`UndoAllIo::confirmation_policy`], either a twice-observed modal
+/// confirmation authorises `OK` or the game may unwind directly; in both modes two
+/// consecutive original snapshots prove restoration.
+pub fn undo_all<I: UndoAllIo>(
+    io: &mut I,
+    original: &I::Board,
+    current: &I::Board,
+    control: PixelPoint,
+    same: impl Fn(&I::Board, &I::Board) -> bool,
+    max_observations: usize,
+) -> Result<(), OperationError> {
+    if max_observations < 2 {
+        return Err(OperationError::Invalid(
+            "restoration needs at least two observations".to_owned(),
+        ));
+    }
+    let policy = io.confirmation_policy();
+    io.input(UndoInput::UndoAll(control))?;
+    if policy == ConfirmationPolicy::Required {
+        let mut confirmation_target = None;
+        for observation in 0..max_observations {
+            match io.observe()? {
+                UndoScene::Confirmation { ok } => {
+                    confirmation_target = Some(ok);
+                    break;
+                }
+                UndoScene::Board(observed) if same(current, &observed) => {}
+                _ => {
+                    return Err(OperationError::Verification(
+                        "Unexpected scene after Undo All; confirmation input withheld".to_owned(),
+                    ));
+                }
+            }
+            if observation + 1 < max_observations {
+                io.settle()?;
+            }
+        }
+        let ok = confirmation_target.ok_or_else(|| {
+            OperationError::Verification(
+                "Undo All confirmation did not appear within the observation budget".to_owned(),
+            )
+        })?;
+        return confirm_and_verify_restoration(io, original, current, ok, &same, max_observations);
+    }
+
+    io.settle()?;
+    let mut restored = 0;
+    for observation in 0..max_observations {
+        match io.observe()? {
+            UndoScene::Board(observed) if same(original, &observed) => {
+                restored += 1;
+                if restored == 2 {
+                    return Ok(());
+                }
+            }
+            UndoScene::Board(_) | UndoScene::Animating => {
+                restored = 0;
+            }
+            UndoScene::Confirmation { ok } => {
+                return confirm_and_verify_restoration(
+                    io,
+                    original,
+                    current,
+                    ok,
+                    &same,
+                    max_observations,
+                );
+            }
+            UndoScene::Unknown => {
+                return Err(OperationError::Verification(
+                    "Unexpected scene after Undo All; restoration aborted".to_owned(),
+                ));
+            }
+        }
+        if restored == 0 && observation + 1 < max_observations {
+            io.settle()?;
+        }
+    }
+    Err(OperationError::Verification(
+        "Undo All did not prove original-board restoration twice; no complete JSON published"
             .to_owned(),
     ))
 }

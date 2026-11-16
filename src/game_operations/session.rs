@@ -18,6 +18,13 @@ use std::time::Duration;
 pub enum Input {
     /// One complete checked press/release at native guest pixels.
     MouseLeft(PixelPoint),
+    /// One checked press/release at native guest pixels using an explicit button hold duration.
+    MouseLeftHold {
+        /// Target coordinate in `1920×1080` native guest pixels.
+        point: PixelPoint,
+        /// Button-down hold duration (must be non-zero).
+        hold: Duration,
+    },
     /// One typed key with existing QMP timing.
     Key(SupportedKey),
 }
@@ -83,6 +90,16 @@ impl<I: OperationIo> Session<I> {
         &self.io
     }
 
+    /// Borrow the latest acquired fresh frame, if still unconsumed, without granting input authority.
+    pub const fn current_frame(&self) -> Option<&CapturedFrame> {
+        self.frame.as_ref()
+    }
+
+    /// Delegate active-controller / STOP checking through the owned operation adapter without granting input.
+    pub fn check_active(&mut self) -> Result<(), OperationError> {
+        self.io.check_active()
+    }
+
 
     /// Acquire once; any failure retires the previous capture before returning.
     pub fn screen_capture(&mut self) -> Result<&CapturedFrame, OperationError> {
@@ -105,6 +122,15 @@ impl<I: OperationIo> Session<I> {
     /// Send one checked native click after same-frame game authority and fresh probe.
     pub fn mouse_left_click(&mut self, point: PixelPoint) -> Result<Delivery, OperationError> {
         self.input(Input::MouseLeft(point))
+    }
+
+    /// Send one checked native click using an explicit non-zero hold duration after authority and probe.
+    pub fn mouse_left_click_with_hold(
+        &mut self,
+        point: PixelPoint,
+        hold: Duration,
+    ) -> Result<Delivery, OperationError> {
+        self.input(Input::MouseLeftHold { point, hold })
     }
 
 
@@ -157,9 +183,21 @@ impl<I: OperationIo> Session<I> {
             OperationError::Invalid("fresh capture required before input".to_owned())
         })?;
         self.io.check_active()?;
-        if let Input::MouseLeft(point) = input {
-            pixel_point_to_qmp(point, frame.width, frame.height)
-                .map_err(|e| OperationError::Invalid(e.to_string()))?;
+        match input {
+            Input::MouseLeft(point) => {
+                pixel_point_to_qmp(point, frame.width, frame.height)
+                    .map_err(|e| OperationError::Invalid(e.to_string()))?;
+            }
+            Input::MouseLeftHold { point, hold } => {
+                if hold.is_zero() {
+                    return Err(OperationError::Invalid(
+                        "mouse hold duration must be non-zero".to_owned(),
+                    ));
+                }
+                pixel_point_to_qmp(point, frame.width, frame.height)
+                    .map_err(|e| OperationError::Invalid(e.to_string()))?;
+            }
+            Input::Key(_) => {}
         }
         self.io.authorise(&frame, input)?;
         self.io.check_active()?;

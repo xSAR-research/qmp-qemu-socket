@@ -72,6 +72,9 @@ where
     fn deliver(&mut self, input: Input) -> Result<(), OperationError> {
         match input {
             Input::MouseLeft(point) => self.qmp.click(point, 1_920, 1_080),
+            Input::MouseLeftHold { point, hold } => {
+                self.qmp.click_with_hold(point, 1_920, 1_080, hold)
+            }
             Input::Key(key) => self.qmp.press_key(key),
         }
         .map_err(|e| OperationError::Transport(e.to_string()))

@@ -1,7 +1,10 @@
 //! Observable contracts for pure recognition, guarded input and single Undo.
 
 use super::option::{InclusiveBounds, OptionDetection, detect_option};
-use super::restoration::{ControlAvailability, UndoLastIo, UndoLastObservation, undo_last};
+use super::restoration::{
+    ConfirmationPolicy, ControlAvailability, UndoAllIo, UndoInput, UndoLastIo, UndoLastObservation,
+    UndoScene, undo_all, undo_last,
+};
 use super::*;
 use crate::{capture::PixelFormat, geometry::PixelPoint, qmp::SupportedKey};
 use std::{cell::RefCell, collections::VecDeque, rc::Rc, time::Duration};
@@ -431,6 +434,174 @@ fn operations_single_undo_verifies_physical_restoration_without_replay() {
         io.events,
         [
             "capture", "input", "wait", "capture", "capture", "wait", "capture", "capture"
+        ]
+    );
+}
+
+
+/// Guarded hold clicks expose current_frame, reject zero durations, and latch uncertainty.
+#[test]
+fn operations_hold_click_validates_duration_bounds_and_uncertainty() {
+    let trace = Rc::new(RefCell::new(Trace::default()));
+    let mut session = Session::new(Fake(trace.clone()));
+    assert!(session.current_frame().is_none());
+
+    session.screen_capture().unwrap();
+    assert!(session.current_frame().is_some());
+    assert!(matches!(
+        session.mouse_left_click_with_hold(PixelPoint::new(10, 10), Duration::ZERO),
+        Err(OperationError::Invalid(_))
+    ));
+    assert!(session.current_frame().is_none());
+    assert!(!trace.borrow().events.contains(&"input"));
+
+    session.screen_capture().unwrap();
+    let delivered = session
+        .mouse_left_click_with_hold(PixelPoint::new(1_128, 728), Duration::from_millis(500))
+        .unwrap();
+    assert_eq!(
+        delivered.input,
+        Input::MouseLeftHold {
+            point: PixelPoint::new(1_128, 728),
+            hold: Duration::from_millis(500),
+        }
+    );
+    assert!(session.current_frame().is_none());
+    assert_eq!(
+        trace.borrow().events,
+        ["capture", "capture", "guard", "probe", "input"]
+    );
+
+    trace.borrow_mut().fail = Some("input");
+    session.screen_capture().unwrap();
+    assert!(matches!(
+        session.mouse_left_click_with_hold(PixelPoint::new(1_128, 728), Duration::from_millis(500)),
+        Err(OperationError::Uncertain(_))
+    ));
+    trace.borrow_mut().fail = None;
+    session.screen_capture().unwrap();
+    assert!(matches!(
+        session.mouse_left_click_with_hold(PixelPoint::new(1_128, 728), Duration::from_millis(500)),
+        Err(OperationError::Uncertain(_))
+    ));
+}
+
+
+/// Scriptable `UndoAllIo` fixture testing confirmation-less and confirmed policies.
+struct MockUndoAll {
+    /// Selected policy under test.
+    policy: ConfirmationPolicy,
+    /// Queued scenes returned by `observe`.
+    scenes: VecDeque<UndoScene<u8>>,
+    /// Recorded inputs and waits in order.
+    events: Vec<&'static str>,
+}
+
+
+impl UndoAllIo for MockUndoAll {
+    type Board = u8;
+
+    fn confirmation_policy(&self) -> ConfirmationPolicy {
+        self.policy
+    }
+
+    fn observe(&mut self) -> Result<UndoScene<u8>, OperationError> {
+        self.events.push("capture");
+        self.scenes
+            .pop_front()
+            .ok_or_else(|| OperationError::Verification("out of mock scenes".to_owned()))
+    }
+
+    fn input(&mut self, input: UndoInput) -> Result<(), OperationError> {
+        match input {
+            UndoInput::UndoAll(_) => self.events.push("undo_all"),
+            UndoInput::Confirm(_) => self.events.push("confirm"),
+            UndoInput::UndoLast(_) => self.events.push("undo_last"),
+        }
+        Ok(())
+    }
+
+    fn settle(&mut self) -> Result<(), OperationError> {
+        self.events.push("wait");
+        Ok(())
+    }
+}
+
+
+/// `DirectOrConfirmed` accepts direct unwind after `Animating`, resists flickers, and supports optional `Confirm`.
+#[test]
+fn operations_undo_all_direct_or_confirmed_handles_direct_flicker_unknown_and_modal() {
+    let mut direct = MockUndoAll {
+        policy: ConfirmationPolicy::DirectOrConfirmed,
+        scenes: VecDeque::from([
+            UndoScene::Animating,
+            UndoScene::Board(1),
+            UndoScene::Board(2),
+            UndoScene::Board(1),
+            UndoScene::Board(1),
+        ]),
+        events: vec![],
+    };
+    undo_all(
+        &mut direct,
+        &1,
+        &2,
+        PixelPoint::new(1_320, 978),
+        |a, b| a == b,
+        8,
+    )
+    .unwrap();
+    assert_eq!(
+        direct.events,
+        [
+            "undo_all", "wait", "capture", "wait", "capture", "capture", "wait", "capture",
+            "capture"
+        ]
+    );
+
+    let mut unknown = MockUndoAll {
+        policy: ConfirmationPolicy::DirectOrConfirmed,
+        scenes: VecDeque::from([UndoScene::Unknown]),
+        events: vec![],
+    };
+    assert!(matches!(
+        undo_all(
+            &mut unknown,
+            &1,
+            &2,
+            PixelPoint::new(1_320, 978),
+            |a, b| a == b,
+            4
+        ),
+        Err(OperationError::Verification(_))
+    ));
+
+    let ok_pt = PixelPoint::new(820, 620);
+    let mut confirmed = MockUndoAll {
+        policy: ConfirmationPolicy::DirectOrConfirmed,
+        scenes: VecDeque::from([
+            UndoScene::Confirmation { ok: ok_pt },
+            UndoScene::Confirmation { ok: ok_pt },
+            UndoScene::Animating,
+            UndoScene::Board(1),
+            UndoScene::Board(1),
+        ]),
+        events: vec![],
+    };
+    undo_all(
+        &mut confirmed,
+        &1,
+        &2,
+        PixelPoint::new(1_320, 978),
+        |a, b| a == b,
+        6,
+    )
+    .unwrap();
+    assert_eq!(
+        confirmed.events,
+        [
+            "undo_all", "wait", "capture", "capture", "confirm", "wait", "capture", "wait",
+            "capture", "capture"
         ]
     );
 }
