@@ -1,8 +1,10 @@
-//! Fixed-capacity connected components and exact-ratio native decimal matching.
-//!
-//! The largest counter region is 142×32 pixels. Twenty components, each on a
-//! native 20×26 canvas, bound scratch storage and work. There is no resizing,
-//! nearest-only acceptance, inferred character or general-purpose OCR fallback.
+/*!
+Fixed-capacity connected components and exact-ratio native decimal matching.
+
+The largest counter region is 142×32 pixels. Twenty components, each on a
+native 20×26 canvas, bound scratch storage and work. There is no resizing,
+nearest-only acceptance, inferred character or general-purpose OCR fallback.
+*/
 
 use super::templates::{CHARACTERS, GLYPHS};
 use crate::geometry::PixelRect;
@@ -41,6 +43,10 @@ const CANVAS_HEIGHT: usize = 26;
 const CANVAS_PIXELS: usize = CANVAS_WIDTH * CANVAS_HEIGHT;
 
 
+/// Total supported decimal glyph classes (`0`–`9`, `/` and `,`).
+const SYMBOL_CLASS_COUNT: usize = 12;
+
+
 /// Blue background floor measured on these gold header backgrounds, in channel units.
 pub(super) const BLUE_FLOOR: u8 = 6;
 
@@ -53,7 +59,7 @@ pub(super) const CORE_MINIMUM: u8 = 150;
 pub(super) const CORE_SPREAD: u8 = 70;
 
 
-/// Conservative absolute normalized distance bound, in parts per million.
+/// Conservative absolute normalised distance bound, in parts per million.
 ///
 /// The worst cross-source same-label distance is 224,568 ppm rounded upward;
 /// the closest different label is 327,696 ppm rounded upward. These are finite
@@ -70,17 +76,16 @@ const SCALE: u64 = 1_000_000;
 
 
 /// Bounded left-to-right classified symbols; no heap allocation is required.
-pub(super) struct Symbols {
+pub(crate) struct Symbols {
     /// Only the first `length` entries carry observed characters.
     values: [u8; MAX_SYMBOLS],
     /// Number of successfully classified distinct components.
     length: usize,
 }
 
-
 impl Symbols {
     /// Borrow only observed symbols, excluding unused fixed-capacity storage.
-    pub(super) fn as_slice(&self) -> &[u8] {
+    pub(crate) fn as_slice(&self) -> &[u8] {
         &self.values[..self.length]
     }
 }
@@ -102,7 +107,7 @@ struct Component {
 }
 
 
-/// Exact bounded normalized intensity distance; zero denominator is never constructed.
+/// Exact bounded normalised intensity distance; zero denominator is never constructed.
 #[derive(Clone, Copy)]
 struct Distance {
     /// Sum of absolute intensity differences over a complete native canvas.
@@ -120,8 +125,42 @@ impl Distance {
 }
 
 
-/// Read every bounded component, rejecting edge contact, unsupported marks or ambiguity.
+/// Read every bounded component using Pyramid's blue-subtracted intensity extractor.
 pub(super) fn read(view: FrameView<'_>, bounds: PixelRect) -> Option<Symbols> {
+    read_with_extractor(
+        view,
+        bounds,
+        |rgb| {
+            let minimum = rgb.into_iter().min().unwrap_or(0);
+            let maximum = rgb.into_iter().max().unwrap_or(0);
+            minimum >= CORE_MINIMUM && maximum - minimum < CORE_SPREAD
+        },
+        |rgb| rgb[2].saturating_sub(BLUE_FLOOR),
+    )
+}
+
+/// Read every bounded component with caller-supplied seed and white-ink intensity mapping.
+pub(crate) fn read_with_extractor(
+    view: FrameView<'_>,
+    bounds: PixelRect,
+    is_seed: impl Fn([u8; 3]) -> bool,
+    intensity: impl Fn([u8; 3]) -> u8,
+) -> Option<Symbols> {
+    read_with_glyph_bank(view, bounds, CHARACTERS, GLYPHS, is_seed, intensity)
+}
+
+/// Read every bounded component using caller-supplied glyph templates and intensity mapping.
+pub(crate) fn read_with_glyph_bank(
+    view: FrameView<'_>,
+    bounds: PixelRect,
+    characters: &[u8],
+    glyphs: &[u8],
+    is_seed: impl Fn([u8; 3]) -> bool,
+    intensity: impl Fn([u8; 3]) -> u8,
+) -> Option<Symbols> {
+    if glyphs.len() != characters.len().checked_mul(CANVAS_PIXELS)? {
+        return None;
+    }
     view.checked_bounds(bounds).ok()?;
     let width = usize::try_from(bounds.width).ok()?;
     let height = usize::try_from(bounds.height).ok()?;
@@ -135,9 +174,7 @@ pub(super) fn read(view: FrameView<'_>, bounds: PixelRect) -> Option<Symbols> {
             bounds.x + (index % width) as u32,
             bounds.y + (index / width) as u32,
         )?;
-        let minimum = *rgb.iter().min()?;
-        let maximum = *rgb.iter().max()?;
-        if minimum >= CORE_MINIMUM && maximum - minimum < CORE_SPREAD {
+        if is_seed(rgb) {
             *label = UNVISITED;
         }
     }
@@ -152,8 +189,8 @@ pub(super) fn read(view: FrameView<'_>, bounds: PixelRect) -> Option<Symbols> {
         length: count,
     };
     for (output, part) in symbols.values[..count].iter_mut().zip(&parts[..count]) {
-        let canvas = isolate(view, bounds, width, &labels[..length], *part)?;
-        *output = classify(&canvas)?;
+        let canvas = isolate(view, bounds, width, &labels[..length], *part, &intensity)?;
+        *output = classify(&canvas, characters, glyphs)?;
     }
     Some(symbols)
 }
@@ -216,6 +253,7 @@ fn isolate(
     width: usize,
     labels: &[u8],
     part: Component,
+    intensity: &impl Fn([u8; 3]) -> u8,
 ) -> Option<[u8; CANVAS_PIXELS]> {
     let glyph_width = part.right.checked_sub(part.left)?.checked_add(1)?;
     let glyph_height = part.bottom.checked_sub(part.top)?.checked_add(1)?;
@@ -232,7 +270,7 @@ fn isolate(
                 continue;
             }
             let rgb = view.pixel_rgb(bounds.x + x as u32, bounds.y + y as u32)?;
-            canvas[(dy + 2) * CANVAS_WIDTH + dx + 2] = rgb[2].saturating_sub(BLUE_FLOOR);
+            canvas[(dy + 2) * CANVAS_WIDTH + dx + 2] = intensity(rgb);
         }
     }
     Some(canvas)
@@ -240,10 +278,15 @@ fn isolate(
 
 
 /// Return one exclusive label only after the absolute and distinct-label exact-ratio gates.
-fn classify(canvas: &[u8; CANVAS_PIXELS]) -> Option<u8> {
-    let mut distances = [None::<Distance>; 12];
-    for (&character, sample) in CHARACTERS.iter().zip(GLYPHS.as_chunks::<CANVAS_PIXELS>().0) {
+fn classify(canvas: &[u8; CANVAS_PIXELS], characters: &[u8], glyphs: &[u8]) -> Option<u8> {
+    if glyphs.len() != characters.len().checked_mul(CANVAS_PIXELS)? {
+        return None;
+    }
+    let mut expected = [false; SYMBOL_CLASS_COUNT];
+    let mut distances = [None::<Distance>; SYMBOL_CLASS_COUNT];
+    for (&character, sample) in characters.iter().zip(glyphs.as_chunks::<CANVAS_PIXELS>().0) {
         let index = character_index(character)?;
+        expected[index] = true;
         for dy in -1..=1 {
             for dx in -1..=1 {
                 let distance = distance(canvas, sample, dx, dy)?;
@@ -253,8 +296,14 @@ fn classify(canvas: &[u8; CANVAS_PIXELS]) -> Option<u8> {
             }
         }
     }
+    if expected.into_iter().filter(|&present| present).count() < 2 {
+        return None;
+    }
     let mut best = None::<(usize, Distance)>;
-    for (index, &distance) in distances.iter().enumerate() {
+    for (index, (&is_expected, &distance)) in expected.iter().zip(&distances).enumerate() {
+        if !is_expected {
+            continue;
+        }
         let distance = distance?;
         if best.is_none_or(|(_, previous)| distance.less_than(previous)) {
             best = Some((index, distance));
@@ -264,8 +313,8 @@ fn classify(canvas: &[u8; CANVAS_PIXELS]) -> Option<u8> {
     if winner.difference * SCALE > DISTANCE_LIMIT * winner.total {
         return None;
     }
-    for (other, distance) in distances.into_iter().enumerate() {
-        if other == index {
+    for (other, (&is_expected, distance)) in expected.iter().zip(distances).enumerate() {
+        if !is_expected || other == index {
             continue;
         }
         let distance = distance?;

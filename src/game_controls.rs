@@ -719,6 +719,12 @@ const TRIPEAKS_CONFLICT_PER_MILLE: u64 = 200;
 /// Minimum bright-white side-border coverage confirming a face-up TriPeaks card.
 const TRIPEAKS_FACE_UP_SIDE_PAPER_PER_MILLE: u64 = 500;
 
+/// Minimum green channel matching the darkened TriPeaks Stock tray background.
+const TRIPEAKS_STOCK_TRAY_GREEN_MINIMUM: u8 = 55;
+
+/// Minimum green-minus-blue delta inside the darkened TriPeaks Stock tray.
+const TRIPEAKS_STOCK_TRAY_GREEN_BLUE_DELTA_MINIMUM: u8 = 20;
+
 /// Surface pixel counters over a bounded native TriPeaks inspection region.
 #[derive(Clone, Copy, Default)]
 struct TriPeaksSurfaceStats {
@@ -733,8 +739,13 @@ struct TriPeaksSurfaceStats {
 }
 
 impl TriPeaksSurfaceStats {
-    /// Accumulate pixel counts across `rect` in `frame`.
-    fn accumulate(&mut self, frame: &CapturedFrame, rect: PixelRect) -> Result<(), OperationError> {
+    /// Accumulate pixel counts across `rect` in `frame` using a caller-selected felt classifier.
+    fn accumulate_with(
+        &mut self,
+        frame: &CapturedFrame,
+        rect: PixelRect,
+        is_felt: fn([u8; 3]) -> bool,
+    ) -> Result<(), OperationError> {
         for y in rect.y..rect.bottom() {
             for x in rect.x..rect.right() {
                 let rgb = pixel_rgb(frame, x, y).ok_or_else(|| {
@@ -749,12 +760,17 @@ impl TriPeaksSurfaceStats {
                 if is_tripeaks_white_paper_pixel(rgb) {
                     self.white_paper = self.white_paper.saturating_add(1);
                 }
-                if is_tripeaks_felt_pixel(rgb) {
+                if is_felt(rgb) {
                     self.felt = self.felt.saturating_add(1);
                 }
             }
         }
         Ok(())
+    }
+
+    /// Accumulate pixel counts across `rect` using standard bright gameplay felt thresholds.
+    fn accumulate(&mut self, frame: &CapturedFrame, rect: PixelRect) -> Result<(), OperationError> {
+        self.accumulate_with(frame, rect, is_tripeaks_felt_pixel)
     }
 
     /// Return `CLASSIC BLUE` card-back ratio in per mille (`0..=1000`).
@@ -778,14 +794,23 @@ fn ratio_per_mille(count: u64, total: u64) -> u64 {
     count.saturating_mul(1_000).checked_div(total).unwrap_or(0)
 }
 
-/// Sample one rectangular region into `TriPeaksSurfaceStats`.
+/// Sample one rectangular region into `TriPeaksSurfaceStats` using `is_felt`.
+fn sample_tripeaks_surface_with(
+    frame: &CapturedFrame,
+    rect: PixelRect,
+    is_felt: fn([u8; 3]) -> bool,
+) -> Result<TriPeaksSurfaceStats, OperationError> {
+    let mut stats = TriPeaksSurfaceStats::default();
+    stats.accumulate_with(frame, rect, is_felt)?;
+    Ok(stats)
+}
+
+/// Sample one rectangular region into `TriPeaksSurfaceStats` using standard gameplay felt.
 fn sample_tripeaks_surface(
     frame: &CapturedFrame,
     rect: PixelRect,
 ) -> Result<TriPeaksSurfaceStats, OperationError> {
-    let mut stats = TriPeaksSurfaceStats::default();
-    stats.accumulate(frame, rect)?;
-    Ok(stats)
+    sample_tripeaks_surface_with(frame, rect, is_tripeaks_felt_pixel)
 }
 
 /// Check whether one RGB pixel matches TriPeaks green gameplay felt.
@@ -793,6 +818,13 @@ fn is_tripeaks_felt_pixel([red, green, blue]: [u8; 3]) -> bool {
     green >= GAMEPLAY_FELT_GREEN_MINIMUM
         && green.saturating_sub(red) >= GAMEPLAY_FELT_GREEN_RED_DELTA_MINIMUM
         && green.saturating_sub(blue) >= GAMEPLAY_FELT_GREEN_BLUE_DELTA_MINIMUM
+}
+
+/// Check whether one RGB pixel matches the darkened TriPeaks Stock tray felt or empty outline.
+fn is_tripeaks_stock_tray_green([red, green, blue]: [u8; 3]) -> bool {
+    green >= TRIPEAKS_STOCK_TRAY_GREEN_MINIMUM
+        && green.saturating_sub(red) >= GAMEPLAY_FELT_GREEN_RED_DELTA_MINIMUM
+        && green.saturating_sub(blue) >= TRIPEAKS_STOCK_TRAY_GREEN_BLUE_DELTA_MINIMUM
 }
 
 /// Check whether one RGB pixel matches calibrated bright card-face paper.
@@ -938,7 +970,8 @@ fn read_tripeaks_stock_card(frame: &CapturedFrame) -> Result<CardRead, Operation
 
     for x in TARGET_STOCK.x..TARGET_STOCK.right() {
         let col_rect = PixelRect::new(x, TRIPEAKS_STOCK_SCAN_TOP, 1, TRIPEAKS_STOCK_SCAN_HEIGHT);
-        let col_stats = sample_tripeaks_surface(frame, col_rect)?;
+        let col_stats =
+            sample_tripeaks_surface_with(frame, col_rect, is_tripeaks_stock_tray_green)?;
         if col_stats.blue_per_mille() >= TRIPEAKS_STOCK_COLUMN_BLUE_PER_MILLE {
             total_blue_cols = total_blue_cols.saturating_add(1);
             if current_run == 0 {
@@ -966,7 +999,8 @@ fn read_tripeaks_stock_card(frame: &CapturedFrame) -> Result<CardRead, Operation
         STOCK_CARD_BOUNDS.width - 8,
         TRIPEAKS_STOCK_SCAN_HEIGHT,
     );
-    let stock_box_stats = sample_tripeaks_surface(frame, stock_box)?;
+    let stock_box_stats =
+        sample_tripeaks_surface_with(frame, stock_box, is_tripeaks_stock_tray_green)?;
 
     if best_run_len >= TRIPEAKS_STOCK_MIN_BLUE_COLUMNS {
         let top_card_rect = PixelRect::new(
@@ -975,7 +1009,8 @@ fn read_tripeaks_stock_card(frame: &CapturedFrame) -> Result<CardRead, Operation
             best_run_len,
             TRIPEAKS_STOCK_SCAN_HEIGHT,
         );
-        let top_card_stats = sample_tripeaks_surface(frame, top_card_rect)?;
+        let top_card_stats =
+            sample_tripeaks_surface_with(frame, top_card_rect, is_tripeaks_stock_tray_green)?;
         let detected_corner = classify_corner(
             frame,
             (best_run_start.saturating_sub(4), STOCK_CARD_BOUNDS.y),

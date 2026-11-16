@@ -1,0 +1,345 @@
+{
+  "schema_version": 1,
+  "fixtures": [
+    {
+      "id": "stock-last-card",
+      "path": "stock-last-card.png",
+      "width": 1920,
+      "height": 1080,
+      "format": "RGB PNG",
+      "bytes": 2886007,
+      "sha256": "29c53e80bab47971f705bf1c3b05116a7365c599513803812c36509331d39dc5",
+      "source": "Live Windows 11 Microsoft Solitaire TriPeaks capture via XSCP v3 + QMP on Beast (2026-11-16)",
+      "provenance": "native",
+      "expected_scene": "Normal Grandmaster Draw 22 (1 Stock card remaining at x=770..900, Waste=5S, Score=0)"
+    },
+    {
+      "id": "stock-empty",
+      "path": "stock-empty.png",
+      "width": 1920,
+      "height": 1080,
+      "format": "RGB PNG",
+      "bytes": 2880907,
+      "sha256": "364dd411189d792ab9d4265161beb38f5a92f0bae0b8596ab5acfd96a4497337",
+      "source": "Live Windows 11 Microsoft Solitaire TriPeaks capture via XSCP v3 + QMP on Beast (2026-11-16)",
+      "provenance": "native",
+      "expected_scene": "Normal Grandmaster Draw 23 (0 Stock cards remaining inside dark tray with light-green outline, Waste=4D, playable Row-4 matches still active)"
+    },
+    {
+      "id": "tableau-row2-uncovered",
+      "path": "tableau-row2-uncovered.png",
+      "width": 1920,
+      "height": 1080,
+      "format": "RGB PNG",
+      "bytes": 3062969,
+      "sha256": "478063fa12ae673698b3d6b2420766f1127922b9d5cead2cad780ef7a7d809f0",
+      "source": "Live Windows 11 Microsoft Solitaire TriPeaks capture via XSCP v3 + QMP on Beast (2026-11-16)",
+      "provenance": "native",
+      "expected_scene": "Uncovered Row-2 (5C, KC) and Row-3 (AC) slots alongside cleared Empty slots in Rows 3-4, Score: 4,600"
+    },
+    {
+      "id": "peak1-uncovered",
+      "path": "peak1-uncovered.png",
+      "width": 1920,
+      "height": 1080,
+      "format": "RGB PNG",
+      "bytes": 3055207,
+      "sha256": "72f2c1044a669ed0e2ad92b6a5888864f3de2458a1bc7d0e3bad9401056a50fc",
+      "source": "Live Windows 11 Microsoft Solitaire TriPeaks capture via XSCP v3 + QMP on Beast (2026-11-16)",
+      "provenance": "native",
+      "expected_scene": "Uncovered Peak 1 Row-1 slot (7D at R1C1), cleared Row-2/3/4 slots, Score: 5,000"
+    },
+    {
+      "id": "no-moves-remaining",
+      "path": "no-moves-remaining.png",
+      "width": 1920,
+      "height": 1080,
+      "format": "RGB PNG",
+      "bytes": 1576639,
+      "sha256": "966367ec8a20f539ff40750f44b729922a263c347834110cc85f57105eee394e",
+      "source": "Live Windows 11 Microsoft Solitaire TriPeaks capture via XSCP v3 + QMP on Beast (2026-11-16)",
+      "provenance": "native",
+      "expected_scene": "No Moves Remaining modal after 0 Stock + 0 legal tableau moves, dimming Undo All (1320,978) with Undo last move button at (1128,728)"
+    }
+  ],
+  "templates": [
+    {
+      "id": "aces",
+      "path": "templates/aces.ink",
+      "width": 55,
+      "height": 32,
+      "bytes": 1760,
+      "sha256": "4b418b985d069ba4da1a0fe1b35f242259c0f2f6804635e6b7aa84716fd88872",
+      "provenance": "native",
+      "source": "tests/fixtures/pyramid-recon/native-v13/recon-seven.png (banner left word)"
+    },
+    {
+      "id": "twos",
+      "path": "templates/twos.ink",
+      "width": 59,
+      "height": 32,
+      "bytes": 1888,
+      "sha256": "db24ec6f6ea8cd9bbf850e5e3cdf33696b8a40ebfe18ab44e6157407f220ce02",
+      "provenance": "native",
+      "source": "tests/fixtures/pyramid-colour-independence/twos-exhausted-green.png (banner left word)"
+    },
+    {
+      "id": "fours",
+      "path": "templates/fours.ink",
+      "width": 62,
+      "height": 32,
+      "bytes": 1984,
+      "sha256": "405ddec8519ec13851a70e4f6fce81d68f61cf78a8a992e716ecf0374ab300a5",
+      "provenance": "native",
+      "source": "tests/fixtures/freecell-empty-play1-fours-20261113.png (banner left word)"
+    },
+    {
+      "id": "fives",
+      "path": "templates/fives.ink",
+      "width": 55,
+      "height": 32,
+      "bytes": 1760,
+      "sha256": "f9c2a0706602a99e856895c33d7035f54ad9d9f0cf3af8a44cf43b40760cd797",
+      "provenance": "native",
+      "source": "tests/fixtures/pyramid-recognition-158/five-spades.png (banner left word)"
+    },
+    {
+      "id": "sixes",
+      "path": "templates/sixes.ink",
+      "width": 56,
+      "height": 32,
+      "bytes": 1792,
+      "sha256": "79afec802eab3a8767b4f9f6db71c95ca33b09fe9efff54b6ad5e20e7d095205",
+      "provenance": "native",
+      "source": "tests/fixtures/pyramid-card-cleared/sixes.png (banner left word)"
+    },
+    {
+      "id": "sevens",
+      "path": "templates/sevens.ink",
+      "width": 78,
+      "height": 32,
+      "bytes": 2496,
+      "sha256": "5357f23dffd21228ea1a1ce0fa142084bbb43ae3f70a58cbb7acbdfcd25df045",
+      "provenance": "native",
+      "source": "tests/fixtures/freecell-sevens-halo-20261109.png (banner left word)"
+    },
+    {
+      "id": "eights",
+      "path": "templates/eights.ink",
+      "width": 68,
+      "height": 32,
+      "bytes": 2176,
+      "sha256": "b5f03ea4c239d5b7fb94168ec86f89c17c400e9c3a834274abfd06dcf098733e",
+      "provenance": "native",
+      "source": "tests/fixtures/pyramid-challenge-redeal/eights.png (banner left word)"
+    },
+    {
+      "id": "nines",
+      "path": "templates/nines.ink",
+      "width": 64,
+      "height": 32,
+      "bytes": 2048,
+      "sha256": "3124bd6249fac5fa6b984076de3cdc4cccd09808a3c54b1e8e1a7bb46be762a4",
+      "provenance": "native",
+      "source": "tests/fixtures/pyramid-card-cleared/nines.png (banner left word)"
+    },
+    {
+      "id": "tens",
+      "path": "templates/tens.ink",
+      "width": 51,
+      "height": 32,
+      "bytes": 1632,
+      "sha256": "09befff31259aa192d38e722f12122eddea5681187e71439fe1990704d76bd77",
+      "provenance": "native",
+      "source": "tests/fixtures/pyramid-stock-recycle/first-unmatched.png (banner left word)"
+    },
+    {
+      "id": "jacks",
+      "path": "templates/jacks.ink",
+      "width": 59,
+      "height": 32,
+      "bytes": 1888,
+      "sha256": "6041ccbfc666d56124ab5a2dd52c4947fc7c8e8d448eaf5b80d15f06859aea45",
+      "provenance": "native",
+      "source": "tests/fixtures/pyramid-challenge-redeal/jacks.png (banner left word)"
+    },
+    {
+      "id": "queens",
+      "path": "templates/queens.ink",
+      "width": 85,
+      "height": 32,
+      "bytes": 2720,
+      "sha256": "914f6fccdb103cf10c75ed19656b32e2b1cffa96bf3b2c71950a051f68de64b7",
+      "provenance": "native",
+      "source": "tests/fixtures/pyramid-recon/native-v14/baseline.png (banner left word)"
+    },
+    {
+      "id": "kings",
+      "path": "templates/kings.ink",
+      "width": 61,
+      "height": 32,
+      "bytes": 1952,
+      "sha256": "6f7d87ef0be302f90d43abdd3e30ac3c7bb09383ddff550a7fe32f02b4e55e9b",
+      "provenance": "native",
+      "source": "tests/fixtures/pyramid-kings-default/kings-one.png (banner left word)"
+    },
+    {
+      "id": "score",
+      "path": "templates/score.ink",
+      "width": 63,
+      "height": 32,
+      "bytes": 2016,
+      "sha256": "ce37a19d77e393a2985c10f624e527895f00a2af3369205f518e4a475800a0bc",
+      "provenance": "native",
+      "source": "tests/fixtures/pyramid-challenge-redeal/score.png"
+    },
+    {
+      "id": "threes-spaced",
+      "path": "templates/threes-spaced.ink",
+      "width": 75,
+      "height": 32,
+      "bytes": 2400,
+      "sha256": "d0e4f03b7fe203aa1675e84f69ab6daa93dca4013a766c6ba5d2237614b7e7c9",
+      "provenance": "synthetic-calibrated-from-native-glyphs",
+      "source": "Assembled from native Tens(T), Eights(h), Fours(r,s), Queens(ee) on y=48..80 with 1px kerning gaps"
+    },
+    {
+      "id": "threes-compact",
+      "path": "templates/threes-compact.ink",
+      "width": 75,
+      "height": 32,
+      "bytes": 2400,
+      "sha256": "9ae0f53d101e482fead5f5594136343000c195702e08c9c3edbf50de1895e98b",
+      "provenance": "synthetic-calibrated-from-native-glyphs",
+      "source": "Assembled from native Tens(T), Eights(h), Score(r->e join), Queens(ee), Fours(s) on y=48..80"
+    },
+    {
+      "id": "boards",
+      "path": "templates/boards.ink",
+      "width": 77,
+      "height": 32,
+      "bytes": 2464,
+      "sha256": "250817a52fa4486cb38cf0bd371269797593395e087e69397ded19f78c4d47ed",
+      "provenance": "native",
+      "source": "tests/fixtures/pyramid-boards-perfect-150/last-observed.png"
+    },
+    {
+      "id": "cleared",
+      "path": "templates/cleared.ink",
+      "width": 81,
+      "height": 32,
+      "bytes": 2592,
+      "sha256": "920e7ef1123edd26433344aa3887ca362d8db8527503a833a89af753fcc89d18",
+      "provenance": "native",
+      "source": "tests/fixtures/pyramid-card-cleared/sixes.png"
+    },
+    {
+      "id": "solve",
+      "path": "templates/solve.ink",
+      "width": 61,
+      "height": 32,
+      "bytes": 1952,
+      "sha256": "e8a6a49abffb2e4190836f401605c75199b84e7d65e41f6f8d0f44726b9c7533",
+      "provenance": "native",
+      "source": "tests/fixtures/freecell-native-eight-20261112.png"
+    },
+    {
+      "id": "the-deck",
+      "path": "templates/the-deck.ink",
+      "width": 97,
+      "height": 32,
+      "bytes": 3104,
+      "sha256": "150ee7b0193b1e17fa05115bfa99602b94bce48b54bf5b3735652190a627b748",
+      "provenance": "native",
+      "source": "tests/fixtures/freecell-native-eight-20261112.png"
+    },
+    {
+      "id": "clear-word",
+      "path": "templates/clear-word.ink",
+      "width": 59,
+      "height": 32,
+      "bytes": 1888,
+      "sha256": "90162c440b5a9b363da523481e24a148598f4a36fb9ffc523679a5267e588bb8",
+      "provenance": "native",
+      "source": "tests/fixtures/freecell-challenge-20261107.png"
+    },
+    {
+      "id": "deals-zero",
+      "path": "templates/deals-zero.ink",
+      "width": 136,
+      "height": 26,
+      "bytes": 3536,
+      "sha256": "e74023ed57e396302843e78b6b60669391b2ddfb3db6d89de3c29a8414527929",
+      "provenance": "native",
+      "source": "tests/fixtures/tripeaks-redeal-20261016/draw-first.png (0 deals left, y=872..898)"
+    },
+    {
+      "id": "deals-one",
+      "path": "templates/deals-one.ink",
+      "width": 124,
+      "height": 26,
+      "bytes": 3224,
+      "sha256": "2da6f3a7df2248bae62e62cd95ec32786eb23a327bc896c4ab71b322b7811b78",
+      "provenance": "native",
+      "source": "tests/fixtures/pyramid-challenge-redeal/jacks.png (1 deal left, y=872..898)"
+    },
+    {
+      "id": "deals-two",
+      "path": "templates/deals-two.ink",
+      "width": 140,
+      "height": 26,
+      "bytes": 3640,
+      "sha256": "47086f49888246f26f2f79870a25f9696c217edda8b7626fbaa7fd15a626283d",
+      "provenance": "native",
+      "source": "tests/fixtures/pyramid-redeal-appearance/count-two.png (2 deals left, y=872..898)"
+    },
+    {
+      "id": "no-moves-title",
+      "path": "templates/no-moves-title.ink",
+      "width": 416,
+      "height": 48,
+      "bytes": 19968,
+      "sha256": "a0f541100942610921ef447f547c0943d7e371b836a25b5b6ce3cd0c146a9032",
+      "provenance": "native",
+      "source": "tests/fixtures/tripeaks-calibration-20261116/no-moves-remaining.png (No Moves Remaining modal title, y=299..347)"
+    },
+    {
+      "id": "normal-score-label",
+      "path": "templates/normal-score-label.ink",
+      "width": 69,
+      "height": 32,
+      "bytes": 2208,
+      "sha256": "419d82a7db61725c24f4d4e7aa3a652490b688d705f630080a841e97f7904fd2",
+      "provenance": "native",
+      "source": "tests/fixtures/tripeaks-calibration-20261116/stock-last-card.png (Normal top-HUD 'Score:' label y=46..78)"
+    },
+    {
+      "id": "normal-digits",
+      "path": "templates/normal-digits.ink",
+      "width": 20,
+      "height": 26,
+      "bytes": 14560,
+      "sha256": "892ae7400fea0b58f4f5afbb0a72c8eff23ce837bc5f0fd09778793c7e2e96b4",
+      "provenance": "native",
+      "source": "11 native h=17 Normal HUD Score digit/comma classes (28 samples) across TriPeaks calibration captures and pyramid-standard-series/pyramid-normal-final-152/pyramid-testing-156"
+    },
+    {
+      "id": "normal-labels",
+      "path": "templates/normal-labels.txt",
+      "bytes": 28,
+      "sha256": "32dba83903f78f8a9bfe9afbf22d9b0889b7ba5acd396fb53872dfabbf8549e9",
+      "provenance": "native",
+      "source": "ASCII label sequence matching templates/normal-digits.ink 520-byte chunks"
+    },
+    {
+      "id": "normal-score-label-alt",
+      "path": "templates/normal-score-label-alt.ink",
+      "width": 68,
+      "height": 32,
+      "bytes": 2176,
+      "sha256": "4cd02679982ae75f28e412546cb6c0745a5ec2002b869d1abd2cc73e3d1e4dba",
+      "provenance": "native",
+      "source": "tests/fixtures/pyramid-normal-final-152/last-observed.png (Normal top-HUD 'Score:' alt subpixel phase y=46..78)"
+    }
+  ]
+}

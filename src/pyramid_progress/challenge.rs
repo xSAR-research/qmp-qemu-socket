@@ -16,8 +16,8 @@ use xsar::image_matching::FrameView;
 
 
 mod cleared;
-mod decimal;
-mod digits;
+pub(crate) mod decimal;
+pub(crate) mod digits;
 mod templates;
 
 

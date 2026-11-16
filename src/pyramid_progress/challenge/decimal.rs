@@ -12,7 +12,7 @@ const MAX_DIGITS: usize = 6;
 
 
 /// Parse a classified bounded counter without allocation or inferred characters.
-pub(super) fn parse(kind: ChallengeKind, symbols: &[u8]) -> Option<ChallengeProgress> {
+pub(crate) fn parse(kind: ChallengeKind, symbols: &[u8]) -> Option<ChallengeProgress> {
     let slash = symbols.iter().position(|&symbol| symbol == b'/')?;
     let current = integer(&symbols[..slash], kind == ChallengeKind::Score)?;
     let target = integer(&symbols[slash + 1..], kind == ChallengeKind::Score)?;
@@ -21,7 +21,7 @@ pub(super) fn parse(kind: ChallengeKind, symbols: &[u8]) -> Option<ChallengeProg
 
 
 /// Parse one bounded integer, checking comma grouping and arithmetic before use.
-fn integer(symbols: &[u8], grouped: bool) -> Option<u32> {
+pub(crate) fn integer(symbols: &[u8], grouped: bool) -> Option<u32> {
     let first = *symbols.first()?;
     if !first.is_ascii_digit() || (first == b'0' && symbols.len() != 1) {
         return None;

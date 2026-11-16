@@ -31,11 +31,11 @@ mod tests;
 
 /// Literal displayed counts, separate from game classification or input authority.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) struct BoardCount {
+pub struct BoardCount {
     /// Positively matched completed count; the calibrated values are zero to two.
-    pub(crate) completed: u8,
+    pub completed: u8,
     /// Positively matched target; this reader supports only the literal three.
-    pub(crate) target: u8,
+    pub target: u8,
 }
 
 

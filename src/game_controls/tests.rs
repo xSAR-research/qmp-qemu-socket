@@ -1060,3 +1060,114 @@ fn read_card_tripeaks_handles_empty_unreadable_ambiguous_and_bounds_edges() {
         );
     }
 }
+
+/// Verify `read_card` against the Goal 2 live Beast TriPeaks captures (contracted/empty Stock,
+/// uncovered Row 1–3 cards, cleared Empty slots above/beside remaining cards, and dimmed modal).
+#[test]
+fn read_card_recognises_live_tripeaks_calibration_fixtures() {
+    let stock_last = decode_png(include_bytes!(
+        "../../tests/fixtures/tripeaks-calibration-20261116/stock-last-card.png"
+    ))
+    .expect("stock-last-card png");
+    assert_eq!(
+        read_card(&stock_last, LocationRequest::tripeaks_draw(1)).expect("Draw 22 Stock"),
+        CardRead::FaceDown
+    );
+    assert_eq!(
+        read_card(&stock_last, LocationRequest::tripeaks_draw(2)).expect("Draw 22 Waste"),
+        CardRead::Card(parse_test_card("5S"))
+    );
+
+    let stock_empty = decode_png(include_bytes!(
+        "../../tests/fixtures/tripeaks-calibration-20261116/stock-empty.png"
+    ))
+    .expect("stock-empty png");
+    assert_eq!(
+        read_card(&stock_empty, LocationRequest::tripeaks_draw(1)).expect("Draw 23 empty Stock"),
+        CardRead::Empty
+    );
+    assert_eq!(
+        read_card(&stock_empty, LocationRequest::tripeaks_draw(2)).expect("Draw 23 Waste"),
+        CardRead::Card(parse_test_card("4D"))
+    );
+
+    let row2_uncovered = decode_png(include_bytes!(
+        "../../tests/fixtures/tripeaks-calibration-20261116/tableau-row2-uncovered.png"
+    ))
+    .expect("tableau-row2-uncovered png");
+    assert_eq!(
+        read_card(&row2_uncovered, LocationRequest::tripeaks_play(2, 1)).expect("R2C1"),
+        CardRead::Card(parse_test_card("5C"))
+    );
+    assert_eq!(
+        read_card(&row2_uncovered, LocationRequest::tripeaks_play(2, 2)).expect("R2C2"),
+        CardRead::Card(parse_test_card("KC"))
+    );
+    assert_eq!(
+        read_card(&row2_uncovered, LocationRequest::tripeaks_play(3, 6)).expect("R3C6"),
+        CardRead::Card(parse_test_card("AC"))
+    );
+    for (row, cols) in [(3_u8, &[1_u8, 2, 3][..]), (4, &[1, 2, 3, 4, 6, 7, 9][..])] {
+        for &col in cols {
+            assert_eq!(
+                read_card(&row2_uncovered, LocationRequest::tripeaks_play(row, col))
+                    .expect("cleared slot"),
+                CardRead::Empty,
+                "row {row} col {col} should be Empty"
+            );
+        }
+    }
+    for col in 1..=3 {
+        assert_eq!(
+            read_card(&row2_uncovered, LocationRequest::tripeaks_play(1, col))
+                .expect("covered Row 1"),
+            CardRead::FaceDown
+        );
+    }
+    assert_eq!(
+        read_card(&row2_uncovered, LocationRequest::tripeaks_draw(1)).expect("contracted Stock"),
+        CardRead::FaceDown
+    );
+    assert_eq!(
+        read_card(&row2_uncovered, LocationRequest::tripeaks_draw(2)).expect("Waste QC"),
+        CardRead::Card(parse_test_card("QC"))
+    );
+
+    let peak1 = decode_png(include_bytes!(
+        "../../tests/fixtures/tripeaks-calibration-20261116/peak1-uncovered.png"
+    ))
+    .expect("peak1-uncovered png");
+    assert_eq!(
+        read_card(&peak1, LocationRequest::tripeaks_play(1, 1)).expect("Peak 1 R1C1"),
+        CardRead::Card(parse_test_card("7D"))
+    );
+    assert_eq!(
+        read_card(&peak1, LocationRequest::tripeaks_play(2, 1)).expect("cleared R2C1"),
+        CardRead::Empty
+    );
+    assert_eq!(
+        read_card(&peak1, LocationRequest::tripeaks_play(2, 2)).expect("cleared R2C2"),
+        CardRead::Empty
+    );
+    assert_eq!(
+        read_card(&peak1, LocationRequest::tripeaks_play(1, 2)).expect("covered Peak 2"),
+        CardRead::FaceDown
+    );
+    assert_eq!(
+        read_card(&peak1, LocationRequest::tripeaks_draw(2)).expect("Waste 5C"),
+        CardRead::Card(parse_test_card("5C"))
+    );
+
+    let no_moves = decode_png(include_bytes!(
+        "../../tests/fixtures/tripeaks-calibration-20261116/no-moves-remaining.png"
+    ))
+    .expect("no-moves-remaining png");
+    assert_eq!(
+        read_card(&no_moves, LocationRequest::tripeaks_draw(1)).expect("dimmed modal Stock"),
+        CardRead::Unreadable
+    );
+    assert_eq!(
+        read_card(&no_moves, LocationRequest::tripeaks_play(1, 1)).expect("dimmed modal R1C1"),
+        CardRead::Unreadable
+    );
+}
