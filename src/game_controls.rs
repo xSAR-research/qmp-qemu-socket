@@ -12,10 +12,18 @@ use xsar::games::{
 
 use crate::{
     capture::CapturedFrame,
+    cards::{TABLEAU_ROW_LENGTHS, TABLEAU_ROW_STARTS},
+    detector::pixel_rgb,
     freecell::{CELL_X, FOUNDATION_X, PLAY_X},
-    game::GameMode,
+    game::{GameMode, is_classic_blue_back},
     game_operations::{CardRead, OperationError, OperationIo, validate_native_frame},
     geometry::PixelRect,
+    parameters::{
+        FACE_UP_WHITE_CHANNEL_MINIMUM, GAMEPLAY_FELT_GREEN_BLUE_DELTA_MINIMUM,
+        GAMEPLAY_FELT_GREEN_MINIMUM, GAMEPLAY_FELT_GREEN_RED_DELTA_MINIMUM,
+        GAMEPLAY_FELT_REQUIRED_FRACTION_PER_MILLE, STOCK_CARD_BOUNDS, TABLEAU_CARD_REGIONS,
+        TARGET_STOCK, WASTE_CARD_BOUNDS,
+    },
     pyramid_recon::vision::{
         CornerClassification, classify_foreground_corner, pyramid_tableau_origin,
         read_pyramid_draw_card,
@@ -73,7 +81,7 @@ pub enum LocationKind {
     Cell,
     /// Free Cell upper foundation slot (`SUIT 1..=4`, left-to-right physical order).
     Suit,
-    /// Pyramid stock/draw pile (`DRAW 1` = left, `DRAW 2` = right).
+    /// Stock or waste/draw pile (`DRAW 1` = left/stock, `DRAW 2` = right/waste).
     Draw,
 }
 
@@ -84,9 +92,9 @@ pub struct LocationRequest {
     pub game: GameMode,
     /// Location category within that game.
     pub kind: LocationKind,
-    /// One-based vertical row (`1..=19` for Free Cell `PLAY`, `1..=7` for Pyramid `PLAY`, `1` for `CELL`/`SUIT`/`DRAW`).
+    /// One-based vertical row (`1..=19` for Free Cell `PLAY`, `1..=7` for Pyramid `PLAY`, `1..=4` for TriPeaks `PLAY`, `1` for `CELL`/`SUIT`/`DRAW`).
     pub row: u8,
-    /// One-based horizontal column or slot (`1..=8` for Free Cell `PLAY`, `1..=4` for `CELL`/`SUIT`, `1..=row` for Pyramid `PLAY`, `1..=2` for Pyramid `DRAW`).
+    /// One-based horizontal column or slot (`1..=8` for Free Cell `PLAY`, `1..=4` for `CELL`/`SUIT`, `1..=row` for Pyramid `PLAY`, `1..=row_length` for TriPeaks `PLAY`, `1..=2` for `DRAW`).
     pub column: u8,
 }
 
@@ -135,6 +143,26 @@ impl LocationRequest {
     pub const fn pyramid_draw(slot: u8) -> Self {
         Self {
             game: GameMode::Pyramid,
+            kind: LocationKind::Draw,
+            row: 1,
+            column: slot,
+        }
+    }
+
+    /// Build a 1-based TriPeaks `PLAY` location request (`row` `1..=4`, `column` `1..=row_length`).
+    pub const fn tripeaks_play(row: u8, column: u8) -> Self {
+        Self {
+            game: GameMode::TriPeaks,
+            kind: LocationKind::Play,
+            row,
+            column,
+        }
+    }
+
+    /// Build a 1-based TriPeaks `DRAW` location request (`1` = Stock, `2` = Waste, `row == 1`).
+    pub const fn tripeaks_draw(slot: u8) -> Self {
+        Self {
+            game: GameMode::TriPeaks,
             kind: LocationKind::Draw,
             row: 1,
             column: slot,
@@ -607,15 +635,396 @@ pub fn read_card(
             };
             read_pyramid_draw_card(frame, right).map_err(OperationError::Recognition)
         }
+        (GameMode::TriPeaks, LocationKind::Play) => {
+            read_tripeaks_play_card(frame, request.row, request.column)
+        }
+        (GameMode::TriPeaks, LocationKind::Draw) => {
+            if request.row != 1 {
+                return Err(OperationError::Invalid(format!(
+                    "TriPeaks DRAW requires row 1, got row {}",
+                    request.row
+                )));
+            }
+            read_tripeaks_draw_card(frame, request.column)
+        }
         (GameMode::FreeCell, LocationKind::Draw)
-        | (GameMode::Pyramid, LocationKind::Cell | LocationKind::Suit)
-        | (GameMode::TriPeaks | GameMode::Klondike | GameMode::Spider, _) => {
-            Err(OperationError::Unsupported(format!(
-                "{:?} does not support {:?} in game_controls::read_card",
-                request.game, request.kind
-            )))
+        | (GameMode::Pyramid | GameMode::TriPeaks, LocationKind::Cell | LocationKind::Suit)
+        | (GameMode::Klondike | GameMode::Spider, _) => Err(OperationError::Unsupported(format!(
+            "{:?} does not support {:?} in game_controls::read_card",
+            request.game, request.kind
+        ))),
+    }
+}
+
+/// Vertical offset from `card_bounds.y` into each TriPeaks row's non-overlapping scan band.
+const TRIPEAKS_BAND_Y_OFFSET: u32 = 85;
+
+/// Vertical height of the non-overlapping TriPeaks tableau scan band (clear of child halo).
+const TRIPEAKS_BAND_HEIGHT: u32 = 8;
+
+/// Horizontal margin from each card edge into the bright white border strip (`x + 5..x + 15`).
+const TRIPEAKS_BORDER_INSET_X: u32 = 5;
+
+/// Width of each vertical card-paper border strip sampled in the non-overlapping band.
+const TRIPEAKS_SIDE_STRIP_WIDTH: u32 = 10;
+
+/// Corner box inset used to confirm unobstructed `CLASSIC BLUE` back coverage.
+const TRIPEAKS_CORNER_BACK_INSET: u32 = 6;
+
+/// Corner box width and height kept inside `31×49` foreground inspection bounds.
+const TRIPEAKS_CORNER_BACK_WIDTH: u32 = 28;
+
+/// Corner box height kept inside `31×49` foreground inspection bounds.
+const TRIPEAKS_CORNER_BACK_HEIGHT: u32 = 44;
+
+/// Top pixel coordinate inside `TARGET_STOCK` vertical interior scan.
+const TRIPEAKS_STOCK_SCAN_TOP: u32 = 690;
+
+/// Vertical pixel span sampled per Stock column (`y = 690..856`, avoiding bottom gold halo).
+const TRIPEAKS_STOCK_SCAN_HEIGHT: u32 = 166;
+
+/// Minimum contiguous `CLASSIC BLUE` column run required to confirm a non-empty TriPeaks Stock card.
+const TRIPEAKS_STOCK_MIN_BLUE_COLUMNS: u32 = 100;
+
+/// Minimum `CLASSIC BLUE` per-mille fraction in one `Stock` vertical column.
+const TRIPEAKS_STOCK_COLUMN_BLUE_PER_MILLE: u64 = 750;
+
+/// Minimum gameplay-felt per-mille fraction in one `Stock` vertical column.
+const TRIPEAKS_STOCK_COLUMN_FELT_PER_MILLE: u64 = 750;
+
+/// Minimum white-paper per-mille fraction marking one `Stock` card-edge column.
+const TRIPEAKS_STOCK_COLUMN_WHITE_PER_MILLE: u64 = 500;
+
+/// Minimum gameplay-felt column count (`80%` of `280` `TARGET_STOCK` columns) proving empty Stock.
+const TRIPEAKS_STOCK_EMPTY_FELT_COLUMNS: u32 = 224;
+
+/// Maximum white-paper columns tolerated when `TARGET_STOCK` is empty.
+const TRIPEAKS_STOCK_MAX_EMPTY_WHITE_COLUMNS: u32 = 8;
+
+/// Minimum `Stock` blue columns considered non-noise when checking felt/back conflict.
+const TRIPEAKS_STOCK_CONFLICT_BLUE_COLUMNS: u32 = 25;
+
+/// Minimum `Stock` felt columns considered non-noise when checking felt/back conflict.
+const TRIPEAKS_STOCK_CONFLICT_FELT_COLUMNS: u32 = 200;
+
+/// Minimum dominant surface ratio matching calibrated `GAMEPLAY_FELT_REQUIRED_FRACTION_PER_MILLE`.
+const TRIPEAKS_SURFACE_DOMINANT_PER_MILLE: u64 = GAMEPLAY_FELT_REQUIRED_FRACTION_PER_MILLE as u64;
+
+/// Maximum allowed trace pixel ratio from opposing card-back/felt/paper classes.
+const TRIPEAKS_SURFACE_TRACE_LIMIT_PER_MILLE: u64 = 50;
+
+/// Minimum per-mille coverage for conflicting simultaneous surface evidence.
+const TRIPEAKS_CONFLICT_PER_MILLE: u64 = 200;
+
+/// Minimum bright-white side-border coverage confirming a face-up TriPeaks card.
+const TRIPEAKS_FACE_UP_SIDE_PAPER_PER_MILLE: u64 = 500;
+
+/// Surface pixel counters over a bounded native TriPeaks inspection region.
+#[derive(Clone, Copy, Default)]
+struct TriPeaksSurfaceStats {
+    /// Total sampled pixels.
+    total: u64,
+    /// Pixels matching `CLASSIC BLUE` card-back thresholds.
+    blue_back: u64,
+    /// Pixels matching neutral bright card-paper minimum channels.
+    white_paper: u64,
+    /// Pixels matching gameplay green felt thresholds.
+    felt: u64,
+}
+
+impl TriPeaksSurfaceStats {
+    /// Accumulate pixel counts across `rect` in `frame`.
+    fn accumulate(&mut self, frame: &CapturedFrame, rect: PixelRect) -> Result<(), OperationError> {
+        for y in rect.y..rect.bottom() {
+            for x in rect.x..rect.right() {
+                let rgb = pixel_rgb(frame, x, y).ok_or_else(|| {
+                    OperationError::Invalid(format!(
+                        "TriPeaks inspection coordinate ({x}, {y}) out of native bounds"
+                    ))
+                })?;
+                self.total = self.total.saturating_add(1);
+                if is_classic_blue_back(rgb) {
+                    self.blue_back = self.blue_back.saturating_add(1);
+                }
+                if is_tripeaks_white_paper_pixel(rgb) {
+                    self.white_paper = self.white_paper.saturating_add(1);
+                }
+                if is_tripeaks_felt_pixel(rgb) {
+                    self.felt = self.felt.saturating_add(1);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Return `CLASSIC BLUE` card-back ratio in per mille (`0..=1000`).
+    fn blue_per_mille(self) -> u64 {
+        ratio_per_mille(self.blue_back, self.total)
+    }
+
+    /// Return bright card-paper ratio in per mille (`0..=1000`).
+    fn white_per_mille(self) -> u64 {
+        ratio_per_mille(self.white_paper, self.total)
+    }
+
+    /// Return gameplay green felt ratio in per mille (`0..=1000`).
+    fn felt_per_mille(self) -> u64 {
+        ratio_per_mille(self.felt, self.total)
+    }
+}
+
+/// Convert `count / total` to rounded-down integer per mille (`0..=1000`).
+fn ratio_per_mille(count: u64, total: u64) -> u64 {
+    count.saturating_mul(1_000).checked_div(total).unwrap_or(0)
+}
+
+/// Sample one rectangular region into `TriPeaksSurfaceStats`.
+fn sample_tripeaks_surface(
+    frame: &CapturedFrame,
+    rect: PixelRect,
+) -> Result<TriPeaksSurfaceStats, OperationError> {
+    let mut stats = TriPeaksSurfaceStats::default();
+    stats.accumulate(frame, rect)?;
+    Ok(stats)
+}
+
+/// Check whether one RGB pixel matches TriPeaks green gameplay felt.
+fn is_tripeaks_felt_pixel([red, green, blue]: [u8; 3]) -> bool {
+    green >= GAMEPLAY_FELT_GREEN_MINIMUM
+        && green.saturating_sub(red) >= GAMEPLAY_FELT_GREEN_RED_DELTA_MINIMUM
+        && green.saturating_sub(blue) >= GAMEPLAY_FELT_GREEN_BLUE_DELTA_MINIMUM
+}
+
+/// Check whether one RGB pixel matches calibrated bright card-face paper.
+fn is_tripeaks_white_paper_pixel(rgb: [u8; 3]) -> bool {
+    rgb.into_iter()
+        .all(|channel| channel >= FACE_UP_WHITE_CHANNEL_MINIMUM)
+}
+
+/// Read one 1-based TriPeaks tableau position (`row` `1..=4`, `column` `1..=row_length`).
+fn read_tripeaks_play_card(
+    frame: &CapturedFrame,
+    row: u8,
+    column: u8,
+) -> Result<CardRead, OperationError> {
+    if !(1..=4).contains(&row) {
+        return Err(OperationError::Invalid(format!(
+            "TriPeaks PLAY row must be 1..=4, got {row}"
+        )));
+    }
+    let row_index = usize::from(row - 1);
+    let row_length = TABLEAU_ROW_LENGTHS[row_index];
+    if !(1..=row_length).contains(&column) {
+        return Err(OperationError::Invalid(format!(
+            "TriPeaks PLAY row {row} column must be 1..={row_length}, got {column}"
+        )));
+    }
+    let slot_index = TABLEAU_ROW_STARTS[row_index] + usize::from(column - 1);
+    read_tripeaks_card_bounds(frame, TABLEAU_CARD_REGIONS[slot_index].card_bounds, true)
+}
+
+/// Read one 1-based TriPeaks draw pile (`1` = Stock across `TARGET_STOCK`, `2` = Waste).
+fn read_tripeaks_draw_card(frame: &CapturedFrame, slot: u8) -> Result<CardRead, OperationError> {
+    match slot {
+        1 => read_tripeaks_stock_card(frame),
+        2 => read_tripeaks_card_bounds(frame, WASTE_CARD_BOUNDS, false),
+        _ => Err(OperationError::Invalid(format!(
+            "TriPeaks DRAW slot must be 1 (Stock) or 2 (Waste), got {slot}"
+        ))),
+    }
+}
+
+/// Read one TriPeaks card rectangle (`allow_face_down` distinguishes covered Tableau from Waste).
+fn read_tripeaks_card_bounds(
+    frame: &CapturedFrame,
+    bounds: PixelRect,
+    allow_face_down: bool,
+) -> Result<CardRead, OperationError> {
+    let classified = classify_corner(frame, (bounds.x, bounds.y))?;
+    let band = PixelRect::new(
+        bounds.x + TRIPEAKS_CORNER_BACK_INSET,
+        bounds.y + TRIPEAKS_BAND_Y_OFFSET,
+        bounds.width - TRIPEAKS_CORNER_BACK_INSET * 2,
+        TRIPEAKS_BAND_HEIGHT,
+    );
+    let band_stats = sample_tripeaks_surface(frame, band)?;
+
+    let mut side_stats = TriPeaksSurfaceStats::default();
+    let left_strip = PixelRect::new(
+        bounds.x + TRIPEAKS_BORDER_INSET_X,
+        bounds.y + TRIPEAKS_BAND_Y_OFFSET,
+        TRIPEAKS_SIDE_STRIP_WIDTH,
+        TRIPEAKS_BAND_HEIGHT,
+    );
+    let right_strip = PixelRect::new(
+        bounds.right() - TRIPEAKS_BORDER_INSET_X - TRIPEAKS_SIDE_STRIP_WIDTH,
+        bounds.y + TRIPEAKS_BAND_Y_OFFSET,
+        TRIPEAKS_SIDE_STRIP_WIDTH,
+        TRIPEAKS_BAND_HEIGHT,
+    );
+    side_stats.accumulate(frame, left_strip)?;
+    side_stats.accumulate(frame, right_strip)?;
+
+    let corner_back_box = PixelRect::new(
+        bounds.x + TRIPEAKS_CORNER_BACK_INSET,
+        bounds.y + TRIPEAKS_CORNER_BACK_INSET,
+        TRIPEAKS_CORNER_BACK_WIDTH,
+        TRIPEAKS_CORNER_BACK_HEIGHT,
+    );
+    let corner_back_stats = sample_tripeaks_surface(frame, corner_back_box)?;
+
+    let band_felt_empty = band_stats.felt_per_mille() >= TRIPEAKS_SURFACE_DOMINANT_PER_MILLE
+        && band_stats.blue_per_mille() <= TRIPEAKS_SURFACE_TRACE_LIMIT_PER_MILLE
+        && band_stats.white_per_mille() <= TRIPEAKS_SURFACE_TRACE_LIMIT_PER_MILLE;
+    let band_blue_back = band_stats.blue_per_mille() >= TRIPEAKS_SURFACE_DOMINANT_PER_MILLE
+        && band_stats.felt_per_mille() <= TRIPEAKS_SURFACE_TRACE_LIMIT_PER_MILLE
+        && side_stats.white_per_mille() <= TRIPEAKS_SURFACE_TRACE_LIMIT_PER_MILLE;
+    let corner_blue_back = corner_back_stats.blue_per_mille()
+        >= TRIPEAKS_SURFACE_DOMINANT_PER_MILLE
+        && corner_back_stats.felt_per_mille() <= TRIPEAKS_SURFACE_TRACE_LIMIT_PER_MILLE;
+    let band_mixed_conflict = (band_stats.blue_per_mille() >= TRIPEAKS_CONFLICT_PER_MILLE
+        && band_stats.felt_per_mille() >= TRIPEAKS_CONFLICT_PER_MILLE)
+        || (side_stats.white_per_mille() >= TRIPEAKS_CONFLICT_PER_MILLE
+            && band_stats.felt_per_mille() >= TRIPEAKS_CONFLICT_PER_MILLE);
+    let face_up_side_paper = side_stats.white_per_mille() >= TRIPEAKS_FACE_UP_SIDE_PAPER_PER_MILLE
+        && band_stats.felt_per_mille() <= TRIPEAKS_SURFACE_TRACE_LIMIT_PER_MILLE
+        && side_stats.blue_per_mille() <= TRIPEAKS_SURFACE_TRACE_LIMIT_PER_MILLE;
+
+    Ok(match classified {
+        CornerClassification::Ambiguous { .. } => CardRead::Ambiguous,
+        CornerClassification::Card(card) => {
+            if band_felt_empty
+                || band_blue_back
+                || band_mixed_conflict
+                || band_stats.felt_per_mille() >= TRIPEAKS_CONFLICT_PER_MILLE
+                || side_stats.blue_per_mille() >= TRIPEAKS_CONFLICT_PER_MILLE
+            {
+                CardRead::Ambiguous
+            } else if face_up_side_paper {
+                CardRead::Card(card)
+            } else {
+                CardRead::Unreadable
+            }
+        }
+        CornerClassification::ColourDisagreement { .. }
+        | CornerClassification::PartialLabel { .. }
+        | CornerClassification::Unreadable { .. } => {
+            if band_mixed_conflict {
+                CardRead::Ambiguous
+            } else if band_felt_empty {
+                CardRead::Empty
+            } else if allow_face_down
+                && matches!(classified, CornerClassification::Unreadable { .. })
+                && corner_blue_back
+                && band_blue_back
+            {
+                CardRead::FaceDown
+            } else {
+                CardRead::Unreadable
+            }
+        }
+    })
+}
+
+/// Read TriPeaks Stock (`DRAW 1`) across the horizontally contracting `TARGET_STOCK` lane.
+fn read_tripeaks_stock_card(frame: &CapturedFrame) -> Result<CardRead, OperationError> {
+    let mut total_blue_cols = 0_u32;
+    let mut felt_cols = 0_u32;
+    let mut white_cols = 0_u32;
+    let mut current_run = 0_u32;
+    let mut best_run_len = 0_u32;
+    let mut current_start = TARGET_STOCK.x;
+    let mut best_run_start = TARGET_STOCK.x;
+
+    for x in TARGET_STOCK.x..TARGET_STOCK.right() {
+        let col_rect = PixelRect::new(x, TRIPEAKS_STOCK_SCAN_TOP, 1, TRIPEAKS_STOCK_SCAN_HEIGHT);
+        let col_stats = sample_tripeaks_surface(frame, col_rect)?;
+        if col_stats.blue_per_mille() >= TRIPEAKS_STOCK_COLUMN_BLUE_PER_MILLE {
+            total_blue_cols = total_blue_cols.saturating_add(1);
+            if current_run == 0 {
+                current_start = x;
+            }
+            current_run = current_run.saturating_add(1);
+            if current_run > best_run_len {
+                best_run_len = current_run;
+                best_run_start = current_start;
+            }
+        } else {
+            current_run = 0;
+        }
+        if col_stats.felt_per_mille() >= TRIPEAKS_STOCK_COLUMN_FELT_PER_MILLE {
+            felt_cols = felt_cols.saturating_add(1);
+        }
+        if col_stats.white_per_mille() >= TRIPEAKS_STOCK_COLUMN_WHITE_PER_MILLE {
+            white_cols = white_cols.saturating_add(1);
         }
     }
+
+    let stock_box = PixelRect::new(
+        STOCK_CARD_BOUNDS.x + 4,
+        TRIPEAKS_STOCK_SCAN_TOP,
+        STOCK_CARD_BOUNDS.width - 8,
+        TRIPEAKS_STOCK_SCAN_HEIGHT,
+    );
+    let stock_box_stats = sample_tripeaks_surface(frame, stock_box)?;
+
+    if best_run_len >= TRIPEAKS_STOCK_MIN_BLUE_COLUMNS {
+        let top_card_rect = PixelRect::new(
+            best_run_start,
+            TRIPEAKS_STOCK_SCAN_TOP,
+            best_run_len,
+            TRIPEAKS_STOCK_SCAN_HEIGHT,
+        );
+        let top_card_stats = sample_tripeaks_surface(frame, top_card_rect)?;
+        let detected_corner = classify_corner(
+            frame,
+            (best_run_start.saturating_sub(4), STOCK_CARD_BOUNDS.y),
+        )?;
+        let default_corner = classify_corner(frame, (STOCK_CARD_BOUNDS.x, STOCK_CARD_BOUNDS.y))?;
+        let has_conflicting_face = matches!(
+            detected_corner,
+            CornerClassification::Card(_) | CornerClassification::Ambiguous { .. }
+        ) || matches!(
+            default_corner,
+            CornerClassification::Card(_) | CornerClassification::Ambiguous { .. }
+        );
+        return Ok(
+            if has_conflicting_face
+                || top_card_stats.felt_per_mille() > TRIPEAKS_SURFACE_TRACE_LIMIT_PER_MILLE
+            {
+                CardRead::Ambiguous
+            } else {
+                CardRead::FaceDown
+            },
+        );
+    }
+
+    if (total_blue_cols >= TRIPEAKS_STOCK_CONFLICT_BLUE_COLUMNS
+        && felt_cols >= TRIPEAKS_STOCK_CONFLICT_FELT_COLUMNS)
+        || (stock_box_stats.blue_per_mille() >= TRIPEAKS_CONFLICT_PER_MILLE
+            && stock_box_stats.felt_per_mille() >= TRIPEAKS_CONFLICT_PER_MILLE)
+    {
+        return Ok(CardRead::Ambiguous);
+    }
+
+    if total_blue_cols == 0
+        && white_cols <= TRIPEAKS_STOCK_MAX_EMPTY_WHITE_COLUMNS
+        && felt_cols >= TRIPEAKS_STOCK_EMPTY_FELT_COLUMNS
+    {
+        let corner = classify_corner(frame, (STOCK_CARD_BOUNDS.x, STOCK_CARD_BOUNDS.y))?;
+        return Ok(
+            if matches!(
+                corner,
+                CornerClassification::Card(_) | CornerClassification::Ambiguous { .. }
+            ) {
+                CardRead::Ambiguous
+            } else {
+                CardRead::Empty
+            },
+        );
+    }
+
+    Ok(CardRead::Unreadable)
 }
 
 /// Check whether one native `1920×1080` frame proves both **Challenge Complete** (`ll`) and **Continue** (`[0, 0, 0]`).

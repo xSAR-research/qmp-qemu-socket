@@ -11,12 +11,10 @@ pub const TABLEAU_CARD_COUNT: usize = 28;
 
 
 /// Number of calibrated card positions in each TriPeaks row.
-#[cfg(test)]
 pub const TABLEAU_ROW_LENGTHS: [u8; 4] = [3, 6, 9, 10];
 
 
 /// First flat-array position for each TriPeaks row.
-#[cfg(test)]
 pub const TABLEAU_ROW_STARTS: [usize; 4] = [0, 3, 9, 18];
 
 

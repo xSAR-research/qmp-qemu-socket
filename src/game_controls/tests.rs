@@ -786,3 +786,277 @@ fn read_card_handles_variable_depth_freecell_cascades_and_empty_play1() {
         CardRead::Empty
     );
 }
+
+/// Parse compact rank+suit notation like `"10S"` or `"AC"` for TriPeaks fixture assertions.
+fn parse_test_card(code: &str) -> Card {
+    let (rank_str, suit_str) = code.split_at(code.len() - 1);
+    let rank = Rank::ALL
+        .into_iter()
+        .find(|rank| rank.as_str() == rank_str)
+        .expect("valid rank");
+    let suit = match suit_str {
+        "C" => Suit::Clubs,
+        "D" => Suit::Diamonds,
+        "H" => Suit::Hearts,
+        "S" => Suit::Spades,
+        _ => unreachable!("known test suit"),
+    };
+    Card::new(rank, suit)
+}
+
+/// Verify `read_card` across all 28 TriPeaks tableau slots plus Stock and Waste on retained Beast PNGs.
+#[test]
+fn read_card_recognises_tripeaks_redeal_fixtures_face_up_face_down_and_draw() {
+    let fixtures: [(&str, &[u8], &str, [&str; 10]); 3] = [
+        (
+            "draw-first",
+            include_bytes!("../../tests/fixtures/tripeaks-redeal-20261016/draw-first.png"),
+            "2S",
+            ["5D", "JC", "5H", "7H", "8D", "2D", "JD", "7D", "2H", "10S"],
+        ),
+        (
+            "left-ace",
+            include_bytes!("../../tests/fixtures/tripeaks-redeal-20261016/left-ace.png"),
+            "2D",
+            ["2H", "AC", "QS", "5H", "KC", "6D", "4D", "8H", "JH", "9S"],
+        ),
+        (
+            "left-eight",
+            include_bytes!("../../tests/fixtures/tripeaks-redeal-20261016/left-eight.png"),
+            "9D",
+            ["JD", "8C", "2C", "8D", "JH", "8H", "8S", "QC", "QD", "9S"],
+        ),
+    ];
+
+    for (name, bytes, expected_waste, expected_row4) in fixtures {
+        let frame = decode_png(bytes).expect("tripeaks fixture png");
+
+        for (row_idx, &row_len) in [3_u8, 6, 9].iter().enumerate() {
+            let row = u8::try_from(row_idx + 1).expect("row fits");
+            for col in 1..=row_len {
+                assert_eq!(
+                    read_card(&frame, LocationRequest::tripeaks_play(row, col))
+                        .expect("covered tripeaks slot read"),
+                    CardRead::FaceDown,
+                    "{name} covered slot ({row}, {col})"
+                );
+            }
+        }
+
+        for (idx, code) in expected_row4.into_iter().enumerate() {
+            let col = u8::try_from(idx + 1).expect("col fits");
+            assert_eq!(
+                read_card(&frame, LocationRequest::tripeaks_play(4, col))
+                    .expect("row-4 tripeaks slot read"),
+                CardRead::Card(parse_test_card(code)),
+                "{name} row 4 col {col}"
+            );
+        }
+
+        assert_eq!(
+            read_card(&frame, LocationRequest::tripeaks_draw(1)).expect("tripeaks DRAW 1"),
+            CardRead::FaceDown,
+            "{name} stock"
+        );
+        assert_eq!(
+            read_card(&frame, LocationRequest::tripeaks_draw(2)).expect("tripeaks DRAW 2"),
+            CardRead::Card(parse_test_card(expected_waste)),
+            "{name} waste"
+        );
+    }
+}
+
+/// Verify synthetic TriPeaks Empty, shifted Stock, Unreadable, Ambiguous, and coordinate guards.
+#[test]
+fn read_card_tripeaks_handles_empty_unreadable_ambiguous_and_bounds_edges() {
+    let base = decode_png(include_bytes!(
+        "../../tests/fixtures/tripeaks-redeal-20261016/draw-first.png"
+    ))
+    .expect("draw-first png");
+
+    // 1. Overlapped Empty: when Row 4 col 2 (298, 443) is removed while parent Row 3 col 1
+    //    (213, 332..513) stays FaceDown, Row 3 col 1's CLASSIC BLUE back sits at (298, 443..513)
+    //    while Row 4 col 2's own non-overlapping band (y >= 514) shows felt -> read_card reads Empty.
+    let mut cleared_r4_c2 = base.clone();
+    paint_rect(
+        &mut cleared_r4_c2,
+        PixelRect::new(298, 443, 136, 70),
+        [21, 87, 173],
+    );
+    paint_rect(
+        &mut cleared_r4_c2,
+        PixelRect::new(298, 514, 136, 110),
+        [20, 130, 75],
+    );
+    assert_eq!(
+        read_card(&cleared_r4_c2, LocationRequest::tripeaks_play(4, 2)).expect("cleared R4C2"),
+        CardRead::Empty
+    );
+    assert_eq!(
+        read_card(&cleared_r4_c2, LocationRequest::tripeaks_play(3, 1)).expect("R3C1 still down"),
+        CardRead::FaceDown
+    );
+
+    // 2. Empty Stock and Waste.
+    let mut empty_draw = base.clone();
+    paint_rect(&mut empty_draw, TARGET_STOCK, [20, 130, 75]);
+    paint_rect(&mut empty_draw, WASTE_CARD_BOUNDS, [20, 130, 75]);
+    assert_eq!(
+        read_card(&empty_draw, LocationRequest::tripeaks_draw(1)).expect("empty stock"),
+        CardRead::Empty
+    );
+    assert_eq!(
+        read_card(&empty_draw, LocationRequest::tripeaks_draw(2)).expect("empty waste"),
+        CardRead::Empty
+    );
+
+    // 3. Shifted Stock stack contracted horizontally to the left inside TARGET_STOCK.
+    let mut contracted_stock = empty_draw.clone();
+    for row in 0..STOCK_CARD_BOUNDS.height {
+        for col in 0..STOCK_CARD_BOUNDS.width {
+            let from = (STOCK_CARD_BOUNDS.y + row) as usize * base.stride
+                + (STOCK_CARD_BOUNDS.x + col) as usize * 4;
+            let to = (STOCK_CARD_BOUNDS.y + row) as usize * contracted_stock.stride
+                + (708 + col) as usize * 4;
+            contracted_stock.pixels[to..to + 4].copy_from_slice(&base.pixels[from..from + 4]);
+        }
+    }
+    assert_eq!(
+        read_card(&contracted_stock, LocationRequest::tripeaks_draw(1)).expect("shifted stock"),
+        CardRead::FaceDown
+    );
+
+    // 4. Unreadable corner / dark damage / invalid blue-backed Waste / partial Stock occlusion.
+    let mut unreadable_play = base.clone();
+    paint_rect(
+        &mut unreadable_play,
+        PixelRect::new(131, 447, 31, 49),
+        [18, 18, 18],
+    );
+    paint_rect(
+        &mut unreadable_play,
+        PixelRect::new(389, 117, 28, 44),
+        [18, 18, 18],
+    );
+    assert_eq!(
+        read_card(&unreadable_play, LocationRequest::tripeaks_play(4, 1)).expect("dark R4C1"),
+        CardRead::Unreadable
+    );
+    assert_eq!(
+        read_card(&unreadable_play, LocationRequest::tripeaks_play(1, 1)).expect("dark R1C1"),
+        CardRead::Unreadable
+    );
+
+    let mut unreadable_waste_blue = base.clone();
+    paint_rect(&mut unreadable_waste_blue, WASTE_CARD_BOUNDS, [21, 87, 173]);
+    assert_eq!(
+        read_card(&unreadable_waste_blue, LocationRequest::tripeaks_draw(2))
+            .expect("blue back waste"),
+        CardRead::Unreadable
+    );
+
+    let mut broken_stock = base.clone();
+    paint_rect(&mut broken_stock, STOCK_CARD_BOUNDS, [18, 18, 18]);
+    assert_eq!(
+        read_card(&broken_stock, LocationRequest::tripeaks_draw(1)).expect("broken stock"),
+        CardRead::Unreadable
+    );
+
+    // 5. Ambiguous conflicting evidence on Tableau, Stock, and Waste.
+    let mut ambiguous_fg = base.clone();
+    paint_foreground_ambiguous_6d_8d(&mut ambiguous_fg, 128, 443);
+    paint_foreground_ambiguous_6d_8d(&mut ambiguous_fg, WASTE_CARD_BOUNDS.x, WASTE_CARD_BOUNDS.y);
+    assert_eq!(
+        read_card(&ambiguous_fg, LocationRequest::tripeaks_play(4, 1)).expect("fg ambig tableau"),
+        CardRead::Ambiguous
+    );
+    assert_eq!(
+        read_card(&ambiguous_fg, LocationRequest::tripeaks_draw(2)).expect("fg ambig waste"),
+        CardRead::Ambiguous
+    );
+
+    let mut ambiguous_band_felt = base.clone();
+    paint_rect(
+        &mut ambiguous_band_felt,
+        PixelRect::new(134, 528, 124, 8),
+        [20, 130, 75],
+    );
+    assert_eq!(
+        read_card(&ambiguous_band_felt, LocationRequest::tripeaks_play(4, 1))
+            .expect("corner + felt ambig"),
+        CardRead::Ambiguous
+    );
+
+    let mut ambiguous_band_blue = base.clone();
+    paint_rect(
+        &mut ambiguous_band_blue,
+        PixelRect::new(134, 528, 124, 8),
+        [21, 87, 173],
+    );
+    assert_eq!(
+        read_card(&ambiguous_band_blue, LocationRequest::tripeaks_play(4, 1))
+            .expect("corner + blue ambig"),
+        CardRead::Ambiguous
+    );
+
+    let mut ambiguous_stock = base;
+    paint_rect(
+        &mut ambiguous_stock,
+        PixelRect::new(832, 682, 68, 182),
+        [20, 130, 75],
+    );
+    assert_eq!(
+        read_card(&ambiguous_stock, LocationRequest::tripeaks_draw(1)).expect("half felt stock"),
+        CardRead::Ambiguous
+    );
+
+    // 6. Out-of-range coordinates -> Invalid; Cell/Suit -> Unsupported.
+    for invalid in [
+        LocationRequest::tripeaks_play(0, 1),
+        LocationRequest::tripeaks_play(5, 1),
+        LocationRequest::tripeaks_play(1, 0),
+        LocationRequest::tripeaks_play(1, 4),
+        LocationRequest::tripeaks_play(2, 7),
+        LocationRequest::tripeaks_play(3, 10),
+        LocationRequest::tripeaks_play(4, 11),
+        LocationRequest::tripeaks_draw(0),
+        LocationRequest::tripeaks_draw(3),
+        LocationRequest {
+            game: GameMode::TriPeaks,
+            kind: LocationKind::Draw,
+            row: 2,
+            column: 1,
+        },
+    ] {
+        assert!(
+            matches!(
+                read_card(&empty_draw, invalid),
+                Err(OperationError::Invalid(_))
+            ),
+            "expected Invalid for {invalid:?}"
+        );
+    }
+
+    for unsupported in [
+        LocationRequest {
+            game: GameMode::TriPeaks,
+            kind: LocationKind::Cell,
+            row: 1,
+            column: 1,
+        },
+        LocationRequest {
+            game: GameMode::TriPeaks,
+            kind: LocationKind::Suit,
+            row: 1,
+            column: 1,
+        },
+    ] {
+        assert!(
+            matches!(
+                read_card(&empty_draw, unsupported),
+                Err(OperationError::Unsupported(_))
+            ),
+            "expected Unsupported for {unsupported:?}"
+        );
+    }
+}

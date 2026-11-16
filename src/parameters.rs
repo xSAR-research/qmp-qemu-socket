@@ -312,7 +312,6 @@ pub const TABLEAU_CARD_REGIONS: [CardRegionPixels; TABLEAU_CARD_COUNT] = [
 
 
 /// Initial TriPeaks stock card-face rectangle in guest pixels.
-#[cfg(test)]
 pub const STOCK_CARD_BOUNDS: PixelRect = PixelRect::new(832, 682, 136, 182);
 
 
@@ -337,7 +336,6 @@ pub const STOCK_CARD_REGION: CardRegionPixels = CardRegionPixels::new(
 
 
 /// TriPeaks waste card-face rectangle in guest pixels.
-#[cfg(test)]
 pub const WASTE_CARD_BOUNDS: PixelRect = PixelRect::new(1_017, 682, 136, 182);
 
 

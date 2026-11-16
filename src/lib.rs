@@ -26,6 +26,7 @@ pub mod pyramid_recon;
 pub mod pyramid_search_policy;
 mod pyramid_workflow_model;
 pub mod qmp;
+pub mod recon;
 mod session_log;
 pub mod shutdown;
 mod single_step_telemetry;

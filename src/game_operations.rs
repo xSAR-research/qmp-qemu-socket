@@ -69,11 +69,13 @@ pub enum CardLocation {
 pub enum CardRead {
     /// Uniquely recognised rank and suit.
     Card(Card),
-    /// Positive empty-pile evidence, exclusive of a recognised identity.
+    /// Positive classic card-back evidence, exclusive of face-up identity and empty proof.
+    FaceDown,
+    /// Positive empty-pile evidence, exclusive of a recognised identity or card back.
     Empty,
-    /// Supported location lacks a complete readable identity or empty proof.
+    /// Supported location lacks a complete readable identity, card back, or empty proof.
     Unreadable,
-    /// Identity and positive empty evidence conflict.
+    /// Identity, card-back, or positive empty evidence conflict.
     Ambiguous,
 }
 
