@@ -145,16 +145,18 @@ Fixture and template provenance for Goal 2 calibration (`tests/fixtures/tripeaks
 
 ## 6. JSON Deal Codecs, Search Adapter, Operator UI & Execution (Goals 3–6)
 
-### 6.1 State Separation & Atomic JSON Persistence
+### 6.1 State Separation & Atomic JSON Persistence (`src/tripeaks_model/json.rs`)
 
-- Separate immutable **initial deal / card-slot map**, **raw recognition observations**, **planned/recorded move lists** (`Play(row, col)` / `Draw`), and **mutable simulation occupancy**. `Unknown` always blocks dependent parent plays and is never treated as `Empty`.
-- Enforce the `65,536`-byte maximum input file limit and validate the full schema before encoding or publishing.
-- Atomic export uses same-directory temporary file creation (`create_new` / `no-overwrite`) and post-error destination inspection on any I/O uncertainty.
+- Separate immutable **initial deal / card-slot map** (`[CardSlot; 52]`), **raw recognition observations**, **planned/recorded move lists** (`TriPeaksMove::TapTableau { row, column }` / `TriPeaksMove::Draw`), and **mutable simulation occupancy** (`TriPeaksPosition` bitmask). `Unknown` and `Unreachable` strictly block tapping/drawing while still tracking newly uncovered parents during replay.
+- `schema_version: 1`, `game: "tripeaks"`, `provenance` (`"restored_at_root"` / `"completed_during_recon"`), `probes_used`, `objective` (`"clear_board"`, `"clear_rank_quota"`, `"reach_score_delta"`), `52`-element `slots` (`{"Known": "AS"}`, `"Unknown"`, `"Unreachable"`), and optional `planned_route` (`<= 51` moves).
+- Enforce the `65,536`-byte input/output limit, duplicate JSON object key rejection (including `\uXXXX`-escaped keys), trailing token refusal, and full deal/route replay validation (`verify_move_sequence`) before publishing.
+- Atomic export (`publish_to_path`) uses same-directory `0600` temporary file creation (`create_new`), `sync_all`, and `no-overwrite` `hard_link` with immediate `DestinationState` inspection (`Absent`, `MatchingBytesPresent`, `PreExistingDifferentBytes`, `InspectionFailed`) on any link failure.
 
-### 6.2 Search & Domain Adapter (`xsar::search`)
+### 6.2 Search & Domain Adapter (`src/tripeaks_model/search.rs`, `xsar::search`)
 
-- Use `xsar::search` (A*/Dijkstra) strictly from `qmp-qemu-socket` without modifying `../xsar`.
-- Support both full-information solving (once sufficient cards are known to prove a complete win path from root) and partial-information frontier reachability (`ReconDomain::plan_info_gain_probe` targeting maximal newly uncovered `Unknown` slots per probe).
+- Use `xsar::search` (A*/Dijkstra and `solve_best_effort_with_control`) strictly from `qmp-qemu-socket` without modifying `../xsar`.
+- Forward move scoring conservatively credits only Beast-verified per-tap streak points (`100 * (2 * streak - 1)`) plus `+500` per cleared `Row 1` Peak (`slots 0..3`); the admissible heuristic and sound impossibility pruning for `ReachScoreDelta` upper-bound `max_gain` optimistically over remaining `Known` cards and Peaks (and reset streak across forced `Draw` transitions) so `A*` remains optimal without underestimating guest thresholds or missing reachable score routes.
+- Outside `ReachScoreDelta`, `SearchState` canonicalizes `streak = 0` and `score_progress = 0` to collapse transposition entries, and uses `solve_best_effort_with_control` (`SearchMethod::Dijkstra`) for both `plan_info_gain_probe` (maximising newly uncovered `Unknown` parents with deeper row & shortest-route tie-breaks) and `best_partial_route`.
 
 ### 6.3 Guarded QMP Execution & `GAME WIN` Capture
 
@@ -179,7 +181,7 @@ Fixture and template provenance for Goal 2 calibration (`tests/fixtures/tripeaks
 
 - **Goal 1 (baseline `3.3.2`):** Write `docs/tripeaks-master-spec.md`; wire and harden `src/recon.rs` (checked `Card` <-> `xsar` `TryFrom`, duplicate-card guard, new typed `ReconError` variants, Rust 2024 `let`-chain cleanup, comprehensive unit tests); add `CardRead::FaceDown` in `src/game_operations.rs`; implement `LocationRequest::tripeaks_play` / `tripeaks_draw` and `(GameMode::TriPeaks, LocationKind::Play | Draw)` in `src/game_controls.rs` verified against `tests/fixtures/tripeaks-redeal-20261016/{draw-first.png, left-ace.png, left-eight.png}` and synthetic edge fixtures.
 - **Goal 2 (Beast Calibration — baseline `3.3.2`):** Captured live Beast screenshots across Stock `0..23`, Draw 23 empty-stock with/without Row-4 matches, `"No Moves Remaining"` modal + `"Undo last move"` (`POST_GAME_MOUSE_HOLD`), confirmation-less `Undo All` `T=0` restoration, uncovered Row 1–3 cards, and live `Score` streak/draw/peak formula; updated Stock empty-tray detection in `src/game_controls.rs`; shared `digits::read_with_glyph_bank` / `decimal::integer` in `src/pyramid_progress/challenge/`; and added `src/tripeaks_progress.rs` Challenge/Normal/deals-left/modal observers with curated fixtures and templates in `tests/fixtures/tripeaks-calibration-20261116/`.
-- **Goal 3 (Pure Model & `xsar::search` Adapter):** Implement 52-slot TriPeaks board/rules/solver, JSON deal codecs (`65,536`-byte cap, atomic temp-file export), and deterministic unit tests.
+- **Goal 3 (Pure Model & `xsar::search` Adapter — baseline `3.3.2`):** Implemented 52-slot TriPeaks board/rules/scoring (`src/tripeaks_model/rules.rs`), independent replay verifier (`replay.rs`), admissible `xsar::search` A*/ `BestEffortProblem` adapters (`search.rs`), and strict `schema_version: 1` `65,536`-byte JSON codec with atomic `no-overwrite` `publish_to_path` (`json.rs`), backed by end-to-end `run_epistemic_recon` tests covering solvable 52-card boards, 51->52 complement deduction, early-exit rank/score routes, live `CompletedDuringRecon`, `DuplicateCard` refusal, `UnsolvableBestPartial`, and A* vs Dijkstra optimality.
 - **Goal 4 (`LiveTriPeaksDomain` & Stock Sweep):** Implement `ReconDomain` for live Beast QMP + capture, including `initialize_and_sweep_stock` with Draw-23 modal guard before `SHARED_UNDO_ALL_CONTROL` `(1320, 978)`.
 - **Goal 5 (`tripeaks_session` Worker & Plain Operator UI):** Wire worker session, plain `Known / Unknown / Unreachable` UI status panels, `GAME WIN` recording, and cancel/`STOP` safety tests.
 - **Goal 6 (Live Beast Qualification & `3.4.0` Release):** Full Beast acceptance testing, approved `3.4.0` version bump + `CHANGELOG.md` + `docs/milestones.md`, and final update to this document appending **final `3.4.0` qualification metrics** and **`## Code Analysis`**.

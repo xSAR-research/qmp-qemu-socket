@@ -38,6 +38,7 @@ pub mod strategy;
 mod terminal_controls;
 mod tracker;
 mod tripeaks;
+pub mod tripeaks_model;
 pub mod tripeaks_progress;
 mod ui_style;
 mod worker;
