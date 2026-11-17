@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.4.0 — TriPeaks RECON, 52-slot A* planning, multi-board session runner, and operator UI, 2026-11-17
+
+- **Shared partial-observability RECON coordinator & TriPeaks card reader (`src/recon.rs`, `src/game_operations.rs`, `src/game_controls.rs`):** Added unwrap-free `src/recon.rs` (`CardSlot` `Known` / `Unknown` / `Unreachable`, single-deck `DuplicateCard` & `NonDeterministicSlot` guards, `51`-to-`52` complement deduction, and `run_epistemic_recon` probe loop), `CardRead::FaceDown` (`CLASSIC BLUE` back separation), and `LocationRequest::tripeaks_play` / `tripeaks_draw` (`TARGET_STOCK` `-3 px/draw` contraction and Draw-23 dark-green empty tray `is_tripeaks_stock_tray_green`).
+- **Beast `1920×1080` calibration & read-only progress/modal observers (`src/tripeaks_progress.rs`, `src/pyramid_progress/challenge/`, `tests/fixtures/tripeaks-calibration-20261116/`):** Added colour-independent `13`-rank Challenge header recognition (`Aces`..`Kings`, `Boards cleared`, `Score`, `Solve the deck`, and `UnsupportedSingleCard` refusal), Normal `Boards: X of 3` and `Score: N` HUD readers (`28` native `h = 17` glyphs), tray deals-left captions (`0/1/2`), and Draw-23 `"No Moves Remaining"` (`UNDO_LAST_MOVE_CLICK_POINT` `(1_128, 728)`) detection.
+- **Pure 52-slot TriPeaks model, `xsar::search` adapters & atomic JSON codec (`src/tripeaks_model.rs`, `src/tripeaks_model/{rules,replay,search,json}.rs`):** Implemented calibrated covering masks, wrap-around `±1` rank matching, verified streak/Peak scoring (`100 * (2 * streak - 1)` + `+500` per cleared Row-1 Peak), independent move/objective replay validation (`verify_move_sequence`, `verify_objective_route`), admissible `xsar::search` A* and `BestEffortProblem` adapters, and `schema_version: 1` `65,536`-byte duplicate-key-rejecting JSON persistence with `0600` same-directory `no-overwrite` `hard_link` publication.
+- **Live QMP reconnaissance & Draw-23 modal recovery (`src/worker/tripeaks_reconnaissance.rs`, `src/game_operations/session.rs`, `src/game_operations/restoration.rs`):** Implemented `LiveTriPeaksDomain` (`initialize_and_sweep_stock`, `execute_probe_and_observe`, `undo_all_and_hash`), `Input::MouseLeftHold` (`POST_GAME_MOUSE_HOLD = 500 ms`) twice-confirmed `"Undo last move"` modal back-out prior to confirmation-less `SHARED_UNDO_ALL_CONTROL` `(1_320, 978)` restoration (`ConfirmationPolicy::DirectOrConfirmed`), and `CompletedDuringRecon` interception.
+- **Multi-board escalation, QMP route playback, session runner & plain operator UI (`src/worker/tripeaks_calculation.rs`, `src/worker/tripeaks_route.rs`, `src/worker/tripeaks_session.rs`, `src/worker/post_game.rs`, `src/tripeaks_workflow_model.rs`, `src/app/tripeaks_workflow.rs`, `src/strategy.rs`, `src/app.rs`, `src/app/pyramid_workflow.rs`):** Enabled `GameMode::TriPeaks` under `SolvingStrategy::ShortestPath`; added automatic `EscalatedClearBoard` (`ClearBoardMinScoreProblem`) when Challenge quotas or scores exceed one board; implemented `Manual` playback (`SINGLE STEP`, `MULTI STEP`, `Stop after step`, `UNDO ALL`), `Continuous` (3-board Normal games via `RestartPolicy::IndependentTriPeaks` + multi-board Challenges) and `Single board` execution with `0`-click `Continue`/`Redeal` discipline and single-scope `GAME WIN` frame recording (`--no-image` honoured); and built the `egui` TriPeaks panel using plain `Known / Unknown / Unreachable` and `Probes used` labels.
+- **Host Tier 2 qualification (Beast):** `cargo fmt --check`, strict Clippy (`--lib --bins` and `--all-targets`), private `cargo doc` (`-D warnings`), `1,818` default tests (`185` ignored), `2,003` full tests (`--include-ignored`, `0` failed, `src/lib.rs`), and release build `target/x86_64-unknown-linux-gnu/release/qmp-qemu-socket` (`17,493,464` bytes, SHA-256 `b4723b40647461f2012423f61f7c0d2e0e6a7dc87ccc57b38f0ebf9126b72bd2`). `../xsar` remains untouched at `0.16.3` (`067ce26`). Live Windows 11 guest acceptance on Beast remains pending operator launch.
+
 ## 3.3.2 — Free Cell Single board live preview, calculation statistics, and 200 ms ABS drag cadence, 2026-11-14
 
 - **Held ABS Free Cell drag cadence (`src/parameters.rs`, `src/qmp.rs`, `src/worker.rs`, `src/app/freecell_route.rs`, `src/worker/freecell_route/tests/native.rs`):** Restored `FREECELL_ROUTE_ABS_GESTURE_INTERVAL` from `100 ms` to `200 ms` (`Duration::from_millis(200)`) across all five intervals between the six acknowledged ABS drag events (`MULTI STEP` and `SINGLE STEP`) to prevent Windows compositor frame stalls (observed up to `163.9 ms` in live `3.3.1` telemetry) from coalescing held pointer updates into Tap-to-Move clicks. Parameterised `qmp::diagnostic_drag_path` `"motion_contract"` from `phase_wait_ms` and updated UI/test timing assertions (`freecell_3120_*`).
@@ -112,7 +121,7 @@ ABS Single Step holds LEFT through source-up45, the native floor midpoint of the
 
 ## 3.1.15 — quarter-card ABS trial (host-qualified)
 
-ABS Single Step now holds LEFT through destination →45nativepx up →34nativepx left →exactdestination, then releases. Seven input packets have six selected2s or500ms minimum gaps. Upper CELL/SUIT drops use the slot centre to keep the path inside it; PLAY keeps the observed destination. Adopt additive xSAR0.16.0 four-point transport; legacy APIs, normal drag and REL retain their contracts. Recognition, relevant effect proofs, sourceACK/STOP and release-only recovery remain unchanged. All 51 fresh paired host gates passed: 1,891 application, 365 library and 80 console tests, zero failed, ignored, measured or filtered. Fresh Windows acceptance remains separate. See [contract](docs/FreeCell-Quarter-3.1.15.md) and [verification](docs/Verification-3.1.15.md).
+ABS Single Step now holds LEFT through destination →45 native px up →34 native px left →exactdestination, then releases. Seven input packets have six selected2s or500ms minimum gaps. Upper CELL/SUIT drops use the slot centre to keep the path inside it; PLAY keeps the observed destination. Adopt additive xSAR0.16.0 four-point transport; legacy APIs, normal drag and REL retain their contracts. Recognition, relevant effect proofs, sourceACK/STOP and release-only recovery remain unchanged. All 51 fresh paired host gates passed: 1,891 application, 365 library and 80 console tests, zero failed, ignored, measured or filtered. Fresh Windows acceptance remains separate. See [contract](docs/FreeCell-Quarter-3.1.15.md) and [verification](docs/Verification-3.1.15.md).
 
 ## 3.1.14 — relevant printed identities (host-qualified)
 
@@ -217,7 +226,7 @@ Keep Solver off and choose the policy matching game autoplay: ON observes automa
 
 All six application source gates passed, including 1,789 tests with zero failures, ignored or filtered tests. The 28 focused tests include synthetic board effects and local TCPv3/Unix-QMP peers. App-only version alignment passed locked check, release build and direct help; 1,015 of 1,017 inputs are unchanged across the two Cargo version edits. xSAR stays at 0.11.0 with its existing qualification retained. Fresh operator-checked guest/UI acceptance remains pending; no guest actions were performed during this implementation.
 
-Native support requires 1920×1080 CLASSIC BLUE, Solver off and complete supported card geometry. Hidden identities are carried only from the authenticated original through verified same-run moves; contradictory visible evidence refuses. Complete-face checks can stop on toolbar-clipped ten-card columns. Actual source/destination click semantics, autoplay timing and complete clean native midgame acceptance still need guest validation. See [verification](docs/Verification-3.1.1.md).
+Native support requires 1920×1080 CLASSIC BLUE, Solver off and complete supported card geometry. Hidden identities are carried only from the authenticated original through verified same-run moves; contradictory visible evidence refuses. Complete-face checks can stop on toolbar-clipped ten-card columns. Actual source/destination click semantics, autoplay timing and complete clean native mid-game acceptance still need guest validation. See [verification](docs/Verification-3.1.1.md).
 
 
 ## 3.1.0
@@ -345,7 +354,7 @@ User profiles and CPU/hardening configuration are preserved. Evidence: `/home/ch
 
 2.9.173 places exact INITIAL source identity readiness inside the existing
 six-check computed-route precondition budget. The immediately retained boundary
-frame is checked first. A supported identity nonmatch remains pending; subsequent
+frame is checked first. A supported identity non-match remains pending; subsequent
 checks use fresh captures and the existing re-observation delay (50 ms for ordinary
 actions; final-action pacing retains its existing owner). Both expected MATCH
 sources must match in the SAME frame. At most six checks are made before refusal.
@@ -562,7 +571,7 @@ speedup or guarantee of particular SIMD instructions. Cargo tests use unwind
 semantics even though a release panic now aborts the process without unwinding.
 The interrupted older-profile run is retained as an interruption, followed by
 complete controller qualification against the exact user-provided manifest.
-See https://doc.rust-lang.org/cargo/reference/profiles.html .
+See <https://doc.rust-lang.org/cargo/reference/profiles.html> .
 
 The retained standard-green and both Coral cases pass their complete expected
 positions offline at the approved default13/10 policy. In the latest saved
@@ -1102,7 +1111,7 @@ Charlie can continue gameplay; the exact packets, matching Recon, exports and lo
 
 [Verification](Evidence/release-verification/Verification-2.9.132.md) · [Live test](History/documentation-index.md#item-cb70331b9e45129c2c22) · [Selected goal](docs/Pyramid-Current-Goal.md) · [Testing matrix](docs/Pyramid-Testing-Matrix.md).
 
-## Retained history — previous deliveries and reports
+## Retained history — previous deliveries and reports v2.9.131
 
 Earlier failure/unfixed statements below are historical. Current host qualification does not replace fresh Beast acceptance.
 
@@ -1140,7 +1149,7 @@ The original full no-challenge / same-Recon fallback / remaining-stock / guarded
 
 [Verification](Evidence/release-verification/Verification-2.9.130.md) · [Live test](History/documentation-index.md#item-348c637136711a0c8100) · [Selected goal](docs/Pyramid-Current-Goal.md) · [Testing matrix](docs/Pyramid-Testing-Matrix.md).
 
-## Retained history — earlier deliveries
+## Retained history — earlier deliveries v2.9.129
 
 Earlier states below are historical. The current delivery and full activated goal govern remaining acceptance; milestone status is unchanged.
 
@@ -1162,7 +1171,7 @@ The original full no-challenge / same-Recon fallback / finite-stock / guarded-RE
 
 [Verification](Evidence/release-verification/Verification-2.9.129.md) · [Live test](History/documentation-index.md#item-ad35a8be132dc6939068) · [Selected goal](docs/Pyramid-Current-Goal.md) · [Testing matrix](docs/Pyramid-Testing-Matrix.md).
 
-## Retained history — earlier deliveries
+## Retained history — earlier deliveries v2.9.128
 
 Earlier states below are dated evidence. The current delivery and immutable full goal govern remaining work; milestone acceptance is unchanged.
 
@@ -1182,7 +1191,7 @@ Charlie relocated the historical tmp validation folders and screenshots into `/h
 
 [Verification](Evidence/release-verification/Verification-2.9.128.md) · [Fresh Beast brief](History/documentation-index.md#item-8b262d6325db169aa18c).
 
-## Retained earlier delivery notes
+## Retained earlier delivery notes v2.9.127
 
 ## 2.9.127 — no-challenge continuation, host qualified
 
@@ -1202,7 +1211,7 @@ The new bundled-only native capability recognises the measured **1 deal left** a
 
 [Verification](Evidence/release-verification/Verification-2.9.127.md) · [Live test](History/documentation-index.md#item-c61aeb6b918074108598)
 
-## Retained earlier delivery notes
+## Retained earlier delivery notes v2.9.126
 
 ## 2.8.126 — rank-independent Card challenge progress
 
@@ -2244,7 +2253,7 @@ push, deployment or guest input is authorised by this calibration repair.
   log using the same monotonic startup clock. Timestamp worker messages when
   emitted so delayed UI polling cannot distort the sequence timing.
 - Stop transition input if recording fails; add regressions for startup cleanup,
-  directory boundaries, scoped recording, failed transitions and timestamping.
+  directory boundaries, scoped recording, failed transitions and time-stamping.
 - Preserve the 1000 ms post-score wait, three control searches, game recognition,
   input safeguards, dependencies, xSAR and capture transport.
 - Beast compilation, all tests and strict private documentation passed on
@@ -2259,7 +2268,7 @@ push, deployment or guest input is authorised by this calibration repair.
 - Centralise the attempt count and update Params and controller diagnostics.
   Preserve existing retry spacing, click budgets, positive reward/gameplay
   recovery, independent win evidence and uncertain-input safeguards.
-- Extend regressions for third-attempt success, exhausted three-frame lookups,
+- Extend regressions for third-attempt success, exhausted three-frame look-ups,
   latest-frame retention, cancellation and no input replay. A synthetic washout
   removes only exact-black OK ink from native Level Up pixels after confirmation.
 - Keep xSAR, the Windows screen-grab server and capture transport unchanged.

@@ -1,6 +1,6 @@
 # TriPeaks Master Specification (RECON + Search Pipeline)
 
-**Document status:** Active implementation specification (baseline crate `3.3.2`, `../xsar` `0.16.3`; Goal 6 will append final `3.4.0` qualification metrics and `## Code Analysis`).
+**Document status:** Qualified implementation specification (application `3.4.0`, `../xsar` `0.16.3`; Goals 1–6 host-qualified on Beast, 2026-11-17).
 
 ## 1. Purpose and System Boundaries
 
@@ -190,7 +190,7 @@ Fixture and template provenance for Goal 2 calibration (`tests/fixtures/tripeaks
 - **Goal 3 (Pure Model & `xsar::search` Adapter — baseline `3.3.2`):** Implemented 52-slot TriPeaks board/rules/scoring (`src/tripeaks_model/rules.rs`), independent replay verifier (`replay.rs`), admissible `xsar::search` A*/ `BestEffortProblem` adapters (`search.rs`), and strict `schema_version: 1` `65,536`-byte JSON codec with atomic `no-overwrite` `publish_to_path` (`json.rs`), backed by end-to-end `run_epistemic_recon` tests covering solvable 52-card boards, 51->52 complement deduction, early-exit rank/score routes, live `CompletedDuringRecon`, `DuplicateCard` refusal, `UnsolvableBestPartial`, and A* vs Dijkstra optimality.
 - **Goal 4 (`LiveTriPeaksDomain` & Stock Sweep — baseline `3.3.2`):** Implemented `LiveTriPeaksDomain` (`ReconDomain`) and `run_tripeaks_recon` in `src/worker/tripeaks_reconnaissance.rs` (wired via `src/worker.rs` and `src/lib.rs`), extended `game_operations` (`Input::MouseLeftHold`, `Session::mouse_left_click_with_hold`, `Session::current_frame`, `Session::check_active`, `ConfirmationPolicy::DirectOrConfirmed`, `UndoScene::Animating`), wired `NativeOperations::deliver` hold clicks, guarded Draw-23 `"No Moves Remaining"` twice-observed `POST_GAME_MOUSE_HOLD` back-out prior to `SHARED_UNDO_ALL_CONTROL` `(1320, 978)`, live completion interception, and atomic JSON publication backed by offline `AF_UNIX` QMP peer and fixture tests (`src/worker/tripeaks_reconnaissance/tests.rs` and `src/game_operations/tests.rs`).
 - **Goal 5 (`tripeaks_session` Worker & Plain Operator UI — baseline `3.3.2`):** Enabled `GameMode::TriPeaks` in `ControllerContext`, added `src/tripeaks_workflow_model.rs`, shared `TriPeaksSessionDriver` & `RestartPolicy::IndependentTriPeaks`, multi-board `EscalatedClearBoard` (`ClearBoardMinScoreProblem`), offline `tripeaks_calculation`, Manual `tripeaks_route` (`SINGLE STEP`, `MULTI STEP`, `Stop after step`, `UNDO ALL`), automatic `tripeaks_session` (`Continuous` + `Single board` + `CompletedDuringRecon` + banked partials vs `0`-click `ClearBoard` dead ends + `GAME WIN` `--no-image` recording), and `src/app/tripeaks_workflow.rs` plain `Known / Unknown / Unreachable` UI with offline + `AF_UNIX` QMP peer tests.
-- **Goal 6 (Live Beast Qualification & `3.4.0` Release — pending):** Full Beast live Windows 11 guest acceptance testing, approved `3.4.0` version bump + `CHANGELOG.md` + `docs/milestones.md`, and final update to this document appending **final `3.4.0` qualification metrics** and **`## Code Analysis`**.
+- **Goal 6 (Live Beast Qualification & `3.4.0` Release — complete on host, pending live operator launch):** Aligned `Cargo.toml` and `Cargo.lock` to `3.4.0` (`../xsar` untouched at `0.16.3`, commit `067ce26`), updated `CHANGELOG.md`, `docs/milestones.md`, `docs/handoff.md`, and this specification with final Beast Tier 2 qualification metrics (Section 8), `Code Analysis` (Section 9), and the operator live Windows 11 acceptance checklist.
 
 ### Mandatory Rust Verification Gates (All Goals)
 
@@ -203,3 +203,31 @@ Every Rust code milestone must pass:
 5. `cargo test --locked --offline --package qmp-qemu-socket -- --include-ignored`
 6. `RUSTDOCFLAGS="-D warnings" cargo doc --locked --offline --package qmp-qemu-socket --no-deps --document-private-items`
 7. `cargo build --locked --offline --release --package qmp-qemu-socket --target x86_64-unknown-linux-gnu`
+
+---
+
+## 8. `3.4.0` Host Qualification Metrics (Beast)
+
+Verified on Beast against `../xsar` `0.16.3` (commit `067ce26`):
+
+| Gate | Command | Result |
+| --- | --- | --- |
+| Format | `cargo fmt --package qmp-qemu-socket -- --check` | Pass |
+| Lib/bin strict Clippy | `cargo clippy --workspace --lib --bins -- -D warnings -D clippy::unwrap_used -D clippy::dbg_macro -D clippy::todo` | Pass |
+| All-targets Clippy | `cargo clippy --workspace --all-targets -- -D warnings` | Pass |
+| Private `cargo doc` | `RUSTDOCFLAGS="-D warnings" cargo doc --locked --offline --package qmp-qemu-socket --no-deps --document-private-items` | Pass |
+| Default test suite | `cargo test --workspace --offline --locked` | `1,818` passed, `0` failed, `185` ignored (`src/lib.rs`; `0` in `src/main.rs`, `0` doc-tests) |
+| Full test suite | `cargo test --locked --offline --package qmp-qemu-socket -- --include-ignored` | `2,003` passed, `0` failed, `0` ignored (`src/lib.rs`; `0` in `src/main.rs`, `0` doc-tests) |
+| Release build | `cargo build --locked --offline --release --package qmp-qemu-socket --target x86_64-unknown-linux-gnu` | Pass |
+
+- **Release artefact:** `target/x86_64-unknown-linux-gnu/release/qmp-qemu-socket` (`17,493,464` bytes, mode `0755`, SHA-256 `b4723b40647461f2012423f61f7c0d2e0e6a7dc87ccc57b38f0ebf9126b72bd2`).
+- **Live guest acceptance:** Pending operator launch on Beast against the Windows 11 QEMU guest (`cargo run --release` and `cargo run --release -- --no-image`).
+
+---
+
+## 9. Code Analysis
+
+1. **Guarded TriPeaks QMP input authority & TCPv3 frame fences:** Every Tableau tap, Stock draw, `"Undo last move"` hold-click, and `Undo All` gesture runs under `authorise_tripeaks_input` and `game_operations::session::Session` (`src/worker/tripeaks_reconnaissance.rs`, `src/game_operations/session.rs`): checking `STOP`/Pause and `ControllerContext` reservation, demanding a fresh `1920×1080` `XSCP v3` scene proof, probing QEMU VM-running state and active absolute pointer routing, re-checking `STOP`, mapping coordinates through checked integer `pixel * 32767 / extent`, and confirming physical board or transition outcomes (`verify_snapshot_matches_position`, `BoardCleared`, `NextBoardDealt`, `BoardWinOverlay`, `ChallengeComplete`, `PartialModal`) with zero retries on uncertain QMP delivery.
+2. **Draw-23 `"No Moves Remaining"` back-out & `Undo All` restoration:** `LiveTriPeaksDomain::initialize_and_sweep_stock` and `restore_board_to_document_root` never send blind clicks to `SHARED_UNDO_ALL_CONTROL` `(1_320, 978)` while a modal overlay owns the guest viewport. When Stock exhaustion leaves zero playable Row-4 matches and triggers `"No Moves Remaining"`, `observe_no_moves_modal` requires two settled captures before sending `Input::MouseLeftHold` (`POST_GAME_MOUSE_HOLD = 500 ms`) to `UNDO_LAST_MOVE_CLICK_POINT` `(1_128, 728)`, proves modal dismissal and Stock `CardRead::FaceDown` recovery, and only then runs confirmation-less `Undo All` (`ConfirmationPolicy::DirectOrConfirmed`) checked against `root_hash` / `verify_snapshot_matches_document_root`.
+3. **`0`-click `Continue` / `Redeal` discipline & fresh-deal anti-duplication:** `drive_tripeaks_session` (`src/worker/tripeaks_session.rs`) stops cleanly with `0` clicks on `Challenge Complete!` (`Continue` / XP counting / `LEVEL-UP!`), issues `0` post-recon guest clicks on unsolvable `ClearBoard` dead ends, never clicks uncalibrated `Redeal`, and proves distinct `previous_root_hash` deals across `NextBoardDealt` and `RestartPolicy::IndependentTriPeaks` (`src/worker/post_game.rs`) restarts while maintaining a single `GAME WIN` image-recording scope (`--no-image` honoured).
+4. **State separation & `65,536`-byte atomic JSON publication:** `src/tripeaks_model/json.rs` keeps `[CardSlot; 52]` deal knowledge, probe observations, `TriPeaksMove` routes, and `TriPeaksPosition` occupancy bitmasks separate (`Unknown` and `Unreachable` strictly block tapping/drawing and never conflate with `Empty`), enforces `MAX_DOCUMENT_BYTES = 65_536`, rejects duplicate JSON object keys (including `\uXXXX` escapes) and trailing tokens, and verifies `verify_move_sequence` before same-directory `0600` `create_new`, `sync_all`, and `no-overwrite` `hard_link` publication with `DestinationState` diagnostics.
