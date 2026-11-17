@@ -2205,3 +2205,146 @@ fn unsolvable_best_partial_and_destination_collision_preservation() {
         preserved
     );
 }
+
+#[test]
+fn undo_all_waits_through_mid_rewind_disabled_toolbar_and_compositor_stall() {
+    assert_eq!(TriPeaksReconConfig::default().max_restore_observations, 24);
+
+    let deal = build_cyclic_deal_cards();
+    let slots = cards_to_slots(&deal);
+    let root_pos = TriPeaksPosition::from_root(&slots).expect("valid root");
+    let root_snap = snapshot_from_position(&deal, &root_pos, false);
+    let expected_hash = semantic_board_hash(&root_snap);
+    let root_frame = synthesize_gameplay_frame(&root_snap, BannerKind::Normal);
+
+    // Mid-play snapshot (`Undo All` enabled) after drawing to the first Stock card.
+    let (drawn_pos, _) =
+        apply_move(&root_pos, &slots, TriPeaksMove::Draw).expect("initial draw succeeds");
+    let drawn_snap = snapshot_from_position(&deal, &drawn_pos, true);
+    let drawn_frame = synthesize_gameplay_frame(&drawn_snap, BannerKind::Normal);
+
+    // Simulated mid-rewind capture matching Beast incident anatomy: `Undo All` is already `Disabled`,
+    // Stock top card has only rewound to `x = 821..952` (exposing green tray `x = 953..968` and
+    // flying blue stripes in the left white deck stack), and early Stock card still sits on Waste.
+    let wrong_waste = deal[usize::from(STOCK_START_SLOT)];
+    let mut mid_rewind_snap = root_snap.clone();
+    mid_rewind_snap.waste = wrong_waste;
+    let mut mid_rewind_frame = synthesize_gameplay_frame(&mid_rewind_snap, BannerKind::Normal);
+    copy_rect(
+        &mut mid_rewind_frame,
+        PixelPoint::new(TARGET_STOCK.x as i32, TARGET_STOCK.y as i32),
+        &assets().stock_empty,
+        TARGET_STOCK,
+    );
+    paint_face_down_card(&mut mid_rewind_frame, 767, STOCK_CARD_BOUNDS.y, 186);
+    for y in 686..860_u32 {
+        for x in 769..806_u32 {
+            let off = y as usize * mid_rewind_frame.stride + x as usize * 4;
+            mid_rewind_frame.pixels[off..off + 4].copy_from_slice(&[255, 255, 255, 255]);
+        }
+    }
+    paint_face_down_card(&mut mid_rewind_frame, 821, STOCK_CARD_BOUNDS.y, 132);
+    assert_eq!(
+        observe_frame(&mid_rewind_frame).expect("mid-rewind classifies without error"),
+        FrameClassification::Settling
+    );
+
+    // Full settled `23`-card `T = 0` frame carrying a non-root Waste card (`wrong_waste`).
+    let settled_wrong_root_frame = synthesize_gameplay_frame(&mid_rewind_snap, BannerKind::Normal);
+    assert!(matches!(
+        observe_frame(&settled_wrong_root_frame).expect("settled wrong root frame"),
+        FrameClassification::Settled(_)
+    ));
+
+    struct ScriptedUndoIo {
+        frames: VecDeque<CapturedFrame>,
+        inputs: Vec<Input>,
+    }
+    impl OperationIo for ScriptedUndoIo {
+        fn check_active(&mut self) -> Result<(), OperationError> {
+            Ok(())
+        }
+        fn capture(&mut self) -> Result<CapturedFrame, OperationError> {
+            self.frames
+                .pop_front()
+                .ok_or_else(|| OperationError::Transport("out of scripted undo frames".to_owned()))
+        }
+        fn authorise(&mut self, _: &CapturedFrame, _: Input) -> Result<(), OperationError> {
+            Ok(())
+        }
+        fn probe(&mut self) -> Result<(), OperationError> {
+            Ok(())
+        }
+        fn deliver(&mut self, i: Input) -> Result<(), OperationError> {
+            self.inputs.push(i);
+            Ok(())
+        }
+        fn wait(&mut self, _: Duration) -> Result<(), OperationError> {
+            Ok(())
+        }
+    }
+
+    // 1. Rewind sequence: 3 mid-rewind captures (`Settling`) + 3 stalled wrong-Waste full-root
+    // frames (< MIN_CONFIRMED_DRIFT_STREAK = 4) + 2 matching `T = 0` frames -> succeeds on 1 click.
+    let mut cfg = fast_qmp_config(4);
+    cfg.max_restore_observations = 16;
+    let frames = VecDeque::from([
+        drawn_frame.clone(),
+        mid_rewind_frame.clone(),
+        mid_rewind_frame.clone(),
+        mid_rewind_frame,
+        settled_wrong_root_frame.clone(),
+        settled_wrong_root_frame.clone(),
+        settled_wrong_root_frame.clone(),
+        root_frame.clone(),
+        root_frame,
+    ]);
+    let cancel = AtomicBool::new(false);
+    let mut domain = LiveTriPeaksDomain::new(
+        Session::new(ScriptedUndoIo {
+            frames,
+            inputs: Vec::new(),
+        }),
+        &cancel,
+        cfg,
+        Box::new(|_| {}),
+    );
+    domain.root_snapshot = Some(root_snap.clone());
+    domain.root_hash = Some(expected_hash);
+    let restored_hash = domain
+        .undo_all_and_hash()
+        .expect("undo_all waits through mid-rewind Stock and 3-frame stall");
+    assert_eq!(restored_hash, expected_hash);
+    assert_eq!(
+        domain.into_session().io().inputs,
+        vec![Input::MouseLeft(SHARED_UNDO_ALL_CONTROL.click_point)]
+    );
+
+    // 2. Genuine drift: `4` consecutive settled mismatched full-root captures (`>= 4`) short-circuit
+    // without exhausting `max_restore_observations` and expose the drifted semantic hash.
+    let mut cfg_drift = fast_qmp_config(4);
+    cfg_drift.max_restore_observations = 16;
+    let drift_frames = VecDeque::from([
+        drawn_frame,
+        settled_wrong_root_frame.clone(),
+        settled_wrong_root_frame.clone(),
+        settled_wrong_root_frame.clone(),
+        settled_wrong_root_frame,
+    ]);
+    let mut drift_domain = LiveTriPeaksDomain::new(
+        Session::new(ScriptedUndoIo {
+            frames: drift_frames,
+            inputs: Vec::new(),
+        }),
+        &cancel,
+        cfg_drift,
+        Box::new(|_| {}),
+    );
+    drift_domain.root_snapshot = Some(root_snap);
+    drift_domain.root_hash = Some(expected_hash);
+    let actual_drift_hash = drift_domain
+        .undo_all_and_hash()
+        .expect("confirmed drift returns drifted semantic hash for RootRestoreMismatch check");
+    assert_ne!(actual_drift_hash, expected_hash);
+    assert!(drift_domain.into_session().io().frames.is_empty());
+}

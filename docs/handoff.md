@@ -1,12 +1,9 @@
-# Current handoff — application 3.4.0, xSAR 0.16.3
+# Current handoff — application 3.4.1, xSAR 0.16.3
 
-Application `3.4.0` delivers the six-goal TriPeaks RECON, A* planning, multi-board execution, and plain operator UI pipeline while keeping `xSAR` untouched at `0.16.3` (commit `067ce26`):
+Application `3.4.1` builds on `3.4.0` with the TriPeaks `Undo All` full-Stock rewind settlement fix while keeping `xSAR` untouched at `0.16.3` (commit `067ce26`):
 
-- Added the shared partial-observability RECON coordinator (`src/recon.rs`), `CardRead::FaceDown` (`src/game_operations.rs`), and TriPeaks `game_controls::read_card` Stock contraction / Draw-23 empty-tray detection (`src/game_controls.rs`).
-- Added Beast `1920×1080` TriPeaks captures, templates, and read-only HUD/modal observers (`tests/fixtures/tripeaks-calibration-20261116/`, `src/tripeaks_progress.rs`, shared `src/pyramid_progress/challenge/`).
-- Built the pure `52`-slot TriPeaks model, replay verifier, admissible `xsar::search` A* & `BestEffortProblem` adapters, and `65,536`-byte atomic JSON persistence (`src/tripeaks_model.rs`, `src/tripeaks_model/{rules,replay,search,json}.rs`).
-- Implemented `LiveTriPeaksDomain` (`src/worker/tripeaks_reconnaissance.rs`), Draw-23 `"No Moves Remaining"` `500 ms` hold-click modal back-out, confirmation-less `Undo All` restoration (`src/game_operations/{session,restoration}.rs`), and `CompletedDuringRecon` interception.
-- Enabled `GameMode::TriPeaks` under `SolvingStrategy::ShortestPath` (`src/strategy.rs`) with `EscalatedClearBoard` multi-board planning (`src/worker/tripeaks_calculation.rs`), shared QMP route playback (`src/worker/tripeaks_route.rs`), `Continuous` / `Single board` / `Manual` session runner (`src/worker/tripeaks_session.rs`, `RestartPolicy::IndependentTriPeaks`, `0`-click `Continue`/`Redeal`, `--no-image`-aware `GAME WIN` capture), plain `Known / Unknown / Unreachable` `egui` controls (`src/tripeaks_workflow_model.rs`, `src/app/tripeaks_workflow.rs`), and qualified [tripeaks-master-spec.md](tripeaks-master-spec.md).
+- Added `game_controls::is_tripeaks_full_root_stock` (`src/game_controls.rs`) checking full `23`-card `T = 0` Stock settlement across `x = 836..966`, zero right-overhang transit blue (`x = 968..980`), and settled left deck-edge white paper (`768..818`) so mid-rewind captures where Microsoft Solitaire greys out `Undo All` before all `23` cards land return `FrameClassification::Settling`.
+- Required `MIN_CONFIRMED_DRIFT_STREAK = 4` consecutive identical settled non-root frames in `DriverUndoAllIo::observe` and raised `TriPeaksReconConfig.max_restore_observations` from `16` to `24` (`src/worker/tripeaks_reconnaissance.rs`), covered by `full_root_stock_accepts_settled_t0_and_rejects_contracted_or_mid_rewind` (`src/game_controls/tests.rs`) and `undo_all_waits_through_mid_rewind_disabled_toolbar_and_compositor_stall` (`src/worker/tripeaks_reconnaissance/tests.rs`).
 
 ## Tier 2 host verification summary (Beast)
 
@@ -15,13 +12,13 @@ Application `3.4.0` delivers the six-goal TriPeaks RECON, A* planning, multi-boa
 | Format | `cargo fmt --package qmp-qemu-socket -- --check` | Pass |
 | Lib/bin strict Clippy | `cargo clippy --workspace --lib --bins -- -D warnings -D clippy::unwrap_used -D clippy::dbg_macro -D clippy::todo` | Pass |
 | All-targets Clippy | `cargo clippy --workspace --all-targets -- -D warnings` | Pass |
-| Default tests | `cargo test --workspace --offline --locked` | `1,818` passed, `0` failed, `185` ignored (`src/lib.rs`; `0` in `src/main.rs`, `0` doc-tests) |
-| Full tests | `cargo test --locked --offline --package qmp-qemu-socket -- --include-ignored` | `2,003` passed, `0` failed, `0` ignored (`src/lib.rs`; `0` in `src/main.rs`, `0` doc-tests) |
+| Default tests | `cargo test --workspace --offline --locked` | `1,820` passed, `0` failed, `185` ignored (`src/lib.rs`; `0` in `src/main.rs`, `0` doc-tests) |
+| Full tests | `cargo test --locked --offline --package qmp-qemu-socket -- --include-ignored` | `2,005` passed, `0` failed, `0` ignored (`src/lib.rs`; `0` in `src/main.rs`, `0` doc-tests) |
 | Private `cargo doc` | `RUSTDOCFLAGS="-D warnings" cargo doc --locked --offline --package qmp-qemu-socket --no-deps --document-private-items` | Pass |
 | Release build | `cargo build --locked --offline --release --package qmp-qemu-socket --target x86_64-unknown-linux-gnu` | Pass |
 
-- **Release executable:** `target/x86_64-unknown-linux-gnu/release/qmp-qemu-socket` (`17,493,464` bytes, mode `0755`, SHA-256 `b4723b40647461f2012423f61f7c0d2e0e6a7dc87ccc57b38f0ebf9126b72bd2`)
-- **Live acceptance status:** Live Windows 11 guest verification on Beast covering TriPeaks `Continuous` (3-board Normal loop + multi-board Challenge `EscalatedClearBoard` + `0`-click `Continue` retirement), `Single board`, Draw-23 `"No Moves Remaining"` `500 ms` hold-click modal back-out + `Undo All`, `Manual` (`RECON / Export 52-slot deal`, `CALCULATE`, `SINGLE STEP`, `MULTI STEP`, `Stop after step`, `UNDO ALL`), unsolvable partial banking vs `0`-click `ClearBoard` dead ends, and default `GAME WIN` frame capture vs `--no-image` (alongside existing Free Cell and Pyramid regressions) remains pending operator launch:
+- **Release executable:** `target/x86_64-unknown-linux-gnu/release/qmp-qemu-socket` (`17,494,760` bytes, mode `0755`, SHA-256 `946b28bc029fdcac21d3cbed75024a0df448f3e1e211fc4850ded38dbb6388ed`)
+- **Live acceptance status:** Live Windows 11 guest verification on Beast covering `v3.4.1` `Undo All` full-Stock rewind restoration on the waiting Challenge board, TriPeaks `Continuous` (3-board Normal loop + multi-board Challenge `EscalatedClearBoard` + `0`-click `Continue` retirement), `Single board`, Draw-23 `"No Moves Remaining"` `500 ms` hold-click modal back-out, `Manual` (`RECON / Export 52-slot deal`, `CALCULATE`, `SINGLE STEP`, `MULTI STEP`, `Stop after step`, `UNDO ALL`), unsolvable partial banking vs `0`-click `ClearBoard` dead ends, and default `GAME WIN` frame capture vs `--no-image` (alongside existing Free Cell and Pyramid regressions) remains pending operator relaunch:
 
 ```sh
 cargo run --release

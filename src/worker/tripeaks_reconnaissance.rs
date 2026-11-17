@@ -27,7 +27,8 @@ use crate::{
     freecell_terminal::{ChallengeTerminalHandoff, classify_challenge_handoff},
     game::GameMode,
     game_controls::{
-        LocationRequest, is_challenge_complete_frame, read_card, wait_for_challenge_complete,
+        LocationRequest, is_challenge_complete_frame, is_tripeaks_full_root_stock, read_card,
+        wait_for_challenge_complete,
     },
     game_operations::{
         CardRead, Input, OperationError, OperationIo, Session,
@@ -83,6 +84,9 @@ const UNDO_ALL_MIN_DISABLED_MUTED: u32 = 450;
 /// Maximum dark dimmed pixels tolerated when `Undo All` is disabled at `T = 0`.
 const UNDO_ALL_MAX_DISABLED_DARK: u32 = 100;
 
+/// Consecutive matching full-root non-matching frames required to short-circuit `Undo All` early.
+const MIN_CONFIRMED_DRIFT_STREAK: usize = 4;
+
 /// Bounded delays, poll counts, and search budgets for [`LiveTriPeaksDomain`].
 #[derive(Clone, Debug)]
 pub struct TriPeaksReconConfig {
@@ -116,7 +120,7 @@ impl Default for TriPeaksReconConfig {
             reobserve_delay: Duration::from_millis(100),
             restore_settle_delay: Duration::from_millis(200),
             max_step_observations: 12,
-            max_restore_observations: 16,
+            max_restore_observations: 24,
             search_limits: DEFAULT_SEARCH_LIMITS,
         }
     }
@@ -405,12 +409,16 @@ pub fn observe_frame(frame: &CapturedFrame) -> Result<FrameClassification, Opera
     }
 
     let undo_all = classify_tripeaks_undo_all(frame)?;
-    Ok(FrameClassification::Settled(BoardSnapshot {
+    let snapshot = BoardSnapshot {
         tableau,
         stock,
         waste,
         undo_all,
-    }))
+    };
+    if snapshot.is_untouched_root_layout() && !is_tripeaks_full_root_stock(frame)? {
+        return Ok(FrameClassification::Settling);
+    }
+    Ok(FrameClassification::Settled(snapshot))
 }
 
 /// Same-frame input authorisation callback passed to `NativeOperations` and test `OperationIo`s.
@@ -994,6 +1002,8 @@ struct DriverUndoAllIo<'a, 'b, 'c, I: OperationIo> {
     last_matched: Option<BoardSnapshot>,
     /// Previous untouched snapshot observed when checking drifted restores.
     last_drifted: Option<BoardSnapshot>,
+    /// Number of consecutive identical untouched non-root snapshots seen so far.
+    drifted_streak: usize,
     /// Set once two consecutive identical untouched frames prove a drifted restore.
     confirmed_drifted: Option<BoardSnapshot>,
     /// Captures a `"No Moves Remaining"` click target if the modal opened right as `UndoAll` ran.
@@ -1025,19 +1035,26 @@ impl<I: OperationIo> UndoAllIo for DriverUndoAllIo<'_, '_, '_, I> {
                 };
                 if matches {
                     self.last_drifted = None;
+                    self.drifted_streak = 0;
                     self.last_matched = Some(snap.clone());
                     return Ok(UndoScene::Board(snap));
                 }
                 self.last_matched = None;
                 if self.last_drifted.as_ref() == Some(&snap) {
+                    self.drifted_streak = self.drifted_streak.saturating_add(1);
                     self.confirmed_drifted = Some(snap);
-                    return Ok(UndoScene::Unknown);
+                    if self.drifted_streak >= MIN_CONFIRMED_DRIFT_STREAK {
+                        return Ok(UndoScene::Unknown);
+                    }
+                    return Ok(UndoScene::Animating);
                 }
                 self.last_drifted = Some(snap);
+                self.drifted_streak = 1;
                 Ok(UndoScene::Animating)
             }
             FrameClassification::Settled(_) | FrameClassification::Settling => {
                 self.last_drifted = None;
+                self.drifted_streak = 0;
                 self.last_matched = None;
                 Ok(UndoScene::Animating)
             }
@@ -1408,6 +1425,7 @@ fn restore_tripeaks_with_driver<I: OperationIo>(
             target,
             last_matched: None,
             last_drifted: None,
+            drifted_streak: 0,
             confirmed_drifted: None,
             observed_modal: None,
         };

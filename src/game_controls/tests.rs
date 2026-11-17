@@ -1171,3 +1171,106 @@ fn read_card_recognises_live_tripeaks_calibration_fixtures() {
         CardRead::Unreadable
     );
 }
+
+#[test]
+fn full_root_stock_accepts_settled_t0_and_rejects_contracted_or_mid_rewind() {
+    let draw_first = decode_png(include_bytes!(
+        "../../tests/fixtures/tripeaks-redeal-20261016/draw-first.png"
+    ))
+    .expect("draw-first png");
+    let left_ace = decode_png(include_bytes!(
+        "../../tests/fixtures/tripeaks-redeal-20261016/left-ace.png"
+    ))
+    .expect("left-ace png");
+    let left_eight = decode_png(include_bytes!(
+        "../../tests/fixtures/tripeaks-redeal-20261016/left-eight.png"
+    ))
+    .expect("left-eight png");
+    assert!(is_tripeaks_full_root_stock(&draw_first).expect("draw-first full stock"));
+    assert!(is_tripeaks_full_root_stock(&left_ace).expect("left-ace full stock"));
+    assert!(is_tripeaks_full_root_stock(&left_eight).expect("left-eight full stock"));
+
+    for (name, bytes) in [
+        (
+            "tableau-row2-uncovered",
+            include_bytes!(
+                "../../tests/fixtures/tripeaks-calibration-20261116/tableau-row2-uncovered.png"
+            )
+            .as_slice(),
+        ),
+        (
+            "peak1-uncovered",
+            include_bytes!(
+                "../../tests/fixtures/tripeaks-calibration-20261116/peak1-uncovered.png"
+            )
+            .as_slice(),
+        ),
+        (
+            "stock-last-card",
+            include_bytes!(
+                "../../tests/fixtures/tripeaks-calibration-20261116/stock-last-card.png"
+            )
+            .as_slice(),
+        ),
+        (
+            "stock-empty",
+            include_bytes!("../../tests/fixtures/tripeaks-calibration-20261116/stock-empty.png")
+                .as_slice(),
+        ),
+        (
+            "no-moves-remaining",
+            include_bytes!(
+                "../../tests/fixtures/tripeaks-calibration-20261116/no-moves-remaining.png"
+            )
+            .as_slice(),
+        ),
+    ] {
+        let frame = decode_png(bytes).expect("calibration png");
+        assert!(
+            !is_tripeaks_full_root_stock(&frame).expect("check non-root calibration fixture"),
+            "{name} must not satisfy full T=0 Stock settlement"
+        );
+    }
+
+    // 1. Even a single drawn card (-3 px shift exposing x = 964..968 green tray) fails full T=0 check.
+    let mut one_draw_contracted = left_ace.clone();
+    for row in 0..STOCK_CARD_BOUNDS.height {
+        for col in 0..STOCK_CARD_BOUNDS.width {
+            let from = (STOCK_CARD_BOUNDS.y + row) as usize * left_ace.stride
+                + (STOCK_CARD_BOUNDS.x + col) as usize * 4;
+            let to = (STOCK_CARD_BOUNDS.y + row) as usize * one_draw_contracted.stride
+                + (STOCK_CARD_BOUNDS.x - 3 + col) as usize * 4;
+            one_draw_contracted.pixels[to..to + 4]
+                .copy_from_slice(&left_ace.pixels[from..from + 4]);
+        }
+    }
+    paint_rect(
+        &mut one_draw_contracted,
+        PixelRect::new(
+            STOCK_CARD_BOUNDS.right() - 3,
+            STOCK_CARD_BOUNDS.y,
+            4,
+            STOCK_CARD_BOUNDS.height,
+        ),
+        [18, 83, 52],
+    );
+    assert!(!is_tripeaks_full_root_stock(&one_draw_contracted).expect("1-draw contracted stock"));
+
+    // 2. Card still sliding left across x = 968..974 right overhang fails full T=0 check.
+    let mut transit_overhang = left_ace.clone();
+    paint_rect(
+        &mut transit_overhang,
+        PixelRect::new(STOCK_CARD_BOUNDS.right(), 700, 6, 150),
+        [21, 87, 173],
+    );
+    assert!(!is_tripeaks_full_root_stock(&transit_overhang).expect("overhang blue card"));
+
+    // 3. Rewinding card showing CLASSIC BLUE stripe inside left white deck stack (x = 810..817) fails.
+    let mut mid_slide_stack = left_ace;
+    paint_rect(
+        &mut mid_slide_stack,
+        PixelRect::new(810, 700, 8, 150),
+        [21, 87, 173],
+    );
+    assert!(!is_tripeaks_full_root_stock(&mid_slide_stack).expect("mid-slide white stack"));
+}

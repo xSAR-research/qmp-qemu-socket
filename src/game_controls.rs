@@ -725,6 +725,12 @@ const TRIPEAKS_STOCK_TRAY_GREEN_MINIMUM: u8 = 55;
 /// Minimum green-minus-blue delta inside the darkened TriPeaks Stock tray.
 const TRIPEAKS_STOCK_TRAY_GREEN_BLUE_DELTA_MINIMUM: u8 = 20;
 
+/// Settled `T = 0` left deck-edge white paper stack inside `TARGET_STOCK` (`x = 768..818`).
+const TRIPEAKS_ROOT_STOCK_LEFT_STACK_BOUNDS: PixelRect = PixelRect::new(768, 698, 50, 150);
+
+/// Minimum neutral bright paper per-mille fraction across the `T = 0` Stock deck stack.
+const TRIPEAKS_ROOT_STOCK_STACK_WHITE_PER_MILLE: u64 = 950;
+
 /// Surface pixel counters over a bounded native TriPeaks inspection region.
 #[derive(Clone, Copy, Default)]
 struct TriPeaksSurfaceStats {
@@ -1060,6 +1066,56 @@ fn read_tripeaks_stock_card(frame: &CapturedFrame) -> Result<CardRead, Operation
     }
 
     Ok(CardRead::Unreadable)
+}
+
+/// Positively confirm that a full `23`-card `T = 0` TriPeaks Stock pile is settled in place.
+///
+/// While Microsoft Solitaire rewinds draws during `Undo All`, `SHARED_UNDO_ALL_CONTROL` greys out
+/// immediately even while Stock remains horizontally contracted (`x = 953..968` exposed green tray)
+/// or flying cards expose `CLASSIC BLUE` stripes inside the white left deck-edge stack.
+pub(crate) fn is_tripeaks_full_root_stock(frame: &CapturedFrame) -> Result<bool, OperationError> {
+    validate_native_frame(frame)?;
+
+    let interior_start = STOCK_CARD_BOUNDS.x + 4;
+    let interior_end = STOCK_CARD_BOUNDS.right().saturating_sub(2);
+    for x in interior_start..interior_end {
+        let col_rect = PixelRect::new(x, TRIPEAKS_STOCK_SCAN_TOP, 1, TRIPEAKS_STOCK_SCAN_HEIGHT);
+        let col_stats =
+            sample_tripeaks_surface_with(frame, col_rect, is_tripeaks_stock_tray_green)?;
+        if col_stats.blue_per_mille() < TRIPEAKS_STOCK_COLUMN_BLUE_PER_MILLE
+            || col_stats.felt_per_mille() > TRIPEAKS_SURFACE_TRACE_LIMIT_PER_MILLE
+        {
+            return Ok(false);
+        }
+    }
+
+    let overhang_width = TARGET_STOCK
+        .right()
+        .saturating_sub(STOCK_CARD_BOUNDS.right());
+    if overhang_width > 0 {
+        let overhang_rect = PixelRect::new(
+            STOCK_CARD_BOUNDS.right(),
+            TRIPEAKS_STOCK_SCAN_TOP,
+            overhang_width,
+            TRIPEAKS_STOCK_SCAN_HEIGHT,
+        );
+        let overhang_stats =
+            sample_tripeaks_surface_with(frame, overhang_rect, is_tripeaks_stock_tray_green)?;
+        if overhang_stats.blue_back > 0 {
+            return Ok(false);
+        }
+    }
+
+    let stack_stats = sample_tripeaks_surface_with(
+        frame,
+        TRIPEAKS_ROOT_STOCK_LEFT_STACK_BOUNDS,
+        is_tripeaks_stock_tray_green,
+    )?;
+    Ok(
+        stack_stats.white_per_mille() >= TRIPEAKS_ROOT_STOCK_STACK_WHITE_PER_MILLE
+            && stack_stats.blue_back == 0
+            && stack_stats.felt == 0,
+    )
 }
 
 /// Check whether one native `1920×1080` frame proves both **Challenge Complete** (`ll`) and **Continue** (`[0, 0, 0]`).
