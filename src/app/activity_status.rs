@@ -27,6 +27,7 @@ pub(super) fn header<R>(
     let context = app.current_preview_context();
     let phase = match app.active_run {
         Some(ActiveRun::FreeCellSession) => app.freecell_workflow.activity_phase(&context),
+        Some(ActiveRun::TriPeaksSession) => app.tripeaks_workflow.activity_phase(&context),
         _ => app.pyramid_workflow.activity_phase(&context),
     };
     let evidence = Evidence {
@@ -109,13 +110,21 @@ impl Evidence {
             };
         }
         match self.owner {
-            Some(ActiveRun::Reconnaissance | ActiveRun::FreeCellRecon) => Status::Recon,
-            Some(ActiveRun::StepOnce | ActiveRun::MultiStep | ActiveRun::FreeCellRoute) => {
-                Status::Solve
-            }
-            Some(ActiveRun::FreeCellCalculation) => Status::Route,
             Some(
-                ActiveRun::ComputedRoute | ActiveRun::PyramidSession | ActiveRun::FreeCellSession,
+                ActiveRun::Reconnaissance | ActiveRun::FreeCellRecon | ActiveRun::TriPeaksRecon,
+            ) => Status::Recon,
+            Some(
+                ActiveRun::StepOnce
+                | ActiveRun::MultiStep
+                | ActiveRun::FreeCellRoute
+                | ActiveRun::TriPeaksRoute,
+            ) => Status::Solve,
+            Some(ActiveRun::FreeCellCalculation | ActiveRun::TriPeaksCalculation) => Status::Route,
+            Some(
+                ActiveRun::ComputedRoute
+                | ActiveRun::PyramidSession
+                | ActiveRun::FreeCellSession
+                | ActiveRun::TriPeaksSession,
             ) => match self.phase {
                 Some(PyramidPhase::Reconnaissance) => Status::Recon,
                 Some(PyramidPhase::Planning) => Status::Route,

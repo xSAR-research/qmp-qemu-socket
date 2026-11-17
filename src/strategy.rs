@@ -8,7 +8,7 @@ use crate::game::GameMode;
 /// User-selected controller; independent preparation does not grant general input.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SolvingStrategy {
-    /// Independent Pyramid and Free Cell workflows; no ordinary input authority.
+    /// Independent Pyramid, Free Cell and TriPeaks workflows; no ordinary input authority.
     ShortestPath,
     /// Existing guest Solver/HALO controllers for all five game types.
     #[default]
@@ -34,7 +34,7 @@ impl SolvingStrategy {
     pub const fn description(self) -> &'static str {
         match self {
             Self::ShortestPath => {
-                "Prepare and execute independently verified Pyramid or Free Cell routes. Other game types are selectable with A* capabilities explicitly unavailable."
+                "Prepare and execute independently verified Pyramid, Free Cell or TriPeaks routes. Other game types remain selectable with A* capabilities unavailable."
             }
             Self::ComputerVision => {
                 "Follow the game's built-in Solver highlights using screen captures and QMP input."
@@ -84,10 +84,14 @@ impl ControllerContext {
     /// Reject unsupported strategy/game combinations before connection or input.
     pub fn validate(&self) -> Result<(), String> {
         if self.strategy == SolvingStrategy::ShortestPath
-            && !matches!(self.game_mode, GameMode::Pyramid | GameMode::FreeCell)
+            && !matches!(
+                self.game_mode,
+                GameMode::Pyramid | GameMode::FreeCell | GameMode::TriPeaks
+            )
         {
             return Err(
-                "Independent requests currently support Pyramid and Free Cell only".to_owned(),
+                "Independent requests currently support Pyramid, Free Cell and TriPeaks only"
+                    .to_owned(),
             );
         }
         Ok(())
@@ -102,9 +106,9 @@ mod tests {
     use super::*;
 
 
-    /// Preparation stays Pyramid-only and cannot grant guest-input authority.
+    /// Preparation allows Pyramid, Free Cell and TriPeaks and never grants ordinary input authority.
     #[test]
-    fn preparation_is_pyramid_or_freecell_and_never_input_authority() {
+    fn preparation_is_pyramid_freecell_or_tripeaks_and_never_input_authority() {
         assert!(!SolvingStrategy::ShortestPath.permits_input());
         assert!(SolvingStrategy::ComputerVision.permits_input());
 
@@ -118,7 +122,10 @@ mod tests {
             );
             assert_eq!(
                 independent.validate().is_ok(),
-                matches!(game, GameMode::Pyramid | GameMode::FreeCell)
+                matches!(
+                    game,
+                    GameMode::Pyramid | GameMode::FreeCell | GameMode::TriPeaks
+                )
             );
             let vision = ControllerContext::new(
                 independent.socket_path,

@@ -28,7 +28,8 @@ pub use rules::{
     legal_moves, slot_to_tableau_coord, stock_slot_id, tableau_slot_id, tap_score_delta,
 };
 pub use search::{
-    DEFAULT_SEARCH_LIMITS, SearchState, best_partial_route, best_partial_route_with_control,
+    DEFAULT_SEARCH_LIMITS, SearchState, TriPeaksPlanOutcome, best_partial_route,
+    best_partial_route_with_control, plan_deal_route, plan_deal_route_with_control,
     plan_info_gain_probe, plan_info_gain_probe_with_control, solve_known_subgraph,
     solve_known_subgraph_with_control,
 };

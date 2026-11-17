@@ -1065,3 +1065,243 @@ fn search_respects_cancellation_and_stop_limits() {
     cancel.store(false, Ordering::Relaxed);
     assert!(plan_info_gain_probe(&truth).is_none()); // all 52 already Known -> 0 unknowns left
 }
+
+/// Build a `29`-move `ClearBoard` deal where `Peak0+Peak1_prefix -> Draw -> Peak2+Peak1_suffix`
+/// splits streaks `(14, 14)` (`40_700` pts) while `Draw -> Peak2 -> Peak0 -> Peak1` runs `28` unbroken (`79_900` pts).
+fn build_two_streak_29_move_deal() -> [CardSlot; DEAL_SLOT_COUNT] {
+    // Disjoint topological groups matching Peak 0 -> Peak 1 prefix -> Draw -> Peak 2 -> Peak 1 suffix:
+    // - Peak 0 (`10`): `[18..=21, 9..=11, 3, 4, 0]` (`2 -> 1 -> 0 -> 12 -> 11 -> 10 -> 9 -> 8 -> 9 -> 8`)
+    // - Peak 1 prefix (`4`): `[22, 23, 12, 13]` (`9 -> 10 -> 11 -> 12`)
+    // - Peak 2 (`10`): `[24..=27, 15..=17, 7, 8, 2]` (`6 -> 7 -> 6 -> 5 -> 4 -> 5 -> 4 -> 3 -> 2 -> 1`)
+    // - Peak 1 suffix (`4`): `[5, 14, 6, 1]` (`0 -> 1 -> 2 -> 1`, covered by `24` via `14` until Peak 2 clears)
+    let peak0: [usize; 10] = [18, 19, 20, 21, 9, 10, 11, 3, 4, 0];
+    let peak0_ranks: [u8; 10] = [2, 1, 0, 12, 11, 10, 9, 8, 9, 8];
+    let peak1_p: [usize; 4] = [22, 23, 12, 13];
+    let peak1_p_ranks: [u8; 4] = [9, 10, 11, 12];
+    let peak2: [usize; 10] = [24, 25, 26, 27, 15, 16, 17, 7, 8, 2];
+    let peak2_ranks: [u8; 10] = [6, 7, 6, 5, 4, 5, 4, 3, 2, 1];
+    let peak1_s: [usize; 4] = [5, 14, 6, 1];
+    let peak1_s_ranks: [u8; 4] = [0, 1, 2, 1];
+
+    let mut used = [false; 52];
+    let mut suit_cursor = [0_u8; 13];
+    let mut take_rank = |rank_idx: u8| -> Card {
+        let s = suit_cursor[usize::from(rank_idx)];
+        assert!(s < 4, "rank {rank_idx} exhausted");
+        suit_cursor[usize::from(rank_idx)] = s + 1;
+        let c = card(rank_idx, s);
+        used[usize::from(c.0)] = true;
+        c
+    };
+
+    let mut slots = [CardSlot::Unknown; DEAL_SLOT_COUNT];
+    // Waste = Four (`3`) -> matches ONLY `peak0[0] = Three (2)` on Row 4.
+    slots[usize::from(INITIAL_WASTE_SLOT.0)] = CardSlot::Known(take_rank(3));
+    // Stock[0] = Six (`5`) -> matches `peak2[0] = Seven (6)`.
+    slots[usize::from(STOCK_START_SLOT)] = CardSlot::Known(take_rank(5));
+
+    for (indices, ranks) in [
+        (&peak0[..], &peak0_ranks[..]),
+        (&peak1_p[..], &peak1_p_ranks[..]),
+        (&peak2[..], &peak2_ranks[..]),
+        (&peak1_s[..], &peak1_s_ranks[..]),
+    ] {
+        for (&slot_idx, &rank_idx) in indices.iter().zip(ranks.iter()) {
+            slots[slot_idx] = CardSlot::Known(take_rank(rank_idx));
+        }
+    }
+
+    let mut stock_idx = usize::from(STOCK_START_SLOT) + 1;
+    for (id, &taken) in used.iter().enumerate() {
+        if !taken {
+            slots[stock_idx] = CardSlot::Known(Card(id as u8));
+            stock_idx += 1;
+        }
+    }
+    assert_eq!(stock_idx, DEAL_SLOT_COUNT);
+    validate_slot_table(&slots).expect("valid 2-streak deal");
+    slots
+}
+
+/// Build an unsolvable deal (`ClearBoard` impossible) with partial rank (`Four`) and score gains.
+fn build_unsolvable_partial_deal() -> [CardSlot; DEAL_SLOT_COUNT] {
+    // Allow clearing `Row 4[0..=2]` (`Three, Four, Five` -> hits rank `3 = Four` and streak 3!)
+    // while trapping remaining tableau (`0` adjacency to Waste/Stock or rest of tableau).
+    let mut used = [false; 52];
+    let mut suit_cursor = [0_u8; 13];
+    let mut take_rank = |rank_idx: u8| -> Card {
+        let s = suit_cursor[usize::from(rank_idx)];
+        assert!(s < 4, "rank {rank_idx} exhausted");
+        suit_cursor[usize::from(rank_idx)] = s + 1;
+        let c = card(rank_idx, s);
+        used[usize::from(c.0)] = true;
+        c
+    };
+
+    let mut fixed = [CardSlot::Unknown; DEAL_SLOT_COUNT];
+    // Waste = `Two` (`1`). Row 4 slots `18, 19, 20` = `[Three (2), Four (3), Five (4)]`.
+    fixed[usize::from(INITIAL_WASTE_SLOT.0)] = CardSlot::Known(take_rank(1));
+    fixed[18] = CardSlot::Known(take_rank(2));
+    fixed[19] = CardSlot::Known(take_rank(3));
+    fixed[20] = CardSlot::Known(take_rank(4));
+    // Trapped Row 4 (`slots 21..=27`) and covered `9, 10` keep distance >= 2 from Waste/Stock `{0..=6}`.
+    for (slot_idx, rank_idx) in (21..28).zip([8_u8, 8, 8, 8, 10, 10, 10]) {
+        fixed[slot_idx] = CardSlot::Known(take_rank(rank_idx));
+    }
+    fixed[9] = CardSlot::Known(take_rank(9));
+    fixed[10] = CardSlot::Known(take_rank(9));
+    // Fill `Waste+Stock` (`29..52`) from remaining ranks `{1,2,3,4,5,6}` (`20` cards) + `3` Aces (`0`):
+    let mut stock_idx = usize::from(STOCK_START_SLOT);
+    for r in [
+        0_u8, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6,
+    ] {
+        fixed[stock_idx] = CardSlot::Known(take_rank(r));
+        stock_idx += 1;
+    }
+    assert_eq!(stock_idx, DEAL_SLOT_COUNT);
+    let mut rem_iter = (0_u8..52).filter(|&id| !used[usize::from(id)]);
+    for slot_idx in (0..9).chain(11..18) {
+        let id = rem_iter.next().expect("remaining trapped tableau card");
+        fixed[slot_idx] = CardSlot::Known(Card(id));
+    }
+    assert!(rem_iter.next().is_none());
+    validate_slot_table(&fixed).expect("valid partial deal");
+    fixed
+}
+
+#[test]
+fn plan_deal_route_handles_multi_board_clear_escalation_and_partial_fallbacks() {
+    // 1. Direct quota within one board -> SolvedObjective.
+    let cyclic = build_cyclic_52_card_deal();
+    let direct = plan_deal_route(
+        &cyclic,
+        Objective::ClearRankQuota {
+            rank: 0,
+            remaining: 2,
+        },
+    )
+    .expect("direct plan");
+    assert!(matches!(
+        direct,
+        TriPeaksPlanOutcome::SolvedObjective { .. }
+    ));
+
+    // 2. Multi-board ClearRankQuota exceeding 1 deck (remaining = 8) on solvable board -> EscalatedClearBoard (28/28 cleared).
+    let escalated_rank = plan_deal_route(
+        &cyclic,
+        Objective::ClearRankQuota {
+            rank: 3,
+            remaining: 8,
+        },
+    )
+    .expect("escalated rank plan");
+    match escalated_rank {
+        TriPeaksPlanOutcome::EscalatedClearBoard {
+            actions, replay, ..
+        } => {
+            assert_eq!(replay.final_position.tableau_mask, 0);
+            verify_objective_route(&cyclic, &actions, Objective::ClearBoard)
+                .expect("escalated full board clear");
+        }
+        other => panic!("expected EscalatedClearBoard for rank quota > 1 deck, got {other:?}"),
+    }
+
+    // 3. Multi-board ReachScoreDelta exceeding 1 deck (90_000) chooses max-score ClearBoard route (79_900 > 40_700).
+    let two_streak = build_two_streak_29_move_deal();
+    let fast_clear =
+        solve_known_subgraph(&two_streak, Objective::ClearBoard).expect("fast 29-move clear");
+    let fast_replay = verify_objective_route(&two_streak, &fast_clear, Objective::ClearBoard)
+        .expect("fast replay");
+    assert_eq!(fast_replay.final_position.score_delta, 40_700);
+
+    let escalated_score = plan_deal_route(
+        &two_streak,
+        Objective::ReachScoreDelta {
+            points_needed: 90_000,
+        },
+    )
+    .expect("escalated score plan");
+    match escalated_score {
+        TriPeaksPlanOutcome::EscalatedClearBoard {
+            actions, replay, ..
+        } => {
+            assert_eq!(replay.final_position.tableau_mask, 0);
+            assert_eq!(replay.final_position.score_delta, 79_900);
+            verify_objective_route(&two_streak, &actions, Objective::ClearBoard)
+                .expect("verified max-score clear");
+        }
+        other => panic!("expected EscalatedClearBoard for score target > 1 deck, got {other:?}"),
+    }
+
+    // 4. Unsolvable board across all 3 objective types:
+    //    - ClearBoard: empty route (`0` board-clear progress), `max_tableau_cleared == 3`
+    //    - ClearRankQuota(Four=3): banks tapping `[18, 19, 20]` (`1` Four cleared)
+    //    - ClearRankQuota(Queen=11): `0` Queens reachable -> empty route
+    //    - ReachScoreDelta(5_000): banks `100 + 300 + 500 = 900` score gain
+    let partial = build_unsolvable_partial_deal();
+    match plan_deal_route(&partial, Objective::ClearBoard).expect("clear partial") {
+        TriPeaksPlanOutcome::UnsolvablePartial {
+            actions,
+            max_tableau_cleared,
+            ..
+        } => {
+            assert!(actions.is_empty(), "ClearBoard partial stays at T=0");
+            assert_eq!(max_tableau_cleared, 3);
+        }
+        other => panic!("expected UnsolvablePartial for ClearBoard dead end, got {other:?}"),
+    }
+    match plan_deal_route(
+        &partial,
+        Objective::ClearRankQuota {
+            rank: 3,
+            remaining: 2,
+        },
+    )
+    .expect("rank partial")
+    {
+        TriPeaksPlanOutcome::UnsolvablePartial {
+            actions,
+            replay,
+            max_tableau_cleared,
+            ..
+        } => {
+            assert!(!actions.is_empty());
+            assert_eq!(replay.final_position.cleared_by_rank[3], 1);
+            assert_eq!(max_tableau_cleared, 3);
+        }
+        other => panic!("expected UnsolvablePartial with rank progress, got {other:?}"),
+    }
+    match plan_deal_route(
+        &partial,
+        Objective::ClearRankQuota {
+            rank: 11,
+            remaining: 2,
+        },
+    )
+    .expect("zero rank partial")
+    {
+        TriPeaksPlanOutcome::UnsolvablePartial { actions, .. } => {
+            assert!(
+                actions.is_empty(),
+                "zero target-rank gain must keep board at T=0"
+            );
+        }
+        other => panic!("expected empty UnsolvablePartial for unreachable rank, got {other:?}"),
+    }
+    match plan_deal_route(
+        &partial,
+        Objective::ReachScoreDelta {
+            points_needed: 5_000,
+        },
+    )
+    .expect("score partial")
+    {
+        TriPeaksPlanOutcome::UnsolvablePartial {
+            actions, replay, ..
+        } => {
+            assert_eq!(actions.len(), 3);
+            assert_eq!(replay.final_position.score_delta, 900);
+        }
+        other => panic!("expected UnsolvablePartial with score progress, got {other:?}"),
+    }
+}

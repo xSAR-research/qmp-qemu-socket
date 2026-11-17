@@ -40,6 +40,7 @@ mod tracker;
 mod tripeaks;
 pub mod tripeaks_model;
 pub mod tripeaks_progress;
+pub(crate) mod tripeaks_workflow_model;
 mod ui_style;
 mod worker;
 

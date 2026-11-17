@@ -6793,7 +6793,7 @@ fn reset_176_invalid_context_has_only_correlated_error_and_no_frame() {
     };
     let context = ControllerContext::new(
         PathBuf::from("/nonexistent-reset.sock"),
-        GameMode::TriPeaks,
+        GameMode::Klondike,
         SolvingStrategy::ShortestPath,
         9,
     );

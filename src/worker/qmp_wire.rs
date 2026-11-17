@@ -201,6 +201,42 @@ fn identity(command: &WorkerCommand) -> (Option<ControllerContext>, Value) {
             Some(context),
             json!({"command":"freecell-session","run_id":request.run_id,"play_style":request.play_style.label()}),
         ),
+        WorkerCommand::ListTriPeaksSources {
+            context,
+            request_id,
+            directory,
+        } => (
+            Some(context),
+            json!({"command":"list-tripeaks-sources","request_id":request_id,"directory":directory}),
+        ),
+        WorkerCommand::ReconnoitreTriPeaks {
+            context,
+            request_id,
+            destination,
+        } => (
+            Some(context),
+            json!({"command":"reconnoitre-tripeaks","request_id":request_id,"export":destination}),
+        ),
+        WorkerCommand::CalculateTriPeaks { identity, path, .. } => (
+            Some(&identity.context),
+            json!({"command":"calculate-tripeaks","request_id":identity.request_id,
+                "source_generation":identity.source_generation,"source":path}),
+        ),
+        WorkerCommand::ExecuteTriPeaksRoute {
+            plan,
+            run_id,
+            action,
+            ..
+        } => (
+            Some(&plan.context),
+            json!({"command":"execute-tripeaks","request_id":plan.request_id,
+                "source_generation":plan.source_generation,"run_id":run_id,
+                "action":format!("{action:?}")}),
+        ),
+        WorkerCommand::StartTriPeaksSession { context, request } => (
+            Some(context),
+            json!({"command":"tripeaks-session","run_id":request.run_id,"play_style":request.play_style.label()}),
+        ),
         WorkerCommand::CalculateRoute {
             context,
             run_id,

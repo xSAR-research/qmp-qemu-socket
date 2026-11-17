@@ -68,7 +68,7 @@ const MAX_BAND_PIXELS: usize = 520 * 48;
 /// Maximum horizontal ink span capacity per band.
 const MAX_SPANS: usize = 16;
 
-/// Maximum normalized L1 distance (`DIFF / TOTAL`) accepted for word matching, in ppm.
+/// Maximum normalised L1 distance (`DIFF / TOTAL`) accepted for word matching, in ppm.
 const WORD_DISTANCE_LIMIT: u64 = 210_000;
 
 /// Minimum required separation (`runner_up - winner`) between distinct word classes, in ppm.
@@ -93,72 +93,72 @@ const RIBBON_DIGIT_SEED_MIN: u8 = 145;
 const HUD_NOMINAL_BG: [u8; 3] = [17, 80, 51];
 
 /// Native Challenge plural rank template bytes (`aces`..`kings`, with spaced/compact `threes`).
-const TMPL_ACES: &[u8; 55 * 32] =
+const TEMPLATE_ACES: &[u8; 55 * 32] =
     include_bytes!("../tests/fixtures/tripeaks-calibration-20261116/templates/aces.ink");
 /// Native `"Twos"` banner template (`59 × 32`).
-const TMPL_TWOS: &[u8; 59 * 32] =
+const TEMPLATE_TWOS: &[u8; 59 * 32] =
     include_bytes!("../tests/fixtures/tripeaks-calibration-20261116/templates/twos.ink");
 /// Calibrated-synthetic `"Threes"` spaced-kerning banner template (`75 × 32`).
-const TMPL_THREES_SPACED: &[u8; 75 * 32] =
+const TEMPLATE_THREES_SPACED: &[u8; 75 * 32] =
     include_bytes!("../tests/fixtures/tripeaks-calibration-20261116/templates/threes-spaced.ink");
 /// Calibrated-synthetic `"Threes"` compact `r->e` banner template (`75 × 32`).
-const TMPL_THREES_COMPACT: &[u8; 75 * 32] =
+const TEMPLATE_THREES_COMPACT: &[u8; 75 * 32] =
     include_bytes!("../tests/fixtures/tripeaks-calibration-20261116/templates/threes-compact.ink");
 /// Native `"Fours"` banner template (`62 × 32`).
-const TMPL_FOURS: &[u8; 62 * 32] =
+const TEMPLATE_FOURS: &[u8; 62 * 32] =
     include_bytes!("../tests/fixtures/tripeaks-calibration-20261116/templates/fours.ink");
 /// Native `"Fives"` banner template (`55 × 32`).
-const TMPL_FIVES: &[u8; 55 * 32] =
+const TEMPLATE_FIVES: &[u8; 55 * 32] =
     include_bytes!("../tests/fixtures/tripeaks-calibration-20261116/templates/fives.ink");
 /// Native `"Sixes"` banner template (`56 × 32`).
-const TMPL_SIXES: &[u8; 56 * 32] =
+const TEMPLATE_SIXES: &[u8; 56 * 32] =
     include_bytes!("../tests/fixtures/tripeaks-calibration-20261116/templates/sixes.ink");
 /// Native `"Sevens"` banner template (`78 × 32`).
-const TMPL_SEVENS: &[u8; 78 * 32] =
+const TEMPLATE_SEVENS: &[u8; 78 * 32] =
     include_bytes!("../tests/fixtures/tripeaks-calibration-20261116/templates/sevens.ink");
 /// Native `"Eights"` banner template (`68 × 32`).
-const TMPL_EIGHTS: &[u8; 68 * 32] =
+const TEMPLATE_EIGHTS: &[u8; 68 * 32] =
     include_bytes!("../tests/fixtures/tripeaks-calibration-20261116/templates/eights.ink");
 /// Native `"Nines"` banner template (`64 × 32`).
-const TMPL_NINES: &[u8; 64 * 32] =
+const TEMPLATE_NINES: &[u8; 64 * 32] =
     include_bytes!("../tests/fixtures/tripeaks-calibration-20261116/templates/nines.ink");
 /// Native `"Tens"` banner template (`51 × 32`).
-const TMPL_TENS: &[u8; 51 * 32] =
+const TEMPLATE_TENS: &[u8; 51 * 32] =
     include_bytes!("../tests/fixtures/tripeaks-calibration-20261116/templates/tens.ink");
 /// Native `"Jacks"` banner template (`59 × 32`).
-const TMPL_JACKS: &[u8; 59 * 32] =
+const TEMPLATE_JACKS: &[u8; 59 * 32] =
     include_bytes!("../tests/fixtures/tripeaks-calibration-20261116/templates/jacks.ink");
 /// Native `"Queens"` banner template (`85 × 32`).
-const TMPL_QUEENS: &[u8; 85 * 32] =
+const TEMPLATE_QUEENS: &[u8; 85 * 32] =
     include_bytes!("../tests/fixtures/tripeaks-calibration-20261116/templates/queens.ink");
 /// Native `"Kings"` banner template (`61 × 32`).
-const TMPL_KINGS: &[u8; 61 * 32] =
+const TEMPLATE_KINGS: &[u8; 61 * 32] =
     include_bytes!("../tests/fixtures/tripeaks-calibration-20261116/templates/kings.ink");
 /// Native `"Boards"` banner template (`77 × 32`).
-const TMPL_BOARDS: &[u8; 77 * 32] =
+const TEMPLATE_BOARDS: &[u8; 77 * 32] =
     include_bytes!("../tests/fixtures/tripeaks-calibration-20261116/templates/boards.ink");
 /// Native `"cleared"` secondary banner template (`81 × 32`).
-const TMPL_CLEARED: &[u8; 81 * 32] =
+const TEMPLATE_CLEARED: &[u8; 81 * 32] =
     include_bytes!("../tests/fixtures/tripeaks-calibration-20261116/templates/cleared.ink");
 /// Native `"Score"` banner template (`63 × 32`).
-const TMPL_SCORE: &[u8; 63 * 32] =
+const TEMPLATE_SCORE: &[u8; 63 * 32] =
     include_bytes!("../tests/fixtures/tripeaks-calibration-20261116/templates/score.ink");
 /// Native `"Solve"` banner template (`61 × 32`).
-const TMPL_SOLVE: &[u8; 61 * 32] =
+const TEMPLATE_SOLVE: &[u8; 61 * 32] =
     include_bytes!("../tests/fixtures/tripeaks-calibration-20261116/templates/solve.ink");
 /// Native `"the deck"` secondary banner template (`97 × 32`).
-const TMPL_THE_DECK: &[u8; THE_DECK_WIDTH * 32] =
+const TEMPLATE_THE_DECK: &[u8; THE_DECK_WIDTH * 32] =
     include_bytes!("../tests/fixtures/tripeaks-calibration-20261116/templates/the-deck.ink");
 /// Native `"Clear"` banner template (`59 × 32`).
-const TMPL_CLEAR_WORD: &[u8; 59 * 32] =
+const TEMPLATE_CLEAR_WORD: &[u8; 59 * 32] =
     include_bytes!("../tests/fixtures/tripeaks-calibration-20261116/templates/clear-word.ink");
 
 /// Native Normal HUD `"Score:"` primary label template (`69 × 32`).
-const TMPL_NORMAL_SCORE_LABEL: &[u8; 69 * 32] = include_bytes!(
+const TEMPLATE_NORMAL_SCORE_LABEL: &[u8; 69 * 32] = include_bytes!(
     "../tests/fixtures/tripeaks-calibration-20261116/templates/normal-score-label.ink"
 );
 /// Native Normal HUD `"Score:"` alternate fractional-hinting template (`68 × 32`).
-const TMPL_NORMAL_SCORE_LABEL_ALT: &[u8; 68 * 32] = include_bytes!(
+const TEMPLATE_NORMAL_SCORE_LABEL_ALT: &[u8; 68 * 32] = include_bytes!(
     "../tests/fixtures/tripeaks-calibration-20261116/templates/normal-score-label-alt.ink"
 );
 /// Native `h = 17` Normal HUD digit/comma templates (`28 × 520` bytes).
@@ -169,17 +169,17 @@ const NORMAL_DIGITS_LABELS: &[u8; 28] =
     include_bytes!("../tests/fixtures/tripeaks-calibration-20261116/templates/normal-labels.txt");
 
 /// Native `"0 deals left"` tray caption template (`136 × 26`).
-const TMPL_DEALS_ZERO: &[u8; 136 * 26] =
+const TEMPLATE_DEALS_ZERO: &[u8; 136 * 26] =
     include_bytes!("../tests/fixtures/tripeaks-calibration-20261116/templates/deals-zero.ink");
 /// Native `"1 deal left"` tray caption template (`124 × 26`).
-const TMPL_DEALS_ONE: &[u8; 124 * 26] =
+const TEMPLATE_DEALS_ONE: &[u8; 124 * 26] =
     include_bytes!("../tests/fixtures/tripeaks-calibration-20261116/templates/deals-one.ink");
 /// Native `"2 deals left"` tray caption template (`140 × 26`).
-const TMPL_DEALS_TWO: &[u8; 140 * 26] =
+const TEMPLATE_DEALS_TWO: &[u8; 140 * 26] =
     include_bytes!("../tests/fixtures/tripeaks-calibration-20261116/templates/deals-two.ink");
 
 /// Native `"No Moves Remaining"` modal title template (`416 × 48`).
-const TMPL_NO_MOVES_TITLE: &[u8; 416 * 48] =
+const TEMPLATE_NO_MOVES_TITLE: &[u8; 416 * 48] =
     include_bytes!("../tests/fixtures/tripeaks-calibration-20261116/templates/no-moves-title.ink");
 
 /// Classified Challenge header objective observed from the native top ribbon.
@@ -271,7 +271,7 @@ const PRIMARY_WORD_CATALOGUE: &[(PrimaryClass, WordTemplate<'static>)] = &[
         WordTemplate {
             width: 55,
             height: WORD_HEIGHT_HUD,
-            bytes: TMPL_ACES,
+            bytes: TEMPLATE_ACES,
         },
     ),
     (
@@ -279,7 +279,7 @@ const PRIMARY_WORD_CATALOGUE: &[(PrimaryClass, WordTemplate<'static>)] = &[
         WordTemplate {
             width: 59,
             height: WORD_HEIGHT_HUD,
-            bytes: TMPL_TWOS,
+            bytes: TEMPLATE_TWOS,
         },
     ),
     (
@@ -287,7 +287,7 @@ const PRIMARY_WORD_CATALOGUE: &[(PrimaryClass, WordTemplate<'static>)] = &[
         WordTemplate {
             width: 75,
             height: WORD_HEIGHT_HUD,
-            bytes: TMPL_THREES_SPACED,
+            bytes: TEMPLATE_THREES_SPACED,
         },
     ),
     (
@@ -295,7 +295,7 @@ const PRIMARY_WORD_CATALOGUE: &[(PrimaryClass, WordTemplate<'static>)] = &[
         WordTemplate {
             width: 75,
             height: WORD_HEIGHT_HUD,
-            bytes: TMPL_THREES_COMPACT,
+            bytes: TEMPLATE_THREES_COMPACT,
         },
     ),
     (
@@ -303,7 +303,7 @@ const PRIMARY_WORD_CATALOGUE: &[(PrimaryClass, WordTemplate<'static>)] = &[
         WordTemplate {
             width: 62,
             height: WORD_HEIGHT_HUD,
-            bytes: TMPL_FOURS,
+            bytes: TEMPLATE_FOURS,
         },
     ),
     (
@@ -311,7 +311,7 @@ const PRIMARY_WORD_CATALOGUE: &[(PrimaryClass, WordTemplate<'static>)] = &[
         WordTemplate {
             width: 55,
             height: WORD_HEIGHT_HUD,
-            bytes: TMPL_FIVES,
+            bytes: TEMPLATE_FIVES,
         },
     ),
     (
@@ -319,7 +319,7 @@ const PRIMARY_WORD_CATALOGUE: &[(PrimaryClass, WordTemplate<'static>)] = &[
         WordTemplate {
             width: 56,
             height: WORD_HEIGHT_HUD,
-            bytes: TMPL_SIXES,
+            bytes: TEMPLATE_SIXES,
         },
     ),
     (
@@ -327,7 +327,7 @@ const PRIMARY_WORD_CATALOGUE: &[(PrimaryClass, WordTemplate<'static>)] = &[
         WordTemplate {
             width: 78,
             height: WORD_HEIGHT_HUD,
-            bytes: TMPL_SEVENS,
+            bytes: TEMPLATE_SEVENS,
         },
     ),
     (
@@ -335,7 +335,7 @@ const PRIMARY_WORD_CATALOGUE: &[(PrimaryClass, WordTemplate<'static>)] = &[
         WordTemplate {
             width: 68,
             height: WORD_HEIGHT_HUD,
-            bytes: TMPL_EIGHTS,
+            bytes: TEMPLATE_EIGHTS,
         },
     ),
     (
@@ -343,7 +343,7 @@ const PRIMARY_WORD_CATALOGUE: &[(PrimaryClass, WordTemplate<'static>)] = &[
         WordTemplate {
             width: 64,
             height: WORD_HEIGHT_HUD,
-            bytes: TMPL_NINES,
+            bytes: TEMPLATE_NINES,
         },
     ),
     (
@@ -351,7 +351,7 @@ const PRIMARY_WORD_CATALOGUE: &[(PrimaryClass, WordTemplate<'static>)] = &[
         WordTemplate {
             width: 51,
             height: WORD_HEIGHT_HUD,
-            bytes: TMPL_TENS,
+            bytes: TEMPLATE_TENS,
         },
     ),
     (
@@ -359,7 +359,7 @@ const PRIMARY_WORD_CATALOGUE: &[(PrimaryClass, WordTemplate<'static>)] = &[
         WordTemplate {
             width: 59,
             height: WORD_HEIGHT_HUD,
-            bytes: TMPL_JACKS,
+            bytes: TEMPLATE_JACKS,
         },
     ),
     (
@@ -367,7 +367,7 @@ const PRIMARY_WORD_CATALOGUE: &[(PrimaryClass, WordTemplate<'static>)] = &[
         WordTemplate {
             width: 85,
             height: WORD_HEIGHT_HUD,
-            bytes: TMPL_QUEENS,
+            bytes: TEMPLATE_QUEENS,
         },
     ),
     (
@@ -375,7 +375,7 @@ const PRIMARY_WORD_CATALOGUE: &[(PrimaryClass, WordTemplate<'static>)] = &[
         WordTemplate {
             width: 61,
             height: WORD_HEIGHT_HUD,
-            bytes: TMPL_KINGS,
+            bytes: TEMPLATE_KINGS,
         },
     ),
     (
@@ -383,7 +383,7 @@ const PRIMARY_WORD_CATALOGUE: &[(PrimaryClass, WordTemplate<'static>)] = &[
         WordTemplate {
             width: 77,
             height: WORD_HEIGHT_HUD,
-            bytes: TMPL_BOARDS,
+            bytes: TEMPLATE_BOARDS,
         },
     ),
     (
@@ -391,7 +391,7 @@ const PRIMARY_WORD_CATALOGUE: &[(PrimaryClass, WordTemplate<'static>)] = &[
         WordTemplate {
             width: 63,
             height: WORD_HEIGHT_HUD,
-            bytes: TMPL_SCORE,
+            bytes: TEMPLATE_SCORE,
         },
     ),
     (
@@ -399,7 +399,7 @@ const PRIMARY_WORD_CATALOGUE: &[(PrimaryClass, WordTemplate<'static>)] = &[
         WordTemplate {
             width: 61,
             height: WORD_HEIGHT_HUD,
-            bytes: TMPL_SOLVE,
+            bytes: TEMPLATE_SOLVE,
         },
     ),
     (
@@ -407,12 +407,12 @@ const PRIMARY_WORD_CATALOGUE: &[(PrimaryClass, WordTemplate<'static>)] = &[
         WordTemplate {
             width: 59,
             height: WORD_HEIGHT_HUD,
-            bytes: TMPL_CLEAR_WORD,
+            bytes: TEMPLATE_CLEAR_WORD,
         },
     ),
 ];
 
-/// Exact rational normalized intensity distance (`difference / total`, non-zero denominator).
+/// Exact rational normalised intensity distance (`difference / total`, non-zero denominator).
 #[derive(Clone, Copy, Eq, PartialEq)]
 struct RatioDistance {
     /// Sum of absolute intensity differences over the aligned union window.
@@ -548,7 +548,7 @@ impl WhiteInkBand {
         spans
     }
 
-    /// Best normalized L1 distance of `template` aligned near `span` across bounded shifts.
+    /// Best normalised L1 distance of `template` aligned near `span` across bounded shifts.
     fn match_at_span(&self, span: InkSpan, template: WordTemplate<'_>) -> Option<RatioDistance> {
         if template.height != self.height
             || template.bytes.len() != template.width.checked_mul(template.height)?
@@ -735,14 +735,14 @@ fn verify_green_top_hud_bg(view: FrameView<'_>) -> Option<[u8; 3]> {
         .then_some(bg)
 }
 
-/// Extract a compile-time crop prefix of `TMPL_THE_DECK` matching `"the"` (`38 × 32`).
+/// Extract a compile-time crop prefix of `TEMPLATE_THE_DECK` matching `"the"` (`38 × 32`).
 const fn the_prefix_bytes() -> [u8; THE_PREFIX_WIDTH * WORD_HEIGHT_HUD] {
     let mut out = [0_u8; THE_PREFIX_WIDTH * WORD_HEIGHT_HUD];
     let mut y = 0;
     while y < WORD_HEIGHT_HUD {
         let mut x = 0;
         while x < THE_PREFIX_WIDTH {
-            out[y * THE_PREFIX_WIDTH + x] = TMPL_THE_DECK[y * THE_DECK_WIDTH + x];
+            out[y * THE_PREFIX_WIDTH + x] = TEMPLATE_THE_DECK[y * THE_DECK_WIDTH + x];
             x += 1;
         }
         y += 1;
@@ -750,8 +750,8 @@ const fn the_prefix_bytes() -> [u8; THE_PREFIX_WIDTH * WORD_HEIGHT_HUD] {
     out
 }
 
-/// Static `"the"` word bytes (`38 × 32`) extracted from native `TMPL_THE_DECK`.
-const TMPL_THE_PREFIX: [u8; THE_PREFIX_WIDTH * WORD_HEIGHT_HUD] = the_prefix_bytes();
+/// Static `"the"` word bytes (`38 × 32`) extracted from native `TEMPLATE_THE_DECK`.
+const TEMPLATE_THE_PREFIX: [u8; THE_PREFIX_WIDTH * WORD_HEIGHT_HUD] = the_prefix_bytes();
 
 /// Observe a colour-independent Challenge banner objective on a `1920×1080` frame.
 ///
@@ -804,7 +804,7 @@ pub fn observe_challenge_header(
                 WordTemplate {
                     width: 81,
                     height: WORD_HEIGHT_HUD,
-                    bytes: TMPL_CLEARED,
+                    bytes: TEMPLATE_CLEARED,
                 },
             ) {
                 return Ok(None);
@@ -832,7 +832,7 @@ pub fn observe_challenge_header(
                 WordTemplate {
                     width: 81,
                     height: WORD_HEIGHT_HUD,
-                    bytes: TMPL_CLEARED,
+                    bytes: TEMPLATE_CLEARED,
                 },
             ) {
                 return Ok(None);
@@ -877,7 +877,7 @@ pub fn observe_challenge_header(
                 WordTemplate {
                     width: THE_DECK_WIDTH,
                     height: WORD_HEIGHT_HUD,
-                    bytes: TMPL_THE_DECK,
+                    bytes: TEMPLATE_THE_DECK,
                 },
             );
             Ok(matched.then_some(TriPeaksChallenge::SolveDeck))
@@ -891,7 +891,7 @@ pub fn observe_challenge_header(
                 WordTemplate {
                     width: THE_PREFIX_WIDTH,
                     height: WORD_HEIGHT_HUD,
-                    bytes: &TMPL_THE_PREFIX,
+                    bytes: &TEMPLATE_THE_PREFIX,
                 },
             );
             Ok(matched.then_some(TriPeaksChallenge::UnsupportedSingleCard))
@@ -956,12 +956,12 @@ pub fn observe_normal_score(frame: &CapturedFrame) -> Result<Option<u32>, Operat
         WordTemplate {
             width: 69,
             height: WORD_HEIGHT_HUD,
-            bytes: TMPL_NORMAL_SCORE_LABEL,
+            bytes: TEMPLATE_NORMAL_SCORE_LABEL,
         },
         WordTemplate {
             width: 68,
             height: WORD_HEIGHT_HUD,
-            bytes: TMPL_NORMAL_SCORE_LABEL_ALT,
+            bytes: TEMPLATE_NORMAL_SCORE_LABEL_ALT,
         },
     ]
     .into_iter()
@@ -1051,7 +1051,7 @@ pub fn observe_deals_left_caption(frame: &CapturedFrame) -> Result<Option<u8>, O
             WordTemplate {
                 width: 136,
                 height: WORD_HEIGHT_DEALS,
-                bytes: TMPL_DEALS_ZERO,
+                bytes: TEMPLATE_DEALS_ZERO,
             },
         ),
         (
@@ -1059,7 +1059,7 @@ pub fn observe_deals_left_caption(frame: &CapturedFrame) -> Result<Option<u8>, O
             WordTemplate {
                 width: 124,
                 height: WORD_HEIGHT_DEALS,
-                bytes: TMPL_DEALS_ONE,
+                bytes: TEMPLATE_DEALS_ONE,
             },
         ),
         (
@@ -1067,7 +1067,7 @@ pub fn observe_deals_left_caption(frame: &CapturedFrame) -> Result<Option<u8>, O
             WordTemplate {
                 width: 140,
                 height: WORD_HEIGHT_DEALS,
-                bytes: TMPL_DEALS_TWO,
+                bytes: TEMPLATE_DEALS_TWO,
             },
         ),
     ];
@@ -1133,7 +1133,7 @@ pub fn observe_no_moves_modal(frame: &CapturedFrame) -> Result<Option<PixelPoint
         WordTemplate {
             width: 416,
             height: WORD_HEIGHT_MODAL,
-            bytes: TMPL_NO_MOVES_TITLE,
+            bytes: TEMPLATE_NO_MOVES_TITLE,
         },
     ) {
         return Ok(None);
@@ -1190,7 +1190,7 @@ mod tests {
                 frame.pixels[off..off + 3].copy_from_slice(&rgb);
             }
         }
-        // Stamp `template` + `TMPL_CLEARED` + `0/3` from `fours` ribbon colour delta.
+        // Stamp `template` + `TEMPLATE_CLEARED` + `0/3` from `fours` ribbon colour delta.
         let stamp =
             |f: &mut CapturedFrame, x0: usize, y0: usize, bytes: &[u8], w: usize, h: usize| {
                 for dy in 0..h {
@@ -1217,7 +1217,7 @@ mod tests {
             template.width,
             template.height,
         );
-        stamp(&mut frame, 922, 48, TMPL_CLEARED, 81, WORD_HEIGHT_HUD);
+        stamp(&mut frame, 922, 48, TEMPLATE_CLEARED, 81, WORD_HEIGHT_HUD);
         // Copy counter ink from native `freecell-empty-play1-fours-20261113.png` (`0/3`) at `x=1044..1090`.
         let src_fours = decode(include_bytes!(
             "../tests/fixtures/freecell-empty-play1-fours-20261113.png"
@@ -1228,13 +1228,13 @@ mod tests {
         for y in 48_usize..80 {
             for x in 1_042_usize..1_096 {
                 let so = y * src_fours.stride + x * 4;
-                let srgb = [
+                let rgb_pixel = [
                     src_fours.pixels[so],
                     src_fours.pixels[so + 1],
                     src_fours.pixels[so + 2],
                 ];
                 let ink = u16::from(white_blend_ink(
-                    srgb,
+                    rgb_pixel,
                     fours_bg,
                     c,
                     denom,
@@ -1404,7 +1404,7 @@ mod tests {
             [28, 76, 146], // cobalt
             [58, 72, 86],  // slate
         ];
-        for bytes in [TMPL_THREES_SPACED, TMPL_THREES_COMPACT] {
+        for bytes in [TEMPLATE_THREES_SPACED, TEMPLATE_THREES_COMPACT] {
             let template = WordTemplate {
                 width: 75,
                 height: WORD_HEIGHT_HUD,
@@ -1644,11 +1644,11 @@ mod tests {
 
     #[test]
     fn pairwise_primary_word_separation_exceeds_margin() {
-        for (idx_a, &(class_a, tmpl_a)) in PRIMARY_WORD_CATALOGUE.iter().enumerate() {
+        for (idx_a, &(class_a, template_a)) in PRIMARY_WORD_CATALOGUE.iter().enumerate() {
             let mut pixels = vec![0_u8; 282 * WORD_HEIGHT_HUD];
-            for y in 0..tmpl_a.height {
-                for x in 0..tmpl_a.width {
-                    pixels[y * 282 + (20 + x)] = tmpl_a.bytes[y * tmpl_a.width + x];
+            for y in 0..template_a.height {
+                for x in 0..template_a.width {
+                    pixels[y * 282 + (20 + x)] = template_a.bytes[y * template_a.width + x];
                 }
             }
             let band = WhiteInkBand {
@@ -1658,18 +1658,18 @@ mod tests {
             };
             let span = InkSpan {
                 start: 22,
-                end: 20 + tmpl_a.width - 2,
+                end: 20 + template_a.width - 2,
             };
             let zero = RatioDistance {
                 difference: 0,
                 total: 1,
             };
-            for (idx_b, &(class_b, tmpl_b)) in PRIMARY_WORD_CATALOGUE.iter().enumerate() {
+            for (idx_b, &(class_b, template_b)) in PRIMARY_WORD_CATALOGUE.iter().enumerate() {
                 if idx_a == idx_b || class_a == class_b {
                     continue;
                 }
                 let dist = band
-                    .match_at_span(span, tmpl_b)
+                    .match_at_span(span, template_b)
                     .expect("non-empty word distance");
                 assert!(
                     zero.margin_before(dist, WORD_MARGIN),

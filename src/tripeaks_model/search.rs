@@ -16,11 +16,10 @@ use crate::recon::{CardSlot, Objective};
 use super::{
     DEAL_SLOT_COUNT, FULL_TABLEAU_MASK, INITIAL_WASTE_SLOT, PEAK_MASK, STOCK_CARD_COUNT,
     STOCK_START_SLOT, TABLEAU_SLOT_COUNT, TriPeaksMove,
-    replay::verify_move_sequence,
-    replay::verify_objective_route,
+    replay::{ReplayError, ReplayReport, verify_move_sequence, verify_objective_route},
     rules::{
         PEAK_CLEAR_BONUS, are_ranks_adjacent, card_rank_index, is_slot_uncovered,
-        slot_to_tableau_coord,
+        slot_to_tableau_coord, tap_score_delta,
     },
     validate_slot_table,
 };
@@ -36,7 +35,7 @@ pub const DEFAULT_SEARCH_LIMITS: SearchLimits = SearchLimits {
 /// Maximum legal transitions from any reachable TriPeaks state (`28` tableau + `1` draw).
 const MAX_SUCCESSORS: usize = TABLEAU_SLOT_COUNT + 1;
 
-/// Compact copyable A* search key canonicalising streak/score outside `ReachScoreDelta`.
+/// Compact copyable A* search key normalising streak/score outside `ReachScoreDelta`.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct SearchState {
     /// Occupied tableau bitmask (`bits 0..28`).
@@ -198,6 +197,115 @@ impl KnownDealModel {
             );
         }
     }
+
+    /// Generate all legal `(TriPeaksMove, SearchState)` transitions from `state`.
+    fn push_search_successors(
+        &self,
+        state: SearchState,
+        track_score: bool,
+        out: &mut SuccessorIter<SearchState>,
+    ) {
+        let mut candidates = state.tableau_mask & self.known_tableau_mask;
+        while candidates != 0 {
+            let idx = candidates.trailing_zeros() as usize;
+            let bit = 1_u32 << idx;
+            candidates &= !bit;
+            if !is_slot_uncovered(state.tableau_mask, idx as u8) {
+                continue;
+            }
+            let rank = self.known_tableau_ranks[idx];
+            if !are_ranks_adjacent(rank, state.waste_rank) {
+                continue;
+            }
+            if let Some((row, column)) = slot_to_tableau_coord(crate::recon::SlotId(idx as u8)) {
+                let (next_streak, next_score) = if track_score {
+                    let s = state.streak.saturating_add(1);
+                    let delta = tap_score_delta(s, row == 1);
+                    (s, state.score_progress.saturating_add(delta))
+                } else {
+                    (0, 0)
+                };
+                out.push(
+                    TriPeaksMove::TapTableau { row, column },
+                    SearchState {
+                        tableau_mask: state.tableau_mask & !bit,
+                        score_progress: next_score,
+                        stock_cursor: state.stock_cursor,
+                        waste_rank: rank,
+                        streak: next_streak,
+                    },
+                );
+            }
+        }
+        if let Some(Some(stock_rank)) = self.known_stock_ranks.get(usize::from(state.stock_cursor))
+        {
+            out.push(
+                TriPeaksMove::Draw,
+                SearchState {
+                    tableau_mask: state.tableau_mask,
+                    score_progress: state.score_progress,
+                    stock_cursor: state.stock_cursor.saturating_add(1),
+                    waste_rank: *stock_rank,
+                    streak: 0,
+                },
+            );
+        }
+    }
+
+    /// Return the bitmask of `Known` tableau slots matching `rank` (`0..13`).
+    fn target_rank_mask(&self, rank: u8) -> u32 {
+        if rank >= 13 {
+            return 0;
+        }
+        let mut mask = 0_u32;
+        for idx in 0..TABLEAU_SLOT_COUNT {
+            if (self.known_tableau_mask & (1_u32 << idx)) != 0
+                && self.known_tableau_ranks[idx] == rank
+            {
+                mask |= 1_u32 << idx;
+            }
+        }
+        mask
+    }
+
+    /// Soundly prove whether any occupied slot in `tableau_mask` lacks an adjacent partner anywhere remaining.
+    fn clear_board_starved(&self, tableau_mask: u32, stock_cursor: u8, waste_rank: u8) -> bool {
+        let mut stock_rank_bits = 0_u16;
+        for maybe_rank in &self.known_stock_ranks[usize::from(stock_cursor)..] {
+            let Some(rank) = maybe_rank else {
+                break;
+            };
+            stock_rank_bits |= 1_u16 << *rank;
+        }
+        let waste_and_stock = (1_u16 << waste_rank) | stock_rank_bits;
+
+        let mut remaining = tableau_mask;
+        while remaining != 0 {
+            let idx = remaining.trailing_zeros() as usize;
+            let bit = 1_u32 << idx;
+            remaining &= !bit;
+            let rank = self.known_tableau_ranks[idx];
+            let adj_mask = (1_u16 << ((rank + 1) % 13)) | (1_u16 << ((rank + 12) % 13));
+            if (waste_and_stock & adj_mask) != 0 {
+                continue;
+            }
+            let mut other = tableau_mask & !bit;
+            let mut has_tableau_partner = false;
+            while other != 0 {
+                let other_idx = other.trailing_zeros() as usize;
+                other &= !(1_u32 << other_idx);
+                let other_rank = self.known_tableau_ranks[other_idx];
+                if (adj_mask & (1_u16 << other_rank)) != 0 {
+                    has_tableau_partner = true;
+                    break;
+                }
+            }
+            if !has_tableau_partner {
+                return true;
+            }
+        }
+        false
+    }
 }
 
 /// Objective-guided `xsar::search::SearchProblem` over `Known` TriPeaks transitions.
@@ -214,17 +322,7 @@ impl TriPeaksObjectiveProblem {
     /// Construct an objective problem; builds `target_rank_mask` when `ClearRankQuota` applies.
     fn new(model: KnownDealModel, objective: Objective) -> Self {
         let target_rank_mask = match objective {
-            Objective::ClearRankQuota { rank, .. } if rank < 13 => {
-                let mut mask = 0_u32;
-                for idx in 0..TABLEAU_SLOT_COUNT {
-                    if (model.known_tableau_mask & (1_u32 << idx)) != 0
-                        && model.known_tableau_ranks[idx] == rank
-                    {
-                        mask |= 1_u32 << idx;
-                    }
-                }
-                mask
-            }
+            Objective::ClearRankQuota { rank, .. } => model.target_rank_mask(rank),
             _ => 0,
         };
         Self {
@@ -250,45 +348,6 @@ impl TriPeaksObjectiveProblem {
             }
             Objective::ReachScoreDelta { points_needed } => state.score_progress >= points_needed,
         }
-    }
-
-    /// Soundly prove whether any occupied slot in `ClearBoard` has zero adjacent rank anywhere remaining.
-    fn clear_board_starved(&self, state: SearchState) -> bool {
-        let mut stock_rank_bits = 0_u16;
-        for maybe_rank in &self.model.known_stock_ranks[usize::from(state.stock_cursor)..] {
-            let Some(rank) = maybe_rank else {
-                break;
-            };
-            stock_rank_bits |= 1_u16 << *rank;
-        }
-        let waste_and_stock = (1_u16 << state.waste_rank) | stock_rank_bits;
-
-        let mut remaining = state.tableau_mask;
-        while remaining != 0 {
-            let idx = remaining.trailing_zeros() as usize;
-            let bit = 1_u32 << idx;
-            remaining &= !bit;
-            let rank = self.model.known_tableau_ranks[idx];
-            let adj_mask = (1_u16 << ((rank + 1) % 13)) | (1_u16 << ((rank + 12) % 13));
-            if (waste_and_stock & adj_mask) != 0 {
-                continue;
-            }
-            let mut other = state.tableau_mask & !bit;
-            let mut has_tableau_partner = false;
-            while other != 0 {
-                let oidx = other.trailing_zeros() as usize;
-                other &= !(1_u32 << oidx);
-                let orank = self.model.known_tableau_ranks[oidx];
-                if (adj_mask & (1_u16 << orank)) != 0 {
-                    has_tableau_partner = true;
-                    break;
-                }
-            }
-            if !has_tableau_partner {
-                return true;
-            }
-        }
-        false
     }
 }
 
@@ -333,54 +392,8 @@ impl SearchProblem for TriPeaksObjectiveProblem {
     fn successors(&self, state: Self::State) -> Self::Successors {
         let mut out = SuccessorIter::empty();
         let track_score = matches!(self.objective, Objective::ReachScoreDelta { .. });
-        let mut candidates = state.tableau_mask & self.model.known_tableau_mask;
-        while candidates != 0 {
-            let idx = candidates.trailing_zeros() as usize;
-            let bit = 1_u32 << idx;
-            candidates &= !bit;
-            if !is_slot_uncovered(state.tableau_mask, idx as u8) {
-                continue;
-            }
-            let rank = self.model.known_tableau_ranks[idx];
-            if !are_ranks_adjacent(rank, state.waste_rank) {
-                continue;
-            }
-            if let Some((row, column)) = slot_to_tableau_coord(crate::recon::SlotId(idx as u8)) {
-                let (next_streak, next_score) = if track_score {
-                    let s = state.streak.saturating_add(1);
-                    let delta = super::rules::tap_score_delta(s, row == 1);
-                    (s, state.score_progress.saturating_add(delta))
-                } else {
-                    (0, 0)
-                };
-                out.push(
-                    TriPeaksMove::TapTableau { row, column },
-                    SearchState {
-                        tableau_mask: state.tableau_mask & !bit,
-                        score_progress: next_score,
-                        stock_cursor: state.stock_cursor,
-                        waste_rank: rank,
-                        streak: next_streak,
-                    },
-                );
-            }
-        }
-        if let Some(Some(stock_rank)) = self
-            .model
-            .known_stock_ranks
-            .get(usize::from(state.stock_cursor))
-        {
-            out.push(
-                TriPeaksMove::Draw,
-                SearchState {
-                    tableau_mask: state.tableau_mask,
-                    score_progress: state.score_progress,
-                    stock_cursor: state.stock_cursor.saturating_add(1),
-                    waste_rank: *stock_rank,
-                    streak: 0,
-                },
-            );
-        }
+        self.model
+            .push_search_successors(state, track_score, &mut out);
         out
     }
 
@@ -454,7 +467,11 @@ impl SearchProblem for TriPeaksObjectiveProblem {
         match self.objective {
             Objective::ClearBoard => {
                 (state.tableau_mask & !self.model.known_tableau_mask) != 0
-                    || self.clear_board_starved(state)
+                    || self.model.clear_board_starved(
+                        state.tableau_mask,
+                        state.stock_cursor,
+                        state.waste_rank,
+                    )
             }
             Objective::ClearRankQuota { rank, remaining } => {
                 let cleared = ((!state.tableau_mask) & self.target_rank_mask).count_ones();
@@ -729,4 +746,611 @@ pub fn best_partial_route_with_control(
 pub fn best_partial_route(slots: &[CardSlot]) -> Vec<TriPeaksMove> {
     let cancel = AtomicBool::new(false);
     best_partial_route_with_control(slots, DEFAULT_SEARCH_LIMITS, &cancel, None, None)
+}
+
+/// Complete, escalated, partial, or stopped planning result produced by [`plan_deal_route_with_control`].
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum TriPeaksPlanOutcome {
+    /// Route satisfies the caller's original objective directly on this deal.
+    SolvedObjective {
+        /// Replay-verified TriPeaks move list starting from `T = 0`.
+        actions: Vec<TriPeaksMove>,
+        /// Verified final state and cleared rank/score tallies.
+        replay: ReplayReport,
+        /// Aggregate bounded search counters across passes.
+        stats: SearchStats,
+    },
+    /// Multi-board Challenge escalation: direct quota/score exceeded a single deck, so a full
+    /// `ClearBoard` clear was planned to earn a free next deal (maximising score on `ReachScoreDelta`).
+    EscalatedClearBoard {
+        /// Replay-verified `28`-card full-board clear starting from `T = 0`.
+        actions: Vec<TriPeaksMove>,
+        /// Verified final state (guaranteed `tableau_mask == 0`).
+        replay: ReplayReport,
+        /// Aggregate bounded search counters across passes.
+        stats: SearchStats,
+    },
+    /// Both the direct objective and `ClearBoard` are exhaustively unsolvable on the known cards.
+    UnsolvablePartial {
+        /// Replay-verified best objective-progress route (empty when `0` progress is reachable).
+        actions: Vec<TriPeaksMove>,
+        /// Verified final state of `actions`.
+        replay: ReplayReport,
+        /// Maximum tableau cards clearable on the known deal (`0..=28`).
+        max_tableau_cleared: u8,
+        /// Aggregate bounded search counters across passes.
+        stats: SearchStats,
+    },
+    /// Search stopped cleanly under operator cancellation or bounded resource limits.
+    Stopped {
+        /// Bounded search stop cause (`Cancelled`, `ExpansionLimit`, etc.).
+        reason: SearchStop,
+        /// Aggregate search counters completed prior to stopping.
+        stats: SearchStats,
+    },
+}
+
+/// A* `SearchProblem` seeking a full `28`-card clear (`tableau_mask == 0`) with `score >= min_score`.
+struct ClearBoardMinScoreProblem {
+    /// Compiled deal ranks and masks.
+    model: KnownDealModel,
+    /// Minimum required verified score delta along the full-board clear.
+    min_score: u32,
+}
+
+impl ClearBoardMinScoreProblem {
+    /// Compute remaining optimistic taps from `state` (`(rem_cards, rem_peaks, start_streak, immediate_tap)`).
+    fn optimistic_bounds(&self, state: SearchState) -> (u32, u32, u32, bool) {
+        let rem_cards = state.tableau_mask.count_ones();
+        let rem_peaks = (state.tableau_mask & PEAK_MASK).count_ones();
+        let immediate_tap = self
+            .model
+            .has_adjacent_uncovered_tap(state.tableau_mask, state.waste_rank);
+        let start_streak = if immediate_tap {
+            u32::from(state.streak)
+        } else {
+            0
+        };
+        (rem_cards, rem_peaks, start_streak, immediate_tap)
+    }
+}
+
+impl SearchProblem for ClearBoardMinScoreProblem {
+    type State = SearchState;
+    type Action = TriPeaksMove;
+    type Successors = SuccessorIter<SearchState>;
+
+    fn initial(&self) -> Self::State {
+        SearchState {
+            tableau_mask: FULL_TABLEAU_MASK,
+            score_progress: 0,
+            stock_cursor: 0,
+            waste_rank: self.model.initial_waste_rank,
+            streak: 0,
+        }
+    }
+
+    fn is_goal(&self, state: Self::State) -> bool {
+        state.tableau_mask == 0 && state.score_progress >= self.min_score
+    }
+
+    fn successors(&self, state: Self::State) -> Self::Successors {
+        let mut out = SuccessorIter::empty();
+        if state.tableau_mask != 0 {
+            self.model.push_search_successors(state, true, &mut out);
+        }
+        out
+    }
+
+    fn heuristic(&self, state: Self::State) -> u32 {
+        let (rem_cards, rem_peaks, start_streak, immediate_tap) = self.optimistic_bounds(state);
+        if rem_cards == 0 {
+            return 0;
+        }
+        let deficit = self.min_score.saturating_sub(state.score_progress);
+        let min_score_taps =
+            min_taps_for_deficit(start_streak, rem_cards, rem_peaks, deficit).unwrap_or(rem_cards);
+        rem_cards
+            .max(min_score_taps)
+            .saturating_add(u32::from(!immediate_tap))
+    }
+
+    fn impossible(&self, state: Self::State) -> bool {
+        if (state.tableau_mask & !self.model.known_tableau_mask) != 0
+            || self.model.clear_board_starved(
+                state.tableau_mask,
+                state.stock_cursor,
+                state.waste_rank,
+            )
+        {
+            return true;
+        }
+        let deficit = self.min_score.saturating_sub(state.score_progress);
+        if deficit == 0 {
+            return false;
+        }
+        let (rem_cards, rem_peaks, start_streak, _) = self.optimistic_bounds(state);
+        max_score_gain_in_taps(start_streak, rem_cards, rem_peaks) < deficit
+    }
+}
+
+/// `BestEffortProblem` maximising target-rank removals (with total cards/peaks as tie-breakers).
+struct MaxRankPartialProblem {
+    /// Compiled deal ranks and masks.
+    model: KnownDealModel,
+    /// Bitmask of `Known` tableau slots matching the Challenge's target rank.
+    target_rank_mask: u32,
+}
+
+impl SearchProblem for MaxRankPartialProblem {
+    type State = ReachState;
+    type Action = TriPeaksMove;
+    type Successors = SuccessorIter<ReachState>;
+
+    fn initial(&self) -> Self::State {
+        ReachState {
+            tableau_mask: FULL_TABLEAU_MASK,
+            stock_cursor: 0,
+            waste_rank: self.model.initial_waste_rank,
+        }
+    }
+
+    fn is_goal(&self, state: Self::State) -> bool {
+        (state.tableau_mask & self.target_rank_mask) == 0 && self.target_rank_mask != 0
+    }
+
+    fn successors(&self, state: Self::State) -> Self::Successors {
+        let mut out = SuccessorIter::empty();
+        self.model.push_reach_successors(state, &mut out);
+        out
+    }
+}
+
+impl BestEffortProblem for MaxRankPartialProblem {
+    fn score(&self, state: Self::State) -> u32 {
+        let rank_cleared = ((!state.tableau_mask) & self.target_rank_mask).count_ones();
+        if rank_cleared == 0 {
+            return 0;
+        }
+        let cleared = (FULL_TABLEAU_MASK & !state.tableau_mask).count_ones();
+        let peaks_cleared = (PEAK_MASK & !state.tableau_mask).count_ones();
+        rank_cleared * 100_000 + cleared * 1_000 + peaks_cleared * 100
+    }
+}
+
+/// `BestEffortProblem` maximising verified single-board score on an unsolvable deal.
+struct MaxScorePartialProblem {
+    /// Compiled deal ranks and masks.
+    model: KnownDealModel,
+}
+
+impl SearchProblem for MaxScorePartialProblem {
+    type State = SearchState;
+    type Action = TriPeaksMove;
+    type Successors = SuccessorIter<SearchState>;
+
+    fn initial(&self) -> Self::State {
+        SearchState {
+            tableau_mask: FULL_TABLEAU_MASK,
+            score_progress: 0,
+            stock_cursor: 0,
+            waste_rank: self.model.initial_waste_rank,
+            streak: 0,
+        }
+    }
+
+    fn is_goal(&self, _state: Self::State) -> bool {
+        false
+    }
+
+    fn successors(&self, state: Self::State) -> Self::Successors {
+        let mut out = SuccessorIter::empty();
+        self.model.push_search_successors(state, true, &mut out);
+        out
+    }
+}
+
+impl BestEffortProblem for MaxScorePartialProblem {
+    fn score(&self, state: Self::State) -> u32 {
+        state.score_progress
+    }
+}
+
+/// Shared borrowed control context passed across planning passes.
+struct PlanSearchEnv<'a, 'b> {
+    /// Validated `52`-slot deal table.
+    slots: &'a [CardSlot],
+    /// Compiled known-card deal model.
+    model: KnownDealModel,
+    /// Resource bounds per search pass.
+    limits: SearchLimits,
+    /// Shared cancellation flag.
+    cancel: &'a AtomicBool,
+    /// Optional cooperative search progress observer.
+    progress: Option<&'b mut dyn FnMut(SearchProgress)>,
+    /// Optional cooperative Pause checkpoint callback.
+    checkpoint: Option<&'a dyn Fn() -> Duration>,
+    /// Cumulative search work across sub-passes.
+    acc_stats: SearchStats,
+}
+
+impl PlanSearchEnv<'_, '_> {
+    /// Accumulate counters from one completed sub-search.
+    fn record_stats(&mut self, next: SearchStats) {
+        self.acc_stats.expanded = self.acc_stats.expanded.saturating_add(next.expanded);
+        self.acc_stats.generated = self.acc_stats.generated.saturating_add(next.generated);
+        self.acc_stats.states = self.acc_stats.states.max(next.states);
+        self.acc_stats.peak_frontier = self.acc_stats.peak_frontier.max(next.peak_frontier);
+        self.acc_stats.elapsed = self.acc_stats.elapsed.saturating_add(next.elapsed);
+    }
+
+    /// Run one `BestEffortProblem` pass cleanly, recording stats and mapping cancellation.
+    fn run_best_effort<P: BestEffortProblem<Action = TriPeaksMove>>(
+        &mut self,
+        problem: &P,
+        options: SearchOptions,
+    ) -> Result<Option<Vec<TriPeaksMove>>, SearchStop> {
+        let outcome = match self.progress.as_deref_mut() {
+            Some(cb) => {
+                let mut forward = |p| cb(p);
+                solve_best_effort_with_control(
+                    problem,
+                    self.limits,
+                    self.cancel,
+                    options,
+                    Some(&mut forward),
+                    self.checkpoint,
+                )
+            }
+            None => solve_best_effort_with_control(
+                problem,
+                self.limits,
+                self.cancel,
+                options,
+                None,
+                self.checkpoint,
+            ),
+        };
+        match outcome {
+            BestEffortOutcome::Solved { actions, stats, .. }
+            | BestEffortOutcome::Partial { actions, stats, .. } => {
+                self.record_stats(stats);
+                Ok(Some(actions))
+            }
+            BestEffortOutcome::Stopped {
+                reason: SearchStop::Cancelled,
+                stats,
+            } => {
+                self.record_stats(stats);
+                Err(SearchStop::Cancelled)
+            }
+            BestEffortOutcome::Stopped { stats, .. } => {
+                self.record_stats(stats);
+                Ok(None)
+            }
+        }
+    }
+
+    /// Run one bounded A* `SearchProblem` pass cleanly, recording stats without pinning `progress`.
+    fn run_astar<P: SearchProblem<Action = TriPeaksMove>>(
+        &mut self,
+        problem: &P,
+        limits: SearchLimits,
+    ) -> SearchOutcome<TriPeaksMove> {
+        let outcome = match self.progress.as_deref_mut() {
+            Some(cb) => {
+                let mut forward = |p| cb(p);
+                solve_with_control(
+                    problem,
+                    limits,
+                    self.cancel,
+                    SearchOptions::default(),
+                    Some(&mut forward),
+                    self.checkpoint,
+                )
+            }
+            None => solve_with_control(
+                problem,
+                limits,
+                self.cancel,
+                SearchOptions::default(),
+                None,
+                self.checkpoint,
+            ),
+        };
+        match &outcome {
+            SearchOutcome::Solved { stats, .. }
+            | SearchOutcome::Unsolvable { stats }
+            | SearchOutcome::Stopped { stats, .. } => self.record_stats(*stats),
+        }
+        outcome
+    }
+
+    /// Run one bounded `solve_known_subgraph_with_control` pass without pinning `progress` lifetime.
+    fn run_objective(&mut self, objective: Objective) -> SearchOutcome<TriPeaksMove> {
+        let outcome = match self.progress.as_deref_mut() {
+            Some(cb) => {
+                let mut forward = |p| cb(p);
+                solve_known_subgraph_with_control(
+                    self.slots,
+                    objective,
+                    self.limits,
+                    SearchOptions::default(),
+                    self.cancel,
+                    Some(&mut forward),
+                    self.checkpoint,
+                )
+            }
+            None => solve_known_subgraph_with_control(
+                self.slots,
+                objective,
+                self.limits,
+                SearchOptions::default(),
+                self.cancel,
+                None,
+                self.checkpoint,
+            ),
+        };
+        match &outcome {
+            SearchOutcome::Solved { stats, .. }
+            | SearchOutcome::Unsolvable { stats }
+            | SearchOutcome::Stopped { stats, .. } => self.record_stats(*stats),
+        }
+        outcome
+    }
+}
+
+/// Upgrade an escalated full-board clear for `ReachScoreDelta` via binary search over `100`-pt
+/// thresholds up to the `28`-card theoretical ceiling, preserving `fast_actions` if capped.
+fn maybe_upgrade_clear_score(
+    env: &mut PlanSearchEnv<'_, '_>,
+    fast_actions: Vec<TriPeaksMove>,
+    fast_replay: ReplayReport,
+) -> Result<(Vec<TriPeaksMove>, ReplayReport), SearchStop> {
+    let mut best_actions = fast_actions;
+    let mut best_replay = fast_replay;
+    let max_theoretical = max_score_gain_in_taps(0, TABLEAU_SLOT_COUNT as u32, 3);
+    let mut lo_hundreds = best_replay.final_position.score_delta / 100 + 1;
+    let mut hi_hundreds = max_theoretical / 100;
+    if lo_hundreds > hi_hundreds {
+        return Ok((best_actions, best_replay));
+    }
+
+    // Bound each score-maximising binary-search probe so multi-draw boards never stall.
+    let probe_limits = SearchLimits {
+        max_states: env.limits.max_states.min(100_000),
+        max_expansions: env.limits.max_expansions.min(50_000),
+        max_memory_bytes: env.limits.max_memory_bytes,
+        max_duration: env.limits.max_duration.min(Duration::from_millis(500)),
+    };
+
+    while lo_hundreds <= hi_hundreds {
+        let mid_hundreds = lo_hundreds + (hi_hundreds - lo_hundreds) / 2;
+        let problem = ClearBoardMinScoreProblem {
+            model: env.model,
+            min_score: mid_hundreds * 100,
+        };
+        match env.run_astar(&problem, probe_limits) {
+            SearchOutcome::Solved { actions, .. } => {
+                let candidate = actions.into_vec();
+                if let Ok(candidate_replay) =
+                    verify_objective_route(env.slots, &candidate, Objective::ClearBoard)
+                {
+                    let candidate_score = candidate_replay.final_position.score_delta;
+                    if candidate_score > best_replay.final_position.score_delta
+                        || (candidate_score == best_replay.final_position.score_delta
+                            && candidate_replay.steps_executed < best_replay.steps_executed)
+                    {
+                        best_actions = candidate;
+                        best_replay = candidate_replay;
+                    }
+                    lo_hundreds = (candidate_score / 100)
+                        .saturating_add(1)
+                        .max(mid_hundreds + 1);
+                } else {
+                    hi_hundreds = mid_hundreds - 1;
+                }
+            }
+            SearchOutcome::Stopped {
+                reason: SearchStop::Cancelled,
+                ..
+            } => return Err(SearchStop::Cancelled),
+            SearchOutcome::Unsolvable { .. } | SearchOutcome::Stopped { .. } => {
+                hi_hundreds = mid_hundreds - 1;
+            }
+        }
+    }
+
+    Ok((best_actions, best_replay))
+}
+
+/// Plan the optimal direct objective route, multi-board `ClearBoard` escalation, or verified
+/// best-partial fallback route over `slots`, verifying every returned move list via replay.
+///
+/// # Errors
+///
+/// Returns [`ReplayError`] if `slots` fails validation or lacks a `Known` initial Waste slot.
+pub fn plan_deal_route_with_control(
+    slots: &[CardSlot],
+    objective: Objective,
+    limits: SearchLimits,
+    cancel: &AtomicBool,
+    progress: Option<&mut dyn FnMut(SearchProgress)>,
+    checkpoint: Option<&dyn Fn() -> Duration>,
+) -> Result<TriPeaksPlanOutcome, ReplayError> {
+    let fixed = validate_slot_table(slots)?;
+    let model = KnownDealModel::from_slots(fixed).ok_or(super::ModelError::UnknownInitialWaste)?;
+    let mut env = PlanSearchEnv {
+        slots: fixed,
+        model,
+        limits,
+        cancel,
+        progress,
+        checkpoint,
+        acc_stats: SearchStats::default(),
+    };
+
+    // 1. Try the direct caller objective first.
+    match env.run_objective(objective) {
+        SearchOutcome::Solved { actions, .. } => {
+            let route = actions.into_vec();
+            let replay = verify_objective_route(fixed, &route, objective)?;
+            return Ok(TriPeaksPlanOutcome::SolvedObjective {
+                actions: route,
+                replay,
+                stats: env.acc_stats,
+            });
+        }
+        SearchOutcome::Stopped { reason, .. } => {
+            return Ok(TriPeaksPlanOutcome::Stopped {
+                reason,
+                stats: env.acc_stats,
+            });
+        }
+        SearchOutcome::Unsolvable { .. } => {}
+    }
+
+    // 2. Multi-board ClearBoard escalation rule for rank/score challenges exceeding one board.
+    if matches!(
+        objective,
+        Objective::ClearRankQuota { .. } | Objective::ReachScoreDelta { .. }
+    ) {
+        match env.run_objective(Objective::ClearBoard) {
+            SearchOutcome::Solved { actions, .. } => {
+                let fast_route = actions.into_vec();
+                let fast_replay =
+                    verify_objective_route(fixed, &fast_route, Objective::ClearBoard)?;
+                let (actions, replay) = if matches!(objective, Objective::ReachScoreDelta { .. }) {
+                    match maybe_upgrade_clear_score(&mut env, fast_route, fast_replay) {
+                        Ok(pair) => pair,
+                        Err(reason) => {
+                            return Ok(TriPeaksPlanOutcome::Stopped {
+                                reason,
+                                stats: env.acc_stats,
+                            });
+                        }
+                    }
+                } else {
+                    (fast_route, fast_replay)
+                };
+                return Ok(TriPeaksPlanOutcome::EscalatedClearBoard {
+                    actions,
+                    replay,
+                    stats: env.acc_stats,
+                });
+            }
+            SearchOutcome::Stopped { reason, .. } => {
+                return Ok(TriPeaksPlanOutcome::Stopped {
+                    reason,
+                    stats: env.acc_stats,
+                });
+            }
+            SearchOutcome::Unsolvable { .. } => {}
+        }
+    }
+
+    // 3. Dead-end fallback: measure maximum clearable cards, and bank positive rank/score gain.
+    let dijkstra = SearchOptions {
+        method: SearchMethod::Dijkstra,
+        heuristic_weight: SearchOptions::default().heuristic_weight,
+    };
+    let best_cards_actions = match env.run_best_effort(&BestPartialProblem { model }, dijkstra) {
+        Ok(Some(actions)) => actions,
+        Ok(None) => Vec::new(),
+        Err(reason) => {
+            return Ok(TriPeaksPlanOutcome::Stopped {
+                reason,
+                stats: env.acc_stats,
+            });
+        }
+    };
+    let best_cards_replay = verify_move_sequence(fixed, &best_cards_actions)?;
+    let max_tableau_cleared = u8::try_from(
+        (FULL_TABLEAU_MASK & !best_cards_replay.final_position.tableau_mask).count_ones(),
+    )
+    .unwrap_or(28);
+
+    let (actions, replay) = match objective {
+        Objective::ClearBoard => (Vec::new(), verify_move_sequence(fixed, &[])?),
+        Objective::ClearRankQuota { rank, .. } => {
+            let target_rank_mask = model.target_rank_mask(rank);
+            if target_rank_mask == 0 {
+                (Vec::new(), verify_move_sequence(fixed, &[])?)
+            } else {
+                let problem = MaxRankPartialProblem {
+                    model,
+                    target_rank_mask,
+                };
+                match env.run_best_effort(&problem, dijkstra) {
+                    Ok(Some(candidate)) => {
+                        let candidate_replay = verify_move_sequence(fixed, &candidate)?;
+                        let cleared = candidate_replay
+                            .final_position
+                            .cleared_by_rank
+                            .get(usize::from(rank))
+                            .copied()
+                            .unwrap_or(0);
+                        if cleared > 0 {
+                            (candidate, candidate_replay)
+                        } else {
+                            (Vec::new(), verify_move_sequence(fixed, &[])?)
+                        }
+                    }
+                    Ok(None) => (Vec::new(), verify_move_sequence(fixed, &[])?),
+                    Err(reason) => {
+                        return Ok(TriPeaksPlanOutcome::Stopped {
+                            reason,
+                            stats: env.acc_stats,
+                        });
+                    }
+                }
+            }
+        }
+        Objective::ReachScoreDelta { .. } => {
+            let problem = MaxScorePartialProblem { model };
+            let mut chosen = (best_cards_actions, best_cards_replay);
+            match env.run_best_effort(&problem, dijkstra) {
+                Ok(Some(candidate)) => {
+                    if let Ok(candidate_replay) = verify_move_sequence(fixed, &candidate)
+                        && candidate_replay.final_position.score_delta
+                            > chosen.1.final_position.score_delta
+                    {
+                        chosen = (candidate, candidate_replay);
+                    }
+                }
+                Ok(None) => {}
+                Err(reason) => {
+                    return Ok(TriPeaksPlanOutcome::Stopped {
+                        reason,
+                        stats: env.acc_stats,
+                    });
+                }
+            }
+            if chosen.1.final_position.score_delta > 0 {
+                chosen
+            } else {
+                (Vec::new(), verify_move_sequence(fixed, &[])?)
+            }
+        }
+    };
+
+    Ok(TriPeaksPlanOutcome::UnsolvablePartial {
+        actions,
+        replay,
+        max_tableau_cleared,
+        stats: env.acc_stats,
+    })
+}
+
+/// Convenience wrapper for [`plan_deal_route_with_control`] using [`DEFAULT_SEARCH_LIMITS`].
+///
+/// # Errors
+///
+/// Returns [`ReplayError`] if `slots` fails validation or lacks a `Known` initial Waste slot.
+pub fn plan_deal_route(
+    slots: &[CardSlot],
+    objective: Objective,
+) -> Result<TriPeaksPlanOutcome, ReplayError> {
+    let cancel = AtomicBool::new(false);
+    plan_deal_route_with_control(slots, objective, DEFAULT_SEARCH_LIMITS, &cancel, None, None)
 }

@@ -152,32 +152,34 @@ Fixture and template provenance for Goal 2 calibration (`tests/fixtures/tripeaks
 - Enforce the `65,536`-byte input/output limit, duplicate JSON object key rejection (including `\uXXXX`-escaped keys), trailing token refusal, and full deal/route replay validation (`verify_move_sequence`) before publishing.
 - Atomic export (`publish_to_path`) uses same-directory `0600` temporary file creation (`create_new`), `sync_all`, and `no-overwrite` `hard_link` with immediate `DestinationState` inspection (`Absent`, `MatchingBytesPresent`, `PreExistingDifferentBytes`, `InspectionFailed`) on any link failure.
 
-### 6.2 Search & Domain Adapter (`src/tripeaks_model/search.rs`, `xsar::search`)
+### 6.2 Search, Calculation & Multi-Board Escalation (`src/tripeaks_model/search.rs`, `src/worker/tripeaks_calculation.rs`, `xsar::search`)
 
 - Use `xsar::search` (A*/Dijkstra and `solve_best_effort_with_control`) strictly from `qmp-qemu-socket` without modifying `../xsar`.
 - Forward move scoring conservatively credits only Beast-verified per-tap streak points (`100 * (2 * streak - 1)`) plus `+500` per cleared `Row 1` Peak (`slots 0..3`); the admissible heuristic and sound impossibility pruning for `ReachScoreDelta` upper-bound `max_gain` optimistically over remaining `Known` cards and Peaks (and reset streak across forced `Draw` transitions) so `A*` remains optimal without underestimating guest thresholds or missing reachable score routes.
 - Outside `ReachScoreDelta`, `SearchState` canonicalizes `streak = 0` and `score_progress = 0` to collapse transposition entries, and uses `solve_best_effort_with_control` (`SearchMethod::Dijkstra`) for both `plan_info_gain_probe` (maximising newly uncovered `Unknown` parents with deeper row & shortest-route tie-breaks) and `best_partial_route`.
+- **Mandatory Multi-Board `ClearBoard` Escalation (`TriPeaksPlanOutcome`, `tripeaks_calculation`):**
+  - When a `ClearRankQuota` or `ReachScoreDelta` Challenge objective exceeds one single board's achievable quota/score (direct solve returns `Unsolvable`), `plan_deal_route_with_control` automatically escalates to `Objective::ClearBoard` (`EscalatedClearBoard`), maximising single-board score on `ReachScoreDelta` via bounded binary search (`ClearBoardMinScoreProblem`) so clearing all `28` tableau cards earns a fresh free deal automatically.
+  - Only when `Objective::ClearBoard` is also unsolvable (`UnsolvablePartial`) does the planner fall back to best banked partial progress (`MaxRankPartialProblem` for rank quotas when `banked_rank_count > 0`, `MaxScorePartialProblem` for positive score gain, and `0` post-recon moves for `ClearBoard` dead ends) with **zero uncalibrated Redeal clicks**.
 
-### 6.3 Guarded QMP Execution & `GAME WIN` Capture
+### 6.3 Guarded QMP Execution, `tripeaks_route`, `tripeaks_session` & `GAME WIN` Capture
 
-- Every gesture/click sequence honours the crate's guarded input contract (`authorise_tripeaks_input` + `game_operations::session::Session` + `NativeOperations::deliver`):
+- Every gesture/click sequence honours the crate's guarded input contract (`authorise_tripeaks_input` + `game_operations::session::Session` + `NativeOperations` / `TrackedOperations` + `TriPeaksSessionDriver`):
   1. Check `STOP` / worker context token and fresh TriPeaks scene verification;
   2. Probe QEMU VM running state and active absolute pointer routing;
   3. Re-check `STOP`;
   4. Map `1920×1080` coordinates via checked `pixel * 32767 / extent`;
-  5. Verify physical board/Waste/Stock change in a fresh frame before advancing to the next move.
-- Live recon execution (`src/worker/tripeaks_reconnaissance.rs`: `LiveTriPeaksDomain`, `run_tripeaks_recon`) implements `ReconDomain`:
-  - **Dirty-start & duplicate refusal:** refuses non-initial deals (`28` tableau face-up/covered check, empty Waste/full Stock invariants) and duplicate cards before issuing any game input.
-  - **Guarded Stock sweep & Draw-23 modal back-out:** draws Stock `0..23` via guarded `'D'` input while monitoring live board/Challenge completion (`CompletedDuringRecon`) and Draw-23 `"No Moves Remaining"`; when Draw-23 modal appears, confirms it twice across fresh frames and holds `"Undo last move"` (`Input::MouseLeftHold` / `Session::mouse_left_click_with_hold` with `POST_GAME_MOUSE_HOLD`) before invoking `Undo All`.
-  - **Direct/confirmed `Undo All` restoration & probing:** acquires a fresh pre-`Undo All` scene (`acquire_pre_undo_scene`), classifies scene/animation state (`classify_tripeaks_undo_all`), drives `game_operations::restoration::undo_all` under `ConfirmationPolicy::DirectOrConfirmed` (`SHARED_UNDO_ALL_CONTROL` `(1320, 978)`), verifies restoration back to the root `semantic_board_hash`, and runs up to `DEFAULT_MAX_PROBES` guided probe/undo cycles with atomic `no-overwrite` JSON export.
-- Record `GAME WIN` sequence frames by default (`--no-image` disables win-sequence recording while retaining failure diagnostics).
+  5. Verify physical board/Waste/Stock position (`verify_snapshot_matches_position` / `verify_snapshot_matches_document_root`) or verified transition (`BoardCleared`, `NextBoardDealt`, `BoardWinOverlay`, `ChallengeComplete`, `PartialModal`) before advancing.
+- **Shared Route Playback & Restoration (`src/worker/tripeaks_route.rs`):** Manual playback (`SINGLE STEP`, `MULTI STEP`, `Stop after step`, `UNDO ALL`) and `tripeaks_session` share `deliver_and_observe_tripeaks_move` and `restore_board_to_document_root` under defensive `verify_move_sequence` / `verify_objective_route` preparation and failure artifact persistence.
+- **Multi-Board Session Driver (`src/worker/tripeaks_session.rs`, `src/worker/post_game.rs`):**
+  - `drive_tripeaks_session` coordinates `Continuous` (3-board Normal games restarting via `RestartPolicy::IndependentTriPeaks` on `Congratulations` / `LEVEL-UP!` without `previous_root_hash` duplicates; multi-board Challenge escalation through `NextBoardDealt` and `ChallengeTracker`; immediate `CompletedDuringRecon` interception) and `Single board` modes while never clicking Challenge Complete `Continue` or uncalibrated `Redeal`.
+  - Records `GAME WIN` sequence frames by default (`--no-image` disables win-sequence recording while retaining failure diagnostics); in `Continuous` 3-board Normal wins `post_game::run_independent_tripeaks_restart_retaining_frame` owns the single win-sequence recording scope cleanly, while standalone terminal wins record once without double-opening scopes.
 
-### 6.4 Operator UI Controls (`egui`)
+### 6.4 Operator UI Controls (`src/app/tripeaks_workflow.rs`, `egui`)
 
-- Present TriPeaks controls cleanly inside the existing left/workspace layout using plain operator terminology:
-  - Status & card knowledge summary using **`Known / Unknown / Unreachable`** slot counts (e.g. `Known: 34 / 52`, `Unknown: 18`, `Unreachable: 0`) rather than `"epistemic"` phrasing.
-  - Explicit **`Probes used`**, Stock sweep toggle/status, solver status, Play / Step / Pause / `STOP` / `Undo All` controls, and deal JSON load/export controls.
-- Keep all QMP I/O, frame capture, Stock sweeps, probing, and search off the `egui` thread on bounded worker threads.
+- Present TriPeaks controls cleanly inside the existing left/workspace layout across **`Continuous`**, **`Single board`**, and **`Manual`** modes using plain operator terminology:
+  - Status & card knowledge summary using **`Known / Unknown / Unreachable`** slot counts (`Known: X/52 · Unknown: Y · Unreachable: Z · Probes used: P`), active objective description, and zero occurrences of `"epistemic"` in user-facing labels, tooltips, status, or logs.
+  - Explicit **`RECON / Export 52-slot deal`**, offline **`Browse…`** / **`CALCULATE`** / **`Cancel calculation`** / **`VIEW ROUTE`**, live search statistics, **`SINGLE STEP`** / **`MULTI STEP`** / **`Stop after step`** / **`UNDO ALL`**, **`START`** / **`Stop`**, cooperative **`Pause` / `Continue`**, **`Cancel`**, **`STOP`**, and failure diagnostic packets.
+- Keep all QMP I/O, TCPv3 frame capture, Stock sweeps, probing, and search off the `egui` thread on bounded worker threads.
 
 ---
 
@@ -187,8 +189,8 @@ Fixture and template provenance for Goal 2 calibration (`tests/fixtures/tripeaks
 - **Goal 2 (Beast Calibration — baseline `3.3.2`):** Captured live Beast screenshots across Stock `0..23`, Draw 23 empty-stock with/without Row-4 matches, `"No Moves Remaining"` modal + `"Undo last move"` (`POST_GAME_MOUSE_HOLD`), confirmation-less `Undo All` `T=0` restoration, uncovered Row 1–3 cards, and live `Score` streak/draw/peak formula; updated Stock empty-tray detection in `src/game_controls.rs`; shared `digits::read_with_glyph_bank` / `decimal::integer` in `src/pyramid_progress/challenge/`; and added `src/tripeaks_progress.rs` Challenge/Normal/deals-left/modal observers with curated fixtures and templates in `tests/fixtures/tripeaks-calibration-20261116/`.
 - **Goal 3 (Pure Model & `xsar::search` Adapter — baseline `3.3.2`):** Implemented 52-slot TriPeaks board/rules/scoring (`src/tripeaks_model/rules.rs`), independent replay verifier (`replay.rs`), admissible `xsar::search` A*/ `BestEffortProblem` adapters (`search.rs`), and strict `schema_version: 1` `65,536`-byte JSON codec with atomic `no-overwrite` `publish_to_path` (`json.rs`), backed by end-to-end `run_epistemic_recon` tests covering solvable 52-card boards, 51->52 complement deduction, early-exit rank/score routes, live `CompletedDuringRecon`, `DuplicateCard` refusal, `UnsolvableBestPartial`, and A* vs Dijkstra optimality.
 - **Goal 4 (`LiveTriPeaksDomain` & Stock Sweep — baseline `3.3.2`):** Implemented `LiveTriPeaksDomain` (`ReconDomain`) and `run_tripeaks_recon` in `src/worker/tripeaks_reconnaissance.rs` (wired via `src/worker.rs` and `src/lib.rs`), extended `game_operations` (`Input::MouseLeftHold`, `Session::mouse_left_click_with_hold`, `Session::current_frame`, `Session::check_active`, `ConfirmationPolicy::DirectOrConfirmed`, `UndoScene::Animating`), wired `NativeOperations::deliver` hold clicks, guarded Draw-23 `"No Moves Remaining"` twice-observed `POST_GAME_MOUSE_HOLD` back-out prior to `SHARED_UNDO_ALL_CONTROL` `(1320, 978)`, live completion interception, and atomic JSON publication backed by offline `AF_UNIX` QMP peer and fixture tests (`src/worker/tripeaks_reconnaissance/tests.rs` and `src/game_operations/tests.rs`).
-- **Goal 5 (`tripeaks_session` Worker & Plain Operator UI):** Wire worker session, plain `Known / Unknown / Unreachable` UI status panels, `GAME WIN` recording, and cancel/`STOP` safety tests.
-- **Goal 6 (Live Beast Qualification & `3.4.0` Release):** Full Beast acceptance testing, approved `3.4.0` version bump + `CHANGELOG.md` + `docs/milestones.md`, and final update to this document appending **final `3.4.0` qualification metrics** and **`## Code Analysis`**.
+- **Goal 5 (`tripeaks_session` Worker & Plain Operator UI — baseline `3.3.2`):** Enabled `GameMode::TriPeaks` in `ControllerContext`, added `src/tripeaks_workflow_model.rs`, shared `TriPeaksSessionDriver` & `RestartPolicy::IndependentTriPeaks`, multi-board `EscalatedClearBoard` (`ClearBoardMinScoreProblem`), offline `tripeaks_calculation`, Manual `tripeaks_route` (`SINGLE STEP`, `MULTI STEP`, `Stop after step`, `UNDO ALL`), automatic `tripeaks_session` (`Continuous` + `Single board` + `CompletedDuringRecon` + banked partials vs `0`-click `ClearBoard` dead ends + `GAME WIN` `--no-image` recording), and `src/app/tripeaks_workflow.rs` plain `Known / Unknown / Unreachable` UI with offline + `AF_UNIX` QMP peer tests.
+- **Goal 6 (Live Beast Qualification & `3.4.0` Release — pending):** Full Beast live Windows 11 guest acceptance testing, approved `3.4.0` version bump + `CHANGELOG.md` + `docs/milestones.md`, and final update to this document appending **final `3.4.0` qualification metrics** and **`## Code Analysis`**.
 
 ### Mandatory Rust Verification Gates (All Goals)
 

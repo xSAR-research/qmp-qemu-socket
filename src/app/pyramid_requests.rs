@@ -381,6 +381,12 @@ impl QmpQemuSocketApp {
             );
             return Ok(());
         }
+        if self.active_run == Some(ActiveRun::TriPeaksCalculation) {
+            self.worker.cancel_tripeaks_calculation();
+            self.stop_requested = true;
+            self.current_status = "Cancelling offline TriPeaks calculation…".to_owned();
+            return Ok(());
+        }
         self.reset_preview = None;
         self.stop_requested = true;
         self.pyramid_workflow.retire_observed();
@@ -389,6 +395,7 @@ impl QmpQemuSocketApp {
         self.current_status = "Stopping…".to_owned();
         let result = self.worker.disconnect(self.current_preview_context());
         self.revoke_freecell_playback();
+        self.revoke_tripeaks_playback();
         self.trace_freecell_ui(
             "STOP-result",
             serde_json::json!({

@@ -13,7 +13,6 @@ pub(crate) mod freecell_reconnaissance;
 pub(crate) mod freecell_route;
 mod freecell_session;
 mod freecell_telemetry;
-#[cfg(test)]
 mod game_operations;
 #[cfg(test)]
 mod image_recording_tests;
@@ -31,8 +30,11 @@ mod spider_execution;
 mod tcp_capture;
 #[cfg(test)]
 mod tcp_capture_tests;
+pub(crate) mod tripeaks_calculation;
 mod tripeaks_geometry;
 pub mod tripeaks_reconnaissance;
+pub(crate) mod tripeaks_route;
+mod tripeaks_session;
 mod tripeaks_terminal;
 
 use std::{
@@ -66,11 +68,17 @@ use crate::{
         SessionRequest, WorkflowMode,
     },
     qmp::QmpClient,
+    recon::Objective,
     stepper::{StepPlan, plan_step, verify_post_action},
     strategy::{ControllerContext, SolvingStrategy},
     tracker::{
         PredictedAction, RowMask, TableauScanState, analyse_frame_with_state,
         is_gameplay_scene_for_mode,
+    },
+    tripeaks_progress::TriPeaksChallenge,
+    tripeaks_workflow_model::{
+        SlotKnowledgeCounts, TriPeaksManualReconSummary, TriPeaksSessionCompletion,
+        TriPeaksSessionProgress, TriPeaksSessionRequest,
     },
 };
 
@@ -304,6 +312,51 @@ enum WorkerCommand {
         /// Validated play style, transfer policy, and post-transfer animation settle delay.
         request: Box<FreeCellSessionRequest>,
     },
+    /// Enumerate TriPeaks source filenames off the UI thread, with no guest activity.
+    ListTriPeaksSources {
+        /// Selected UI context used only to reject stale directory results.
+        context: ControllerContext,
+        /// Checked browser request token, independent of calculation ownership.
+        request_id: u64,
+        /// Exact operator-selected directory to enumerate.
+        directory: PathBuf,
+    },
+    /// Acquire and restore one untouched `52`-slot TriPeaks deal under separate recon authority.
+    ReconnoitreTriPeaks {
+        /// Immutable controller selection reserved for this acquisition.
+        context: ControllerContext,
+        /// Monotonic manual RECON identifier matched by progress/finish events.
+        request_id: u64,
+        /// Exact operator-selected destination path (never overwritten).
+        destination: PathBuf,
+    },
+    /// Compute an offline TriPeaks route from a validated `52`-slot deal document.
+    CalculateTriPeaks {
+        /// Exact UI correlation independent of live RECON.
+        identity: tripeaks_calculation::Identity,
+        /// Bounded JSON source path.
+        path: PathBuf,
+        /// Shared cooperative cancellation flag.
+        cancel: Arc<AtomicBool>,
+    },
+    /// Execute one reserved TriPeaks Manual playback action (`SingleStep`, `MultiStep`, `UndoAll`).
+    ExecuteTriPeaksRoute {
+        /// Exact calculation/source context.
+        plan: tripeaks_calculation::Identity,
+        /// Playback reservation serial.
+        run_id: u64,
+        /// Requested step, continuous playback, or root `Undo All` restoration.
+        action: tripeaks_route::PlaybackAction,
+        /// Settle and observation limits applied per step or restoration.
+        timings: tripeaks_reconnaissance::TriPeaksStepTiming,
+    },
+    /// Hold one reservation across TriPeaks Recon, planning/escalation, playback, and transitions.
+    StartTriPeaksSession {
+        /// Immutable socket, game, strategy and selection generation.
+        context: ControllerContext,
+        /// Validated play style, step timings, and board-transition settle delay.
+        request: Box<TriPeaksSessionRequest>,
+    },
     /// Calculate using only a same-session restored acquisition.
     CalculateRoute {
         /// Immutable socket/game/strategy generation for the origin receipt.
@@ -408,6 +461,59 @@ pub enum WorkerEvent {
     FreeCellSessionProgress(FreeCellSessionProgress),
     /// Sole automatic completion event emitted after an automatic Free Cell session retires.
     FreeCellSessionFinished(FreeCellSessionCompletion),
+    /// Directory-bound TriPeaks JSON source listing result, unrelated to execution authority.
+    TriPeaksSourcesListed {
+        /// Matching browser request token.
+        request_id: u64,
+        /// Directory whose JSON filenames were listed.
+        directory: PathBuf,
+        /// Matching `.json` paths or the filesystem refusal.
+        result: Result<Vec<PathBuf>, String>,
+    },
+    /// Live card-knowledge counts emitted during Manual TriPeaks reconnaissance.
+    TriPeaksReconProgress {
+        /// Matching Manual RECON request identifier.
+        request_id: u64,
+        /// Plain `Known / Unknown / Unreachable` counts across the `52`-slot deal.
+        counts: SlotKnowledgeCounts,
+        /// Number of `Undo All` probe cycles completed so far.
+        probes_used: usize,
+        /// Resolved Normal or Challenge objective, if determined yet.
+        objective: Option<Objective>,
+        /// Challenge banner details observed at `T = 0`, if present.
+        challenge: Option<TriPeaksChallenge>,
+    },
+    /// Manual TriPeaks reconnaissance completed or stopped.
+    TriPeaksReconFinished {
+        /// Matching Manual RECON request identifier.
+        request_id: u64,
+        /// Causal termination kind (`Completed`, `OperatorStopped`, or `Failed`).
+        termination: crate::pyramid_workflow_model::RunTermination,
+        /// Validated export summary or diagnostic error message.
+        result: Result<TriPeaksManualReconSummary, String>,
+    },
+    /// Offline TriPeaks A* / escalation calculation finished or was cancelled.
+    TriPeaksCalculationFinished {
+        /// Exact request identity owning this offline report.
+        identity: tripeaks_calculation::Identity,
+        /// Independently verified calculation report or failure message.
+        result: Result<Arc<tripeaks_calculation::Report>, String>,
+    },
+    /// Manual TriPeaks live route playback (`SingleStep`, `MultiStep`, or `UndoAll`) finished.
+    TriPeaksRouteFinished {
+        /// Exact calculation/source context.
+        plan: tripeaks_calculation::Identity,
+        /// Playback invocation serial.
+        run_id: u64,
+        /// Final route progress or persisted failure packet.
+        result: Result<tripeaks_route::Progress, Box<tripeaks_route::Failure>>,
+        /// Causal termination kind (`Completed`, `OperatorStopped`, or `Failed`).
+        termination: crate::pyramid_workflow_model::RunTermination,
+    },
+    /// Advisory progress snapshot emitted during an automatic TriPeaks session.
+    TriPeaksSessionProgress(TriPeaksSessionProgress),
+    /// Final completion event releasing automatic TriPeaks session ownership.
+    TriPeaksSessionFinished(TriPeaksSessionCompletion),
     /// Detailed diagnostic text for visible and session logs.
     Log(String),
     /// Extended Single step evidence persisted only in the private session log.
@@ -582,6 +688,10 @@ struct LatestFrameSlot {
     freecell_calculation: Arc<freecell_calculation::Control>,
     /// Independent mutable route cursor, separate from offline calculation and HALO play.
     freecell_route: Arc<Mutex<freecell_route::Store>>,
+    /// Independent TriPeaks offline reservation and coalesced A* progress.
+    tripeaks_calculation: Arc<tripeaks_calculation::Control>,
+    /// Independent TriPeaks mutable route cursor and Step/UndoAll store.
+    tripeaks_route: Arc<Mutex<tripeaks_route::Store>>,
     /// Out-of-band control for one serial A* command, independent of preview pixels.
     pause: Arc<pyramid_pause::Gate>,
     /// Exact engine ownership and operator-requested objective replacement.
@@ -968,6 +1078,8 @@ impl WorkerHandle {
     pub(crate) fn request_shutdown(&self) {
         self.latest_frame.freecell_calculation.cancel(None);
         self.revoke_freecell_route();
+        self.latest_frame.tripeaks_calculation.cancel(None);
+        self.revoke_tripeaks_route();
         self.latest_frame.pause.abort();
         self.latest_frame.search_control.abort();
         self.shutdown_requested.store(true, Ordering::SeqCst);
@@ -1018,10 +1130,257 @@ impl WorkerHandle {
         self.check_accepting_requests()?;
         if self.cancel_requested.load(Ordering::Acquire)
             && !self.latest_frame.freecell_calculation.running()
+            && !self.latest_frame.tripeaks_calculation.running()
         {
             return Err("STOP is latched; Continue cannot restart this work".to_owned());
         }
         self.latest_frame.pause.request(epoch, pause)
+    }
+
+    /// Enumerate a selected TriPeaks source directory on the existing worker without guest I/O.
+    pub(crate) fn list_tripeaks_sources(
+        &self,
+        context: ControllerContext,
+        request_id: u64,
+        directory: PathBuf,
+    ) -> Result<(), String> {
+        self.check_accepting_requests()?;
+        self.command_tx
+            .send(WorkerCommand::ListTriPeaksSources {
+                context,
+                request_id,
+                directory,
+            })
+            .map_err(|e| format!("Worker unavailable: {e}"))
+    }
+
+    /// Queue standalone Manual TriPeaks reconnaissance (`RECON / Export 52-slot deal`).
+    pub(crate) fn reconnoitre_tripeaks(
+        &self,
+        context: ControllerContext,
+        request_id: u64,
+        destination: PathBuf,
+    ) -> Result<(), String> {
+        self.check_accepting_requests()?;
+        context.validate()?;
+        if context.game_mode != GameMode::TriPeaks
+            || context.strategy != SolvingStrategy::ShortestPath
+        {
+            return Err("TriPeaks RECON requires ShortestPath + TriPeaks".to_owned());
+        }
+        if destination.as_os_str().is_empty() {
+            return Err("TriPeaks RECON destination path cannot be empty".to_owned());
+        }
+        self.latest_frame
+            .reconnaissance
+            .select(&context, &self.cancel_requested)?;
+        self.latest_frame.reconnaissance.queue_reconnaissance(
+            &context,
+            &self.cancel_requested,
+            || {
+                self.command_tx
+                    .send(WorkerCommand::ReconnoitreTriPeaks {
+                        context: context.clone(),
+                        request_id,
+                        destination,
+                    })
+                    .map_err(|e| format!("QMP worker unavailable: {e}"))
+            },
+        )
+    }
+
+    /// Queue an offline TriPeaks calculation without RECON, capture, or guest input.
+    pub(crate) fn calculate_tripeaks(
+        &self,
+        context: ControllerContext,
+        request_id: u64,
+        source_generation: u64,
+        path: PathBuf,
+    ) -> Result<(), String> {
+        self.check_accepting_requests()?;
+        context.validate()?;
+        if context.game_mode != GameMode::TriPeaks
+            || context.strategy != SolvingStrategy::ShortestPath
+        {
+            return Err("TriPeaks independent calculation requires ShortestPath".to_owned());
+        }
+        self.revoke_tripeaks_route();
+        let identity = tripeaks_calculation::Identity {
+            context,
+            request_id,
+            source_generation,
+        };
+        let cancel = self
+            .latest_frame
+            .tripeaks_calculation
+            .reserve(identity.clone())?;
+        if let Err(error) = self.command_tx.send(WorkerCommand::CalculateTriPeaks {
+            identity: identity.clone(),
+            path,
+            cancel,
+        }) {
+            self.latest_frame
+                .tripeaks_calculation
+                .cancel(Some(&identity));
+            let _ = self.latest_frame.tripeaks_calculation.finish(&identity);
+            return Err(format!("Worker unavailable: {error}"));
+        }
+        Ok(())
+    }
+
+    /// Cancel active TriPeaks offline planning immediately without disconnecting or capturing.
+    pub(crate) fn cancel_tripeaks_calculation(&self) {
+        self.latest_frame.tripeaks_calculation.cancel(None);
+        self.revoke_tripeaks_route();
+        self.latest_frame.pause.wake();
+    }
+
+    /// Consume coalesced TriPeaks offline search progress.
+    pub(crate) fn take_tripeaks_calculation_progress(
+        &self,
+    ) -> Option<tripeaks_calculation::Progress> {
+        self.latest_frame.tripeaks_calculation.take()
+    }
+
+    /// Retire any idle Manual TriPeaks route candidate; running invocations keep ownership until done.
+    pub(crate) fn revoke_tripeaks_route(&self) {
+        if let Ok(mut store) = self.latest_frame.tripeaks_route.lock() {
+            store.revoke();
+        }
+    }
+
+    /// Return `true` while `plan` is installed, idle, and still has executable moves.
+    pub(crate) fn tripeaks_route_available(&self, plan: &tripeaks_calculation::Identity) -> bool {
+        self.latest_frame
+            .tripeaks_route
+            .lock()
+            .is_ok_and(|s| s.available(plan))
+    }
+
+    /// Return `true` while `plan` is installed and idle, enabling Manual `UNDO ALL`.
+    pub(crate) fn tripeaks_undo_available(&self, plan: &tripeaks_calculation::Identity) -> bool {
+        self.latest_frame
+            .tripeaks_route
+            .lock()
+            .is_ok_and(|s| s.undo_available(plan))
+    }
+
+    /// Consume latest coalesced TriPeaks live playback progress.
+    pub(crate) fn take_tripeaks_route_progress(&self) -> Option<tripeaks_route::Progress> {
+        self.latest_frame
+            .tripeaks_route
+            .lock()
+            .ok()?
+            .take_progress()
+    }
+
+    /// Request cooperative clean-boundary stop after finishing the active verified step.
+    pub(crate) fn request_tripeaks_stop_after_step(
+        &self,
+        plan: &tripeaks_calculation::Identity,
+        run_id: u64,
+    ) -> Result<(), String> {
+        self.check_accepting_requests()?;
+        self.latest_frame
+            .reconnaissance
+            .check_active(&plan.context, &self.cancel_requested)?;
+        self.latest_frame
+            .tripeaks_route
+            .lock()
+            .map_err(|_| "TriPeaks playback store poisoned".to_owned())?
+            .request_stop_after_step(plan, run_id)
+    }
+
+    /// Reserve and queue one guarded Manual TriPeaks playback action (`SingleStep`, `MultiStep`,
+    /// or `UndoAll`).
+    pub(crate) fn execute_tripeaks_route(
+        &self,
+        plan: tripeaks_calculation::Identity,
+        action: tripeaks_route::PlaybackAction,
+        timings: tripeaks_reconnaissance::TriPeaksStepTiming,
+    ) -> Result<u64, String> {
+        self.check_accepting_requests()?;
+        plan.context.validate()?;
+        if plan.context.game_mode != GameMode::TriPeaks
+            || plan.context.strategy != SolvingStrategy::ShortestPath
+        {
+            return Err("Independent TriPeaks route requires ShortestPath + TriPeaks".into());
+        }
+        let run_id = self
+            .latest_frame
+            .tripeaks_route
+            .lock()
+            .map_err(|_| "TriPeaks store poisoned")?
+            .reserve(&plan, action)?;
+        let queued = (|| {
+            self.latest_frame
+                .reconnaissance
+                .select(&plan.context, &self.cancel_requested)?;
+            self.latest_frame.reconnaissance.queue_reconnaissance(
+                &plan.context,
+                &self.cancel_requested,
+                || {
+                    self.command_tx
+                        .send(WorkerCommand::ExecuteTriPeaksRoute {
+                            plan: plan.clone(),
+                            run_id,
+                            action,
+                            timings,
+                        })
+                        .map_err(|e| format!("Worker unavailable: {e}"))
+                },
+            )
+        })();
+        if let Err(error) = queued {
+            let retirement = self
+                .latest_frame
+                .tripeaks_route
+                .lock()
+                .map_err(|_| "TriPeaks retirement poisoned".to_owned())
+                .and_then(|mut store| store.reject(&plan, run_id));
+            return Err(match retirement {
+                Ok(()) => error,
+                Err(secondary) => format!("{error}; retirement also failed: {secondary}"),
+            });
+        }
+        Ok(run_id)
+    }
+
+    /// Queue one worker-owned automatic TriPeaks session (`Continuous` or `Single board`).
+    pub(crate) fn start_tripeaks_session(
+        &self,
+        context: ControllerContext,
+        request: TriPeaksSessionRequest,
+    ) -> Result<(), String> {
+        self.check_accepting_requests()?;
+        context.validate()?;
+        if context.game_mode != GameMode::TriPeaks
+            || context.strategy != SolvingStrategy::ShortestPath
+        {
+            return Err("TriPeaks automatic session requires ShortestPath + TriPeaks".to_owned());
+        }
+        if !request.play_style.uses_session() {
+            return Err(
+                "Select Continuous or Single board before starting a TriPeaks session".to_owned(),
+            );
+        }
+        self.latest_frame
+            .reconnaissance
+            .select(&context, &self.cancel_requested)?;
+        self.latest_frame.reconnaissance.queue_reconnaissance(
+            &context,
+            &self.cancel_requested,
+            || {
+                self.latest_frame.tripeaks_calculation.cancel(None);
+                self.revoke_tripeaks_route();
+                self.command_tx
+                    .send(WorkerCommand::StartTriPeaksSession {
+                        context: context.clone(),
+                        request: Box::new(request),
+                    })
+                    .map_err(|e| format!("TriPeaks session worker unavailable: {e}"))
+            },
+        )
     }
 
 
@@ -1087,6 +1446,8 @@ impl WorkerHandle {
     pub(crate) fn cancel_freecell_calculation(&self) {
         self.latest_frame.freecell_calculation.cancel(None);
         self.revoke_freecell_route();
+        self.latest_frame.tripeaks_calculation.cancel(None);
+        self.revoke_tripeaks_route();
         self.latest_frame.pause.wake();
     }
 
@@ -1708,6 +2069,8 @@ impl WorkerHandle {
             .operator_stop(&context, &self.cancel_requested);
         self.latest_frame.freecell_calculation.cancel(None);
         self.revoke_freecell_route();
+        self.latest_frame.tripeaks_calculation.cancel(None);
+        self.revoke_tripeaks_route();
         self.latest_frame.pause.abort();
         self.latest_frame.search_control.abort();
         // Requests that the worker return to its detached state.
@@ -1826,13 +2189,15 @@ fn run_worker(
         let phase = match &command {
             WorkerCommand::Reconnoitre { .. }
             | WorkerCommand::StartPyramidSession { .. }
-            | WorkerCommand::StartFreeCellSession { .. } => Some(pyramid_pause::Phase::Recon),
-            WorkerCommand::CalculateRoute { .. } | WorkerCommand::CalculateFreeCell { .. } => {
-                Some(pyramid_pause::Phase::Search)
-            }
-            WorkerCommand::ExecuteRoute { .. } | WorkerCommand::ExecuteFreeCellRoute { .. } => {
-                Some(pyramid_pause::Phase::Gameplay)
-            }
+            | WorkerCommand::StartFreeCellSession { .. }
+            | WorkerCommand::ReconnoitreTriPeaks { .. }
+            | WorkerCommand::StartTriPeaksSession { .. } => Some(pyramid_pause::Phase::Recon),
+            WorkerCommand::CalculateRoute { .. }
+            | WorkerCommand::CalculateFreeCell { .. }
+            | WorkerCommand::CalculateTriPeaks { .. } => Some(pyramid_pause::Phase::Search),
+            WorkerCommand::ExecuteRoute { .. }
+            | WorkerCommand::ExecuteFreeCellRoute { .. }
+            | WorkerCommand::ExecuteTriPeaksRoute { .. } => Some(pyramid_pause::Phase::Gameplay),
             _ => None,
         };
         let mut pause_failure = None;
@@ -1851,28 +2216,7 @@ fn run_worker(
                 request_id,
                 directory,
             } => {
-                let result = (|| {
-                    let entries = std::fs::read_dir(&directory)
-                        .map_err(|e| format!("Source directory: {e}"))?;
-                    let mut paths = Vec::new();
-                    for entry in entries {
-                        if shutdown_requested.load(Ordering::Acquire) {
-                            return Err("Application shutdown".to_owned());
-                        }
-                        let entry = entry.map_err(|e| format!("Source entry: {e}"))?;
-                        let path = entry.path();
-                        if path.extension().is_some_and(|e| e == "json")
-                            && entry
-                                .file_type()
-                                .map_err(|e| format!("Source type: {e}"))?
-                                .is_file()
-                        {
-                            paths.push(path);
-                        }
-                    }
-                    paths.sort();
-                    Ok(paths)
-                })();
+                let result = list_json_sources_in_dir(&directory, &shutdown_requested);
                 let _ = event_tx.send_for_context(
                     Some(context),
                     WorkerEvent::FreeCellSourcesListed {
@@ -1881,6 +2225,116 @@ fn run_worker(
                         result,
                     },
                 );
+            }
+            WorkerCommand::ListTriPeaksSources {
+                context,
+                request_id,
+                directory,
+            } => {
+                let result = list_json_sources_in_dir(&directory, &shutdown_requested);
+                let _ = event_tx.send_for_context(
+                    Some(context),
+                    WorkerEvent::TriPeaksSourcesListed {
+                        request_id,
+                        directory,
+                        result,
+                    },
+                );
+            }
+            WorkerCommand::ReconnoitreTriPeaks {
+                context,
+                request_id,
+                destination,
+            } => {
+                if let Some(error) = pause_failure {
+                    event_tx.latest_frame.reconnaissance.finish();
+                    send_state(&event_tx, WorkerState::Uncertain);
+                    let _ = event_tx.send_for_context(
+                        Some(context),
+                        WorkerEvent::TriPeaksReconFinished {
+                            request_id,
+                            termination: crate::pyramid_workflow_model::RunTermination::Failed,
+                            result: Err(error),
+                        },
+                    );
+                } else {
+                    let _capture_cancel =
+                        tcp_capture::CancellationScope::install(Arc::clone(&cancel_requested));
+                    event_tx.set_capture_context(Some(context.clone()));
+                    tripeaks_session::run_recon(
+                        &context,
+                        request_id,
+                        destination,
+                        &event_tx,
+                        &cancel_requested,
+                    );
+                }
+            }
+            WorkerCommand::CalculateTriPeaks {
+                identity,
+                path,
+                cancel,
+            } => {
+                if let Some(error) = pause_failure {
+                    tripeaks_calculation::complete(identity, Err(error), &event_tx);
+                } else {
+                    tripeaks_calculation::run(
+                        identity,
+                        &path,
+                        &cancel,
+                        &event_tx,
+                        &shutdown_requested,
+                    );
+                }
+            }
+            WorkerCommand::ExecuteTriPeaksRoute {
+                plan,
+                run_id,
+                action,
+                timings,
+            } => {
+                if let Some(error) = pause_failure {
+                    tripeaks_route::reject(plan, run_id, error, &event_tx);
+                } else {
+                    let _capture_cancel =
+                        tcp_capture::CancellationScope::install(Arc::clone(&cancel_requested));
+                    event_tx.set_capture_context(Some(plan.context.clone()));
+                    tripeaks_route::run(
+                        plan,
+                        run_id,
+                        action,
+                        timings,
+                        &event_tx,
+                        &cancel_requested,
+                    );
+                }
+            }
+            WorkerCommand::StartTriPeaksSession { context, request } => {
+                let _capture_cancel =
+                    tcp_capture::CancellationScope::install(Arc::clone(&cancel_requested));
+                event_tx.set_capture_context(Some(context.clone()));
+                if let Some(error) = pause_failure {
+                    event_tx.latest_frame.reconnaissance.finish();
+                    send_state(&event_tx, WorkerState::Uncertain);
+                    let _ = event_tx.send(WorkerEvent::TriPeaksSessionFinished(
+                        TriPeaksSessionCompletion {
+                            context,
+                            run_id: request.run_id,
+                            completed_boards: 0,
+                            completed_games: 0,
+                            termination: crate::pyramid_workflow_model::RunTermination::Failed,
+                            counts: None,
+                            objective_label: None,
+                            unsolvable_max_cleared: None,
+                            calculation_report: None,
+                            export_path: None,
+                            failure_directory: None,
+                            result: Err(error),
+                        },
+                    ));
+                } else {
+                    tripeaks_session::run(&context, &request, &event_tx, &cancel_requested);
+                }
             }
             WorkerCommand::ExecuteFreeCellRoute {
                 plan,
@@ -2182,6 +2636,32 @@ fn run_worker(
 }
 
 
+/// Enumerate regular `.json` source paths in `directory` sorted lexicographically, off the UI thread.
+fn list_json_sources_in_dir(
+    directory: &Path,
+    shutdown_requested: &AtomicBool,
+) -> Result<Vec<PathBuf>, String> {
+    let entries = std::fs::read_dir(directory).map_err(|e| format!("Source directory: {e}"))?;
+    let mut paths = Vec::new();
+    for entry in entries {
+        if shutdown_requested.load(Ordering::Acquire) {
+            return Err("Application shutdown".to_owned());
+        }
+        let entry = entry.map_err(|e| format!("Source entry: {e}"))?;
+        let path = entry.path();
+        if path.extension().is_some_and(|e| e == "json")
+            && entry
+                .file_type()
+                .map_err(|e| format!("Source type: {e}"))?
+                .is_file()
+        {
+            paths.push(path);
+        }
+    }
+    paths.sort();
+    Ok(paths)
+}
+
 /// Reset board and scan history when socket, game, strategy or generation changes.
 fn reset_scan_state_for_context(
     context: &ControllerContext,
@@ -2254,11 +2734,14 @@ fn run_preparation_capture(context: &ControllerContext, event_tx: &WorkerEventSi
         step_failed_before_input(event_tx, error);
         return;
     }
+    let mode_label = match context.game_mode {
+        GameMode::TriPeaks => "TriPeaks",
+        _ => "Pyramid",
+    };
     send_state(event_tx, WorkerState::Connecting);
-    send_status(event_tx, "Capturing Pyramid preparation".to_owned());
+    send_status(event_tx, format!("Capturing {mode_label} preparation"));
     let result = (|| {
         let (mut qmp, probe) = connect_and_probe(&context.socket_path)?;
-
 
         if !probe.is_running() {
             return Err("Preparation capture refused because the VM is not running".to_owned());
@@ -2269,7 +2752,6 @@ fn run_preparation_capture(context: &ControllerContext, event_tx: &WorkerEventSi
         Ok::<_, String>((frame, prediction))
     })();
 
-
     match result {
         Ok((frame, prediction)) => {
             event_tx
@@ -2278,9 +2760,14 @@ fn run_preparation_capture(context: &ControllerContext, event_tx: &WorkerEventSi
             send_state(event_tx, WorkerState::Ready);
             send_status(
                 event_tx,
-                "Pyramid preparation only — read-only preview".to_owned(),
+                format!("{mode_label} preparation only — read-only preview"),
             );
-            send_log(event_tx, "Fresh raw Pyramid preparation capture; no HALO analysis, card recognition or guest input was performed by this read-only command. Reconnaissance and computed routes use their separate guarded controls.".to_owned());
+            send_log(
+                event_tx,
+                format!(
+                    "Fresh raw {mode_label} preparation capture; no HALO analysis, card recognition or guest input was performed by this read-only command. Reconnaissance and computed routes use their separate guarded controls."
+                ),
+            );
         }
         Err(error) => step_failed_before_input(event_tx, error),
     }

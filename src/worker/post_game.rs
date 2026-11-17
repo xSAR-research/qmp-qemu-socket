@@ -64,6 +64,11 @@ enum RestartPolicy<'a> {
     },
     /// Stop before Solver and prove a complete untouched Pyramid board.
     IndependentPyramid(&'a ReconVision, Option<NormalPyramidCompletion>),
+    /// Independent TriPeaks reuses `tripeaks_terminal` + two matching untouched `Boards: 1 of 3` normal starts.
+    IndependentTriPeaks {
+        /// Optional semantic root hash of the completed game (`!=` on restart).
+        previous_root_hash: Option<u64>,
+    },
 }
 
 
@@ -112,7 +117,8 @@ impl<'a> RestartPolicy<'a> {
         match self {
             Self::ComputerVision(..)
             | Self::ChallengeTarget(..)
-            | Self::IndependentFreeCell { .. } => None,
+            | Self::IndependentFreeCell { .. }
+            | Self::IndependentTriPeaks { .. } => None,
             Self::IndependentPyramid(vision, _) => Some(vision),
         }
     }
@@ -139,14 +145,55 @@ impl<'a> RestartPolicy<'a> {
     }
 
 
+    /// Independent TriPeaks uses calibrated `tripeaks_terminal` and untouched normal `T = 0` evidence.
+    fn is_tripeaks_independent(self) -> bool {
+        matches!(self, Self::IndependentTriPeaks { .. })
+    }
+
+
+    /// Return the completed TriPeaks deal hash that a restarted normal board must differ from.
+    fn tripeaks_previous_hash(self) -> Option<u64> {
+        match self {
+            Self::IndependentTriPeaks { previous_root_hash } => previous_root_hash,
+            _ => None,
+        }
+    }
+
+
     /// Return the completed Free Cell deal that a restarted normal board must differ from.
     fn freecell_previous_deal(self) -> Option<&'a InitialDeal> {
         match self {
             Self::IndependentFreeCell { previous_deal } => previous_deal,
-            Self::ChallengeTarget(..) | Self::ComputerVision(..) | Self::IndependentPyramid(..) => {
-                None
-            }
+            Self::ChallengeTarget(..)
+            | Self::ComputerVision(..)
+            | Self::IndependentPyramid(..)
+            | Self::IndependentTriPeaks { .. } => None,
         }
+    }
+
+
+    /// Resolve an already-visible TriPeaks post-game control (`LevelUpOk`, `NewGame`, `Play`).
+    fn tripeaks_known_stage(
+        self,
+        observation: Option<&FrameObservation>,
+        profile: &GameControlProfile,
+    ) -> Result<Option<usize>, String> {
+        let Some(observation) = observation else {
+            return Ok(None);
+        };
+        if !self.is_tripeaks_independent() || observation.gameplay_scene {
+            return Ok(None);
+        }
+        if super::tripeaks_terminal::is_direct_level_up_overlay(&observation.frame)? {
+            return Ok(Some(0));
+        }
+        if resolve_post_game_target(observation, POST_GAME_TARGETS[1], profile)?.is_some() {
+            return Ok(Some(1));
+        }
+        if resolve_post_game_target(observation, POST_GAME_TARGETS[2], profile)?.is_some() {
+            return Ok(Some(2));
+        }
+        Ok(None)
     }
 
 
@@ -638,6 +685,80 @@ pub(super) fn run_independent_freecell_restart_retaining_frame(
 }
 
 
+/// Borrowed worker state and cancellation fences for one independent TriPeaks normal restart.
+pub(super) struct TriPeaksRestartContext<'a> {
+    /// Connected QMP client used exclusively after fresh visual proof and probes.
+    pub(super) qmp: &'a mut QmpClient,
+    /// Socket path retained for capture telemetry parity.
+    pub(super) socket_path: &'a Path,
+    /// Optional freshly captured frame establishing terminal panel or already-dealt normal `1 of 3`.
+    pub(super) initial_observation: Option<&'a FrameObservation>,
+    /// Optional `T = 0` root hash of the completed game that a restarted board must differ from.
+    pub(super) previous_root_hash: Option<u64>,
+    /// Mutable scan state reset for TriPeaks across the transition.
+    pub(super) scan_state: &'a mut TableauScanState,
+    /// Board counter reset upon proving a fresh untouched board.
+    pub(super) completed_boards: &'a mut usize,
+    /// Shared worker event/state sink.
+    pub(super) event_tx: &'a WorkerEventSink,
+    /// Monotonic run/session cancellation flag.
+    pub(super) cancel_requested: &'a AtomicBool,
+    /// Caller-owned latest frame slot updated after every capture before refusal.
+    pub(super) latest_frame: &'a mut Option<CapturedFrame>,
+    /// Causal STOP/context authority for the active TriPeaks session.
+    pub(super) authority: RestartAuthority<'a>,
+}
+
+/// Execute TriPeaks' post-win sequence (`GAME WIN` -> optional `LEVEL UP` -> `NEW GAME` -> `PLAY`)
+/// and prove two consecutive matching untouched `Boards: 1 of 3` normal deals before returning.
+///
+/// Reuses bounded post-game controls, QMP probes, STOP fences, and default `GAME WIN` sequence
+/// recording (`--no-image` disables win-sequence frames) without touching Solver or HALO recovery.
+///
+/// # Errors
+///
+/// Returns an error for a wrong selected game, revoked authority, unrecognised entry frame,
+/// challenge header, unchanged `previous_root_hash`, or missing bounded controls.
+pub(super) fn run_independent_tripeaks_restart_retaining_frame(
+    ctx: TriPeaksRestartContext<'_>,
+) -> Result<PostGameOutcome, String> {
+    if let Some(observation) = ctx.initial_observation {
+        *ctx.latest_frame = Some(observation.frame.clone());
+    }
+    if ctx.scan_state.mode() != crate::game::GameMode::TriPeaks {
+        return Err("Independent TriPeaks restart requires the selected TriPeaks game".to_owned());
+    }
+    let authority = Some(ctx.authority);
+    require_independent_restart_active(ctx.cancel_requested, ctx.event_tx, authority)?;
+    if let Some(observation) = ctx.initial_observation {
+        let profile = profiles::for_game(crate::game::GameMode::TriPeaks);
+        let recognised_terminal =
+            super::tripeaks_terminal::terminal_kind(&observation.frame)?.is_some();
+        let control_visible = !observation.gameplay_scene
+            && (resolve_post_game_target(observation, POST_GAME_TARGETS[1], profile)?.is_some()
+                || resolve_post_game_target(observation, POST_GAME_TARGETS[2], profile)?.is_some());
+        let ready_start =
+            tripeaks_start_readiness(&observation.frame, ctx.previous_root_hash)?.is_ok();
+        if !recognised_terminal && !control_visible && !ready_start {
+            return Err("Independent TriPeaks restart has no positive terminal, control, or fresh normal 1-of-3 board evidence; no input authorised".to_owned());
+        }
+    }
+    run_post_game_restart_with_policy(
+        ctx.qmp,
+        ctx.socket_path,
+        ctx.initial_observation,
+        ctx.scan_state,
+        ctx.completed_boards,
+        ctx.event_tx,
+        ctx.cancel_requested,
+        RestartPolicy::IndependentTriPeaks {
+            previous_root_hash: ctx.previous_root_hash,
+        },
+        Some(ctx.latest_frame),
+        authority,
+    )
+}
+
 /// Shared bounded terminal stages with an explicit gameplay-readiness policy.
 #[expect(
     clippy::too_many_arguments,
@@ -669,13 +790,14 @@ fn run_post_game_restart_with_policy(
     let mut input_wall = Duration::ZERO;
     let boards_per_game = scan_state.mode().profile().boards_per_game;
     let profile = profiles::for_game(scan_state.mode());
-    // Only a positively confirmed TriPeaks terminal entry gets the narrow skip
-    // evidence policy. Pyramid and existing score-counting transitions retain theirs.
+    // Only a positively confirmed TriPeaks terminal entry or IndependentTriPeaks restart
+    // uses the narrow reward/level-up evidence policy without generic non-gameplay fallbacks.
     let guarded_tripeaks_entry = scan_state.mode() == crate::game::GameMode::TriPeaks
-        && initial_observation.is_some_and(|observation| {
-            super::tripeaks_terminal::terminal_kind(&observation.frame)
-                .is_ok_and(|kind| kind.is_some())
-        });
+        && (policy.is_tripeaks_independent()
+            || initial_observation.is_some_and(|observation| {
+                super::tripeaks_terminal::terminal_kind(&observation.frame)
+                    .is_ok_and(|kind| kind.is_some())
+            }));
     let direct_level_up_entry = guarded_tripeaks_entry
         && initial_observation.is_some_and(|observation| {
             super::tripeaks_terminal::is_direct_level_up_overlay(&observation.frame) == Ok(true)
@@ -731,6 +853,26 @@ fn run_post_game_restart_with_policy(
             policy.freecell_previous_deal(),
         );
     }
+    if policy.is_tripeaks_independent()
+        && let Some(observation) = initial_observation
+        && tripeaks_start_readiness(&observation.frame, policy.tripeaks_previous_hash())?.is_ok()
+    {
+        return verify_independent_tripeaks_start(
+            IndependentStartContext {
+                qmp,
+                socket_path,
+                first: Some(observation),
+                scan_state,
+                completed_boards,
+                event_tx,
+                cancel_requested,
+                restarted: false,
+                latest_frame: &mut latest_frame,
+                authority,
+            },
+            policy.tripeaks_previous_hash(),
+        );
+    }
     let initial_challenge_reward = matches!(policy, RestartPolicy::ChallengeTarget(..))
         && initial_observation.is_some_and(|observation| {
             crate::pyramid_progress::is_challenge_complete(&observation.frame) == Ok(true)
@@ -746,6 +888,8 @@ fn run_post_game_restart_with_policy(
         Some(0)
     } else if policy.is_freecell() {
         policy.freecell_known_stage(initial_observation)?
+    } else if policy.is_tripeaks_independent() {
+        policy.tripeaks_known_stage(initial_observation, profile)?
     } else {
         known_post_game_stage(initial_observation, profile)?
     };
@@ -870,6 +1014,31 @@ fn run_post_game_restart_with_policy(
                     return Err("Independent Free Cell restart found gameplay without a full untouched normal board; Solver and input recovery withheld".to_owned());
                 }
             }
+            if policy.is_tripeaks_independent() {
+                require_independent_restart_active(cancel_requested, event_tx, authority)?;
+                if tripeaks_start_readiness(&observation.frame, policy.tripeaks_previous_hash())?
+                    .is_ok()
+                {
+                    return verify_independent_tripeaks_start(
+                        IndependentStartContext {
+                            qmp,
+                            socket_path,
+                            first: Some(&observation),
+                            scan_state,
+                            completed_boards,
+                            event_tx,
+                            cancel_requested,
+                            restarted: false,
+                            latest_frame: &mut latest_frame,
+                            authority,
+                        },
+                        policy.tripeaks_previous_hash(),
+                    );
+                }
+                if observation.gameplay_scene {
+                    return Err("Independent TriPeaks restart found gameplay without a fresh untouched 1-of-3 normal board; Solver and input recovery withheld".to_owned());
+                }
+            }
 
 
             if policy.allows_solver()
@@ -888,6 +1057,8 @@ fn run_post_game_restart_with_policy(
                 && super::tripeaks_terminal::is_direct_level_up_overlay(&observation.frame)?;
             let observed_stage = if policy.is_freecell() {
                 policy.freecell_known_stage(Some(&observation))?
+            } else if policy.is_tripeaks_independent() {
+                policy.tripeaks_known_stage(Some(&observation), profile)?
             } else if policy.is_pyramid()
                 && !recognised_pyramid_terminal(&observation.frame)?
                 && !(normal_pyramid && expected_pyramid_new_game(&observation.frame)?)
@@ -1097,13 +1268,16 @@ fn run_post_game_restart_with_policy(
             }
 
 
-            if policy.is_freecell() {
+            if policy.is_freecell() || policy.is_tripeaks_independent() {
                 require_independent_restart_active(cancel_requested, event_tx, authority)?;
                 if observation.gameplay_scene {
                     if let Some(lookup) = lookup.as_mut() {
-                        lookup.set_outcome("independent-freecell-gameplay");
+                        lookup.set_outcome("independent-gameplay-abort");
                     }
-                    return Err("Independent Free Cell restart found gameplay before Play completed; no Solver or recovery input authorised".to_owned());
+                    return Err(format!(
+                        "Independent {} restart found gameplay before Play completed; no Solver or recovery input authorised",
+                        scan_state.mode().label()
+                    ));
                 }
             }
 
@@ -1137,7 +1311,7 @@ fn run_post_game_restart_with_policy(
                 } else {
                     let raw_point = lookup.search(&observation.frame)?;
                     let point = lookup.confirm_ok(&observation.frame, raw_point)?;
-                    if direct_level_up_entry
+                    if (direct_level_up_entry || policy.is_tripeaks_independent())
                         && target.stage == PostGameStage::LevelUpOk
                         && !super::tripeaks_terminal::is_direct_level_up_context(
                             &observation.frame,
@@ -1566,6 +1740,23 @@ fn run_post_game_restart_with_policy(
                 authority,
             },
             policy.freecell_previous_deal(),
+        );
+    }
+    if policy.is_tripeaks_independent() {
+        return verify_independent_tripeaks_start(
+            IndependentStartContext {
+                qmp,
+                socket_path,
+                first: None,
+                scan_state,
+                completed_boards,
+                event_tx,
+                cancel_requested,
+                restarted: true,
+                latest_frame: &mut latest_frame,
+                authority,
+            },
+            policy.tripeaks_previous_hash(),
         );
     }
 
@@ -2003,6 +2194,90 @@ fn verify_independent_start<T>(
     } else {
         Ok(PostGameOutcome::RecoveredGameplay(observation))
     }
+}
+
+/// Observe whether a TriPeaks frame is a fresh untouched `Boards: 1 of 3` normal starting
+/// deal distinct from `previous_root_hash`, pending while animating, or fatal on challenge/header
+/// contradictions.
+pub(super) fn tripeaks_start_readiness(
+    frame: &CapturedFrame,
+    previous_root_hash: Option<u64>,
+) -> Result<Result<super::tripeaks_reconnaissance::BoardSnapshot, String>, String> {
+    use super::tripeaks_reconnaissance::{FrameClassification, observe_frame, semantic_board_hash};
+    use crate::pyramid_progress::BoardCount;
+    use crate::tripeaks_progress::{
+        observe_challenge_header, observe_normal_boards, observe_normal_boards_header,
+    };
+
+    let expected = BoardCount {
+        completed: 0,
+        target: 3,
+    };
+    if observe_challenge_header(frame)
+        .map_err(|error| error.to_string())?
+        .is_some()
+    {
+        return Err(
+            "Independent TriPeaks starting-board header is a challenge board, not a normal game; no input authorised"
+                .to_owned(),
+        );
+    }
+    if observe_normal_boards_header(frame)
+        .map_err(|error| error.to_string())?
+        .is_some_and(|actual| actual != expected)
+    {
+        return Err(
+            "Independent TriPeaks starting-board header contradicts a fresh 1-of-3 normal game; no input authorised"
+                .to_owned(),
+        );
+    }
+
+    match observe_frame(frame).map_err(|error| error.to_string())? {
+        FrameClassification::Settled(snap) if snap.is_untouched_root_layout() => {
+            if observe_normal_boards(frame).map_err(|error| error.to_string())? != Some(expected) {
+                return Ok(Err(
+                    "New normal TriPeaks 1-of-3 header is not yet positively confirmed".to_owned(),
+                ));
+            }
+            if previous_root_hash == Some(semantic_board_hash(&snap)) {
+                return Ok(Err(
+                    "Observed TriPeaks starting board still matches the previous completed deal"
+                        .to_owned(),
+                ));
+            }
+            Ok(Ok(snap))
+        }
+        FrameClassification::Settled(_)
+        | FrameClassification::Settling
+        | FrameClassification::BoardWinOverlay
+        | FrameClassification::Unsupported(_) => Ok(Err(
+            "Waiting for fresh untouched TriPeaks Board 1 of 3 to settle".to_owned(),
+        )),
+        FrameClassification::ChallengeComplete => Err(
+            "TriPeaks post-game restart observed Challenge Complete! instead of a normal game; no input authorised"
+                .to_owned(),
+        ),
+        FrameClassification::NoMovesModal(_) => Err(
+            "TriPeaks post-game restart observed No Moves Remaining modal on starting verification"
+                .to_owned(),
+        ),
+    }
+}
+
+/// Require two consecutive matching normal TriPeaks `Boards: 1 of 3` `T = 0` starts distinct from `previous_root_hash`.
+fn verify_independent_tripeaks_start(
+    ctx: IndependentStartContext<'_, '_>,
+    previous_root_hash: Option<u64>,
+) -> Result<PostGameOutcome, String> {
+    verify_independent_start(
+        ctx,
+        crate::game::GameMode::TriPeaks,
+        "STOP or context cancellation revoked independent TriPeaks starting-board observation",
+        "TriPeaks Board 1 of 3 ready for reconnaissance",
+        "Independent TriPeaks restart verified by two fresh matching untouched Boards: 1 of 3 deals; fresh guarded Recon follows.",
+        |frame| tripeaks_start_readiness(frame, previous_root_hash),
+        |a, b| a == b,
+    )
 }
 
 /// Require two consecutive matching normal Free Cell starting-board observations distinct from `previous_deal`.

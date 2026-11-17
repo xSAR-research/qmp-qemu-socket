@@ -90,6 +90,11 @@ impl<I: OperationIo> Session<I> {
         &self.io
     }
 
+    /// Consume the session and return its inner operation I/O adapter without granting input authority.
+    pub fn into_io(self) -> I {
+        self.io
+    }
+
     /// Borrow the latest acquired fresh frame, if still unconsumed, without granting input authority.
     pub const fn current_frame(&self) -> Option<&CapturedFrame> {
         self.frame.as_ref()

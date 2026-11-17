@@ -1001,7 +1001,7 @@ pub(super) fn complete_route(
 
 
 /// Reconcile generic worker readiness after an automatic session completes or is stopped.
-fn next_session_worker_state(
+pub(super) fn next_session_worker_state(
     state: WorkerState,
     termination: RunTermination,
     failed: bool,
@@ -1557,7 +1557,7 @@ impl QmpQemuSocketApp {
 
 
     /// Keep STOP/EXIT visible across all A* games without changing controller authority.
-    fn independent_stop_exit(&mut self, ui: &mut egui::Ui) {
+    pub(super) fn independent_stop_exit(&mut self, ui: &mut egui::Ui) {
         if bevel_button(ui, "EXIT", STATE_RED, false, true).clicked() {
             self.request_exit();
         }
@@ -1570,7 +1570,7 @@ impl QmpQemuSocketApp {
 
 
     /// Share the existing STOP request and failure presentation across row controls.
-    fn request_independent_stop(&mut self) {
+    pub(super) fn request_independent_stop(&mut self) {
         if let Err(error) = self.request_stop() {
             self.worker_state = WorkerState::Error;
             self.current_status = "Stop request failed".to_owned();
@@ -1646,7 +1646,7 @@ impl QmpQemuSocketApp {
 
 
     /// Render shared cooperative `Pause`/`Continue` and `Cancel` buttons plus pause status.
-    fn session_pause_cancel_controls(&mut self, ui: &mut egui::Ui) {
+    pub(super) fn session_pause_cancel_controls(&mut self, ui: &mut egui::Ui) {
         let pause = self.worker.pause_state();
         let label = match pause {
             Some(state) if state.requested || state.acknowledged => "Continue",
@@ -1815,6 +1815,9 @@ impl QmpQemuSocketApp {
                 });
                 ui.label(&self.current_status);
             }
+        } else if self.game_mode == GameMode::TriPeaks {
+            self.tripeaks_workflow_body(ui, idle);
+            return;
         } else {
             ui.horizontal(|ui| {
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {

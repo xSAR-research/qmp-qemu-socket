@@ -86,3 +86,69 @@ where
             .map_err(|_| OperationError::Cancelled)
     }
 }
+
+/// [`OperationIo`] wrapper around [`NativeOperations`] recording balanced QMP delivery counters
+/// and retaining the first and latest verified frames across one TriPeaks route or recon run.
+pub(super) struct TrackedOperations<'a, A, G> {
+    /// Core QMP, capture, probe, and frame-authorisation adapter.
+    pub inner: NativeOperations<'a, A, G>,
+    /// Guarded input deliveries started (`attempted == acknowledged` proves transport balance).
+    pub attempted: usize,
+    /// Guarded input deliveries acknowledged cleanly by QMP.
+    pub acknowledged: usize,
+    /// First frame captured during this run, if any.
+    pub first: Option<CapturedFrame>,
+    /// Most recent frame captured during this run, if any.
+    pub latest: Option<CapturedFrame>,
+}
+
+impl<'a, A, G> TrackedOperations<'a, A, G> {
+    /// Wrap `inner` with zero deliveries and empty retained diagnostic frames.
+    pub(super) fn new(inner: NativeOperations<'a, A, G>) -> Self {
+        Self {
+            inner,
+            attempted: 0,
+            acknowledged: 0,
+            first: None,
+            latest: None,
+        }
+    }
+}
+
+impl<A, G> OperationIo for TrackedOperations<'_, A, G>
+where
+    A: FnMut() -> Result<(), OperationError>,
+    G: FnMut(&CapturedFrame, Input) -> Result<(), OperationError>,
+{
+    fn check_active(&mut self) -> Result<(), OperationError> {
+        self.inner.check_active()
+    }
+
+    fn capture(&mut self) -> Result<CapturedFrame, OperationError> {
+        let frame = self.inner.capture()?;
+        if self.first.is_none() {
+            self.first = Some(frame.clone());
+        }
+        self.latest = Some(frame.clone());
+        Ok(frame)
+    }
+
+    fn authorise(&mut self, frame: &CapturedFrame, input: Input) -> Result<(), OperationError> {
+        self.inner.authorise(frame, input)
+    }
+
+    fn probe(&mut self) -> Result<(), OperationError> {
+        self.inner.probe()
+    }
+
+    fn deliver(&mut self, input: Input) -> Result<(), OperationError> {
+        self.attempted = self.attempted.saturating_add(1);
+        self.inner.deliver(input)?;
+        self.acknowledged = self.acknowledged.saturating_add(1);
+        Ok(())
+    }
+
+    fn wait(&mut self, duration: Duration) -> Result<(), OperationError> {
+        self.inner.wait(duration)
+    }
+}

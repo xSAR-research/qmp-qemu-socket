@@ -15,6 +15,7 @@ mod pyramid_defaults;
 mod pyramid_requests;
 mod pyramid_workflow;
 mod reset_preview;
+mod tripeaks_workflow;
 mod window_chrome;
 
 #[cfg(test)]
@@ -128,6 +129,14 @@ enum ActiveRun {
     PyramidSession,
     /// Worker-owned automatic Free Cell session across Recon, A* planning, execution, and restart.
     FreeCellSession,
+    /// Manual TriPeaks live reconnaissance (`RECON / Export 52-slot deal`).
+    TriPeaksRecon,
+    /// Dedicated offline TriPeaks A* / multi-board escalation calculation.
+    TriPeaksCalculation,
+    /// Manual TriPeaks live route playback (`SINGLE STEP`, `MULTI STEP`, `UNDO ALL`).
+    TriPeaksRoute,
+    /// Worker-owned automatic TriPeaks multi-board / Challenge session.
+    TriPeaksSession,
 }
 
 
@@ -520,6 +529,8 @@ pub struct QmpQemuSocketApp {
     pyramid_workflow: PyramidWorkflow,
     /// Independent Free Cell session play-style selection and advisory session progress.
     freecell_workflow: pyramid_workflow::FreeCellWorkflow,
+    /// Independent TriPeaks workflow (`Continuous`, `Single board`, and `Manual`).
+    tripeaks_workflow: tripeaks_workflow::TriPeaksWorkflowState,
     /// Editable local socket pathname; edits revoke preview authority.
     qmp_socket_path: String,
     /// Bounded visible tail of timestamped session output.
@@ -714,6 +725,7 @@ impl QmpQemuSocketApp {
             computed_route_form,
             pyramid_workflow: PyramidWorkflow::default(),
             freecell_workflow: pyramid_workflow::FreeCellWorkflow::default(),
+            tripeaks_workflow: tripeaks_workflow::TriPeaksWorkflowState::default(),
             qmp_socket_path,
             log_lines: Vec::new(),
             show_output: false,
@@ -1183,6 +1195,10 @@ impl QmpQemuSocketApp {
                                     | ActiveRun::FreeCellCalculation
                                     | ActiveRun::FreeCellRoute
                                     | ActiveRun::FreeCellRecon
+                                    | ActiveRun::TriPeaksSession
+                                    | ActiveRun::TriPeaksCalculation
+                                    | ActiveRun::TriPeaksRoute
+                                    | ActiveRun::TriPeaksRecon
                             )
                         ) {
                             self.stop_requested = false;
@@ -1194,6 +1210,9 @@ impl QmpQemuSocketApp {
                                 != Some(&self.current_preview_context())
                             && !self
                                 .freecell_workflow
+                                .retain_after_detach(&self.current_preview_context())
+                            && !self
+                                .tripeaks_workflow
                                 .retain_after_detach(&self.current_preview_context())
                         {
                             self.invalidate_preview();
@@ -1306,6 +1325,10 @@ impl QmpQemuSocketApp {
                                 | ActiveRun::FreeCellCalculation
                                 | ActiveRun::FreeCellRoute
                                 | ActiveRun::FreeCellRecon
+                                | ActiveRun::TriPeaksSession
+                                | ActiveRun::TriPeaksCalculation
+                                | ActiveRun::TriPeaksRoute
+                                | ActiveRun::TriPeaksRecon
                         )
                     ) {
                         self.push_log("Ignored a gameplay completion while waiting for the separate guarded request to finish.");
@@ -1514,12 +1537,52 @@ impl QmpQemuSocketApp {
                     result,
                     termination,
                 ),
+                WorkerEvent::TriPeaksSourcesListed {
+                    request_id,
+                    directory,
+                    result,
+                } => self.tripeaks_sources_listed(request_id, directory, result),
+                WorkerEvent::TriPeaksReconProgress {
+                    request_id,
+                    counts,
+                    probes_used,
+                    objective,
+                    challenge,
+                } => self.tripeaks_recon_progress(
+                    request_id,
+                    counts,
+                    probes_used,
+                    objective,
+                    challenge,
+                ),
+                WorkerEvent::TriPeaksReconFinished {
+                    request_id,
+                    termination,
+                    result,
+                } => self.tripeaks_recon_finished(request_id, termination, result),
+                WorkerEvent::TriPeaksCalculationFinished { identity, result } => {
+                    self.tripeaks_calculation_finished(identity, result)
+                }
+                WorkerEvent::TriPeaksRouteFinished {
+                    plan,
+                    run_id,
+                    result,
+                    termination,
+                } => self.tripeaks_route_finished(plan, run_id, result, termination),
+                WorkerEvent::TriPeaksSessionProgress(progress) => {
+                    self.tripeaks_session_progress(progress)
+                }
+                WorkerEvent::TriPeaksSessionFinished(completion) => {
+                    self.tripeaks_session_finished(completion)
+                }
             }
         }
 
 
         self.receive_freecell_calculation_progress();
         self.receive_freecell_route_progress();
+        self.receive_tripeaks_calculation_progress();
+        self.receive_tripeaks_route_progress();
         if let Some(progress) = self.worker.take_pyramid_planning_progress() {
             let selected = self.current_preview_context();
             self.pyramid_workflow.receive_planning(progress, &selected);
@@ -1669,6 +1732,7 @@ impl QmpQemuSocketApp {
         self.freecell_recon_state.clear_preview();
         self.freecell_playback.retained = None;
         self.freecell_workflow.clear_preview();
+        self.tripeaks_workflow.clear_preview();
         self.capture_texture = None;
         self.captured_dimensions = None;
         self.preview_context = None;
@@ -2083,6 +2147,7 @@ impl QmpQemuSocketApp {
         self.computed_route_form.revoke_acquisition();
         self.computed_route_form.report = None;
         self.revoke_freecell_playback();
+        self.revoke_tripeaks_playback();
         self.game_mode = match strategy {
             SolvingStrategy::ShortestPath => GameMode::FreeCell,
             SolvingStrategy::ComputerVision => self.computer_vision_game_mode,
@@ -2096,6 +2161,7 @@ impl QmpQemuSocketApp {
             self.reset_preview = None;
         }
         self.pyramid_workflow.bind(&selected_context);
+        self.tripeaks_workflow.bind(&selected_context);
         self.invalidate_preview();
         self.snapshot_request_id = self.snapshot_request_id.wrapping_add(1);
         self.current_board = 1;
@@ -2113,6 +2179,9 @@ impl QmpQemuSocketApp {
             self.current_status = match self.game_mode {
                 GameMode::Pyramid => "Pyramid — explicit reconnaissance required".into(),
                 GameMode::FreeCell => "Free Cell — explicit RECON or offline calculation".into(),
+                GameMode::TriPeaks => {
+                    "TriPeaks — explicit RECON, session, or offline calculation".into()
+                }
                 mode => format!("A* not implemented for {mode}; input disabled"),
             };
             return;
@@ -2257,6 +2326,7 @@ impl QmpQemuSocketApp {
         self.computed_route_form.revoke_acquisition();
         self.computed_route_form.report = None;
         self.revoke_freecell_playback();
+        self.revoke_tripeaks_playback();
         self.invalidate_preview();
         self.current_board = 1;
         self.board_position_established = false;
@@ -2274,6 +2344,9 @@ impl QmpQemuSocketApp {
             self.current_status = match self.game_mode {
                 GameMode::Pyramid => "Pyramid — explicit reconnaissance required".into(),
                 GameMode::FreeCell => "Free Cell — explicit RECON or offline calculation".into(),
+                GameMode::TriPeaks => {
+                    "TriPeaks — explicit RECON, session, or offline calculation".into()
+                }
                 mode => format!("A* not implemented for {mode}; input disabled"),
             };
             return;
@@ -2430,8 +2503,22 @@ impl QmpQemuSocketApp {
                         && let Err(error) = self.request_stop() {
 
 
-                            if !matches!(self.active_run, Some(ActiveRun::Reconnaissance | ActiveRun::FreeCellRecon | ActiveRun::ComputedRoute | ActiveRun::PyramidSession | ActiveRun::FreeCellSession | ActiveRun::FreeCellCalculation
-                                    | ActiveRun::FreeCellRoute)) {
+                            if !matches!(
+                                self.active_run,
+                                Some(
+                                    ActiveRun::Reconnaissance
+                                        | ActiveRun::FreeCellRecon
+                                        | ActiveRun::ComputedRoute
+                                        | ActiveRun::PyramidSession
+                                        | ActiveRun::FreeCellSession
+                                        | ActiveRun::FreeCellCalculation
+                                        | ActiveRun::FreeCellRoute
+                                        | ActiveRun::TriPeaksRecon
+                                        | ActiveRun::TriPeaksSession
+                                        | ActiveRun::TriPeaksCalculation
+                                        | ActiveRun::TriPeaksRoute
+                                )
+                            ) {
                                 self.active_run = None;
                             }
                             self.worker_state = WorkerState::Error;
@@ -2685,7 +2772,11 @@ impl QmpQemuSocketApp {
         egui::Frame::group(ui.style()).show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
                 if self.solving_strategy == SolvingStrategy::ShortestPath {
-                    ui.strong("Pyramid · Reconnaissance / computed route");
+                    ui.strong(match self.game_mode {
+                        GameMode::TriPeaks => "TriPeaks · Reconnaissance / computed route",
+                        GameMode::FreeCell => "Free Cell · Reconnaissance / computed route",
+                        _ => "Pyramid · Reconnaissance / computed route",
+                    });
                 } else if self.game_mode.calibration_only() {
                     ui.strong(format!("{} — calibration only", self.game_mode));
                 } else {
@@ -2750,7 +2841,8 @@ impl QmpQemuSocketApp {
                     self.reconnaissance_report = None;
                     self.computed_route_form.revoke_acquisition();
                     self.computed_route_form.report = None;
-        self.revoke_freecell_playback();
+                    self.revoke_freecell_playback();
+                    self.revoke_tripeaks_playback();
                     self.invalidate_preview();
                     self.current_status = "Socket changed — capture required".to_owned();
                     self.push_log("QMP socket changed locally; prior preview authority was discarded. Capture a fresh read-only frame before input.");
@@ -3644,7 +3736,8 @@ impl eframe::App for QmpQemuSocketApp {
 /// Align one Free Cell workflow stage with the available control area.
 ///
 /// Stage bodies choose wrapping rows for controls and ordinary wrapping for output.
-fn freecell_control_group<R>(
+/// Wrap related manual Free Cell controls cleanly across narrow and wide viewports.
+pub(super) fn freecell_control_group<R>(
     ui: &mut egui::Ui,
     title: &str,
     contents: impl FnOnce(&mut egui::Ui) -> R,
@@ -3703,6 +3796,10 @@ fn active_run_after_worker_state(
                 | ActiveRun::FreeCellSession
                 | ActiveRun::FreeCellCalculation
                 | ActiveRun::FreeCellRoute
+                | ActiveRun::TriPeaksRecon
+                | ActiveRun::TriPeaksSession
+                | ActiveRun::TriPeaksCalculation
+                | ActiveRun::TriPeaksRoute
         )
     ) && matches!(
         state,

@@ -204,7 +204,7 @@ pub struct StepOutcome {
 pub struct TriPeaksPosition {
     /// Occupancy bitmask over `SlotId(0..28)` (`1` = still on board, `0` = cleared).
     pub tableau_mask: u32,
-    /// Index (`0..=23`) of the next undrawn Stock card (`SlotId(29 + stock_cursor)`).
+    /// Index (`0..=23`) of the next Stock card to draw (`SlotId(29 + stock_cursor)`).
     pub stock_cursor: u8,
     /// Currently visible top card of the Waste pile.
     pub waste_card: Card,
@@ -358,8 +358,8 @@ pub fn apply_move(
 
             let mut newly_uncovered_slots = Vec::new();
             for parent in 0..18_u8 {
-                let pbit = 1_u32 << parent;
-                if (next_mask & pbit) != 0
+                let parent_bit = 1_u32 << parent;
+                if (next_mask & parent_bit) != 0
                     && !is_slot_uncovered(prev_mask, parent)
                     && is_slot_uncovered(next_mask, parent)
                 {
