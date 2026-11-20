@@ -617,7 +617,6 @@ mod tests {
 
 
     /// Check the detected anchor and full run length on the first exterior line.
-
     #[test]
     fn finds_a_long_halo_run_below_the_card() {
         let mut frame = rgba_frame(220, 220);
@@ -638,7 +637,6 @@ mod tests {
 
 
     /// Keep the minimum accepted halo length inclusive.
-
     #[test]
     fn accepts_a_halo_run_exactly_at_the_minimum_length() {
         let mut frame = rgba_frame(220, 220);
@@ -655,7 +653,6 @@ mod tests {
 
 
     /// Keep second-line detections anchored to the audited baseline.
-
     #[test]
     fn canonicalises_a_run_on_the_second_halo_line_to_the_baseline() {
         let mut frame = rgba_frame(220, 220);
@@ -672,7 +669,6 @@ mod tests {
 
 
     /// Ensure an exact TriPeaks halo hit keeps its observed anchor.
-
     #[test]
     fn tableau_fast_path_preserves_the_audited_anchor() {
         let mut frame = rgba_frame(220, 220);
@@ -689,7 +685,6 @@ mod tests {
 
 
     /// Accept calibrated dark-gold rendering drift without moving the click anchor.
-
     #[test]
     fn tableau_fallback_finds_a_dark_halo_on_a_shifted_exterior_line() {
         let mut frame = rgba_frame(220, 220);
@@ -706,7 +701,6 @@ mod tests {
 
 
     /// Accept the inclusive X tolerance while returning the fixed calibrated anchor.
-
     #[test]
     fn tableau_fallback_canonicalises_a_tolerated_fringe_start() {
         let mut frame = rgba_frame(220, 220);
@@ -724,7 +718,6 @@ mod tests {
 
 
     /// Reject white, felt, red and other colours outside the relaxed gold relationship.
-
     #[test]
     fn tableau_fallback_rejects_non_gold_channel_relationships() {
         for colour in [
@@ -747,7 +740,6 @@ mod tests {
 
 
     /// Reject a long gold run just beyond the permitted start displacement.
-
     #[test]
     fn tableau_fallback_rejects_a_gold_run_starting_outside_x_tolerance() {
         let mut frame = rgba_frame(220, 220);
@@ -759,7 +751,6 @@ mod tests {
 
 
     /// Accept both exterior strip edges and reject adjacent card or out-of-strip pixels.
-
     #[test]
     fn tableau_fallback_is_bounded_to_the_exterior_strip() {
         for accepted_y in [180, 193] {
@@ -785,7 +776,6 @@ mod tests {
 
 
     /// Prevent the exact detector from widening its two-line search.
-
     #[test]
     fn ignores_gold_runs_outside_the_two_calibrated_halo_lines() {
         let mut frame = rgba_frame(220, 220);
@@ -797,7 +787,6 @@ mod tests {
 
 
     /// Ensure gold card artwork cannot qualify as an exterior halo.
-
     #[test]
     fn ignores_a_long_gold_run_inside_card_artwork() {
         let mut frame = rgba_frame(220, 220);
@@ -812,7 +801,6 @@ mod tests {
 
 
     /// Keep a run one pixel below the minimum ineligible.
-
     #[test]
     fn rejects_an_exterior_run_shorter_than_the_threshold() {
         let mut frame = rgba_frame(220, 220);
@@ -823,7 +811,6 @@ mod tests {
 
 
     /// Check the accepted face-up rectangle geometry and presence result.
-
     #[test]
     fn detects_a_solid_near_white_face_block() {
         let mut frame = rgba_frame(80, 40);
@@ -850,7 +837,6 @@ mod tests {
 
 
     /// Cover inclusive white/width thresholds and a block touching the right edge.
-
     #[test]
     fn white_block_threshold_and_size_boundaries_are_exact() {
         let probe = PixelRect::new(10, 12, 60, FACE_UP_WHITE_SCAN_HEIGHT);
@@ -906,7 +892,6 @@ mod tests {
 
 
     /// Reject insufficient width, incomplete height and scattered bright pixels.
-
     #[test]
     fn rejects_short_partial_and_speckled_white_patterns() {
         let probe = PixelRect::new(10, 12, 60, 4);
@@ -944,7 +929,6 @@ mod tests {
 
 
     /// Check the black-versus-filled progress classification on the calibrated probe.
-
     #[test]
     fn solver_progress_uses_the_black_right_third_as_another_board() {
         let mut frame = rgba_frame(1_920, 1_080);
@@ -968,7 +952,6 @@ mod tests {
 
 
     /// Keep both game modes on the same inclusive 65-black-pixel boundary.
-
     #[test]
     fn both_modes_share_the_exact_65_of_76_progress_threshold() {
         let mut frame = rgba_frame(1_920, 1_080);
@@ -1010,7 +993,6 @@ mod tests {
 
 
     /// Replay recorded progress pixels to protect the interior probe from border regressions.
-
     #[test]
     fn captured_new_board_progress_samples_the_interior_instead_of_the_gold_border() {
         let fixture: serde_json::Value = serde_json::from_str(include_str!(
@@ -1093,7 +1075,6 @@ mod tests {
 
 
     /// Reject truncated storage and a frame too short to contain the progress probe.
-
     #[test]
     fn progress_rejects_incomplete_frames_instead_of_classifying_them() {
         let mut truncated = rgba_frame(1_920, 1_080);
@@ -1117,7 +1098,6 @@ mod tests {
 
 
     /// Exercise invalid storage, out-of-frame probes and improperly nested card geometry.
-
     #[test]
     fn rejects_invalid_layout_and_geometry() {
         let mut invalid_layout = rgba_frame(220, 220);

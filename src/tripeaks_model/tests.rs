@@ -6,20 +6,20 @@ use std::{
     io::Cursor,
     path::{Path, PathBuf},
     sync::atomic::{AtomicBool, Ordering},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use xsar::{
     games::cards::{Card as XsarCard, Rank, Suit},
-    search::{SearchMethod, SearchOptions, SearchOutcome, SearchStop},
+    search::{PartialProof, SearchLimits, SearchMethod, SearchOptions, SearchOutcome, SearchStop},
 };
 
 use crate::{
     geometry::PixelRect,
     parameters::TABLEAU_CARD_REGIONS,
     recon::{
-        Card, CardSlot, Objective, ReconDomain, ReconError, ReconOutcome, SlotId,
-        run_epistemic_recon,
+        BestPartialRoute, Card, CardSlot, Objective, ProbePlan, ReconDomain, ReconError,
+        ReconOutcome, SlotId, run_epistemic_recon,
     },
 };
 
@@ -561,7 +561,10 @@ impl ReconDomain for SimulatedTriPeaksDomain {
         solve_known_subgraph(slots, objective)
     }
 
-    fn plan_info_gain_probe(&self, slots: &[CardSlot]) -> Option<Vec<Self::Move>> {
+    fn plan_info_gain_probe(
+        &self,
+        slots: &[CardSlot],
+    ) -> Result<ProbePlan<Self::Move>, ReconError> {
         plan_info_gain_probe(slots)
     }
 
@@ -621,7 +624,10 @@ impl ReconDomain for SimulatedTriPeaksDomain {
         Ok(self.root_hash)
     }
 
-    fn best_partial_route(&self, slots: &[CardSlot]) -> Vec<Self::Move> {
+    fn best_partial_route(
+        &self,
+        slots: &[CardSlot],
+    ) -> Result<BestPartialRoute<Self::Move>, ReconError> {
         best_partial_route(slots)
     }
 }
@@ -784,11 +790,13 @@ fn end_to_end_recon_handles_live_completion_duplicate_card_and_unsolvable_unreac
     let ReconOutcome::UnsolvableBestPartial {
         best_partial_route,
         unreachable_slots,
+        proof,
     } = out_unsolv
     else {
         panic!("expected UnsolvableBestPartial, got {out_unsolv:?}");
     };
     assert!(unreachable_slots >= 3);
+    assert_eq!(proof, PartialProof::Exhaustive);
     verify_move_sequence(&hide_rows_1_to_3(&blocked_deal), &best_partial_route)
         .expect("best partial route is legal from T=0");
 
@@ -834,7 +842,10 @@ fn fifty_one_to_fifty_two_complement_deduces_final_peak_without_physical_probe()
             solve_known_subgraph(slots, objective)
         }
 
-        fn plan_info_gain_probe(&self, slots: &[CardSlot]) -> Option<Vec<Self::Move>> {
+        fn plan_info_gain_probe(
+            &self,
+            slots: &[CardSlot],
+        ) -> Result<ProbePlan<Self::Move>, ReconError> {
             plan_info_gain_probe(slots)
         }
 
@@ -860,7 +871,10 @@ fn fifty_one_to_fifty_two_complement_deduces_final_peak_without_physical_probe()
             Ok(self.root_hash)
         }
 
-        fn best_partial_route(&self, slots: &[CardSlot]) -> Vec<Self::Move> {
+        fn best_partial_route(
+            &self,
+            slots: &[CardSlot],
+        ) -> Result<BestPartialRoute<Self::Move>, ReconError> {
             best_partial_route(slots)
         }
     }
@@ -1063,7 +1077,10 @@ fn search_respects_cancellation_and_stop_limits() {
         }
     ));
     cancel.store(false, Ordering::Relaxed);
-    assert!(plan_info_gain_probe(&truth).is_none()); // all 52 already Known -> 0 unknowns left
+    assert!(matches!(
+        plan_info_gain_probe(&truth),
+        Ok(ProbePlan::Exhausted)
+    )); // all 52 already Known -> 0 unknowns left
 }
 
 /// Build a `29`-move `ClearBoard` deal where `Peak0+Peak1_prefix -> Draw -> Peak2+Peak1_suffix`
@@ -1243,10 +1260,14 @@ fn plan_deal_route_handles_multi_board_clear_escalation_and_partial_fallbacks() 
         TriPeaksPlanOutcome::UnsolvablePartial {
             actions,
             max_tableau_cleared,
+            proof,
+            unknown_slots,
             ..
         } => {
             assert!(actions.is_empty(), "ClearBoard partial stays at T=0");
             assert_eq!(max_tableau_cleared, 3);
+            assert_eq!(proof, PartialProof::Exhaustive);
+            assert_eq!(unknown_slots, 0);
         }
         other => panic!("expected UnsolvablePartial for ClearBoard dead end, got {other:?}"),
     }
@@ -1263,11 +1284,15 @@ fn plan_deal_route_handles_multi_board_clear_escalation_and_partial_fallbacks() 
             actions,
             replay,
             max_tableau_cleared,
+            proof,
+            unknown_slots,
             ..
         } => {
             assert!(!actions.is_empty());
             assert_eq!(replay.final_position.cleared_by_rank[3], 1);
             assert_eq!(max_tableau_cleared, 3);
+            assert_eq!(proof, PartialProof::Exhaustive);
+            assert_eq!(unknown_slots, 0);
         }
         other => panic!("expected UnsolvablePartial with rank progress, got {other:?}"),
     }
@@ -1280,11 +1305,18 @@ fn plan_deal_route_handles_multi_board_clear_escalation_and_partial_fallbacks() 
     )
     .expect("zero rank partial")
     {
-        TriPeaksPlanOutcome::UnsolvablePartial { actions, .. } => {
+        TriPeaksPlanOutcome::UnsolvablePartial {
+            actions,
+            proof,
+            unknown_slots,
+            ..
+        } => {
             assert!(
                 actions.is_empty(),
                 "zero target-rank gain must keep board at T=0"
             );
+            assert_eq!(proof, PartialProof::Exhaustive);
+            assert_eq!(unknown_slots, 0);
         }
         other => panic!("expected empty UnsolvablePartial for unreachable rank, got {other:?}"),
     }
@@ -1297,11 +1329,360 @@ fn plan_deal_route_handles_multi_board_clear_escalation_and_partial_fallbacks() 
     .expect("score partial")
     {
         TriPeaksPlanOutcome::UnsolvablePartial {
-            actions, replay, ..
+            actions,
+            replay,
+            proof,
+            unknown_slots,
+            ..
         } => {
             assert_eq!(actions.len(), 3);
             assert_eq!(replay.final_position.score_delta, 900);
+            assert_eq!(proof, PartialProof::Exhaustive);
+            assert_eq!(unknown_slots, 0);
         }
         other => panic!("expected UnsolvablePartial with score progress, got {other:?}"),
     }
+}
+
+#[test]
+fn probe_planning_distinguishes_bounded_from_exhausted_and_propagates_faults() {
+    let masked = hide_rows_1_to_3(&build_cyclic_52_card_deal());
+    let cancel = AtomicBool::new(false);
+
+    // 1. Tight expansion bound stops before clearing any Row-4 pair to uncover Row 3 (`score == 0`).
+    let tight_limits = SearchLimits {
+        max_states: 1_000,
+        max_expansions: 1,
+        max_memory_bytes: DEFAULT_SEARCH_LIMITS.max_memory_bytes,
+        max_duration: Duration::from_secs(5),
+    };
+    assert!(matches!(
+        plan_info_gain_probe_with_control(&masked, tight_limits, &cancel, None, None),
+        Ok(ProbePlan::Bounded(SearchStop::ExpansionLimit))
+    ));
+
+    // 2. Zero duration stops before expansion begins and returns Bounded(TimeLimit), not Exhausted.
+    let zero_duration = SearchLimits {
+        max_duration: Duration::ZERO,
+        ..DEFAULT_SEARCH_LIMITS
+    };
+    assert!(matches!(
+        plan_info_gain_probe_with_control(&masked, zero_duration, &cancel, None, None),
+        Ok(ProbePlan::Bounded(SearchStop::TimeLimit))
+    ));
+
+    // 3. Cancellation and invalid slot tables/unknown waste propagate errors rather than Exhausted.
+    cancel.store(true, Ordering::Release);
+    assert!(matches!(
+        plan_info_gain_probe_with_control(&masked, DEFAULT_SEARCH_LIMITS, &cancel, None, None),
+        Err(ReconError::Cancelled)
+    ));
+    cancel.store(false, Ordering::Release);
+
+    let mut no_waste = masked;
+    no_waste[usize::from(INITIAL_WASTE_SLOT.0)] = CardSlot::Unknown;
+    assert!(matches!(
+        plan_info_gain_probe(&no_waste),
+        Err(ReconError::SearchFailed {
+            context: "probe planning",
+            ..
+        })
+    ));
+    let mut no_waste_all_known_parents = build_cyclic_52_card_deal();
+    no_waste_all_known_parents[usize::from(INITIAL_WASTE_SLOT.0)] = CardSlot::Unknown;
+    assert!(matches!(
+        plan_info_gain_probe(&no_waste_all_known_parents),
+        Err(ReconError::SearchFailed {
+            context: "probe planning",
+            ..
+        })
+    ));
+    assert!(matches!(
+        plan_info_gain_probe(&masked[..10]),
+        Err(ReconError::SearchFailed {
+            context: "probe planning",
+            ..
+        })
+    ));
+
+    // 4. Tight search limits through RECON produce BoundedBestPartial while keeping Unknown slots intact.
+    /// Wrapper domain delegating search calls with tight bounds to simulate a bounded probe timeout.
+    struct BoundedProbeDomain {
+        /// Underlying deterministic TriPeaks test domain.
+        inner: SimulatedTriPeaksDomain,
+        /// Tight search budget causing `ProbePlan::Bounded`.
+        limits: SearchLimits,
+        /// Cooperative cancellation token.
+        cancel: AtomicBool,
+    }
+    impl ReconDomain for BoundedProbeDomain {
+        type Move = TriPeaksMove;
+
+        fn initialize_and_sweep_stock(&mut self) -> Result<(Vec<CardSlot>, u64), ReconError> {
+            self.inner.initialize_and_sweep_stock()
+        }
+
+        fn solve_known_subgraph(
+            &self,
+            slots: &[CardSlot],
+            objective: Objective,
+        ) -> Option<Vec<Self::Move>> {
+            self.inner.solve_known_subgraph(slots, objective)
+        }
+
+        fn plan_info_gain_probe(
+            &self,
+            slots: &[CardSlot],
+        ) -> Result<ProbePlan<Self::Move>, ReconError> {
+            plan_info_gain_probe_with_control(slots, self.limits, &self.cancel, None, None)
+        }
+
+        fn execute_probe_and_observe(
+            &mut self,
+            probe: &[Self::Move],
+        ) -> Result<Option<Vec<(SlotId, Card)>>, ReconError> {
+            self.inner.execute_probe_and_observe(probe)
+        }
+
+        fn undo_all_and_hash(&mut self) -> Result<u64, ReconError> {
+            self.inner.undo_all_and_hash()
+        }
+
+        fn best_partial_route(
+            &self,
+            slots: &[CardSlot],
+        ) -> Result<BestPartialRoute<Self::Move>, ReconError> {
+            best_partial_route_with_control(slots, self.limits, &self.cancel, None, None)
+        }
+    }
+
+    let mut bounded_dom = BoundedProbeDomain {
+        inner: SimulatedTriPeaksDomain::new(build_cyclic_52_card_deal(), Objective::ClearBoard),
+        limits: tight_limits,
+        cancel: AtomicBool::new(false),
+    };
+    let recon_out = run_epistemic_recon(&mut bounded_dom, Objective::ClearBoard, true, 5)
+        .expect("bounded probe completes with BoundedBestPartial");
+    assert!(matches!(
+        recon_out,
+        ReconOutcome::BoundedBestPartial {
+            unknown_slots: 18,
+            unreachable_slots: 0,
+            probe_stop: SearchStop::ExpansionLimit,
+            proof: PartialProof::Bounded(SearchStop::ExpansionLimit),
+            ..
+        }
+    ));
+}
+
+#[test]
+fn best_partial_and_plan_deal_route_preserve_partial_proof_unknowns_and_non_cancel_stops() {
+    let masked = hide_rows_1_to_3(&build_cyclic_52_card_deal());
+    let cancel = AtomicBool::new(false);
+    let tight_limits = SearchLimits {
+        max_states: 1_000,
+        max_expansions: 1,
+        max_memory_bytes: DEFAULT_SEARCH_LIMITS.max_memory_bytes,
+        max_duration: Duration::from_secs(5),
+    };
+
+    let bounded_partial =
+        best_partial_route_with_control(&masked, tight_limits, &cancel, None, None)
+            .expect("bounded best partial returns prefix with Bounded proof");
+    assert_eq!(
+        bounded_partial.proof,
+        PartialProof::Bounded(SearchStop::ExpansionLimit)
+    );
+    assert!(bounded_partial.has_unknown_slots);
+
+    // Exhaustive `plan_deal_route` on an unsolvable deal WITH Unknown slots carries `unknown_slots > 0`.
+    let partial_unknown = hide_rows_1_to_3(&build_unsolvable_partial_deal());
+    match plan_deal_route(&partial_unknown, Objective::ClearBoard).expect("partial with unknowns") {
+        TriPeaksPlanOutcome::UnsolvablePartial {
+            proof,
+            unknown_slots,
+            ..
+        } => {
+            assert_eq!(proof, PartialProof::Exhaustive);
+            assert_eq!(unknown_slots, 18);
+        }
+        other => panic!("expected UnsolvablePartial with unknown_slots=18, got {other:?}"),
+    }
+
+    // Tight limits on `plan_deal_route_with_control` surface `Stopped` (non-cancel) rather than false exhaustion.
+    let zero_duration = SearchLimits {
+        max_duration: Duration::ZERO,
+        ..DEFAULT_SEARCH_LIMITS
+    };
+    let stopped = plan_deal_route_with_control(
+        &partial_unknown,
+        Objective::ClearBoard,
+        zero_duration,
+        &cancel,
+        None,
+        None,
+    )
+    .expect("zero-duration search returns Stopped outcome");
+    assert!(matches!(
+        stopped,
+        TriPeaksPlanOutcome::Stopped {
+            reason: SearchStop::TimeLimit,
+            ..
+        }
+    ));
+}
+
+/// Decode a short rank+suit string (`"QS"`, `"10H"`, etc.) into canonical `CardSlot::Known`.
+fn slot_from_code(code: &str) -> CardSlot {
+    let (rank_str, suit_str) = code.split_at(code.len() - 1);
+    let rank_idx: u8 = match rank_str {
+        "A" => 0,
+        "2" => 1,
+        "3" => 2,
+        "4" => 3,
+        "5" => 4,
+        "6" => 5,
+        "7" => 6,
+        "8" => 7,
+        "9" => 8,
+        "10" => 9,
+        "J" => 10,
+        "Q" => 11,
+        "K" => 12,
+        other => panic!("unexpected rank code {other}"),
+    };
+    let suit = match suit_str {
+        "C" => Suit::Clubs,
+        "D" => Suit::Diamonds,
+        "H" => Suit::Hearts,
+        "S" => Suit::Spades,
+        other => panic!("unexpected suit code {other}"),
+    };
+    let rank = Rank::from_value(rank_idx + 1).expect("rank 1..=13");
+    let canonical = Card::try_from(XsarCard::new(rank, suit)).expect("canonical card id < 52");
+    CardSlot::Known(canonical)
+}
+
+#[test]
+fn queens_challenge_671k_state_deal_escalates_to_full_clear_under_10gb_limits() {
+    assert_eq!(
+        DEFAULT_SEARCH_LIMITS.max_memory_bytes,
+        10_usize * 1024 * 1024 * 1024
+    );
+    assert_eq!(DEFAULT_SEARCH_LIMITS.max_states, 20_000_000);
+    assert_eq!(DEFAULT_SEARCH_LIMITS.max_expansions, 20_000_000);
+    assert_eq!(DEFAULT_SEARCH_LIMITS.max_duration, Duration::from_secs(600));
+
+    let codes = [
+        "QS", "4S", "7S", "AH", "JH", "AC", "3D", "4H", "7D", "QC", "8C", "4D", "9H", "10S", "KC",
+        "QH", "6S", "QD", "AD", "3C", "5C", "2C", "10D", "5S", "9D", "7C", "2S", "JS", "KH", "8S",
+        "6C", "7H", "10C", "8H", "2H", "JC", "AS", "KD", "3H", "3S", "9S", "JD", "4C", "2D", "6H",
+        "9C", "KS", "6D", "8D", "5H", "10H", "5D",
+    ];
+    let slots: [CardSlot; DEAL_SLOT_COUNT] = codes.map(slot_from_code);
+    let objective = Objective::ClearRankQuota {
+        rank: 11,
+        remaining: 10,
+    };
+
+    let outcome = plan_deal_route(&slots, objective)
+        .expect("671k-state Queens Challenge deal solves cleanly under 10 GiB policy");
+    let TriPeaksPlanOutcome::EscalatedClearBoard {
+        actions, replay, ..
+    } = outcome
+    else {
+        panic!("expected EscalatedClearBoard on live 671k-state Queens deal, got {outcome:?}");
+    };
+    assert_eq!(replay.final_position.tableau_mask, 0);
+    verify_objective_route(&slots, &actions, Objective::ClearBoard)
+        .expect("escalated ClearBoard route replays cleanly");
+
+    // Non-time resource bounds on Pass 2 (`ClearBoard` escalation) fall through to Pass 3 with `PartialProof::Bounded`.
+    let cancel = AtomicBool::new(false);
+    let tight_limits = SearchLimits {
+        max_states: 1_000,
+        max_expansions: 50,
+        max_memory_bytes: DEFAULT_SEARCH_LIMITS.max_memory_bytes,
+        max_duration: Duration::from_secs(5),
+    };
+    let fallthrough =
+        plan_deal_route_with_control(&slots, objective, tight_limits, &cancel, None, None)
+            .expect("Pass 2 ExpansionLimit falls through to Pass 3 bounded partial");
+    assert!(matches!(
+        fallthrough,
+        TriPeaksPlanOutcome::UnsolvablePartial {
+            proof: PartialProof::Bounded(SearchStop::ExpansionLimit),
+            unknown_slots: 0,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn unseen_rank_probability_breaks_probe_ties_and_continuation_chains_from_mid_board() {
+    let mut slots = [CardSlot::Unknown; DEAL_SLOT_COUNT];
+    // Fix all 4 Kings (12) and all 4 Twos (1) in `Known` -> `unseen_adjacent(Ace) == 0`.
+    slots[0] = CardSlot::Known(card(12, 0));
+    slots[1] = CardSlot::Known(card(12, 1));
+    slots[2] = CardSlot::Known(card(12, 2));
+    slots[3] = CardSlot::Known(card(12, 3));
+    slots[4] = CardSlot::Known(card(1, 0));
+    slots[5] = CardSlot::Known(card(1, 1));
+    slots[6] = CardSlot::Known(card(1, 2));
+
+    // Fork A (`18=2, 19=A` uncovering `slot 9`) ends at `Ace (0)` with zero unseen adjacent ranks.
+    slots[18] = CardSlot::Known(card(1, 3));
+    slots[19] = CardSlot::Known(card(0, 0));
+
+    // Fork B (`25=4, 26=5` uncovering `slot 16`) ends at `Five (4)` with 6 unseen adjacent cards (`4`s and `6`s).
+    slots[25] = CardSlot::Known(card(3, 0));
+    slots[26] = CardSlot::Known(card(4, 0));
+    slots[27] = CardSlot::Known(card(6, 0));
+    slots[17] = CardSlot::Known(card(5, 0));
+
+    // Non-bridging Row 4 spacers (`Nine` and `Jack`).
+    slots[20] = CardSlot::Known(card(8, 0));
+    slots[21] = CardSlot::Known(card(8, 1));
+    slots[22] = CardSlot::Known(card(10, 0));
+    slots[23] = CardSlot::Known(card(10, 1));
+    slots[24] = CardSlot::Known(card(8, 2));
+
+    // Initial Waste = Three (`rank 2`).
+    slots[usize::from(INITIAL_WASTE_SLOT.0)] = CardSlot::Known(card(2, 0));
+
+    let ProbePlan::Found(initial_probe) =
+        plan_info_gain_probe(&slots).expect("tie-break selects highest unseen continuation probe")
+    else {
+        panic!("expected ProbePlan::Found for Fork A vs Fork B tie");
+    };
+    assert_eq!(
+        initial_probe,
+        vec![
+            TriPeaksMove::TapTableau { row: 4, column: 8 },
+            TriPeaksMove::TapTableau { row: 4, column: 9 },
+        ]
+    );
+
+    // Simulate online flip: `slot 16` reveals `Six of Diamonds` (`rank 5`); mid-board continuation chains up to `slot 8` (`Unknown`)!
+    slots[16] = CardSlot::Known(card(5, 1));
+    let cancel = AtomicBool::new(false);
+    let ProbePlan::Found(cont) =
+        search::plan_info_gain_continuation(search::ProbeContinuationInput {
+            slots: &slots,
+            executed_prefix: &initial_probe,
+            limits: DEFAULT_SEARCH_LIMITS,
+            cancel: &cancel,
+        })
+        .expect("mid-board continuation succeeds cleanly")
+    else {
+        panic!("expected continuation probe after slot 16 flips Six");
+    };
+    assert_eq!(
+        cont,
+        vec![
+            TriPeaksMove::TapTableau { row: 3, column: 8 },
+            TriPeaksMove::TapTableau { row: 4, column: 10 },
+            TriPeaksMove::TapTableau { row: 3, column: 9 },
+        ]
+    );
 }

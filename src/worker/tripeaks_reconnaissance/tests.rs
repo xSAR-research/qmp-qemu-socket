@@ -16,7 +16,10 @@ use std::{
 };
 
 use serde_json::{Value, json};
-use xsar::games::cards::Rank;
+use xsar::{
+    games::cards::Rank,
+    search::{PartialProof, SearchLimits, SearchStop},
+};
 
 use super::*;
 use crate::{
@@ -54,8 +57,10 @@ struct BaseAssets {
     draw_first: CapturedFrame,
     /// Calibrated Draw-23 frame showing dark-green empty Stock tray (`TARGET_STOCK`).
     stock_empty: CapturedFrame,
-    /// Calibrated `"No Moves Remaining"` modal frame with dimmed backdrop.
+    /// Calibrated tall Normal `"No Moves Remaining"` modal frame with dimmed backdrop.
     no_moves: CapturedFrame,
+    /// Calibrated compact Challenge `"No Moves Remaining"` modal frame (`5D` Waste, `Queens cleared 0/10`).
+    no_moves_compact: CapturedFrame,
     /// Calibrated TriPeaks `Congratulations` board-win frame.
     tp01: CapturedFrame,
     /// Calibrated Challenge Complete `"Continue"` frame.
@@ -98,6 +103,12 @@ fn assets() -> &'static BaseAssets {
                 "../../../tests/fixtures/tripeaks-calibration-20261116/no-moves-remaining.png"
             ),
             "no-moves-remaining",
+        );
+        let no_moves_compact = decode(
+            include_bytes!(
+                "../../../tests/fixtures/tripeaks-calibration-20261116/no-moves-remaining-compact.png"
+            ),
+            "no-moves-remaining-compact",
         );
         let tp01 = decode(
             include_bytes!("../../../tests/fixtures/tripeaks-TP01.png"),
@@ -143,6 +154,7 @@ fn assets() -> &'static BaseAssets {
             draw_first,
             stock_empty,
             no_moves,
+            no_moves_compact,
             tp01,
             challenge_complete,
             xp_counting,
@@ -262,6 +274,145 @@ fn build_draw_23_no_match_deal_cards() -> [Card; DEAL_SLOT_COUNT] {
         *slot = take_rank(rank_idx);
     }
     assert!(used.iter().all(|&taken| taken));
+    out
+}
+
+/// Build an unsolvable deal whose Draw-23 card (`SlotId(51)`) is `5D` (matching
+/// `no-moves-remaining-compact.png`) with zero legal Row-4 moves at Draw 23.
+fn build_draw_23_compact_no_match_deal_cards() -> [Card; DEAL_SLOT_COUNT] {
+    let mut used = [false; 52];
+    let mut suit_cursor = [0_u8; 13];
+    let five_diamonds = card(4, 1);
+    used[usize::from(five_diamonds.0)] = true;
+    let mut take_rank = |rank_idx: u8| -> Card {
+        loop {
+            let s = suit_cursor[usize::from(rank_idx)];
+            assert!(s < 4, "rank exhausted");
+            suit_cursor[usize::from(rank_idx)] = s + 1;
+            let c = card(rank_idx, s);
+            if !used[usize::from(c.0)] {
+                used[usize::from(c.0)] = true;
+                return c;
+            }
+        }
+    };
+
+    let mut out = [Card(0); DEAL_SLOT_COUNT];
+    // Hidden Rows 1..=3 (`0..18`): absorb adjacent ranks `{3 (4), 12 (K)}` plus remaining `{2, 4, 10, 11}`.
+    let hidden_ranks = [
+        2_u8, 2, 3, 3, 3, 3, 4, 4, 4, 10, 11, 11, 11, 11, 12, 12, 12, 12,
+    ];
+    for (slot, rank_idx) in out[0..18].iter_mut().zip(hidden_ranks) {
+        *slot = take_rank(rank_idx);
+    }
+    // Row 4 (`18..28`): ranks `{0, 1, 2}` (`A, 2, 3`), keeping circular distance >= 2 from `5D (4)` and `{5..=10}`.
+    let row4_ranks = [0_u8, 0, 0, 0, 1, 1, 1, 1, 2, 2];
+    for (slot, rank_idx) in out[18..TABLEAU_SLOT_COUNT].iter_mut().zip(row4_ranks) {
+        *slot = take_rank(rank_idx);
+    }
+    // Waste + Stock (`28..51`) only contain `{4..=10}` and `SlotId(51) = 5D` -> zero legal Row-4 matches.
+    out[DEAL_SLOT_COUNT - 1] = five_diamonds;
+    let mut next_slot = usize::from(INITIAL_WASTE_SLOT.0);
+    for (id, &taken) in used.iter().enumerate() {
+        if !taken {
+            out[next_slot] = Card(id as u8);
+            next_slot += 1;
+        }
+    }
+    assert_eq!(next_slot, DEAL_SLOT_COUNT - 1);
+    out
+}
+
+/// Build an unsolvable deal whose Draw-23 card (`SlotId(51)`) is `AH` (matching
+/// `no-moves-remaining.png`) with zero legal Row-4 moves at Draw 23.
+fn build_draw_23_tall_ah_no_match_deal_cards() -> [Card; DEAL_SLOT_COUNT] {
+    let mut used = [false; 52];
+    let mut suit_cursor = [0_u8; 13];
+    let ace_hearts = card(0, 2);
+    used[usize::from(ace_hearts.0)] = true;
+    let mut take_rank = |rank_idx: u8| -> Card {
+        loop {
+            let s = suit_cursor[usize::from(rank_idx)];
+            assert!(s < 4, "rank exhausted");
+            suit_cursor[usize::from(rank_idx)] = s + 1;
+            let c = card(rank_idx, s);
+            if !used[usize::from(c.0)] {
+                used[usize::from(c.0)] = true;
+                return c;
+            }
+        }
+    };
+
+    let mut out = [Card(0); DEAL_SLOT_COUNT];
+    // Hidden Rows 1..=3 (`0..18`): absorb adjacent ranks `{1 (2), 5 (6)}` plus remaining `{0, 4, 11, 12}`.
+    let hidden_ranks = [0_u8, 0, 0, 1, 1, 1, 1, 4, 4, 5, 5, 5, 5, 11, 12, 12, 12, 12];
+    for (slot, rank_idx) in out[0..18].iter_mut().zip(hidden_ranks) {
+        *slot = take_rank(rank_idx);
+    }
+    // Row 4 (`18..28`): ranks `{2, 3, 4}` (`3, 4, 5`), keeping circular distance >= 2 from `AH (0)` and `{6..=11}`.
+    let row4_ranks = [2_u8, 2, 2, 2, 3, 3, 3, 3, 4, 4];
+    for (slot, rank_idx) in out[18..TABLEAU_SLOT_COUNT].iter_mut().zip(row4_ranks) {
+        *slot = take_rank(rank_idx);
+    }
+    out[DEAL_SLOT_COUNT - 1] = ace_hearts;
+    let mut next_slot = usize::from(INITIAL_WASTE_SLOT.0);
+    for (id, &taken) in used.iter().enumerate() {
+        if !taken {
+            out[next_slot] = Card(id as u8);
+            next_slot += 1;
+        }
+    }
+    assert_eq!(next_slot, DEAL_SLOT_COUNT - 1);
+    out
+}
+
+/// Build a solvable `52`-card deal where Draw 23 (`SlotId(51) = 5D`) has zero Row-4 matches,
+/// triggering the compact modal during initial Stock sweep before RECON probes and solves.
+fn build_solvable_draw_23_compact_modal_deal_cards() -> [Card; DEAL_SLOT_COUNT] {
+    let mut used = [false; 52];
+    let mut suit_cursor = [0_u8; 13];
+    let five_diamonds = card(4, 1);
+    used[usize::from(five_diamonds.0)] = true;
+    let mut take_rank = |rank_idx: u8| -> Card {
+        loop {
+            let s = suit_cursor[usize::from(rank_idx)];
+            assert!(s < 4, "rank exhausted");
+            suit_cursor[usize::from(rank_idx)] = s + 1;
+            let c = card(rank_idx, s);
+            if !used[usize::from(c.0)] {
+                used[usize::from(c.0)] = true;
+                return c;
+            }
+        }
+    };
+
+    let mut out = [Card(0); DEAL_SLOT_COUNT];
+    out[usize::from(INITIAL_WASTE_SLOT.0)] = take_rank(6); // Seven
+    // Row 4 (`18..28`): zero `4 (3)` and zero `6 (5)` so Draw 23 (`5D`) has no Row-4 moves.
+    for (slot_idx, rank_idx) in (18..28).zip([7_u8, 8, 9, 10, 11, 12, 0, 1, 2, 1]) {
+        out[slot_idx] = take_rank(rank_idx);
+    }
+    // Row 3 (`9..18`): `3, 4, 5, 6, 7, 8, 9, 10, 11`.
+    for (slot_idx, rank_idx) in (9..18).zip([2_u8, 3, 4, 5, 6, 7, 8, 9, 10]) {
+        out[slot_idx] = take_rank(rank_idx);
+    }
+    // Row 2 (`3..9`): `Q, K, A, K, Q, J`.
+    for (slot_idx, rank_idx) in (3..9).zip([11_u8, 12, 0, 12, 11, 10]) {
+        out[slot_idx] = take_rank(rank_idx);
+    }
+    // Row 1 (`0..3`): `10, 9, 8`.
+    for (slot_idx, rank_idx) in (0..3).zip([9_u8, 8, 7]) {
+        out[slot_idx] = take_rank(rank_idx);
+    }
+    out[DEAL_SLOT_COUNT - 1] = five_diamonds;
+    let mut stock_idx = usize::from(STOCK_START_SLOT);
+    for (id, &taken) in used.iter().enumerate() {
+        if !taken {
+            out[stock_idx] = Card(id as u8);
+            stock_idx += 1;
+        }
+    }
+    assert_eq!(stock_idx, DEAL_SLOT_COUNT - 1);
     out
 }
 
@@ -582,6 +733,28 @@ fn make_settling_variant(mut frame: CapturedFrame, unreadable_slot: usize) -> Ca
     frame
 }
 
+/// Dim a synthetic live board (`0.20x`) and composite the calibrated compact Challenge modal panel
+/// `(531, 393, 858, 278)` so uncovered upper cards remain dimmed behind the real dialog overlay.
+fn synthesize_compact_modal_over_board(
+    snapshot: &BoardSnapshot,
+    banner: BannerKind,
+) -> CapturedFrame {
+    let mut frame = synthesize_gameplay_frame(snapshot, banner);
+    let (chunks, _) = frame.pixels.as_chunks_mut::<4>();
+    for px in chunks {
+        px[0] /= 5;
+        px[1] /= 5;
+        px[2] /= 5;
+    }
+    copy_rect(
+        &mut frame,
+        PixelPoint::new(531, 393),
+        &assets().no_moves_compact,
+        PixelRect::new(531, 393, 858, 278),
+    );
+    frame
+}
+
 /// Compute `BoardSnapshot` from truth cards + [`TriPeaksPosition`] + `undo_all_enabled`.
 fn snapshot_from_position(
     truth: &[Card; DEAL_SLOT_COUNT],
@@ -652,19 +825,37 @@ enum WireAction {
     },
 }
 
+/// Modal layout served by the simulated `AF_UNIX` QMP guest when `modal_open` is active.
+#[derive(Clone, Copy, Default, Eq, PartialEq)]
+enum ModalKind {
+    /// Tall Normal-mode modal (`no-moves-remaining.png`, click `(1_128, 728)`).
+    #[default]
+    TallNormal,
+    /// Compact Challenge-mode modal (`no-moves-remaining-compact.png`, click `(1_133, 605)`).
+    CompactChallenge,
+}
+
 /// Scripted guest scene modes and fault injections for the simulated `AF_UNIX` QMP peer.
 #[derive(Clone, Default)]
 struct PeerBehavior {
     /// Optional banner stamped onto every generated gameplay frame.
     banner: Option<BannerKind>,
+    /// Which `"No Moves Remaining"` layout to serve when `modal_open` activates.
+    modal_kind: ModalKind,
     /// Queue a transient `Settling` mid-flip frame on the first N tableau taps.
     inject_settling_on_tap: usize,
     /// Queue N `Animating` mid-unwind frames after `UndoAll`.
     inject_animating_on_undo_all: usize,
+    /// Trigger `"No Moves Remaining"` immediately upon Draw 23 (`pos.stock_cursor == 23`), before any un-dimmed Draw-23 capture.
+    immediate_modal_on_draw_23: bool,
     /// Trigger `"No Moves Remaining"` on the screendump immediately *following* the first Draw 23 read.
     modal_after_draw_23_read: bool,
+    /// Open `"No Moves Remaining"` on the Nth `UndoAll` click (1-based) to exercise modal recovery on sweep (`1`) or probes (`>= 2`).
+    modal_race_on_undo_all_index: Option<usize>,
     /// Open `"No Moves Remaining"` only *after* `UndoAll` arrives on the wire (narrow modal race).
     modal_race_on_undo_all: bool,
+    /// Open `"No Moves Remaining"` immediately upon reaching the Nth tableau tap (`1`-based).
+    modal_on_probe_tap: Option<usize>,
     /// Assert cooperative `cancel` (`STOP`) right after handling N screendumps.
     stop_after_captures: Option<(Arc<AtomicBool>, usize)>,
     /// Inject a QMP error reply on the Nth `input-send-event` down/key packet (triggers `UncertainDelivery`).
@@ -864,10 +1055,24 @@ fn spawn_mock_qmp_guest(
                             .or_insert_with(|| encode_stored_png(&assets().challenge_complete))
                             .clone()
                     } else if modal_open {
-                        special_png_cache
-                            .entry("no_moves")
-                            .or_insert_with(|| encode_stored_png(&assets().no_moves))
-                            .clone()
+                        if behavior.modal_on_probe_tap.is_some()
+                            && behavior.modal_kind == ModalKind::CompactChallenge
+                        {
+                            let snap = snapshot_from_position(&current_truth, &pos, true);
+                            let frame = synthesize_compact_modal_over_board(&snap, banner);
+                            encode_stored_png(&frame)
+                        } else {
+                            let (cache_key, modal_frame) = match behavior.modal_kind {
+                                ModalKind::TallNormal => ("no_moves", &assets().no_moves),
+                                ModalKind::CompactChallenge => {
+                                    ("no_moves_compact", &assets().no_moves_compact)
+                                }
+                            };
+                            special_png_cache
+                                .entry(cache_key)
+                                .or_insert_with(|| encode_stored_png(modal_frame))
+                                .clone()
+                        }
                     } else {
                         let mut effective_pos = pos;
                         let undo_enabled = if animating_left > 0 {
@@ -977,7 +1182,13 @@ fn spawn_mock_qmp_guest(
                                         qmp_to_pixel(qy, NOMINAL_FRAME_HEIGHT),
                                     );
                                     if modal_open {
-                                        if px == UNDO_LAST_MOVE_CLICK_POINT
+                                        let expected_modal_click = match behavior.modal_kind {
+                                            ModalKind::TallNormal => UNDO_LAST_MOVE_CLICK_POINT,
+                                            ModalKind::CompactChallenge => {
+                                                UNDO_LAST_MOVE_COMPACT_CLICK_POINT
+                                            }
+                                        };
+                                        if px == expected_modal_click
                                             && hold >= Duration::from_millis(450)
                                         {
                                             modal_open = false;
@@ -995,7 +1206,11 @@ fn spawn_mock_qmp_guest(
                                         }
                                     } else if px == SHARED_UNDO_ALL_CONTROL.click_point {
                                         undo_all_count += 1;
-                                        if behavior.modal_race_on_undo_all && undo_all_count == 1 {
+                                        let race_target =
+                                            behavior.modal_race_on_undo_all_index.or_else(|| {
+                                                behavior.modal_race_on_undo_all.then_some(1)
+                                            });
+                                        if race_target == Some(undo_all_count) {
                                             modal_open = true;
                                         } else {
                                             history.clear();
@@ -1032,6 +1247,9 @@ fn spawn_mock_qmp_guest(
                                         {
                                             terminal_override = Some(kind);
                                         }
+                                        if behavior.modal_on_probe_tap == Some(tap_count) {
+                                            modal_open = true;
+                                        }
                                     }
                                 }
                             }
@@ -1045,6 +1263,11 @@ fn spawn_mock_qmp_guest(
                                         apply_move(&pos, &cur_slots, mv).expect("guest draw legal");
                                     history.push(mv);
                                     pos = next;
+                                    if behavior.immediate_modal_on_draw_23
+                                        && pos.stock_cursor == STOCK_CARD_COUNT
+                                    {
+                                        modal_open = true;
+                                    }
                                 }
                             }
                             _ => {}
@@ -1240,6 +1463,51 @@ fn native_fixtures_and_52_card_synth_calibrate_cleanly() {
         FrameClassification::NoMovesModal(UNDO_LAST_MOVE_CLICK_POINT)
     );
     assert_eq!(
+        observe_frame(&base.no_moves_compact).expect("observe compact no_moves"),
+        FrameClassification::NoMovesModal(UNDO_LAST_MOVE_COMPACT_CLICK_POINT)
+    );
+    assert!(
+        authorise_tripeaks_input(
+            &base.no_moves_compact,
+            Input::MouseLeftHold {
+                point: UNDO_LAST_MOVE_COMPACT_CLICK_POINT,
+                hold: POST_GAME_MOUSE_HOLD,
+            },
+        )
+        .is_ok()
+    );
+    assert!(
+        authorise_tripeaks_input(
+            &base.no_moves_compact,
+            Input::MouseLeftHold {
+                point: UNDO_LAST_MOVE_CLICK_POINT,
+                hold: POST_GAME_MOUSE_HOLD,
+            },
+        )
+        .is_err()
+    );
+    assert!(
+        authorise_tripeaks_input(
+            &base.no_moves_compact,
+            Input::MouseLeftHold {
+                point: PixelPoint::new(791, 605),
+                hold: POST_GAME_MOUSE_HOLD,
+            },
+        )
+        .is_err(),
+        "gold End game button must never be authorised"
+    );
+    assert!(
+        authorise_tripeaks_input(
+            &base.no_moves,
+            Input::MouseLeftHold {
+                point: UNDO_LAST_MOVE_COMPACT_CLICK_POINT,
+                hold: POST_GAME_MOUSE_HOLD,
+            },
+        )
+        .is_err()
+    );
+    assert_eq!(
         observe_frame(&base.tp01).expect("observe TP01"),
         FrameClassification::BoardWinOverlay
     );
@@ -1358,7 +1626,7 @@ fn qmp_peer_runs_full_stock_sweep_multi_probe_and_atomic_json() {
     let ReconOutcome::SolvedFromRoot { route, probes_used } = report.outcome else {
         panic!("expected SolvedFromRoot, got {:?}", report.outcome);
     };
-    assert!(probes_used >= 2);
+    assert_eq!(probes_used, 1);
 
     let draw_count = telemetry
         .actions
@@ -1557,6 +1825,748 @@ fn qmp_peer_backs_out_draw_23_no_moves_modal_and_single_move_dead_end() {
 }
 
 #[test]
+fn qmp_peer_recovers_compact_challenge_draw_23_modal_and_probe_modals() {
+    let _backend = TestCaptureBackend::legacy_qmp();
+    let expected_compact_x = (UNDO_LAST_MOVE_COMPACT_CLICK_POINT.x as u32 * 32_767) / 1_920;
+    let expected_compact_y = (UNDO_LAST_MOVE_COMPACT_CLICK_POINT.y as u32 * 32_767) / 1_080;
+    let expected_tall_x = (UNDO_LAST_MOVE_CLICK_POINT.x as u32 * 32_767) / 1_920;
+    let expected_tall_y = (UNDO_LAST_MOVE_CLICK_POINT.y as u32 * 32_767) / 1_080;
+    let expected_undo_x = (SHARED_UNDO_ALL_CONTROL.click_point.x as u32 * 32_767) / 1_920;
+    let expected_undo_y = (SHARED_UNDO_ALL_CONTROL.click_point.y as u32 * 32_767) / 1_080;
+    let five_diamonds = Card::try_from(xsar::games::cards::Card::new(
+        Rank::Five,
+        xsar::games::cards::Suit::Diamonds,
+    ))
+    .expect("5D canonical");
+    let ace_hearts = Card::try_from(xsar::games::cards::Card::new(
+        Rank::Ace,
+        xsar::games::cards::Suit::Hearts,
+    ))
+    .expect("AH canonical");
+
+    // 1. Subcase A: Solvable deal where Draw 23 (`SlotId(51) = 5D`) IMMEDIATELY opens the real
+    //    `no-moves-remaining-compact.png` Challenge modal -> RECON reads `5D` from darkened
+    //    Waste + confirms darkened empty Stock -> clicks compact `(1_133, 605)` with 500ms hold
+    //    -> confirms `Stock == FaceDown` & `Waste == SlotId(50)` -> clicks `Undo All` -> restores
+    //    `T = 0` -> continues probing and solves to `SolvedFromRoot`!
+    let dir_a = TempTestDir::create("tripeaks-qmp-compact-solvable");
+    let sock_a = dir_a.0.join("qmp.sock");
+    let dest_a = dir_a.0.join("compact-solved.json");
+    let truth_a = build_solvable_draw_23_compact_modal_deal_cards();
+    assert_eq!(truth_a[DEAL_SLOT_COUNT - 1], five_diamonds);
+    let handle_a = spawn_mock_qmp_guest(
+        sock_a.clone(),
+        truth_a,
+        PeerBehavior {
+            banner: Some(BannerKind::FoursFourOfTwelve),
+            modal_kind: ModalKind::CompactChallenge,
+            immediate_modal_on_draw_23: true,
+            ..PeerBehavior::default()
+        },
+    );
+    let cancel_a = Arc::new(AtomicBool::new(false));
+    let mut cfg_a = fast_qmp_config(6);
+    cfg_a.objective_override = Some(Objective::ClearBoard);
+    let (report_a, _, uncertain_a) =
+        run_qmp_session_test(&sock_a, &cancel_a, cfg_a, Some(&dest_a), |_, _| {})
+            .expect("immediate compact Draw-23 modal must recover and solve deal");
+    let tel_a = handle_a.join().expect("join compact solvable peer");
+    assert!(!uncertain_a);
+
+    let ReconOutcome::SolvedFromRoot { route, probes_used } = report_a.outcome else {
+        panic!("expected SolvedFromRoot, got {:?}", report_a.outcome);
+    };
+    assert!(probes_used >= 1);
+    assert_eq!(report_a.document.slots[51], CardSlot::Known(five_diamonds));
+    assert!(
+        report_a
+            .document
+            .slots
+            .iter()
+            .all(|s| matches!(s, CardSlot::Known(_)))
+    );
+
+    let compact_clicks = tel_a
+        .actions
+        .iter()
+        .filter(|act| {
+            matches!(
+                act,
+                WireAction::Click { qmp_x, qmp_y, hold }
+                if *qmp_x == expected_compact_x
+                    && *qmp_y == expected_compact_y
+                    && *hold >= Duration::from_millis(450)
+            )
+        })
+        .count();
+    assert_eq!(compact_clicks, 1);
+    assert!(!tel_a.actions.iter().any(|act| {
+        matches!(act, WireAction::Click { qmp_x, qmp_y, .. } if *qmp_x == expected_tall_x && *qmp_y == expected_tall_y)
+    }));
+    let undo_all_idx = tel_a
+        .actions
+        .iter()
+        .position(|act| {
+            matches!(act, WireAction::Click { qmp_x, qmp_y, .. } if *qmp_x == expected_undo_x && *qmp_y == expected_undo_y)
+        })
+        .expect("Undo All click must follow Undo last move");
+    let modal_click_idx = tel_a
+        .actions
+        .iter()
+        .position(|act| {
+            matches!(act, WireAction::Click { qmp_x, qmp_y, .. } if *qmp_x == expected_compact_x && *qmp_y == expected_compact_y)
+        })
+        .expect("compact modal Undo last move click");
+    assert!(modal_click_idx < undo_all_idx);
+
+    let decoded_a = from_slice(&fs::read(&dest_a).expect("read solved JSON")).expect("valid JSON");
+    verify_objective_route(&decoded_a.slots, &route, Objective::ClearBoard)
+        .expect("verified root route after compact modal recovery");
+
+    // 2. Subcase B: Dead-end deal (`Row 4` unreachable, `SlotId(51) = 5D`) with immediate compact
+    //    modal concludes `UnsolvableBestPartial` with all 34 initial/stock cards `Known` (including `5D`).
+    let dir_b = TempTestDir::create("tripeaks-qmp-compact-dead");
+    let sock_b = dir_b.0.join("qmp.sock");
+    let truth_b = build_draw_23_compact_no_match_deal_cards();
+    let handle_b = spawn_mock_qmp_guest(
+        sock_b.clone(),
+        truth_b,
+        PeerBehavior {
+            modal_kind: ModalKind::CompactChallenge,
+            immediate_modal_on_draw_23: true,
+            ..PeerBehavior::default()
+        },
+    );
+    let cancel_b = Arc::new(AtomicBool::new(false));
+    let (report_b, _, _) =
+        run_qmp_session_test(&sock_b, &cancel_b, fast_qmp_config(4), None, |_, _| {})
+            .expect("dead-end immediate compact Draw-23 modal recovers cleanly");
+    let tel_b = handle_b.join().expect("join compact dead-end peer");
+    assert!(matches!(
+        report_b.outcome,
+        ReconOutcome::UnsolvableBestPartial {
+            unreachable_slots: 18,
+            ..
+        }
+    ));
+    assert_eq!(report_b.document.slots[51], CardSlot::Known(five_diamonds));
+    assert!(
+        report_b.document.slots[18..]
+            .iter()
+            .all(|s| matches!(s, CardSlot::Known(_)))
+    );
+    assert!(tel_b.actions.iter().any(|act| {
+        matches!(
+            act,
+            WireAction::Click { qmp_x, qmp_y, hold }
+            if *qmp_x == expected_compact_x && *qmp_y == expected_compact_y && *hold >= Duration::from_millis(450)
+        )
+    }));
+
+    // 3. Subcase C: Immediate tall Normal modal (`no-moves-remaining.png`, `SlotId(51) = AH`) on
+    //    Draw 23 recovers `AH` via bottom-right rotated fallback and clicks `(1_128, 728)`.
+    let dir_c = TempTestDir::create("tripeaks-qmp-tall-ah");
+    let sock_c = dir_c.0.join("qmp.sock");
+    let truth_c = build_draw_23_tall_ah_no_match_deal_cards();
+    let handle_c = spawn_mock_qmp_guest(
+        sock_c.clone(),
+        truth_c,
+        PeerBehavior {
+            modal_kind: ModalKind::TallNormal,
+            immediate_modal_on_draw_23: true,
+            ..PeerBehavior::default()
+        },
+    );
+    let cancel_c = Arc::new(AtomicBool::new(false));
+    let (report_c, _, _) =
+        run_qmp_session_test(&sock_c, &cancel_c, fast_qmp_config(4), None, |_, _| {})
+            .expect("immediate tall Draw-23 modal recovers AH cleanly");
+    let tel_c = handle_c.join().expect("join tall AH peer");
+    assert_eq!(report_c.document.slots[51], CardSlot::Known(ace_hearts));
+    assert!(tel_c.actions.iter().any(|act| {
+        matches!(
+            act,
+            WireAction::Click { qmp_x, qmp_y, hold }
+            if *qmp_x == expected_tall_x && *qmp_y == expected_tall_y && *hold >= Duration::from_millis(450)
+        )
+    }));
+
+    // 4. Subcase D: Mid-RECON probe (`Undo All` #2) triggers compact Challenge modal over QMP ->
+    //    two-step `(1_133, 605)` `POST_GAME_MOUSE_HOLD` -> `(1_320, 978)` `Undo All` -> `T = 0` -> solves!
+    let dir_d = TempTestDir::create("tripeaks-qmp-probe-compact");
+    let sock_d = dir_d.0.join("qmp.sock");
+    let truth_d = build_stock_gated_deal_cards();
+    let handle_d = spawn_mock_qmp_guest(
+        sock_d.clone(),
+        truth_d,
+        PeerBehavior {
+            modal_kind: ModalKind::CompactChallenge,
+            modal_race_on_undo_all_index: Some(2),
+            ..PeerBehavior::default()
+        },
+    );
+    let cancel_d = Arc::new(AtomicBool::new(false));
+    let (report_d, _, _) =
+        run_qmp_session_test(&sock_d, &cancel_d, fast_qmp_config(8), None, |_, _| {})
+            .expect("mid-RECON probe compact modal recovers cleanly");
+    let tel_d = handle_d.join().expect("join probe compact peer");
+    assert!(matches!(
+        report_d.outcome,
+        ReconOutcome::SolvedFromRoot { .. }
+    ));
+    assert!(tel_d.actions.iter().any(|act| {
+        matches!(
+            act,
+            WireAction::Click { qmp_x, qmp_y, hold }
+            if *qmp_x == expected_compact_x && *qmp_y == expected_compact_y && *hold >= Duration::from_millis(450)
+        )
+    }));
+
+    // 5. Subcase E: Two-step `acquire_non_settling_scene` mid-RECON probe modal recovery
+    //    (compact Challenge modal -> `(1_133, 605)` hold -> un-dimmed mid-probe board -> `(1_320, 978)` `Undo All` -> `T = 0`).
+    struct ScriptedProbeModalIo {
+        frames: VecDeque<CapturedFrame>,
+        inputs: Vec<Input>,
+    }
+    impl OperationIo for ScriptedProbeModalIo {
+        fn check_active(&mut self) -> Result<(), OperationError> {
+            Ok(())
+        }
+        fn capture(&mut self) -> Result<CapturedFrame, OperationError> {
+            self.frames
+                .pop_front()
+                .ok_or_else(|| OperationError::Transport("out of scripted probe frames".to_owned()))
+        }
+        fn authorise(&mut self, f: &CapturedFrame, i: Input) -> Result<(), OperationError> {
+            authorise_tripeaks_input(f, i)
+        }
+        fn probe(&mut self) -> Result<(), OperationError> {
+            Ok(())
+        }
+        fn deliver(&mut self, i: Input) -> Result<(), OperationError> {
+            self.inputs.push(i);
+            Ok(())
+        }
+        fn wait(&mut self, _: Duration) -> Result<(), OperationError> {
+            Ok(())
+        }
+    }
+
+    let deal_e = build_cyclic_deal_cards();
+    let slots_e = cards_to_slots(&deal_e);
+    let root_pos_e = TriPeaksPosition::from_root(&slots_e).expect("cyclic root");
+    let root_snap_e = snapshot_from_position(&deal_e, &root_pos_e, false);
+    let root_frame_e = synthesize_gameplay_frame(&root_snap_e, BannerKind::Normal);
+    let (mid_pos_e, _) = apply_move(&root_pos_e, &slots_e, TriPeaksMove::Draw).expect("first draw");
+    let mid_snap_e = snapshot_from_position(&deal_e, &mid_pos_e, true);
+    let mid_frame_e = synthesize_gameplay_frame(&mid_snap_e, BannerKind::Normal);
+
+    let compact_modal = assets().no_moves_compact.clone();
+    let frames_e = VecDeque::from([
+        compact_modal.clone(),
+        compact_modal,
+        mid_frame_e.clone(),
+        mid_frame_e,
+        root_frame_e.clone(),
+        root_frame_e,
+    ]);
+    let cancel_e = AtomicBool::new(false);
+    let mut dom_e = LiveTriPeaksDomain::new(
+        Session::new(ScriptedProbeModalIo {
+            frames: frames_e,
+            inputs: Vec::new(),
+        }),
+        &cancel_e,
+        fast_qmp_config(2),
+        Box::new(|_| {}),
+    );
+    dom_e.root_snapshot = Some(root_snap_e.clone());
+    dom_e.root_hash = Some(semantic_board_hash(&root_snap_e));
+    let restored_e = dom_e
+        .undo_all_and_hash()
+        .expect("mid-probe compact modal recovers cleanly in two steps");
+    assert_eq!(restored_e, semantic_board_hash(&root_snap_e));
+    assert_eq!(
+        dom_e.into_session().io().inputs,
+        vec![
+            Input::MouseLeftHold {
+                point: UNDO_LAST_MOVE_COMPACT_CLICK_POINT,
+                hold: POST_GAME_MOUSE_HOLD,
+            },
+            Input::MouseLeft(SHARED_UNDO_ALL_CONTROL.click_point),
+        ]
+    );
+
+    // 6. Subcase F: Fail-closed checks when darkened Waste is unreadable or back-out restores wrong card.
+    let mut broken_waste_modal = assets().no_moves_compact.clone();
+    for y in WASTE_CARD_BOUNDS.y..(WASTE_CARD_BOUNDS.y + 60) {
+        for x in WASTE_CARD_BOUNDS.x..(WASTE_CARD_BOUNDS.x + 40) {
+            let off = y as usize * broken_waste_modal.stride + x as usize * 4;
+            broken_waste_modal.pixels[off..off + 3].copy_from_slice(&[51, 51, 52]);
+        }
+    }
+    let mut dom_bad_waste = LiveTriPeaksDomain::new(
+        Session::new(ScriptedProbeModalIo {
+            frames: VecDeque::from([broken_waste_modal]),
+            inputs: Vec::new(),
+        }),
+        &cancel_e,
+        fast_qmp_config(2),
+        Box::new(|_| {}),
+    );
+    let mut slots_bad = [CardSlot::Unknown; DEAL_SLOT_COUNT];
+    let bad_err = dom_bad_waste
+        .poll_stock_draw_step(
+            STOCK_CARD_COUNT - 1,
+            &root_snap_e,
+            &mid_snap_e,
+            &mut slots_bad,
+        )
+        .expect_err("unreadable darkened Waste must fail closed before clicking");
+    assert!(matches!(
+        bad_err,
+        ReconError::VisionClassificationFailed { slot: SlotId(51) }
+    ));
+    assert!(dom_bad_waste.into_session().io().inputs.is_empty());
+
+    // Wrong post-`Undo last move` card (e.g., restored to `T = 0` or wrong Waste instead of `mid_snap_e.waste`).
+    let mut wrong_prev_snap = mid_snap_e.clone();
+    wrong_prev_snap.waste = deal_e[usize::from(STOCK_START_SLOT) + 1];
+    let wrong_prev_frame = synthesize_gameplay_frame(&wrong_prev_snap, BannerKind::Normal);
+    let mut dom_wrong_back_out = LiveTriPeaksDomain::new(
+        Session::new(ScriptedProbeModalIo {
+            frames: VecDeque::from([
+                assets().no_moves_compact.clone(),
+                assets().no_moves_compact.clone(),
+                wrong_prev_frame.clone(),
+                wrong_prev_frame,
+            ]),
+            inputs: Vec::new(),
+        }),
+        &cancel_e,
+        fast_qmp_config(2),
+        Box::new(|_| {}),
+    );
+    let mut slots_wrong = [CardSlot::Unknown; DEAL_SLOT_COUNT];
+    let wrong_err = dom_wrong_back_out
+        .poll_stock_draw_step(
+            STOCK_CARD_COUNT - 1,
+            &root_snap_e,
+            &mid_snap_e,
+            &mut slots_wrong,
+        )
+        .expect_err("wrong Waste after Draw-23 Undo last move must fail before Undo All");
+    assert!(matches!(wrong_err, ReconError::SceneVerification { .. }));
+    assert_eq!(
+        dom_wrong_back_out.into_session().io().inputs,
+        vec![Input::MouseLeftHold {
+            point: UNDO_LAST_MOVE_COMPACT_CLICK_POINT,
+            hold: POST_GAME_MOUSE_HOLD,
+        }]
+    );
+
+    // 7. Subcase G: End-to-end `AF_UNIX` QMP peer where a mid-RECON probe tableau tap immediately
+    //    triggers the compact Challenge `"No Moves Remaining"` modal (`modal_on_probe_tap: Some(2)`):
+    //    RECON confirms the modal twice, reads the dimmed newly uncovered Row-3 parent card, executes
+    //    Step 1 `(1_133, 605)` `POST_GAME_MOUSE_HOLD`, executes Step 2 `(1_320, 978)` `Undo All` -> `T = 0`,
+    //    and continues probing to `SolvedFromRoot`!
+    let dir_g = TempTestDir::create("tripeaks-qmp-probe-immediate-compact");
+    let sock_g = dir_g.0.join("qmp.sock");
+    let dest_g = dir_g.0.join("probe-immediate-solved.json");
+    let truth_g = build_stock_gated_deal_cards();
+    let handle_g = spawn_mock_qmp_guest(
+        sock_g.clone(),
+        truth_g,
+        PeerBehavior {
+            modal_kind: ModalKind::CompactChallenge,
+            modal_on_probe_tap: Some(2),
+            ..PeerBehavior::default()
+        },
+    );
+    let cancel_g = Arc::new(AtomicBool::new(false));
+    let (report_g, _, uncertain_g) = run_qmp_session_test(
+        &sock_g,
+        &cancel_g,
+        fast_qmp_config(10),
+        Some(&dest_g),
+        |_, _| {},
+    )
+    .expect("immediate mid-RECON probe compact modal must recover and solve");
+    let tel_g = handle_g.join().expect("join immediate probe modal peer");
+    assert!(!uncertain_g);
+    let ReconOutcome::SolvedFromRoot { route: route_g, .. } = report_g.outcome else {
+        panic!(
+            "expected SolvedFromRoot after probe modal recovery, got {:?}",
+            report_g.outcome
+        );
+    };
+    let modal_click_g = tel_g
+        .actions
+        .iter()
+        .position(|act| {
+            matches!(
+                act,
+                WireAction::Click { qmp_x, qmp_y, hold }
+                if *qmp_x == expected_compact_x && *qmp_y == expected_compact_y && *hold >= Duration::from_millis(450)
+            )
+        })
+        .expect("probe modal must click compact Undo last move");
+    let post_modal_undo_all = tel_g
+        .actions
+        .iter()
+        .skip(modal_click_g + 1)
+        .any(|act| {
+            matches!(
+                act,
+                WireAction::Click { qmp_x, qmp_y, hold }
+                if *qmp_x == expected_undo_x && *qmp_y == expected_undo_y && *hold < Duration::from_millis(200)
+            )
+        });
+    assert!(
+        post_modal_undo_all,
+        "Step 2 Undo All must follow Step 1 Undo last move after multi-step probe modal"
+    );
+    let decoded_g = from_slice(&fs::read(&dest_g).expect("read solved JSON")).expect("valid JSON");
+    verify_objective_route(&decoded_g.slots, &route_g, Objective::ClearBoard)
+        .expect("verified root route after immediate probe modal recovery");
+
+    // 8. Subcase H: Scripted state-machine edge coverage:
+    //    (a) 2-step probe (`[Tap(4, 1), Tap(4, 2)]` from untouched `T = 0`) where tap #2 triggers
+    //        immediate compact modal: reads dimmed uncovered Row-3 parent `slot 9` across two frames,
+    //        waits through delayed XAML dismiss (`NoMovesModal` + dimmed fade-out -> `Settled` x 2)
+    //        without re-clicking, restores pre-step `after_tap1`, then Step 2 `Undo All` -> `T = 0`;
+    //    (b) Draw-23 fade-in (dimmed fade-in frame -> `NoMovesModal` x 2) recovers cleanly with 1 hold click;
+    //    (c) Stuck modal refusing to clear after 1 `Undo last move` click fails closed without re-clicking.
+    let deal_h = build_cyclic_deal_cards();
+    let slots_h = cards_to_slots(&deal_h);
+    let root_pos_h = TriPeaksPosition::from_root(&slots_h).expect("root pos H");
+    let root_snap_h = snapshot_from_position(&deal_h, &root_pos_h, false);
+    let root_frame_h = synthesize_gameplay_frame(&root_snap_h, BannerKind::Normal);
+
+    let (tap1_pos_h, _) = apply_move(
+        &root_pos_h,
+        &slots_h,
+        TriPeaksMove::TapTableau { row: 4, column: 1 },
+    )
+    .expect("tap1 legal");
+    let tap1_snap_h = snapshot_from_position(&deal_h, &tap1_pos_h, true);
+    let tap1_frame_h = synthesize_gameplay_frame(&tap1_snap_h, BannerKind::Normal);
+
+    let (tap2_pos_h, _) = apply_move(
+        &tap1_pos_h,
+        &slots_h,
+        TriPeaksMove::TapTableau { row: 4, column: 2 },
+    )
+    .expect("tap2 legal");
+    let tap2_snap_h = snapshot_from_position(&deal_h, &tap2_pos_h, true);
+    let modal_after_tap2 = synthesize_compact_modal_over_board(&tap2_snap_h, BannerKind::Normal);
+
+    let mut fade_only_frame = tap1_frame_h.clone();
+    for px in fade_only_frame.pixels.as_chunks_mut::<4>().0 {
+        px[0] /= 3;
+        px[1] /= 3;
+        px[2] /= 3;
+    }
+
+    let mut dom_2_step = LiveTriPeaksDomain::new(
+        Session::new(ScriptedProbeModalIo {
+            frames: VecDeque::from([
+                root_frame_h.clone(),     // probe_entry_verify
+                tap1_frame_h.clone(),     // after tap1 settles
+                modal_after_tap2.clone(), // after tap2 immediate modal #1
+                modal_after_tap2.clone(), // modal confirm #2
+                modal_after_tap2,         // delayed XAML dismiss poll #0 (still modal)
+                fade_only_frame.clone(),  // delayed XAML dismiss poll #1 (dimmed fade-out)
+                tap1_frame_h.clone(),     // un-dimmed tap1 settled #1
+                tap1_frame_h.clone(),     // un-dimmed tap1 settled #2
+                tap1_frame_h,             // undo_all_and_hash acquire_non_settling_scene
+                root_frame_h.clone(),     // Undo All -> T = 0 #1
+                root_frame_h,             // Undo All -> T = 0 #2
+            ]),
+            inputs: Vec::new(),
+        }),
+        &cancel_e,
+        fast_qmp_config(2),
+        Box::new(|_| {}),
+    );
+    dom_2_step.root_snapshot = Some(root_snap_h.clone());
+    dom_2_step.root_hash = Some(semantic_board_hash(&root_snap_h));
+    let observed_2_step = dom_2_step
+        .execute_probe_and_observe(&[
+            TriPeaksMove::TapTableau { row: 4, column: 1 },
+            TriPeaksMove::TapTableau { row: 4, column: 2 },
+        ])
+        .expect("2-step immediate probe modal must recover cleanly")
+        .expect("must return revealed Row-3 parent observation");
+    assert_eq!(observed_2_step, vec![(SlotId(9), deal_h[9])]);
+    assert_eq!(
+        dom_2_step
+            .undo_all_and_hash()
+            .expect("Step 2 Undo All must restore T=0 cleanly after Step 1 back-out"),
+        semantic_board_hash(&root_snap_h)
+    );
+    assert_eq!(
+        dom_2_step.into_session().io().inputs,
+        vec![
+            Input::MouseLeft(TABLEAU_CARD_REGIONS[18].click_point),
+            Input::MouseLeft(TABLEAU_CARD_REGIONS[19].click_point),
+            Input::MouseLeftHold {
+                point: UNDO_LAST_MOVE_COMPACT_CLICK_POINT,
+                hold: POST_GAME_MOUSE_HOLD,
+            },
+            Input::MouseLeft(SHARED_UNDO_ALL_CONTROL.click_point),
+        ]
+    );
+
+    // Draw-23 fade-in (dimmed fade-in frame before `NoMovesModal` x 2) recovers cleanly with 1 hold click.
+    let mid_frame_h = synthesize_gameplay_frame(&mid_snap_e, BannerKind::Normal);
+    let mut dom_fade_in = LiveTriPeaksDomain::new(
+        Session::new(ScriptedProbeModalIo {
+            frames: VecDeque::from([
+                fade_only_frame,
+                assets().no_moves_compact.clone(),
+                assets().no_moves_compact.clone(),
+                mid_frame_h.clone(),
+                mid_frame_h,
+            ]),
+            inputs: Vec::new(),
+        }),
+        &cancel_e,
+        fast_qmp_config(2),
+        Box::new(|_| {}),
+    );
+    let mut slots_fade = [CardSlot::Unknown; DEAL_SLOT_COUNT];
+    let un_dimmed_fade = dom_fade_in
+        .poll_stock_draw_step(
+            STOCK_CARD_COUNT - 1,
+            &root_snap_e,
+            &mid_snap_e,
+            &mut slots_fade,
+        )
+        .expect("Draw-23 fade-in frame before modal must recover cleanly");
+    assert_eq!(un_dimmed_fade, mid_snap_e);
+    assert_eq!(slots_fade[51], CardSlot::Known(five_diamonds));
+    assert_eq!(
+        dom_fade_in.into_session().io().inputs,
+        vec![Input::MouseLeftHold {
+            point: UNDO_LAST_MOVE_COMPACT_CLICK_POINT,
+            hold: POST_GAME_MOUSE_HOLD,
+        }]
+    );
+
+    // Stuck modal that never clears after 1 `Undo last move` click must fail closed without re-clicking.
+    let mut cfg_stuck = fast_qmp_config(2);
+    cfg_stuck.max_restore_observations = 3;
+    let mut dom_stuck = LiveTriPeaksDomain::new(
+        Session::new(ScriptedProbeModalIo {
+            frames: VecDeque::from([
+                assets().no_moves_compact.clone(),
+                assets().no_moves_compact.clone(),
+                assets().no_moves_compact.clone(),
+                assets().no_moves_compact.clone(),
+                assets().no_moves_compact.clone(),
+            ]),
+            inputs: Vec::new(),
+        }),
+        &cancel_e,
+        cfg_stuck,
+        Box::new(|_| {}),
+    );
+    let stuck_err = dom_stuck
+        .driver()
+        .back_out_no_moves_modal(
+            "stuck_modal_test",
+            UNDO_LAST_MOVE_COMPACT_CLICK_POINT,
+            false,
+        )
+        .expect_err("stuck modal must fail closed after budget expiry");
+    assert!(matches!(stuck_err, ReconError::SceneVerification { .. }));
+    assert_eq!(
+        dom_stuck.into_session().io().inputs.len(),
+        1,
+        "must never send a second click when modal refuses to clear"
+    );
+
+    // 9. Subcase I: Dimmed XAML scrim fade-in resilience & fail-closed bounds across all three
+    //    reconnaissance entry points:
+    //    (a) `acquire_non_settling_scene` / `restore_to_untouched_root` (`Draw23Sweep`) tolerates
+    //        bounded dimmed fade frames before `NoMovesModal`, then executes two-step recovery;
+    let root_frame_i = synthesize_gameplay_frame(&root_snap_e, BannerKind::Normal);
+    let mid_frame_i = synthesize_gameplay_frame(&mid_snap_e, BannerKind::Normal);
+    let root_frame_ih = synthesize_gameplay_frame(&root_snap_h, BannerKind::Normal);
+    let tap1_frame_ih = synthesize_gameplay_frame(&tap1_snap_h, BannerKind::Normal);
+    let modal_after_tap2_i = synthesize_compact_modal_over_board(&tap2_snap_h, BannerKind::Normal);
+    let mut fade_only_i = tap1_frame_ih.clone();
+    for px in fade_only_i.pixels.as_chunks_mut::<4>().0 {
+        px[0] /= 3;
+        px[1] /= 3;
+        px[2] /= 3;
+    }
+
+    let mut dom_draw23_fade = LiveTriPeaksDomain::new(
+        Session::new(ScriptedProbeModalIo {
+            frames: VecDeque::from([
+                fade_only_i.clone(),
+                fade_only_i.clone(),
+                assets().no_moves_compact.clone(),
+                assets().no_moves_compact.clone(),
+                mid_frame_i.clone(),
+                mid_frame_i.clone(),
+                root_frame_i.clone(),
+                root_frame_i.clone(),
+            ]),
+            inputs: Vec::new(),
+        }),
+        &cancel_e,
+        fast_qmp_config(2),
+        Box::new(|_| {}),
+    );
+    let draw23_fade_restored = dom_draw23_fade
+        .restore_to_untouched_root(
+            "draw23_fade_in_recovery",
+            RootRestoreTarget::Draw23Sweep {
+                root: &root_snap_e,
+                slot_50: mid_snap_e.waste,
+            },
+        )
+        .expect("Draw23Sweep must wait through dimmed fade-in frames before compact modal");
+    assert_eq!(draw23_fade_restored, root_snap_e);
+    assert_eq!(
+        dom_draw23_fade.into_session().io().inputs,
+        vec![
+            Input::MouseLeftHold {
+                point: UNDO_LAST_MOVE_COMPACT_CLICK_POINT,
+                hold: POST_GAME_MOUSE_HOLD,
+            },
+            Input::MouseLeft(SHARED_UNDO_ALL_CONTROL.click_point),
+        ]
+    );
+
+    //    (b) `DriverUndoAllIo::observe` treats bounded dimmed fade-in frames after `Undo All` as
+    //        `UndoScene::Animating` until the delayed `NoMovesModal` settles, without extra clicks;
+    let mut dom_undo_race_fade = LiveTriPeaksDomain::new(
+        Session::new(ScriptedProbeModalIo {
+            frames: VecDeque::from([
+                mid_frame_i.clone(),
+                fade_only_i.clone(),
+                fade_only_i.clone(),
+                assets().no_moves_compact.clone(),
+                assets().no_moves_compact.clone(),
+                mid_frame_i.clone(),
+                mid_frame_i.clone(),
+                root_frame_i.clone(),
+                root_frame_i.clone(),
+            ]),
+            inputs: Vec::new(),
+        }),
+        &cancel_e,
+        fast_qmp_config(2),
+        Box::new(|_| {}),
+    );
+    dom_undo_race_fade.root_snapshot = Some(root_snap_e.clone());
+    dom_undo_race_fade.root_hash = Some(semantic_board_hash(&root_snap_e));
+    let undo_race_hash = dom_undo_race_fade
+        .undo_all_and_hash()
+        .expect("Undo All race with dimmed fade-in into delayed modal must recover cleanly");
+    assert_eq!(undo_race_hash, semantic_board_hash(&root_snap_e));
+    assert_eq!(
+        dom_undo_race_fade.into_session().io().inputs,
+        vec![
+            Input::MouseLeft(SHARED_UNDO_ALL_CONTROL.click_point),
+            Input::MouseLeftHold {
+                point: UNDO_LAST_MOVE_COMPACT_CLICK_POINT,
+                hold: POST_GAME_MOUSE_HOLD,
+            },
+            Input::MouseLeft(SHARED_UNDO_ALL_CONTROL.click_point),
+        ]
+    );
+
+    //    (c) Persistent dimmed fade exceeding `MAX_DIMMED_FADE_OBSERVATIONS` fails closed cleanly,
+    //        while genuine pure-black non-gameplay frames abort on the very first observation;
+    let mut black_frame = root_frame_i.clone();
+    black_frame.pixels.fill(0);
+    for px in black_frame.pixels.as_chunks_mut::<4>().0 {
+        px[3] = 255;
+    }
+    let mut cfg_fade_cap = fast_qmp_config(2);
+    cfg_fade_cap.max_restore_observations = 12;
+    let mut dom_persist_fade = LiveTriPeaksDomain::new(
+        Session::new(ScriptedProbeModalIo {
+            frames: VecDeque::from(vec![fade_only_i.clone(); 10]),
+            inputs: Vec::new(),
+        }),
+        &cancel_e,
+        cfg_fade_cap,
+        Box::new(|_| {}),
+    );
+    let persist_err = dom_persist_fade
+        .driver()
+        .acquire_non_settling_scene("persist_dimmed_fade_fail_closed")
+        .expect("bounded fade retries must return Unsupported rather than loop");
+    assert!(matches!(persist_err, FrameClassification::Unsupported(_)));
+    assert_eq!(
+        dom_persist_fade.into_session().io().frames.len(),
+        10 - (MAX_DIMMED_FADE_OBSERVATIONS + 1),
+        "must stop immediately once MAX_DIMMED_FADE_OBSERVATIONS is reached"
+    );
+
+    let mut dom_black = LiveTriPeaksDomain::new(
+        Session::new(ScriptedProbeModalIo {
+            frames: VecDeque::from([mid_frame_i, black_frame, root_frame_i]),
+            inputs: Vec::new(),
+        }),
+        &cancel_e,
+        fast_qmp_config(2),
+        Box::new(|_| {}),
+    );
+    dom_black.root_snapshot = Some(root_snap_e.clone());
+    dom_black.root_hash = Some(semantic_board_hash(&root_snap_e));
+    let black_err = dom_black
+        .undo_all_and_hash()
+        .expect_err("black screen after Undo All must abort immediately on observation #1");
+    assert!(matches!(black_err, ReconError::SceneVerification { .. }));
+    let black_session = dom_black.into_session();
+    let black_io = black_session.io();
+    assert_eq!(black_io.frames.len(), 1);
+    assert_eq!(
+        black_io.inputs,
+        vec![Input::MouseLeft(SHARED_UNDO_ALL_CONTROL.click_point)]
+    );
+
+    //    (d) Challenge-mode mid-RECON probe encountering dimmed fade-in before compact modal skips the
+    //        5-capture Challenge Complete poll and recovers cleanly to `tap1_frame_ih`.
+    let mut dom_challenge_fade = LiveTriPeaksDomain::new(
+        Session::new(ScriptedProbeModalIo {
+            frames: VecDeque::from([
+                root_frame_ih,
+                tap1_frame_ih.clone(),
+                fade_only_i,
+                modal_after_tap2_i.clone(),
+                modal_after_tap2_i,
+                tap1_frame_ih.clone(),
+                tap1_frame_ih,
+            ]),
+            inputs: Vec::new(),
+        }),
+        &cancel_e,
+        fast_qmp_config(2),
+        Box::new(|_| {}),
+    );
+    dom_challenge_fade.challenge_mode = true;
+    dom_challenge_fade.root_snapshot = Some(root_snap_h.clone());
+    dom_challenge_fade.root_hash = Some(semantic_board_hash(&root_snap_h));
+    let obs_challenge_fade = dom_challenge_fade
+        .execute_probe_and_observe(&[
+            TriPeaksMove::TapTableau { row: 4, column: 1 },
+            TriPeaksMove::TapTableau { row: 4, column: 2 },
+        ])
+        .expect("Challenge probe encountering dimmed fade-in before modal must recover cleanly")
+        .expect("must return revealed Row-3 parent observation");
+    assert_eq!(obs_challenge_fade, vec![(SlotId(9), deal_h[9])]);
+    assert!(dom_challenge_fade.into_session().io().frames.is_empty());
+}
+
+#[test]
 fn stop_mid_sweep_search_and_probe_aborts_without_undo_all_or_json() {
     let _backend = TestCaptureBackend::legacy_qmp();
     let dir = TempTestDir::create("tripeaks-qmp-stop");
@@ -1627,12 +2637,12 @@ fn stop_mid_sweep_search_and_probe_aborts_without_undo_all_or_json() {
     for slot in &mut partial_slots[0..18] {
         slot_set_unknown(slot);
     }
-    let sentinel_probe = dom_search
+    let plan_err = dom_search
         .plan_info_gain_probe(&partial_slots)
-        .expect("cancelled planner must signal execute_probe_and_observe to surface Cancelled");
-    assert!(!sentinel_probe.is_empty());
+        .expect_err("cancelled planner must immediately return Cancelled");
+    assert!(matches!(plan_err, ReconError::Cancelled));
     let probe_err = dom_search
-        .execute_probe_and_observe(&sentinel_probe)
+        .execute_probe_and_observe(&[TriPeaksMove::Draw])
         .expect_err("cancelled probe must abort immediately");
     assert!(matches!(probe_err, ReconError::Cancelled));
 }
@@ -1904,9 +2914,12 @@ fn root_restore_mismatch_dirty_start_and_duplicate_refusals() {
         ) -> Option<Vec<Self::Move>> {
             self.0.solve_known_subgraph(slots, objective)
         }
-        fn plan_info_gain_probe(&self, _slots: &[CardSlot]) -> Option<Vec<Self::Move>> {
+        fn plan_info_gain_probe(
+            &self,
+            _slots: &[CardSlot],
+        ) -> Result<ProbePlan<Self::Move>, ReconError> {
             // Plan prefix touching Peak 1's subtree (`18..=27 -> 9..=17 -> 3, 4`) leaving Peak 3 (`slot 2`) covered:
-            Some(vec![
+            Ok(ProbePlan::Found(vec![
                 TriPeaksMove::TapTableau { row: 4, column: 1 },
                 TriPeaksMove::TapTableau { row: 4, column: 2 },
                 TriPeaksMove::TapTableau { row: 4, column: 3 },
@@ -1928,7 +2941,7 @@ fn root_restore_mismatch_dirty_start_and_duplicate_refusals() {
                 TriPeaksMove::TapTableau { row: 3, column: 9 },
                 TriPeaksMove::TapTableau { row: 2, column: 1 },
                 TriPeaksMove::TapTableau { row: 2, column: 2 },
-            ])
+            ]))
         }
         fn execute_probe_and_observe(
             &mut self,
@@ -1939,7 +2952,10 @@ fn root_restore_mismatch_dirty_start_and_duplicate_refusals() {
         fn undo_all_and_hash(&mut self) -> Result<u64, ReconError> {
             self.0.undo_all_and_hash()
         }
-        fn best_partial_route(&self, slots: &[CardSlot]) -> Vec<Self::Move> {
+        fn best_partial_route(
+            &self,
+            slots: &[CardSlot],
+        ) -> Result<BestPartialRoute<Self::Move>, ReconError> {
             self.0.best_partial_route(slots)
         }
     }
@@ -2119,7 +3135,7 @@ fn completed_during_recon_intercepts_challenge_and_normal_wins_without_extra_cli
     one_left_snap.tableau[0] = TableauSlotObs::Card(deal[18]);
     let one_left_frame = synthesize_gameplay_frame(&one_left_snap, BannerKind::Normal);
     let mut frames_tp = VecDeque::new();
-    frames_tp.push_back(one_left_frame);
+    frames_tp.push_back(one_left_frame.clone());
     frames_tp.push_back(assets().tp01.clone());
     frames_tp.push_back(assets().tp01.clone());
 
@@ -2140,6 +3156,37 @@ fn completed_during_recon_intercepts_challenge_and_normal_wins_without_extra_cli
         .expect("final-card TP01 win overlay returns Ok(None)");
     assert_eq!(tp_res, None);
     assert_eq!(dom_tp.into_session().io().inputs.len(), 1);
+
+    // Subcase D: Active Challenge refuses Normal `BoardWinOverlay` (`TP01`) cleanly.
+    let mut cfg_tp_challenge = fast_qmp_config(2);
+    cfg_tp_challenge.force_challenge_mode = true;
+    let mut dom_tp_challenge = LiveTriPeaksDomain::new(
+        Session::new(ScriptedStepIo {
+            frames: VecDeque::from([one_left_frame, assets().tp01.clone(), assets().tp01.clone()]),
+            inputs: Vec::new(),
+        }),
+        &cancel_tp,
+        cfg_tp_challenge,
+        Box::new(|_| {}),
+    );
+    dom_tp_challenge.root_snapshot = Some(one_left_snap);
+    dom_tp_challenge.root_hash = Some(semantic_board_hash(&BoardSnapshot {
+        tableau: {
+            let mut t = [TableauSlotObs::Empty; TABLEAU_SLOT_COUNT];
+            t[0] = TableauSlotObs::Card(deal[18]);
+            t
+        },
+        stock: StockObs::FaceDown,
+        waste: deal[28],
+        undo_all: ControlAvailability::Disabled,
+    }));
+    let tp_challenge_err = dom_tp_challenge
+        .execute_probe_and_observe(&[TriPeaksMove::TapTableau { row: 1, column: 1 }])
+        .expect_err("Challenge mode must refuse Normal BoardWinOverlay");
+    assert!(matches!(
+        tp_challenge_err,
+        ReconError::SceneVerification { .. }
+    ));
 }
 
 #[test]
@@ -2160,11 +3207,13 @@ fn unsolvable_best_partial_and_destination_collision_preservation() {
     let ReconOutcome::UnsolvableBestPartial {
         best_partial_route,
         unreachable_slots,
+        proof,
     } = report.outcome
     else {
         panic!("expected UnsolvableBestPartial, got {:?}", report.outcome);
     };
     assert!(unreachable_slots >= 3);
+    assert_eq!(proof, PartialProof::Exhaustive);
     verify_move_sequence(&report.document.slots, &best_partial_route)
         .expect("best_partial_route valid on published slots");
 
@@ -2208,7 +3257,7 @@ fn unsolvable_best_partial_and_destination_collision_preservation() {
 
 #[test]
 fn undo_all_waits_through_mid_rewind_disabled_toolbar_and_compositor_stall() {
-    assert_eq!(TriPeaksReconConfig::default().max_restore_observations, 24);
+    assert_eq!(TriPeaksReconConfig::default().max_restore_observations, 40);
 
     let deal = build_cyclic_deal_cards();
     let slots = cards_to_slots(&deal);
@@ -2347,4 +3396,496 @@ fn undo_all_waits_through_mid_rewind_disabled_toolbar_and_compositor_stall() {
         .expect("confirmed drift returns drifted semantic hash for RootRestoreMismatch check");
     assert_ne!(actual_drift_hash, expected_hash);
     assert!(drift_domain.into_session().io().frames.is_empty());
+}
+
+#[test]
+fn bounded_probe_limits_during_live_recon_preserve_unknown_slots_in_published_json() {
+    let _backend = TestCaptureBackend::legacy_qmp();
+    let dir = TempTestDir::create("tripeaks-qmp-bounded-probe");
+    let socket = dir.0.join("qmp.sock");
+    let dest = dir.0.join("bounded-probe.json");
+    let cancel = Arc::new(AtomicBool::new(false));
+    let truth = build_cyclic_deal_cards();
+
+    let mut cfg = fast_qmp_config(4);
+    cfg.search_limits = SearchLimits {
+        max_states: 1_000,
+        max_expansions: 1,
+        ..DEFAULT_SEARCH_LIMITS
+    };
+
+    let handle = spawn_mock_qmp_guest(socket.clone(), truth, PeerBehavior::default());
+    let (report, _, _) = run_qmp_session_test(&socket, &cancel, cfg, Some(&dest), |_, _| {})
+        .expect("tight probe limit completes with BoundedBestPartial JSON");
+    let _ = handle.join().expect("join mock QMP guest");
+
+    assert!(matches!(
+        report.outcome,
+        ReconOutcome::BoundedBestPartial {
+            unknown_slots: 18,
+            unreachable_slots: 0,
+            probe_stop: SearchStop::ExpansionLimit,
+            proof: PartialProof::Bounded(SearchStop::ExpansionLimit),
+            ..
+        }
+    ));
+
+    let bytes = fs::read(&dest).expect("read bounded JSON artifact");
+    let decoded = from_slice(&bytes).expect("decode bounded JSON artifact");
+    assert_eq!(
+        decoded
+            .slots
+            .iter()
+            .filter(|&&slot| slot == CardSlot::Unknown)
+            .count(),
+        18
+    );
+    assert_eq!(
+        decoded
+            .slots
+            .iter()
+            .filter(|&&slot| slot == CardSlot::Unreachable)
+            .count(),
+        0
+    );
+}
+
+/// Verify `observe_frame` classifies untouched `T = 0` boards with warm-ivory Challenge target
+/// cards as `Settled` rather than looping `Settling`.
+#[test]
+fn observe_frame_settles_on_warm_ivory_challenge_target_tableau_cards() {
+    let mut frame = assets().left_ace.clone();
+    // Tint multiple playable Row 4 slots (Row 4 Col 1 = 2H, Row 4 Col 5 = KC) and Waste (2D) to
+    // calibrated warm-ivory Challenge target paper with 2 px outer gold glow borders.
+    for bounds in [
+        TABLEAU_CARD_REGIONS[18].card_bounds,
+        TABLEAU_CARD_REGIONS[22].card_bounds,
+        WASTE_CARD_BOUNDS,
+    ] {
+        for dy in 0..bounds.height {
+            for dx in 0..bounds.width {
+                let idx = (bounds.y + dy) as usize * frame.stride + (bounds.x + dx) as usize * 4;
+                if dx == 0 || dx + 1 == bounds.width {
+                    frame.pixels[idx..idx + 4].copy_from_slice(&[254, 209, 4, 255]);
+                } else if dx == 1 || dx + 2 == bounds.width {
+                    frame.pixels[idx..idx + 4].copy_from_slice(&[221, 211, 172, 255]);
+                } else if frame.pixels[idx] >= 245
+                    && frame.pixels[idx + 1] >= 245
+                    && frame.pixels[idx + 2] >= 245
+                {
+                    let rgb = if dx <= 3 || dx + 4 >= bounds.width {
+                        [249, 245, 228, 255]
+                    } else {
+                        [252, 246, 230, 255]
+                    };
+                    frame.pixels[idx..idx + 4].copy_from_slice(&rgb);
+                }
+            }
+        }
+    }
+
+    let classification = observe_frame(&frame).expect("observe warm-ivory Challenge T=0 frame");
+    let FrameClassification::Settled(snapshot) = classification else {
+        panic!("expected Settled for warm-ivory T=0 frame, got {classification:?}");
+    };
+    assert!(snapshot.is_untouched_root_layout());
+    assert_eq!(snapshot.stock, StockObs::FaceDown);
+    assert_eq!(snapshot.undo_all, ControlAvailability::Disabled);
+    assert_eq!(
+        snapshot.tableau[18],
+        TableauSlotObs::Card(
+            Card::try_from(xsar::games::cards::Card::new(
+                Rank::Two,
+                xsar::games::cards::Suit::Hearts,
+            ))
+            .expect("2H canonical")
+        )
+    );
+    assert_eq!(
+        snapshot.tableau[22],
+        TableauSlotObs::Card(
+            Card::try_from(xsar::games::cards::Card::new(
+                Rank::King,
+                xsar::games::cards::Suit::Clubs,
+            ))
+            .expect("KC canonical")
+        )
+    );
+    assert_eq!(
+        snapshot.waste,
+        Card::try_from(xsar::games::cards::Card::new(
+            Rank::Two,
+            xsar::games::cards::Suit::Diamonds,
+        ))
+        .expect("2D canonical")
+    );
+}
+
+/// Verify `observe_frame` and `undo_all_and_hash` treat transient mid-flight card transit,
+/// mid-flip Stock/Waste transitions, and child-before-parent cover inversions on gameplay
+/// frames as `Settling` / `Animating`, while aborting immediately on non-gameplay frames and
+/// failing closed if gameplay ambiguity persists across the restoration budget.
+#[test]
+fn undo_all_waits_through_in_flight_card_transit_and_cover_inversion_and_fails_closed_on_persistent_ambiguity()
+ {
+    let deal = build_cyclic_deal_cards();
+    let slots = cards_to_slots(&deal);
+    let root_pos = TriPeaksPosition::from_root(&slots).expect("valid root");
+    let root_snap = snapshot_from_position(&deal, &root_pos, false);
+    let expected_hash = semantic_board_hash(&root_snap);
+    let root_frame = synthesize_gameplay_frame(&root_snap, BannerKind::Normal);
+
+    let (drawn_pos, _) =
+        apply_move(&root_pos, &slots, TriPeaksMove::Draw).expect("initial draw succeeds");
+    let drawn_snap = snapshot_from_position(&deal, &drawn_pos, true);
+    let drawn_frame = synthesize_gameplay_frame(&drawn_snap, BannerKind::Normal);
+
+    // 1. Mid-flight tableau transit matching live incident 2397959-0: A♣ flying diagonally back
+    // from Waste toward Row 2 Col 3 across cleared Row 3 Cols 4 & 5 produces `band_mixed_conflict`
+    // (`CardRead::Ambiguous`). `read_card` stays strict while `observe_frame` reports `Settling`.
+    let mut mid_flight_snap = root_snap.clone();
+    mid_flight_snap.tableau[5] = TableauSlotObs::Empty;
+    mid_flight_snap.tableau[12] = TableauSlotObs::Empty;
+    mid_flight_snap.tableau[13] = TableauSlotObs::Empty;
+    mid_flight_snap.tableau[21] = TableauSlotObs::Empty;
+    mid_flight_snap.tableau[22] = TableauSlotObs::Empty;
+    mid_flight_snap.tableau[23] = TableauSlotObs::Empty;
+    let mut in_flight_tableau_frame =
+        synthesize_gameplay_frame(&mid_flight_snap, BannerKind::Normal);
+    paint_face_up_card(&mut in_flight_tableau_frame, 826, 250, 136, Card(0));
+    assert_eq!(
+        read_card(
+            &in_flight_tableau_frame,
+            LocationRequest::tripeaks_play(3, 4)
+        )
+        .expect("R3C4 mixed transit"),
+        CardRead::Ambiguous
+    );
+    assert_eq!(
+        read_card(
+            &in_flight_tableau_frame,
+            LocationRequest::tripeaks_play(3, 5)
+        )
+        .expect("R3C5 mixed transit"),
+        CardRead::Ambiguous
+    );
+    assert_eq!(
+        observe_frame(&in_flight_tableau_frame).expect("observe mid-flight tableau"),
+        FrameClassification::Settling
+    );
+
+    // 2. Mid-flip Stock & Waste transit (`CardRead::Ambiguous` on DRAW 1 & DRAW 2).
+    let mut mid_flip_stock_waste_frame = root_frame.clone();
+    for y in STOCK_CARD_BOUNDS.y..STOCK_CARD_BOUNDS.bottom() {
+        for x in STOCK_CARD_BOUNDS.x..(STOCK_CARD_BOUNDS.x + 68) {
+            let off = y as usize * mid_flip_stock_waste_frame.stride + x as usize * 4;
+            mid_flip_stock_waste_frame.pixels[off..off + 4].copy_from_slice(&[20, 130, 75, 255]);
+        }
+    }
+    for y in 767..779_u32 {
+        for x in WASTE_CARD_BOUNDS.x..(WASTE_CARD_BOUNDS.x + 68) {
+            let off = y as usize * mid_flip_stock_waste_frame.stride + x as usize * 4;
+            mid_flip_stock_waste_frame.pixels[off..off + 4].copy_from_slice(&[20, 130, 75, 255]);
+        }
+    }
+    assert_eq!(
+        read_card(
+            &mid_flip_stock_waste_frame,
+            LocationRequest::tripeaks_draw(1)
+        )
+        .expect("Stock ambiguous mid-flip"),
+        CardRead::Ambiguous
+    );
+    assert_eq!(
+        read_card(
+            &mid_flip_stock_waste_frame,
+            LocationRequest::tripeaks_draw(2)
+        )
+        .expect("Waste ambiguous mid-flip"),
+        CardRead::Ambiguous
+    );
+    assert_eq!(
+        observe_frame(&mid_flip_stock_waste_frame).expect("observe Stock/Waste mid-flip"),
+        FrameClassification::Settling
+    );
+
+    // 3. Cover-order animation lag: Row 4 children landed before parent Row 3 Col 1 flipped back
+    // to FaceDown (`covered == true && obs != FaceDown`).
+    let mut cover_inversion_snap = root_snap.clone();
+    cover_inversion_snap.tableau[9] = TableauSlotObs::Card(deal[9]);
+    let cover_inversion_frame =
+        synthesize_gameplay_frame(&cover_inversion_snap, BannerKind::Normal);
+    assert_eq!(
+        observe_frame(&cover_inversion_frame).expect("observe cover-order transit"),
+        FrameClassification::Settling
+    );
+
+    struct ScriptedTransitIo {
+        frames: VecDeque<CapturedFrame>,
+        inputs: Vec<Input>,
+    }
+    impl OperationIo for ScriptedTransitIo {
+        fn check_active(&mut self) -> Result<(), OperationError> {
+            Ok(())
+        }
+        fn capture(&mut self) -> Result<CapturedFrame, OperationError> {
+            self.frames.pop_front().ok_or_else(|| {
+                OperationError::Transport("out of scripted transit frames".to_owned())
+            })
+        }
+        fn authorise(&mut self, _: &CapturedFrame, _: Input) -> Result<(), OperationError> {
+            Ok(())
+        }
+        fn probe(&mut self) -> Result<(), OperationError> {
+            Ok(())
+        }
+        fn deliver(&mut self, i: Input) -> Result<(), OperationError> {
+            self.inputs.push(i);
+            Ok(())
+        }
+        fn wait(&mut self, _: Duration) -> Result<(), OperationError> {
+            Ok(())
+        }
+    }
+
+    // A. Recovers cleanly in one Undo All click across all three transient rewind frames.
+    let cancel = AtomicBool::new(false);
+    let mut domain = LiveTriPeaksDomain::new(
+        Session::new(ScriptedTransitIo {
+            frames: VecDeque::from([
+                drawn_frame.clone(),
+                in_flight_tableau_frame.clone(),
+                mid_flip_stock_waste_frame,
+                cover_inversion_frame,
+                root_frame.clone(),
+                root_frame,
+            ]),
+            inputs: Vec::new(),
+        }),
+        &cancel,
+        fast_qmp_config(4),
+        Box::new(|_| {}),
+    );
+    domain.root_snapshot = Some(root_snap.clone());
+    domain.root_hash = Some(expected_hash);
+    let restored = domain
+        .undo_all_and_hash()
+        .expect("undo_all settles across in-flight card transit and cover inversion");
+    assert_eq!(restored, expected_hash);
+    assert_eq!(
+        domain.into_session().io().inputs,
+        vec![Input::MouseLeft(SHARED_UNDO_ALL_CONTROL.click_point)]
+    );
+
+    // B. Non-gameplay overlay during Undo All still aborts immediately (`UndoScene::Unknown`).
+    let mut non_gameplay_domain = LiveTriPeaksDomain::new(
+        Session::new(ScriptedTransitIo {
+            frames: VecDeque::from([
+                drawn_frame.clone(),
+                assets().xp_counting.clone(),
+                in_flight_tableau_frame.clone(),
+            ]),
+            inputs: Vec::new(),
+        }),
+        &cancel,
+        fast_qmp_config(4),
+        Box::new(|_| {}),
+    );
+    non_gameplay_domain.root_snapshot = Some(root_snap.clone());
+    non_gameplay_domain.root_hash = Some(expected_hash);
+    let non_gameplay_err = non_gameplay_domain
+        .undo_all_and_hash()
+        .expect_err("non-gameplay scene must abort Undo All immediately");
+    assert!(
+        matches!(
+            &non_gameplay_err,
+            ReconError::SceneVerification { detail }
+                if detail.contains("Unexpected scene after Undo All; restoration aborted")
+        ),
+        "unexpected non-gameplay error: {non_gameplay_err:?}"
+    );
+    assert_eq!(non_gameplay_domain.into_session().io().frames.len(), 1);
+
+    // C. Persistent stationary gameplay ambiguity fails closed at budget expiry with 1 click.
+    let mut persistent_cfg = fast_qmp_config(4);
+    persistent_cfg.max_restore_observations = 4;
+    let mut persistent_domain = LiveTriPeaksDomain::new(
+        Session::new(ScriptedTransitIo {
+            frames: VecDeque::from([
+                drawn_frame,
+                in_flight_tableau_frame.clone(),
+                in_flight_tableau_frame.clone(),
+                in_flight_tableau_frame.clone(),
+                in_flight_tableau_frame.clone(),
+                in_flight_tableau_frame,
+            ]),
+            inputs: Vec::new(),
+        }),
+        &cancel,
+        persistent_cfg,
+        Box::new(|_| {}),
+    );
+    persistent_domain.root_snapshot = Some(root_snap);
+    persistent_domain.root_hash = Some(expected_hash);
+    let persistent_err = persistent_domain
+        .undo_all_and_hash()
+        .expect_err("persistent gameplay ambiguity must fail closed once budget expires");
+    assert!(
+        matches!(
+            &persistent_err,
+            ReconError::SceneVerification { detail }
+                if detail.contains("Undo All did not prove original-board restoration twice")
+        ),
+        "unexpected persistent ambiguity error: {persistent_err:?}"
+    );
+    assert_eq!(
+        persistent_domain.into_session().io().inputs,
+        vec![Input::MouseLeft(SHARED_UNDO_ALL_CONTROL.click_point)]
+    );
+}
+
+#[test]
+fn qmp_peer_reactive_continuation_chains_newly_flipped_cards_and_forks_across_probes() {
+    let _backend = TestCaptureBackend::legacy_qmp();
+    let expected_undo_qmp_x = (SHARED_UNDO_ALL_CONTROL.click_point.x as u32 * 32_767) / 1_920;
+    let expected_undo_qmp_y = (SHARED_UNDO_ALL_CONTROL.click_point.y as u32 * 32_767) / 1_080;
+
+    // 1. Subcase A: Forked 52-card deal where Fork A (`18=2 -> 19=3 -> [9=4] -> 20=5 -> [10=4] -> [3=4]`)
+    //    chains across Row 3 & Row 2 inside a single reactive probe, while mutually isolated Fork B
+    //    (`26=K -> 27=Q -> [17=K]`) forces a separate probe from `T = 0`.
+    let mut used = [false; DEAL_SLOT_COUNT];
+    let mut suit_cursor = [0_u8; 13];
+    let mut take_card = |rank_idx: u8| -> Card {
+        let s = suit_cursor[usize::from(rank_idx)];
+        assert!(s < 4, "rank {rank_idx} exhausted");
+        suit_cursor[usize::from(rank_idx)] = s + 1;
+        let c = card(rank_idx, s);
+        used[usize::from(c.0)] = true;
+        c
+    };
+    let mut truth_a = [Card(0); DEAL_SLOT_COUNT];
+    truth_a[usize::from(INITIAL_WASTE_SLOT.0)] = take_card(0); // Ace
+    // Fork A: 18(2) -> 19(3) -> [9=4] -> 20(5) -> [10=4] -> [uncovers 3=4]
+    truth_a[18] = take_card(1);
+    truth_a[19] = take_card(2);
+    truth_a[9] = take_card(3);
+    truth_a[20] = take_card(4);
+    truth_a[10] = take_card(3);
+    truth_a[3] = take_card(3);
+    // Fork B: 26(K) -> 27(Q) -> [uncovers 17=K]
+    truth_a[26] = take_card(12);
+    truth_a[27] = take_card(11);
+    truth_a[17] = take_card(12);
+    // Alternating [Q, 2, Q, 2, Q] barrier across Row 4 [21..=25] prevents bridging between Fork A and Fork B.
+    for (slot_idx, rank_idx) in [(21, 11), (22, 1), (23, 11), (24, 1), (25, 11)] {
+        truth_a[slot_idx] = take_card(rank_idx);
+    }
+    // Stock [29..52] holds all 23 remaining cards of ranks 4..=9 (Five..Ten), non-adjacent to Ace/King/Queen/Two.
+    let mut stock_idx = usize::from(STOCK_START_SLOT);
+    for _ in 0..3 {
+        truth_a[stock_idx] = take_card(4);
+        stock_idx += 1;
+    }
+    for rank_idx in 5_u8..=9 {
+        for _ in 0..4 {
+            truth_a[stock_idx] = take_card(rank_idx);
+            stock_idx += 1;
+        }
+    }
+    assert_eq!(stock_idx, DEAL_SLOT_COUNT);
+    let rem_covered_slots = [0, 1, 2, 4, 5, 6, 7, 8, 11, 12, 13, 14, 15, 16];
+    let mut slot_iter = rem_covered_slots.into_iter();
+    for (id, &taken) in used.iter().enumerate() {
+        if !taken {
+            let dst = slot_iter.next().expect("exact 14 remaining covered slots");
+            truth_a[dst] = Card(id as u8);
+        }
+    }
+    assert!(slot_iter.next().is_none());
+
+    let dir_a = TempTestDir::create("tripeaks-qmp-reactive-forks");
+    let sock_a = dir_a.0.join("qmp.sock");
+    let handle_a = spawn_mock_qmp_guest(sock_a.clone(), truth_a, PeerBehavior::default());
+    let cancel_a = Arc::new(AtomicBool::new(false));
+    let (report_a, _, uncertain_a) =
+        run_qmp_session_test(&sock_a, &cancel_a, fast_qmp_config(6), None, |_, _| {})
+            .expect("forked reactive QMP RECON finishes cleanly");
+    let tel_a = handle_a.join().expect("join forked peer");
+    assert!(!uncertain_a);
+    let ReconOutcome::UnsolvableBestPartial { .. } = report_a.outcome else {
+        panic!(
+            "expected UnsolvableBestPartial after exploring both isolated forks, got {:?}",
+            report_a.outcome
+        );
+    };
+    assert_eq!(report_a.document.slots[9], CardSlot::Known(truth_a[9]));
+    assert_eq!(report_a.document.slots[10], CardSlot::Known(truth_a[10]));
+    assert_eq!(report_a.document.slots[3], CardSlot::Known(truth_a[3]));
+    assert_eq!(report_a.document.slots[17], CardSlot::Known(truth_a[17]));
+    assert!(report_a.document.probes_used >= 2);
+
+    // Fork A clicks (`18, 19, 9, 20, 10`) execute together without an intermediate `Undo All` click between `19` and `9` or `20` and `10`.
+    let qmp_coord = |slot_idx: usize| -> (u32, u32) {
+        let pt = TABLEAU_CARD_REGIONS[slot_idx].click_point;
+        (
+            (pt.x as u32 * 32_767) / 1_920,
+            (pt.y as u32 * 32_767) / 1_080,
+        )
+    };
+    let (q19_x, q19_y) = qmp_coord(19);
+    let (q10_x, q10_y) = qmp_coord(10);
+    let pos_19 = tel_a
+        .actions
+        .iter()
+        .position(|a| matches!(a, WireAction::Click { qmp_x, qmp_y, .. } if *qmp_x == q19_x && *qmp_y == q19_y))
+        .expect("Fork A clicks slot 19");
+    let pos_10 = tel_a
+        .actions
+        .iter()
+        .position(|a| matches!(a, WireAction::Click { qmp_x, qmp_y, .. } if *qmp_x == q10_x && *qmp_y == q10_y))
+        .expect("Fork A chains online through newly revealed slot 9 to tap slot 10");
+    assert!(pos_19 < pos_10);
+    assert!(
+        !tel_a.actions[pos_19..pos_10].iter().any(|a| matches!(
+            a,
+            WireAction::Click { qmp_x, qmp_y, .. } if *qmp_x == expected_undo_qmp_x && *qmp_y == expected_undo_qmp_y
+        )),
+        "must not reset via Undo All between discovering slot 9 and chaining through slot 10"
+    );
+
+    // 2. Subcase B: Multi-board Challenge (`Fours cleared 4/12`, `ClearRankQuota { rank: 3, remaining: 8 }`)
+    //    over solvable `build_stock_gated_deal_cards()` escalates to `ClearBoard` inside `solve_known_subgraph`.
+    let dir_b = TempTestDir::create("tripeaks-qmp-challenge-clear-board");
+    let sock_b = dir_b.0.join("qmp.sock");
+    let truth_b = build_stock_gated_deal_cards();
+    let handle_b = spawn_mock_qmp_guest(
+        sock_b.clone(),
+        truth_b,
+        PeerBehavior {
+            banner: Some(BannerKind::FoursFourOfTwelve),
+            ..PeerBehavior::default()
+        },
+    );
+    let cancel_b = Arc::new(AtomicBool::new(false));
+    let (report_b, _, uncertain_b) =
+        run_qmp_session_test(&sock_b, &cancel_b, fast_qmp_config(4), None, |_, _| {})
+            .expect("Challenge ClearBoard escalation solves inside RECON");
+    let _tel_b = handle_b.join().expect("join Challenge escalation peer");
+    assert!(!uncertain_b);
+    assert_eq!(
+        report_b.objective,
+        Objective::ClearRankQuota {
+            rank: 3,
+            remaining: 8,
+        }
+    );
+    let ReconOutcome::SolvedFromRoot { route, probes_used } = report_b.outcome else {
+        panic!(
+            "expected Challenge ClearBoard escalation to return SolvedFromRoot, got {:?}",
+            report_b.outcome
+        );
+    };
+    assert_eq!(probes_used, 1);
+    verify_objective_route(&report_b.document.slots, &route, Objective::ClearBoard)
+        .expect("escalated ClearBoard Challenge route replays cleanly");
 }

@@ -23,8 +23,8 @@ use super::{
     pyramid_stop::StopTrace,
     selected_capture_backend, tripeaks_calculation,
     tripeaks_reconnaissance::{
-        LiveStepOutcome, TriPeaksSessionDriver, TriPeaksStepOptions, TriPeaksStepTiming,
-        authorise_tripeaks_input, deliver_and_observe_tripeaks_move,
+        LiveStepOutcome, StepModalPolicy, TriPeaksSessionDriver, TriPeaksStepOptions,
+        TriPeaksStepTiming, authorise_tripeaks_input, deliver_and_observe_tripeaks_move,
         restore_board_to_document_root, verify_snapshot_matches_document_root,
         verify_snapshot_matches_position,
     },
@@ -78,6 +78,19 @@ pub enum Completion {
     RestoredToRoot,
 }
 
+/// Explicit session provenance passed into TriPeaks playback (`Normal` vs `Challenge`).
+///
+/// Distinguishes *Boards cleared* and *Solve the deck* challenges mapped to
+/// [`Objective::ClearBoard`] from normal 3-board play without guessing from objective shape alone.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) enum SessionOrigin {
+    /// Classic 3-board play (`ClearBoard` expects `BoardCleared` / `BoardWinOverlay` / `NextBoardDealt`).
+    #[default]
+    Normal,
+    /// Challenge play requiring Challenge Complete / XP handoff checks even on `Objective::ClearBoard`.
+    Challenge,
+}
+
 /// Coalesced live execution telemetry consumed by the UI between completions.
 #[derive(Clone, Debug)]
 pub(crate) struct Progress {
@@ -97,6 +110,8 @@ pub(crate) struct Progress {
     pub score_delta: u32,
     /// Cumulative tableau cards cleared (`0..=28`) after `cursor` moves.
     pub cards_cleared: u8,
+    /// Cumulative verified `TapTableau` removals per canonical rank (`0..13`) from `T = 0`.
+    pub cleared_by_rank: [u8; 13],
     /// Final completion kind once settled.
     pub completion: Option<Completion>,
 }
@@ -448,6 +463,22 @@ fn stop_after_step_requested(
     Ok(store.stop_after_step)
 }
 
+/// Parameters controlling one [`execute_for_session`] playback or `Undo All` invocation.
+pub(super) struct SessionExecutionRequest {
+    /// Owning calculation identity.
+    pub(super) plan: tripeaks_calculation::Identity,
+    /// Distinct reserved playback run identifier.
+    pub(super) run_id: u64,
+    /// Step, continuous, or `Undo All` restoration action.
+    pub(super) action: PlaybackAction,
+    /// Settle delays and observation limits per step or restoration.
+    pub(super) timings: TriPeaksStepTiming,
+    /// `true` in standalone Manual mode to open the `GAME WIN` image scope upon terminal win.
+    pub(super) record_terminal_win_scope: bool,
+    /// Explicit Challenge vs Normal session provenance.
+    pub(super) origin: SessionOrigin,
+}
+
 /// Execute one reserved TriPeaks playback action against the live guest using [`TriPeaksSessionDriver`].
 ///
 /// When `record_terminal_win_scope` is `true` (standalone Manual route mode), saves the cached entry
@@ -455,14 +486,18 @@ fn stop_after_step_requested(
 /// Automatic sessions in `Continuous` mode pass `false` on intermediate/restartable transitions so
 /// [`super::post_game::run_independent_tripeaks_restart_retaining_frame`] owns the single win sequence scope.
 pub(super) fn execute_for_session(
-    plan: tripeaks_calculation::Identity,
-    run_id: u64,
-    action: PlaybackAction,
-    timings: TriPeaksStepTiming,
-    record_terminal_win_scope: bool,
+    request: SessionExecutionRequest,
     events: &WorkerEventSink,
     cancel: &AtomicBool,
 ) -> SessionExecution {
+    let SessionExecutionRequest {
+        plan,
+        run_id,
+        action,
+        timings,
+        record_terminal_win_scope,
+        origin,
+    } = request;
     let mut final_state: Option<LiveState> = None;
     let mut latest_frame: Option<CapturedFrame> = None;
     let mut first_frame: Option<CapturedFrame> = None;
@@ -499,7 +534,8 @@ pub(super) fn execute_for_session(
         let (moves, verify_obj, is_partial, escalated_clear_board) =
             outcome_route(&cached.report.outcome)?;
         let slots = cached.report.document.slots;
-        let challenge_mode = escalated_clear_board
+        let challenge_mode = origin == SessionOrigin::Challenge
+            || escalated_clear_board
             || !matches!(cached.report.document.objective, Objective::ClearBoard);
 
         match selected_capture_backend()? {
@@ -619,14 +655,18 @@ pub(super) fn execute_for_session(
                 }
 
                 let mv = moves[current.cursor];
-                let allow_final_modal = is_partial && current.cursor + 1 == moves.len();
+                let modal_policy = if is_partial && current.cursor + 1 == moves.len() {
+                    StepModalPolicy::AllowFinalPartial
+                } else {
+                    StepModalPolicy::Disallow
+                };
                 let step_outcome = deliver_and_observe_tripeaks_move(
                     &mut driver,
                     &current_snap,
                     TriPeaksStepOptions {
                         mv,
                         challenge_mode,
-                        allow_final_modal,
+                        modal_policy,
                     },
                     &mut newly_observed,
                 )
@@ -653,6 +693,7 @@ pub(super) fn execute_for_session(
                         acknowledged: io_stats.acknowledged,
                         score_delta: current.position.score_delta,
                         cards_cleared,
+                        cleared_by_rank: current.position.cleared_by_rank,
                         completion: None,
                     },
                 );
@@ -671,6 +712,16 @@ pub(super) fn execute_for_session(
                     LiveStepOutcome::BoardCleared(next_snap) => {
                         current_snap = next_snap;
                         if current.cursor >= moves.len() {
+                            if record_terminal_win_scope
+                                && challenge_mode
+                                && !escalated_clear_board
+                                && driver
+                                    .poll_challenge_complete_or_handoff()
+                                    .map_err(|err| err.to_string())?
+                            {
+                                let _game_win_images = super::begin_game_win_images(events)?;
+                                return Ok(Completion::ChallengeComplete);
+                            }
                             return Ok(Completion::BoardCleared);
                         }
                     }
@@ -692,6 +743,11 @@ pub(super) fn execute_for_session(
                     LiveStepOutcome::PartialModal => {
                         return Ok(Completion::PartialComplete);
                     }
+                    LiveStepOutcome::ProbeModalRecovered => {
+                        return Err(
+                            "Unexpected probe modal recovery during route playback".to_owned()
+                        );
+                    }
                 }
 
                 if current.cursor >= moves.len() {
@@ -699,6 +755,16 @@ pub(super) fn execute_for_session(
                         return Ok(Completion::PartialComplete);
                     }
                     if verify_obj == Objective::ClearBoard && current.position.tableau_mask == 0 {
+                        if record_terminal_win_scope
+                            && challenge_mode
+                            && !escalated_clear_board
+                            && driver
+                                .poll_challenge_complete_or_handoff()
+                                .map_err(|err| err.to_string())?
+                        {
+                            let _game_win_images = super::begin_game_win_images(events)?;
+                            return Ok(Completion::ChallengeComplete);
+                        }
                         return Ok(Completion::BoardCleared);
                     }
                     if challenge_mode
@@ -747,6 +813,7 @@ pub(super) fn execute_for_session(
             acknowledged,
             score_delta: current.position.score_delta,
             cards_cleared: cleared,
+            cleared_by_rank: current.position.cleared_by_rank,
             completion: Some(completion),
         })
     })();
@@ -882,6 +949,7 @@ pub(super) fn run(
     run_id: u64,
     action: PlaybackAction,
     timings: TriPeaksStepTiming,
+    origin: SessionOrigin,
     events: &WorkerEventSink,
     cancel: &AtomicBool,
 ) {
@@ -903,7 +971,18 @@ pub(super) fn run(
         result,
         termination,
         ..
-    } = execute_for_session(plan.clone(), run_id, action, timings, true, events, cancel);
+    } = execute_for_session(
+        SessionExecutionRequest {
+            plan: plan.clone(),
+            run_id,
+            action,
+            timings,
+            record_terminal_win_scope: true,
+            origin,
+        },
+        events,
+        cancel,
+    );
     events.latest_frame.reconnaissance.finish();
     let _ = events.send_for_context(
         Some(plan.context.clone()),
@@ -980,8 +1059,9 @@ mod tests {
         recon::{Card, CardSlot, SlotId},
         strategy::ControllerContext,
         tripeaks_model::{
-            COVERING_CHILD_MASKS, DEAL_SLOT_COUNT, DealProvenance, INITIAL_WASTE_SLOT,
-            STOCK_CARD_COUNT, STOCK_START_SLOT, TriPeaksDealDocument, slot_to_tableau_coord,
+            COVERING_CHILD_MASKS, DEAL_SLOT_COUNT, DEFAULT_SEARCH_LIMITS, DealProvenance,
+            INITIAL_WASTE_SLOT, STOCK_CARD_COUNT, STOCK_START_SLOT, TriPeaksDealDocument,
+            slot_to_tableau_coord,
         },
         worker::tripeaks_reconnaissance::{StockObs, TableauSlotObs},
     };
@@ -999,8 +1079,21 @@ mod tests {
         draw_first: CapturedFrame,
         /// Calibrated Draw-23 dark-green empty Stock tray fixture.
         stock_empty: CapturedFrame,
+        /// Settled Challenge Complete (`Continue`) terminal screen fixture.
+        challenge_continue: CapturedFrame,
+        /// Challenge Complete XP-counting animation terminal screen fixture.
+        challenge_xp: CapturedFrame,
         /// Corner `(x, y)` origins in `fc01` indexed by canonical card ID `0..52`.
         corner_origins: [(u32, u32); DEAL_SLOT_COUNT],
+    }
+
+    /// Optional synthetic post-clear Challenge screen rendered once `tableau_mask == 0`.
+    #[derive(Clone, Copy, Eq, Hash, PartialEq)]
+    enum BoardClearedOverlay {
+        /// Settled `"Challenge Complete!"` modal with active `"Continue"` button.
+        ChallengeContinue,
+        /// Active Challenge XP counting frame (`ChallengeTerminalHandoff::XpCounting`).
+        ChallengeXpCounting,
     }
 
     /// Global lazy decoded asset bank shared across route unit tests.
@@ -1030,6 +1123,16 @@ mod tests {
                 ),
                 "stock-empty",
             );
+            let challenge_continue = decode(
+                include_bytes!(
+                    "../../tests/fixtures/freecell-challenge-complete-continue-20261113.png"
+                ),
+                "challenge-continue",
+            );
+            let challenge_xp = decode(
+                include_bytes!("../../tests/fixtures/freecell-challenge-complete-xp-20261113.png"),
+                "challenge-xp",
+            );
 
             let mut corner_origins = [None; DEAL_SLOT_COUNT];
             for (col_idx, &x) in PLAY_X.iter().enumerate() {
@@ -1052,6 +1155,8 @@ mod tests {
                 left_ace,
                 draw_first,
                 stock_empty,
+                challenge_continue,
+                challenge_xp,
                 corner_origins: corner_origins
                     .map(|opt| opt.expect("FC01 contains all 52 canonical cards")),
             }
@@ -1197,8 +1302,22 @@ mod tests {
         position: TriPeaksPosition,
         undo_enabled: bool,
         corrupt_slot_18: Option<Card>,
+        board_cleared_overlay: Option<BoardClearedOverlay>,
     ) -> Vec<u8> {
         let base = assets();
+        if position.tableau_mask == 0
+            && let Some(overlay) = board_cleared_overlay
+        {
+            let source = match overlay {
+                BoardClearedOverlay::ChallengeContinue => &base.challenge_continue,
+                BoardClearedOverlay::ChallengeXpCounting => &base.challenge_xp,
+            };
+            let mut bgr = Vec::with_capacity(source.pixels.len() / 4 * 3);
+            for px in source.pixels.as_chunks::<4>().0 {
+                bgr.extend_from_slice(&[px[2], px[1], px[0]]);
+            }
+            return bgr;
+        }
         let mut frame = base.left_ace.clone();
         for y in 96..(96 + 545_u32) {
             let src_y = 650 + (y - 96) % 180;
@@ -1289,6 +1408,8 @@ mod tests {
         undo_enabled: bool,
         /// Optional Row-4 visual corruption card ID.
         corrupt_slot_18: Option<u8>,
+        /// Optional post-clear Challenge overlay frame.
+        board_cleared_overlay: Option<BoardClearedOverlay>,
     }
 
     /// Shared simulated TriPeaks Windows 11 guest state accessed by QMP and `BgrV3` threads.
@@ -1303,6 +1424,10 @@ mod tests {
         history: Vec<TriPeaksMove>,
         /// Optional Row-4 card corruption forcing a pre-execution mismatch error.
         corrupt_slot_18: Option<Card>,
+        /// Optional Challenge screen shown after `tableau_mask == 0`.
+        board_cleared_overlay: Option<BoardClearedOverlay>,
+        /// Number of empty-tableau captures served before showing `board_cleared_overlay`.
+        empty_frames_before_overlay: usize,
         /// Total `input-send-event` clicks/keys committed by the simulated guest.
         qmp_inputs_delivered: usize,
         /// Optional deterministic callback requesting `stop_after_step` on the Nth completed input.
@@ -1370,6 +1495,8 @@ mod tests {
             position: root,
             history: Vec::new(),
             corrupt_slot_18,
+            board_cleared_overlay: None,
+            empty_frames_before_overlay: 0,
             qmp_inputs_delivered: 0,
             stop_after_step_hook: None,
         }));
@@ -1638,7 +1765,17 @@ mod tests {
                 .map_err(|err| std::io::Error::new(ErrorKind::InvalidData, err))?;
             *seq += 1;
             let (slots, key) = {
-                let g = state.lock().expect("guest state lock");
+                let mut g = state.lock().expect("guest state lock");
+                let board_cleared_overlay = if g.position.tableau_mask == 0 {
+                    if g.empty_frames_before_overlay > 0 {
+                        g.empty_frames_before_overlay -= 1;
+                        None
+                    } else {
+                        g.board_cleared_overlay
+                    }
+                } else {
+                    None
+                };
                 (
                     g.slots,
                     BgrCacheKey {
@@ -1647,6 +1784,7 @@ mod tests {
                         waste_id: g.position.waste_card.0,
                         undo_enabled: !g.history.is_empty(),
                         corrupt_slot_18: g.corrupt_slot_18.map(|c| c.0),
+                        board_cleared_overlay,
                     },
                 )
             };
@@ -1664,6 +1802,7 @@ mod tests {
                     pos,
                     key.undo_enabled,
                     key.corrupt_slot_18.map(Card),
+                    key.board_cleared_overlay,
                 ))
             }));
             let header = v3::ResponseHeader::success(
@@ -1728,6 +1867,7 @@ mod tests {
                 bytes: Vec::new(),
                 cancel: &cancel,
                 events: &sink,
+                search_limits: DEFAULT_SEARCH_LIMITS,
             },
             || Ok(false),
             |_, _| {},
@@ -1743,12 +1883,13 @@ mod tests {
         (sink, rx, plan, cancel)
     }
 
-    /// Execute one reserved playback action and return the emitted completion event payload.
-    fn execute_one(
+    /// Execute one reserved playback action with explicit `SessionOrigin`.
+    fn execute_one_with_origin(
         sink: &WorkerEventSink,
         rx: &mpsc::Receiver<super::super::ContextualWorkerEvent>,
         plan: &tripeaks_calculation::Identity,
         action: PlaybackAction,
+        origin: SessionOrigin,
         cancel: &Arc<AtomicBool>,
     ) -> (RunTermination, Result<Progress, String>, u64) {
         let run_id = sink
@@ -1759,8 +1900,27 @@ mod tests {
             .reserve(plan, action)
             .expect("reserve action");
         reserve_run_scope(sink, plan, cancel);
-        run(plan.clone(), run_id, action, fast_timings(), sink, cancel);
+        run(
+            plan.clone(),
+            run_id,
+            action,
+            fast_timings(),
+            origin,
+            sink,
+            cancel,
+        );
         drain_route_finished(rx, run_id)
+    }
+
+    /// Execute one reserved playback action with default `SessionOrigin::Normal`.
+    fn execute_one(
+        sink: &WorkerEventSink,
+        rx: &mpsc::Receiver<super::super::ContextualWorkerEvent>,
+        plan: &tripeaks_calculation::Identity,
+        action: PlaybackAction,
+        cancel: &Arc<AtomicBool>,
+    ) -> (RunTermination, Result<Progress, String>, u64) {
+        execute_one_with_origin(sink, rx, plan, action, SessionOrigin::Normal, cancel)
     }
 
     /// Arm context ownership and capture context exactly as `WorkerHandle` does before dispatch.
@@ -1846,6 +2006,7 @@ mod tests {
             run2,
             PlaybackAction::MultiStep,
             fast_timings(),
+            SessionOrigin::Normal,
             &sink,
             &cancel,
         );
@@ -1929,6 +2090,7 @@ mod tests {
             run_id,
             PlaybackAction::SingleStep,
             fast_timings(),
+            SessionOrigin::Normal,
             &sink,
             &cancel,
         );
@@ -1944,5 +2106,93 @@ mod tests {
                 .expect("store")
                 .available(&plan)
         );
+    }
+
+    /// Explicit `SessionOrigin::Challenge` executes Challenge completion and XP handoff checks
+    /// even when the document objective is `Objective::ClearBoard` (e.g. *Boards cleared* / *Solve the deck*).
+    #[test]
+    fn session_origin_challenge_clear_board_completes_challenge_and_xp_handoff_without_clicks() {
+        let slots = cyclic_solvable_slots();
+
+        // 1. Delayed `ChallengeComplete` modal (`BoardCleared` on final card -> Challenge banner settles):
+        let sock_delayed = temp_socket_path("challenge-delayed");
+        let guest_delayed = spawn_loopback_guest(sock_delayed.clone(), slots, None);
+        {
+            let mut g = guest_delayed.state.lock().expect("lock guest");
+            g.board_cleared_overlay = Some(BoardClearedOverlay::ChallengeContinue);
+            g.empty_frames_before_overlay = 1;
+        }
+        let (sink1, rx1, plan1, cancel1) = prepare_and_install_candidate(&sock_delayed, slots);
+        let _cap1 = super::super::tcp_capture::CancellationScope::install(Arc::clone(&cancel1));
+        let (term1, res1, _) = execute_one_with_origin(
+            &sink1,
+            &rx1,
+            &plan1,
+            PlaybackAction::MultiStep,
+            SessionOrigin::Challenge,
+            &cancel1,
+        );
+        assert_eq!(term1, RunTermination::Completed);
+        let prog1 = res1.expect("Challenge Origin ClearBoard should complete challenge");
+        assert_eq!(prog1.completion, Some(Completion::ChallengeComplete));
+        assert_eq!(prog1.cards_cleared, 28);
+        assert_eq!(prog1.cleared_by_rank.iter().sum::<u8>(), 28);
+        assert_eq!(
+            guest_delayed
+                .state
+                .lock()
+                .expect("lock guest")
+                .qmp_inputs_delivered,
+            28
+        );
+
+        // 2. Delayed XP-counting handoff after `BoardCleared` with `SessionOrigin::Challenge` ->
+        //    cleanly retires via `poll_challenge_complete_or_handoff` as `ChallengeComplete` with zero clicks.
+        let sock_xp = temp_socket_path("challenge-xp");
+        let guest_xp = spawn_loopback_guest(sock_xp.clone(), slots, None);
+        {
+            let mut g = guest_xp.state.lock().expect("lock guest");
+            g.board_cleared_overlay = Some(BoardClearedOverlay::ChallengeXpCounting);
+            g.empty_frames_before_overlay = 1;
+        }
+        let (sink2, rx2, plan2, cancel2) = prepare_and_install_candidate(&sock_xp, slots);
+        let _cap2 = super::super::tcp_capture::CancellationScope::install(Arc::clone(&cancel2));
+        let (term2, res2, _) = execute_one_with_origin(
+            &sink2,
+            &rx2,
+            &plan2,
+            PlaybackAction::MultiStep,
+            SessionOrigin::Challenge,
+            &cancel2,
+        );
+        assert_eq!(term2, RunTermination::Completed);
+        let prog2 = res2.expect("Challenge Origin ClearBoard XP handoff completes");
+        assert_eq!(prog2.completion, Some(Completion::ChallengeComplete));
+        assert_eq!(
+            guest_xp
+                .state
+                .lock()
+                .expect("lock guest")
+                .qmp_inputs_delivered,
+            28
+        );
+
+        // 3. Explicit `SessionOrigin::Normal` on the same `ClearBoard` deal returns `BoardCleared`
+        //    without running Challenge Complete polling.
+        let sock_norm = temp_socket_path("normal-clear");
+        let _guest_norm = spawn_loopback_guest(sock_norm.clone(), slots, None);
+        let (sink3, rx3, plan3, cancel3) = prepare_and_install_candidate(&sock_norm, slots);
+        let _cap3 = super::super::tcp_capture::CancellationScope::install(Arc::clone(&cancel3));
+        let (term3, res3, _) = execute_one_with_origin(
+            &sink3,
+            &rx3,
+            &plan3,
+            PlaybackAction::MultiStep,
+            SessionOrigin::Normal,
+            &cancel3,
+        );
+        assert_eq!(term3, RunTermination::Completed);
+        let prog3 = res3.expect("Normal Origin ClearBoard finishes with BoardCleared");
+        assert_eq!(prog3.completion, Some(Completion::BoardCleared));
     }
 }

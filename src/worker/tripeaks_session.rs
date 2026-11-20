@@ -19,6 +19,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+use xsar::search::PartialProof;
+
 use super::{
     CaptureBackend, CaptureMode, QmpClient, TableauScanState, WorkerEvent, WorkerEventSink,
     WorkerState, analyse_captured_frame, capture_screen_causal,
@@ -27,13 +29,15 @@ use super::{
     pyramid_stop::StopTrace,
     selected_capture_backend, send_log, send_state, send_status, tripeaks_calculation,
     tripeaks_reconnaissance::{
-        FrameClassification, LiveTriPeaksDomain, TriPeaksReconConfig, authorise_tripeaks_input,
-        observe_frame, run_tripeaks_recon, semantic_board_hash,
+        FrameClassification, LiveTriPeaksDomain, TriPeaksReconConfig, TriPeaksSessionDriver,
+        TriPeaksStepTiming, authorise_tripeaks_input, observe_frame, run_tripeaks_recon,
+        semantic_board_hash,
     },
     tripeaks_route,
 };
 use crate::{
     capture::CapturedFrame,
+    freecell_terminal::{ChallengeTerminalHandoff, classify_challenge_handoff},
     game::GameMode,
     game_operations::OperationError,
     parameters::BOARD_TRANSITION_REOBSERVE_DELAY,
@@ -41,7 +45,9 @@ use crate::{
     pyramid_workflow_model::{RunTermination, SessionPhase},
     recon::{Objective, ReconOutcome},
     strategy::{ControllerContext, SolvingStrategy},
-    tripeaks_model::{MAX_DOCUMENT_BYTES, TriPeaksDealDocument},
+    tripeaks_model::{
+        DEFAULT_SEARCH_LIMITS, MAX_DOCUMENT_BYTES, TriPeaksDealDocument, verify_move_sequence,
+    },
     tripeaks_progress::TriPeaksChallenge,
     tripeaks_workflow_model::{
         SlotKnowledgeCounts, TriPeaksManualReconSummary, TriPeaksPlanningSnapshot,
@@ -66,6 +72,8 @@ pub(crate) struct AcquiredBoard {
     pub bytes: Vec<u8>,
     /// Active objective resolved for this board (HUD Challenge or tracked continuation).
     pub objective: Objective,
+    /// Explicit session provenance carried across boards (`Challenge` vs `Normal`).
+    pub origin: tripeaks_route::SessionOrigin,
     /// Live Challenge header detected at `T = 0`, if any.
     pub detected_challenge: Option<TriPeaksChallenge>,
     /// Semantic hash of the verified `T = 0` root board.
@@ -76,6 +84,10 @@ pub(crate) struct AcquiredBoard {
     pub terminal_challenge_complete: bool,
     /// `true` when `completed_during_recon` already reached Normal 3/3 `Congratulations`.
     pub terminal_board_win: bool,
+    /// Target-rank `TapTableau` removals executed during a `completed_during_recon` probe prefix.
+    pub recon_cleared_by_rank: [u8; 13],
+    /// Score delta gained along a `completed_during_recon` probe prefix.
+    pub recon_score_delta: u32,
     /// Plain operator card counts (`Known / Unknown / Unreachable`).
     pub counts: SlotKnowledgeCounts,
     /// Number of `Undo All` probe cycles executed during recon.
@@ -91,18 +103,23 @@ pub(crate) enum PlanDecision<R> {
         /// `true` when direct quota/score exceeded one deck and escalated to full `28`-card clear.
         escalated_clear_board: bool,
     },
-    /// Deal proved unsolvable for both target and `ClearBoard`; carries optional partial progress route.
+    /// Deal could not be solved for target or `ClearBoard`; carries optional partial progress,
+    /// partial-search proof status, and remaining `Unknown` slot count.
     UnsolvablePartial {
         /// Positive rank/score progress route to bank, or `None` (`0` clicks for dead-end `ClearBoard`).
         route: Option<R>,
-        /// Original board objective proved unsolvable.
+        /// Original board objective evaluated.
         objective: Objective,
         /// Target-rank cards cleared along `route` (`0` outside `ClearRankQuota`).
         banked_rank_count: u8,
         /// Verified score delta along `route`.
         score_delta: u32,
-        /// Maximum clearable tableau cards across the known subgraph (`0..=28`).
+        /// Best clearable tableau cards across the known subgraph (`0..=28`).
         cards_cleared: u8,
+        /// Exhaustive vs bounded proof status for partial progress.
+        proof: PartialProof,
+        /// Count of evaluated slots still marked [`crate::recon::CardSlot::Unknown`].
+        unknown_slots: usize,
     },
 }
 
@@ -115,6 +132,8 @@ pub(crate) struct ExecutedBoard {
     pub cards_cleared: u8,
     /// Verified score delta earned along the executed moves.
     pub score_delta: u32,
+    /// Cumulative verified `TapTableau` removals per canonical rank (`0..13`) from `T = 0`.
+    pub cleared_by_rank: [u8; 13],
 }
 
 /// Verified board state observed after `BoardCleared` settles into the next screen.
@@ -191,15 +210,31 @@ impl ChallengeTracker {
     }
 
     /// Update fallback remaining counters after executing a board (used only if HUD lacks live header).
-    fn on_board_progressed(&mut self, score_delta: u32, executed_board_clear: bool) {
+    fn on_board_progressed(
+        &mut self,
+        score_delta: u32,
+        executed_board_clear: bool,
+        cleared_by_rank: [u8; 13],
+    ) {
         if executed_board_clear && let Some(rem) = &mut self.boards_remaining {
             *rem = rem.saturating_sub(1);
         }
-        if let Some(Objective::ReachScoreDelta { points_needed }) = self.last_objective {
-            let next_needed = points_needed.saturating_sub(score_delta);
-            self.last_objective = Some(Objective::ReachScoreDelta {
-                points_needed: next_needed.max(1),
-            });
+        match self.last_objective {
+            Some(Objective::ReachScoreDelta { points_needed }) => {
+                let next_needed = points_needed.saturating_sub(score_delta);
+                self.last_objective = Some(Objective::ReachScoreDelta {
+                    points_needed: next_needed.max(1),
+                });
+            }
+            Some(Objective::ClearRankQuota { rank, remaining }) => {
+                let cleared_target = cleared_by_rank.get(usize::from(rank)).copied().unwrap_or(0);
+                let next_remaining = remaining.saturating_sub(cleared_target);
+                self.last_objective = Some(Objective::ClearRankQuota {
+                    rank,
+                    remaining: next_remaining.max(1),
+                });
+            }
+            _ => {}
         }
     }
 }
@@ -257,36 +292,72 @@ pub(crate) trait TriPeaksSessionIo {
     fn restart_game(&mut self, generation: u64, previous_root_hash: u64) -> Result<(), String>;
 }
 
-/// Format an unsolvable partial stop summary clearly without promising Redeal automation.
-fn partial_stop_summary(
+/// Inputs formatted by [`partial_stop_summary`] when a board stops without clearing its objective.
+struct PartialStopSummary<'a> {
+    /// Target board objective evaluated.
     objective: Objective,
+    /// `true` when positive rank/score progress was executed on the board.
     banked: bool,
+    /// Target-rank cards cleared during banked playback.
     banked_rank_count: u8,
+    /// Score delta achieved during banked playback.
     score_delta: u32,
+    /// Maximum/best-found clearable tableau cards (`0..=28`).
     cards_cleared: u8,
-    path: &Path,
-) -> String {
-    let target = format_tripeaks_objective(objective, None);
-    if banked {
-        match objective {
+    /// Exhaustive vs bounded proof status from planning.
+    proof: PartialProof,
+    /// Number of remaining [`crate::recon::CardSlot::Unknown`] slots in the evaluated document.
+    unknown_slots: usize,
+    /// Exported deal JSON path.
+    path: &'a Path,
+}
+
+/// Format an unsolvable or bounded partial stop summary cleanly without promising Redeal automation.
+fn partial_stop_summary(info: PartialStopSummary<'_>) -> String {
+    let target = format_tripeaks_objective(info.objective, None);
+    let path_disp = info.path.display();
+    if info.unknown_slots > 0 {
+        let stop_note = match info.proof {
+            PartialProof::Exhaustive => String::new(),
+            PartialProof::Bounded(reason) => format!("; search stopped at {reason}"),
+        };
+        return format!(
+            "Known-cards search did not solve {target} ({} Unknown slots remain; best-found {}/28 tableau{stop_note}, export: {path_disp}); zero post-recon clicks sent.",
+            info.unknown_slots, info.cards_cleared,
+        );
+    }
+    if info.banked {
+        let state_prefix = match info.proof {
+            PartialProof::Exhaustive => format!("Deal unsolvable for {target}"),
+            PartialProof::Bounded(reason) => {
+                format!("No complete route found for {target} (search stopped at {reason})")
+            }
+        };
+        match info.objective {
             Objective::ClearRankQuota { .. } => format!(
-                "Deal unsolvable for {target}; banked {banked_rank_count} target-rank cards (+{score_delta} pts, export: {}); release control without Redeal clicks.",
-                path.display()
+                "{state_prefix}; banked {} target-rank cards (+{} pts, export: {path_disp}); release control without Redeal clicks.",
+                info.banked_rank_count, info.score_delta,
             ),
             Objective::ReachScoreDelta { .. } => format!(
-                "Deal unsolvable for {target}; banked +{score_delta} score points (export: {}); release control without Redeal clicks.",
-                path.display()
+                "{state_prefix}; banked +{} score points (export: {path_disp}); release control without Redeal clicks.",
+                info.score_delta,
             ),
             Objective::ClearBoard => format!(
-                "Deal unsolvable for {target} (max {cards_cleared}/28 clearable, export: {}); zero post-recon clicks sent.",
-                path.display()
+                "{state_prefix} (best-found {}/28 clearable, export: {path_disp}); zero post-recon clicks sent.",
+                info.cards_cleared,
             ),
         }
     } else {
-        format!(
-            "Proved untouched T=0 deal unsolvable for {target} (max {cards_cleared}/28 tableau clearable, export: {}); zero post-recon clicks sent — Redeal manually.",
-            path.display()
-        )
+        match info.proof {
+            PartialProof::Exhaustive => format!(
+                "Proved untouched T=0 deal unsolvable for {target} (max {}/28 tableau clearable, export: {path_disp}); zero post-recon clicks sent — Redeal manually.",
+                info.cards_cleared,
+            ),
+            PartialProof::Bounded(reason) => format!(
+                "Untouched T=0 deal unsolved for {target} (best-found {}/28 tableau clearable; search stopped at {reason}; maximum unproved, export: {path_disp}); zero post-recon clicks sent — Redeal manually.",
+                info.cards_cleared,
+            ),
+        }
     }
 }
 
@@ -334,6 +405,9 @@ pub(crate) fn drive_tripeaks_session<I: TriPeaksSessionIo>(
         let effective_objective =
             tracker.on_acquired(acquired.objective, acquired.detected_challenge);
         acquired.objective = effective_objective;
+        if tracker.challenge_active {
+            acquired.origin = tripeaks_route::SessionOrigin::Challenge;
+        }
         let obj_label = format_tripeaks_objective(effective_objective, acquired.detected_challenge);
         last_export = Some(acquired.export_path.clone());
         last_counts = Some(acquired.counts);
@@ -363,6 +437,11 @@ pub(crate) fn drive_tripeaks_session<I: TriPeaksSessionIo>(
                 });
             }
             if acquired.terminal_board_win {
+                if tracker.challenge_active {
+                    return Err(format!(
+                        "Unexpected Normal Board Win overlay during Challenge cycle {generation}"
+                    ));
+                }
                 completed_games = completed_games
                     .checked_add(1)
                     .ok_or("Completed TriPeaks game counter exhausted")?;
@@ -387,7 +466,7 @@ pub(crate) fn drive_tripeaks_session<I: TriPeaksSessionIo>(
                 io.restart_game(generation, acquired.root_hash)?;
                 continue;
             }
-            if style == TriPeaksPlayStyle::SingleBoard {
+            if style == TriPeaksPlayStyle::SingleBoard && !tracker.challenge_active {
                 io.phase(generation, SessionPhase::Completion);
                 return Ok(SessionOutcome {
                     completed_boards,
@@ -428,15 +507,55 @@ pub(crate) fn drive_tripeaks_session<I: TriPeaksSessionIo>(
                     });
                 }
                 PostClearTransition::BoardWinOverlay => {
+                    if tracker.challenge_active {
+                        return Err(format!(
+                            "Unexpected Normal Board Win overlay during Challenge transition on cycle {generation}"
+                        ));
+                    }
                     completed_games = completed_games
                         .checked_add(1)
                         .ok_or("Completed TriPeaks game counter exhausted")?;
+                    if style == TriPeaksPlayStyle::SingleBoard {
+                        io.phase(generation, SessionPhase::Completion);
+                        io.finish_terminal_win_images()?;
+                        return Ok(SessionOutcome {
+                            completed_boards,
+                            completed_games,
+                            unsolvable_max_cleared: None,
+                            export_path: last_export,
+                            counts: last_counts,
+                            objective_label: last_objective_label,
+                            summary: format!(
+                                "Single TriPeaks board win verified after recon (board {generation}, games: {completed_games}, export: {}).",
+                                acquired.export_path.display()
+                            ),
+                        });
+                    }
                     io.phase(generation, SessionPhase::Restart);
                     io.check()?;
                     io.restart_game(generation, acquired.root_hash)?;
                 }
                 PostClearTransition::NextBoardDealt(_) => {
-                    tracker.on_board_progressed(0, true);
+                    tracker.on_board_progressed(
+                        acquired.recon_score_delta,
+                        true,
+                        acquired.recon_cleared_by_rank,
+                    );
+                    if style == TriPeaksPlayStyle::SingleBoard {
+                        io.phase(generation, SessionPhase::Completion);
+                        return Ok(SessionOutcome {
+                            completed_boards,
+                            completed_games,
+                            unsolvable_max_cleared: None,
+                            export_path: last_export,
+                            counts: last_counts,
+                            objective_label: last_objective_label,
+                            summary: format!(
+                                "Single TriPeaks board completed during recon ({obj_label}, board {generation}, export: {}); stopped cleanly before playing next board.",
+                                acquired.export_path.display()
+                            ),
+                        });
+                    }
                 }
             }
             continue;
@@ -453,12 +572,15 @@ pub(crate) fn drive_tripeaks_session<I: TriPeaksSessionIo>(
                 banked_rank_count,
                 score_delta,
                 cards_cleared,
+                proof,
+                unknown_slots,
             } => {
-                let worth_banking = match objective {
-                    Objective::ClearRankQuota { .. } => banked_rank_count > 0,
-                    Objective::ReachScoreDelta { .. } => score_delta > 0,
-                    Objective::ClearBoard => false,
-                };
+                let worth_banking = unknown_slots == 0
+                    && match objective {
+                        Objective::ClearRankQuota { .. } => banked_rank_count > 0,
+                        Objective::ReachScoreDelta { .. } => score_delta > 0,
+                        Objective::ClearBoard => false,
+                    };
                 if worth_banking && let Some(partial_route) = route {
                     io.phase(generation, SessionPhase::Execution);
                     io.check()?;
@@ -484,14 +606,16 @@ pub(crate) fn drive_tripeaks_session<I: TriPeaksSessionIo>(
                             ),
                         });
                     }
-                    let summary = partial_stop_summary(
+                    let summary = partial_stop_summary(PartialStopSummary {
                         objective,
-                        true,
+                        banked: true,
                         banked_rank_count,
-                        executed.score_delta,
+                        score_delta: executed.score_delta,
                         cards_cleared,
-                        &acquired.export_path,
-                    );
+                        proof,
+                        unknown_slots,
+                        path: &acquired.export_path,
+                    });
                     return Ok(SessionOutcome {
                         completed_boards,
                         completed_games,
@@ -504,14 +628,16 @@ pub(crate) fn drive_tripeaks_session<I: TriPeaksSessionIo>(
                 }
 
                 io.phase(generation, SessionPhase::Completion);
-                let summary = partial_stop_summary(
+                let summary = partial_stop_summary(PartialStopSummary {
                     objective,
-                    false,
-                    0,
-                    0,
+                    banked: false,
+                    banked_rank_count: 0,
+                    score_delta: 0,
                     cards_cleared,
-                    &acquired.export_path,
-                );
+                    proof,
+                    unknown_slots,
+                    path: &acquired.export_path,
+                });
                 return Ok(SessionOutcome {
                     completed_boards,
                     completed_games,
@@ -533,7 +659,11 @@ pub(crate) fn drive_tripeaks_session<I: TriPeaksSessionIo>(
                 completed_boards = completed_boards
                     .checked_add(1)
                     .ok_or("Completed TriPeaks board counter exhausted")?;
-                tracker.on_board_progressed(executed.score_delta, executed.cards_cleared == 28);
+                tracker.on_board_progressed(
+                    executed.score_delta,
+                    executed.cards_cleared == 28,
+                    executed.cleared_by_rank,
+                );
 
                 match executed.completion {
                     tripeaks_route::Completion::ChallengeComplete => {
@@ -556,6 +686,11 @@ pub(crate) fn drive_tripeaks_session<I: TriPeaksSessionIo>(
                         });
                     }
                     tripeaks_route::Completion::BoardWinOverlay => {
+                        if tracker.challenge_active {
+                            return Err(format!(
+                                "Unexpected Normal Board Win overlay during Challenge cycle {generation}"
+                            ));
+                        }
                         completed_games = completed_games
                             .checked_add(1)
                             .ok_or("Completed TriPeaks game counter exhausted")?;
@@ -605,7 +740,7 @@ pub(crate) fn drive_tripeaks_session<I: TriPeaksSessionIo>(
                         io.phase(generation, SessionPhase::Transition);
                     }
                     tripeaks_route::Completion::BoardCleared => {
-                        if style == TriPeaksPlayStyle::SingleBoard {
+                        if style == TriPeaksPlayStyle::SingleBoard && !tracker.challenge_active {
                             io.phase(generation, SessionPhase::Completion);
                             return Ok(SessionOutcome {
                                 completed_boards,
@@ -646,14 +781,51 @@ pub(crate) fn drive_tripeaks_session<I: TriPeaksSessionIo>(
                                 });
                             }
                             PostClearTransition::BoardWinOverlay => {
+                                if tracker.challenge_active {
+                                    return Err(format!(
+                                        "Unexpected Normal Board Win overlay during Challenge transition on cycle {generation}"
+                                    ));
+                                }
                                 completed_games = completed_games
                                     .checked_add(1)
                                     .ok_or("Completed TriPeaks game counter exhausted")?;
+                                if style == TriPeaksPlayStyle::SingleBoard {
+                                    io.phase(generation, SessionPhase::Completion);
+                                    io.finish_terminal_win_images()?;
+                                    return Ok(SessionOutcome {
+                                        completed_boards,
+                                        completed_games,
+                                        unsolvable_max_cleared: None,
+                                        export_path: last_export,
+                                        counts: last_counts,
+                                        objective_label: last_objective_label,
+                                        summary: format!(
+                                            "Single TriPeaks 3/3 game win verified (board {generation}, games: {completed_games}, export: {}).",
+                                            acquired.export_path.display()
+                                        ),
+                                    });
+                                }
                                 io.phase(generation, SessionPhase::Restart);
                                 io.check()?;
                                 io.restart_game(generation, acquired.root_hash)?;
                             }
-                            PostClearTransition::NextBoardDealt(_) => {}
+                            PostClearTransition::NextBoardDealt(_) => {
+                                if style == TriPeaksPlayStyle::SingleBoard {
+                                    io.phase(generation, SessionPhase::Completion);
+                                    return Ok(SessionOutcome {
+                                        completed_boards,
+                                        completed_games,
+                                        unsolvable_max_cleared: None,
+                                        export_path: last_export,
+                                        counts: last_counts,
+                                        objective_label: last_objective_label,
+                                        summary: format!(
+                                            "Single TriPeaks board {generation} cleared ({obj_label}, export: {}); stopped cleanly before playing next board.",
+                                            acquired.export_path.display()
+                                        ),
+                                    });
+                                }
+                            }
                         }
                     }
                     tripeaks_route::Completion::ObjectiveReached => {
@@ -708,6 +880,18 @@ fn classify_recon_completion_screen(frame: Option<&CapturedFrame>) -> (bool, boo
     match observe_frame(frame) {
         Ok(FrameClassification::ChallengeComplete) => (true, false),
         Ok(FrameClassification::BoardWinOverlay) => (false, true),
+        Ok(FrameClassification::Unsupported(_)) => {
+            if matches!(
+                classify_challenge_handoff(frame),
+                Ok(Some(
+                    ChallengeTerminalHandoff::XpCounting | ChallengeTerminalHandoff::LevelUp
+                ))
+            ) {
+                (true, false)
+            } else {
+                (false, false)
+            }
+        }
         _ => (false, false),
     }
 }
@@ -1136,6 +1320,25 @@ impl TriPeaksSessionIo for Native<'_> {
         } else {
             (false, false)
         };
+        let (recon_cleared_by_rank, recon_score_delta) = if completed_during_recon
+            && let Some(route) = report.document.planned_route.as_deref()
+            && let Ok(replay) = verify_move_sequence(&report.document.slots, route)
+        {
+            (
+                replay.final_position.cleared_by_rank,
+                replay.final_position.score_delta,
+            )
+        } else {
+            ([0; 13], 0)
+        };
+        let origin = if force_challenge
+            || report.detected_challenge.is_some()
+            || !matches!(report.objective, Objective::ClearBoard)
+        {
+            tripeaks_route::SessionOrigin::Challenge
+        } else {
+            tripeaks_route::SessionOrigin::Normal
+        };
 
         send_log(
             self.events,
@@ -1159,11 +1362,14 @@ impl TriPeaksSessionIo for Native<'_> {
             document: report.document,
             bytes,
             objective: report.objective,
+            origin,
             detected_challenge: report.detected_challenge,
             root_hash: report.root_hash,
             completed_during_recon,
             terminal_challenge_complete,
             terminal_board_win,
+            recon_cleared_by_rank,
+            recon_score_delta,
             counts,
             probes_used: self.probes_used,
         })
@@ -1201,6 +1407,7 @@ impl TriPeaksSessionIo for Native<'_> {
                 bytes: acquired.bytes.clone(),
                 cancel: self.cancel,
                 events: self.events,
+                search_limits: DEFAULT_SEARCH_LIMITS,
             },
             || match stop_trace.check(&events.latest_frame.reconnaissance, context, cancel) {
                 Ok(()) => Ok(false),
@@ -1274,13 +1481,17 @@ impl TriPeaksSessionIo for Native<'_> {
                 replay,
                 max_tableau_cleared,
                 banked_rank_count,
+                proof,
+                unknown_slots,
                 ..
             } => {
                 let score_delta = replay.final_position.score_delta;
                 let banked_rank_count = *banked_rank_count;
                 let max_tableau_cleared = *max_tableau_cleared;
                 let objective = *objective;
-                let partial_route = if !moves.is_empty() {
+                let proof = *proof;
+                let unknown_slots = *unknown_slots;
+                let partial_route = if unknown_slots == 0 && !moves.is_empty() {
                     Some(
                         tripeaks_route::Prepared::new(identity, report, self.cancel)
                             .map_err(|err| err.to_string())?,
@@ -1294,6 +1505,8 @@ impl TriPeaksSessionIo for Native<'_> {
                     banked_rank_count,
                     score_delta,
                     cards_cleared: max_tableau_cleared,
+                    proof,
+                    unknown_slots,
                 })
             }
             tripeaks_calculation::Outcome::Cancelled(_) => {
@@ -1309,7 +1522,7 @@ impl TriPeaksSessionIo for Native<'_> {
     fn execute(
         &mut self,
         generation: u64,
-        _acquired: &AcquiredBoard,
+        acquired: &AcquiredBoard,
         route: Self::Route,
         _allow_final_modal: bool,
     ) -> Result<ExecutedBoard, String> {
@@ -1338,11 +1551,14 @@ impl TriPeaksSessionIo for Native<'_> {
         );
 
         let execution = tripeaks_route::execute_for_session(
-            plan_id,
-            route_run_id,
-            tripeaks_route::PlaybackAction::MultiStep,
-            self.request.step_timing,
-            false,
+            tripeaks_route::SessionExecutionRequest {
+                plan: plan_id,
+                run_id: route_run_id,
+                action: tripeaks_route::PlaybackAction::MultiStep,
+                timings: self.request.step_timing,
+                record_terminal_win_scope: false,
+                origin: acquired.origin,
+            },
             self.events,
             self.cancel,
         );
@@ -1372,6 +1588,7 @@ impl TriPeaksSessionIo for Native<'_> {
                     completion,
                     cards_cleared: progress.cards_cleared,
                     score_delta: progress.score_delta,
+                    cleared_by_rank: progress.cleared_by_rank,
                 })
             }
             Err(failure) => {
@@ -1422,7 +1639,11 @@ impl TriPeaksSessionIo for Native<'_> {
                     next_confirm = None;
                     overlay_confirm += 1;
                     if overlay_confirm >= 2 {
-                        let _ = challenge_mode;
+                        if challenge_mode {
+                            return Err(format!(
+                                "Unexpected Normal Board Win overlay during Challenge transition on cycle {generation}"
+                            ));
+                        }
                         return Ok(PostClearTransition::BoardWinOverlay);
                     }
                 }
@@ -1451,6 +1672,62 @@ impl TriPeaksSessionIo for Native<'_> {
                     return Err(format!(
                         "Unexpected No Moves Remaining modal after clearing TriPeaks board {generation}"
                     ));
+                }
+                FrameClassification::Unsupported(_) if challenge_mode => {
+                    challenge_confirm = 0;
+                    overlay_confirm = 0;
+                    next_confirm = None;
+                    if matches!(
+                        classify_challenge_handoff(&frame).map_err(|e| e.to_string())?,
+                        Some(
+                            ChallengeTerminalHandoff::XpCounting
+                                | ChallengeTerminalHandoff::LevelUp
+                        )
+                    ) {
+                        let context = self.context;
+                        let events = self.events;
+                        let cancel = self.cancel;
+                        let stop_trace = &self.stop_trace;
+                        let mut on_frame = |captured: &CapturedFrame| {
+                            self.latest = Some(captured.clone());
+                            events.publish_diagnostic_frame(captured.clone());
+                        };
+                        let mut uncertain = false;
+                        let inner_ops = NativeOperations {
+                            qmp: &mut qmp,
+                            socket: &context.socket_path,
+                            events,
+                            cancel,
+                            active: || {
+                                stop_trace
+                                    .check(&events.latest_frame.reconnaissance, context, cancel)
+                                    .map_err(|err| {
+                                        if cancel.load(Ordering::Acquire) {
+                                            OperationError::Cancelled
+                                        } else {
+                                            OperationError::Adapter(err)
+                                        }
+                                    })
+                            },
+                            guard: authorise_tripeaks_input,
+                            last_timing: None,
+                        };
+                        let mut poll_session =
+                            crate::game_operations::Session::new(TrackedOperations::new(inner_ops));
+                        let mut driver = TriPeaksSessionDriver {
+                            session: &mut poll_session,
+                            cancel,
+                            on_frame: &mut on_frame,
+                            uncertain_latched: &mut uncertain,
+                            timings: TriPeaksStepTiming::from(&TriPeaksReconConfig::default()),
+                        };
+                        if driver
+                            .poll_challenge_complete_or_handoff()
+                            .map_err(|e| e.to_string())?
+                        {
+                            return Ok(PostClearTransition::ChallengeComplete);
+                        }
+                    }
                 }
                 FrameClassification::Settling | FrameClassification::Unsupported(_) => {
                     challenge_confirm = 0;
@@ -1813,7 +2090,7 @@ mod tests {
     };
 
     use serde_json::{Value, json};
-    use xsar::{games::cards::Rank, tcp::protocol::v3};
+    use xsar::{games::cards::Rank, search::SearchStop, tcp::protocol::v3};
 
     use super::super::{LatestFrameSlot, TestCaptureBackend, WorkerImageDiagnostics};
     use super::*;
@@ -1858,6 +2135,8 @@ mod tests {
         fours_header: CapturedFrame,
         /// Calibrated `Challenge Complete!` overlay with `"Continue"`.
         challenge_complete: CapturedFrame,
+        /// Active Challenge XP-counting animation overlay (`ChallengeTerminalHandoff::XpCounting`).
+        challenge_xp: CapturedFrame,
         /// Discovered `(x, y)` corner origin inside `fc01` indexed by canonical card ID `0..52`.
         corner_origins: [(u32, u32); DEAL_SLOT_COUNT],
     }
@@ -1907,6 +2186,10 @@ mod tests {
                 ),
                 "boards-complete-continue",
             );
+            let challenge_xp = decode(
+                include_bytes!("../../tests/fixtures/freecell-challenge-complete-xp-20261113.png"),
+                "freecell-challenge-complete-xp",
+            );
             let mut corner_origins = [None; DEAL_SLOT_COUNT];
             for (col_idx, &x) in PLAY_X.iter().enumerate() {
                 let max_rows = if col_idx < 4 { 7 } else { 6 };
@@ -1932,6 +2215,7 @@ mod tests {
                 normal_two,
                 fours_header,
                 challenge_complete,
+                challenge_xp,
                 corner_origins: corner_origins
                     .map(|opt| opt.expect("FC01 contains all 52 canonical cards")),
             }
@@ -1952,6 +2236,10 @@ mod tests {
         terminal_challenge_complete: bool,
         /// `true` when `completed_during_recon` hit Normal 3/3 win.
         terminal_board_win: bool,
+        /// Optional target-rank removals achieved during `completed_during_recon`.
+        recon_cleared_by_rank: [u8; 13],
+        /// Optional score delta achieved during `completed_during_recon`.
+        recon_score_delta: u32,
         /// Scripted planning decision returned by `plan`.
         plan_decision: PlanDecision<String>,
         /// Outcome returned when `execute` consumes `plan_decision`'s route.
@@ -1985,6 +2273,8 @@ mod tests {
         plan_calls: Vec<(u64, Objective)>,
         /// `(generation, route_tag, allow_final_modal)` per `execute`.
         execute_calls: Vec<(u64, String, bool)>,
+        /// `(generation, origin)` passed into `execute` from `AcquiredBoard`.
+        execute_origins: Vec<(u64, tripeaks_route::SessionOrigin)>,
         /// Total `finish_terminal_win_images` calls.
         finish_win_calls: usize,
         /// `(generation, previous_root_hash)` per `restart_game`.
@@ -2050,16 +2340,27 @@ mod tests {
                 .pop_front()
                 .ok_or_else(|| format!("missing scripted board for cycle {generation}"))?;
             let objective = script.objective;
+            let origin = if force_challenge
+                || script.detected_challenge.is_some()
+                || !matches!(objective, Objective::ClearBoard)
+            {
+                tripeaks_route::SessionOrigin::Challenge
+            } else {
+                tripeaks_route::SessionOrigin::Normal
+            };
             let acquired = AcquiredBoard {
                 export_path: PathBuf::from(format!("mock-tripeaks-g{generation}.json")),
                 document: ScriptedBoard::sample_document(objective),
                 bytes: Vec::new(),
                 objective,
+                origin,
                 detected_challenge: script.detected_challenge,
                 root_hash: script.root_hash,
                 completed_during_recon: script.completed_during_recon,
                 terminal_challenge_complete: script.terminal_challenge_complete,
                 terminal_board_win: script.terminal_board_win,
+                recon_cleared_by_rank: script.recon_cleared_by_rank,
+                recon_score_delta: script.recon_score_delta,
                 counts: SlotKnowledgeCounts {
                     known: 52,
                     unknown: 0,
@@ -2092,12 +2393,16 @@ mod tests {
                     banked_rank_count,
                     score_delta,
                     cards_cleared,
+                    proof,
+                    unknown_slots,
                 } => PlanDecision::UnsolvablePartial {
                     route: route.clone(),
                     objective: *objective,
                     banked_rank_count: *banked_rank_count,
                     score_delta: *score_delta,
                     cards_cleared: *cards_cleared,
+                    proof: *proof,
+                    unknown_slots: *unknown_slots,
                 },
             })
         }
@@ -2105,13 +2410,14 @@ mod tests {
         fn execute(
             &mut self,
             generation: u64,
-            _acquired: &AcquiredBoard,
+            acquired: &AcquiredBoard,
             route: Self::Route,
             allow_final_modal: bool,
         ) -> Result<ExecutedBoard, String> {
             self.log
                 .execute_calls
                 .push((generation, route, allow_final_modal));
+            self.log.execute_origins.push((generation, acquired.origin));
             Ok(self.current.as_ref().expect("current board").executed)
         }
 
@@ -2157,6 +2463,8 @@ mod tests {
             completed_during_recon: false,
             terminal_challenge_complete: false,
             terminal_board_win: false,
+            recon_cleared_by_rank: [0; 13],
+            recon_score_delta: 0,
             plan_decision: PlanDecision::Solved {
                 route: format!("route-{root_hash:#x}"),
                 escalated_clear_board,
@@ -2165,6 +2473,7 @@ mod tests {
                 completion,
                 cards_cleared,
                 score_delta,
+                cleared_by_rank: [0; 13],
             },
             post_clear: None,
         }
@@ -2364,6 +2673,8 @@ mod tests {
             completed_during_recon: true,
             terminal_challenge_complete: true,
             terminal_board_win: false,
+            recon_cleared_by_rank: [0; 13],
+            recon_score_delta: 0,
             plan_decision: PlanDecision::Solved {
                 route: "unused".to_owned(),
                 escalated_clear_board: false,
@@ -2372,6 +2683,7 @@ mod tests {
                 completion: tripeaks_route::Completion::ChallengeComplete,
                 cards_cleared: 1,
                 score_delta: 200,
+                cleared_by_rank: [0; 13],
             },
             post_clear: None,
         }]);
@@ -2401,6 +2713,8 @@ mod tests {
             completed_during_recon: false,
             terminal_challenge_complete: false,
             terminal_board_win: false,
+            recon_cleared_by_rank: [0; 13],
+            recon_score_delta: 0,
             plan_decision: PlanDecision::UnsolvablePartial {
                 route: Some("bank-rank".to_owned()),
                 objective: Objective::ClearRankQuota {
@@ -2410,11 +2724,14 @@ mod tests {
                 banked_rank_count: 2,
                 score_delta: 600,
                 cards_cleared: 12,
+                proof: PartialProof::Exhaustive,
+                unknown_slots: 0,
             },
             executed: ExecutedBoard {
                 completion: tripeaks_route::Completion::PartialComplete,
                 cards_cleared: 6,
                 score_delta: 600,
+                cleared_by_rank: [0; 13],
             },
             post_clear: None,
         }]);
@@ -2438,6 +2755,8 @@ mod tests {
             completed_during_recon: false,
             terminal_challenge_complete: false,
             terminal_board_win: false,
+            recon_cleared_by_rank: [0; 13],
+            recon_score_delta: 0,
             plan_decision: PlanDecision::UnsolvablePartial {
                 route: Some("bank-score".to_owned()),
                 objective: Objective::ReachScoreDelta {
@@ -2446,11 +2765,14 @@ mod tests {
                 banked_rank_count: 0,
                 score_delta: 1_500,
                 cards_cleared: 10,
+                proof: PartialProof::Exhaustive,
+                unknown_slots: 0,
             },
             executed: ExecutedBoard {
                 completion: tripeaks_route::Completion::PartialComplete,
                 cards_cleared: 5,
                 score_delta: 1_500,
+                cleared_by_rank: [0; 13],
             },
             post_clear: None,
         }]);
@@ -2468,17 +2790,22 @@ mod tests {
             completed_during_recon: false,
             terminal_challenge_complete: false,
             terminal_board_win: false,
+            recon_cleared_by_rank: [0; 13],
+            recon_score_delta: 0,
             plan_decision: PlanDecision::UnsolvablePartial {
                 route: None,
                 objective: Objective::ClearBoard,
                 banked_rank_count: 0,
                 score_delta: 0,
                 cards_cleared: 9,
+                proof: PartialProof::Exhaustive,
+                unknown_slots: 0,
             },
             executed: ExecutedBoard {
                 completion: tripeaks_route::Completion::PartialComplete,
                 cards_cleared: 0,
                 score_delta: 0,
+                cleared_by_rank: [0; 13],
             },
             post_clear: None,
         }]);
@@ -2702,14 +3029,18 @@ mod tests {
         bgr
     }
 
-    /// Synthesize a packed 24-bit BGR Challenge gameplay or `Challenge Complete!` frame.
+    /// Synthesize a packed 24-bit BGR Challenge gameplay, XP handoff, or `Challenge Complete!` frame.
     fn render_challenge_bgr(
         slots: &[CardSlot; DEAL_SLOT_COUNT],
         position: TriPeaksPosition,
         undo_enabled: bool,
         challenge_complete: bool,
+        challenge_xp: bool,
     ) -> Vec<u8> {
         let base = assets();
+        if challenge_xp {
+            return frame_to_bgr(&base.challenge_xp);
+        }
         if challenge_complete {
             return frame_to_bgr(&base.challenge_complete);
         }
@@ -2800,6 +3131,8 @@ mod tests {
         history: Vec<TriPeaksMove>,
         /// Set to `true` once tapping the Challenge Four finishes `Challenge Complete!`.
         challenge_complete: bool,
+        /// Set to `true` to serve the active Challenge XP-counting animation screen.
+        challenge_xp: bool,
     }
 
     /// Cache key for live session `BgrV3` frames.
@@ -2815,10 +3148,14 @@ mod tests {
         undo_enabled: bool,
         /// Whether terminal `Challenge Complete!` overlay is displayed.
         challenge_complete: bool,
+        /// Whether active Challenge XP-counting animation frame is displayed.
+        challenge_xp: bool,
     }
 
     /// RAII local `AF_UNIX` QMP + TCP `BgrV3` loopback harness for `tripeaks_session::run`.
     struct LiveLoopback {
+        /// Shared mutable guest state accessible for post-clear transition transitions.
+        guest: Arc<Mutex<LiveGuest>>,
         /// Shutdown latch torn down on drop.
         shutdown: Arc<AtomicBool>,
         /// Thread-local `CaptureMode::BgrV3` guard.
@@ -2870,6 +3207,7 @@ mod tests {
             position: root,
             history: Vec::new(),
             challenge_complete: false,
+            challenge_xp: false,
         }));
         let shutdown = Arc::new(AtomicBool::new(false));
 
@@ -3051,6 +3389,7 @@ mod tests {
         });
 
         LiveLoopback {
+            guest,
             shutdown,
             _backend: TestCaptureBackend::tcp_mode(address, CaptureMode::BgrV3),
             qmp_thread: Some(qmp_thread),
@@ -3093,6 +3432,7 @@ mod tests {
                         waste_id: g.position.waste_card.0,
                         undo_enabled: !g.history.is_empty(),
                         challenge_complete: g.challenge_complete,
+                        challenge_xp: g.challenge_xp,
                     },
                 )
             };
@@ -3110,6 +3450,7 @@ mod tests {
                     pos,
                     key.undo_enabled,
                     key.challenge_complete,
+                    key.challenge_xp,
                 ))
             }));
             let header = v3::ResponseHeader::success(
@@ -3234,5 +3575,459 @@ mod tests {
         assert!(done_disabled.result.is_ok(), "{:?}", done_disabled.result);
         assert_eq!(done_disabled.completed_boards, 1);
         assert_eq!(done_disabled.completed_games, 1);
+    }
+
+    /// `Objective::ClearRankQuota` decrements remaining quota across boards without a fresh HUD banner
+    /// read (`detected_challenge == None`), both after `io.execute` and after `completed_during_recon`.
+    #[test]
+    fn clear_rank_quota_decrements_across_boards_without_fresh_banner_read() {
+        // 1. `io.execute` path: start with 5 Fours left, clear 2 on Cycle 1 -> Cycle 2 gets remaining=3;
+        //    clearing >= remaining on Cycle 2 (when NextBoardDealt intervenes) clamps `.max(1)`.
+        let mut by_rank_c1 = [0_u8; 13];
+        by_rank_c1[3] = 2;
+        let mut by_rank_c2 = [0_u8; 13];
+        by_rank_c2[3] = 5;
+
+        let mut io = MockSessionIo::new(vec![
+            ScriptedBoard {
+                root_hash: 0x8001,
+                objective: Objective::ClearRankQuota {
+                    rank: 3,
+                    remaining: 5,
+                },
+                detected_challenge: Some(TriPeaksChallenge::ClearRank {
+                    rank: Rank::Four,
+                    current: 0,
+                    target: 5,
+                }),
+                completed_during_recon: false,
+                terminal_challenge_complete: false,
+                terminal_board_win: false,
+                recon_cleared_by_rank: [0; 13],
+                recon_score_delta: 0,
+                plan_decision: PlanDecision::Solved {
+                    route: "c1".to_owned(),
+                    escalated_clear_board: true,
+                },
+                executed: ExecutedBoard {
+                    completion: tripeaks_route::Completion::NextBoardDealt { root_hash: 0x8002 },
+                    cards_cleared: 28,
+                    score_delta: 2_000,
+                    cleared_by_rank: by_rank_c1,
+                },
+                post_clear: None,
+            },
+            ScriptedBoard {
+                root_hash: 0x8002,
+                objective: Objective::ClearBoard,
+                detected_challenge: None, // no fresh banner read on cycle 2!
+                completed_during_recon: false,
+                terminal_challenge_complete: false,
+                terminal_board_win: false,
+                recon_cleared_by_rank: [0; 13],
+                recon_score_delta: 0,
+                plan_decision: PlanDecision::Solved {
+                    route: "c2".to_owned(),
+                    escalated_clear_board: true,
+                },
+                executed: ExecutedBoard {
+                    completion: tripeaks_route::Completion::NextBoardDealt { root_hash: 0x8003 },
+                    cards_cleared: 28,
+                    score_delta: 2_000,
+                    cleared_by_rank: by_rank_c2,
+                },
+                post_clear: None,
+            },
+            solved_script(
+                0x8003,
+                Objective::ClearBoard,
+                None,
+                false,
+                tripeaks_route::Completion::ChallengeComplete,
+                500,
+                4,
+            ),
+        ]);
+        let out = drive_tripeaks_session(TriPeaksPlayStyle::Continuous, &mut io)
+            .expect("multi-board rank Challenge completes cleanly");
+        assert_eq!(out.completed_boards, 3);
+        assert_eq!(out.completed_games, 1);
+        assert_eq!(
+            io.log.plan_calls[1],
+            (
+                2,
+                Objective::ClearRankQuota {
+                    rank: 3,
+                    remaining: 3
+                }
+            )
+        );
+        assert_eq!(
+            io.log.plan_calls[2],
+            (
+                3,
+                Objective::ClearRankQuota {
+                    rank: 3,
+                    remaining: 1
+                }
+            )
+        );
+
+        // 2. `completed_during_recon` -> `NextBoardDealt` path decrements `ClearRankQuota` identically.
+        let mut recon_by_rank = [0_u8; 13];
+        recon_by_rank[3] = 3;
+        let mut recon_io = MockSessionIo::new(vec![
+            ScriptedBoard {
+                root_hash: 0x8101,
+                objective: Objective::ClearRankQuota {
+                    rank: 3,
+                    remaining: 5,
+                },
+                detected_challenge: Some(TriPeaksChallenge::ClearRank {
+                    rank: Rank::Four,
+                    current: 0,
+                    target: 5,
+                }),
+                completed_during_recon: true,
+                terminal_challenge_complete: false,
+                terminal_board_win: false,
+                recon_cleared_by_rank: recon_by_rank,
+                recon_score_delta: 900,
+                plan_decision: PlanDecision::Solved {
+                    route: "unused".to_owned(),
+                    escalated_clear_board: false,
+                },
+                executed: ExecutedBoard {
+                    completion: tripeaks_route::Completion::BoardCleared,
+                    cards_cleared: 28,
+                    score_delta: 900,
+                    cleared_by_rank: [0; 13],
+                },
+                post_clear: Some(PostClearTransition::NextBoardDealt(0x8102)),
+            },
+            solved_script(
+                0x8102,
+                Objective::ClearBoard,
+                None,
+                false,
+                tripeaks_route::Completion::ChallengeComplete,
+                800,
+                8,
+            ),
+        ]);
+        let recon_done = drive_tripeaks_session(TriPeaksPlayStyle::Continuous, &mut recon_io)
+            .expect("recon quota decrement completes cleanly");
+        assert_eq!(recon_done.completed_boards, 2);
+        assert_eq!(recon_done.completed_games, 1);
+        assert_eq!(
+            recon_io.log.plan_calls[0],
+            (
+                2,
+                Objective::ClearRankQuota {
+                    rank: 3,
+                    remaining: 2
+                }
+            )
+        );
+    }
+
+    /// Explicit `SessionOrigin::Challenge` vs `SessionOrigin::Normal` propagates across `Boards cleared`
+    /// and `Solve the deck` (`Objective::ClearBoard`), including `SingleBoard` Challenge retirement.
+    #[test]
+    fn session_origin_distinguishes_boards_and_solve_deck_challenges_from_normal() {
+        // 1. Multi-board `Boards { current: 1, target: 3 }`: Cycle 2 has `detected_challenge: None`,
+        //    yet BOTH cycles execute with explicit `SessionOrigin::Challenge` (never `Normal`).
+        let mut boards_io = MockSessionIo::new(vec![
+            solved_script(
+                0x8201,
+                Objective::ClearBoard,
+                Some(TriPeaksChallenge::Boards {
+                    current: 1,
+                    target: 3,
+                }),
+                false,
+                tripeaks_route::Completion::BoardCleared,
+                2_100,
+                28,
+            ),
+            solved_script(
+                0x8202,
+                Objective::ClearBoard,
+                None,
+                false,
+                tripeaks_route::Completion::BoardCleared,
+                2_100,
+                28,
+            ),
+        ]);
+        boards_io.boards[0].post_clear = Some(PostClearTransition::NextBoardDealt(0x8202));
+        boards_io.boards[1].post_clear = Some(PostClearTransition::ChallengeComplete);
+        let boards_out = drive_tripeaks_session(TriPeaksPlayStyle::Continuous, &mut boards_io)
+            .expect("Boards cleared challenge completes cleanly");
+        assert_eq!(boards_out.completed_boards, 2);
+        assert_eq!(boards_out.completed_games, 1);
+        assert_eq!(
+            boards_io.log.execute_origins,
+            vec![
+                (1, tripeaks_route::SessionOrigin::Challenge),
+                (2, tripeaks_route::SessionOrigin::Challenge),
+            ]
+        );
+
+        // 2. `SingleBoard` + `TriPeaksChallenge::SolveDeck` landing on `BoardCleared` waits via
+        //    `wait_next_board_after_clear` and retires Challenge Complete cleanly with zero clicks.
+        let mut single_solve_deck = MockSessionIo::new(vec![solved_script(
+            0x8301,
+            Objective::ClearBoard,
+            Some(TriPeaksChallenge::SolveDeck),
+            false,
+            tripeaks_route::Completion::BoardCleared,
+            2_500,
+            28,
+        )]);
+        single_solve_deck.boards[0].post_clear = Some(PostClearTransition::ChallengeComplete);
+        let single_challenge_out =
+            drive_tripeaks_session(TriPeaksPlayStyle::SingleBoard, &mut single_solve_deck)
+                .expect("SingleBoard SolveDeck BoardCleared awaits ChallengeComplete");
+        assert_eq!(single_challenge_out.completed_boards, 1);
+        assert_eq!(single_challenge_out.completed_games, 1);
+        assert_eq!(single_solve_deck.log.finish_win_calls, 1);
+        assert_eq!(
+            single_solve_deck.log.execute_origins,
+            vec![(1, tripeaks_route::SessionOrigin::Challenge)]
+        );
+
+        // 3. `SingleBoard` + `Normal` (`ClearBoard`, no Challenge banner) executes with `SessionOrigin::Normal`
+        //    and stops immediately on `BoardCleared` without waiting for transition.
+        let mut single_normal = MockSessionIo::new(vec![solved_script(
+            0x8401,
+            Objective::ClearBoard,
+            None,
+            false,
+            tripeaks_route::Completion::BoardCleared,
+            2_500,
+            28,
+        )]);
+        let single_norm_out =
+            drive_tripeaks_session(TriPeaksPlayStyle::SingleBoard, &mut single_normal)
+                .expect("SingleBoard Normal stops cleanly on BoardCleared");
+        assert_eq!(single_norm_out.completed_boards, 1);
+        assert_eq!(single_norm_out.completed_games, 0);
+        assert_eq!(single_normal.log.finish_win_calls, 0);
+        assert_eq!(
+            single_normal.log.execute_origins,
+            vec![(1, tripeaks_route::SessionOrigin::Normal)]
+        );
+
+        // 4. Active Challenges refuse `BoardWinOverlay` restarts across both execution and recon paths.
+        let mut challenge_win_exec = MockSessionIo::new(vec![solved_script(
+            0x8402,
+            Objective::ClearBoard,
+            Some(TriPeaksChallenge::SolveDeck),
+            false,
+            tripeaks_route::Completion::BoardWinOverlay,
+            2_500,
+            28,
+        )]);
+        let win_exec_err =
+            drive_tripeaks_session(TriPeaksPlayStyle::Continuous, &mut challenge_win_exec)
+                .expect_err("Challenge must refuse Normal BoardWinOverlay execution completion");
+        assert!(win_exec_err.contains("Challenge"));
+        assert_eq!(challenge_win_exec.log.restart_calls.len(), 0);
+
+        let mut challenge_win_recon = MockSessionIo::new(vec![ScriptedBoard {
+            root_hash: 0x8403,
+            objective: Objective::ClearBoard,
+            detected_challenge: Some(TriPeaksChallenge::Boards {
+                current: 1,
+                target: 2,
+            }),
+            completed_during_recon: true,
+            terminal_challenge_complete: false,
+            terminal_board_win: true,
+            recon_cleared_by_rank: [0; 13],
+            recon_score_delta: 0,
+            plan_decision: PlanDecision::Solved {
+                route: "unused".to_owned(),
+                escalated_clear_board: false,
+            },
+            executed: ExecutedBoard {
+                completion: tripeaks_route::Completion::BoardCleared,
+                cards_cleared: 28,
+                score_delta: 0,
+                cleared_by_rank: [0; 13],
+            },
+            post_clear: None,
+        }]);
+        let win_recon_err =
+            drive_tripeaks_session(TriPeaksPlayStyle::Continuous, &mut challenge_win_recon)
+                .expect_err("Challenge must refuse terminal_board_win during recon");
+        assert!(win_recon_err.contains("Challenge"));
+        assert_eq!(challenge_win_recon.log.restart_calls.len(), 0);
+    }
+
+    /// Partial decisions with `Unknown` slots or bounded cutoffs refuse false exhaustion wording
+    /// and never click irreversible partial moves when `Unknown` slots remain.
+    #[test]
+    fn bounded_and_unknown_unsolvable_partial_refuse_auto_banking_and_preserve_honest_wording() {
+        let mut unknown_io = MockSessionIo::new(vec![ScriptedBoard {
+            root_hash: 0x8501,
+            objective: Objective::ClearRankQuota {
+                rank: 3,
+                remaining: 4,
+            },
+            detected_challenge: Some(TriPeaksChallenge::ClearRank {
+                rank: Rank::Four,
+                current: 0,
+                target: 4,
+            }),
+            completed_during_recon: false,
+            terminal_challenge_complete: false,
+            terminal_board_win: false,
+            recon_cleared_by_rank: [0; 13],
+            recon_score_delta: 0,
+            plan_decision: PlanDecision::UnsolvablePartial {
+                route: Some("do-not-execute-with-unknowns".to_owned()),
+                objective: Objective::ClearRankQuota {
+                    rank: 3,
+                    remaining: 4,
+                },
+                banked_rank_count: 2,
+                score_delta: 500,
+                cards_cleared: 11,
+                proof: PartialProof::Bounded(SearchStop::TimeLimit),
+                unknown_slots: 12,
+            },
+            executed: ExecutedBoard {
+                completion: tripeaks_route::Completion::PartialComplete,
+                cards_cleared: 0,
+                score_delta: 0,
+                cleared_by_rank: [0; 13],
+            },
+            post_clear: None,
+        }]);
+        let unknown_out = drive_tripeaks_session(TriPeaksPlayStyle::Continuous, &mut unknown_io)
+            .expect("unknown partial halts safely at T=0");
+        assert_eq!(unknown_io.log.execute_calls.len(), 0);
+        assert!(unknown_out.summary.contains("12 Unknown slots remain"));
+        assert!(unknown_out.summary.contains("search stopped at time limit"));
+        assert!(!unknown_out.summary.contains("Proved untouched"));
+        assert!(
+            !unknown_out
+                .summary
+                .to_ascii_lowercase()
+                .contains("epistemic")
+        );
+
+        let mut bounded_io = MockSessionIo::new(vec![ScriptedBoard {
+            root_hash: 0x8502,
+            objective: Objective::ClearBoard,
+            detected_challenge: None,
+            completed_during_recon: false,
+            terminal_challenge_complete: false,
+            terminal_board_win: false,
+            recon_cleared_by_rank: [0; 13],
+            recon_score_delta: 0,
+            plan_decision: PlanDecision::UnsolvablePartial {
+                route: None,
+                objective: Objective::ClearBoard,
+                banked_rank_count: 0,
+                score_delta: 0,
+                cards_cleared: 16,
+                proof: PartialProof::Bounded(SearchStop::ExpansionLimit),
+                unknown_slots: 0,
+            },
+            executed: ExecutedBoard {
+                completion: tripeaks_route::Completion::PartialComplete,
+                cards_cleared: 0,
+                score_delta: 0,
+                cleared_by_rank: [0; 13],
+            },
+            post_clear: None,
+        }]);
+        let bounded_out = drive_tripeaks_session(TriPeaksPlayStyle::Continuous, &mut bounded_io)
+            .expect("bounded partial reports maximum unproved");
+        assert!(bounded_out.summary.contains("best-found 16/28"));
+        assert!(
+            bounded_out
+                .summary
+                .contains("search stopped at expansion limit")
+        );
+        assert!(bounded_out.summary.contains("maximum unproved"));
+        assert!(!bounded_out.summary.contains("Proved untouched"));
+    }
+
+    /// Live `Native::wait_next_board_after_clear` catches active Challenge `XpCounting` handoffs
+    /// cleanly instead of timing out after clearing a Challenge board.
+    #[test]
+    fn native_wait_next_board_after_clear_handles_xp_counting_handoff() {
+        let id = NEXT_SESSION_TEST_ID.fetch_add(1, Ordering::Relaxed);
+        let sock = std::env::temp_dir().join(format!(
+            "tripeaks-session-xp-handoff-{}-{id}.sock",
+            std::process::id()
+        ));
+        let slots = single_four_challenge_slots();
+        let loopback = spawn_session_loopback(sock.clone(), slots);
+        loopback.guest.lock().expect("guest").challenge_xp = true;
+
+        let context =
+            ControllerContext::new(sock, GameMode::TriPeaks, SolvingStrategy::ShortestPath, id);
+        let (tx, _rx) = mpsc::channel();
+        let sink = WorkerEventSink {
+            events: tx,
+            latest_frame: LatestFrameSlot::default(),
+            capture_context: Mutex::new(None),
+        };
+        let cancel = Arc::new(AtomicBool::new(false));
+        let _cap_cancel =
+            super::super::tcp_capture::CancellationScope::install(Arc::clone(&cancel));
+        sink.set_capture_context(Some(context.clone()));
+        sink.latest_frame
+            .reconnaissance
+            .select(&context, &cancel)
+            .expect("select");
+        sink.latest_frame
+            .reconnaissance
+            .queue_reconnaissance(&context, &cancel, || Ok(()))
+            .expect("queue");
+
+        let request = TriPeaksSessionRequest {
+            run_id: id,
+            play_style: TriPeaksPlayStyle::Continuous,
+            step_timing: TriPeaksStepTiming {
+                move_settle_delay: Duration::from_millis(1),
+                reobserve_delay: Duration::from_millis(1),
+                restore_settle_delay: Duration::from_millis(1),
+                max_step_observations: 4,
+                max_restore_observations: 6,
+            },
+            board_redeal_settle: Duration::from_millis(1),
+        };
+        let mut native = Native {
+            stop_trace: StopTrace::default(),
+            phase_error: None,
+            context: &context,
+            request: &request,
+            events: &sink,
+            cancel: &cancel,
+            phase: SessionPhase::Transition,
+            generation: 1,
+            completed_boards: 1,
+            completed_games: 0,
+            counts: None,
+            probes_used: 0,
+            objective_label: None,
+            export_path: None,
+            latest_calculation: None,
+            latest: None,
+            failure_saved: false,
+            failure_directory: None,
+        };
+
+        let transition = native
+            .wait_next_board_after_clear(1, 0xDEAD_BEEF, true)
+            .expect("XP counting handoff resolves cleanly to ChallengeComplete");
+        assert_eq!(transition, PostClearTransition::ChallengeComplete);
+        drop(loopback);
     }
 }

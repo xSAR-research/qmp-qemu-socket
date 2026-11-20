@@ -859,7 +859,6 @@ mod tests {
 
 
     /// Keep Pyramid click history independent from row reconciliation and reset it per board.
-
     #[test]
     fn pyramid_board_record_is_separate_from_tripeaks_row_hints() {
         let mut state = TableauScanState::for_mode(GameMode::Pyramid);
@@ -886,7 +885,6 @@ mod tests {
 
 
     /// Reject non-calibrated Pyramid frame dimensions at the common tracker boundary.
-
     #[test]
     fn pyramid_analysis_rejects_frame_dimensions_before_reading_pixels() {
         let state = TableauScanState::for_mode(GameMode::Pyramid);
@@ -1037,7 +1035,6 @@ mod tests {
 
 
     /// Keep an empty frame a read-only no-highlight observation.
-
     #[test]
     fn reports_no_highlight_for_a_blank_calibrated_frame() {
         let frame = blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT);
@@ -1051,7 +1048,6 @@ mod tests {
 
 
     /// Select the stock Draw key operation from a calibrated lower-panel halo.
-
     #[test]
     fn reports_draw_for_the_stock_halo() {
         let mut frame = blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT);
@@ -1066,7 +1062,6 @@ mod tests {
 
 
     /// Keep Draw detection across the audited stock movement lane.
-
     #[test]
     fn reports_draw_after_the_stock_pile_moves_left() {
         let mut frame = blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT);
@@ -1090,7 +1085,6 @@ mod tests {
 
 
     /// Reject an otherwise long gold run beyond the stock scan boundary.
-
     #[test]
     fn does_not_treat_a_gold_run_outside_the_stock_lane_as_draw() {
         let mut frame = blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT);
@@ -1112,7 +1106,6 @@ mod tests {
 
 
     /// Accept a calibrated scene probe filled with the expected green felt.
-
     #[test]
     fn accepts_a_green_felt_gameplay_scene() {
         let mut frame = blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT);
@@ -1126,7 +1119,6 @@ mod tests {
 
 
     /// Reject modal-style blue pixels at the gameplay scene gate.
-
     #[test]
     fn rejects_a_blue_dialog_scene() {
         let mut frame = blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT);
@@ -1140,7 +1132,6 @@ mod tests {
 
 
     /// Keep the final bottom-row slot mapped to its canonical click centre.
-
     #[test]
     fn reports_row_four_column_ten_and_its_calibrated_centre() {
         let mut frame = blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT);
@@ -1155,7 +1146,6 @@ mod tests {
 
 
     /// Fail closed when an exact halo would move input away from the calibrated card centre.
-
     #[test]
     fn rejects_a_shifted_exact_halo_anchor_instead_of_shifting_the_click() {
         let mut frame = blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT);
@@ -1176,7 +1166,6 @@ mod tests {
 
 
     /// Recover the observed dark halo rendering drift through the bounded relaxed path.
-
     #[test]
     fn reports_row_three_card_from_a_dark_halo_shifted_four_pixels() {
         let mut frame = blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT);
@@ -1196,7 +1185,6 @@ mod tests {
 
 
     /// Count separately exposed top cards for final-tableau context.
-
     #[test]
     fn counts_individual_face_up_cards_on_the_top_row() {
         let mut frame = blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT);
@@ -1228,7 +1216,6 @@ mod tests {
 
 
     /// Preserve ambiguity when stock and tableau both contain eligible halos.
-
     #[test]
     fn reports_multiple_valid_highlights_as_ambiguous() {
         let mut frame = blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT);
@@ -1244,7 +1231,6 @@ mod tests {
 
 
     /// Exercise profile priority selection when a bottom target precedes tableau matches.
-
     #[test]
     fn priority_policy_selects_the_first_bottom_target_without_scanning_tableau() {
         let mut frame = blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT);
@@ -1263,7 +1249,6 @@ mod tests {
 
 
     /// Keep priority selection deterministic within a lower tableau row.
-
     #[test]
     fn priority_policy_selects_the_first_card_in_lower_to_upper_scan_order() {
         let mut frame = blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT);
@@ -1281,7 +1266,6 @@ mod tests {
 
 
     /// Retain non-contiguous row hints and reject an empty scan-state fixture.
-
     #[test]
     fn row_masks_preserve_gaps_and_derive_valid_bounds() {
         let mask = row_mask(&[2, 4]);
@@ -1298,7 +1282,6 @@ mod tests {
 
 
     /// Widen a bottom-row hint when white occupancy reveals an upper-row target.
-
     #[test]
     fn finds_an_upper_row_after_reconciling_white_bands() {
         let mut frame = blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT);
@@ -1317,7 +1300,6 @@ mod tests {
 
 
     /// Preserve gaps while combining independent face-up row observations.
-
     #[test]
     fn white_reconciliation_keeps_non_contiguous_active_rows() {
         let mut frame = blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT);
@@ -1337,7 +1319,6 @@ mod tests {
 
 
     /// Recover a lower-row target after a stale top-row hint using white probes.
-
     #[test]
     fn stale_row_one_state_recovers_a_row_four_highlight() {
         let mut frame = blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT);
@@ -1352,7 +1333,6 @@ mod tests {
 
 
     /// Find an eligible lower-row halo even when occupancy probes provide no help.
-
     #[test]
     fn fallback_halo_recovers_stale_state_without_white_evidence() {
         let mut frame = blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT);
@@ -1366,7 +1346,6 @@ mod tests {
 
 
     /// Narrow the row hint after independently observing that its lower row is empty.
-
     #[test]
     fn retires_an_empty_lower_row_when_an_upper_active_row_has_the_halo() {
         let mut frame = blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT);
@@ -1385,7 +1364,6 @@ mod tests {
 
 
     /// Keep simultaneous halos ambiguous when full fallback extends the row window.
-
     #[test]
     fn full_fallback_preserves_cross_row_ambiguity() {
         let mut frame = blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT);
@@ -1403,7 +1381,6 @@ mod tests {
 
 
     /// Do not let the relaxed colour path conceal a second valid halo.
-
     #[test]
     fn relaxed_fallback_preserves_cross_row_ambiguity() {
         let mut frame = blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT);
@@ -1421,7 +1398,6 @@ mod tests {
 
 
     /// Count every eligible stock and tableau recommendation under uniqueness policy.
-
     #[test]
     fn stock_and_two_tableau_halos_report_three_way_ambiguity() {
         let mut frame = blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT);
@@ -1440,7 +1416,6 @@ mod tests {
 
 
     /// Update meaningful row observations without collapsing the hint on missing evidence.
-
     #[test]
     fn observed_mask_transitions_change_state_but_empty_evidence_does_not() {
         let mut state = TableauScanState::initial();
@@ -1464,7 +1439,6 @@ mod tests {
 
 
     /// Apply a fresh row hint once and report no change for repeated or missing observations.
-
     #[test]
     fn single_observation_updates_the_non_authoritative_row_hint() {
         let mut state = TableauScanState::initial();
@@ -1478,7 +1452,6 @@ mod tests {
 
 
     /// Retain non-contiguous row hints when the entire analysed frame lacks evidence.
-
     #[test]
     fn blank_frame_cannot_collapse_a_multi_row_state() {
         let frame = blank_frame(NOMINAL_FRAME_WIDTH, NOMINAL_FRAME_HEIGHT);
@@ -1492,7 +1465,6 @@ mod tests {
 
 
     /// Reject a frame one pixel too narrow before running any calibrated detector.
-
     #[test]
     fn rejects_a_frame_with_the_wrong_dimensions_before_detection() {
         let frame = blank_frame(NOMINAL_FRAME_WIDTH - 1, NOMINAL_FRAME_HEIGHT);

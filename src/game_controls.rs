@@ -11,7 +11,7 @@ use xsar::games::{
 };
 
 use crate::{
-    capture::CapturedFrame,
+    capture::{CapturedFrame, PixelFormat},
     cards::{TABLEAU_ROW_LENGTHS, TABLEAU_ROW_STARTS},
     detector::pixel_rgb,
     freecell::{CELL_X, FOUNDATION_X, PLAY_X},
@@ -21,13 +21,14 @@ use crate::{
     parameters::{
         FACE_UP_WHITE_CHANNEL_MINIMUM, GAMEPLAY_FELT_GREEN_BLUE_DELTA_MINIMUM,
         GAMEPLAY_FELT_GREEN_MINIMUM, GAMEPLAY_FELT_GREEN_RED_DELTA_MINIMUM,
-        GAMEPLAY_FELT_REQUIRED_FRACTION_PER_MILLE, STOCK_CARD_BOUNDS, TABLEAU_CARD_REGIONS,
-        TARGET_STOCK, WASTE_CARD_BOUNDS,
+        GAMEPLAY_FELT_REQUIRED_FRACTION_PER_MILLE, NOMINAL_FRAME_HEIGHT, NOMINAL_FRAME_WIDTH,
+        STOCK_CARD_BOUNDS, TABLEAU_CARD_REGIONS, TARGET_STOCK, WASTE_CARD_BOUNDS,
     },
     pyramid_recon::vision::{
         CornerClassification, classify_foreground_corner, pyramid_tableau_origin,
         read_pyramid_draw_card,
     },
+    tripeaks_progress::{UNDO_LAST_MOVE_COMPACT_CLICK_POINT, observe_no_moves_modal},
 };
 
 /// Native vertical origins for the initial seven rows of a Free Cell tableau cascade.
@@ -731,6 +732,18 @@ const TRIPEAKS_ROOT_STOCK_LEFT_STACK_BOUNDS: PixelRect = PixelRect::new(768, 698
 /// Minimum neutral bright paper per-mille fraction across the `T = 0` Stock deck stack.
 const TRIPEAKS_ROOT_STOCK_STACK_WHITE_PER_MILLE: u64 = 950;
 
+/// Minimum red channel on warm ivory Challenge target-rank card paper (`RGB ~ [252, 246, 230]`).
+const TRIPEAKS_TARGET_PAPER_RED_MINIMUM: u8 = 242;
+
+/// Minimum green channel on warm ivory Challenge target-rank card paper.
+const TRIPEAKS_TARGET_PAPER_GREEN_MINIMUM: u8 = 235;
+
+/// Minimum blue channel on warm ivory Challenge target-rank card paper (excluding gold glow borders).
+const TRIPEAKS_TARGET_PAPER_BLUE_MINIMUM: u8 = 215;
+
+/// Maximum red-minus-blue warmth spread on Challenge target-rank card paper.
+const TRIPEAKS_TARGET_PAPER_MAX_WARMTH: u8 = 40;
+
 /// Surface pixel counters over a bounded native TriPeaks inspection region.
 #[derive(Clone, Copy, Default)]
 struct TriPeaksSurfaceStats {
@@ -738,7 +751,7 @@ struct TriPeaksSurfaceStats {
     total: u64,
     /// Pixels matching `CLASSIC BLUE` card-back thresholds.
     blue_back: u64,
-    /// Pixels matching neutral bright card-paper minimum channels.
+    /// Pixels matching calibrated neutral bright or warm ivory card-face paper.
     white_paper: u64,
     /// Pixels matching gameplay green felt thresholds.
     felt: u64,
@@ -833,10 +846,18 @@ fn is_tripeaks_stock_tray_green([red, green, blue]: [u8; 3]) -> bool {
         && green.saturating_sub(blue) >= TRIPEAKS_STOCK_TRAY_GREEN_BLUE_DELTA_MINIMUM
 }
 
-/// Check whether one RGB pixel matches calibrated bright card-face paper.
-fn is_tripeaks_white_paper_pixel(rgb: [u8; 3]) -> bool {
-    rgb.into_iter()
-        .all(|channel| channel >= FACE_UP_WHITE_CHANNEL_MINIMUM)
+/// Check whether one RGB pixel matches calibrated neutral bright or warm ivory card-face paper,
+/// excluding decorative gold Challenge glow borders.
+fn is_tripeaks_white_paper_pixel([red, green, blue]: [u8; 3]) -> bool {
+    (red >= FACE_UP_WHITE_CHANNEL_MINIMUM
+        && green >= FACE_UP_WHITE_CHANNEL_MINIMUM
+        && blue >= FACE_UP_WHITE_CHANNEL_MINIMUM)
+        || (red >= TRIPEAKS_TARGET_PAPER_RED_MINIMUM
+            && green >= TRIPEAKS_TARGET_PAPER_GREEN_MINIMUM
+            && blue >= TRIPEAKS_TARGET_PAPER_BLUE_MINIMUM
+            && red >= green
+            && green >= blue
+            && red.saturating_sub(blue) <= TRIPEAKS_TARGET_PAPER_MAX_WARMTH)
 }
 
 /// Read one 1-based TriPeaks tableau position (`row` `1..=4`, `column` `1..=row_length`).
@@ -1116,6 +1137,442 @@ pub(crate) fn is_tripeaks_full_root_stock(frame: &CapturedFrame) -> Result<bool,
             && stack_stats.blue_back == 0
             && stack_stats.felt == 0,
     )
+}
+
+/// Minimum per-mille dimmed tray/outline coverage proving an empty Stock slot behind a modal.
+const TRIPEAKS_DIMMED_EMPTY_PER_MILLE: u64 = 850;
+
+/// Maximum per-mille stray dimmed paper or blue-back pixels tolerated inside an empty Stock tray.
+const TRIPEAKS_DIMMED_NOISE_LIMIT_PER_MILLE: u64 = 20;
+
+/// Minimum per-mille dimmed card-paper coverage required across unobstructed Waste paper strips.
+const TRIPEAKS_DIMMED_WASTE_PAPER_PER_MILLE: u64 = 500;
+
+/// Minimum per-mille unobstructed lower Waste paper required for tall Normal-modal rotated fallback.
+const TRIPEAKS_DIMMED_LOWER_PAPER_PER_MILLE: u64 = 750;
+
+/// Minimum per-channel brightness accepted as dimmed white/ivory card paper under a modal overlay.
+const TRIPEAKS_DIMMED_PAPER_MIN_CHANNEL: u8 = 25;
+
+/// Maximum per-channel brightness accepted as dimmed card paper (excludes un-dimmed bright white).
+const TRIPEAKS_DIMMED_PAPER_MAX_CHANNEL: u8 = 145;
+
+/// Maximum channel spread accepted for dimmed neutral white or warm-ivory card paper.
+const TRIPEAKS_DIMMED_PAPER_MAX_SPREAD: u8 = 18;
+
+/// Unobstructed Stock verification geometry paired with one modal layout (`compact` vs `tall`).
+struct DimmedStockRegions<'a> {
+    /// Unobstructed dark-green interior tray rectangle.
+    interior: PixelRect,
+    /// Unobstructed dimmed light-green empty-slot outline edges.
+    outline_edges: &'a [PixelRect],
+}
+
+/// Compact Challenge modal leaves all four empty Stock edges and full interior unobstructed.
+const COMPACT_DIMMED_STOCK_REGIONS: DimmedStockRegions<'static> = DimmedStockRegions {
+    interior: PixelRect::new(776, 692, 116, 160),
+    outline_edges: &[
+        PixelRect::new(780, 682, 106, 4),
+        PixelRect::new(780, 857, 106, 4),
+        PixelRect::new(768, 692, 3, 158),
+        PixelRect::new(898, 692, 3, 158),
+    ],
+};
+
+/// Tall Normal modal overlaps `y = 682..795`, leaving the lower tray and three edges unobstructed.
+const TALL_DIMMED_STOCK_REGIONS: DimmedStockRegions<'static> = DimmedStockRegions {
+    interior: PixelRect::new(776, 800, 116, 52),
+    outline_edges: &[
+        PixelRect::new(780, 857, 106, 4),
+        PixelRect::new(768, 800, 3, 50),
+        PixelRect::new(898, 800, 3, 50),
+    ],
+};
+
+/// Pixel predicate matching darkened empty Stock tray interior behind a modal dim overlay.
+fn is_dimmed_stock_tray_pixel([red, green, blue]: [u8; 3]) -> bool {
+    red <= 18 && (8..=25).contains(&green) && green > red && green >= blue
+}
+
+/// Pixel predicate matching the darkened light-green empty Stock slot outline behind a modal overlay.
+fn is_dimmed_stock_outline_pixel([red, green, blue]: [u8; 3]) -> bool {
+    green >= 26 && green.saturating_sub(red) >= 14 && green.saturating_sub(blue) >= 5
+}
+
+/// Pixel predicate matching a darkened `CLASSIC BLUE` card back behind a modal dim overlay.
+fn is_dimmed_blue_back_pixel([red, green, blue]: [u8; 3]) -> bool {
+    blue >= 24 && blue >= green.saturating_add(8) && blue >= red.saturating_add(16)
+}
+
+/// Pixel predicate matching darkened neutral white or warm-ivory card paper behind a modal overlay.
+fn is_dimmed_paper_pixel([red, green, blue]: [u8; 3]) -> bool {
+    let min_c = red.min(green).min(blue);
+    let max_c = red.max(green).max(blue);
+    min_c >= TRIPEAKS_DIMMED_PAPER_MIN_CHANNEL
+        && max_c <= TRIPEAKS_DIMMED_PAPER_MAX_CHANNEL
+        && max_c.saturating_sub(min_c) <= TRIPEAKS_DIMMED_PAPER_MAX_SPREAD
+}
+
+/// Internal Stock verification status behind an active `"No Moves Remaining"` modal.
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum DimmedStockStatus {
+    /// Positive dimmed empty-Stock tray and outline verified.
+    Empty,
+    /// Conflicting dimmed blue card back observed inside Stock.
+    BlueConflict,
+    /// Neither empty-Stock outline/tray proof nor clear conflict succeeded.
+    Unverified,
+}
+
+/// Verify unobstructed dimmed empty-Stock tray and outline pixels for the active modal layout.
+fn verify_dimmed_empty_stock(
+    view: &xsar::image_matching::FrameView<'_>,
+    compact_modal: bool,
+) -> Result<DimmedStockStatus, OperationError> {
+    let regions = if compact_modal {
+        &COMPACT_DIMMED_STOCK_REGIONS
+    } else {
+        &TALL_DIMMED_STOCK_REGIONS
+    };
+    view.checked_bounds(regions.interior)
+        .map_err(|error| OperationError::Invalid(format!("{error:?}")))?;
+    let mut total = 0_u64;
+    let mut tray = 0_u64;
+    let mut blue = 0_u64;
+    let mut paper = 0_u64;
+    for y in regions.interior.y..regions.interior.bottom() {
+        for x in regions.interior.x..regions.interior.right() {
+            let rgb = view.pixel_rgb(x, y).ok_or_else(|| {
+                OperationError::Invalid("Dimmed Stock interior pixel out of bounds".to_owned())
+            })?;
+            total += 1;
+            if is_dimmed_stock_tray_pixel(rgb) {
+                tray += 1;
+            }
+            if is_dimmed_blue_back_pixel(rgb) {
+                blue += 1;
+            }
+            if is_dimmed_paper_pixel(rgb) {
+                paper += 1;
+            }
+        }
+    }
+    if ratio_per_mille(blue, total) >= TRIPEAKS_CONFLICT_PER_MILLE {
+        return Ok(DimmedStockStatus::BlueConflict);
+    }
+    if ratio_per_mille(tray, total) < TRIPEAKS_DIMMED_EMPTY_PER_MILLE
+        || ratio_per_mille(blue, total) > TRIPEAKS_DIMMED_NOISE_LIMIT_PER_MILLE
+        || ratio_per_mille(paper, total) > TRIPEAKS_DIMMED_NOISE_LIMIT_PER_MILLE
+    {
+        return Ok(DimmedStockStatus::Unverified);
+    }
+    for &edge in regions.outline_edges {
+        if !coverage_per_mille(
+            view,
+            edge,
+            is_dimmed_stock_outline_pixel,
+            TRIPEAKS_DIMMED_EMPTY_PER_MILLE,
+        )? {
+            return Ok(DimmedStockStatus::Unverified);
+        }
+    }
+    Ok(DimmedStockStatus::Empty)
+}
+
+/// Sample dimmed Waste card paper across `rects` and return median `[R, G, B]` if coverage holds.
+fn sample_dimmed_waste_paper(
+    view: &xsar::image_matching::FrameView<'_>,
+    rects: &[PixelRect],
+    min_paper_per_mille: u64,
+) -> Result<Option<[u8; 3]>, OperationError> {
+    let mut total = 0_u64;
+    let mut tray_or_blue = 0_u64;
+    let mut reds = Vec::new();
+    let mut greens = Vec::new();
+    let mut blues = Vec::new();
+    for &rect in rects {
+        view.checked_bounds(rect)
+            .map_err(|error| OperationError::Invalid(format!("{error:?}")))?;
+        for y in rect.y..rect.bottom() {
+            for x in rect.x..rect.right() {
+                let rgb = view.pixel_rgb(x, y).ok_or_else(|| {
+                    OperationError::Invalid("Dimmed Waste paper pixel out of bounds".to_owned())
+                })?;
+                total += 1;
+                if is_dimmed_paper_pixel(rgb) {
+                    reds.push(rgb[0]);
+                    greens.push(rgb[1]);
+                    blues.push(rgb[2]);
+                } else if is_dimmed_stock_tray_pixel(rgb) || is_dimmed_blue_back_pixel(rgb) {
+                    tray_or_blue += 1;
+                }
+            }
+        }
+    }
+    let paper_count = u64::try_from(reds.len()).unwrap_or(0);
+    if ratio_per_mille(paper_count, total) < min_paper_per_mille
+        || ratio_per_mille(tray_or_blue, total) > TRIPEAKS_SURFACE_TRACE_LIMIT_PER_MILLE
+    {
+        return Ok(None);
+    }
+    reds.sort_unstable();
+    greens.sort_unstable();
+    blues.sort_unstable();
+    let mid = reds.len() / 2;
+    Ok(Some([reds[mid], greens[mid], blues[mid]]))
+}
+
+/// Contrast-normalise one dimmed RGB pixel relative to measured dimmed `paper` RGB.
+fn normalise_dimmed_pixel(rgb: [u8; 3], paper: [u8; 3]) -> [u8; 3] {
+    let mut out = [0_u8; 3];
+    for ch in 0..3 {
+        let denom = u32::from(paper[ch].max(1));
+        out[ch] = ((u32::from(rgb[ch]) * 255) / denom).min(255) as u8;
+    }
+    out
+}
+
+/// Compact Challenge-mode `"No Moves Remaining"` panel envelope plus outer drop-shadow margin.
+const COMPACT_MODAL_OCCLUSION_BOUNDS: PixelRect = PixelRect::new(525, 387, 870, 290);
+
+/// Tall Normal-mode `"No Moves Remaining"` panel envelope plus outer drop-shadow margin.
+const TALL_MODAL_OCCLUSION_BOUNDS: PixelRect = PixelRect::new(566, 262, 788, 540);
+
+/// Return `true` when two axis-aligned pixel rectangles intersect.
+const fn rects_overlap(a: PixelRect, b: PixelRect) -> bool {
+    a.x < b.right() && b.x < a.right() && a.y < b.bottom() && b.y < a.bottom()
+}
+
+/// Normalise `copy_bounds` relative to `paper` onto an empty native buffer and return it.
+fn normalise_dimmed_region(
+    view: &xsar::image_matching::FrameView<'_>,
+    copy_bounds: PixelRect,
+    paper: [u8; 3],
+) -> Result<CapturedFrame, OperationError> {
+    let mut normalised = blank_native_frame();
+    for y in copy_bounds.y..copy_bounds.bottom() {
+        for x in copy_bounds.x..copy_bounds.right() {
+            let rgb = view.pixel_rgb(x, y).ok_or_else(|| {
+                OperationError::Invalid("Dimmed card region pixel out of bounds".to_owned())
+            })?;
+            let scaled = normalise_dimmed_pixel(rgb, paper);
+            let off = y as usize * normalised.stride + x as usize * 4;
+            normalised.pixels[off..off + 3].copy_from_slice(&scaled);
+        }
+    }
+    Ok(normalised)
+}
+
+/// Read an unobstructed dimmed face-up card inside `bounds` given measured `modal_box`.
+fn read_unobstructed_dimmed_card(
+    view: &xsar::image_matching::FrameView<'_>,
+    bounds: PixelRect,
+    modal_box: PixelRect,
+) -> Result<CardRead, OperationError> {
+    let corner_crop = PixelRect::new(bounds.x + 3, bounds.y + 4, 31, 49);
+    if rects_overlap(corner_crop, modal_box) {
+        return Ok(CardRead::Unreadable);
+    }
+
+    let left_strip = PixelRect::new(
+        bounds.x + TRIPEAKS_BORDER_INSET_X,
+        bounds.y + TRIPEAKS_BAND_Y_OFFSET,
+        TRIPEAKS_SIDE_STRIP_WIDTH,
+        TRIPEAKS_BAND_HEIGHT,
+    );
+    let right_strip = PixelRect::new(
+        bounds.right() - TRIPEAKS_BORDER_INSET_X - TRIPEAKS_SIDE_STRIP_WIDTH,
+        bounds.y + TRIPEAKS_BAND_Y_OFFSET,
+        TRIPEAKS_SIDE_STRIP_WIDTH,
+        TRIPEAKS_BAND_HEIGHT,
+    );
+    if !rects_overlap(left_strip, modal_box) && !rects_overlap(right_strip, modal_box) {
+        let Some(paper) = sample_dimmed_waste_paper(
+            view,
+            &[left_strip, right_strip],
+            TRIPEAKS_DIMMED_WASTE_PAPER_PER_MILLE,
+        )?
+        else {
+            return Ok(CardRead::Unreadable);
+        };
+        let normalised = normalise_dimmed_region(view, bounds, paper)?;
+        return read_tripeaks_card_bounds(&normalised, bounds, false);
+    }
+
+    // When the mid-card band (`y + 85`) sits behind the modal while the top corner (`y + 4..53`)
+    // remains clear (e.g. Row 3 middle slots above the compact Challenge modal), sample the upper
+    // white paper borders clear of court-card portrait frames (`dy = 4..10`, `dx = 121..130`).
+    let top_strip = PixelRect::new(bounds.x + 40, bounds.y + 4, 65, 6);
+    let right_margin_strip = PixelRect::new(bounds.right() - 15, bounds.y + 15, 9, 30);
+    if rects_overlap(top_strip, modal_box) || rects_overlap(right_margin_strip, modal_box) {
+        return Ok(CardRead::Unreadable);
+    }
+    let Some(paper) = sample_dimmed_waste_paper(
+        view,
+        &[top_strip, right_margin_strip],
+        TRIPEAKS_DIMMED_LOWER_PAPER_PER_MILLE,
+    )?
+    else {
+        return Ok(CardRead::Unreadable);
+    };
+    let normalised = normalise_dimmed_region(view, corner_crop, paper)?;
+    Ok(read_from_classification(classify_corner(
+        &normalised,
+        (bounds.x, bounds.y),
+    )?))
+}
+
+/// Allocate an empty packed `1920×1080` `CapturedFrame` scratch surface for contrast normalisation.
+fn blank_native_frame() -> CapturedFrame {
+    let width = NOMINAL_FRAME_WIDTH as usize;
+    let height = NOMINAL_FRAME_HEIGHT as usize;
+    let stride = width * 4;
+    let mut pixels = vec![0_u8; stride * height];
+    let (chunks, _) = pixels.as_chunks_mut::<4>();
+    for chunk in chunks {
+        chunk[3] = 255;
+    }
+    CapturedFrame {
+        width: NOMINAL_FRAME_WIDTH,
+        height: NOMINAL_FRAME_HEIGHT,
+        stride,
+        format: PixelFormat::Rgba8,
+        pixels,
+    }
+}
+
+/// Positively verify the darkened empty Stock tray while a `"No Moves Remaining"` modal is active.
+///
+/// Strictly gated on [`observe_no_moves_modal`]; returns `Ok(false)` on un-dimmed frames or when
+/// no calibrated modal overlay is present.
+///
+/// # Errors
+///
+/// Returns [`OperationError::Invalid`] if `frame` is not packed `1920×1080` RGBA8.
+pub fn is_tripeaks_dimmed_empty_stock(frame: &CapturedFrame) -> Result<bool, OperationError> {
+    validate_native_frame(frame)?;
+    let Some(modal_click) = observe_no_moves_modal(frame)? else {
+        return Ok(false);
+    };
+    let view = frame
+        .as_view()
+        .map_err(|error| OperationError::Invalid(error.to_string()))?;
+    Ok(
+        verify_dimmed_empty_stock(&view, modal_click == UNDO_LAST_MOVE_COMPACT_CLICK_POINT)?
+            == DimmedStockStatus::Empty,
+    )
+}
+
+/// Read the darkened Draw-23 Waste card and confirm the darkened empty Stock tray while a
+/// `"No Moves Remaining"` modal dim overlay is positively active.
+///
+/// Strictly gated on [`observe_no_moves_modal`] so un-dimmed [`read_card`] thresholds remain
+/// untouched. Contrast-normalises the unobstructed dimmed Waste paper/ink (`WASTE_CARD_BOUNDS`
+/// directly on the compact Challenge modal, or the unobstructed 180°-rotated bottom-right corner
+/// fallback when the tall Normal modal overlaps `(1017, 682)`) and runs the full foreground rank
+/// and suit classification margins.
+///
+/// # Errors
+///
+/// Returns [`OperationError`] on invalid native frame layout or underlying recognition errors.
+pub fn read_tripeaks_dimmed_modal_waste(frame: &CapturedFrame) -> Result<CardRead, OperationError> {
+    validate_native_frame(frame)?;
+    let Some(modal_click) = observe_no_moves_modal(frame)? else {
+        return Ok(CardRead::Unreadable);
+    };
+    let compact_modal = modal_click == UNDO_LAST_MOVE_COMPACT_CLICK_POINT;
+    let view = frame
+        .as_view()
+        .map_err(|error| OperationError::Invalid(error.to_string()))?;
+
+    match verify_dimmed_empty_stock(&view, compact_modal)? {
+        DimmedStockStatus::Empty => {}
+        DimmedStockStatus::BlueConflict => return Ok(CardRead::Ambiguous),
+        DimmedStockStatus::Unverified => return Ok(CardRead::Unreadable),
+    }
+
+    if compact_modal {
+        return read_unobstructed_dimmed_card(
+            &view,
+            WASTE_CARD_BOUNDS,
+            COMPACT_MODAL_OCCLUSION_BOUNDS,
+        );
+    }
+
+    // Tall Normal-mode modal overlaps `(1017, 682)` through `y = 795`; fall back to the
+    // unobstructed lower paper strips and 180°-rotated bottom-right corner (`y >= 807`).
+    let lower_left_strip = PixelRect::new(
+        WASTE_CARD_BOUNDS.x + TRIPEAKS_BORDER_INSET_X,
+        848,
+        TRIPEAKS_SIDE_STRIP_WIDTH,
+        8,
+    );
+    let lower_bottom_strip = PixelRect::new(WASTE_CARD_BOUNDS.x + 10, 853, 80, 6);
+    let Some(paper) = sample_dimmed_waste_paper(
+        &view,
+        &[lower_left_strip, lower_bottom_strip],
+        TRIPEAKS_DIMMED_LOWER_PAPER_PER_MILLE,
+    )?
+    else {
+        return Ok(CardRead::Unreadable);
+    };
+
+    let mut normalised = blank_native_frame();
+    let max_x = WASTE_CARD_BOUNDS.x + 134;
+    let max_y = WASTE_CARD_BOUNDS.y + 181;
+    for dy in 0..57_u32 {
+        for dx in 0..38_u32 {
+            let sx = max_x - dx;
+            let sy = max_y - dy;
+            let rgb = view.pixel_rgb(sx, sy).ok_or_else(|| {
+                OperationError::Invalid(
+                    "Dimmed rotated Waste corner pixel out of bounds".to_owned(),
+                )
+            })?;
+            let scaled = normalise_dimmed_pixel(rgb, paper);
+            let off = (WASTE_CARD_BOUNDS.y + dy) as usize * normalised.stride
+                + (WASTE_CARD_BOUNDS.x + dx) as usize * 4;
+            normalised.pixels[off..off + 3].copy_from_slice(&scaled);
+        }
+    }
+    Ok(read_from_classification(classify_corner(
+        &normalised,
+        (WASTE_CARD_BOUNDS.x, WASTE_CARD_BOUNDS.y),
+    )?))
+}
+
+/// Read an unobstructed dimmed TriPeaks tableau slot (`0..28`) while a `"No Moves Remaining"`
+/// modal dim overlay is positively active (used by mid-RECON probe recovery).
+///
+/// Strictly gated on [`observe_no_moves_modal`]; returns `Ok(CardRead::Unreadable)` when no modal
+/// is active or when the slot corner/paper strips overlap the modal panel.
+///
+/// # Errors
+///
+/// Returns [`OperationError`] on out-of-range `slot_index` or invalid frame layout.
+pub(crate) fn read_tripeaks_dimmed_modal_tableau_slot(
+    frame: &CapturedFrame,
+    slot_index: usize,
+) -> Result<CardRead, OperationError> {
+    validate_native_frame(frame)?;
+    let region = TABLEAU_CARD_REGIONS.get(slot_index).ok_or_else(|| {
+        OperationError::Invalid(format!(
+            "Invalid TriPeaks tableau slot index {slot_index} (expected 0..{})",
+            TABLEAU_CARD_REGIONS.len()
+        ))
+    })?;
+    let Some(modal_click) = observe_no_moves_modal(frame)? else {
+        return Ok(CardRead::Unreadable);
+    };
+    let modal_box = if modal_click == UNDO_LAST_MOVE_COMPACT_CLICK_POINT {
+        COMPACT_MODAL_OCCLUSION_BOUNDS
+    } else {
+        TALL_MODAL_OCCLUSION_BOUNDS
+    };
+    let view = frame
+        .as_view()
+        .map_err(|error| OperationError::Invalid(error.to_string()))?;
+    read_unobstructed_dimmed_card(&view, region.card_bounds, modal_box)
 }
 
 /// Check whether one native `1920×1080` frame proves both **Challenge Complete** (`ll`) and **Continue** (`[0, 0, 0]`).

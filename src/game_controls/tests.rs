@@ -1274,3 +1274,455 @@ fn full_root_stock_accepts_settled_t0_and_rejects_contracted_or_mid_rewind() {
     );
     assert!(!is_tripeaks_full_root_stock(&mid_slide_stack).expect("mid-slide white stack"));
 }
+
+/// Apply calibrated Challenge target-rank warm-ivory paper (`[252, 246, 230]`) and outer 2 px
+/// gold glow border (`[254, 209, 4]` / `[221, 211, 172]`) to neutral white pixels inside `bounds`.
+fn tint_card_warm_ivory_with_gold_border(frame: &mut CapturedFrame, bounds: PixelRect) {
+    for dy in 0..bounds.height {
+        for dx in 0..bounds.width {
+            let idx = (bounds.y + dy) as usize * frame.stride + (bounds.x + dx) as usize * 4;
+            if dx == 0 || dx + 1 == bounds.width {
+                frame.pixels[idx..idx + 4].copy_from_slice(&[254, 209, 4, 255]);
+            } else if dx == 1 || dx + 2 == bounds.width {
+                frame.pixels[idx..idx + 4].copy_from_slice(&[221, 211, 172, 255]);
+            } else if frame.pixels[idx] >= 245
+                && frame.pixels[idx + 1] >= 245
+                && frame.pixels[idx + 2] >= 245
+            {
+                let rgb = if dx <= 3 || dx + 4 >= bounds.width {
+                    [249, 245, 228, 255]
+                } else {
+                    [252, 246, 230, 255]
+                };
+                frame.pixels[idx..idx + 4].copy_from_slice(&rgb);
+            }
+        }
+    }
+}
+
+/// Verify warm-ivory Challenge target-rank cards pass `read_card` while outer gold glow is rejected.
+#[test]
+fn tripeaks_read_card_accepts_warm_ivory_challenge_target_cards_and_rejects_gold_glow() {
+    let mut left_ace = decode_png(include_bytes!(
+        "../../tests/fixtures/tripeaks-redeal-20261016/left-ace.png"
+    ))
+    .expect("left-ace png");
+    let r4_c1 = TABLEAU_CARD_REGIONS[18].card_bounds;
+    tint_card_warm_ivory_with_gold_border(&mut left_ace, r4_c1);
+    tint_card_warm_ivory_with_gold_border(&mut left_ace, WASTE_CARD_BOUNDS);
+    assert_eq!(
+        read_card(&left_ace, LocationRequest::tripeaks_play(4, 1))
+            .expect("warm-ivory Row 4 Col 1 2H"),
+        CardRead::Card(parse_test_card("2H"))
+    );
+    assert_eq!(
+        read_card(&left_ace, LocationRequest::tripeaks_draw(2)).expect("warm-ivory Waste 2D"),
+        CardRead::Card(parse_test_card("2D"))
+    );
+    assert_eq!(
+        read_card(&left_ace, LocationRequest::tripeaks_play(3, 1)).expect("covered Row 3 Col 1"),
+        CardRead::FaceDown
+    );
+
+    let mut peak1 = decode_png(include_bytes!(
+        "../../tests/fixtures/tripeaks-calibration-20261116/peak1-uncovered.png"
+    ))
+    .expect("peak1-uncovered png");
+    tint_card_warm_ivory_with_gold_border(&mut peak1, TABLEAU_CARD_REGIONS[0].card_bounds);
+    assert_eq!(
+        read_card(&peak1, LocationRequest::tripeaks_play(1, 1))
+            .expect("warm-ivory uncovered Peak 1 7D"),
+        CardRead::Card(parse_test_card("7D"))
+    );
+
+    // Pure outer gold glow / fringe in the side strips must never qualify as card paper.
+    for (label, gold_rgb) in [
+        ("bright gold glow", [254_u8, 209, 4]),
+        ("gold fringe", [221_u8, 211, 172]),
+    ] {
+        let mut glow_only = left_ace.clone();
+        let left_strip = PixelRect::new(
+            r4_c1.x + TRIPEAKS_BORDER_INSET_X,
+            r4_c1.y + TRIPEAKS_BAND_Y_OFFSET,
+            TRIPEAKS_SIDE_STRIP_WIDTH,
+            TRIPEAKS_BAND_HEIGHT,
+        );
+        let right_strip = PixelRect::new(
+            r4_c1.right() - TRIPEAKS_BORDER_INSET_X - TRIPEAKS_SIDE_STRIP_WIDTH,
+            r4_c1.y + TRIPEAKS_BAND_Y_OFFSET,
+            TRIPEAKS_SIDE_STRIP_WIDTH,
+            TRIPEAKS_BAND_HEIGHT,
+        );
+        paint_rect(&mut glow_only, left_strip, gold_rgb);
+        paint_rect(&mut glow_only, right_strip, gold_rgb);
+        assert_eq!(
+            read_card(&glow_only, LocationRequest::tripeaks_play(4, 1))
+                .expect("gold-only strips fail paper gate"),
+            CardRead::Unreadable,
+            "{label} must be rejected by is_tripeaks_white_paper_pixel"
+        );
+    }
+
+    let no_moves = decode_png(include_bytes!(
+        "../../tests/fixtures/tripeaks-calibration-20261116/no-moves-remaining.png"
+    ))
+    .expect("no-moves-remaining png");
+    assert_eq!(
+        read_card(&no_moves, LocationRequest::tripeaks_play(1, 1)).expect("dimmed R1C1"),
+        CardRead::Unreadable
+    );
+    assert_eq!(
+        read_card(&no_moves, LocationRequest::tripeaks_draw(1)).expect("dimmed Stock"),
+        CardRead::Unreadable
+    );
+}
+
+/// Verify modal-gated dimmed Waste card recognition (`5D` on compact Challenge modal, `AH`
+/// bottom-right rotated fallback on tall Normal modal) and dimmed empty-Stock verification,
+/// while leaving standard un-dimmed `read_card` thresholds strictly unchanged.
+#[test]
+fn dimmed_modal_waste_and_empty_stock_reader_strictly_gated_on_no_moves_modal() {
+    let compact = decode_png(include_bytes!(
+        "../../tests/fixtures/tripeaks-calibration-20261116/no-moves-remaining-compact.png"
+    ))
+    .expect("no-moves-remaining-compact png");
+    let tall = decode_png(include_bytes!(
+        "../../tests/fixtures/tripeaks-calibration-20261116/no-moves-remaining.png"
+    ))
+    .expect("no-moves-remaining png");
+    let stock_empty = decode_png(include_bytes!(
+        "../../tests/fixtures/tripeaks-calibration-20261116/stock-empty.png"
+    ))
+    .expect("stock-empty png");
+    let stock_last = decode_png(include_bytes!(
+        "../../tests/fixtures/tripeaks-calibration-20261116/stock-last-card.png"
+    ))
+    .expect("stock-last-card png");
+
+    // 1. Standard un-dimmed `read_card` MUST continue failing closed on dimmed modal frames.
+    for (label, modal) in [("compact", &compact), ("tall", &tall)] {
+        assert_eq!(
+            read_card(modal, LocationRequest::tripeaks_draw(1)).expect("standard read Stock"),
+            CardRead::Unreadable,
+            "{label} modal Stock must remain Unreadable to standard read_card"
+        );
+        assert_eq!(
+            read_card(modal, LocationRequest::tripeaks_draw(2)).expect("standard read Waste"),
+            CardRead::Unreadable,
+            "{label} modal Waste must remain Unreadable to standard read_card"
+        );
+    }
+
+    // 2. Positive dimmed empty-Stock and Waste classification on both native modal captures.
+    assert!(is_tripeaks_dimmed_empty_stock(&compact).expect("compact empty stock"));
+    assert!(is_tripeaks_dimmed_empty_stock(&tall).expect("tall empty stock"));
+    assert_eq!(
+        read_tripeaks_dimmed_modal_waste(&compact).expect("compact dimmed Waste 5D"),
+        CardRead::Card(parse_test_card("5D"))
+    );
+    assert_eq!(
+        read_tripeaks_dimmed_modal_waste(&tall).expect("tall dimmed Waste AH fallback"),
+        CardRead::Card(parse_test_card("AH"))
+    );
+
+    // 3. Strictly gated on `observe_no_moves_modal`: un-dimmed frames & corrupted modals refuse.
+    for non_modal in [&stock_empty, &stock_last] {
+        assert!(!is_tripeaks_dimmed_empty_stock(non_modal).expect("non-modal empty stock"));
+        assert_eq!(
+            read_tripeaks_dimmed_modal_waste(non_modal).expect("non-modal Waste"),
+            CardRead::Unreadable
+        );
+    }
+
+    let mut broken_modal_btn = compact.clone();
+    paint_rect(
+        &mut broken_modal_btn,
+        PixelRect::new(1_130, 620, 10, 8),
+        [20, 20, 20],
+    );
+    assert!(!is_tripeaks_dimmed_empty_stock(&broken_modal_btn).expect("broken modal empty stock"));
+    assert_eq!(
+        read_tripeaks_dimmed_modal_waste(&broken_modal_btn).expect("broken modal Waste"),
+        CardRead::Unreadable
+    );
+
+    // 4. Conflicting dimmed blue card back inside Stock refuses (`false` / `Ambiguous`).
+    let mut blue_stock_modal = compact.clone();
+    paint_rect(
+        &mut blue_stock_modal,
+        PixelRect::new(776, 692, 116, 160),
+        [4, 17, 35],
+    );
+    assert!(!is_tripeaks_dimmed_empty_stock(&blue_stock_modal).expect("blue stock rejected"));
+    assert_eq!(
+        read_tripeaks_dimmed_modal_waste(&blue_stock_modal).expect("blue stock conflict"),
+        CardRead::Ambiguous
+    );
+
+    // 5. Missing Stock outline (dark solid tray without outline) refuses (`false` / `Unreadable`).
+    let mut no_outline_stock = compact.clone();
+    paint_rect(
+        &mut no_outline_stock,
+        PixelRect::new(766, 680, 138, 184),
+        [3, 15, 10],
+    );
+    assert!(!is_tripeaks_dimmed_empty_stock(&no_outline_stock).expect("missing stock outline"));
+    assert_eq!(
+        read_tripeaks_dimmed_modal_waste(&no_outline_stock).expect("missing stock outline Waste"),
+        CardRead::Unreadable
+    );
+
+    // 6. Dimmed black card (Clubs/Spades) & warm-ivory Challenge target card both classify cleanly,
+    //    while ambiguous 6D/8D Waste corner fails closed as `CardRead::Ambiguous`.
+    let fc01 = decode_png(include_bytes!("../../tests/fixtures/freecell-FC01.png")).expect("FC01");
+    let mut black_waste = compact.clone();
+    // Copy FC01's `AS` (`PLAY 1 row 1`, `(196, 331)`) into Waste, then dim by `0.20x` (`1 / 5`).
+    paint_rect(
+        &mut black_waste,
+        WASTE_CARD_BOUNDS,
+        [254 / 5, 254 / 5, 254 / 5],
+    );
+    for dy in 0..53_u32 {
+        for dx in 0..34_u32 {
+            let from =
+                (FREECELL_ROW_Y[0] + dy) as usize * fc01.stride + (PLAY_X[0] + dx) as usize * 4;
+            let to = (WASTE_CARD_BOUNDS.y + dy) as usize * black_waste.stride
+                + (WASTE_CARD_BOUNDS.x + dx) as usize * 4;
+            for ch in 0..3 {
+                black_waste.pixels[to + ch] = fc01.pixels[from + ch] / 5;
+            }
+            black_waste.pixels[to + 3] = 255;
+        }
+    }
+    let expected_fc01_card =
+        match read_card(&fc01, LocationRequest::freecell_play(1, 1)).expect("FC01 PLAY 1 row 1") {
+            CardRead::Card(card) => card,
+            other => panic!("expected FC01 Card, got {other:?}"),
+        };
+    assert_eq!(
+        read_tripeaks_dimmed_modal_waste(&black_waste).expect("dimmed FC01 card"),
+        CardRead::Card(expected_fc01_card)
+    );
+
+    // Warm-ivory Challenge target paper (`[252, 246, 230] / 5 = [50, 49, 46]`) on `5D`.
+    let mut warm_waste = compact.clone();
+    for y in WASTE_CARD_BOUNDS.y..WASTE_CARD_BOUNDS.bottom() {
+        for x in WASTE_CARD_BOUNDS.x..WASTE_CARD_BOUNDS.right() {
+            let off = y as usize * warm_waste.stride + x as usize * 4;
+            if warm_waste.pixels[off] >= 45
+                && warm_waste.pixels[off + 1] >= 45
+                && warm_waste.pixels[off + 2] >= 45
+            {
+                warm_waste.pixels[off] = 50;
+                warm_waste.pixels[off + 1] = 49;
+                warm_waste.pixels[off + 2] = 46;
+            }
+        }
+    }
+    assert_eq!(
+        read_tripeaks_dimmed_modal_waste(&warm_waste).expect("dimmed warm-ivory 5D"),
+        CardRead::Card(parse_test_card("5D"))
+    );
+
+    // Dimmed ambiguous `6D`/`8D` corner must return `CardRead::Ambiguous`.
+    let mut dimmed_ambiguous = compact.clone();
+    paint_foreground_ambiguous_6d_8d(
+        &mut dimmed_ambiguous,
+        WASTE_CARD_BOUNDS.x,
+        WASTE_CARD_BOUNDS.y,
+    );
+    for dy in 0..55_u32 {
+        for dx in 0..36_u32 {
+            let off = (WASTE_CARD_BOUNDS.y + dy) as usize * dimmed_ambiguous.stride
+                + (WASTE_CARD_BOUNDS.x + dx) as usize * 4;
+            for ch in 0..3 {
+                dimmed_ambiguous.pixels[off + ch] /= 5;
+            }
+        }
+    }
+    assert_eq!(
+        read_tripeaks_dimmed_modal_waste(&dimmed_ambiguous).expect("dimmed ambiguous 6D/8D"),
+        CardRead::Ambiguous
+    );
+
+    // 7. Real native dimmed Row-4 cards (including court `JS` and wide `10H`) classify cleanly
+    //    both in compact Waste (`WASTE_CARD_BOUNDS`) and tall 180°-rotated lower Waste fallback.
+    let copy_card_to_waste = |dst: &mut CapturedFrame, src: &CapturedFrame, sx: u32, sy: u32| {
+        for dy in 0..WASTE_CARD_BOUNDS.height {
+            for dx in 0..WASTE_CARD_BOUNDS.width {
+                let from = (sy + dy) as usize * src.stride + (sx + dx) as usize * 4;
+                let to = (WASTE_CARD_BOUNDS.y + dy) as usize * dst.stride
+                    + (WASTE_CARD_BOUNDS.x + dx) as usize * 4;
+                dst.pixels[to..to + 4].copy_from_slice(&src.pixels[from..from + 4]);
+            }
+        }
+    };
+    for (src_label, src, sx, sy, code) in [
+        ("compact AD", &compact, 128_u32, 443_u32, "AD"),
+        ("compact 3C", &compact, 298, 443, "3C"),
+        ("compact 2S", &compact, 1_486, 443, "2S"),
+        ("compact JS", &compact, 1_655, 443, "JS"),
+        ("tall 9D", &tall, 298, 443, "9D"),
+        ("tall 10H", &tall, 1_486, 443, "10H"),
+        ("tall 3C", &tall, 1_655, 443, "3C"),
+    ] {
+        let mut c_frame = compact.clone();
+        copy_card_to_waste(&mut c_frame, src, sx, sy);
+        assert_eq!(
+            read_tripeaks_dimmed_modal_waste(&c_frame).expect(src_label),
+            CardRead::Card(parse_test_card(code)),
+            "{src_label} in compact modal Waste"
+        );
+
+        // Preserve tall modal panel top (`y < 796`), overwrite only lower exposed Waste (`y >= 796`).
+        let mut t_frame = tall.clone();
+        for dy in (796 - WASTE_CARD_BOUNDS.y)..WASTE_CARD_BOUNDS.height {
+            for dx in 0..WASTE_CARD_BOUNDS.width {
+                let from = (sy + dy) as usize * src.stride + (sx + dx) as usize * 4;
+                let to = (WASTE_CARD_BOUNDS.y + dy) as usize * t_frame.stride
+                    + (WASTE_CARD_BOUNDS.x + dx) as usize * 4;
+                t_frame.pixels[to..to + 4].copy_from_slice(&src.pixels[from..from + 4]);
+            }
+        }
+        assert_eq!(
+            read_tripeaks_dimmed_modal_waste(&t_frame).expect(src_label),
+            CardRead::Card(parse_test_card(code)),
+            "{src_label} in tall 180-rotated Waste fallback"
+        );
+    }
+
+    // 8. Quantisation edge `[50, 50, 52]` on side strips with median `[51, 51, 52]` stays readable.
+    let mut quant_waste = compact.clone();
+    paint_rect(
+        &mut quant_waste,
+        PixelRect::new(
+            WASTE_CARD_BOUNDS.x + TRIPEAKS_BORDER_INSET_X,
+            WASTE_CARD_BOUNDS.y + TRIPEAKS_BAND_Y_OFFSET,
+            TRIPEAKS_SIDE_STRIP_WIDTH,
+            TRIPEAKS_BAND_HEIGHT,
+        ),
+        [50, 50, 52],
+    );
+    assert_eq!(
+        read_tripeaks_dimmed_modal_waste(&quant_waste).expect("quantised paper edge"),
+        CardRead::Card(parse_test_card("5D"))
+    );
+
+    // 9. Exhaustively classify all 52 cards from `FC01` dimmed by `0.20x` in compact Waste.
+    for (col_idx, &sx) in PLAY_X.iter().enumerate() {
+        let rows = if col_idx < 4 { 7 } else { 6 };
+        for &sy in FREECELL_ROW_Y.iter().take(rows) {
+            let CardRead::Card(expected) = read_card(
+                &fc01,
+                LocationRequest::freecell_play(
+                    u8::try_from(col_idx + 1).expect("col fits"),
+                    u8::try_from(
+                        FREECELL_ROW_Y
+                            .iter()
+                            .position(|&y| y == sy)
+                            .expect("row found")
+                            + 1,
+                    )
+                    .expect("row fits"),
+                ),
+            )
+            .expect("FC01 card") else {
+                panic!("expected FC01 Card");
+            };
+            let mut f = compact.clone();
+            paint_rect(&mut f, WASTE_CARD_BOUNDS, [51, 51, 52]);
+            for dy in 0..53_u32 {
+                for dx in 0..34_u32 {
+                    let from = (sy + dy) as usize * fc01.stride + (sx + dx) as usize * 4;
+                    let to = (WASTE_CARD_BOUNDS.y + dy) as usize * f.stride
+                        + (WASTE_CARD_BOUNDS.x + dx) as usize * 4;
+                    for ch in 0..3 {
+                        f.pixels[to + ch] = fc01.pixels[from + ch] / 5;
+                    }
+                    f.pixels[to + 3] = 255;
+                }
+            }
+            assert_eq!(
+                read_tripeaks_dimmed_modal_waste(&f).expect("52 dimmed cards"),
+                CardRead::Card(expected),
+                "dimmed FC01 {expected:?}"
+            );
+        }
+    }
+
+    // 10. Modal-gated dimmed tableau reader handles Row 1/2/3 unobstructed and Row 3 middle
+    //     slots (top/right border above `y = 387`, including court `JS` and `10H`), while
+    //     rejecting covered slots and non-modal frames.
+    assert_eq!(
+        read_tripeaks_dimmed_modal_tableau_slot(&compact, 18).expect("unobstructed R4C1 AD"),
+        CardRead::Card(parse_test_card("AD"))
+    );
+    assert_eq!(
+        read_tripeaks_dimmed_modal_tableau_slot(&compact, 27).expect("unobstructed R4C10 JS"),
+        CardRead::Card(parse_test_card("JS"))
+    );
+    assert_eq!(
+        read_tripeaks_dimmed_modal_tableau_slot(&compact, 22).expect("modal-covered R4C5"),
+        CardRead::Unreadable
+    );
+    assert_eq!(
+        read_tripeaks_dimmed_modal_tableau_slot(&tall, 12).expect("tall-covered R3C4"),
+        CardRead::Unreadable
+    );
+    assert_eq!(
+        read_tripeaks_dimmed_modal_tableau_slot(&stock_empty, 18).expect("non-modal gated"),
+        CardRead::Unreadable
+    );
+
+    // Copy `JS` (`1655, 443`) and `10H` (`1486, 443`) into Row 3 middle slot 12 (`x=722, y=332`,
+    // whose mid-card band `y=417` is covered by compact modal `(525, 387)` while corner + top/right
+    // white margins remain above `y=387`).
+    for (label, src, sx, sy, code) in [
+        ("Row 3 slot 12 JS", &compact, 1_655_u32, 443_u32, "JS"),
+        ("Row 3 slot 12 10H", &tall, 1_486, 443, "10H"),
+    ] {
+        let mut r3_frame = compact.clone();
+        let dst_bounds = TABLEAU_CARD_REGIONS[12].card_bounds;
+        for dy in 0..55_u32 {
+            for dx in 0..dst_bounds.width {
+                let from = (sy + dy) as usize * src.stride + (sx + dx) as usize * 4;
+                let to = (dst_bounds.y + dy) as usize * r3_frame.stride
+                    + (dst_bounds.x + dx) as usize * 4;
+                r3_frame.pixels[to..to + 4].copy_from_slice(&src.pixels[from..from + 4]);
+            }
+        }
+        assert_eq!(
+            read_tripeaks_dimmed_modal_tableau_slot(&r3_frame, 12).expect(label),
+            CardRead::Card(parse_test_card(code)),
+            "{label} should classify via unobstructed upper corner/margins above compact modal"
+        );
+    }
+
+    // Warm-ivory card paper (`[249, 243, 224]` dimmed by 0.20x to `[49, 48, 44]`) in Row 3 slot 12
+    // must still satisfy `read_tripeaks_dimmed_modal_tableau_slot` without rejecting warm tint.
+    let mut warm_r3 = compact.clone();
+    let warm_dst = TABLEAU_CARD_REGIONS[12].card_bounds;
+    for dy in 0..55_u32 {
+        for dx in 0..warm_dst.width {
+            let from = (443 + dy) as usize * compact.stride + (1_655 + dx) as usize * 4;
+            let to = (warm_dst.y + dy) as usize * warm_r3.stride + (warm_dst.x + dx) as usize * 4;
+            let [r, g, b, a] = [
+                compact.pixels[from],
+                compact.pixels[from + 1],
+                compact.pixels[from + 2],
+                compact.pixels[from + 3],
+            ];
+            let rgb = if r >= 38 && r.max(g).max(b).saturating_sub(r.min(g).min(b)) <= 12 {
+                [49, 48, 44, a]
+            } else {
+                [r, g, b, a]
+            };
+            warm_r3.pixels[to..to + 4].copy_from_slice(&rgb);
+        }
+    }
+    assert_eq!(
+        read_tripeaks_dimmed_modal_tableau_slot(&warm_r3, 12).expect("warm ivory Row 3 slot 12 JS"),
+        CardRead::Card(parse_test_card("JS")),
+        "warm-ivory dimmed Row 3 slot 12 JS must classify cleanly"
+    );
+}

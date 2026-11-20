@@ -20,11 +20,17 @@ use crate::{
 
 pub use crate::pyramid_progress::BoardCount;
 
-/// Calibrated native bounds for `"Undo last move"` on the `"No Moves Remaining"` modal.
+/// Calibrated native bounds for `"Undo last move"` on the tall Normal-mode `"No Moves Remaining"` modal.
 pub const UNDO_LAST_MOVE_BUTTON_BOUNDS: PixelRect = PixelRect::new(976, 692, 305, 72);
 
-/// Calibrated native click centre for `"Undo last move"` on the `"No Moves Remaining"` modal.
+/// Calibrated native click centre for `"Undo last move"` on the tall Normal-mode `"No Moves Remaining"` modal.
 pub const UNDO_LAST_MOVE_CLICK_POINT: PixelPoint = PixelPoint::new(1_128, 728);
+
+/// Calibrated native bounds for `"Undo last move"` on the compact Challenge-mode `"No Moves Remaining"` modal.
+pub const UNDO_LAST_MOVE_COMPACT_BUTTON_BOUNDS: PixelRect = PixelRect::new(977, 568, 312, 74);
+
+/// Calibrated native click centre for `"Undo last move"` on the compact Challenge-mode `"No Moves Remaining"` modal.
+pub const UNDO_LAST_MOVE_COMPACT_CLICK_POINT: PixelPoint = PixelPoint::new(1_133, 605);
 
 /// Top-HUD Challenge ribbon band matching primary/secondary banner words (`32` px tall).
 const BANNER_WORD_BAND: PixelRect = PixelRect::new(820, 48, 282, 32);
@@ -44,8 +50,11 @@ const NORMAL_SCORE_DIGIT_RIGHT: u32 = 1_625;
 /// Tray caption band below Stock/Waste checked for `"0 deals left"` / `"1 deal left"` / `"2 deals left"`.
 const DEALS_LEFT_BAND: PixelRect = PixelRect::new(882, 872, 156, 26);
 
-/// Blue modal title band checked for `"No Moves Remaining"`.
+/// Blue modal title band checked for `"No Moves Remaining"` on the tall Normal-mode modal.
 const NO_MOVES_TITLE_BAND: PixelRect = PixelRect::new(740, 299, 445, 48);
+
+/// Blue modal title band checked for `"No Moves Remaining"` on the compact Challenge-mode modal.
+const NO_MOVES_TITLE_BAND_COMPACT: PixelRect = PixelRect::new(714, 457, 496, 48);
 
 /// Height of Challenge banner and Normal top-HUD word strips.
 const WORD_HEIGHT_HUD: usize = 32;
@@ -178,9 +187,14 @@ const TEMPLATE_DEALS_ONE: &[u8; 124 * 26] =
 const TEMPLATE_DEALS_TWO: &[u8; 140 * 26] =
     include_bytes!("../tests/fixtures/tripeaks-calibration-20261116/templates/deals-two.ink");
 
-/// Native `"No Moves Remaining"` modal title template (`416 × 48`).
+/// Native `"No Moves Remaining"` modal title template for the tall Normal-mode layout (`416 × 48`).
 const TEMPLATE_NO_MOVES_TITLE: &[u8; 416 * 48] =
     include_bytes!("../tests/fixtures/tripeaks-calibration-20261116/templates/no-moves-title.ink");
+
+/// Native `"No Moves Remaining"` modal title template for the compact Challenge-mode layout (`470 × 48`).
+const TEMPLATE_NO_MOVES_TITLE_COMPACT: &[u8; 470 * 48] = include_bytes!(
+    "../tests/fixtures/tripeaks-calibration-20261116/templates/no-moves-title-compact.ink"
+);
 
 /// Classified Challenge header objective observed from the native top ribbon.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1074,16 +1088,129 @@ pub fn observe_deals_left_caption(frame: &CapturedFrame) -> Result<Option<u8>, O
     Ok(band.classify_exclusive(full_span, &candidates))
 }
 
-/// Detect the Draw-23 zero-match `"No Moves Remaining"` modal and return the click
-/// target for its active `"Undo last move"` button ([`UNDO_LAST_MOVE_CLICK_POINT`]).
+/// Calibration profile for one `"No Moves Remaining"` modal variant (tall Normal vs compact Challenge).
+struct NoMovesModalLayout {
+    /// Five modal background probes flanking the title to tolerate subtle suit watermarks.
+    bg_probes: [(u32, u32); 5],
+    /// Title white-ink search band.
+    title_band: PixelRect,
+    /// Calibrated `"No Moves Remaining"` title template for this layout.
+    title_template: WordTemplate<'static>,
+    /// Active blue `"Undo last move"` button envelope.
+    button_bounds: PixelRect,
+    /// Click centre inside the `"Undo last move"` button (never `"End game"`).
+    click_point: PixelPoint,
+    /// Three interior blue-button probes clear of white label strokes.
+    button_probes: [(u32, u32); 3],
+}
+
+/// Supported `"No Moves Remaining"` modal layouts: tall Normal-mode and compact Challenge-mode.
+const NO_MOVES_MODAL_LAYOUTS: [NoMovesModalLayout; 2] = [
+    NoMovesModalLayout {
+        bg_probes: [
+            (640, 314),
+            (680, 314),
+            (710, 314),
+            (1_210, 314),
+            (1_260, 314),
+        ],
+        title_band: NO_MOVES_TITLE_BAND,
+        title_template: WordTemplate {
+            width: 416,
+            height: WORD_HEIGHT_MODAL,
+            bytes: TEMPLATE_NO_MOVES_TITLE,
+        },
+        button_bounds: UNDO_LAST_MOVE_BUTTON_BOUNDS,
+        click_point: UNDO_LAST_MOVE_CLICK_POINT,
+        button_probes: [(1_128, 745), (982, 728), (1_275, 728)],
+    },
+    NoMovesModalLayout {
+        bg_probes: [
+            (640, 480),
+            (680, 480),
+            (710, 480),
+            (1_215, 480),
+            (1_260, 480),
+        ],
+        title_band: NO_MOVES_TITLE_BAND_COMPACT,
+        title_template: WordTemplate {
+            width: 470,
+            height: WORD_HEIGHT_MODAL,
+            bytes: TEMPLATE_NO_MOVES_TITLE_COMPACT,
+        },
+        button_bounds: UNDO_LAST_MOVE_COMPACT_BUTTON_BOUNDS,
+        click_point: UNDO_LAST_MOVE_COMPACT_CLICK_POINT,
+        button_probes: [(1_133, 622), (983, 605), (1_283, 605)],
+    },
+];
+
+/// Return `true` when `view` positively matches one calibrated `"No Moves Remaining"` layout.
+fn matches_no_moves_modal_layout(view: FrameView<'_>, layout: &NoMovesModalLayout) -> bool {
+    let Some(bg) = median_consistent_rgb(view, layout.bg_probes, 24) else {
+        return false;
+    };
+    if bg[2] < 100 || bg[2] < bg[0].saturating_add(60) {
+        return false;
+    }
+    let Some(band) = WhiteInkBand::extract(view, layout.title_band, bg, CHANNEL_INK_TOLERANCE)
+    else {
+        return false;
+    };
+    let spans = band.spans();
+    let (Some(&first), Some(&last)) = (spans.first(), spans.last()) else {
+        return false;
+    };
+    let full_span = InkSpan {
+        start: first.start,
+        end: last.end,
+    };
+    if !band.matches_single(full_span, layout.title_template) {
+        return false;
+    }
+
+    let Ok(click_x) = u32::try_from(layout.click_point.x) else {
+        return false;
+    };
+    let Ok(click_y) = u32::try_from(layout.click_point.y) else {
+        return false;
+    };
+    if click_x < layout.button_bounds.x
+        || click_x >= layout.button_bounds.right()
+        || click_y < layout.button_bounds.y
+        || click_y >= layout.button_bounds.bottom()
+    {
+        return false;
+    }
+    let Some(top_rail) = view.pixel_rgb(click_x, layout.button_bounds.y) else {
+        return false;
+    };
+    if top_rail[2] < 180 {
+        return false;
+    }
+    for (bx, by) in layout.button_probes {
+        let Some(btn_rgb) = view.pixel_rgb(bx, by) else {
+            return false;
+        };
+        if btn_rgb[2] < 140 || btn_rgb[2] < btn_rgb[0].saturating_add(70) {
+            return false;
+        }
+    }
+    true
+}
+
+/// Detect the Draw-23 zero-match `"No Moves Remaining"` modal (tall Normal-mode or compact
+/// Challenge-mode) and return the layout-specific click target for its active blue
+/// `"Undo last move"` button ([`UNDO_LAST_MOVE_CLICK_POINT`] or
+/// [`UNDO_LAST_MOVE_COMPACT_CLICK_POINT`]).
 ///
-/// Requires:
+/// Never returns the adjacent gold `"End game"` button. Requires:
 /// - Dimmed outer board backdrop (`max(rgb) <= 85` at `(200, 500)`, `(1700, 500)`,
 ///   and `SHARED_UNDO_ALL_CONTROL` `(1320, 978)`),
-/// - Bright blue modal header matching `"No Moves Remaining"` (`no-moves-title.ink`), and
-/// - Active blue `"Undo last move"` control within [`UNDO_LAST_MOVE_BUTTON_BOUNDS`].
+/// - Bright blue modal header matching `"No Moves Remaining"` (`no-moves-title.ink` or
+///   `no-moves-title-compact.ink`), and
+/// - Active blue `"Undo last move"` control within the matched layout's button bounds.
 ///
-/// Returns `Ok(None)` with zero side effects and zero QMP I/O when absent.
+/// Returns `Ok(None)` with zero side effects and zero QMP I/O when absent or ambiguous.
 ///
 /// # Errors
 ///
@@ -1101,62 +1228,16 @@ pub fn observe_no_moves_modal(frame: &CapturedFrame) -> Result<Option<PixelPoint
             return Ok(None);
         }
     }
-    let (Some(left_bg), Some(right_bg)) = (view.pixel_rgb(650, 314), view.pixel_rgb(1_260, 314))
-    else {
-        return Ok(None);
-    };
-    for bg in [left_bg, right_bg] {
-        if bg[2] < 100 || bg[2] < bg[0].saturating_add(60) {
-            return Ok(None);
+    let mut matched = None;
+    for layout in &NO_MOVES_MODAL_LAYOUTS {
+        if matches_no_moves_modal_layout(view, layout) {
+            if matched.is_some() {
+                return Ok(None);
+            }
+            matched = Some(layout.click_point);
         }
     }
-    for ch in 0..3 {
-        if left_bg[ch].abs_diff(right_bg[ch]) > 15 {
-            return Ok(None);
-        }
-    }
-    let Some(band) =
-        WhiteInkBand::extract(view, NO_MOVES_TITLE_BAND, left_bg, CHANNEL_INK_TOLERANCE)
-    else {
-        return Ok(None);
-    };
-    let spans = band.spans();
-    let (Some(&first), Some(&last)) = (spans.first(), spans.last()) else {
-        return Ok(None);
-    };
-    let full_span = InkSpan {
-        start: first.start,
-        end: last.end,
-    };
-    if !band.matches_single(
-        full_span,
-        WordTemplate {
-            width: 416,
-            height: WORD_HEIGHT_MODAL,
-            bytes: TEMPLATE_NO_MOVES_TITLE,
-        },
-    ) {
-        return Ok(None);
-    }
-
-    let Ok(click_x) = u32::try_from(UNDO_LAST_MOVE_CLICK_POINT.x) else {
-        return Ok(None);
-    };
-    let Some(top_rail) = view.pixel_rgb(click_x, UNDO_LAST_MOVE_BUTTON_BOUNDS.y) else {
-        return Ok(None);
-    };
-    if top_rail[2] < 180 {
-        return Ok(None);
-    }
-    for (bx, by) in [(1_128, 745), (982, 728), (1_275, 728)] {
-        let Some(btn_rgb) = view.pixel_rgb(bx, by) else {
-            return Ok(None);
-        };
-        if btn_rgb[2] < 140 || btn_rgb[2] < btn_rgb[0].saturating_add(70) {
-            return Ok(None);
-        }
-    }
-    Ok(Some(UNDO_LAST_MOVE_CLICK_POINT))
+    Ok(matched)
 }
 
 #[cfg(test)]
@@ -1611,6 +1692,9 @@ mod tests {
         let modal = decode(include_bytes!(
             "../tests/fixtures/tripeaks-calibration-20261116/no-moves-remaining.png"
         ));
+        let compact_modal = decode(include_bytes!(
+            "../tests/fixtures/tripeaks-calibration-20261116/no-moves-remaining-compact.png"
+        ));
         let stock_empty = decode(include_bytes!(
             "../tests/fixtures/tripeaks-calibration-20261116/stock-empty.png"
         ));
@@ -1625,6 +1709,14 @@ mod tests {
             observe_no_moves_modal(&modal).expect("valid frame"),
             Some(UNDO_LAST_MOVE_CLICK_POINT)
         );
+        assert_eq!(
+            observe_no_moves_modal(&compact_modal).expect("valid compact modal frame"),
+            Some(UNDO_LAST_MOVE_COMPACT_CLICK_POINT)
+        );
+        assert_ne!(
+            UNDO_LAST_MOVE_COMPACT_CLICK_POINT,
+            UNDO_LAST_MOVE_CLICK_POINT
+        );
         for non_modal in [&stock_empty, &stock_last, &tp01, &tp02, &tp03] {
             assert_eq!(
                 observe_no_moves_modal(non_modal).expect("valid frame"),
@@ -1632,12 +1724,45 @@ mod tests {
             );
         }
 
-        // Corrupting the active blue `"Undo last move"` button must fail closed.
+        // Corrupting the active blue `"Undo last move"` button must fail closed for both layouts.
         let mut corrupted_btn = modal;
         let off = 745 * corrupted_btn.stride + 1_128 * 4;
         corrupted_btn.pixels[off..off + 3].copy_from_slice(&[20, 20, 20]);
         assert_eq!(
             observe_no_moves_modal(&corrupted_btn).expect("valid frame"),
+            None
+        );
+
+        let mut corrupted_compact_btn = compact_modal.clone();
+        let compact_off = 622 * corrupted_compact_btn.stride + 1_133 * 4;
+        corrupted_compact_btn.pixels[compact_off..compact_off + 3].copy_from_slice(&[20, 20, 20]);
+        assert_eq!(
+            observe_no_moves_modal(&corrupted_compact_btn).expect("valid frame"),
+            None
+        );
+
+        // Subtle suit-watermark spread (`17` Blue units) flanking the compact title must still match.
+        let mut watermarked = compact_modal.clone();
+        let left_wm = 480 * watermarked.stride + 640 * 4;
+        watermarked.pixels[left_wm..left_wm + 3].copy_from_slice(&[32, 92, 167]);
+        let right_wm = 480 * watermarked.stride + 1_260 * 4;
+        watermarked.pixels[right_wm..right_wm + 3].copy_from_slice(&[20, 78, 150]);
+        assert_eq!(
+            observe_no_moves_modal(&watermarked).expect("watermarked compact modal"),
+            Some(UNDO_LAST_MOVE_COMPACT_CLICK_POINT)
+        );
+
+        // Corrupting the compact modal title text must also fail closed.
+        let mut corrupted_compact_title = compact_modal;
+        for y in 460..500_usize {
+            for x in 735..1_180_usize {
+                let title_off = y * corrupted_compact_title.stride + x * 4;
+                corrupted_compact_title.pixels[title_off..title_off + 3]
+                    .copy_from_slice(&[24, 80, 154]);
+            }
+        }
+        assert_eq!(
+            observe_no_moves_modal(&corrupted_compact_title).expect("valid frame"),
             None
         );
     }

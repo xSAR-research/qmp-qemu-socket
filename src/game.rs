@@ -564,7 +564,6 @@ mod tests {
 
 
     /// Keep the initial mode, selectable modes and authorised calibration contracts stable.
-
     #[test]
     fn tripeaks_remains_the_default_with_five_independent_modes() {
         let mode = GameMode::default();
@@ -598,7 +597,6 @@ mod tests {
 
 
     /// Keep Pyramid target analysis separate while sharing the accepted progress probe.
-
     #[test]
     fn pyramid_uses_its_own_detector_and_the_shared_progress_calibration() {
         let profile = GameMode::Pyramid.profile();
@@ -621,7 +619,6 @@ mod tests {
 
 
     /// Check TriPeaks repeat policies and per-action configured settling delays.
-
     #[test]
     fn repeated_bottom_actions_and_tableau_actions_have_distinct_policies() {
         let profile = *GameMode::TriPeaks.profile();

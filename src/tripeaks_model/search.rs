@@ -6,16 +6,16 @@
 use std::{sync::atomic::AtomicBool, time::Duration};
 
 use xsar::search::{
-    BestEffortOutcome, BestEffortProblem, SearchLimits, SearchMethod, SearchOptions, SearchOutcome,
-    SearchProblem, SearchProgress, SearchStats, SearchStop, solve_best_effort_with_control,
-    solve_with_control,
+    BestEffortOutcome, BestEffortProblem, PartialProof, SearchLimits, SearchMethod, SearchOptions,
+    SearchOutcome, SearchProblem, SearchProgress, SearchStats, SearchStop,
+    solve_best_effort_with_control, solve_with_control,
 };
 
-use crate::recon::{CardSlot, Objective};
+use crate::recon::{BestPartialRoute, CardSlot, Objective, ProbePlan, ReconError};
 
 use super::{
-    DEAL_SLOT_COUNT, FULL_TABLEAU_MASK, INITIAL_WASTE_SLOT, PEAK_MASK, STOCK_CARD_COUNT,
-    STOCK_START_SLOT, TABLEAU_SLOT_COUNT, TriPeaksMove,
+    DEAL_SLOT_COUNT, FULL_TABLEAU_MASK, INITIAL_WASTE_SLOT, ModelError, PEAK_MASK,
+    STOCK_CARD_COUNT, STOCK_START_SLOT, TABLEAU_SLOT_COUNT, TriPeaksMove,
     replay::{ReplayError, ReplayReport, verify_move_sequence, verify_objective_route},
     rules::{
         PEAK_CLEAR_BONUS, are_ranks_adjacent, card_rank_index, is_slot_uncovered,
@@ -24,12 +24,12 @@ use super::{
     validate_slot_table,
 };
 
-/// Bounded synchronous search limits used by the zero-argument [`crate::recon::ReconDomain`] helpers.
+/// Default Beast workstation search allowances (`10 GiB` nominal storage, `20M` retained history/expansions, `600 s`).
 pub const DEFAULT_SEARCH_LIMITS: SearchLimits = SearchLimits {
-    max_states: 500_000,
-    max_expansions: 500_000,
-    max_memory_bytes: 256 * 1024 * 1024,
-    max_duration: Duration::from_secs(10),
+    max_states: 20_000_000,
+    max_expansions: 20_000_000,
+    max_memory_bytes: 10_usize * 1024 * 1024 * 1024,
+    max_duration: Duration::from_secs(600),
 };
 
 /// Maximum legal transitions from any reachable TriPeaks state (`28` tableau + `1` draw).
@@ -111,6 +111,8 @@ struct KnownDealModel {
     known_tableau_ranks: [u8; TABLEAU_SLOT_COUNT],
     /// Optional `Known` rank index for each ordered Stock card `0..23`.
     known_stock_ranks: [Option<u8>; STOCK_CARD_COUNT as usize],
+    /// Remaining unseen cards per rank (`0..=4`) derived from the `52`-card single-deck complement.
+    unseen_rank_counts: [u8; 13],
 }
 
 impl KnownDealModel {
@@ -137,12 +139,37 @@ impl KnownDealModel {
                 known_stock_ranks[idx] = Some(card_rank_index(card));
             }
         }
+        let mut unseen_rank_counts = [4_u8; 13];
+        let mut seen_cards = 0_u64;
+        for entry in fixed {
+            if let CardSlot::Known(card) = *entry
+                && card.0 < 52
+            {
+                let bit = 1_u64 << card.0;
+                if (seen_cards & bit) == 0 {
+                    seen_cards |= bit;
+                    let rank_idx = usize::from(card_rank_index(card));
+                    unseen_rank_counts[rank_idx] = unseen_rank_counts[rank_idx].saturating_sub(1);
+                }
+            }
+        }
         Some(Self {
             initial_waste_rank: card_rank_index(waste_card),
             known_tableau_mask,
             known_tableau_ranks,
             known_stock_ranks,
+            unseen_rank_counts,
         })
+    }
+
+    /// Return the exact count (`0..=8`) of unseen cards adjacent (`±1`) to `rank`.
+    fn unseen_adjacent_count(&self, rank: u8) -> u8 {
+        if rank >= 13 {
+            return 0;
+        }
+        let lower = usize::from((rank + 12) % 13);
+        let upper = usize::from((rank + 1) % 13);
+        self.unseen_rank_counts[lower].saturating_add(self.unseen_rank_counts[upper])
     }
 
     /// Return true when at least one currently uncovered `Known` card matches `waste_rank`.
@@ -506,12 +533,19 @@ impl SearchProblem for TriPeaksObjectiveProblem {
     }
 }
 
-/// Bitmask of initially covered `CardSlot::Unknown` tableau parents (`0..18`).
-fn covered_unknown_parent_mask(slots: &[CardSlot; DEAL_SLOT_COUNT]) -> u32 {
+/// Bitmask of currently covered `CardSlot::Unknown` tableau parents (`0..18`) under `tableau_mask`.
+fn covered_unknown_mask_from(
+    slots: &[CardSlot; DEAL_SLOT_COUNT],
+    initial_tableau_mask: u32,
+) -> u32 {
     let mut mask = 0_u32;
     for (idx, entry) in slots.iter().take(18).enumerate() {
-        if matches!(entry, CardSlot::Unknown) && !is_slot_uncovered(FULL_TABLEAU_MASK, idx as u8) {
-            mask |= 1_u32 << idx;
+        let bit = 1_u32 << idx;
+        if (initial_tableau_mask & bit) != 0
+            && matches!(entry, CardSlot::Unknown)
+            && !is_slot_uncovered(initial_tableau_mask, idx as u8)
+        {
+            mask |= bit;
         }
     }
     mask
@@ -536,7 +570,9 @@ fn exposed_unknown_mask(tableau_mask: u32, covered_unknown_mask: u32) -> u32 {
 struct InfoGainProbeProblem {
     /// Compiled deal ranks and masks.
     model: KnownDealModel,
-    /// Bitmask of `Unknown` slots covered at `T = 0`.
+    /// Starting `ReachState` (`T = 0` root or live mid-probe board state).
+    initial_state: ReachState,
+    /// Bitmask of `Unknown` slots covered at `initial_state`.
     covered_unknown_mask: u32,
 }
 
@@ -546,11 +582,7 @@ impl SearchProblem for InfoGainProbeProblem {
     type Successors = SuccessorIter<ReachState>;
 
     fn initial(&self) -> Self::State {
-        ReachState {
-            tableau_mask: FULL_TABLEAU_MASK,
-            stock_cursor: 0,
-            waste_rank: self.model.initial_waste_rank,
-        }
+        self.initial_state
     }
 
     fn is_goal(&self, state: Self::State) -> bool {
@@ -576,7 +608,11 @@ impl BestEffortProblem for InfoGainProbeProblem {
         let r1 = (exposed & PEAK_MASK).count_ones();
         let r2 = ((exposed >> 3) & 0b11_1111).count_ones();
         let r3 = ((exposed >> 9) & 0x1FF).count_ones();
-        count * 1_000 + r1 * 4 + r2 * 2 + r3
+        let row_bonus = r1 * 4 + r2 * 2 + r3;
+        let adj_unseen = u32::from(self.model.unseen_adjacent_count(state.waste_rank));
+        let rem_draws = u32::from(STOCK_CARD_COUNT.saturating_sub(state.stock_cursor));
+        let cleared = (self.initial_state.tableau_mask & !state.tableau_mask).count_ones();
+        count * 100_000 + row_bonus * 1_000 + adj_unseen * 100 + rem_draws * 3 + cleared
     }
 }
 
@@ -669,22 +705,50 @@ pub fn solve_known_subgraph(slots: &[CardSlot], objective: Objective) -> Option<
     }
 }
 
-/// Plan the highest-information-gain legal move sequence exposing `>= 1` `Unknown` parent.
-pub fn plan_info_gain_probe_with_control(
-    slots: &[CardSlot],
-    limits: SearchLimits,
-    cancel: &AtomicBool,
+/// Borrowed context for continuing info-gain probing from a live mid-board prefix.
+pub(crate) struct ProbeContinuationInput<'a> {
+    /// Current `52`-slot deal table combining known cards and unrevealed slots.
+    pub slots: &'a [CardSlot],
+    /// Legal physical moves already executed from `T = 0` to reach the live board state.
+    pub executed_prefix: &'a [TriPeaksMove],
+    /// Search limits governing probe planning.
+    pub limits: SearchLimits,
+    /// Cooperative cancellation flag checked during graph search.
+    pub cancel: &'a AtomicBool,
+}
+
+/// Shared base planner backing both `T = 0` probe planning and mid-board continuation.
+fn plan_info_gain_from_prefix(
+    input: ProbeContinuationInput<'_>,
     progress: Option<&mut dyn FnMut(SearchProgress)>,
     checkpoint: Option<&dyn Fn() -> Duration>,
-) -> Option<Vec<TriPeaksMove>> {
-    let fixed = validate_slot_table(slots).ok()?;
-    let covered_unknown_mask = covered_unknown_parent_mask(fixed);
+) -> Result<ProbePlan<TriPeaksMove>, ReconError> {
+    let fixed = validate_slot_table(input.slots).map_err(|err| ReconError::SearchFailed {
+        context: "probe planning",
+        detail: err.to_string(),
+    })?;
+    let model = KnownDealModel::from_slots(fixed).ok_or_else(|| ReconError::SearchFailed {
+        context: "probe planning",
+        detail: ModelError::UnknownInitialWaste.to_string(),
+    })?;
+    let prefix_report = verify_move_sequence(fixed, input.executed_prefix).map_err(|err| {
+        ReconError::SearchFailed {
+            context: "probe planning",
+            detail: err.to_string(),
+        }
+    })?;
+    let initial_state = ReachState {
+        tableau_mask: prefix_report.final_position.tableau_mask,
+        stock_cursor: prefix_report.final_position.stock_cursor,
+        waste_rank: card_rank_index(prefix_report.final_position.waste_card),
+    };
+    let covered_unknown_mask = covered_unknown_mask_from(fixed, initial_state.tableau_mask);
     if covered_unknown_mask == 0 {
-        return None;
+        return Ok(ProbePlan::Exhausted);
     }
-    let model = KnownDealModel::from_slots(fixed)?;
     let problem = InfoGainProbeProblem {
         model,
+        initial_state,
         covered_unknown_mask,
     };
     let options = SearchOptions {
@@ -692,58 +756,191 @@ pub fn plan_info_gain_probe_with_control(
         heuristic_weight: SearchOptions::default().heuristic_weight,
     };
     let actions = match solve_best_effort_with_control(
-        &problem, limits, cancel, options, progress, checkpoint,
+        &problem,
+        input.limits,
+        input.cancel,
+        options,
+        progress,
+        checkpoint,
     ) {
         BestEffortOutcome::Solved { actions, .. } => actions,
         BestEffortOutcome::Partial { actions, score, .. } if score > 0 => actions,
-        BestEffortOutcome::Partial { .. } | BestEffortOutcome::Stopped { .. } => return None,
+        BestEffortOutcome::Partial {
+            proof: PartialProof::Exhaustive,
+            ..
+        } => return Ok(ProbePlan::Exhausted),
+        BestEffortOutcome::Partial {
+            proof: PartialProof::Bounded(stop),
+            ..
+        } => return Ok(ProbePlan::Bounded(stop)),
+        BestEffortOutcome::Stopped {
+            reason: SearchStop::Cancelled,
+            ..
+        } => return Err(ReconError::Cancelled),
+        BestEffortOutcome::Stopped {
+            reason: reason @ (SearchStop::AllocationFailure | SearchStop::InternalInvariant),
+            ..
+        } => {
+            return Err(ReconError::SearchFailed {
+                context: "probe planning",
+                detail: reason.to_string(),
+            });
+        }
+        BestEffortOutcome::Stopped {
+            reason:
+                reason @ (SearchStop::StateLimit
+                | SearchStop::ExpansionLimit
+                | SearchStop::MemoryLimit
+                | SearchStop::TimeLimit),
+            ..
+        } => return Ok(ProbePlan::Bounded(reason)),
     };
     if actions.is_empty() {
-        return None;
+        return Err(ReconError::SearchFailed {
+            context: "probe planning",
+            detail: "info-gain solver returned an empty probe with positive score".to_owned(),
+        });
     }
-    let report = verify_move_sequence(fixed, &actions).ok()?;
-    (!report.newly_uncovered_unknown_slots.is_empty()).then_some(actions)
+    let mut combined =
+        Vec::with_capacity(input.executed_prefix.len().saturating_add(actions.len()));
+    combined.extend_from_slice(input.executed_prefix);
+    combined.extend_from_slice(&actions);
+    let report =
+        verify_move_sequence(fixed, &combined).map_err(|err| ReconError::SearchFailed {
+            context: "probe planning",
+            detail: err.to_string(),
+        })?;
+    if report.newly_uncovered_unknown_slots.len()
+        <= prefix_report.newly_uncovered_unknown_slots.len()
+    {
+        return Err(ReconError::SearchFailed {
+            context: "probe planning",
+            detail: "planned probe did not uncover any Unknown slot under replay".to_owned(),
+        });
+    }
+    Ok(ProbePlan::Found(actions))
+}
+
+/// Plan an information-gain legal move sequence exposing `>= 1` [`CardSlot::Unknown`] parent,
+/// distinguishing exhaustive impossibility from bounded interruption and fatal faults.
+///
+/// # Errors
+///
+/// Returns [`ReconError::Cancelled`] on operator cancellation or [`ReconError::SearchFailed`]
+/// if `slots` fail validation, lack a `Known` initial Waste, or hit allocation/invariant faults.
+pub fn plan_info_gain_probe_with_control(
+    slots: &[CardSlot],
+    limits: SearchLimits,
+    cancel: &AtomicBool,
+    progress: Option<&mut dyn FnMut(SearchProgress)>,
+    checkpoint: Option<&dyn Fn() -> Duration>,
+) -> Result<ProbePlan<TriPeaksMove>, ReconError> {
+    plan_info_gain_from_prefix(
+        ProbeContinuationInput {
+            slots,
+            executed_prefix: &[],
+            limits,
+            cancel,
+        },
+        progress,
+        checkpoint,
+    )
+}
+
+/// Plan an online continuation probe from the live state reached after `executed_prefix`.
+///
+/// # Errors
+///
+/// Propagates [`ReconError`] identically to [`plan_info_gain_probe_with_control`].
+pub(crate) fn plan_info_gain_continuation(
+    input: ProbeContinuationInput<'_>,
+) -> Result<ProbePlan<TriPeaksMove>, ReconError> {
+    plan_info_gain_from_prefix(input, None, None)
 }
 
 /// Convenience wrapper for [`plan_info_gain_probe_with_control`] using [`DEFAULT_SEARCH_LIMITS`].
-pub fn plan_info_gain_probe(slots: &[CardSlot]) -> Option<Vec<TriPeaksMove>> {
+///
+/// # Errors
+///
+/// Propagates [`ReconError`] from [`plan_info_gain_probe_with_control`].
+pub fn plan_info_gain_probe(slots: &[CardSlot]) -> Result<ProbePlan<TriPeaksMove>, ReconError> {
     let cancel = AtomicBool::new(false);
     plan_info_gain_probe_with_control(slots, DEFAULT_SEARCH_LIMITS, &cancel, None, None)
 }
 
 /// Compute the maximum-tableau-removal partial route over `Known` cards using `xsar::search`.
+///
+/// # Errors
+///
+/// Returns [`ReconError::Cancelled`] on operator cancellation or [`ReconError::SearchFailed`]
+/// if `slots` fail validation, lack a `Known` initial Waste, or hit allocation/invariant faults.
 pub fn best_partial_route_with_control(
     slots: &[CardSlot],
     limits: SearchLimits,
     cancel: &AtomicBool,
     progress: Option<&mut dyn FnMut(SearchProgress)>,
     checkpoint: Option<&dyn Fn() -> Duration>,
-) -> Vec<TriPeaksMove> {
-    let Some(model) = KnownDealModel::from_slots(slots) else {
-        return Vec::new();
-    };
+) -> Result<BestPartialRoute<TriPeaksMove>, ReconError> {
+    let fixed = validate_slot_table(slots).map_err(|err| ReconError::SearchFailed {
+        context: "partial fallback",
+        detail: err.to_string(),
+    })?;
+    let has_unknown_slots = fixed.iter().any(|slot| matches!(slot, CardSlot::Unknown));
+    let model = KnownDealModel::from_slots(fixed).ok_or_else(|| ReconError::SearchFailed {
+        context: "partial fallback",
+        detail: ModelError::UnknownInitialWaste.to_string(),
+    })?;
     let problem = BestPartialProblem { model };
     let options = SearchOptions {
         method: SearchMethod::Dijkstra,
         heuristic_weight: SearchOptions::default().heuristic_weight,
     };
-    let actions = match solve_best_effort_with_control(
+    let (actions, proof) = match solve_best_effort_with_control(
         &problem, limits, cancel, options, progress, checkpoint,
     ) {
-        BestEffortOutcome::Solved { actions, .. } | BestEffortOutcome::Partial { actions, .. } => {
-            actions
+        BestEffortOutcome::Solved { actions, .. } => (actions, PartialProof::Exhaustive),
+        BestEffortOutcome::Partial { actions, proof, .. } => (actions, proof),
+        BestEffortOutcome::Stopped {
+            reason: SearchStop::Cancelled,
+            ..
+        } => return Err(ReconError::Cancelled),
+        BestEffortOutcome::Stopped {
+            reason: reason @ (SearchStop::AllocationFailure | SearchStop::InternalInvariant),
+            ..
+        } => {
+            return Err(ReconError::SearchFailed {
+                context: "partial fallback",
+                detail: reason.to_string(),
+            });
         }
-        BestEffortOutcome::Stopped { .. } => return Vec::new(),
+        BestEffortOutcome::Stopped {
+            reason:
+                reason @ (SearchStop::StateLimit
+                | SearchStop::ExpansionLimit
+                | SearchStop::MemoryLimit
+                | SearchStop::TimeLimit),
+            ..
+        } => (Vec::new(), PartialProof::Bounded(reason)),
     };
-    if verify_move_sequence(slots, &actions).is_ok() {
-        actions
-    } else {
-        Vec::new()
-    }
+    verify_move_sequence(fixed, &actions).map_err(|err| ReconError::SearchFailed {
+        context: "partial fallback",
+        detail: err.to_string(),
+    })?;
+    Ok(BestPartialRoute {
+        moves: actions,
+        proof,
+        has_unknown_slots,
+    })
 }
 
 /// Convenience wrapper for [`best_partial_route_with_control`] using [`DEFAULT_SEARCH_LIMITS`].
-pub fn best_partial_route(slots: &[CardSlot]) -> Vec<TriPeaksMove> {
+///
+/// # Errors
+///
+/// Propagates [`ReconError`] from [`best_partial_route_with_control`].
+pub fn best_partial_route(
+    slots: &[CardSlot],
+) -> Result<BestPartialRoute<TriPeaksMove>, ReconError> {
     let cancel = AtomicBool::new(false);
     best_partial_route_with_control(slots, DEFAULT_SEARCH_LIMITS, &cancel, None, None)
 }
@@ -770,14 +967,19 @@ pub enum TriPeaksPlanOutcome {
         /// Aggregate bounded search counters across passes.
         stats: SearchStats,
     },
-    /// Both the direct objective and `ClearBoard` are exhaustively unsolvable on the known cards.
+    /// Direct objective and `ClearBoard` escalation could not be solved on the known cards;
+    /// carries the best partial progress, proof status (`Exhaustive` vs `Bounded`), and remaining `Unknown` slot count.
     UnsolvablePartial {
         /// Replay-verified best objective-progress route (empty when `0` progress is reachable).
         actions: Vec<TriPeaksMove>,
         /// Verified final state of `actions`.
         replay: ReplayReport,
-        /// Maximum tableau cards clearable on the known deal (`0..=28`).
+        /// Best number of tableau cards cleared on the known deal (`0..=28`; proven max iff `proof == Exhaustive && unknown_slots == 0`).
         max_tableau_cleared: u8,
+        /// Whether partial-progress search exhausted the known subgraph or stopped at a bound.
+        proof: PartialProof,
+        /// Number of slots in the evaluated table still marked [`CardSlot::Unknown`].
+        unknown_slots: usize,
         /// Aggregate bounded search counters across passes.
         stats: SearchStats,
     },
@@ -984,12 +1186,12 @@ impl PlanSearchEnv<'_, '_> {
         self.acc_stats.elapsed = self.acc_stats.elapsed.saturating_add(next.elapsed);
     }
 
-    /// Run one `BestEffortProblem` pass cleanly, recording stats and mapping cancellation.
+    /// Run one `BestEffortProblem` pass cleanly, preserving partial proof and propagating `Stopped`.
     fn run_best_effort<P: BestEffortProblem<Action = TriPeaksMove>>(
         &mut self,
         problem: &P,
         options: SearchOptions,
-    ) -> Result<Option<Vec<TriPeaksMove>>, SearchStop> {
+    ) -> Result<(Vec<TriPeaksMove>, PartialProof), SearchStop> {
         let outcome = match self.progress.as_deref_mut() {
             Some(cb) => {
                 let mut forward = |p| cb(p);
@@ -1012,21 +1214,22 @@ impl PlanSearchEnv<'_, '_> {
             ),
         };
         match outcome {
-            BestEffortOutcome::Solved { actions, stats, .. }
-            | BestEffortOutcome::Partial { actions, stats, .. } => {
+            BestEffortOutcome::Solved { actions, stats, .. } => {
                 self.record_stats(stats);
-                Ok(Some(actions))
+                Ok((actions, PartialProof::Exhaustive))
             }
-            BestEffortOutcome::Stopped {
-                reason: SearchStop::Cancelled,
+            BestEffortOutcome::Partial {
+                actions,
+                proof,
                 stats,
+                ..
             } => {
                 self.record_stats(stats);
-                Err(SearchStop::Cancelled)
+                Ok((actions, proof))
             }
-            BestEffortOutcome::Stopped { stats, .. } => {
+            BestEffortOutcome::Stopped { reason, stats } => {
                 self.record_stats(stats);
-                Ok(None)
+                Err(reason)
             }
         }
     }
@@ -1116,12 +1319,12 @@ fn maybe_upgrade_clear_score(
         return Ok((best_actions, best_replay));
     }
 
-    // Bound each score-maximising binary-search probe so multi-draw boards never stall.
+    // Bound each score-maximising binary-search probe proportionally to workstation budgets.
     let probe_limits = SearchLimits {
-        max_states: env.limits.max_states.min(100_000),
-        max_expansions: env.limits.max_expansions.min(50_000),
+        max_states: env.limits.max_states.min(2_000_000),
+        max_expansions: env.limits.max_expansions.min(2_000_000),
         max_memory_bytes: env.limits.max_memory_bytes,
-        max_duration: env.limits.max_duration.min(Duration::from_millis(500)),
+        max_duration: env.limits.max_duration.min(Duration::from_secs(5)),
     };
 
     while lo_hundreds <= hi_hundreds {
@@ -1152,9 +1355,12 @@ fn maybe_upgrade_clear_score(
                 }
             }
             SearchOutcome::Stopped {
-                reason: SearchStop::Cancelled,
+                reason:
+                    reason @ (SearchStop::Cancelled
+                    | SearchStop::AllocationFailure
+                    | SearchStop::InternalInvariant),
                 ..
-            } => return Err(SearchStop::Cancelled),
+            } => return Err(reason),
             SearchOutcome::Unsolvable { .. } | SearchOutcome::Stopped { .. } => {
                 hi_hundreds = mid_hundreds - 1;
             }
@@ -1190,7 +1396,9 @@ pub fn plan_deal_route_with_control(
         acc_stats: SearchStats::default(),
     };
 
-    // 1. Try the direct caller objective first.
+    let mut prior_bound: Option<SearchStop> = None;
+
+    // 1. Try the direct caller objective first; non-time resource bounds fall through to escalation/partial.
     match env.run_objective(objective) {
         SearchOutcome::Solved { actions, .. } => {
             let route = actions.into_vec();
@@ -1200,6 +1408,13 @@ pub fn plan_deal_route_with_control(
                 replay,
                 stats: env.acc_stats,
             });
+        }
+        SearchOutcome::Stopped {
+            reason:
+                reason @ (SearchStop::StateLimit | SearchStop::ExpansionLimit | SearchStop::MemoryLimit),
+            ..
+        } => {
+            prior_bound = Some(reason);
         }
         SearchOutcome::Stopped { reason, .. } => {
             return Ok(TriPeaksPlanOutcome::Stopped {
@@ -1239,6 +1454,17 @@ pub fn plan_deal_route_with_control(
                     stats: env.acc_stats,
                 });
             }
+            SearchOutcome::Stopped {
+                reason:
+                    reason @ (SearchStop::StateLimit
+                    | SearchStop::ExpansionLimit
+                    | SearchStop::MemoryLimit),
+                ..
+            } => {
+                if prior_bound.is_none() {
+                    prior_bound = Some(reason);
+                }
+            }
             SearchOutcome::Stopped { reason, .. } => {
                 return Ok(TriPeaksPlanOutcome::Stopped {
                     reason,
@@ -1249,40 +1475,60 @@ pub fn plan_deal_route_with_control(
         }
     }
 
+    let unknown_slots = fixed
+        .iter()
+        .filter(|slot| matches!(slot, CardSlot::Unknown))
+        .count();
+
     // 3. Dead-end fallback: measure maximum clearable cards, and bank positive rank/score gain.
     let dijkstra = SearchOptions {
         method: SearchMethod::Dijkstra,
         heuristic_weight: SearchOptions::default().heuristic_weight,
     };
-    let best_cards_actions = match env.run_best_effort(&BestPartialProblem { model }, dijkstra) {
-        Ok(Some(actions)) => actions,
-        Ok(None) => Vec::new(),
-        Err(reason) => {
-            return Ok(TriPeaksPlanOutcome::Stopped {
-                reason,
-                stats: env.acc_stats,
-            });
-        }
-    };
+    let (best_cards_actions, best_cards_proof) =
+        match env.run_best_effort(&BestPartialProblem { model }, dijkstra) {
+            Ok((actions, pass3_proof)) => {
+                let combined_proof = match prior_bound {
+                    Some(stop) => combine_partial_proofs(PartialProof::Bounded(stop), pass3_proof),
+                    None => pass3_proof,
+                };
+                (actions, combined_proof)
+            }
+            Err(reason) => {
+                return Ok(TriPeaksPlanOutcome::Stopped {
+                    reason,
+                    stats: env.acc_stats,
+                });
+            }
+        };
     let best_cards_replay = verify_move_sequence(fixed, &best_cards_actions)?;
     let max_tableau_cleared = u8::try_from(
         (FULL_TABLEAU_MASK & !best_cards_replay.final_position.tableau_mask).count_ones(),
     )
     .unwrap_or(28);
 
-    let (actions, replay) = match objective {
-        Objective::ClearBoard => (Vec::new(), verify_move_sequence(fixed, &[])?),
+    let (actions, replay, proof) = match objective {
+        Objective::ClearBoard => (
+            Vec::new(),
+            verify_move_sequence(fixed, &[])?,
+            best_cards_proof,
+        ),
         Objective::ClearRankQuota { rank, .. } => {
             let target_rank_mask = model.target_rank_mask(rank);
             if target_rank_mask == 0 {
-                (Vec::new(), verify_move_sequence(fixed, &[])?)
+                (
+                    Vec::new(),
+                    verify_move_sequence(fixed, &[])?,
+                    best_cards_proof,
+                )
             } else {
                 let problem = MaxRankPartialProblem {
                     model,
                     target_rank_mask,
                 };
                 match env.run_best_effort(&problem, dijkstra) {
-                    Ok(Some(candidate)) => {
+                    Ok((candidate, rank_proof)) => {
+                        let proof = combine_partial_proofs(best_cards_proof, rank_proof);
                         let candidate_replay = verify_move_sequence(fixed, &candidate)?;
                         let cleared = candidate_replay
                             .final_position
@@ -1291,12 +1537,11 @@ pub fn plan_deal_route_with_control(
                             .copied()
                             .unwrap_or(0);
                         if cleared > 0 {
-                            (candidate, candidate_replay)
+                            (candidate, candidate_replay, proof)
                         } else {
-                            (Vec::new(), verify_move_sequence(fixed, &[])?)
+                            (Vec::new(), verify_move_sequence(fixed, &[])?, proof)
                         }
                     }
-                    Ok(None) => (Vec::new(), verify_move_sequence(fixed, &[])?),
                     Err(reason) => {
                         return Ok(TriPeaksPlanOutcome::Stopped {
                             reason,
@@ -1309,27 +1554,27 @@ pub fn plan_deal_route_with_control(
         Objective::ReachScoreDelta { .. } => {
             let problem = MaxScorePartialProblem { model };
             let mut chosen = (best_cards_actions, best_cards_replay);
-            match env.run_best_effort(&problem, dijkstra) {
-                Ok(Some(candidate)) => {
-                    if let Ok(candidate_replay) = verify_move_sequence(fixed, &candidate)
-                        && candidate_replay.final_position.score_delta
-                            > chosen.1.final_position.score_delta
+            let proof = match env.run_best_effort(&problem, dijkstra) {
+                Ok((candidate, score_proof)) => {
+                    let candidate_replay = verify_move_sequence(fixed, &candidate)?;
+                    if candidate_replay.final_position.score_delta
+                        > chosen.1.final_position.score_delta
                     {
                         chosen = (candidate, candidate_replay);
                     }
+                    combine_partial_proofs(best_cards_proof, score_proof)
                 }
-                Ok(None) => {}
                 Err(reason) => {
                     return Ok(TriPeaksPlanOutcome::Stopped {
                         reason,
                         stats: env.acc_stats,
                     });
                 }
-            }
+            };
             if chosen.1.final_position.score_delta > 0 {
-                chosen
+                (chosen.0, chosen.1, proof)
             } else {
-                (Vec::new(), verify_move_sequence(fixed, &[])?)
+                (Vec::new(), verify_move_sequence(fixed, &[])?, proof)
             }
         }
     };
@@ -1338,8 +1583,20 @@ pub fn plan_deal_route_with_control(
         actions,
         replay,
         max_tableau_cleared,
+        proof,
+        unknown_slots,
         stats: env.acc_stats,
     })
+}
+
+/// Combine two partial-search proof flags conservatively (`Exhaustive` only when both are).
+const fn combine_partial_proofs(first: PartialProof, second: PartialProof) -> PartialProof {
+    match (first, second) {
+        (PartialProof::Exhaustive, PartialProof::Exhaustive) => PartialProof::Exhaustive,
+        (PartialProof::Bounded(stop), _) | (_, PartialProof::Bounded(stop)) => {
+            PartialProof::Bounded(stop)
+        }
+    }
 }
 
 /// Convenience wrapper for [`plan_deal_route_with_control`] using [`DEFAULT_SEARCH_LIMITS`].

@@ -349,6 +349,8 @@ enum WorkerCommand {
         action: tripeaks_route::PlaybackAction,
         /// Settle and observation limits applied per step or restoration.
         timings: tripeaks_reconnaissance::TriPeaksStepTiming,
+        /// Explicit Challenge vs Normal session origin preserved from RECON.
+        origin: tripeaks_route::SessionOrigin,
     },
     /// Hold one reservation across TriPeaks Recon, planning/escalation, playback, and transitions.
     StartTriPeaksSession {
@@ -1298,6 +1300,7 @@ impl WorkerHandle {
         plan: tripeaks_calculation::Identity,
         action: tripeaks_route::PlaybackAction,
         timings: tripeaks_reconnaissance::TriPeaksStepTiming,
+        origin: tripeaks_route::SessionOrigin,
     ) -> Result<u64, String> {
         self.check_accepting_requests()?;
         plan.context.validate()?;
@@ -1326,6 +1329,7 @@ impl WorkerHandle {
                             run_id,
                             action,
                             timings,
+                            origin,
                         })
                         .map_err(|e| format!("Worker unavailable: {e}"))
                 },
@@ -2292,6 +2296,7 @@ fn run_worker(
                 run_id,
                 action,
                 timings,
+                origin,
             } => {
                 if let Some(error) = pause_failure {
                     tripeaks_route::reject(plan, run_id, error, &event_tx);
@@ -2304,6 +2309,7 @@ fn run_worker(
                         run_id,
                         action,
                         timings,
+                        origin,
                         &event_tx,
                         &cancel_requested,
                     );

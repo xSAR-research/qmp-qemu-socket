@@ -60,6 +60,18 @@
       "source": "Live Windows 11 Microsoft Solitaire TriPeaks capture via XSCP v3 + QMP on Beast (2026-11-16)",
       "provenance": "native",
       "expected_scene": "No Moves Remaining modal after 0 Stock + 0 legal tableau moves, dimming Undo All (1320,978) with Undo last move button at (1128,728)"
+    },
+    {
+      "id": "no-moves-remaining-compact",
+      "path": "no-moves-remaining-compact.png",
+      "width": 1920,
+      "height": 1080,
+      "format": "RGBA PNG",
+      "bytes": 2214501,
+      "sha256": "c6cee54e06c2358657cbd29cec979b2d814961d6f76fb4dbfadb4573395ec796",
+      "source": "Live Windows 11 Microsoft Solitaire TriPeaks Challenge (Queens cleared 0/10) Draw-23 capture on Beast (2026-11-19)",
+      "provenance": "native",
+      "expected_scene": "Compact Challenge-mode No Moves Remaining modal (x=531..1388, y=393..670) with End game and Undo last move at (1133,605) above unobstructed dimmed Waste 5D (1017,682,136,182) and empty Stock tray outline"
     }
   ],
   "templates": [
@@ -302,6 +314,16 @@
       "sha256": "a0f541100942610921ef447f547c0943d7e371b836a25b5b6ce3cd0c146a9032",
       "provenance": "native",
       "source": "tests/fixtures/tripeaks-calibration-20261116/no-moves-remaining.png (No Moves Remaining modal title, y=299..347)"
+    },
+    {
+      "id": "no-moves-title-compact",
+      "path": "templates/no-moves-title-compact.ink",
+      "width": 470,
+      "height": 48,
+      "bytes": 22560,
+      "sha256": "4321aef406c44275c650b7d7df1de5f4e9559e515bbdf3f86c1089b56ffd112c",
+      "provenance": "native",
+      "source": "tests/fixtures/tripeaks-calibration-20261116/no-moves-remaining-compact.png (compact Challenge No Moves Remaining modal title, x=727..1197, y=457..505)"
     },
     {
       "id": "normal-score-label",

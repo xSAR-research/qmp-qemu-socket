@@ -19,7 +19,7 @@ use std::{
     time::Duration,
 };
 
-use xsar::search::{SearchProgress, SearchStats, SearchStop};
+use xsar::search::{PartialProof, SearchLimits, SearchProgress, SearchStats, SearchStop};
 
 use super::{WorkerEvent, WorkerEventSink, pyramid_pause, tripeaks_route};
 use crate::{
@@ -70,7 +70,8 @@ pub(crate) enum Outcome {
         /// `true` when direct quota/score exceeded one deck and escalated to full `28`-card clear.
         escalated_clear_board: bool,
     },
-    /// Exhaustive proof that neither the target nor full `ClearBoard` is solvable; carries any
+    /// Partial fallback produced when neither the target nor full `ClearBoard` solved cleanly;
+    /// carries proof status (`Exhaustive` vs `Bounded`), remaining `Unknown` slot count, and any
     /// best banked partial route (`moves` may be empty when zero objective gain exists).
     Partial {
         /// Original target [`Objective`] requested for this board.
@@ -79,10 +80,14 @@ pub(crate) enum Outcome {
         moves: Vec<TriPeaksMove>,
         /// Verified final state of `moves`.
         replay: ReplayReport,
-        /// Maximum tableau cards clearable on the known deal (`0..=28`).
+        /// Best tableau cards cleared on the known deal (`0..=28`).
         max_tableau_cleared: u8,
         /// Target-rank cards cleared along `moves` when `objective` is `ClearRankQuota`, else `0`.
         banked_rank_count: u8,
+        /// Whether partial-progress search exhausted the known subgraph or stopped at a bound.
+        proof: PartialProof,
+        /// Count of slots in the evaluated document still marked [`crate::recon::CardSlot::Unknown`].
+        unknown_slots: usize,
         /// Aggregate search counters across all solver passes.
         stats: SearchStats,
     },
@@ -236,6 +241,8 @@ pub(super) struct SearchInput<'a> {
     pub cancel: &'a AtomicBool,
     /// Event sink hosting pause coordination.
     pub events: &'a WorkerEventSink,
+    /// Bounded resource limits forwarded to [`plan_deal_route_with_control`].
+    pub search_limits: SearchLimits,
 }
 
 /// Execute bounded TriPeaks A* / escalation search with pause checkpoints and cancellation fences.
@@ -253,6 +260,7 @@ pub(super) fn search_deal_with_control(
         bytes,
         cancel,
         events,
+        search_limits,
     } = input;
     if check_active()? {
         return Ok(Report {
@@ -309,7 +317,7 @@ pub(super) fn search_deal_with_control(
     let plan = plan_deal_route_with_control(
         &document.slots,
         target_objective,
-        DEFAULT_SEARCH_LIMITS,
+        search_limits,
         cancel,
         Some(&mut progress),
         Some(&checkpoint),
@@ -349,6 +357,8 @@ pub(super) fn search_deal_with_control(
             actions,
             replay,
             max_tableau_cleared,
+            proof,
+            unknown_slots,
             stats,
         } => {
             let banked_rank_count = match target_objective {
@@ -366,15 +376,23 @@ pub(super) fn search_deal_with_control(
                 replay,
                 max_tableau_cleared,
                 banked_rank_count,
+                proof,
+                unknown_slots,
                 stats,
             }
         }
         TriPeaksPlanOutcome::Stopped { reason, stats } => {
-            if reason == SearchStop::Cancelled || cancel.load(Ordering::Acquire) {
+            if reason == SearchStop::Cancelled
+                || (cancel.load(Ordering::Acquire)
+                    && !matches!(
+                        reason,
+                        SearchStop::AllocationFailure | SearchStop::InternalInvariant
+                    ))
+            {
                 Outcome::Cancelled(stats)
             } else {
                 Outcome::Failed {
-                    failure: format!("Bounded TriPeaks search stopped before proof ({reason:?})"),
+                    failure: format!("Bounded TriPeaks search stopped before proof ({reason})"),
                     stats,
                 }
             }
@@ -437,6 +455,7 @@ pub(super) fn run(
                 bytes,
                 cancel,
                 events,
+                search_limits: DEFAULT_SEARCH_LIMITS,
             },
             || match active() {
                 Ok(()) => Ok(false),
@@ -502,19 +521,37 @@ pub(crate) fn outcome_summary_message(outcome: &Outcome) -> String {
             replay,
             max_tableau_cleared,
             banked_rank_count,
+            proof,
+            unknown_slots,
             ..
         } => {
             let target_label = format_tripeaks_objective(*objective, None);
+            let scope_clause = match (unknown_slots, proof) {
+                (0, PartialProof::Exhaustive) => format!(
+                    "Proved deal unsolvable for {target_label} (max {max_tableau_cleared}/28 tableau clearable)"
+                ),
+                (0, PartialProof::Bounded(reason)) => format!(
+                    "No complete route found for {target_label}; best-found {max_tableau_cleared}/28 tableau clearable (search stopped at {reason}; maximum unproved)"
+                ),
+                (unknown, PartialProof::Exhaustive) => format!(
+                    "Known-cards search did not solve {target_label} ({unknown} Unknown slots remain; max {max_tableau_cleared}/28 clear over known cards)"
+                ),
+                (unknown, PartialProof::Bounded(reason)) => format!(
+                    "Known-cards search did not solve {target_label} ({unknown} Unknown slots remain; best-found {max_tableau_cleared}/28 clear; search stopped at {reason})"
+                ),
+            };
             if moves.is_empty() {
-                format!(
-                    "Proved deal unsolvable for {target_label} (max {max_tableau_cleared}/28 tableau clearable); zero post-recon moves queued"
-                )
+                format!("{scope_clause}; zero post-recon moves queued")
             } else {
+                let route_verb = if *unknown_slots == 0 && *proof == PartialProof::Exhaustive {
+                    "banked partial route"
+                } else {
+                    "best-found partial route"
+                };
                 format!(
-                    "Proved deal unsolvable for {target_label} (max {max_tableau_cleared}/28 tableau); banked partial route: {} steps, +{} pts, {} target-rank cards",
+                    "{scope_clause}; {route_verb}: {} steps, +{} pts, {banked_rank_count} target-rank cards",
                     moves.len(),
                     replay.final_position.score_delta,
-                    banked_rank_count,
                 )
             }
         }
@@ -839,6 +876,7 @@ mod tests {
                         latest_frame: LatestFrameSlot::default(),
                         capture_context: Mutex::new(None),
                     },
+                    search_limits: DEFAULT_SEARCH_LIMITS,
                 },
                 || Ok(false),
                 |_, _| {},
@@ -888,6 +926,7 @@ mod tests {
                 bytes: Vec::new(),
                 cancel: &AtomicBool::new(false),
                 events: &sink,
+                search_limits: DEFAULT_SEARCH_LIMITS,
             },
             || Ok(false),
             |_, _| {},
@@ -895,7 +934,13 @@ mod tests {
         .expect("clear dead-end finishes");
         assert!(matches!(
             clear_dead.outcome,
-            Outcome::Partial { ref moves, banked_rank_count: 0, .. } if moves.is_empty()
+            Outcome::Partial {
+                ref moves,
+                banked_rank_count: 0,
+                proof: PartialProof::Exhaustive,
+                unknown_slots: 0,
+                ..
+            } if moves.is_empty()
         ));
 
         let quota_partial = search_deal_with_control(
@@ -915,6 +960,7 @@ mod tests {
                 bytes: Vec::new(),
                 cancel: &AtomicBool::new(false),
                 events: &sink,
+                search_limits: DEFAULT_SEARCH_LIMITS,
             },
             || Ok(false),
             |_, _| {},
@@ -922,7 +968,13 @@ mod tests {
         .expect("partial four finishes");
         assert!(matches!(
             quota_partial.outcome,
-            Outcome::Partial { ref moves, banked_rank_count: 1, .. } if !moves.is_empty()
+            Outcome::Partial {
+                ref moves,
+                banked_rank_count: 1,
+                proof: PartialProof::Exhaustive,
+                unknown_slots: 0,
+                ..
+            } if !moves.is_empty()
         ));
     }
 
@@ -985,5 +1037,106 @@ mod tests {
                 .expect("lock")
                 .available(&id2)
         );
+    }
+
+    /// Bounded stops (`TimeLimit`/`ExpansionLimit`) map to `Outcome::Failed`, and partial outcomes
+    /// preserve `PartialProof` + `Unknown` slot counts cleanly in plain operator wording.
+    #[test]
+    fn non_cancel_stop_maps_to_failed_and_partial_summary_distinguishes_bounded_and_unknown() {
+        let (_, sink, _) = test_context_and_sink("bounded-partial");
+        let full_dead = dead_end_with_one_four_slots();
+        let mut with_unknowns = full_dead;
+        for slot in &mut with_unknowns[0..18] {
+            *slot = CardSlot::Unknown;
+        }
+
+        // 1. Tight duration bound on an unsolved deal stops before proof -> `Outcome::Failed` (not Cancelled).
+        let zero_limits = SearchLimits {
+            max_duration: Duration::ZERO,
+            ..DEFAULT_SEARCH_LIMITS
+        };
+        let stopped_report = search_deal_with_control(
+            SearchInput {
+                document: TriPeaksDealDocument {
+                    provenance: DealProvenance::RestoredAtRoot,
+                    probes_used: 0,
+                    objective: Objective::ClearBoard,
+                    slots: with_unknowns,
+                    planned_route: None,
+                },
+                objective_override: None,
+                path: PathBuf::from("stopped-time.json"),
+                bytes: Vec::new(),
+                cancel: &AtomicBool::new(false),
+                events: &sink,
+                search_limits: zero_limits,
+            },
+            || Ok(false),
+            |_, _| {},
+        )
+        .expect("zero-duration search finishes with Failed report");
+        assert!(matches!(
+            stopped_report.outcome,
+            Outcome::Failed { ref failure, .. } if failure.contains("time limit")
+        ));
+        let failed_summary = outcome_summary_message(&stopped_report.outcome);
+        assert!(failed_summary.contains("Calculation failed:"));
+        assert!(!failed_summary.to_ascii_lowercase().contains("epistemic"));
+
+        // 2. Partial outcome with `CardSlot::Unknown` slots remaining preserves `unknown_slots == 18`
+        //    and avoids "Proved deal unsolvable" phrasing.
+        let unknown_report = search_deal_with_control(
+            SearchInput {
+                document: TriPeaksDealDocument {
+                    provenance: DealProvenance::RestoredAtRoot,
+                    probes_used: 1,
+                    objective: Objective::ClearRankQuota {
+                        rank: 3,
+                        remaining: 2,
+                    },
+                    slots: with_unknowns,
+                    planned_route: None,
+                },
+                objective_override: None,
+                path: PathBuf::from("unknown-partial.json"),
+                bytes: Vec::new(),
+                cancel: &AtomicBool::new(false),
+                events: &sink,
+                search_limits: DEFAULT_SEARCH_LIMITS,
+            },
+            || Ok(false),
+            |_, _| {},
+        )
+        .expect("unknown partial finishes");
+        assert!(matches!(
+            unknown_report.outcome,
+            Outcome::Partial {
+                unknown_slots: 18,
+                proof: PartialProof::Exhaustive,
+                ..
+            }
+        ));
+        let unknown_summary = outcome_summary_message(&unknown_report.outcome);
+        assert!(unknown_summary.contains("18 Unknown slots remain"));
+        assert!(!unknown_summary.contains("Proved deal unsolvable"));
+        assert!(!unknown_summary.to_ascii_lowercase().contains("epistemic"));
+
+        // 3. Synthetic `PartialProof::Bounded` summary cleanly states `best-found` and `maximum unproved`.
+        let bounded_summary = outcome_summary_message(&Outcome::Partial {
+            objective: Objective::ClearBoard,
+            moves: Vec::new(),
+            replay: crate::tripeaks_model::verify_move_sequence(&full_dead, &[])
+                .expect("empty replay"),
+            max_tableau_cleared: 14,
+            banked_rank_count: 0,
+            proof: PartialProof::Bounded(SearchStop::ExpansionLimit),
+            unknown_slots: 0,
+            stats: SearchStats::default(),
+        });
+        assert!(bounded_summary.contains("best-found 14/28"));
+        assert!(bounded_summary.contains("expansion limit"));
+        assert!(bounded_summary.contains("maximum unproved"));
+        assert!(!bounded_summary.contains("Proved deal unsolvable"));
+        assert!(!bounded_summary.to_ascii_lowercase().contains("epistemic"));
     }
 }

@@ -28,6 +28,7 @@ use crate::{
     game::GameMode,
     game_controls::{
         LocationRequest, is_challenge_complete_frame, is_tripeaks_full_root_stock, read_card,
+        read_tripeaks_dimmed_modal_tableau_slot, read_tripeaks_dimmed_modal_waste,
         wait_for_challenge_complete,
     },
     game_operations::{
@@ -38,22 +39,30 @@ use crate::{
         validate_native_frame,
     },
     geometry::PixelPoint,
-    parameters::{POST_GAME_MOUSE_HOLD, SHARED_UNDO_ALL_CONTROL, TABLEAU_CARD_REGIONS},
+    parameters::{
+        GAMEPLAY_FELT_GREEN_MINIMUM, GAMEPLAY_FELT_PROBE_BOUNDS,
+        GAMEPLAY_FELT_REQUIRED_FRACTION_PER_MILLE, POST_GAME_MOUSE_HOLD, SHARED_UNDO_ALL_CONTROL,
+        TABLEAU_CARD_REGIONS,
+    },
     qmp::SupportedKey,
-    recon::{Card, CardSlot, Objective, ReconDomain, ReconError, ReconOutcome, SlotId},
+    recon::{
+        BestPartialRoute, Card, CardSlot, Objective, ProbePlan, ReconDomain, ReconError,
+        ReconOutcome, SlotId,
+    },
     tracker::is_gameplay_scene_for_mode,
     tripeaks_model::{
         COVERING_CHILD_MASKS, DEAL_SLOT_COUNT, DEFAULT_SEARCH_LIMITS, DealProvenance,
-        INITIAL_WASTE_SLOT, PublishDealError, STOCK_CARD_COUNT, STOCK_START_SLOT,
+        INITIAL_WASTE_SLOT, MAX_ROUTE_MOVES, PublishDealError, STOCK_CARD_COUNT, STOCK_START_SLOT,
         TABLEAU_SLOT_COUNT, TriPeaksDealDocument, TriPeaksMove, TriPeaksPosition,
         are_ranks_adjacent, best_partial_route_with_control, card_rank_index, covering_children,
         is_slot_uncovered, plan_info_gain_probe_with_control, publish_to_path,
+        search::{ProbeContinuationInput, plan_info_gain_continuation},
         slot_to_tableau_coord, solve_known_subgraph_with_control, tableau_slot_id,
         validate_slot_table,
     },
     tripeaks_progress::{
-        TriPeaksChallenge, UNDO_LAST_MOVE_CLICK_POINT, observe_challenge_header,
-        observe_no_moves_modal,
+        TriPeaksChallenge, UNDO_LAST_MOVE_CLICK_POINT, UNDO_LAST_MOVE_COMPACT_CLICK_POINT,
+        observe_challenge_header, observe_no_moves_modal,
     },
     tripeaks_workflow_model::SlotKnowledgeCounts,
 };
@@ -86,6 +95,53 @@ const UNDO_ALL_MAX_DISABLED_DARK: u32 = 100;
 
 /// Consecutive matching full-root non-matching frames required to short-circuit `Undo All` early.
 const MIN_CONFIRMED_DRIFT_STREAK: usize = 4;
+
+/// Outer-backdrop sample points outside both `"No Moves Remaining"` layouts and active card stacks.
+const DIMMED_FADE_PROBE_POINTS: [(u32, u32); 3] = [(200, 500), (1_700, 500), (1_320, 978)];
+
+/// Maximum RGB channel brightness permitted at dimmed outer TriPeaks backdrop probe points.
+const DIMMED_FADE_MAX_OUTER_CHANNEL: u8 = 130;
+
+/// Minimum green channel expected on dimmed TriPeaks felt during modal scrim fade.
+const DIMMED_FADE_MIN_GREEN: u8 = 10;
+
+/// Maximum consecutive dimmed fade-in frames tolerated before failing closed.
+const MAX_DIMMED_FADE_OBSERVATIONS: usize = 6;
+
+/// Returns `true` when `frame` is a native TriPeaks board dimmed by the modal scrim before the
+/// `"No Moves Remaining"` dialog renders (false on bright boards and XP/LevelUp/Continue screens).
+fn is_dimmed_tripeaks_fade_backdrop(frame: &CapturedFrame) -> bool {
+    if validate_native_frame(frame).is_err() {
+        return false;
+    }
+    if !matches!(classify_challenge_handoff(frame), Ok(None)) {
+        return false;
+    }
+    if DIMMED_FADE_PROBE_POINTS.into_iter().any(|(x, y)| {
+        pixel_rgb(frame, x, y)
+            .is_none_or(|[r, g, b]| r.max(g).max(b) > DIMMED_FADE_MAX_OUTER_CHANNEL)
+    }) {
+        return false;
+    }
+
+    let mut total = 0_u64;
+    let mut dimmed_felt = 0_u64;
+    for y in GAMEPLAY_FELT_PROBE_BOUNDS.y..GAMEPLAY_FELT_PROBE_BOUNDS.bottom() {
+        for x in GAMEPLAY_FELT_PROBE_BOUNDS.x..GAMEPLAY_FELT_PROBE_BOUNDS.right() {
+            let Some([r, g, b]) = pixel_rgb(frame, x, y) else {
+                return false;
+            };
+            total += 1;
+            if (DIMMED_FADE_MIN_GREEN..GAMEPLAY_FELT_GREEN_MINIMUM).contains(&g)
+                && g.saturating_sub(r) >= 8
+                && g.saturating_sub(b) >= 3
+            {
+                dimmed_felt += 1;
+            }
+        }
+    }
+    total > 0 && dimmed_felt * 1_000 >= total * u64::from(GAMEPLAY_FELT_REQUIRED_FRACTION_PER_MILLE)
+}
 
 /// Bounded delays, poll counts, and search budgets for [`LiveTriPeaksDomain`].
 #[derive(Clone, Debug)]
@@ -120,7 +176,7 @@ impl Default for TriPeaksReconConfig {
             reobserve_delay: Duration::from_millis(100),
             restore_settle_delay: Duration::from_millis(200),
             max_step_observations: 12,
-            max_restore_observations: 24,
+            max_restore_observations: 40,
             search_limits: DEFAULT_SEARCH_LIMITS,
         }
     }
@@ -187,7 +243,7 @@ impl BoardSnapshot {
 pub enum FrameClassification {
     /// Consistent TriPeaks gameplay frame with every tableau slot, Stock, and Waste resolved.
     Settled(BoardSnapshot),
-    /// Active gameplay scene where cards or flips remain unreadable / mid-animation.
+    /// Active gameplay scene where cards, flips, or Undo All rewinds remain mid-animation.
     Settling,
     /// `"No Moves Remaining"` modal is active with the calibrated `"Undo last move"` click point.
     NoMovesModal(PixelPoint),
@@ -195,7 +251,7 @@ pub enum FrameClassification {
     ChallengeComplete,
     /// Positive post-win TriPeaks reward/level-up overlay (`Congratulations` or `LEVEL-UP!`).
     BoardWinOverlay,
-    /// Unsupported scene, ambiguous card reading, or structurally impossible cover state.
+    /// Non-gameplay scene without a supported modal or post-win overlay.
     Unsupported(String),
 }
 
@@ -353,39 +409,24 @@ pub fn observe_frame(frame: &CapturedFrame) -> Result<FrameClassification, Opera
                 *dst = TableauSlotObs::Empty;
                 empty_mask |= 1_u32 << idx;
             }
-            CardRead::Unreadable => saw_unreadable = true,
-            CardRead::Ambiguous => {
-                return Ok(FrameClassification::Unsupported(format!(
-                    "ambiguous tableau card at row {row} column {column}"
-                )));
-            }
+            CardRead::Unreadable | CardRead::Ambiguous => saw_unreadable = true,
         }
     }
 
     let stock = match read_card(frame, LocationRequest::tripeaks_draw(1))? {
         CardRead::FaceDown => StockObs::FaceDown,
         CardRead::Empty => StockObs::Empty,
-        CardRead::Unreadable => {
+        CardRead::Unreadable | CardRead::Card(_) | CardRead::Ambiguous => {
             saw_unreadable = true;
             StockObs::Empty
-        }
-        CardRead::Card(_) | CardRead::Ambiguous => {
-            return Ok(FrameClassification::Unsupported(
-                "unexpected Stock face-up or ambiguous classification".to_owned(),
-            ));
         }
     };
 
     let waste = match read_card(frame, LocationRequest::tripeaks_draw(2))? {
         CardRead::Card(card) => Some(recon_card_from_xsar(card)?),
-        CardRead::Unreadable | CardRead::Empty => {
+        CardRead::Unreadable | CardRead::Empty | CardRead::FaceDown | CardRead::Ambiguous => {
             saw_unreadable = true;
             None
-        }
-        CardRead::FaceDown | CardRead::Ambiguous => {
-            return Ok(FrameClassification::Unsupported(
-                "unexpected Waste face-down or ambiguous classification".to_owned(),
-            ));
         }
     };
 
@@ -398,17 +439,15 @@ pub fn observe_frame(frame: &CapturedFrame) -> Result<FrameClassification, Opera
 
     for (idx, obs) in tableau.iter().enumerate() {
         let covered = (COVERING_CHILD_MASKS[idx] & !empty_mask) != 0;
-        if covered && *obs != TableauSlotObs::FaceDown {
-            return Ok(FrameClassification::Unsupported(format!(
-                "covered TriPeaks slot {idx} did not read FaceDown"
-            )));
-        }
-        if !covered && *obs == TableauSlotObs::FaceDown {
+        if covered != (*obs == TableauSlotObs::FaceDown) {
             return Ok(FrameClassification::Settling);
         }
     }
 
     let undo_all = classify_tripeaks_undo_all(frame)?;
+    if undo_all == ControlAvailability::Ambiguous {
+        return Ok(FrameClassification::Settling);
+    }
     let snapshot = BoardSnapshot {
         tableau,
         stock,
@@ -419,6 +458,13 @@ pub fn observe_frame(frame: &CapturedFrame) -> Result<FrameClassification, Opera
         return Ok(FrameClassification::Settling);
     }
     Ok(FrameClassification::Settled(snapshot))
+}
+
+/// Return `true` when `point` is one of the calibrated `"Undo last move"` modal click centres.
+const fn is_undo_last_move_click_point(point: PixelPoint) -> bool {
+    (point.x == UNDO_LAST_MOVE_CLICK_POINT.x && point.y == UNDO_LAST_MOVE_CLICK_POINT.y)
+        || (point.x == UNDO_LAST_MOVE_COMPACT_CLICK_POINT.x
+            && point.y == UNDO_LAST_MOVE_COMPACT_CLICK_POINT.y)
 }
 
 /// Same-frame input authorisation callback passed to `NativeOperations` and test `OperationIo`s.
@@ -473,7 +519,7 @@ pub fn authorise_tripeaks_input(frame: &CapturedFrame, input: Input) -> Result<(
         }
         Input::MouseLeft(point) => authorise_tableau_tap_input(frame, point),
         Input::MouseLeftHold { point, hold }
-            if point == UNDO_LAST_MOVE_CLICK_POINT && hold == POST_GAME_MOUSE_HOLD =>
+            if is_undo_last_move_click_point(point) && hold == POST_GAME_MOUSE_HOLD =>
         {
             match observe_no_moves_modal(frame)? {
                 Some(detected) if detected == point => Ok(()),
@@ -612,8 +658,23 @@ pub(crate) enum LiveStepOutcome {
     BoardWinOverlay,
     /// Verified `Challenge Complete!` (or XP-counting / `LEVEL-UP!` handoff) screen.
     ChallengeComplete,
-    /// `"No Moves Remaining"` modal observed when `allow_final_modal` was explicitly set.
+    /// `"No Moves Remaining"` modal observed when [`StepModalPolicy::AllowFinalPartial`] was set.
     PartialModal,
+    /// Mid-RECON probe triggered `"No Moves Remaining"` and Step 1 (`Undo last move`) backed it
+    /// out cleanly onto the un-dimmed pre-step board so Step 2 (`Undo All`) can complete.
+    ProbeModalRecovered,
+}
+
+/// Modal handling policy passed into [`deliver_and_observe_tripeaks_move`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum StepModalPolicy {
+    /// Refuse `"No Moves Remaining"` as an unexpected overlay.
+    Disallow,
+    /// Final move of a banked partial route: confirm twice and return [`LiveStepOutcome::PartialModal`].
+    AllowFinalPartial,
+    /// Mid-RECON probe step: confirm modal twice, read unobstructed newly uncovered parents,
+    /// back out via `"Undo last move"` (`POST_GAME_MOUSE_HOLD`), and verify pre-step board restoration.
+    RecoverProbe,
 }
 
 /// Mode and safety options passed alongside one [`TriPeaksMove`] into [`deliver_and_observe_tripeaks_move`].
@@ -623,8 +684,8 @@ pub(crate) struct TriPeaksStepOptions {
     pub(crate) mv: TriPeaksMove,
     /// Whether Challenge completion / handoff detection is active.
     pub(crate) challenge_mode: bool,
-    /// Whether landing on `"No Moves Remaining"` after the final banked move returns cleanly.
-    pub(crate) allow_final_modal: bool,
+    /// Policy governing `"No Moves Remaining"` modal handling on this step.
+    pub(crate) modal_policy: StepModalPolicy,
 }
 
 /// Target untouched `T = 0` predicate checked during [`restore_tripeaks_with_driver`].
@@ -632,6 +693,13 @@ pub(crate) struct TriPeaksStepOptions {
 enum RootRestoreTarget<'a> {
     /// Exact snapshot equality with a stored `T = 0` [`BoardSnapshot`] (recon probing).
     ExactSnapshot(&'a BoardSnapshot),
+    /// Initial Draw-23 Stock-sweep restoration (`ExactSnapshot` + Draw-22 back-out invariants).
+    Draw23Sweep {
+        /// Untouched `T = 0` root snapshot.
+        root: &'a BoardSnapshot,
+        /// Previous Waste card (`SlotId(50)`) expected after Draw-23 `"Undo last move"`.
+        slot_50: Card,
+    },
     /// Verified match against a saved `TriPeaksDealDocument`'s `Known` slots (`UNDO ALL` playback).
     DocumentSlots(&'a [CardSlot; DEAL_SLOT_COUNT]),
 }
@@ -815,23 +883,87 @@ impl<'a, 'b, I: OperationIo> TriPeaksSessionDriver<'a, 'b, I> {
         })
     }
 
-    /// Poll input-free until settled gameplay or a non-gameplay modal appears (`Settling` retries).
+    /// Poll input-free until settled gameplay or a non-gameplay modal appears (`Settling` and
+    /// bounded dimmed modal fade-in retries).
     pub(crate) fn acquire_non_settling_scene(
         &mut self,
         context: &'static str,
     ) -> Result<FrameClassification, ReconError> {
         let attempts = self.timings.max_restore_observations.max(1);
+        let mut fade_streak = 0_usize;
+        let mut last_class = FrameClassification::Settling;
         for attempt in 0..attempts {
-            let frame = self.capture_and_publish(context)?;
-            let class = observe_frame(frame).map_err(|err| self.map_op_error(context, err))?;
-            if class != FrameClassification::Settling {
-                return Ok(class);
+            let (class, is_dimmed_fade) = {
+                let frame = self.capture_and_publish(context)?;
+                let is_dimmed_fade = is_dimmed_tripeaks_fade_backdrop(frame);
+                let class = observe_frame(frame).map_err(|err| self.map_op_error(context, err))?;
+                (class, is_dimmed_fade)
+            };
+            match class {
+                FrameClassification::Settling => {
+                    fade_streak = 0;
+                    last_class = FrameClassification::Settling;
+                }
+                FrameClassification::Unsupported(_)
+                    if is_dimmed_fade && fade_streak < MAX_DIMMED_FADE_OBSERVATIONS =>
+                {
+                    fade_streak += 1;
+                    last_class = class;
+                }
+                other => return Ok(other),
             }
             if attempt + 1 < attempts {
                 self.wait_cancellable(self.timings.reobserve_delay, context)?;
             }
         }
-        Ok(FrameClassification::Settling)
+        Ok(last_class)
+    }
+
+    /// Click a twice-confirmed `"No Moves Remaining"` `"Undo last move"` target using
+    /// `POST_GAME_MOUSE_HOLD`, then wait for two consecutive matching un-dimmed `Settled` frames.
+    pub(crate) fn dismiss_confirmed_no_moves_modal(
+        &mut self,
+        context: &'static str,
+        point: PixelPoint,
+    ) -> Result<BoardSnapshot, ReconError> {
+        self.deliver_hold_click(point, POST_GAME_MOUSE_HOLD, context)?;
+        self.wait_cancellable(self.timings.restore_settle_delay, context)?;
+
+        let mut last_settled: Option<BoardSnapshot> = None;
+        let attempts = self.timings.max_restore_observations.max(2);
+        for attempt in 0..attempts {
+            let frame = self.capture_and_publish(context)?;
+            match observe_frame(frame).map_err(|err| self.map_op_error(context, err))? {
+                FrameClassification::Settled(snap) => {
+                    if last_settled.as_ref() == Some(&snap) {
+                        return Ok(snap);
+                    }
+                    last_settled = Some(snap);
+                }
+                FrameClassification::Settling => {
+                    last_settled = None;
+                    if attempt + 1 < attempts {
+                        self.wait_cancellable(self.timings.reobserve_delay, context)?;
+                    }
+                }
+                FrameClassification::NoMovesModal(_) | FrameClassification::Unsupported(_)
+                    if last_settled.is_none() && attempt + 1 < attempts =>
+                {
+                    self.wait_cancellable(self.timings.reobserve_delay, context)?;
+                }
+                other => {
+                    return Err(ReconError::SceneVerification {
+                        detail: format!(
+                            "unexpected scene after No Moves Remaining Undo-last-move: {other:?}"
+                        ),
+                    });
+                }
+            }
+        }
+        Err(ReconError::SceneVerification {
+            detail: "board did not settle twice cleanly after No Moves Remaining back-out"
+                .to_owned(),
+        })
     }
 
     /// Back out a twice-confirmed `"No Moves Remaining"` modal using `POST_GAME_MOUSE_HOLD`, then
@@ -865,39 +997,7 @@ impl<'a, 'b, I: OperationIo> TriPeaksSessionDriver<'a, 'b, I> {
             }
         }
 
-        self.deliver_hold_click(initial_point, POST_GAME_MOUSE_HOLD, context)?;
-        self.wait_cancellable(self.timings.restore_settle_delay, context)?;
-
-        let mut last_settled: Option<BoardSnapshot> = None;
-        let attempts = self.timings.max_restore_observations.max(2);
-        for attempt in 0..attempts {
-            let frame = self.capture_and_publish(context)?;
-            match observe_frame(frame).map_err(|err| self.map_op_error(context, err))? {
-                FrameClassification::Settled(snap) => {
-                    if last_settled.as_ref() == Some(&snap) {
-                        return Ok(snap);
-                    }
-                    last_settled = Some(snap);
-                }
-                FrameClassification::Settling => {
-                    last_settled = None;
-                    if attempt + 1 < attempts {
-                        self.wait_cancellable(self.timings.reobserve_delay, context)?;
-                    }
-                }
-                other => {
-                    return Err(ReconError::SceneVerification {
-                        detail: format!(
-                            "unexpected scene after No Moves Remaining Undo-last-move: {other:?}"
-                        ),
-                    });
-                }
-            }
-        }
-        Err(ReconError::SceneVerification {
-            detail: "board did not settle twice cleanly after No Moves Remaining back-out"
-                .to_owned(),
-        })
+        self.dismiss_confirmed_no_moves_modal(context, initial_point)
     }
 
     /// Poll until two consecutive captures confirm `"No Moves Remaining"` at `expected`.
@@ -1008,6 +1108,8 @@ struct DriverUndoAllIo<'a, 'b, 'c, I: OperationIo> {
     confirmed_drifted: Option<BoardSnapshot>,
     /// Captures a `"No Moves Remaining"` click target if the modal opened right as `UndoAll` ran.
     observed_modal: Option<PixelPoint>,
+    /// Consecutive dimmed TriPeaks fade-in frames tolerated while awaiting modal render.
+    fade_streak: usize,
 }
 
 impl<I: OperationIo> UndoAllIo for DriverUndoAllIo<'_, '_, '_, I> {
@@ -1024,10 +1126,13 @@ impl<I: OperationIo> UndoAllIo for DriverUndoAllIo<'_, '_, '_, I> {
         }
         let frame = self.driver.session.screen_capture()?;
         (self.driver.on_frame)(frame);
+        let is_dimmed_fade = is_dimmed_tripeaks_fade_backdrop(frame);
         match observe_frame(frame)? {
             FrameClassification::Settled(snap) if snap.is_untouched_root_layout() => {
+                self.fade_streak = 0;
                 let matches = match self.target {
-                    RootRestoreTarget::ExactSnapshot(root) => snap == *root,
+                    RootRestoreTarget::ExactSnapshot(root)
+                    | RootRestoreTarget::Draw23Sweep { root, .. } => snap == *root,
                     RootRestoreTarget::DocumentSlots(slots) => {
                         verify_snapshot_matches_document_root(&snap, slots).is_ok()
                             && self.last_matched.as_ref().is_none_or(|prev| *prev == snap)
@@ -1053,14 +1158,25 @@ impl<I: OperationIo> UndoAllIo for DriverUndoAllIo<'_, '_, '_, I> {
                 Ok(UndoScene::Animating)
             }
             FrameClassification::Settled(_) | FrameClassification::Settling => {
+                self.fade_streak = 0;
                 self.last_drifted = None;
                 self.drifted_streak = 0;
                 self.last_matched = None;
                 Ok(UndoScene::Animating)
             }
             FrameClassification::NoMovesModal(point) => {
+                self.fade_streak = 0;
                 self.observed_modal = Some(point);
                 Ok(UndoScene::Unknown)
+            }
+            FrameClassification::Unsupported(_)
+                if is_dimmed_fade && self.fade_streak < MAX_DIMMED_FADE_OBSERVATIONS =>
+            {
+                self.fade_streak = self.fade_streak.saturating_add(1);
+                self.last_drifted = None;
+                self.drifted_streak = 0;
+                self.last_matched = None;
+                Ok(UndoScene::Animating)
             }
             FrameClassification::ChallengeComplete
             | FrameClassification::BoardWinOverlay
@@ -1226,9 +1342,12 @@ pub(crate) fn deliver_and_observe_tripeaks_move<I: OperationIo>(
     };
 
     for attempt in 0..attempts {
-        let frame = driver.capture_and_publish("tripeaks_step_observe")?;
-        let class = observe_frame(frame)
-            .map_err(|err| driver.map_op_error("tripeaks_step_observe", err))?;
+        let (class_res, is_dimmed_fade) = {
+            let frame = driver.capture_and_publish("tripeaks_step_observe")?;
+            let is_dimmed_fade = is_dimmed_tripeaks_fade_backdrop(frame);
+            (observe_frame(frame), is_dimmed_fade)
+        };
+        let class = class_res.map_err(|err| driver.map_op_error("tripeaks_step_observe", err))?;
         match class {
             FrameClassification::ChallengeComplete => {
                 let second = driver
@@ -1253,6 +1372,12 @@ pub(crate) fn deliver_and_observe_tripeaks_move<I: OperationIo>(
                     FrameClassification::ChallengeComplete => {
                         return Ok(LiveStepOutcome::ChallengeComplete);
                     }
+                    FrameClassification::BoardWinOverlay if options.challenge_mode => {
+                        return Err(ReconError::SceneVerification {
+                            detail: "unexpected Normal Board Win overlay during active TriPeaks Challenge"
+                                .to_owned(),
+                        });
+                    }
                     FrameClassification::BoardWinOverlay => {
                         return Ok(LiveStepOutcome::BoardWinOverlay);
                     }
@@ -1264,11 +1389,22 @@ pub(crate) fn deliver_and_observe_tripeaks_move<I: OperationIo>(
                     }
                 }
             }
+            FrameClassification::Unsupported(_)
+                if is_dimmed_fade
+                    && (final_card_step
+                        || options.modal_policy == StepModalPolicy::RecoverProbe)
+                    && attempt + 1 < attempts =>
+            {
+                driver
+                    .wait_cancellable(driver.timings.reobserve_delay, "tripeaks_step_reobserve")?;
+            }
             FrameClassification::Unsupported(detail) if options.challenge_mode => {
                 if driver.poll_challenge_complete_or_handoff()? {
                     return Ok(LiveStepOutcome::ChallengeComplete);
                 }
-                if final_card_step && attempt + 1 < attempts {
+                if (final_card_step || options.modal_policy == StepModalPolicy::RecoverProbe)
+                    && attempt + 1 < attempts
+                {
                     driver.wait_cancellable(
                         driver.timings.reobserve_delay,
                         "tripeaks_step_reobserve",
@@ -1281,13 +1417,37 @@ pub(crate) fn deliver_and_observe_tripeaks_move<I: OperationIo>(
                     ),
                 });
             }
-            FrameClassification::Unsupported(_) if final_card_step && attempt + 1 < attempts => {
+            FrameClassification::Unsupported(_)
+                if (final_card_step || options.modal_policy == StepModalPolicy::RecoverProbe)
+                    && attempt + 1 < attempts =>
+            {
                 driver
                     .wait_cancellable(driver.timings.reobserve_delay, "tripeaks_step_reobserve")?;
             }
-            FrameClassification::NoMovesModal(point) if options.allow_final_modal => {
+            FrameClassification::NoMovesModal(point)
+                if options.modal_policy == StepModalPolicy::AllowFinalPartial =>
+            {
                 driver.capture_matching_no_moves_modal(point, "tripeaks_partial_modal")?;
                 return Ok(LiveStepOutcome::PartialModal);
+            }
+            FrameClassification::NoMovesModal(point)
+                if options.modal_policy == StepModalPolicy::RecoverProbe =>
+            {
+                let first_frame = driver
+                    .session
+                    .current_frame()
+                    .ok_or_else(|| ReconError::SceneVerification {
+                        detail: "missing retained modal frame during probe recovery".to_owned(),
+                    })?
+                    .clone();
+                return recover_probe_no_moves_modal(
+                    driver,
+                    current,
+                    tap_target,
+                    &first_frame,
+                    point,
+                    newly_observed,
+                );
             }
             FrameClassification::Settled(next)
                 if final_card_step && next.is_untouched_root_layout() =>
@@ -1357,6 +1517,141 @@ pub(crate) fn deliver_and_observe_tripeaks_move<I: OperationIo>(
     })
 }
 
+/// Handle `"No Moves Remaining"` observed immediately on a mid-RECON probe step:
+/// read any unobstructed newly uncovered dimmed parent cards, confirm the modal twice,
+/// execute Step 1 (`Undo last move` with `POST_GAME_MOUSE_HOLD`), verify un-dimmed `current`
+/// restoration, and commit verified observations into `newly_observed`.
+fn recover_probe_no_moves_modal<I: OperationIo>(
+    driver: &mut TriPeaksSessionDriver<'_, '_, I>,
+    current: &BoardSnapshot,
+    tap_target: Option<(usize, Card)>,
+    first_frame: &CapturedFrame,
+    point: PixelPoint,
+    newly_observed: &mut Vec<(SlotId, Card)>,
+) -> Result<LiveStepOutcome, ReconError> {
+    let mut uncovered_indices = Vec::new();
+    let mut first_reads = Vec::new();
+    let mut first_waste = None;
+
+    if let Some((tapped_slot_idx, _)) = tap_target {
+        let prev_empty = empty_tableau_mask(current);
+        let next_empty = prev_empty | (1_u32 << tapped_slot_idx);
+        for (idx, &mask) in COVERING_CHILD_MASKS.iter().enumerate() {
+            if idx == tapped_slot_idx {
+                continue;
+            }
+            let was_covered = (mask & !prev_empty) != 0;
+            let is_covered = (mask & !next_empty) != 0;
+            if was_covered && !is_covered {
+                uncovered_indices.push(idx);
+                let card = match read_tripeaks_dimmed_modal_tableau_slot(first_frame, idx)
+                    .map_err(|err| driver.map_op_error("tripeaks_probe_modal_parent_first", err))?
+                {
+                    CardRead::Card(xc) => Some(
+                        recon_card_from_xsar(xc)
+                            .map_err(|err| driver.map_op_error("tripeaks_probe_modal_card", err))?,
+                    ),
+                    _ => None,
+                };
+                first_reads.push(card);
+            }
+        }
+    } else {
+        let waste_read = read_tripeaks_dimmed_modal_waste(first_frame)
+            .map_err(|err| driver.map_op_error("tripeaks_probe_modal_waste_first", err))?;
+        let CardRead::Card(xc) = waste_read else {
+            return Err(ReconError::SceneVerification {
+                detail: "dimmed Waste unreadable during probe Draw modal".to_owned(),
+            });
+        };
+        first_waste = Some(
+            recon_card_from_xsar(xc)
+                .map_err(|err| driver.map_op_error("tripeaks_probe_modal_card", err))?,
+        );
+    }
+
+    let second_frame = driver
+        .capture_and_publish("tripeaks_probe_modal_confirm")?
+        .clone();
+    match observe_frame(&second_frame)
+        .map_err(|err| driver.map_op_error("tripeaks_probe_modal_confirm", err))?
+    {
+        FrameClassification::NoMovesModal(point_2) if point_2 == point => {}
+        other => {
+            return Err(ReconError::SceneVerification {
+                detail: format!(
+                    "expected second No Moves Remaining modal confirmation at {point:?}, got {other:?}"
+                ),
+            });
+        }
+    }
+
+    let mut pending_observations = Vec::new();
+    let mut missing_slots = Vec::new();
+    if tap_target.is_some() {
+        for (&idx, &first_card) in uncovered_indices.iter().zip(&first_reads) {
+            let slot_u8 = u8::try_from(idx).unwrap_or(u8::MAX);
+            let slot = SlotId(slot_u8);
+            let second_read = read_tripeaks_dimmed_modal_tableau_slot(&second_frame, idx)
+                .map_err(|err| driver.map_op_error("tripeaks_probe_modal_parent_second", err))?;
+            match (first_card, second_read) {
+                (Some(c1), CardRead::Card(xc2)) => {
+                    let c2 = recon_card_from_xsar(xc2)
+                        .map_err(|err| driver.map_op_error("tripeaks_probe_modal_card", err))?;
+                    if c1 != c2 {
+                        return Err(ReconError::NonDeterministicSlot {
+                            slot,
+                            previous: c1,
+                            observed: c2,
+                        });
+                    }
+                    pending_observations.push((slot, c1));
+                }
+                _ => missing_slots.push(slot),
+            }
+        }
+    } else if let Some(w1) = first_waste {
+        let second_waste = read_tripeaks_dimmed_modal_waste(&second_frame)
+            .map_err(|err| driver.map_op_error("tripeaks_probe_modal_waste_second", err))?;
+        let CardRead::Card(xc2) = second_waste else {
+            return Err(ReconError::SceneVerification {
+                detail: "dimmed Waste unreadable on second probe Draw modal confirmation"
+                    .to_owned(),
+            });
+        };
+        let w2 = recon_card_from_xsar(xc2)
+            .map_err(|err| driver.map_op_error("tripeaks_probe_modal_card", err))?;
+        if w1 != w2 {
+            return Err(ReconError::SceneVerification {
+                detail: format!(
+                    "dimmed Waste disagreed across probe Draw modal confirmation: {w1:?} != {w2:?}"
+                ),
+            });
+        }
+    }
+
+    let un_dimmed =
+        driver.dismiss_confirmed_no_moves_modal("tripeaks_probe_modal_undo_last_move", point)?;
+    if un_dimmed != *current {
+        return Err(ReconError::SceneVerification {
+            detail: format!(
+                "board after probe Undo-last-move did not restore pre-step position (waste {:?} != {:?})",
+                un_dimmed.waste, current.waste
+            ),
+        });
+    }
+
+    for (slot, card) in pending_observations {
+        record_observed_parent(newly_observed, slot, card)?;
+    }
+    if newly_observed.is_empty()
+        && let Some(&slot) = missing_slots.first()
+    {
+        return Err(ReconError::VisionClassificationFailed { slot });
+    }
+    Ok(LiveStepOutcome::ProbeModalRecovered)
+}
+
 /// Dismiss any `"No Moves Remaining"` modal, execute guarded `Undo All` under
 /// `ConfirmationPolicy::DirectOrConfirmed`, and verify twice-settled restoration to `slots`.
 ///
@@ -1379,6 +1674,46 @@ pub(crate) fn restore_board_to_document_root<I: OperationIo>(
     Ok(restored)
 }
 
+/// Verify that Step 1 (`Undo last move`) of Draw-23 recovery cleared the modal onto an
+/// un-dimmed board with `1` `FaceDown` Stock card, `SlotId(50)` restored on Waste, unchanged
+/// tableau, and `Undo All` enabled.
+fn verify_draw_23_undo_last_settlement(
+    un_dimmed: &BoardSnapshot,
+    root: &BoardSnapshot,
+    slot_50: Card,
+) -> Result<(), ReconError> {
+    if un_dimmed.tableau != root.tableau {
+        return Err(ReconError::SceneVerification {
+            detail: "tableau changed unexpectedly after Draw-23 Undo last move".to_owned(),
+        });
+    }
+    if un_dimmed.stock != StockObs::FaceDown {
+        return Err(ReconError::SceneVerification {
+            detail: format!(
+                "expected Stock FaceDown (1 card) after Draw-23 Undo last move, got {:?}",
+                un_dimmed.stock
+            ),
+        });
+    }
+    if un_dimmed.waste != slot_50 {
+        return Err(ReconError::SceneVerification {
+            detail: format!(
+                "expected Waste {:?} (SlotId 50) after Draw-23 Undo last move, got {:?}",
+                slot_50, un_dimmed.waste
+            ),
+        });
+    }
+    if un_dimmed.undo_all != ControlAvailability::Enabled(SHARED_UNDO_ALL_CONTROL.click_point) {
+        return Err(ReconError::SceneVerification {
+            detail: format!(
+                "Undo All control not Enabled after Draw-23 Undo last move: {:?}",
+                un_dimmed.undo_all
+            ),
+        });
+    }
+    Ok(())
+}
+
 /// Core shared `Undo All` restoration loop parameterized by `target`.
 fn restore_tripeaks_with_driver<I: OperationIo>(
     driver: &mut TriPeaksSessionDriver<'_, '_, I>,
@@ -1392,7 +1727,9 @@ fn restore_tripeaks_with_driver<I: OperationIo>(
         FrameClassification::Settled(snap) => snap,
         FrameClassification::NoMovesModal(pt) => {
             let un_dimmed = driver.back_out_no_moves_modal(context, pt, true)?;
-            if un_dimmed.is_untouched_root_layout() {
+            if let RootRestoreTarget::Draw23Sweep { root, slot_50 } = target {
+                verify_draw_23_undo_last_settlement(&un_dimmed, root, slot_50)?;
+            } else if un_dimmed.is_untouched_root_layout() {
                 return Ok(un_dimmed);
             }
             un_dimmed
@@ -1417,7 +1754,8 @@ fn restore_tripeaks_with_driver<I: OperationIo>(
 
         let max_obs = driver.timings.max_restore_observations.max(2);
         let placeholder_expected = match target {
-            RootRestoreTarget::ExactSnapshot(root) => root.clone(),
+            RootRestoreTarget::ExactSnapshot(root)
+            | RootRestoreTarget::Draw23Sweep { root, .. } => root.clone(),
             RootRestoreTarget::DocumentSlots(_) => current.clone(),
         };
         let mut undo_io = DriverUndoAllIo {
@@ -1428,6 +1766,7 @@ fn restore_tripeaks_with_driver<I: OperationIo>(
             drifted_streak: 0,
             confirmed_drifted: None,
             observed_modal: None,
+            fade_streak: 0,
         };
         let result = undo_all(
             &mut undo_io,
@@ -1435,7 +1774,9 @@ fn restore_tripeaks_with_driver<I: OperationIo>(
             &current,
             SHARED_UNDO_ALL_CONTROL.click_point,
             |expected, observed| match target {
-                RootRestoreTarget::ExactSnapshot(_) => observed == expected,
+                RootRestoreTarget::ExactSnapshot(_) | RootRestoreTarget::Draw23Sweep { .. } => {
+                    observed == expected
+                }
                 RootRestoreTarget::DocumentSlots(slots) => {
                     verify_snapshot_matches_document_root(observed, slots).is_ok()
                 }
@@ -1449,7 +1790,8 @@ fn restore_tripeaks_with_driver<I: OperationIo>(
         match result {
             Ok(()) => {
                 return match target {
-                    RootRestoreTarget::ExactSnapshot(root) => Ok(root.clone()),
+                    RootRestoreTarget::ExactSnapshot(root)
+                    | RootRestoreTarget::Draw23Sweep { root, .. } => Ok(root.clone()),
                     RootRestoreTarget::DocumentSlots(_) => {
                         matched.ok_or_else(|| ReconError::SceneVerification {
                             detail: "Undo All completed without retained matched snapshot"
@@ -1479,7 +1821,9 @@ fn restore_tripeaks_with_driver<I: OperationIo>(
                 {
                     modal_backed_out = true;
                     let un_dimmed = driver.back_out_no_moves_modal(context, modal_pt, true)?;
-                    if un_dimmed.is_untouched_root_layout() {
+                    if let RootRestoreTarget::Draw23Sweep { root, slot_50 } = target {
+                        verify_draw_23_undo_last_settlement(&un_dimmed, root, slot_50)?;
+                    } else if un_dimmed.is_untouched_root_layout() {
                         return Ok(un_dimmed);
                     }
                     current = un_dimmed;
@@ -1886,31 +2230,35 @@ impl<'a, I: OperationIo> LiveTriPeaksDomain<'a, I> {
         })
     }
 
-    /// Execute `23` guarded `D` draws, verify empty Stock at Draw 23, and populate Stock slots `29..52`.
+    /// Execute `23` guarded `D` draws, verify empty Stock at Draw 23 (including immediate
+    /// `"No Moves Remaining"` modal darkened-Waste `SlotId(51)` capture + `"Undo last move"`
+    /// back-out), and populate Stock slots `29..52`. Returns `(slot_50_card, final_snapshot)`.
     fn sweep_all_stock_draws(
         &mut self,
         root: &BoardSnapshot,
         slots: &mut [CardSlot; DEAL_SLOT_COUNT],
-    ) -> Result<BoardSnapshot, ReconError> {
+    ) -> Result<(Card, BoardSnapshot), ReconError> {
         let mut current = root.clone();
+        let mut slot_50 = root.waste;
         for draw_idx in 0..STOCK_CARD_COUNT {
+            if draw_idx + 1 == STOCK_CARD_COUNT {
+                slot_50 = current.waste;
+            }
             self.deliver_key(SupportedKey::Draw, "stock_sweep_draw")?;
             self.wait_cancellable(self.config.move_settle_delay, "stock_sweep_settle")?;
-            let next = self.poll_stock_draw_step(draw_idx, root, &current)?;
-            let target_slot = SlotId(STOCK_START_SLOT + draw_idx);
-            check_single_deck_slot_binding(slots, target_slot, next.waste)?;
-            slots[usize::from(target_slot.0)] = CardSlot::Known(next.waste);
-            current = next;
+            current = self.poll_stock_draw_step(draw_idx, root, &current, slots)?;
         }
-        Ok(current)
+        Ok((slot_50, current))
     }
 
-    /// Wait for the post-`D` Waste card transition (preserving Draw-23 empty Stock proof).
+    /// Wait for the post-`D` Waste card transition, bind `SlotId(29 + draw_idx)`, and handle
+    /// immediate Draw-23 `"No Moves Remaining"` modal darkened-Waste reading + Step 1 back-out.
     fn poll_stock_draw_step(
         &mut self,
         draw_idx: u8,
         root: &BoardSnapshot,
         prev: &BoardSnapshot,
+        slots: &mut [CardSlot; DEAL_SLOT_COUNT],
     ) -> Result<BoardSnapshot, ReconError> {
         let is_final_draw = draw_idx + 1 == STOCK_CARD_COUNT;
         let expected_stock = if is_final_draw {
@@ -1922,10 +2270,15 @@ impl<'a, I: OperationIo> LiveTriPeaksDomain<'a, I> {
         let attempts = self.config.max_step_observations.max(1);
 
         for attempt in 0..attempts {
-            let frame = self.capture_and_publish("stock_sweep_observe")?;
-            match observe_frame(frame)
-                .map_err(|err| self.map_op_error("stock_sweep_observe", err))?
-            {
+            let class = {
+                let frame = self.capture_and_publish("stock_sweep_observe")?;
+                observe_frame(frame)
+            };
+            let class = match class {
+                Ok(c) => c,
+                Err(err) => return Err(self.map_op_error("stock_sweep_observe", err)),
+            };
+            match class {
                 FrameClassification::Settled(next) => {
                     if next.tableau != root.tableau {
                         return Err(ReconError::SceneVerification {
@@ -1951,9 +2304,91 @@ impl<'a, I: OperationIo> LiveTriPeaksDomain<'a, I> {
                         }
                         return Err(ReconError::VisionClassificationFailed { slot: target_slot });
                     }
+                    check_single_deck_slot_binding(slots, target_slot, next.waste)?;
+                    slots[usize::from(target_slot.0)] = CardSlot::Known(next.waste);
                     return Ok(next);
                 }
+                FrameClassification::NoMovesModal(point) if is_final_draw => {
+                    let first_waste_res = match self.session.current_frame() {
+                        Some(frame) => read_tripeaks_dimmed_modal_waste(frame),
+                        None => {
+                            return Err(ReconError::SceneVerification {
+                                detail: "missing retained modal frame for dimmed Waste read"
+                                    .to_owned(),
+                            });
+                        }
+                    };
+                    let first_waste = match first_waste_res {
+                        Ok(read) => read,
+                        Err(err) => {
+                            return Err(self.map_op_error("stock_draw_23_dimmed_waste_first", err));
+                        }
+                    };
+                    let CardRead::Card(card_1) = first_waste else {
+                        return Err(ReconError::VisionClassificationFailed { slot: target_slot });
+                    };
+
+                    let (second_class, second_waste_res) = {
+                        let second_frame =
+                            self.capture_and_publish("stock_draw_23_modal_confirm")?;
+                        (
+                            observe_frame(second_frame),
+                            read_tripeaks_dimmed_modal_waste(second_frame),
+                        )
+                    };
+                    let second_class = match second_class {
+                        Ok(c) => c,
+                        Err(err) => {
+                            return Err(self.map_op_error("stock_draw_23_modal_confirm", err));
+                        }
+                    };
+                    match second_class {
+                        FrameClassification::NoMovesModal(point_2) if point_2 == point => {}
+                        other => {
+                            return Err(ReconError::SceneVerification {
+                                detail: format!(
+                                    "expected second No Moves Remaining modal confirmation at {point:?}, got {other:?}"
+                                ),
+                            });
+                        }
+                    }
+                    let second_waste = match second_waste_res {
+                        Ok(read) => read,
+                        Err(err) => {
+                            return Err(self.map_op_error("stock_draw_23_dimmed_waste_second", err));
+                        }
+                    };
+                    let CardRead::Card(card_2) = second_waste else {
+                        return Err(ReconError::VisionClassificationFailed { slot: target_slot });
+                    };
+                    let recon_1 = recon_card_from_xsar(card_1)
+                        .map_err(|err| self.map_op_error("stock_draw_23_card_convert", err))?;
+                    let recon_2 = recon_card_from_xsar(card_2)
+                        .map_err(|err| self.map_op_error("stock_draw_23_card_convert", err))?;
+                    if recon_1 != recon_2 {
+                        return Err(ReconError::NonDeterministicSlot {
+                            slot: target_slot,
+                            previous: recon_1,
+                            observed: recon_2,
+                        });
+                    }
+                    check_single_deck_slot_binding(slots, target_slot, recon_1)?;
+                    slots[usize::from(target_slot.0)] = CardSlot::Known(recon_1);
+
+                    let un_dimmed = {
+                        let mut driver = self.driver();
+                        driver.dismiss_confirmed_no_moves_modal(
+                            "stock_draw_23_undo_last_move",
+                            point,
+                        )?
+                    };
+                    verify_draw_23_undo_last_settlement(&un_dimmed, root, prev.waste)?;
+                    return Ok(un_dimmed);
+                }
                 FrameClassification::Settling if attempt + 1 < attempts => {
+                    self.wait_cancellable(self.config.reobserve_delay, "stock_sweep_poll")?;
+                }
+                FrameClassification::Unsupported(_) if is_final_draw && attempt + 1 < attempts => {
                     self.wait_cancellable(self.config.reobserve_delay, "stock_sweep_poll")?;
                 }
                 FrameClassification::Settling => {
@@ -1978,10 +2413,10 @@ impl<'a, I: OperationIo> LiveTriPeaksDomain<'a, I> {
     fn restore_to_untouched_root(
         &mut self,
         context: &'static str,
-        root: &BoardSnapshot,
+        target: RootRestoreTarget<'_>,
     ) -> Result<BoardSnapshot, ReconError> {
         let mut driver = self.driver();
-        restore_tripeaks_with_driver(&mut driver, context, RootRestoreTarget::ExactSnapshot(root))
+        restore_tripeaks_with_driver(&mut driver, context, target)
     }
 
     /// Sync the shared `[CardSlot; 52]` cache with `slots` from `recon` (preserving deduction / `Unreachable`).
@@ -1995,32 +2430,41 @@ impl<'a, I: OperationIo> LiveTriPeaksDomain<'a, I> {
     /// Merge verified `(SlotId, Card)` probe observations into `latest_slots` (for `CompletedDuringRecon`).
     fn merge_observations_into_latest(&self, observations: &[(SlotId, Card)]) {
         let mut updated = self.latest_slots.get();
-        for &(slot, card) in observations {
-            let idx = usize::from(slot.0);
-            if idx >= DEAL_SLOT_COUNT || card.0 >= 52 {
-                continue;
+        if matches!(
+            updated[usize::from(INITIAL_WASTE_SLOT.0)],
+            CardSlot::Known(_)
+        ) {
+            for &(slot, card) in observations {
+                let _ = crate::recon::bind_observation(&mut updated, slot, card, true);
             }
-            let conflict = updated.iter().enumerate().any(|(other_idx, entry)| {
-                (other_idx == idx && matches!(*entry, CardSlot::Known(prev) if prev != card))
-                    || (other_idx != idx && *entry == CardSlot::Known(card))
-            });
-            if !conflict {
-                updated[idx] = CardSlot::Known(card);
+        } else {
+            for &(slot, card) in observations {
+                let idx = usize::from(slot.0);
+                if idx >= DEAL_SLOT_COUNT || card.0 >= 52 {
+                    continue;
+                }
+                let conflict = updated.iter().enumerate().any(|(other_idx, entry)| {
+                    (other_idx == idx && matches!(*entry, CardSlot::Known(prev) if prev != card))
+                        || (other_idx != idx && *entry == CardSlot::Known(card))
+                });
+                if !conflict {
+                    updated[idx] = CardSlot::Known(card);
+                }
             }
         }
         self.latest_slots.set(updated);
         self.emit_progress(&updated);
     }
 
-    /// Execute one probe move via `Session`, confirm its effect or live completion, and append newly
-    /// uncovered `(SlotId, Card)` parent readings.
+    /// Execute one probe move via `Session`, confirm its effect, modal recovery, or live
+    /// completion, and append newly uncovered `(SlotId, Card)` parent readings.
     fn execute_one_probe_step(
         &mut self,
         mv: TriPeaksMove,
         current: &mut BoardSnapshot,
         executed_prefix: &mut Vec<TriPeaksMove>,
         newly_observed: &mut Vec<(SlotId, Card)>,
-    ) -> Result<bool, ReconError> {
+    ) -> Result<ProbeStepResult, ReconError> {
         let challenge_mode = self.challenge_mode;
         let outcome = {
             let mut driver = self.driver();
@@ -2030,28 +2474,40 @@ impl<'a, I: OperationIo> LiveTriPeaksDomain<'a, I> {
                 TriPeaksStepOptions {
                     mv,
                     challenge_mode,
-                    allow_final_modal: false,
+                    modal_policy: StepModalPolicy::RecoverProbe,
                 },
                 newly_observed,
             )?
         };
-        executed_prefix.push(mv);
         match outcome {
             LiveStepOutcome::Settled(next) => {
+                executed_prefix.push(mv);
                 *current = next;
-                Ok(false)
+                Ok(ProbeStepResult::Continue)
             }
+            LiveStepOutcome::ProbeModalRecovered => Ok(ProbeStepResult::ModalBackedOut),
             LiveStepOutcome::BoardCleared(_)
             | LiveStepOutcome::NextBoardDealt { .. }
             | LiveStepOutcome::BoardWinOverlay
             | LiveStepOutcome::ChallengeComplete
             | LiveStepOutcome::PartialModal => {
+                executed_prefix.push(mv);
                 self.merge_observations_into_latest(newly_observed);
                 self.completed_probe_moves = Some(executed_prefix.clone());
-                Ok(true)
+                Ok(ProbeStepResult::CompletedLive)
             }
         }
     }
+}
+
+/// Control-flow outcome returned by [`LiveTriPeaksDomain::execute_one_probe_step`].
+enum ProbeStepResult {
+    /// Step settled normally; continue probing remaining planned moves.
+    Continue,
+    /// Board/Challenge completed directly during probing (`CompletedDuringRecon`).
+    CompletedLive,
+    /// Move triggered `"No Moves Remaining"` and Step 1 (`Undo last move`) backed it out.
+    ModalBackedOut,
 }
 
 /// Ensure single-deck uniqueness before binding `card` into `slots[slot]`.
@@ -2204,8 +2660,14 @@ impl<I: OperationIo> ReconDomain for LiveTriPeaksDomain<'_, I> {
         check_single_deck_slot_binding(&slots, INITIAL_WASTE_SLOT, root.waste)?;
         slots[usize::from(INITIAL_WASTE_SLOT.0)] = CardSlot::Known(root.waste);
 
-        let _after_sweep = self.sweep_all_stock_draws(&root, &mut slots)?;
-        let restored = self.restore_to_untouched_root("initial_stock_sweep_undo_all", &root)?;
+        let (slot_50, _after_sweep) = self.sweep_all_stock_draws(&root, &mut slots)?;
+        let restored = self.restore_to_untouched_root(
+            "initial_stock_sweep_undo_all",
+            RootRestoreTarget::Draw23Sweep {
+                root: &root,
+                slot_50,
+            },
+        )?;
         let restored_hash = semantic_board_hash(&restored);
         if restored_hash != hash {
             return Err(ReconError::RootRestoreMismatch {
@@ -2237,35 +2699,57 @@ impl<I: OperationIo> ReconDomain for LiveTriPeaksDomain<'_, I> {
             None,
             None,
         ) {
-            SearchOutcome::Solved { actions, .. } => Some(actions.into_vec()),
+            SearchOutcome::Solved { actions, .. } => return Some(actions.into_vec()),
             SearchOutcome::Stopped {
                 reason: SearchStop::Cancelled,
                 ..
-            }
-            | SearchOutcome::Unsolvable { .. }
-            | SearchOutcome::Stopped { .. } => None,
+            } => return None,
+            SearchOutcome::Unsolvable { .. } | SearchOutcome::Stopped { .. } => {}
         }
+        if matches!(
+            objective,
+            Objective::ClearRankQuota { .. } | Objective::ReachScoreDelta { .. }
+        ) && !self.cancel.load(Ordering::Acquire)
+            && let SearchOutcome::Solved { actions, .. } = solve_known_subgraph_with_control(
+                slots,
+                Objective::ClearBoard,
+                self.config.search_limits,
+                SearchOptions::default(),
+                self.cancel,
+                None,
+                None,
+            )
+        {
+            return Some(actions.into_vec());
+        }
+        None
     }
 
-    fn plan_info_gain_probe(&self, slots: &[CardSlot]) -> Option<Vec<Self::Move>> {
+    fn plan_info_gain_probe(
+        &self,
+        slots: &[CardSlot],
+    ) -> Result<ProbePlan<Self::Move>, ReconError> {
         self.sync_latest_slots(slots);
-        if self.uncertain_latched || self.cancel.load(Ordering::Acquire) {
-            // Return one sentinel move so `run_epistemic_recon` enters `execute_probe_and_observe`
-            // and exits immediately with `ReconError::Cancelled` / `UncertainDelivery` rather
-            // than mistaking cancellation as `UnsolvableBestPartial`.
-            return Some(vec![TriPeaksMove::Draw]);
+        if self.uncertain_latched {
+            return Err(ReconError::UncertainDelivery {
+                context: "probe_plan",
+                detail: "earlier QMP delivery remains uncertain".to_owned(),
+            });
         }
-        let probe = plan_info_gain_probe_with_control(
+        if self.cancel.load(Ordering::Acquire) {
+            return Err(ReconError::Cancelled);
+        }
+        let plan = plan_info_gain_probe_with_control(
             slots,
             self.config.search_limits,
             self.cancel,
             None,
             None,
-        );
+        )?;
         if self.cancel.load(Ordering::Acquire) {
-            return Some(vec![TriPeaksMove::Draw]);
+            return Err(ReconError::Cancelled);
         }
-        probe
+        Ok(plan)
     }
 
     fn execute_probe_and_observe(
@@ -2305,18 +2789,80 @@ impl<I: OperationIo> ReconDomain for LiveTriPeaksDomain<'_, I> {
             }
         }
 
+        let mut live_slots = self.latest_slots.get();
+        let can_continue_live = matches!(
+            live_slots[usize::from(INITIAL_WASTE_SLOT.0)],
+            CardSlot::Known(_)
+        );
         let mut current = root;
-        let mut executed_prefix = Vec::with_capacity(probe.len());
+        let mut executed_prefix = Vec::with_capacity(MAX_ROUTE_MOVES);
         let mut newly_observed = Vec::new();
-        for &mv in probe {
-            let completed_live = self.execute_one_probe_step(
-                mv,
-                &mut current,
-                &mut executed_prefix,
-                &mut newly_observed,
-            )?;
-            if completed_live {
-                return Ok(None);
+        let mut current_batch = probe.to_vec();
+
+        loop {
+            let mut revealed_new_unknown = false;
+            let mut modal_backed_out = false;
+
+            for &mv in &current_batch {
+                let obs_before = newly_observed.len();
+                match self.execute_one_probe_step(
+                    mv,
+                    &mut current,
+                    &mut executed_prefix,
+                    &mut newly_observed,
+                )? {
+                    ProbeStepResult::Continue => {
+                        for &(slot, card) in &newly_observed[obs_before..] {
+                            let is_new_unknown = matches!(
+                                live_slots.get(usize::from(slot.0)),
+                                Some(CardSlot::Unknown)
+                            );
+                            if is_new_unknown {
+                                revealed_new_unknown = true;
+                            }
+                            if can_continue_live {
+                                crate::recon::bind_observation(&mut live_slots, slot, card, true)?;
+                            }
+                        }
+                        if can_continue_live && revealed_new_unknown {
+                            self.sync_latest_slots(&live_slots);
+                            break;
+                        }
+                    }
+                    ProbeStepResult::CompletedLive => return Ok(None),
+                    ProbeStepResult::ModalBackedOut => {
+                        if newly_observed.is_empty() {
+                            return Err(ReconError::SceneVerification {
+                                detail: "mid-RECON probe triggered No Moves Remaining before observing any Unknown slot".to_owned(),
+                            });
+                        }
+                        if can_continue_live {
+                            for &(slot, card) in &newly_observed[obs_before..] {
+                                crate::recon::bind_observation(&mut live_slots, slot, card, true)?;
+                            }
+                            self.sync_latest_slots(&live_slots);
+                        }
+                        modal_backed_out = true;
+                        break;
+                    }
+                }
+            }
+
+            if modal_backed_out || !can_continue_live || !revealed_new_unknown {
+                break;
+            }
+
+            self.check_ready("probe_continuation")?;
+            match plan_info_gain_continuation(ProbeContinuationInput {
+                slots: &live_slots,
+                executed_prefix: &executed_prefix,
+                limits: self.config.search_limits,
+                cancel: self.cancel,
+            })? {
+                ProbePlan::Found(next_moves) => {
+                    current_batch = next_moves;
+                }
+                ProbePlan::Exhausted | ProbePlan::Bounded(_) => break,
             }
         }
         Ok(Some(newly_observed))
@@ -2330,17 +2876,27 @@ impl<I: OperationIo> ReconDomain for LiveTriPeaksDomain<'_, I> {
             .ok_or_else(|| ReconError::SceneVerification {
                 detail: "undo_all_and_hash called before initialize_and_sweep_stock".to_owned(),
             })?;
-        let restored = self.restore_to_untouched_root("probe_undo_all", &root)?;
+        let restored = self
+            .restore_to_untouched_root("probe_undo_all", RootRestoreTarget::ExactSnapshot(&root))?;
         self.undo_cycles_completed = self.undo_cycles_completed.saturating_add(1);
         let slots = self.latest_slots.get();
         self.emit_progress(&slots);
         Ok(semantic_board_hash(&restored))
     }
 
-    fn best_partial_route(&self, slots: &[CardSlot]) -> Vec<Self::Move> {
+    fn best_partial_route(
+        &self,
+        slots: &[CardSlot],
+    ) -> Result<BestPartialRoute<Self::Move>, ReconError> {
         self.sync_latest_slots(slots);
-        if self.uncertain_latched || self.cancel.load(Ordering::Acquire) {
-            return Vec::new();
+        if self.uncertain_latched {
+            return Err(ReconError::UncertainDelivery {
+                context: "partial_route",
+                detail: "earlier QMP delivery remains uncertain".to_owned(),
+            });
+        }
+        if self.cancel.load(Ordering::Acquire) {
+            return Err(ReconError::Cancelled);
         }
         best_partial_route_with_control(slots, self.config.search_limits, self.cancel, None, None)
     }
@@ -2389,6 +2945,9 @@ pub fn run_tripeaks_recon<I: OperationIo>(
             domain.completed_probe_moves().map(ToOwned::to_owned),
         ),
         ReconOutcome::UnsolvableBestPartial {
+            best_partial_route, ..
+        }
+        | ReconOutcome::BoundedBestPartial {
             best_partial_route, ..
         } => (
             DealProvenance::RestoredAtRoot,

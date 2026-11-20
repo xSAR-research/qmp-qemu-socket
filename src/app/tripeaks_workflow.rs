@@ -80,6 +80,8 @@ pub(super) struct TriPeaksWorkflowState {
     manual_probes_used: usize,
     /// Plain objective label observed in Manual `RECON` or loaded JSON.
     manual_objective_label: Option<String>,
+    /// Explicit Challenge vs Normal provenance recorded by Manual `RECON` for its exported path.
+    manual_recon_origin: Option<(PathBuf, tripeaks_route::SessionOrigin)>,
     /// Directory typed or opened in the Manual JSON source browser.
     source_dir_input: String,
     /// Whether the inline JSON source browser window is open.
@@ -137,6 +139,7 @@ impl TriPeaksWorkflowState {
             self.retained_preview = None;
             self.report = None;
             self.active_recon = None;
+            self.manual_recon_origin = None;
             self.active_calc = None;
             self.prepared_plan = None;
             self.pending_route = None;
@@ -547,12 +550,32 @@ impl QmpQemuSocketApp {
                 render_tripeaks_determined_report(ui, &report, None, "tripeaks-session");
             }
             if let Some(cards) = self.tripeaks_workflow.unsolvable_max_cleared {
-                ui.colored_label(
-                    Color32::from_rgb(240, 196, 80),
+                let unproved = self
+                    .tripeaks_workflow
+                    .calculation_report
+                    .as_ref()
+                    .is_some_and(|report| {
+                        matches!(
+                            &report.outcome,
+                            tripeaks_calculation::Outcome::Partial {
+                                proof: xsar::search::PartialProof::Bounded(_),
+                                ..
+                            } | tripeaks_calculation::Outcome::Partial {
+                                unknown_slots: 1..,
+                                ..
+                            }
+                        )
+                    });
+                let notice = if unproved {
+                    format!(
+                        "Unsolved deal notice (best-found {cards}/28 tableau clearable; maximum unproved; zero Redeal clicks sent). Deal a new game and press START."
+                    )
+                } else {
                     format!(
                         "Unsolvable deal notice (max {cards}/28 tableau clearable; zero Redeal clicks sent). Deal a new game and press START."
-                    ),
-                );
+                    )
+                };
+                ui.colored_label(Color32::from_rgb(240, 196, 80), notice);
             }
             if let Some(path) = &self.tripeaks_workflow.export_path {
                 ui.small(format!("Last exported deal: {}", path.display()));
@@ -616,6 +639,7 @@ impl QmpQemuSocketApp {
                     self.tripeaks_workflow.source_path_input = edited;
                     self.tripeaks_workflow.source_generation =
                         self.tripeaks_workflow.source_generation.wrapping_add(1);
+                    self.tripeaks_workflow.manual_recon_origin = None;
                     self.revoke_tripeaks_playback();
                 }
                 if ui
@@ -762,6 +786,7 @@ impl QmpQemuSocketApp {
                     self.tripeaks_workflow.source_path_input = path.to_string_lossy().into_owned();
                     self.tripeaks_workflow.source_generation =
                         self.tripeaks_workflow.source_generation.wrapping_add(1);
+                    self.tripeaks_workflow.manual_recon_origin = None;
                     self.tripeaks_workflow.source_browser_open = false;
                     self.revoke_tripeaks_playback();
                 }
@@ -966,9 +991,16 @@ impl QmpQemuSocketApp {
             return;
         };
         let timing = self.tripeaks_step_timing();
+        let origin = match (
+            self.tripeaks_workflow.manual_report.as_ref(),
+            self.tripeaks_workflow.manual_recon_origin.as_ref(),
+        ) {
+            (Some(report), Some((recon_path, origin))) if recon_path == &report.path => *origin,
+            _ => tripeaks_route::SessionOrigin::Normal,
+        };
         match self
             .worker
-            .execute_tripeaks_route(plan.clone(), action, timing)
+            .execute_tripeaks_route(plan.clone(), action, timing, origin)
         {
             Ok(run_id) => {
                 self.active_run = Some(ActiveRun::TriPeaksRoute);
@@ -1085,6 +1117,14 @@ impl QmpQemuSocketApp {
                     summary.objective,
                     summary.challenge,
                 ));
+                let origin = if summary.challenge.is_some()
+                    || !matches!(summary.objective, crate::recon::Objective::ClearBoard)
+                {
+                    tripeaks_route::SessionOrigin::Challenge
+                } else {
+                    tripeaks_route::SessionOrigin::Normal
+                };
+                self.tripeaks_workflow.manual_recon_origin = Some((summary.path.clone(), origin));
                 self.tripeaks_workflow.source_path_input =
                     summary.path.to_string_lossy().into_owned();
                 self.tripeaks_workflow.source_generation =
@@ -1148,6 +1188,7 @@ impl QmpQemuSocketApp {
         if self.active_run == Some(ActiveRun::TriPeaksCalculation) {
             self.active_run = None;
         }
+        let stopped = self.stop_requested;
         self.stop_requested = false;
         self.worker_state = WorkerState::Ready;
         match result {
@@ -1159,7 +1200,20 @@ impl QmpQemuSocketApp {
                     Some(format_tripeaks_objective(report.document.objective, None));
                 let summary = tripeaks_calculation::outcome_summary_message(&report.outcome);
                 self.tripeaks_workflow.manual_message = summary.clone();
-                self.current_status = summary;
+                self.current_status = summary.clone();
+                if let tripeaks_calculation::Outcome::Failed { ref failure, .. } = report.outcome {
+                    self.push_log(summary);
+                    if !stopped {
+                        self.failure_window.general(
+                            "TriPeaks calculation",
+                            failure,
+                            serde_json::json!({
+                                "request_id": identity.request_id,
+                                "path": report.path,
+                            }),
+                        );
+                    }
+                }
                 let has_candidate = matches!(
                     &report.outcome,
                     tripeaks_calculation::Outcome::Solved { .. }
@@ -1483,9 +1537,29 @@ mod tests {
             &tripeaks_calculation::Outcome::Partial {
                 objective: Objective::ClearBoard,
                 moves: Vec::new(),
-                replay: dummy_replay,
+                replay: dummy_replay.clone(),
                 max_tableau_cleared: 0,
                 banked_rank_count: 0,
+                proof: xsar::search::PartialProof::Exhaustive,
+                unknown_slots: 0,
+                stats: xsar::search::SearchStats::default(),
+            },
+        ));
+        samples.push(tripeaks_calculation::outcome_summary_message(
+            &tripeaks_calculation::Outcome::Partial {
+                objective: Objective::ClearBoard,
+                moves: Vec::new(),
+                replay: dummy_replay,
+                max_tableau_cleared: 14,
+                banked_rank_count: 0,
+                proof: xsar::search::PartialProof::Bounded(xsar::search::SearchStop::TimeLimit),
+                unknown_slots: 6,
+                stats: xsar::search::SearchStats::default(),
+            },
+        ));
+        samples.push(tripeaks_calculation::outcome_summary_message(
+            &tripeaks_calculation::Outcome::Failed {
+                failure: "Bounded TriPeaks search stopped before proof (time limit)".to_owned(),
                 stats: xsar::search::SearchStats::default(),
             },
         ));
@@ -1514,6 +1588,7 @@ mod tests {
                     acknowledged: 1,
                     score_delta: 100,
                     cards_cleared: 1,
+                    cleared_by_rank: [0; 13],
                     completion: Some(comp),
                 },
                 Objective::ClearBoard,

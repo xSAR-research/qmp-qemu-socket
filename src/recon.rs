@@ -5,6 +5,7 @@
 //! (TriPeaks, Klondike, Spider) controlled over QMP + guest framebuffer CV.
 
 use thiserror::Error;
+use xsar::search::{PartialProof, SearchStop};
 
 /// Compact card representation (`0..52` standard deck encoding: `suit * 13 + rank`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -164,6 +165,38 @@ pub enum ReconError {
         /// Executed probe cycles.
         probes: usize,
     },
+    /// Bounded search or internal replay verification aborted fatally during RECON.
+    #[error("RECON search failed during {context}: {detail}")]
+    SearchFailed {
+        /// Phase where search failed (e.g. `"probe planning"`, `"partial fallback"`).
+        context: &'static str,
+        /// Underlying invariant, allocation, or replay diagnostic.
+        detail: String,
+    },
+}
+
+/// Result of planning a single information-gain probe over the currently known slots.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProbePlan<M> {
+    /// Legal move sequence proved to expose at least one remaining [`CardSlot::Unknown`] slot.
+    Found(Vec<M>),
+    /// Exhaustive search proved no legal sequence can uncover any remaining [`CardSlot::Unknown`] slot.
+    Exhausted,
+    /// Search reached a resource bound (`TimeLimit`, `StateLimit`, etc.) before exhausting the graph.
+    ///
+    /// Unrevealed [`CardSlot::Unknown`] slots MUST remain `Unknown` (never [`CardSlot::Unreachable`]).
+    Bounded(SearchStop),
+}
+
+/// Replay-verified best partial route returned when an objective cannot be solved cleanly.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BestPartialRoute<M> {
+    /// Ordered move sequence from `t = 0` maximising partial progress on known cards.
+    pub moves: Vec<M>,
+    /// Exhaustive score-maximum proof vs bounded best-found status.
+    pub proof: PartialProof,
+    /// `true` when at least one evaluated slot was [`CardSlot::Unknown`].
+    pub has_unknown_slots: bool,
 }
 
 /// Terminal outcome of the RECON + A* orchestration loop.
@@ -181,12 +214,27 @@ pub enum ReconOutcome<M> {
         /// Number of Undo All probe cycles required.
         probes_used: usize,
     },
-    /// Deal proved unsolvable; returns best partial route (e.g., max foundation/score).
+    /// Probe search exhaustively proved remaining unrevealed slots unreachable; returns best partial route.
     UnsolvableBestPartial {
         /// Best partial move sequence from t=0.
         best_partial_route: Vec<M>,
         /// Count of slots that remained legally unreachable.
         unreachable_slots: usize,
+        /// Whether partial-route search exhausted the known subgraph or stopped at a bound.
+        proof: PartialProof,
+    },
+    /// Probe search hit a search bound while [`CardSlot::Unknown`] slots remain; `Unknown` slots are preserved.
+    BoundedBestPartial {
+        /// Best partial move sequence found over currently known cards.
+        best_partial_route: Vec<M>,
+        /// Count of slots remaining [`CardSlot::Unknown`].
+        unknown_slots: usize,
+        /// Count of slots already known to be [`CardSlot::Unreachable`].
+        unreachable_slots: usize,
+        /// Resource bound that stopped probe planning.
+        probe_stop: SearchStop,
+        /// Whether partial-route search exhausted the known-card subgraph or stopped at a bound.
+        proof: PartialProof,
     },
 }
 
@@ -207,8 +255,10 @@ pub trait ReconDomain {
         objective: Objective,
     ) -> Option<Vec<Self::Move>>;
 
-    /// Plans the highest information-gain legal move sequence that exposes >= 1 `Unknown` slot.
-    fn plan_info_gain_probe(&self, slots: &[CardSlot]) -> Option<Vec<Self::Move>>;
+    /// Plans an information-gain legal move sequence exposing `>= 1` [`CardSlot::Unknown`] slot,
+    /// distinguishes exhaustive exhaustion from resource bounds, and propagates fatal search faults.
+    fn plan_info_gain_probe(&self, slots: &[CardSlot])
+    -> Result<ProbePlan<Self::Move>, ReconError>;
 
     /// Executes `probe` via QMP, records newly flipped cards as `(SlotId, Card)`,
     /// and returns `Ok(None)` if Victory/Challenge banner intercepted execution early.
@@ -220,12 +270,15 @@ pub trait ReconDomain {
     /// Invokes in-game Undo All and returns the post-reset board visual hash.
     fn undo_all_and_hash(&mut self) -> Result<u64, ReconError>;
 
-    /// Computes best partial route (max cleared cards / foundation progress) when unsolvable.
-    fn best_partial_route(&self, slots: &[CardSlot]) -> Vec<Self::Move>;
+    /// Computes best partial route (max cleared cards / foundation progress) with proof status.
+    fn best_partial_route(
+        &self,
+        slots: &[CardSlot],
+    ) -> Result<BestPartialRoute<Self::Move>, ReconError>;
 }
 
 /// Binds a newly observed card into `slots`, checking determinism and 52-card complement.
-fn bind_observation(
+pub(crate) fn bind_observation(
     slots: &mut [CardSlot],
     slot: SlotId,
     card: Card,
@@ -307,7 +360,7 @@ fn bind_observation(
 fn mark_unreachable_best_partial<D: ReconDomain>(
     domain: &D,
     slots: &mut [CardSlot],
-) -> ReconOutcome<D::Move> {
+) -> Result<ReconOutcome<D::Move>, ReconError> {
     for entry in slots.iter_mut() {
         if *entry == CardSlot::Unknown {
             *entry = CardSlot::Unreachable;
@@ -317,10 +370,33 @@ fn mark_unreachable_best_partial<D: ReconDomain>(
         .iter()
         .filter(|&&s| s == CardSlot::Unreachable)
         .count();
-    ReconOutcome::UnsolvableBestPartial {
-        best_partial_route: domain.best_partial_route(slots),
+    let best = domain.best_partial_route(slots)?;
+    Ok(ReconOutcome::UnsolvableBestPartial {
+        best_partial_route: best.moves,
         unreachable_slots,
-    }
+        proof: best.proof,
+    })
+}
+
+/// Preserves all remaining `Unknown` slots and builds a bounded best-partial outcome.
+fn bounded_best_partial<D: ReconDomain>(
+    domain: &D,
+    slots: &[CardSlot],
+    probe_stop: SearchStop,
+) -> Result<ReconOutcome<D::Move>, ReconError> {
+    let unknown_slots = slots.iter().filter(|&&s| s == CardSlot::Unknown).count();
+    let unreachable_slots = slots
+        .iter()
+        .filter(|&&s| s == CardSlot::Unreachable)
+        .count();
+    let best = domain.best_partial_route(slots)?;
+    Ok(ReconOutcome::BoundedBestPartial {
+        best_partial_route: best.moves,
+        unknown_slots,
+        unreachable_slots,
+        probe_stop,
+        proof: best.proof,
+    })
 }
 
 /// Runs the closed-loop RECON + opportunistic A* pipeline within `max_probes`.
@@ -337,8 +413,10 @@ pub fn run_epistemic_recon<D: ReconDomain>(
             return Ok(ReconOutcome::SolvedFromRoot { route, probes_used });
         }
 
-        let Some(probe) = domain.plan_info_gain_probe(&slots) else {
-            return Ok(mark_unreachable_best_partial(domain, &mut slots));
+        let probe = match domain.plan_info_gain_probe(&slots)? {
+            ProbePlan::Found(probe) => probe,
+            ProbePlan::Exhausted => return mark_unreachable_best_partial(domain, &mut slots),
+            ProbePlan::Bounded(stop) => return bounded_best_partial(domain, &slots, stop),
         };
 
         let Some(observations) = domain.execute_probe_and_observe(&probe)? else {
@@ -373,11 +451,11 @@ pub fn run_epistemic_recon<D: ReconDomain>(
         });
     }
 
-    if domain.plan_info_gain_probe(&slots).is_none() {
-        return Ok(mark_unreachable_best_partial(domain, &mut slots));
+    match domain.plan_info_gain_probe(&slots)? {
+        ProbePlan::Found(_) => Err(ReconError::ProbeBudgetExhausted { probes: max_probes }),
+        ProbePlan::Exhausted => mark_unreachable_best_partial(domain, &mut slots),
+        ProbePlan::Bounded(stop) => bounded_best_partial(domain, &slots, stop),
     }
-
-    Err(ReconError::ProbeBudgetExhausted { probes: max_probes })
 }
 
 #[cfg(test)]
@@ -416,8 +494,16 @@ mod tests {
         partial_route: Vec<u8>,
         /// Number of `undo_all_and_hash` calls observed.
         undo_calls: usize,
-        /// Number of planned probes yielded before returning `None`.
+        /// Number of planned probes yielded before returning `Exhausted` or `Bounded`.
         planned_probes_remaining: usize,
+        /// Optional stop reason returned when `planned_probes_remaining == 0`.
+        probe_bound_stop: Option<SearchStop>,
+        /// Optional error factory injected from `plan_info_gain_probe`.
+        probe_plan_error: Option<fn() -> ReconError>,
+        /// Proof flag returned by `best_partial_route`.
+        partial_proof: PartialProof,
+        /// Optional error factory injected from `best_partial_route`.
+        partial_route_error: Option<fn() -> ReconError>,
     }
 
     impl MockDomain {
@@ -434,6 +520,10 @@ mod tests {
                 partial_route: vec![9],
                 undo_calls: 0,
                 planned_probes_remaining: 4,
+                probe_bound_stop: None,
+                probe_plan_error: None,
+                partial_proof: PartialProof::Exhaustive,
+                partial_route_error: None,
             }
         }
     }
@@ -458,8 +548,20 @@ mod tests {
                 .then(|| self.winning_route.clone())
         }
 
-        fn plan_info_gain_probe(&self, _slots: &[CardSlot]) -> Option<Vec<Self::Move>> {
-            (self.planned_probes_remaining > 0).then(|| vec![7])
+        fn plan_info_gain_probe(
+            &self,
+            _slots: &[CardSlot],
+        ) -> Result<ProbePlan<Self::Move>, ReconError> {
+            if let Some(err_fn) = self.probe_plan_error {
+                return Err(err_fn());
+            }
+            if self.planned_probes_remaining > 0 {
+                Ok(ProbePlan::Found(vec![7]))
+            } else if let Some(stop) = self.probe_bound_stop {
+                Ok(ProbePlan::Bounded(stop))
+            } else {
+                Ok(ProbePlan::Exhausted)
+            }
         }
 
         fn execute_probe_and_observe(
@@ -482,8 +584,18 @@ mod tests {
             Ok(self.undo_hashes.pop_front().unwrap_or(self.root_hash))
         }
 
-        fn best_partial_route(&self, _slots: &[CardSlot]) -> Vec<Self::Move> {
-            self.partial_route.clone()
+        fn best_partial_route(
+            &self,
+            slots: &[CardSlot],
+        ) -> Result<BestPartialRoute<Self::Move>, ReconError> {
+            if let Some(err_fn) = self.partial_route_error {
+                return Err(err_fn());
+            }
+            Ok(BestPartialRoute {
+                moves: self.partial_route.clone(),
+                proof: self.partial_proof,
+                has_unknown_slots: slots.contains(&CardSlot::Unknown),
+            })
         }
     }
 
@@ -641,8 +753,129 @@ mod tests {
             Some(ReconOutcome::UnsolvableBestPartial {
                 best_partial_route: vec![9],
                 unreachable_slots: 2,
+                proof: PartialProof::Exhaustive,
             })
         );
+    }
+
+    /// Verify bounded probe planning leaves `Unknown` slots untouched and returns `BoundedBestPartial`.
+    #[test]
+    fn run_epistemic_recon_bounded_probe_preserves_unknown_slots_and_proof() {
+        /// Stateful mock capturing the slice passed to `best_partial_route`.
+        struct CapturingDomain {
+            /// Underlying mock behaviour.
+            inner: MockDomain,
+            /// Snapshot of `slots` passed to `best_partial_route`.
+            captured_slots: std::cell::RefCell<Vec<CardSlot>>,
+        }
+
+        impl ReconDomain for CapturingDomain {
+            type Move = u8;
+
+            fn initialize_and_sweep_stock(&mut self) -> Result<(Vec<CardSlot>, u64), ReconError> {
+                self.inner.initialize_and_sweep_stock()
+            }
+
+            fn solve_known_subgraph(
+                &self,
+                slots: &[CardSlot],
+                objective: Objective,
+            ) -> Option<Vec<Self::Move>> {
+                self.inner.solve_known_subgraph(slots, objective)
+            }
+
+            fn plan_info_gain_probe(
+                &self,
+                slots: &[CardSlot],
+            ) -> Result<ProbePlan<Self::Move>, ReconError> {
+                self.inner.plan_info_gain_probe(slots)
+            }
+
+            fn execute_probe_and_observe(
+                &mut self,
+                probe: &[Self::Move],
+            ) -> Result<Option<Vec<(SlotId, Card)>>, ReconError> {
+                self.inner.execute_probe_and_observe(probe)
+            }
+
+            fn undo_all_and_hash(&mut self) -> Result<u64, ReconError> {
+                self.inner.undo_all_and_hash()
+            }
+
+            fn best_partial_route(
+                &self,
+                slots: &[CardSlot],
+            ) -> Result<BestPartialRoute<Self::Move>, ReconError> {
+                *self.captured_slots.borrow_mut() = slots.to_vec();
+                self.inner.best_partial_route(slots)
+            }
+        }
+
+        let mut domain = CapturingDomain {
+            inner: MockDomain::new(vec![
+                CardSlot::Known(Card(1)),
+                CardSlot::Unknown,
+                CardSlot::Unreachable,
+                CardSlot::Unknown,
+            ]),
+            captured_slots: std::cell::RefCell::new(Vec::new()),
+        };
+        domain.inner.planned_probes_remaining = 0;
+        domain.inner.probe_bound_stop = Some(SearchStop::TimeLimit);
+        domain.inner.partial_proof = PartialProof::Bounded(SearchStop::ExpansionLimit);
+
+        let outcome = run_epistemic_recon(&mut domain, Objective::ClearBoard, true, 3);
+        assert_eq!(
+            outcome.ok(),
+            Some(ReconOutcome::BoundedBestPartial {
+                best_partial_route: vec![9],
+                unknown_slots: 2,
+                unreachable_slots: 1,
+                probe_stop: SearchStop::TimeLimit,
+                proof: PartialProof::Bounded(SearchStop::ExpansionLimit),
+            })
+        );
+        assert_eq!(
+            domain.captured_slots.into_inner(),
+            vec![
+                CardSlot::Known(Card(1)),
+                CardSlot::Unknown,
+                CardSlot::Unreachable,
+                CardSlot::Unknown,
+            ]
+        );
+    }
+
+    /// Verify fatal search errors propagate cleanly from probe planning and partial fallback.
+    #[test]
+    fn run_epistemic_recon_propagates_fatal_search_errors_without_undo() {
+        /// Build a deterministic internal search error for fault propagation tests.
+        fn make_search_failed() -> ReconError {
+            ReconError::SearchFailed {
+                context: "probe planning",
+                detail: "allocation failure".to_owned(),
+            }
+        }
+
+        let mut probe_err_domain = MockDomain::new(vec![CardSlot::Unknown; 4]);
+        probe_err_domain.probe_plan_error = Some(make_search_failed);
+        let err = run_epistemic_recon(&mut probe_err_domain, Objective::ClearBoard, true, 2);
+        assert!(matches!(
+            err,
+            Err(ReconError::SearchFailed {
+                context: "probe planning",
+                ..
+            })
+        ));
+        assert_eq!(probe_err_domain.undo_calls, 0);
+
+        let mut partial_err_domain = MockDomain::new(vec![CardSlot::Unknown; 4]);
+        partial_err_domain.planned_probes_remaining = 0;
+        partial_err_domain.partial_route_error = Some(make_search_failed);
+        let partial_err =
+            run_epistemic_recon(&mut partial_err_domain, Objective::ClearBoard, true, 2);
+        assert!(matches!(partial_err, Err(ReconError::SearchFailed { .. })));
+        assert_eq!(partial_err_domain.undo_calls, 0);
     }
 
     /// Verify mismatched Undo All visual hashes and empty probes fail closed.
@@ -744,6 +977,21 @@ mod tests {
             Some(ReconOutcome::UnsolvableBestPartial {
                 best_partial_route: vec![9],
                 unreachable_slots: 3,
+                proof: PartialProof::Exhaustive,
+            })
+        );
+
+        let mut zero_bounded = MockDomain::new(vec![CardSlot::Unknown; 3]);
+        zero_bounded.planned_probes_remaining = 0;
+        zero_bounded.probe_bound_stop = Some(SearchStop::StateLimit);
+        assert_eq!(
+            run_epistemic_recon(&mut zero_bounded, Objective::ClearBoard, true, 0).ok(),
+            Some(ReconOutcome::BoundedBestPartial {
+                best_partial_route: vec![9],
+                unknown_slots: 3,
+                unreachable_slots: 0,
+                probe_stop: SearchStop::StateLimit,
+                proof: PartialProof::Exhaustive,
             })
         );
 
@@ -764,6 +1012,7 @@ mod tests {
             Some(ReconOutcome::UnsolvableBestPartial {
                 best_partial_route: vec![9],
                 unreachable_slots: 3,
+                proof: PartialProof::Exhaustive,
             })
         );
         assert_eq!(final_probe_exhausted.undo_calls, 1);
