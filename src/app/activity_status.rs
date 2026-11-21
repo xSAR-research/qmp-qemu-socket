@@ -181,6 +181,7 @@ mod tests {
             phase: pyramid_pause::Phase::Search,
             requested: true,
             acknowledged: false,
+            search: None,
         });
         assert_eq!(state.status(), badge::Status::Route);
         state = make();
@@ -189,6 +190,7 @@ mod tests {
             phase: pyramid_pause::Phase::Search,
             requested: true,
             acknowledged: true,
+            search: None,
         });
         assert_eq!(state.status(), badge::Status::Waiting);
         state = make();

@@ -575,11 +575,15 @@ pub(crate) fn drive_tripeaks_session<I: TriPeaksSessionIo>(
                 proof,
                 unknown_slots,
             } => {
+                let operator_play_partial =
+                    proof == PartialProof::Bounded(xsar::search::SearchStop::Interrupted);
                 let worth_banking = unknown_slots == 0
                     && match objective {
-                        Objective::ClearRankQuota { .. } => banked_rank_count > 0,
+                        Objective::ClearRankQuota { .. } => {
+                            banked_rank_count > 0 || (operator_play_partial && cards_cleared > 0)
+                        }
                         Objective::ReachScoreDelta { .. } => score_delta > 0,
-                        Objective::ClearBoard => false,
+                        Objective::ClearBoard => operator_play_partial && cards_cleared > 0,
                     };
                 if worth_banking && let Some(partial_route) = route {
                     io.phase(generation, SessionPhase::Execution);
@@ -4029,5 +4033,40 @@ mod tests {
             .expect("XP counting handoff resolves cleanly to ChallengeComplete");
         assert_eq!(transition, PostClearTransition::ChallengeComplete);
         drop(loopback);
+    }
+
+    #[test]
+    fn tripeaks_350_clear_board_play_partial_executes_and_stops_cleanly() {
+        let mut play_io = MockSessionIo::new(vec![ScriptedBoard {
+            root_hash: 0x3500,
+            objective: Objective::ClearBoard,
+            detected_challenge: None,
+            completed_during_recon: false,
+            terminal_challenge_complete: false,
+            terminal_board_win: false,
+            recon_cleared_by_rank: [0; 13],
+            recon_score_delta: 0,
+            plan_decision: PlanDecision::UnsolvablePartial {
+                route: Some("play-partial-clear-board".to_owned()),
+                objective: Objective::ClearBoard,
+                banked_rank_count: 0,
+                score_delta: 1200,
+                cards_cleared: 14,
+                proof: PartialProof::Bounded(SearchStop::Interrupted),
+                unknown_slots: 0,
+            },
+            executed: ExecutedBoard {
+                completion: tripeaks_route::Completion::PartialComplete,
+                cards_cleared: 14,
+                score_delta: 1200,
+                cleared_by_rank: [0; 13],
+            },
+            post_clear: None,
+        }]);
+        let outcome = drive_tripeaks_session(TriPeaksPlayStyle::Continuous, &mut play_io)
+            .expect("Play interrupted ClearBoard executes verified partial route cleanly");
+        assert_eq!(play_io.log.execute_calls.len(), 1);
+        assert_eq!(play_io.log.restart_calls.len(), 0);
+        assert!(outcome.summary.contains("best-found 14/28"));
     }
 }

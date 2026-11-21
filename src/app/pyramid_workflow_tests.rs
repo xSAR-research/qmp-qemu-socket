@@ -2005,7 +2005,10 @@ fn freecell_330_session_lifecycle_accepts_option_2a_and_stop_preview_once() {
 
 
 /// Collect all rendered text labels from a headless `egui` paint pass for exact parity checks.
-fn collect_egui_text(shapes: &[eframe::egui::epaint::ClippedShape], out: &mut Vec<String>) {
+pub(super) fn collect_egui_text(
+    shapes: &[eframe::egui::epaint::ClippedShape],
+    out: &mut Vec<String>,
+) {
     fn walk_shape(shape: &eframe::egui::epaint::Shape, out: &mut Vec<String>) {
         match shape {
             eframe::egui::epaint::Shape::Text(text) => out.push(text.galley.text().to_owned()),
@@ -2161,6 +2164,7 @@ fn freecell_332_single_board_displays_live_and_determined_calculation_stats_and_
             automatic_moves: 0,
             foundation_cards: 41,
         },
+        partial_proof: xsar::search::PartialProof::Exhaustive,
         paused: Duration::from_millis(500),
     });
 
@@ -2253,4 +2257,62 @@ fn freecell_332_single_board_displays_live_and_determined_calculation_stats_and_
     assert!(workflow.calculation_report.is_some());
     workflow.clear_preview();
     assert!(!workflow.retain_after_detach(&selected));
+}
+
+
+/// Play gating depends strictly on Search phase, positive best score, and no pending Play latch;
+/// auto-pause banner exposes both Continue (+60s) and Play prompts cleanly.
+#[test]
+fn search_350_play_button_gating_and_auto_pause_status_ui() {
+    use crate::worker::pyramid_pause::{Phase, SearchSnapshot, Snapshot};
+    let snap = |phase, requested, acknowledged, auto_paused, best_score, play_requested| Snapshot {
+        epoch: 9,
+        phase,
+        requested,
+        acknowledged,
+        search: Some(SearchSnapshot {
+            active_elapsed: Duration::from_secs(360),
+            next_auto_pause_at: Duration::from_secs(360),
+            continue_step: Duration::from_secs(60),
+            auto_paused,
+            best_score,
+            play_requested,
+        }),
+    };
+
+    assert!(!snap(Phase::Search, false, false, false, 0, false).can_play_best());
+    assert!(snap(Phase::Search, false, false, false, 1, false).can_play_best());
+    assert!(snap(Phase::Search, true, true, true, 12, false).can_play_best());
+    assert!(!snap(Phase::Search, false, false, false, 12, true).can_play_best());
+    assert!(!snap(Phase::Recon, false, false, false, 12, false).can_play_best());
+
+    let auto_paused = snap(Phase::Search, true, true, true, 19, false);
+    assert!(auto_paused.is_auto_paused());
+
+    let ctx = eframe::egui::Context::default();
+    let mut texts = Vec::new();
+    let out = ctx.run_ui(
+        eframe::egui::RawInput {
+            screen_rect: Some(eframe::egui::Rect::from_min_size(
+                eframe::egui::Pos2::ZERO,
+                eframe::egui::vec2(820.0, 120.0),
+            )),
+            ..Default::default()
+        },
+        |ui| {
+            super::pyramid_workflow::render_pause_search_status(
+                ui,
+                auto_paused,
+                "Paused — frontier retained",
+            );
+        },
+    );
+    collect_egui_text(&out.shapes, &mut texts);
+    out.drop_without_applying_deltas();
+    assert!(
+        texts
+            .iter()
+            .any(|t| t
+                == "Auto-paused at 360s / 360s (best score 19) — press Continue (+60s) or Play")
+    );
 }

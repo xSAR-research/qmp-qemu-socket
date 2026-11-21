@@ -64,6 +64,16 @@ impl Playback {
     }
 
 
+    /// Clear retained UI progress/messages alongside executable playback consent on mode switch.
+    pub(super) fn clear_inactive(&mut self) {
+        self.plan = None;
+        self.multi_step_stop = None;
+        self.progress = None;
+        self.message.clear();
+        self.retained = None;
+    }
+
+
     /// Accept progress only for the still-outstanding exact plan and invocation.
     fn progress(&mut self, progress: Progress) {
         if self.pending.as_ref() == Some(&(progress.plan.clone(), progress.run_id)) {

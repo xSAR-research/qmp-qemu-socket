@@ -1121,6 +1121,24 @@ impl WorkerHandle {
     }
 
 
+    /// True if the active calculation or worker STOP latch is already cancelled.
+    fn active_work_cancelled(&self) -> bool {
+        if self.latest_frame.freecell_calculation.running() {
+            return false;
+        }
+        if self.latest_frame.freecell_calculation.is_cancelled() {
+            return true;
+        }
+        if self.latest_frame.tripeaks_calculation.running() {
+            return false;
+        }
+        if self.latest_frame.tripeaks_calculation.is_cancelled() {
+            return true;
+        }
+        self.cancel_requested.load(Ordering::Acquire)
+    }
+
+
     /// Read actual safe-point acknowledgement without issuing a worker command.
     pub(crate) fn pause_state(&self) -> Option<pyramid_pause::Snapshot> {
         self.latest_frame.pause.snapshot()
@@ -1130,13 +1148,32 @@ impl WorkerHandle {
     /// Change suspension only for the current epoch; cancellation always wins.
     pub(crate) fn request_pause(&self, epoch: u64, pause: bool) -> Result<(), String> {
         self.check_accepting_requests()?;
-        if self.cancel_requested.load(Ordering::Acquire)
-            && !self.latest_frame.freecell_calculation.running()
-            && !self.latest_frame.tripeaks_calculation.running()
-        {
+        if self.active_work_cancelled() {
             return Err("STOP is latched; Continue cannot restart this work".to_owned());
         }
         self.latest_frame.pause.request(epoch, pause)
+    }
+
+
+    /// Stop active or paused A* search early for `epoch` to replay and play the best route.
+    pub(crate) fn request_play_best(&self, epoch: u64) -> Result<(), String> {
+        self.check_accepting_requests()?;
+        if self.active_work_cancelled() {
+            return Err("STOP is latched; Play cannot proceed".to_owned());
+        }
+        self.latest_frame.pause.request_play_best(epoch)
+    }
+
+
+    /// Retire idle retained calculation/route stores across modes when switching game or strategy.
+    pub(crate) fn clear_inactive_mode_stores(&self) {
+        self.latest_frame.clear_planning_progress();
+        self.revoke_freecell_route();
+        self.revoke_tripeaks_route();
+        if let Ok(mut store) = self.latest_frame.computed_route.lock() {
+            store.discard_prepared();
+            *store = computed_route::Store::default();
+        }
     }
 
     /// Enumerate a selected TriPeaks source directory on the existing worker without guest I/O.

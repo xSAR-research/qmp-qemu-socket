@@ -73,6 +73,63 @@ use xsar::{
 use xsar::search::SearchOutcome;
 
 
+/// Pyramid A* best-effort problem over `xsar::games::pyramid::rules`.
+struct PyramidProblem<'a> {
+    /// Immutable validated starting 52-card Pyramid deal.
+    deal: &'a CompleteDeal,
+    /// Active action-cost policy (`CardMatches` vs `LogicalActions`).
+    cost: search::PyramidCost,
+}
+
+
+impl xsar::search::SearchProblem for PyramidProblem<'_> {
+    type State = SearchState;
+    type Action = RecordedAction;
+    type Successors = std::iter::Flatten<
+        std::array::IntoIter<
+            Option<(RecordedAction, SearchState)>,
+            { xsar::games::pyramid::planning::MAX_SUCCESSORS },
+        >,
+    >;
+
+    fn initial(&self) -> Self::State {
+        SearchState::initial()
+    }
+
+    fn is_goal(&self, state: Self::State) -> bool {
+        state.is_goal()
+    }
+
+    fn successors(&self, state: Self::State) -> Self::Successors {
+        rules::successors(self.deal, state).into_iter().flatten()
+    }
+
+    fn action_cost(&self, _state: Self::State, action: Self::Action) -> u32 {
+        match (self.cost, action) {
+            (search::PyramidCost::CardMatches, RecordedAction::Move | RecordedAction::Recycle) => 0,
+            _ => 1,
+        }
+    }
+
+    fn heuristic(&self, state: Self::State) -> u32 {
+        rules::heuristic(self.deal, state)
+    }
+
+    fn impossible(&self, state: Self::State) -> bool {
+        rules::impossible(self.deal, state)
+    }
+}
+
+
+impl xsar::search::BestEffortProblem for PyramidProblem<'_> {
+    fn score(&self, state: Self::State) -> u32 {
+        u32::try_from(TABLEAU_LEN)
+            .unwrap_or(28)
+            .saturating_sub(state.tableau_remaining())
+    }
+}
+
+
 /// Identify a returned outcome that must fail under the current route policy.
 fn completed_search_failure(
     outcome: &BestEffortOutcome<RecordedAction>,
@@ -87,6 +144,13 @@ fn completed_search_failure(
             proof,
             ..
         } => {
+            if *proof == PartialProof::Bounded(xsar::search::SearchStop::Interrupted)
+                && !actions.is_empty()
+                && *score > 0
+                && *score < TABLEAU_LEN as u32
+            {
+                return false;
+            }
             if shortest || boards {
                 *proof != PartialProof::Exhaustive
             } else {
@@ -894,8 +958,19 @@ pub(super) fn calculate_owned_causal(
                 "Challenge target is already reached; no further route input authorised".to_owned(),
             );
         }
+        struct PriorBestCandidate {
+            actions: Vec<RecordedAction>,
+            score: u32,
+        }
         let mut operator_requested_maximum = false;
+        let mut prior_best: Option<PriorBestCandidate> = None;
+        let mut reported_best_score = 0u32;
+        let (search_scope, yield_best) = events.latest_frame.pause.begin_search();
         let (actions, stats, objective, guarantee) = loop {
+            if prior_best.is_none() {
+                reported_best_score = 0;
+                events.latest_frame.pause.update_search_best_score(0);
+            }
             check_acquisition_causal(&acquisition, context, events, cancel, stop_trace)?;
             let search_work = events.latest_frame.search_control.begin(
                 context,
@@ -953,7 +1028,7 @@ pub(super) fn calculate_owned_causal(
             send_status(
                 events,
                 format!(
-                    "Searching for {} — no automatic cutoff; use STOP to cancel…",
+                    "Searching for {} — 360s auto-pause step (+60s Continue), or Play best / STOP…",
                     route_goal.label()
                 ),
             );
@@ -967,7 +1042,13 @@ pub(super) fn calculate_owned_causal(
                 .ok_or("Invalid internal search weight")?,
             };
             let mut last_logged = Duration::ZERO;
-            let mut progress = |snapshot: xsar::search::SearchProgress| {
+            let mut progress = |best_snapshot: xsar::search::BestEffortProgress| {
+                reported_best_score = reported_best_score.max(best_snapshot.best_score);
+                events
+                    .latest_frame
+                    .pause
+                    .update_search_best_score(reported_best_score);
+                let snapshot = best_snapshot.search;
                 // At most one intermediate row per second plus the engine's final row.
                 if snapshot.finished
                     || snapshot.stats.elapsed.saturating_sub(last_logged)
@@ -1000,7 +1081,10 @@ pub(super) fn calculate_owned_causal(
                 match events.latest_frame.pause.checkpoint_interruptible(
                     super::pyramid_pause::Phase::Search,
                     || check_acquisition_causal(&acquisition, context, events, cancel, stop_trace),
-                    || search_work.maximum_requested(),
+                    || {
+                        Ok(!yield_best.load(std::sync::atomic::Ordering::Acquire)
+                            && search_work.maximum_requested()?)
+                    },
                 ) {
                     Ok(super::pyramid_pause::Checkpoint::Ready(paused)) => paused,
                     Ok(super::pyramid_pause::Checkpoint::Interrupted(paused)) => {
@@ -1018,15 +1102,22 @@ pub(super) fn calculate_owned_causal(
                     }
                 }
             };
-            let outcome = search::solve_best_effort_with_cost_and_control(
-                &acquisition.deal,
+            search_scope.set_auto_pause(true);
+            let outcome = xsar::search::solve_best_effort_controlled(
+                &PyramidProblem {
+                    deal: &acquisition.deal,
+                    cost,
+                },
                 limits,
-                &local_cancel,
                 options,
-                cost,
-                Some(&mut progress),
-                Some(&checkpoint),
+                xsar::search::BestEffortControl {
+                    cancel: &local_cancel,
+                    yield_best: Some(&yield_best),
+                    progress: Some(&mut progress),
+                    checkpoint: Some(&checkpoint),
+                },
             );
+            search_scope.set_auto_pause(false);
             if let Some(error) = checkpoint_error.borrow_mut().take() {
                 return Err(error);
             }
@@ -1037,19 +1128,30 @@ pub(super) fn calculate_owned_causal(
                     bound.kind == crate::pyramid_progress::ChallengeKind::Boards
                 }),
             );
+            let has_prior_play_route = matches!(
+                &outcome,
+                BestEffortOutcome::Partial {
+                    proof: PartialProof::Bounded(xsar::search::SearchStop::Interrupted),
+                    ..
+                }
+            ) && prior_best.is_some();
+            let effective_failed = failed_before_stop && !has_prior_play_route;
+            let play_requested = yield_best.load(std::sync::atomic::Ordering::Acquire)
+                && !matches!(outcome, BestEffortOutcome::Stopped { .. });
             // Preserve a returned solver failure ahead of a later STOP. An already
-            // accepted Maximum request still retires this result through the handshake.
-            let replace = if failed_before_stop {
-                search_work.finish().unwrap_or(false)
+            // accepted Maximum request still retires this result through the handshake,
+            // unless operator Play was requested on an available partial/solved route.
+            let replace = if effective_failed {
+                search_work.finish().unwrap_or(false) && !play_requested
             } else {
                 checkpoint();
                 if let Some(error) = checkpoint_error.borrow_mut().take() {
                     return Err(error);
                 }
                 check_acquisition_causal(&acquisition, context, events, cancel, stop_trace)?;
-                search_work.finish()?
+                search_work.finish()? && !play_requested
             };
-            if !failed_before_stop || replace {
+            if !effective_failed || replace {
                 check_acquisition_causal(&acquisition, context, events, cancel, stop_trace)?;
             }
             if replace {
@@ -1093,6 +1195,35 @@ pub(super) fn calculate_owned_causal(
                             method.label()
                         ),
                     );
+                    if proof == PartialProof::Bounded(xsar::search::SearchStop::Interrupted) {
+                        let (final_actions, final_score) = if let Some(prior) =
+                            prior_best.take().filter(|prior| {
+                                prior.score > score
+                                    || actions.is_empty()
+                                    || score == 0
+                                    || score >= TABLEAU_LEN as u32
+                            }) {
+                            (prior.actions, prior.score)
+                        } else {
+                            (actions, score)
+                        };
+                        if final_actions.is_empty()
+                            || final_score == 0
+                            || final_score >= TABLEAU_LEN as u32
+                        {
+                            return Err(no_winning_route_message(proof));
+                        }
+                        let removed = u8::try_from(final_score)
+                            .map_err(|_| "Fallback score is outside tableau bounds")?;
+                        break (
+                            final_actions,
+                            stats,
+                            RouteObjective::Removal { removed, proof },
+                            format!(
+                                "Play requested: {removed}/28 tableau cards removed; search stopped at {proof:?}; automatic play stops at the verified partial position"
+                            ),
+                        );
+                    }
                     if requirement.is_some_and(|bound| {
                         bound.kind == crate::pyramid_progress::ChallengeKind::Boards
                     }) {
@@ -1147,6 +1278,18 @@ pub(super) fn calculate_owned_causal(
                                     cancel,
                                     stop_trace,
                                 )?;
+                                if !actions.is_empty()
+                                    && score > 0
+                                    && score < TABLEAU_LEN as u32
+                                    && prior_best.as_ref().is_none_or(|prior| score > prior.score)
+                                {
+                                    reported_best_score = reported_best_score.max(score);
+                                    events
+                                        .latest_frame
+                                        .pause
+                                        .update_search_best_score(reported_best_score);
+                                    prior_best = Some(PriorBestCandidate { actions, score });
+                                }
                                 send_status(events, "No winning Shortest route. Switching to Maximum card matches using existing Recon for this board only.".to_owned());
                                 send_log(events, "Automatic current-board fallback: Shortest route → Maximum card matches; same Recon receipt retained.".to_owned());
                                 method = RouteMethod::Fast;
@@ -1154,8 +1297,25 @@ pub(super) fn calculate_owned_causal(
                             }
                         }
                     }
-                    if actions.is_empty() || score == 0 || score >= TABLEAU_LEN as u32 {
-                        if proof == PartialProof::Exhaustive && score == 0 && actions.is_empty() {
+                    let (final_actions, final_score) = if let Some(prior) =
+                        prior_best.take().filter(|prior| {
+                            actions.is_empty()
+                                || score == 0
+                                || score >= TABLEAU_LEN as u32
+                                || (proof != PartialProof::Exhaustive && prior.score > score)
+                        }) {
+                        (prior.actions, prior.score)
+                    } else {
+                        (actions, score)
+                    };
+                    if final_actions.is_empty()
+                        || final_score == 0
+                        || final_score >= TABLEAU_LEN as u32
+                    {
+                        if proof == PartialProof::Exhaustive
+                            && final_score == 0
+                            && final_actions.is_empty()
+                        {
                             break (Vec::new(), stats, RouteObjective::Drain,
                             "no winning route or beneficial tableau removal; stock continuation prepared".to_owned());
                         }
@@ -1164,7 +1324,7 @@ pub(super) fn calculate_owned_causal(
                             "No beneficial tableau-removal route found; fallback={proof:?}; no execution plan"
                         ));
                     }
-                    let removed = u8::try_from(score)
+                    let removed = u8::try_from(final_score)
                         .map_err(|_| "Fallback score is outside tableau bounds")?;
                     let guarantee = match proof {
                         PartialProof::Exhaustive => format!(
@@ -1175,7 +1335,7 @@ pub(super) fn calculate_owned_causal(
                         ),
                     };
                     (
-                        actions,
+                        final_actions,
                         stats,
                         RouteObjective::Removal { removed, proof },
                         guarantee,
@@ -1205,6 +1365,7 @@ pub(super) fn calculate_owned_causal(
             };
             break prepared;
         };
+        drop(search_scope);
         record_detail(&mut details, "search_stats", search_stats_details(stats));
         record_detail(
             &mut details,

@@ -1645,26 +1645,60 @@ impl QmpQemuSocketApp {
     }
 
 
-    /// Render shared cooperative `Pause`/`Continue` and `Cancel` buttons plus pause status.
+    /// Render shared cooperative `Pause`/`Continue`, `Play` and `Cancel` buttons plus search status.
     pub(super) fn session_pause_cancel_controls(&mut self, ui: &mut egui::Ui) {
         let pause = self.worker.pause_state();
         let label = match pause {
             Some(state) if state.requested || state.acknowledged => "Continue",
             _ => "Pause",
         };
-        if bevel_button(
+        let pause_button = bevel_button(
             ui,
             label,
             SETUP_BLUE,
             false,
             pause.is_some() && !self.stop_requested,
-        )
-        .clicked()
+        );
+        let pause_button = if let Some(state) = pause
+            && state.is_auto_paused()
+            && let Some(search) = state.search
+        {
+            pause_button.on_hover_text(format!(
+                "Resume A* search for +{}s more active calculation time",
+                search.continue_step.as_secs()
+            ))
+        } else {
+            pause_button
+        };
+        if pause_button.clicked()
             && let Some(state) = pause
         {
             let request = !(state.requested || state.acknowledged);
             if let Err(error) = self.worker.request_pause(state.epoch, request) {
                 self.push_log(error);
+            }
+        }
+        if let Some(state) = pause
+            && state.phase == crate::worker::pyramid_pause::Phase::Search
+            && bevel_button(
+                ui,
+                "Play",
+                ACTION_GREEN,
+                false,
+                !self.stop_requested && !self.exiting && state.can_play_best(),
+            )
+            .on_hover_text("Stop A* search early and play/install the best scored route so far")
+            .clicked()
+        {
+            match self.worker.request_play_best(state.epoch) {
+                Ok(()) => {
+                    self.current_status =
+                        "Play requested — stopping A* and preparing best route…".to_owned();
+                    self.push_log(
+                        "Play requested: stopping active A* search to replay and play the best route.",
+                    );
+                }
+                Err(error) => self.push_log(error),
             }
         }
         let cancel_enabled =
@@ -1673,11 +1707,8 @@ impl QmpQemuSocketApp {
             self.request_independent_stop();
         }
         if let Some(state) = pause {
-            if state.acknowledged {
-                ui.label(format!("{} paused", state.phase.label()));
-            } else if state.requested {
-                ui.label("Pausing…");
-            }
+            let phase_fallback = format!("{} paused", state.phase.label());
+            render_pause_search_status(ui, state, &phase_fallback);
         }
     }
 
@@ -1767,9 +1798,8 @@ impl QmpQemuSocketApp {
                     );
                 }
                 if let Some(report) = &self.freecell_workflow.calculation_report {
-                    let summary = crate::worker::freecell_calculation::outcome_summary_message(
-                        &report.outcome,
-                    );
+                    let summary =
+                        crate::worker::freecell_calculation::report_summary_message(report);
                     if self.current_status != summary {
                         ui.label(summary);
                     }
@@ -2197,6 +2227,63 @@ impl QmpQemuSocketApp {
             });
             ui.small("Capture Frame/PNG request new pixels. They do not replace the saved failure packet.");
         });
+    }
+}
+
+
+/// Display live auto-pause step timer, pause confirmation, or active Play best-score status.
+pub(super) fn render_pause_search_status(
+    ui: &mut egui::Ui,
+    pause: crate::worker::pyramid_pause::Snapshot,
+    paused_label: &str,
+) {
+    if let Some(search) = pause.search {
+        if pause.is_auto_paused() {
+            ui.colored_label(
+                egui::Color32::from_rgb(240, 196, 80),
+                format!(
+                    "Auto-paused at {:.0}s / {:.0}s (best score {}) — press Continue (+{}s) or Play",
+                    search.active_elapsed.as_secs_f64(),
+                    search.next_auto_pause_at.as_secs_f64(),
+                    search.best_score,
+                    search.continue_step.as_secs(),
+                ),
+            );
+        } else if pause.acknowledged {
+            if search.play_requested {
+                ui.label(format!(
+                    "Stopping A* for Play (best score {})…",
+                    search.best_score
+                ));
+            } else {
+                ui.label(format!(
+                    "{paused_label} ({:.0}s / {:.0}s · best score {})",
+                    search.active_elapsed.as_secs_f64(),
+                    search.next_auto_pause_at.as_secs_f64(),
+                    search.best_score,
+                ));
+            }
+        } else if pause.requested {
+            ui.label("Pausing…");
+        } else if search.play_requested {
+            ui.label(format!(
+                "Stopping A* to replay best route (score {})…",
+                search.best_score
+            ));
+        } else {
+            ui.small(format!(
+                "Auto-pause at {:.0}s ({:.0}s active) · best score {}",
+                search.next_auto_pause_at.as_secs_f64(),
+                search.active_elapsed.as_secs_f64(),
+                search.best_score,
+            ));
+        }
+        return;
+    }
+    if pause.acknowledged {
+        ui.label(paused_label);
+    } else if pause.requested {
+        ui.label("Pausing…");
     }
 }
 

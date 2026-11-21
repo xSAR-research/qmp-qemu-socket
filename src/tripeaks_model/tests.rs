@@ -1686,3 +1686,543 @@ fn unseen_rank_probability_breaks_probe_ties_and_continuation_chains_from_mid_bo
         ]
     );
 }
+
+
+#[test]
+fn tripeaks_350_plan_deal_route_controlled_yield_best_and_cancel_precedence() {
+    use xsar::games::cards::Suit;
+    let waste_card = Card::try_from(XsarCard::new(Rank::Ace, Suit::Clubs)).expect("card id");
+    let tap_1 = Card::try_from(XsarCard::new(
+        Rank::from_value(2).expect("rank 2"),
+        Suit::Clubs,
+    ))
+    .expect("card id");
+    let tap_2 = Card::try_from(XsarCard::new(
+        Rank::from_value(3).expect("rank 3"),
+        Suit::Diamonds,
+    ))
+    .expect("card id");
+    let mut deck = Vec::with_capacity(52);
+    for suit in [Suit::Clubs, Suit::Diamonds, Suit::Hearts, Suit::Spades] {
+        for r in 1_u8..=13 {
+            let c = Card::try_from(XsarCard::new(
+                Rank::from_value(r).expect("rank 1..=13"),
+                suit,
+            ))
+            .expect("card id");
+            if c != waste_card && c != tap_1 && c != tap_2 {
+                deck.push(c);
+            }
+        }
+    }
+    let mut slots = [CardSlot::Unknown; DEAL_SLOT_COUNT];
+    slots[usize::from(INITIAL_WASTE_SLOT.0)] = CardSlot::Known(waste_card);
+    slots[18] = CardSlot::Known(tap_1);
+    slots[19] = CardSlot::Known(tap_2);
+    let mut deck_iter = deck.into_iter();
+    for entry in &mut slots {
+        if matches!(entry, CardSlot::Unknown) {
+            *entry = CardSlot::Known(deck_iter.next().expect("full 52-card deck"));
+        }
+    }
+
+    let cancel = AtomicBool::new(false);
+    let yield_best = AtomicBool::new(false);
+    let polls = std::cell::Cell::new(0usize);
+    let checkpoint = || {
+        let n = polls.get() + 1;
+        polls.set(n);
+        if n >= 300 {
+            yield_best.store(true, std::sync::atomic::Ordering::Release);
+        }
+        Duration::ZERO
+    };
+    let outcome = super::plan_deal_route_controlled(
+        &slots,
+        Objective::ClearBoard,
+        DEFAULT_SEARCH_LIMITS,
+        xsar::search::BestEffortControl {
+            cancel: &cancel,
+            yield_best: Some(&yield_best),
+            progress: None,
+            checkpoint: Some(&checkpoint),
+        },
+    )
+    .expect("controlled TriPeaks planning succeeds cleanly");
+    if let TriPeaksPlanOutcome::UnsolvablePartial {
+        actions,
+        proof,
+        max_tableau_cleared,
+        ..
+    } = outcome
+    {
+        assert_eq!(proof, PartialProof::Bounded(SearchStop::Interrupted));
+        assert!(max_tableau_cleared > 0);
+        assert!(!actions.is_empty());
+        verify_move_sequence(&slots, &actions).expect("yielded TriPeaks prefix replays cleanly");
+    } else if !matches!(outcome, TriPeaksPlanOutcome::SolvedObjective { .. }) {
+        panic!("expected SolvedObjective or Interrupted Partial, got {outcome:?}");
+    }
+
+    // Hard cancel must supersede yield_best.
+    cancel.store(true, std::sync::atomic::Ordering::Release);
+    yield_best.store(true, std::sync::atomic::Ordering::Release);
+    let cancelled = super::plan_deal_route_controlled(
+        &slots,
+        Objective::ClearBoard,
+        DEFAULT_SEARCH_LIMITS,
+        xsar::search::BestEffortControl {
+            cancel: &cancel,
+            yield_best: Some(&yield_best),
+            progress: None,
+            checkpoint: None,
+        },
+    )
+    .expect("cancelled planning returns cleanly");
+    assert!(matches!(
+        cancelled,
+        TriPeaksPlanOutcome::Stopped {
+            reason: SearchStop::Cancelled,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn tripeaks_350_multi_pass_score_monotonicity_upgrade_yield_and_prior_bound_preservation() {
+    use xsar::games::cards::Suit;
+
+    // 1. Build a 52-card deal where tableau + stock form consecutive adjacent ranks so ClearBoard
+    // solves swiftly in Pass 2 and ReachScoreDelta enters `maybe_upgrade_clear_score`.
+    let card_at = |rank_idx: u8, suit_idx: usize| {
+        let suit = [Suit::Clubs, Suit::Diamonds, Suit::Hearts, Suit::Spades][suit_idx];
+        Card::try_from(XsarCard::new(
+            Rank::from_value(rank_idx + 1).expect("rank 1..=13"),
+            suit,
+        ))
+        .expect("card id")
+    };
+    let mut used = [false; 52];
+    let mut take = |rank_idx: u8| -> Card {
+        for s in 0..4 {
+            let idx = usize::from(rank_idx) * 4 + s;
+            if !used[idx] {
+                used[idx] = true;
+                return card_at(rank_idx, s);
+            }
+        }
+        panic!("rank exhausted");
+    };
+    let mut clear_slots = [CardSlot::Unknown; DEAL_SLOT_COUNT];
+    clear_slots[usize::from(INITIAL_WASTE_SLOT.0)] = CardSlot::Known(take(0)); // Ace
+    // Clear bottom-up: row 3 (slot 27..=18) -> row 2 (17..=9) -> row 1 (8..=3) -> row 0 (2..=0).
+    // Adjacent rank ramp keeps each rank count <= 3 while ensuring an instant 28-card ClearBoard.
+    let ranks_28 = [
+        1_u8, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 1, 2, 3, 4,
+    ];
+    for (step, slot_idx) in (0..28).rev().enumerate() {
+        clear_slots[slot_idx] = CardSlot::Known(take(ranks_28[step]));
+    }
+    for entry in &mut clear_slots {
+        if matches!(entry, CardSlot::Unknown) {
+            let next_idx = used
+                .iter()
+                .position(|&u| !u)
+                .expect("remaining unique card");
+            used[next_idx] = true;
+            *entry = CardSlot::Known(card_at((next_idx / 4) as u8, next_idx % 4));
+        }
+    }
+
+    // Exercise `maybe_upgrade_clear_score` with `yield_best` triggered once score_progress > 0 inside
+    // upgrade probes; best_score must remain strictly positive and return `EscalatedClearBoard`.
+    let cancel = AtomicBool::new(false);
+    let yield_best = AtomicBool::new(false);
+    let upgrade_scores = std::cell::RefCell::new(Vec::new());
+    let probes = std::cell::Cell::new(0usize);
+    let mut progress = |snap: xsar::search::BestEffortProgress| {
+        let p = probes.get() + 1;
+        probes.set(p);
+        upgrade_scores.borrow_mut().push(snap.best_score);
+        if p > 3 && snap.best_score > 0 {
+            // Delay slightly so Pass 2 completes ClearBoard and enters `maybe_upgrade_clear_score`.
+            if snap.search.stats.expanded > 10 {
+                yield_best.store(true, std::sync::atomic::Ordering::Release);
+            }
+        }
+    };
+    let escalated = super::plan_deal_route_controlled(
+        &clear_slots,
+        Objective::ReachScoreDelta {
+            points_needed: 500_000,
+        },
+        DEFAULT_SEARCH_LIMITS,
+        xsar::search::BestEffortControl {
+            cancel: &cancel,
+            yield_best: Some(&yield_best),
+            progress: Some(&mut progress),
+            checkpoint: None,
+        },
+    )
+    .expect("ReachScoreDelta upgrade interruption succeeds cleanly");
+    assert!(
+        matches!(
+            &escalated,
+            TriPeaksPlanOutcome::EscalatedClearBoard { .. }
+                | TriPeaksPlanOutcome::SolvedObjective { .. }
+        ) || matches!(
+            &escalated,
+            TriPeaksPlanOutcome::UnsolvablePartial {
+                proof: PartialProof::Bounded(SearchStop::Interrupted),
+                max_tableau_cleared: 1..=28,
+                ..
+            }
+        ),
+        "unexpected outcome: {escalated:?}"
+    );
+    let recorded = upgrade_scores.borrow();
+    if let Some(first_pos) = recorded.iter().position(|&s| s > 0) {
+        assert!(
+            recorded[first_pos..].iter().all(|&s| s > 0),
+            "live best_score must never dip back to 0 during upgrade probes: {recorded:?}"
+        );
+    }
+
+    // 2. Directly trigger yield_best on Pass 2 via ReachScoreDelta where ClearBoard completes and
+    // enters `maybe_upgrade_clear_score` before yield_best is raised inside probe #1's checkpoint.
+    let cancel2 = AtomicBool::new(false);
+    let yield2 = AtomicBool::new(false);
+    let mut saw_positive_after_clear = Vec::new();
+    let finished_count = std::cell::Cell::new(0usize);
+    let mut obs2 = |snap: xsar::search::BestEffortProgress| {
+        if finished_count.get() >= 2 {
+            saw_positive_after_clear.push(snap.best_score);
+        }
+        if snap.search.finished {
+            finished_count.set(finished_count.get() + 1);
+        }
+    };
+    let ckpt2 = || {
+        // Trigger Play once Pass 1 & Pass 2 finished reports and we are inside `maybe_upgrade_clear_score`.
+        if finished_count.get() >= 2 {
+            yield2.store(true, std::sync::atomic::Ordering::Release);
+        }
+        Duration::ZERO
+    };
+    let escalated2 = super::plan_deal_route_controlled(
+        &clear_slots,
+        Objective::ReachScoreDelta {
+            points_needed: 500_000,
+        },
+        DEFAULT_SEARCH_LIMITS,
+        xsar::search::BestEffortControl {
+            cancel: &cancel2,
+            yield_best: Some(&yield2),
+            progress: Some(&mut obs2),
+            checkpoint: Some(&ckpt2),
+        },
+    )
+    .expect("upgrade probe Play succeeds");
+    assert!(matches!(
+        escalated2,
+        TriPeaksPlanOutcome::EscalatedClearBoard { .. }
+    ));
+    assert!(
+        saw_positive_after_clear.iter().all(|&s| s > 0),
+        "maybe_upgrade_clear_score must not reset best_score to 0: {saw_positive_after_clear:?}"
+    );
+
+    // 3. Prior StateLimit in Pass 1 + ClearBoard in Pass 2 must NOT mask Interrupted in Pass 3a.
+    let mut state_bound_slots = [CardSlot::Unknown; DEAL_SLOT_COUNT];
+    let mut deck: Vec<Card> = (0_u8..13)
+        .flat_map(|r| (0..4).map(move |s| card_at(r, s)))
+        .collect();
+    let pop_rank = |pool: &mut Vec<Card>, r: u8| {
+        let p = pool
+            .iter()
+            .position(|c| (0..4).any(|s| *c == card_at(r, s)))
+            .expect("rank present in 52-card deck");
+        pool.remove(p)
+    };
+    state_bound_slots[usize::from(INITIAL_WASTE_SLOT.0)] = CardSlot::Known(pop_rank(&mut deck, 4)); // Five
+    // Top peak 0 = Ace (rank 0) covered by non-adjacent cards; row 3 has a tappable Four (`rank 3`)
+    // so depth >= 1 immediately scores positive cards while StateLimit=100 stops Pass 1 & Pass 2!
+    state_bound_slots[0] = CardSlot::Known(pop_rank(&mut deck, 0));
+    state_bound_slots[18] = CardSlot::Known(pop_rank(&mut deck, 3)); // Four (tappable from Five!)
+    state_bound_slots[19] = CardSlot::Known(pop_rank(&mut deck, 2)); // Three
+    state_bound_slots[20] = CardSlot::Known(pop_rank(&mut deck, 1)); // Two
+    for entry in &mut state_bound_slots {
+        if matches!(entry, CardSlot::Unknown) {
+            *entry = CardSlot::Known(deck.remove(0));
+        }
+    }
+    let cancel3 = AtomicBool::new(false);
+    let yield3 = AtomicBool::new(false);
+    let ckpt3_count = std::cell::Cell::new(0usize);
+    let pass_finished3 = std::cell::Cell::new(0usize);
+    let mut obs3 = |snap: xsar::search::BestEffortProgress| {
+        if snap.search.finished {
+            pass_finished3.set(pass_finished3.get() + 1);
+        }
+    };
+    let ckpt3 = || {
+        // After Pass 1 (ClearRankQuota) + Pass 2 (ClearBoard) hit StateLimit (2 finished passes),
+        // wait until Pass 3a (`BestPartialProblem`) expands root + Draw/Tap successors (~20 polls),
+        // long before hitting `max_states = 100`, then raise `yield3`.
+        if pass_finished3.get() >= 2 {
+            let n = ckpt3_count.get() + 1;
+            ckpt3_count.set(n);
+            if n >= 20 {
+                yield3.store(true, std::sync::atomic::Ordering::Release);
+            }
+        }
+        Duration::ZERO
+    };
+    let tight_limits = SearchLimits {
+        max_states: 100,
+        max_expansions: 100,
+        ..DEFAULT_SEARCH_LIMITS
+    };
+    let yielded3 = super::plan_deal_route_controlled(
+        &state_bound_slots,
+        Objective::ClearRankQuota {
+            rank: 0,
+            remaining: 1,
+        },
+        tight_limits,
+        xsar::search::BestEffortControl {
+            cancel: &cancel3,
+            yield_best: Some(&yield3),
+            progress: Some(&mut obs3),
+            checkpoint: Some(&ckpt3),
+        },
+    )
+    .expect("Pass 3a yield under prior StateLimit succeeds cleanly");
+    assert!(
+        matches!(
+            yielded3,
+            TriPeaksPlanOutcome::UnsolvablePartial {
+                proof: PartialProof::Bounded(SearchStop::Interrupted),
+                max_tableau_cleared,
+                ..
+            } if max_tableau_cleared > 0
+        ),
+        "prior StateLimit must not mask Pass 3a Interrupted: {yielded3:?}"
+    );
+}
+
+#[test]
+fn tripeaks_350_multi_pass_play_preserves_superior_prior_pass_candidate() {
+    use xsar::games::cards::Suit;
+
+    let card_at = |rank_idx: u8, suit_idx: usize| {
+        let suit = [Suit::Clubs, Suit::Diamonds, Suit::Hearts, Suit::Spades][suit_idx];
+        Card::try_from(XsarCard::new(
+            Rank::from_value(rank_idx + 1).expect("rank 1..=13"),
+            suit,
+        ))
+        .expect("card id")
+    };
+    let mut deck: Vec<Card> = (0_u8..13)
+        .flat_map(|r| (0..4).map(move |s| card_at(r, s)))
+        .collect();
+    let pop_rank = |pool: &mut Vec<Card>, r: u8| {
+        let p = pool
+            .iter()
+            .position(|c| (0..4).any(|s| *c == card_at(r, s)))
+            .expect("rank present in 52-card deck");
+        pool.remove(p)
+    };
+
+    // Construct an unsolvable 52-card deal where:
+    // - Peak 0 (`slot 0`) holds the 4th Queen (`rank 11`), permanently blocked by Sevens (`9..=12`)
+    //   whose only partners (`6`, `8`) reside in `1..=8`.
+    // - `slot 18` holds a non-target `Ten` (`rank 9`), tappable immediately from Waste `Jack` (`28`).
+    // - `slots 19..=23` hold `Q, K, Q, J, Q`, allowing `3` Queens to be cleared cleanly in Pass 1
+    //   (`ClearRankQuota { rank: 11, remaining: 4 }`), and also yielding `>= 900` streak points.
+    // - `slots 24..=27` hold `5, 5, 5, 5`, blocked from `Stock` because `4`s live in `14..=17`.
+    let mut slots = [CardSlot::Unknown; DEAL_SLOT_COUNT];
+    slots[0] = CardSlot::Known(pop_rank(&mut deck, 11)); // Q (blocked)
+    for slot in &mut slots[1..=4] {
+        *slot = CardSlot::Known(pop_rank(&mut deck, 5)); // 6
+    }
+    for slot in &mut slots[5..=8] {
+        *slot = CardSlot::Known(pop_rank(&mut deck, 7)); // 8
+    }
+    for slot in &mut slots[9..=12] {
+        *slot = CardSlot::Known(pop_rank(&mut deck, 6)); // 7
+    }
+    slots[13] = CardSlot::Known(pop_rank(&mut deck, 0)); // A
+    for slot in &mut slots[14..=17] {
+        *slot = CardSlot::Known(pop_rank(&mut deck, 3)); // 4
+    }
+    slots[18] = CardSlot::Known(pop_rank(&mut deck, 9)); // 10 (first successor at root, 0 Queens)
+    slots[19] = CardSlot::Known(pop_rank(&mut deck, 11)); // Q
+    slots[20] = CardSlot::Known(pop_rank(&mut deck, 12)); // K
+    slots[21] = CardSlot::Known(pop_rank(&mut deck, 11)); // Q
+    slots[22] = CardSlot::Known(pop_rank(&mut deck, 10)); // J
+    slots[23] = CardSlot::Known(pop_rank(&mut deck, 11)); // Q
+    for slot in &mut slots[24..=27] {
+        *slot = CardSlot::Known(pop_rank(&mut deck, 4)); // 5
+    }
+    slots[usize::from(INITIAL_WASTE_SLOT.0)] = CardSlot::Known(pop_rank(&mut deck, 10)); // Initial Waste J
+    // Fill Stock (`29..=51`) deterministically with remaining 23 cards (`A x3, 2 x4, 3 x4, 9 x4, 10 x3, J x2, K x3`).
+    assert_eq!(deck.len(), 23);
+    for (dst, src) in slots[usize::from(STOCK_START_SLOT)..DEAL_SLOT_COUNT]
+        .iter_mut()
+        .zip(deck)
+    {
+        *dst = CardSlot::Known(src);
+    }
+
+    let rank_obj = Objective::ClearRankQuota {
+        rank: 11,
+        remaining: 4,
+    };
+
+    // Case 1: Interrupt Pass 2 (`ClearBoard`) right after root expansion scores `Tap 18 (10)` (0 Queens).
+    // Must retain Pass 1's exhaustively discovered 3-Queen route instead of Pass 2's 1 non-target card.
+    let run_interrupt_after_passes = |objective: Objective, passes_before_yield: usize| {
+        let cancel = AtomicBool::new(false);
+        let yield_best = AtomicBool::new(false);
+        let finished = std::cell::Cell::new(0usize);
+        let ckpt_polls = std::cell::Cell::new(0usize);
+        let mut obs = |snap: xsar::search::BestEffortProgress| {
+            if snap.search.finished {
+                finished.set(finished.get() + 1);
+            }
+        };
+        let ckpt = || {
+            if finished.get() >= passes_before_yield {
+                let n = ckpt_polls.get() + 1;
+                ckpt_polls.set(n);
+                // Allow root expansion (root + Tap 18 = 10) before raising yield_best.
+                if n >= 8 {
+                    yield_best.store(true, std::sync::atomic::Ordering::Release);
+                }
+            }
+            Duration::ZERO
+        };
+        super::plan_deal_route_controlled(
+            &slots,
+            objective,
+            DEFAULT_SEARCH_LIMITS,
+            xsar::search::BestEffortControl {
+                cancel: &cancel,
+                yield_best: Some(&yield_best),
+                progress: Some(&mut obs),
+                checkpoint: Some(&ckpt),
+            },
+        )
+        .expect("controlled planning succeeds")
+    };
+
+    let pass2_yield = run_interrupt_after_passes(rank_obj, 1);
+    match &pass2_yield {
+        TriPeaksPlanOutcome::UnsolvablePartial {
+            actions,
+            replay,
+            proof,
+            ..
+        } => {
+            assert_eq!(*proof, PartialProof::Bounded(SearchStop::Interrupted));
+            assert_eq!(
+                replay.final_position.cleared_by_rank[11], 3,
+                "Pass 2 Play must not regress Pass 1's 3-Queen route to Pass 2's non-target card: {actions:?}"
+            );
+            verify_move_sequence(&slots, actions).expect("preserved route replays");
+        }
+        other => panic!("expected UnsolvablePartial in Case 1, got {other:?}"),
+    }
+
+    // Case 2: Interrupt Pass 3a (`BestPartialProblem`) after Pass 1 & Pass 2 exhaust.
+    let pass3a_yield = run_interrupt_after_passes(rank_obj, 2);
+    match &pass3a_yield {
+        TriPeaksPlanOutcome::UnsolvablePartial {
+            actions,
+            replay,
+            proof,
+            ..
+        } => {
+            assert_eq!(*proof, PartialProof::Bounded(SearchStop::Interrupted));
+            assert_eq!(
+                replay.final_position.cleared_by_rank[11], 3,
+                "Pass 3a Play must not regress Pass 1's 3-Queen route: {actions:?}"
+            );
+            verify_move_sequence(&slots, actions).expect("preserved route replays");
+        }
+        other => panic!("expected UnsolvablePartial in Case 2, got {other:?}"),
+    }
+
+    // Case 3: Interrupt Pass 3b (`MaxRankPartialProblem`) after Pass 1, Pass 2 & Pass 3a exhaust.
+    let pass3b_yield = run_interrupt_after_passes(rank_obj, 3);
+    match &pass3b_yield {
+        TriPeaksPlanOutcome::UnsolvablePartial {
+            actions,
+            replay,
+            proof,
+            ..
+        } => {
+            assert_eq!(*proof, PartialProof::Bounded(SearchStop::Interrupted));
+            assert_eq!(
+                replay.final_position.cleared_by_rank[11], 3,
+                "Pass 3b Play must not regress Pass 1's 3-Queen route: {actions:?}"
+            );
+            verify_move_sequence(&slots, actions).expect("preserved route replays");
+        }
+        other => panic!("expected UnsolvablePartial in Case 3, got {other:?}"),
+    }
+
+    // Case 4: `ReachScoreDelta` with optimistically reachable target (`10_000 <= 79_900` so Pass 1
+    // explores instead of pruning at root) finds high-streak score (>= 2_500 pts); interrupting Pass 2
+    // after 1 low-score card (100 pts, ClearBoard score 1_000) must keep Pass 1's higher score.
+    let score_yield = run_interrupt_after_passes(
+        Objective::ReachScoreDelta {
+            points_needed: 10_000,
+        },
+        1,
+    );
+    match &score_yield {
+        TriPeaksPlanOutcome::UnsolvablePartial {
+            actions,
+            replay,
+            proof,
+            ..
+        } => {
+            assert_eq!(*proof, PartialProof::Bounded(SearchStop::Interrupted));
+            assert!(
+                replay.final_position.score_delta >= 2_500,
+                "Pass 2 Play must preserve Pass 1's high-streak score (got {}): {actions:?}",
+                replay.final_position.score_delta
+            );
+            verify_move_sequence(&slots, actions).expect("preserved route replays");
+        }
+        other => panic!("expected UnsolvablePartial in Case 4, got {other:?}"),
+    }
+
+    // Case 5: `ClearRankQuota { remaining: 5 }` (only 4 Queens exist on tableau, so Pass 1 prunes at root),
+    // Pass 2 (`ClearBoard`) exhausts with multiple cards (`>= 5`), then Pass 3a is interrupted at root+1.
+    let pass2_clearboard_yield = run_interrupt_after_passes(
+        Objective::ClearRankQuota {
+            rank: 11,
+            remaining: 5,
+        },
+        2,
+    );
+    match &pass2_clearboard_yield {
+        TriPeaksPlanOutcome::UnsolvablePartial {
+            actions,
+            max_tableau_cleared,
+            proof,
+            ..
+        } => {
+            assert_eq!(*proof, PartialProof::Bounded(SearchStop::Interrupted));
+            assert!(
+                *max_tableau_cleared >= 5,
+                "Pass 3a Play must preserve Pass 2's exhaustive multi-card partial route (got {max_tableau_cleared}): {actions:?}"
+            );
+            verify_move_sequence(&slots, actions).expect("preserved route replays");
+        }
+        other => panic!("expected UnsolvablePartial in Case 5, got {other:?}"),
+    }
+}

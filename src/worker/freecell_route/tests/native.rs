@@ -474,6 +474,7 @@ fn returned_jack_fixture() -> (
         path: PathBuf::from("native-returned-JC-closed-prefix.json"),
         deal,
         bytes: Vec::new(),
+        partial_proof: xsar::search::PartialProof::Exhaustive,
         paused: Duration::ZERO,
         outcome: Outcome::Partial {
             moves: moves.into_boxed_slice(),
@@ -1180,6 +1181,7 @@ fn freecell_3114_native_sixes_binds52_and_proves_only_jh_source_and_empty_cell()
         path: PathBuf::from("native-sixes-JH-to-CELL1-prefix.json"),
         deal: deal.clone(),
         bytes: Vec::new(),
+        partial_proof: xsar::search::PartialProof::Exhaustive,
         paused: Duration::ZERO,
         outcome: Outcome::Partial {
             moves: Box::new([action]),
@@ -2092,6 +2094,7 @@ fn club_followup_fixture() -> ClubFollowup {
         path: PathBuf::from("synthetic-FC13-club-followups.json"),
         deal,
         bytes: Vec::new(),
+        partial_proof: xsar::search::PartialProof::Exhaustive,
         paused: Duration::ZERO,
         // This replay-checked transport seam makes no exhaustive maximum claim.
         outcome: Outcome::Partial {

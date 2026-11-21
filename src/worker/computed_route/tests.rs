@@ -2135,3 +2135,196 @@ fn native_150_challenge_handoff_cannot_bypass_delivery_or_revocation() {
     assert!(confirm_final_action(SearchState::initial(), &mut io, 0, 0, Duration::ZERO).is_err());
     assert!(io.delivered.is_empty() && io.final_observations.is_empty());
 }
+
+
+/// Operator `Play` interrupted partials (`Bounded(Interrupted)`) with positive score are authorised
+/// under both Shortest and Maximum Pyramid policies, whereas 0 score and timeouts remain refused.
+#[test]
+fn pyramid_350_play_interrupted_partial_authorises_shortest_and_maximum() {
+    use xsar::search::{SearchStats, SearchStop};
+    let play_partial = BestEffortOutcome::Partial {
+        actions: vec![RecordedAction::Move],
+        score: 6,
+        proof: PartialProof::Bounded(SearchStop::Interrupted),
+        stats: SearchStats::default(),
+    };
+    assert!(!completed_search_failure(&play_partial, true, false));
+    assert!(!completed_search_failure(&play_partial, false, false));
+    assert!(!completed_search_failure(&play_partial, false, true));
+
+    let zero_play = BestEffortOutcome::Partial {
+        actions: Vec::new(),
+        score: 0,
+        proof: PartialProof::Bounded(SearchStop::Interrupted),
+        stats: SearchStats::default(),
+    };
+    assert!(completed_search_failure(&zero_play, true, false));
+    assert!(completed_search_failure(&zero_play, false, false));
+}
+
+
+#[cfg(not(miri))]
+fn slow_unsolvable_pyramid_deal() -> CompleteDeal {
+    let base = accepted_plan().acquisition.deal;
+    let mut cards: Vec<Card> = base
+        .tableau()
+        .iter()
+        .chain(base.stock().iter())
+        .copied()
+        .collect();
+    let take_rank = |pool: &mut Vec<Card>, target: xsar::games::cards::Rank| {
+        let pos = pool
+            .iter()
+            .position(|c| c.rank() == target)
+            .expect("exact rank present in 52-card deal");
+        pool.remove(pos)
+    };
+    use xsar::games::cards::Rank;
+    // Trap two 8s in row 2 directly under three 5s in row 3 -> mathematically unsolvable,
+    // while row-7 Kings guarantee immediate positive partial score on expansion 1.
+    let mut tableau = [cards[0]; 28];
+    tableau[0] = take_rank(&mut cards, Rank::Five);
+    tableau[1] = take_rank(&mut cards, Rank::Eight);
+    tableau[2] = take_rank(&mut cards, Rank::Eight);
+    tableau[3] = take_rank(&mut cards, Rank::Five);
+    tableau[4] = take_rank(&mut cards, Rank::Five);
+    tableau[5] = take_rank(&mut cards, Rank::Five);
+    tableau[21] = take_rank(&mut cards, Rank::King);
+    tableau[22] = take_rank(&mut cards, Rank::King);
+    tableau[23] = take_rank(&mut cards, Rank::King);
+    tableau[24] = take_rank(&mut cards, Rank::King);
+    for slot in &mut tableau[6..21] {
+        *slot = cards.remove(0);
+    }
+    for slot in &mut tableau[25..28] {
+        *slot = cards.remove(0);
+    }
+    let stock: [Card; 24] = cards.try_into().expect("24 remaining stock cards");
+    CompleteDeal::try_new(tableau, stock, base.metadata().clone()).expect("unique 52-card deal")
+}
+
+
+#[cfg(not(miri))]
+#[test]
+fn pyramid_350_boards_challenge_play_and_concurrent_switch_priority() {
+    use std::sync::{Arc, Mutex, mpsc};
+    for (boards_challenge, also_request_max) in [(true, false), (false, true)] {
+        let base = accepted_plan();
+        let deal = slow_unsolvable_pyramid_deal();
+        let bytes = xsar::pyramid_json::to_vec(&deal).expect("valid deal export");
+        let context = base.acquisition.context.clone();
+        let cancel = Arc::new(AtomicBool::new(false));
+        let (tx, _rx) = mpsc::channel();
+        let events = WorkerEventSink {
+            events: tx,
+            latest_frame: super::super::LatestFrameSlot::default(),
+            capture_context: Mutex::new(Some(context.clone())),
+        };
+        let latest = events.latest_frame.clone();
+        latest.reconnaissance.select(&context, &cancel).unwrap();
+        latest
+            .reconnaissance
+            .queue_reconnaissance(&context, &cancel, || Ok(()))
+            .unwrap();
+        let directory = std::env::temp_dir().join(format!(
+            "pyramid-play-{}-{}-{boards_challenge}-{also_request_max}",
+            std::process::id(),
+            std::thread::current().name().unwrap_or("test")
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("deal.json");
+        std::fs::write(&path, &bytes).unwrap();
+        let challenge = boards_challenge.then(|| {
+            crate::pyramid_progress::ChallengeProgress::new(
+                crate::pyramid_progress::ChallengeKind::Boards,
+                0,
+                3,
+            )
+            .unwrap()
+        });
+        record_acquisition(
+            &context,
+            &events,
+            &cancel,
+            deal,
+            base.acquisition.vision,
+            &path,
+            challenge,
+            None,
+            crate::pyramid_workflow_model::ObservedGame::Unknown,
+        )
+        .unwrap();
+        let _pause_work = latest
+            .pause
+            .begin(super::super::pyramid_pause::Phase::Search)
+            .unwrap();
+        let _cleanup = SwitchSearchCleanup {
+            cancel: Arc::clone(&cancel),
+            latest: latest.clone(),
+        };
+        let worker_path = path.clone();
+        let worker_context = context.clone();
+        let worker_cancel = Arc::clone(&cancel);
+        let worker = std::thread::spawn(move || {
+            calculate_owned_with_policy(
+                &worker_context,
+                955,
+                &worker_path,
+                RouteMethod::FewestActions,
+                0,
+                &events,
+                &worker_cancel,
+                false,
+            )
+        });
+        wait_for_switch_condition(|| {
+            latest
+                .pause
+                .snapshot()
+                .is_some_and(super::super::pyramid_pause::Snapshot::can_play_best)
+                && latest.search_control.snapshot().is_some()
+        });
+        let epoch = latest.pause.snapshot().unwrap().epoch;
+        latest.pause.request(epoch, true).unwrap();
+        wait_for_switch_condition(|| {
+            latest
+                .pause
+                .snapshot()
+                .is_some_and(|snap| snap.acknowledged)
+        });
+        if also_request_max {
+            let shortest = latest.search_control.snapshot().unwrap();
+            latest
+                .search_control
+                .request_maximum(&shortest, &cancel)
+                .unwrap();
+        }
+        latest.pause.request_play_best(epoch).unwrap();
+        let report = worker.join().unwrap().expect("Play partial verified route");
+        if also_request_max {
+            // Play must beat concurrent Switch-to-Maximum cleanly rather than looping into Maximum.
+            assert_eq!(report.method, RouteMethod::FewestActions);
+        }
+        let prepared = latest
+            .computed_route
+            .lock()
+            .unwrap()
+            .prepared
+            .take()
+            .unwrap();
+        assert!(matches!(
+            prepared.objective,
+            RouteObjective::Removal {
+                removed,
+                proof: PartialProof::Bounded(xsar::search::SearchStop::Interrupted)
+            } if removed > 0
+        ));
+        let actions: Vec<_> = prepared.trace.iter().map(|step| step.action).collect();
+        assert_eq!(
+            prepared.trace,
+            replay::replay(&prepared.acquisition.deal, &actions, false).unwrap()
+        );
+        std::fs::remove_file(path).unwrap();
+        std::fs::remove_dir(directory).unwrap();
+    }
+}

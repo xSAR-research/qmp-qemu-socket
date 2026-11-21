@@ -8,7 +8,15 @@ use std::{
     cell::{Cell, RefCell},
     io::Read,
 };
-use xsar::games::freecell::search::{BestEffortOutcome as Outcome, Progress as SearchProgress};
+use xsar::games::freecell::{
+    InitialDeal,
+    rules::{Position, RecordedMove, Successors},
+    search::{BestEffortOutcome as Outcome, Failure, Progress as SearchProgress},
+};
+use xsar::search::{
+    BestEffortControl, BestEffortOutcome, BestEffortProblem, BestEffortProgress, PartialProof,
+    SearchProblem, SearchStop,
+};
 
 
 /// Exact UI correlation, unrelated to acquisition/execution authority.
@@ -44,8 +52,10 @@ pub(crate) struct Report {
     pub deal: xsar::games::freecell::InitialDeal,
     /// Original loaded bytes, bounded by the codec and never reread during search.
     pub bytes: Vec<u8>,
-    /// Solved is complete; Partial is independently replayed and exhaustively maximal.
+    /// Solved is complete; Partial is independently replayed (`partial_proof` distinguishes Exhaustive vs Play interrupt).
     pub outcome: Outcome,
+    /// Proof status of any [`Outcome::Partial`] (`Exhaustive` unless interrupted early by `Play`).
+    pub partial_proof: PartialProof,
     /// Actual completed intentional suspension for the whole calculation.
     pub paused: Duration,
 }
@@ -135,6 +145,15 @@ impl Control {
     }
 
 
+    /// True when an active reservation exists and its cancellation latch is set.
+    pub(super) fn is_cancelled(&self) -> bool {
+        self.active
+            .lock()
+            .ok()
+            .is_some_and(|a| a.as_ref().is_some_and(|(_, c)| c.load(Ordering::Acquire)))
+    }
+
+
     /// Retire only this exact reservation, leaving stale final events harmless.
     pub(super) fn finish(&self, identity: &Identity) -> Result<(), String> {
         let mut active = self
@@ -182,6 +201,189 @@ pub(super) struct SearchInput<'a> {
     pub(super) events: &'a WorkerEventSink,
 }
 
+/// Free Cell A* problem adapter over `xsar::games::freecell::rules`.
+struct FreeCellProblem<'a> {
+    /// Immutable validated starting 52-card deal.
+    deal: &'a InitialDeal,
+}
+
+
+impl SearchProblem for FreeCellProblem<'_> {
+    type State = Position;
+    type Action = RecordedMove;
+    type Successors = Successors;
+
+    fn initial(&self) -> Self::State {
+        Position::initial(self.deal)
+    }
+
+    fn is_goal(&self, state: Self::State) -> bool {
+        state.is_goal()
+    }
+
+    fn successors(&self, state: Self::State) -> Self::Successors {
+        state.successors()
+    }
+}
+
+
+impl BestEffortProblem for FreeCellProblem<'_> {
+    fn score(&self, state: Self::State) -> u32 {
+        state.foundation_cards()
+    }
+}
+
+
+/// Close forced automatic foundation transfers and independently replay-verify a Free Cell route.
+fn verify_freecell_best_effort(
+    deal: &InitialDeal,
+    raw: BestEffortOutcome<RecordedMove>,
+    cancel: &AtomicBool,
+) -> (Outcome, PartialProof) {
+    match raw {
+        BestEffortOutcome::Solved { actions, stats, .. } => {
+            let moves: Box<[RecordedMove]> = actions.into_boxed_slice();
+            match xsar::games::freecell::replay::verify_with_control(deal, &moves, cancel) {
+                Ok(replay) => (
+                    Outcome::Solved {
+                        moves,
+                        replay,
+                        stats,
+                    },
+                    PartialProof::Exhaustive,
+                ),
+                Err(err) if err.kind == xsar::games::freecell::replay::ReplayFailure::Cancelled => {
+                    (Outcome::Cancelled(stats), PartialProof::Exhaustive)
+                }
+                Err(err) => (
+                    Outcome::Failed {
+                        failure: Failure::Replay(err),
+                        stats,
+                    },
+                    PartialProof::Exhaustive,
+                ),
+            }
+        }
+        BestEffortOutcome::Partial {
+            mut actions,
+            score,
+            proof,
+            stats,
+        } => {
+            let mut pos = Position::initial(deal);
+            for &mv in &actions {
+                let Ok(next) = pos.apply(mv) else {
+                    return (
+                        Outcome::Failed {
+                            failure: Failure::Engine(SearchStop::InternalInvariant),
+                            stats,
+                        },
+                        proof,
+                    );
+                };
+                pos = next;
+            }
+            // Interrupted best-effort nodes may still have pending forced-automatic foundation cards.
+            while let Some(auto_mv) = pos.automatic() {
+                let Ok(next) = pos.apply(auto_mv) else {
+                    return (
+                        Outcome::Failed {
+                            failure: Failure::Engine(SearchStop::InternalInvariant),
+                            stats,
+                        },
+                        proof,
+                    );
+                };
+                pos = next;
+                actions.push(auto_mv);
+            }
+            let closed_foundations = pos.foundation_cards();
+            let moves: Box<[RecordedMove]> = actions.into_boxed_slice();
+            if pos.is_goal() {
+                return match xsar::games::freecell::replay::verify_with_control(
+                    deal, &moves, cancel,
+                ) {
+                    Ok(replay) => (
+                        Outcome::Solved {
+                            moves,
+                            replay,
+                            stats,
+                        },
+                        PartialProof::Exhaustive,
+                    ),
+                    Err(err)
+                        if err.kind == xsar::games::freecell::replay::ReplayFailure::Cancelled =>
+                    {
+                        (Outcome::Cancelled(stats), PartialProof::Exhaustive)
+                    }
+                    Err(err) => (
+                        Outcome::Failed {
+                            failure: Failure::Replay(err),
+                            stats,
+                        },
+                        PartialProof::Exhaustive,
+                    ),
+                };
+            }
+            match xsar::games::freecell::replay::verify_prefix_with_control(deal, &moves, cancel) {
+                Ok(summary) => {
+                    let verified_cards: u32 = summary
+                        .endpoint
+                        .foundations()
+                        .iter()
+                        .copied()
+                        .map(u32::from)
+                        .sum();
+                    if verified_cards != closed_foundations
+                        || verified_cards >= 52
+                        || (proof == PartialProof::Exhaustive && verified_cards != score)
+                    {
+                        return (
+                            Outcome::Failed {
+                                failure: Failure::Engine(SearchStop::InternalInvariant),
+                                stats,
+                            },
+                            proof,
+                        );
+                    }
+                    (
+                        Outcome::Partial {
+                            moves,
+                            deliberate_moves: summary.deliberate,
+                            automatic_moves: summary.automatic,
+                            foundation_cards: verified_cards,
+                            stats,
+                        },
+                        proof,
+                    )
+                }
+                Err(err) if err.kind == xsar::games::freecell::replay::ReplayFailure::Cancelled => {
+                    (Outcome::Cancelled(stats), proof)
+                }
+                Err(err) => (
+                    Outcome::Failed {
+                        failure: Failure::Replay(err),
+                        stats,
+                    },
+                    proof,
+                ),
+            }
+        }
+        BestEffortOutcome::Stopped {
+            reason: SearchStop::Cancelled,
+            stats,
+        } => (Outcome::Cancelled(stats), PartialProof::Exhaustive),
+        BestEffortOutcome::Stopped { reason, stats } => (
+            Outcome::Failed {
+                failure: Failure::Engine(reason),
+                stats,
+            },
+            PartialProof::Exhaustive,
+        ),
+    }
+}
+
+
 /// Execute A* best-effort search with pause checkpoints and cancellation fences,
 /// returning a frozen immutable `Report` without spawning a detached thread.
 pub(super) fn search_deal_with_control(
@@ -202,6 +404,7 @@ pub(super) fn search_deal_with_control(
             deal,
             bytes,
             outcome: Outcome::Cancelled(xsar::search::SearchStats::default()),
+            partial_proof: PartialProof::Exhaustive,
             paused: Duration::ZERO,
         });
     }
@@ -243,21 +446,37 @@ pub(super) fn search_deal_with_control(
         }
         paused
     };
-    let mut progress = |search| {
+    let (search_scope, yield_best) = events.latest_frame.pause.begin_search();
+    let mut progress = |snap: BestEffortProgress| {
+        events
+            .latest_frame
+            .pause
+            .update_search_best_score(snap.best_score);
+        let search = SearchProgress {
+            search: snap.search,
+            best_foundation_cards: snap.best_score,
+        };
         crate::single_step_telemetry::record(
             || serde_json::json!({"event":"calculation-progress", "progress":format!("{search:?}"), "paused_ms":paused_total.get().as_millis()}),
         );
         on_progress(search, paused_total.get());
     };
     crate::single_step_telemetry::record(
-        || serde_json::json!({"event":"calculation-search-start", "objective":"complete board first; exhaustive maximum foundations if impossible", "input_frozen":true, "independent_replay_required":true}),
+        || serde_json::json!({"event":"calculation-search-start", "objective":"complete board first; best foundations if stopped early or exhausted", "input_frozen":true, "independent_replay_required":true}),
     );
-    let mut outcome = xsar::games::freecell::search::solve_best_effort_with_control(
-        &deal,
-        cancel,
-        Some(&mut progress),
-        Some(&checkpoint),
+    let problem = FreeCellProblem { deal: &deal };
+    let raw_outcome = xsar::search::solve_guided_unlimited_best_effort_controlled(
+        &problem,
+        &|pos: Position| pos.guidance(),
+        BestEffortControl {
+            cancel,
+            yield_best: Some(&yield_best),
+            progress: Some(&mut progress),
+            checkpoint: Some(&checkpoint),
+        },
     );
+    drop(search_scope);
+    let (mut outcome, partial_proof) = verify_freecell_best_effort(&deal, raw_outcome, cancel);
     if let Some((error, cancelled)) = checkpoint_error.into_inner()
         && !cancelled
     {
@@ -272,13 +491,14 @@ pub(super) fn search_deal_with_control(
         }
     }
     crate::single_step_telemetry::record(
-        || serde_json::json!({"event":"calculation-search-finished", "outcome":match &outcome {Outcome::Solved{..}=>"solved and independently replayed", Outcome::Partial{..}=>"exhaustive maximum independently replayed", Outcome::Failed{..}=>"failed", Outcome::Cancelled(_)=>"cancelled"}, "stats":format!("{:?}", stats(&outcome)), "route_available":matches!(&outcome,Outcome::Solved{..}|Outcome::Partial{foundation_cards:1..=51,..})}),
+        || serde_json::json!({"event":"calculation-search-finished", "outcome":match &outcome {Outcome::Solved{..}=>"solved and independently replayed", Outcome::Partial{..}=>if partial_proof == PartialProof::Exhaustive {"exhaustive maximum independently replayed"} else {"play-best partial independently replayed"}, Outcome::Failed{..}=>"failed", Outcome::Cancelled(_)=>"cancelled"}, "stats":format!("{:?}", stats(&outcome)), "route_available":matches!(&outcome,Outcome::Solved{..}|Outcome::Partial{foundation_cards:1..=51,..})}),
     );
     Ok(Report {
         path,
         deal,
         bytes,
         outcome,
+        partial_proof,
         paused: paused_total.get(),
     })
 }
@@ -355,13 +575,36 @@ pub(crate) fn stats(outcome: &Outcome) -> xsar::search::SearchStats {
 
 
 /// Format the shared Free Cell calculation summary line for both Manual and Session modes.
+#[cfg(test)]
 pub(crate) fn outcome_summary_message(outcome: &Outcome) -> String {
+    format_summary_message(outcome, PartialProof::Exhaustive)
+}
+
+
+/// Format the calculation summary distinguishing exhaustive proof from Play-interrupted routes.
+pub(crate) fn report_summary_message(report: &Report) -> String {
+    format_summary_message(&report.outcome, report.partial_proof)
+}
+
+
+/// Shared formatter for complete, exhaustive-partial and Play-interrupted Free Cell summaries.
+fn format_summary_message(outcome: &Outcome, partial_proof: PartialProof) -> String {
     match outcome {
         Outcome::Solved { moves, replay, .. } => format!(
             "Complete route independently replayed: {} transfers; {} deliberate, {} automatic; 52 foundation cards",
             moves.len(),
             replay.deliberate,
             replay.automatic
+        ),
+        Outcome::Partial {
+            moves,
+            deliberate_moves,
+            automatic_moves,
+            foundation_cards,
+            ..
+        } if partial_proof != PartialProof::Exhaustive => format!(
+            "Play requested — stopped search early and independently replayed best partial route: {foundation_cards}/52 foundation cards; {} transfers, {deliberate_moves} deliberate, {automatic_moves} automatic",
+            moves.len()
         ),
         Outcome::Partial {
             moves,
@@ -545,6 +788,7 @@ mod tests {
             path: PathBuf::from("partial-retirement.json"),
             deal,
             bytes: Vec::new(),
+            partial_proof: PartialProof::Exhaustive,
             paused: Duration::ZERO,
             outcome: Outcome::Partial {
                 moves: moves.into_boxed_slice(),
@@ -951,6 +1195,296 @@ mod tests {
             assert!(!latest.freecell_calculation.running());
             assert!(latest.pause.request(epoch, false).is_err());
             assert!(latest.freecell_calculation.reserve(identity).is_ok());
+            std::fs::remove_dir_all(root).unwrap();
+        }
+    }
+
+
+    /// Play interrupt closes trailing forced automatic foundation transfers (including 52/52 promotion).
+    #[test]
+    fn freecell_350_play_interrupt_closes_forced_automatic_transfers_and_promotes_to_solved() {
+        let auto_deal = automatic_deal();
+        let first_auto = Position::initial(&auto_deal).automatic().unwrap();
+        let (promoted, proof) = verify_freecell_best_effort(
+            &auto_deal,
+            xsar::search::BestEffortOutcome::Partial {
+                actions: vec![first_auto],
+                score: 1,
+                proof: PartialProof::Bounded(SearchStop::Interrupted),
+                stats: xsar::search::SearchStats::default(),
+            },
+            &AtomicBool::new(false),
+        );
+        assert_eq!(proof, PartialProof::Exhaustive);
+        assert!(matches!(
+            promoted,
+            Outcome::Solved {
+                ref moves,
+                replay,
+                ..
+            } if moves.len() == 52 && replay.foundations == [13; 4]
+        ));
+
+        // Build a deal where ascending filler puts remaining Aces at bottoms (initial automatic=None)
+        // and moving top KS -> Cell(0) uncovers AC (forced auto) while burying 2C keeps < 52.
+        let two_c = Card::new(
+            Rank::from_value(2).unwrap(),
+            xsar::games::cards::Suit::Clubs,
+        );
+        let ace_c = Card::new(Rank::Ace, xsar::games::cards::Suit::Clubs);
+        let king_s = Card::new(Rank::King, xsar::games::cards::Suit::Spades);
+        let mut columns: [Vec<Card>; 8] = std::array::from_fn(|_| Vec::new());
+        let all_cards: Vec<Card> = (1..=13)
+            .flat_map(|rank| {
+                FOUNDATION_SUITS.map(|suit| Card::new(Rank::from_value(rank).unwrap(), suit))
+            })
+            .filter(|&c| c != two_c && c != ace_c && c != king_s)
+            .collect();
+        // Column 0 (len 7): [2C, <4 filler cards>, AC, KS]; cols 1..3 get 7 each; cols 4..7 get 6 each.
+        let mut rest = all_cards.into_iter();
+        columns[0].push(two_c);
+        columns[0].extend(rest.by_ref().take(4));
+        columns[0].push(ace_c);
+        columns[0].push(king_s);
+        for (col_idx, col) in columns.iter_mut().enumerate().skip(1) {
+            let needed = if col_idx < 4 { 7 } else { 6 };
+            col.extend(rest.by_ref().take(needed));
+        }
+        let partial_deal = InitialDeal::new(
+            BoardState::new(
+                columns.map(|c| CascadeStack::from_cards(c).unwrap()),
+                [None; 4],
+                [0; 4],
+            )
+            .unwrap(),
+            auto_deal.metadata().clone(),
+        )
+        .unwrap();
+        let initial_pos = Position::initial(&partial_deal);
+        assert!(initial_pos.automatic().is_none());
+        let deliberate = xsar::games::freecell::rules::RecordedMove {
+            card_id: xsar::games::freecell::rules::card_id(Card::new(
+                Rank::King,
+                xsar::games::cards::Suit::Spades,
+            )),
+            from: xsar::games::freecell::rules::Pile::Cascade(0),
+            to: xsar::games::freecell::rules::Pile::Cell(0),
+            is_auto: false,
+        };
+        assert!(
+            xsar::games::freecell::replay::verify_prefix_with_control(
+                &partial_deal,
+                &[deliberate],
+                &AtomicBool::new(false),
+            )
+            .is_err(),
+            "unclosed deliberate prefix must be rejected before automatic closure"
+        );
+        let (closed_partial, partial_proof) = verify_freecell_best_effort(
+            &partial_deal,
+            xsar::search::BestEffortOutcome::Partial {
+                actions: vec![deliberate],
+                score: 0,
+                proof: PartialProof::Bounded(SearchStop::Interrupted),
+                stats: xsar::search::SearchStats::default(),
+            },
+            &AtomicBool::new(false),
+        );
+        assert_eq!(
+            partial_proof,
+            PartialProof::Bounded(SearchStop::Interrupted)
+        );
+        assert!(matches!(
+            closed_partial,
+            Outcome::Partial {
+                deliberate_moves: 1,
+                automatic_moves: 1..,
+                foundation_cards: 1..=51,
+                ..
+            }
+        ));
+    }
+
+
+    /// Real FreeCell calculation hits 360s auto-pause, extends +60s on Continue, installs route on Play, and discards on Cancel.
+    #[test]
+    fn freecell_350_run_auto_pause_360s_continue_60s_and_play_vs_cancel() {
+        let mut columns: [Vec<Card>; 8] = std::array::from_fn(|_| Vec::new());
+        // Bury 2s at bottom beneath 3..K while exposing Aces on top -> immediate best_score >= 1, deep search.
+        let mut rest = Vec::new();
+        for suit in FOUNDATION_SUITS {
+            for rank in 3..=13 {
+                rest.push(Card::new(Rank::from_value(rank).unwrap(), suit));
+            }
+        }
+        let mut rest_iter = rest.into_iter();
+        for (col_idx, suit) in FOUNDATION_SUITS.into_iter().enumerate() {
+            columns[col_idx].push(Card::new(Rank::from_value(2).unwrap(), suit));
+            columns[col_idx].extend(rest_iter.by_ref().take(5));
+            columns[col_idx].push(Card::new(Rank::Ace, suit));
+        }
+        for col in columns.iter_mut().skip(4) {
+            col.extend(rest_iter.by_ref().take(6));
+        }
+        let deal = InitialDeal::new(
+            BoardState::new(
+                columns.map(|c| CascadeStack::from_cards(c).unwrap()),
+                [None; 4],
+                [0; 4],
+            )
+            .unwrap(),
+            Metadata::new(
+                "freecell-350-auto-pause",
+                "synthetic",
+                crate::freecell_recon::objective::FULL_BOARD_SOURCE,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let bytes = xsar::freecell_json::to_vec(&deal).unwrap();
+
+        for (case_idx, trigger_cancel) in [false, true].into_iter().enumerate() {
+            let root = std::env::temp_dir().join(format!(
+                "freecell-350-step-play-{}-{case_idx}",
+                std::process::id()
+            ));
+            let _ = std::fs::remove_dir_all(&root);
+            std::fs::create_dir_all(&root).unwrap();
+            let path = root.join("deal.json");
+            std::fs::write(&path, &bytes).unwrap();
+
+            let latest = LatestFrameSlot::default();
+            let identity = Identity {
+                context: ControllerContext::new(
+                    PathBuf::from("/nonexistent/freecell-350.sock"),
+                    GameMode::FreeCell,
+                    SolvingStrategy::ShortestPath,
+                    350,
+                ),
+                request_id: 10 + u64::try_from(case_idx).unwrap(),
+                source_generation: 1,
+            };
+            let cancel = latest
+                .freecell_calculation
+                .reserve(identity.clone())
+                .unwrap();
+            let work = latest.pause.begin(pyramid_pause::Phase::Search).unwrap();
+            let (sender, receiver) = mpsc::channel();
+            let worker_latest = latest.clone();
+            let worker_id = identity.clone();
+            let worker_path = path.clone();
+            let worker = std::thread::spawn(move || {
+                let events = WorkerEventSink {
+                    events: sender,
+                    latest_frame: worker_latest,
+                    capture_context: Mutex::new(None),
+                };
+                run(
+                    worker_id,
+                    &worker_path,
+                    &cancel,
+                    &events,
+                    &AtomicBool::new(false),
+                );
+                drop(work);
+            });
+
+            // Wait until best_score > 0 is reported live while searching.
+            let deadline = Instant::now() + Duration::from_secs(5);
+            let epoch = loop {
+                if let Some(snap) = latest.pause.snapshot()
+                    && snap.can_play_best()
+                {
+                    break snap.epoch;
+                }
+                assert!(
+                    Instant::now() < deadline,
+                    "FreeCell search did not reach positive score"
+                );
+                std::thread::sleep(Duration::from_millis(5));
+            };
+
+            // Advance active clock to 360s -> must auto-pause cleanly.
+            latest
+                .pause
+                .advance_search_clock_for_test(Duration::from_secs(360));
+            let deadline = Instant::now() + Duration::from_secs(5);
+            let paused_active = loop {
+                if let Some(snap) = latest.pause.snapshot()
+                    && snap.is_auto_paused()
+                {
+                    break snap.search.unwrap().active_elapsed;
+                }
+                assert!(
+                    Instant::now() < deadline,
+                    "FreeCell search did not auto-pause at 360s"
+                );
+                std::thread::sleep(Duration::from_millis(5));
+            };
+
+            // Continue adds +60s.
+            latest.pause.request(epoch, false).unwrap();
+            let deadline = Instant::now() + Duration::from_secs(5);
+            loop {
+                if let Some(snap) = latest.pause.snapshot()
+                    && !snap.requested
+                    && let Some(search) = snap.search
+                    && search.next_auto_pause_at >= paused_active + Duration::from_secs(60)
+                {
+                    break;
+                }
+                assert!(Instant::now() < deadline, "Continue did not extend by +60s");
+                std::thread::sleep(Duration::from_millis(5));
+            }
+
+            // Advance another +60s -> second auto-pause.
+            latest
+                .pause
+                .advance_search_clock_for_test(Duration::from_secs(60));
+            let deadline = Instant::now() + Duration::from_secs(5);
+            loop {
+                if let Some(snap) = latest.pause.snapshot()
+                    && snap.is_auto_paused()
+                {
+                    break;
+                }
+                assert!(
+                    Instant::now() < deadline,
+                    "FreeCell search did not auto-pause on +60s step"
+                );
+                std::thread::sleep(Duration::from_millis(5));
+            }
+
+            if trigger_cancel {
+                latest.freecell_calculation.cancel(Some(&identity));
+                latest.pause.wake();
+            } else {
+                latest.pause.request_play_best(epoch).unwrap();
+            }
+
+            let event = receiver.recv_timeout(Duration::from_secs(10)).unwrap();
+            worker.join().unwrap();
+            let WorkerEvent::FreeCellCalculationFinished { result, .. } = event.event else {
+                panic!("expected FreeCellCalculationFinished");
+            };
+            let report = result.unwrap();
+            if trigger_cancel {
+                assert!(matches!(report.outcome, Outcome::Cancelled(_)));
+                assert!(!latest.freecell_route.lock().unwrap().available(&identity));
+            } else {
+                assert_eq!(
+                    report.partial_proof,
+                    PartialProof::Bounded(SearchStop::Interrupted)
+                );
+                assert!(matches!(
+                    report.outcome,
+                    Outcome::Partial {
+                        foundation_cards: 1..=51,
+                        ..
+                    }
+                ));
+                assert!(latest.freecell_route.lock().unwrap().available(&identity));
+            }
             std::fs::remove_dir_all(root).unwrap();
         }
     }

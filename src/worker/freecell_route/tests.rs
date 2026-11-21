@@ -404,6 +404,7 @@ fn report() -> Arc<freecell_calculation::Report> {
         deal,
         bytes: Vec::new(),
         outcome,
+        partial_proof: xsar::search::PartialProof::Exhaustive,
         paused: Duration::ZERO,
     })
 }
@@ -473,6 +474,7 @@ fn prefix_report(deal: InitialDeal) -> Arc<freecell_calculation::Report> {
         path: PathBuf::from("typed-prefix-seam.json"),
         bytes: Vec::new(),
         deal,
+        partial_proof: xsar::search::PartialProof::Exhaustive,
         paused: Duration::ZERO,
         outcome: Outcome::Partial {
             moves: moves.into_boxed_slice(),

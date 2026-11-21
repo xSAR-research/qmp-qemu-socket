@@ -19,7 +19,10 @@ use std::{
     time::Duration,
 };
 
-use xsar::search::{PartialProof, SearchLimits, SearchProgress, SearchStats, SearchStop};
+use xsar::search::{
+    BestEffortControl, BestEffortProgress, PartialProof, SearchLimits, SearchProgress, SearchStats,
+    SearchStop,
+};
 
 use super::{WorkerEvent, WorkerEventSink, pyramid_pause, tripeaks_route};
 use crate::{
@@ -27,7 +30,7 @@ use crate::{
     strategy::ControllerContext,
     tripeaks_model::{
         DEFAULT_SEARCH_LIMITS, MAX_DOCUMENT_BYTES, ReplayReport, TriPeaksDealDocument,
-        TriPeaksMove, TriPeaksPlanOutcome, from_slice, plan_deal_route_with_control,
+        TriPeaksMove, TriPeaksPlanOutcome, from_slice, plan_deal_route_controlled,
     },
     tripeaks_workflow_model::format_tripeaks_objective,
 };
@@ -197,6 +200,14 @@ impl Control {
             .is_some_and(|a| a.as_ref().is_some_and(|(_, c)| !c.load(Ordering::Acquire)))
     }
 
+    /// Return `true` when an active reservation exists and its cancellation latch is raised.
+    pub(super) fn is_cancelled(&self) -> bool {
+        self.active
+            .lock()
+            .ok()
+            .is_some_and(|a| a.as_ref().is_some_and(|(_, c)| c.load(Ordering::Acquire)))
+    }
+
     /// Retire only this exact `identity` reservation (e.g. if dispatch failed before worker start).
     pub(super) fn finish(&self, identity: &Identity) -> Result<(), String> {
         let mut active = self
@@ -241,7 +252,7 @@ pub(super) struct SearchInput<'a> {
     pub cancel: &'a AtomicBool,
     /// Event sink hosting pause coordination.
     pub events: &'a WorkerEventSink,
-    /// Bounded resource limits forwarded to [`plan_deal_route_with_control`].
+    /// Bounded resource limits forwarded to [`plan_deal_route_controlled`].
     pub search_limits: SearchLimits,
 }
 
@@ -310,19 +321,43 @@ pub(super) fn search_deal_with_control(
         }
         paused
     };
-    let mut progress = |search| {
-        on_progress(search, paused_total.get());
+    let (search_scope, yield_best) = events.latest_frame.pause.begin_search();
+    let effective_limits = if search_limits.max_duration == DEFAULT_SEARCH_LIMITS.max_duration
+        && events
+            .latest_frame
+            .pause
+            .snapshot()
+            .is_some_and(|snap| snap.search.is_some())
+    {
+        // Active auto-pause (`360s` + `+60s` Continue) gates long interactive searches; do not stop at `600s`.
+        SearchLimits {
+            max_duration: Duration::MAX,
+            ..search_limits
+        }
+    } else {
+        search_limits
+    };
+    let mut progress = |snap: BestEffortProgress| {
+        events
+            .latest_frame
+            .pause
+            .update_search_best_score(snap.best_score);
+        on_progress(snap.search, paused_total.get());
     };
 
-    let plan = plan_deal_route_with_control(
+    let plan = plan_deal_route_controlled(
         &document.slots,
         target_objective,
-        search_limits,
-        cancel,
-        Some(&mut progress),
-        Some(&checkpoint),
+        effective_limits,
+        BestEffortControl {
+            cancel,
+            yield_best: Some(&yield_best),
+            progress: Some(&mut progress),
+            checkpoint: Some(&checkpoint),
+        },
     )
     .map_err(|err| format!("TriPeaks planning error: {err}"))?;
+    drop(search_scope);
 
     if let Some((error, cancelled)) = checkpoint_error.into_inner()
         && !cancelled

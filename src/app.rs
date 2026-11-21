@@ -2127,6 +2127,32 @@ impl QmpQemuSocketApp {
     }
 
 
+    /// Clear all inactive-mode retained reports, playback consents, and worker route stores.
+    fn clear_inactive_mode_state(&mut self, next_context: &ControllerContext) {
+        self.pyramid_workflow.retire_observed();
+        self.reconnaissance_form.confirmed_context = None;
+        self.reconnaissance_report = None;
+        self.computed_route_form.revoke_acquisition();
+        self.computed_route_form.report = None;
+        self.freecell_calculation.clear_retained();
+        self.freecell_playback.clear_inactive();
+        self.revoke_freecell_playback();
+        self.revoke_tripeaks_playback();
+        if self
+            .reset_preview
+            .as_ref()
+            .is_some_and(|refresh| &refresh.context != next_context)
+        {
+            self.reset_preview = None;
+        }
+        self.freecell_workflow.bind(next_context);
+        self.pyramid_workflow.bind(next_context);
+        self.tripeaks_workflow.clear_inactive(next_context);
+        self.worker.clear_inactive_mode_stores();
+        self.invalidate_preview();
+    }
+
+
     /// Select a controller only while idle, revoke old authority and capture fresh pixels.
     fn select_strategy(&mut self, strategy: SolvingStrategy) {
         if !controls_are_mutable(self.active_run, self.worker_state, self.stop_requested)
@@ -2142,27 +2168,12 @@ impl QmpQemuSocketApp {
         self.solving_strategy = strategy;
         self.strategy_choice_pending = false;
         self.context_generation = self.context_generation.wrapping_add(1);
-        self.reconnaissance_form.confirmed_context = None;
-        self.reconnaissance_report = None;
-        self.computed_route_form.revoke_acquisition();
-        self.computed_route_form.report = None;
-        self.revoke_freecell_playback();
-        self.revoke_tripeaks_playback();
         self.game_mode = match strategy {
             SolvingStrategy::ShortestPath => GameMode::FreeCell,
             SolvingStrategy::ComputerVision => self.computer_vision_game_mode,
         };
         let selected_context = self.current_preview_context();
-        if self
-            .reset_preview
-            .as_ref()
-            .is_some_and(|refresh| refresh.context != selected_context)
-        {
-            self.reset_preview = None;
-        }
-        self.pyramid_workflow.bind(&selected_context);
-        self.tripeaks_workflow.bind(&selected_context);
-        self.invalidate_preview();
+        self.clear_inactive_mode_state(&selected_context);
         self.snapshot_request_id = self.snapshot_request_id.wrapping_add(1);
         self.current_board = 1;
         self.board_position_established = false;
@@ -2319,15 +2330,9 @@ impl QmpQemuSocketApp {
         if self.solving_strategy == SolvingStrategy::ComputerVision {
             self.computer_vision_game_mode = self.game_mode;
         }
-        self.pyramid_workflow.retire_observed();
         self.context_generation = self.context_generation.wrapping_add(1);
-        self.reconnaissance_form.confirmed_context = None;
-        self.reconnaissance_report = None;
-        self.computed_route_form.revoke_acquisition();
-        self.computed_route_form.report = None;
-        self.revoke_freecell_playback();
-        self.revoke_tripeaks_playback();
-        self.invalidate_preview();
+        let selected_context = self.current_preview_context();
+        self.clear_inactive_mode_state(&selected_context);
         self.current_board = 1;
         self.board_position_established = false;
         self.boards_per_game = self.game_mode.profile().boards_per_game;
@@ -6064,5 +6069,28 @@ mod tests {
             assert!(form.active_run_id.is_none());
             assert!(form.execution_plan(&context).is_err());
         }
+    }
+
+
+    /// Mode switch `Playback::clear_inactive` wipes retained playback consent, progress and messages.
+    #[test]
+    fn mode_switch_worker_store_cleanup_retires_planning_and_routes() {
+        let fc_ctx = ControllerContext::new(
+            PathBuf::from("/tmp/mode-switch.sock"),
+            GameMode::FreeCell,
+            SolvingStrategy::ShortestPath,
+            1,
+        );
+        let id = crate::worker::freecell_calculation::Identity {
+            context: fc_ctx.clone(),
+            request_id: 1,
+            source_generation: 1,
+        };
+        let mut fc_playback = freecell_route::Playback::default();
+        fc_playback.plan = Some(id);
+        fc_playback.retained = Some(fc_ctx);
+        fc_playback.clear_inactive();
+        assert!(fc_playback.plan.is_none());
+        assert!(fc_playback.retained.is_none());
     }
 }

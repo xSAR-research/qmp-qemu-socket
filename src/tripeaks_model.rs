@@ -29,9 +29,9 @@ pub use rules::{
 };
 pub use search::{
     DEFAULT_SEARCH_LIMITS, SearchState, TriPeaksPlanOutcome, best_partial_route,
-    best_partial_route_with_control, plan_deal_route, plan_deal_route_with_control,
-    plan_info_gain_probe, plan_info_gain_probe_with_control, solve_known_subgraph,
-    solve_known_subgraph_with_control,
+    best_partial_route_with_control, plan_deal_route, plan_deal_route_controlled,
+    plan_deal_route_with_control, plan_info_gain_probe, plan_info_gain_probe_with_control,
+    solve_known_subgraph, solve_known_subgraph_with_control,
 };
 
 /// Total number of slots in a standard TriPeaks single-deck deal (`28` tableau + `1` waste + `23` stock).

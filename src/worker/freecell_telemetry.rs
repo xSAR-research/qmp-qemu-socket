@@ -127,7 +127,7 @@ pub(super) fn event(event: &WorkerEvent) {
                 "outcome":result.as_ref().ok().map(|report|match &report.outcome {
                     xsar::games::freecell::search::BestEffortOutcome::Solved{..}=>"Solved",
                     xsar::games::freecell::search::BestEffortOutcome::Cancelled{..}=>"Cancelled",
-                    xsar::games::freecell::search::BestEffortOutcome::Partial{..}=>"ProvedMaximumPartial",
+                    xsar::games::freecell::search::BestEffortOutcome::Partial{..}=>if report.partial_proof == xsar::search::PartialProof::Exhaustive {"ProvedMaximumPartial"} else {"PlayBestPartial"},
                     xsar::games::freecell::search::BestEffortOutcome::Failed{..}=>"Failed",
                 }),
                 "stats":result.as_ref().ok().map(|report|format!("{:?}",freecell_calculation::stats(&report.outcome))),

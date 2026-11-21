@@ -16,6 +16,14 @@ pub const APP_NAME: &str = env!("CARGO_PKG_NAME");
 pub const RELEASE_LABEL: &str = concat!("v", env!("CARGO_PKG_VERSION"));
 
 
+/// Initial active-search calculation time limit before automatic pause (excluding pause time).
+pub const DEFAULT_SEARCH_AUTO_PAUSE_FIRST_STEP: Duration = Duration::from_secs(360);
+
+
+/// Additional active-search time granted per Continue press after automatic pause.
+pub const DEFAULT_SEARCH_AUTO_PAUSE_CONTINUE_STEP: Duration = Duration::from_secs(60);
+
+
 /// Initial application window width in egui logical points.
 pub const INITIAL_WINDOW_WIDTH: f32 = 1120.0;
 

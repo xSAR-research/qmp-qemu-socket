@@ -490,6 +490,11 @@ fn drive_no_challenge(io: &mut impl Pipeline) -> Result<String, String> {
         io.check()?;
         let result = io.execute(generation)?;
         io.check()?;
+        if let BoardCompletion::PartialPositionVerified { removed, remaining } = result {
+            return Ok(format!(
+                "Partial route complete — {removed}/28 tableau cards removed, {remaining} remain; exact endpoint verified. Session stopped; no next-board or restart input."
+            ));
+        }
         if !matches!(
             result,
             BoardCompletion::AwaitingFreshBoard | BoardCompletion::StockRedealt

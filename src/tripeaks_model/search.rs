@@ -6,9 +6,10 @@
 use std::{sync::atomic::AtomicBool, time::Duration};
 
 use xsar::search::{
-    BestEffortOutcome, BestEffortProblem, PartialProof, SearchLimits, SearchMethod, SearchOptions,
-    SearchOutcome, SearchProblem, SearchProgress, SearchStats, SearchStop,
-    solve_best_effort_with_control, solve_with_control,
+    BestEffortControl, BestEffortOutcome, BestEffortProblem, BestEffortProgress, PartialProof,
+    SearchLimits, SearchMethod, SearchOptions, SearchOutcome, SearchProblem, SearchProgress,
+    SearchStats, SearchStop, solve_best_effort_controlled, solve_best_effort_with_control,
+    solve_controlled, solve_with_control,
 };
 
 use crate::recon::{BestPartialRoute, CardSlot, Objective, ProbePlan, ReconError};
@@ -533,6 +534,28 @@ impl SearchProblem for TriPeaksObjectiveProblem {
     }
 }
 
+impl BestEffortProblem for TriPeaksObjectiveProblem {
+    fn score(&self, state: Self::State) -> u32 {
+        match self.objective {
+            Objective::ClearBoard => {
+                let cleared = (FULL_TABLEAU_MASK & !state.tableau_mask).count_ones();
+                let peaks_cleared = (PEAK_MASK & !state.tableau_mask).count_ones();
+                cleared * 1_000 + peaks_cleared * 100
+            }
+            Objective::ClearRankQuota { .. } => {
+                let rank_cleared = ((!state.tableau_mask) & self.target_rank_mask).count_ones();
+                if rank_cleared == 0 {
+                    return 0;
+                }
+                let cleared = (FULL_TABLEAU_MASK & !state.tableau_mask).count_ones();
+                let peaks_cleared = (PEAK_MASK & !state.tableau_mask).count_ones();
+                rank_cleared * 100_000 + cleared * 1_000 + peaks_cleared * 100
+            }
+            Objective::ReachScoreDelta { .. } => state.score_progress,
+        }
+    }
+}
+
 /// Bitmask of currently covered `CardSlot::Unknown` tableau parents (`0..18`) under `tableau_mask`.
 fn covered_unknown_mask_from(
     slots: &[CardSlot; DEAL_SLOT_COUNT],
@@ -791,7 +814,8 @@ fn plan_info_gain_from_prefix(
                 reason @ (SearchStop::StateLimit
                 | SearchStop::ExpansionLimit
                 | SearchStop::MemoryLimit
-                | SearchStop::TimeLimit),
+                | SearchStop::TimeLimit
+                | SearchStop::Interrupted),
             ..
         } => return Ok(ProbePlan::Bounded(reason)),
     };
@@ -918,7 +942,8 @@ pub fn best_partial_route_with_control(
                 reason @ (SearchStop::StateLimit
                 | SearchStop::ExpansionLimit
                 | SearchStop::MemoryLimit
-                | SearchStop::TimeLimit),
+                | SearchStop::TimeLimit
+                | SearchStop::Interrupted),
             ..
         } => (Vec::new(), PartialProof::Bounded(reason)),
     };
@@ -1076,6 +1101,12 @@ impl SearchProblem for ClearBoardMinScoreProblem {
     }
 }
 
+impl BestEffortProblem for ClearBoardMinScoreProblem {
+    fn score(&self, state: Self::State) -> u32 {
+        state.score_progress
+    }
+}
+
 /// `BestEffortProblem` maximising target-rank removals (with total cards/peaks as tie-breakers).
 struct MaxRankPartialProblem {
     /// Compiled deal ranks and masks.
@@ -1158,22 +1189,119 @@ impl BestEffortProblem for MaxScorePartialProblem {
     }
 }
 
+/// Observer channel supporting legacy progress and controlled best-score progress.
+enum PlanProgress<'b> {
+    /// Legacy progress callback without live best score.
+    Search(&'b mut dyn FnMut(SearchProgress)),
+    /// Controlled best-effort callback carrying live best score.
+    BestEffort(&'b mut dyn FnMut(BestEffortProgress)),
+}
+
+/// Single-phase objective search outcome supporting cooperative `Play` best-prefix yield.
+enum ObjectivePassResult {
+    /// Verified route satisfying the target objective.
+    Solved(Vec<TriPeaksMove>),
+    /// Operator soft-yield interrupted before completion with a candidate prefix.
+    PartialYield {
+        /// Ordered moves from root (`empty` when no positive score existed).
+        actions: Vec<TriPeaksMove>,
+        /// Problem score reached at `actions`.
+        score: u32,
+    },
+    /// Frontier depleted without solving the target objective.
+    Exhausted,
+    /// Search stopped due to resource limit, cancellation, or invariant error.
+    Stopped(SearchStop),
+}
+
+/// Comparable progress key ranking verified partial/complete candidates for a target [`Objective`].
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct CandidateRank {
+    /// Target objective satisfied directly (`SolvedObjective`).
+    solved_objective: bool,
+    /// Full `28`-card board cleared (`EscalatedClearBoard` for rank/score challenges).
+    cleared_board: bool,
+    /// Primary partial objective metric (`rank_cleared` for `ClearRankQuota`,
+    /// `score_delta` for `ReachScoreDelta`, `0` for `ClearBoard`).
+    primary_metric: u32,
+    /// Total tableau cards cleared (`0..=28`).
+    cards_cleared: u32,
+    /// Row-1 peak cards cleared (`0..=3`).
+    peaks_cleared: u32,
+    /// Verified point delta along the route.
+    score_delta: u32,
+    /// Shorter routes win all progress ties.
+    reverse_steps: std::cmp::Reverse<usize>,
+}
+
+/// Independently replay `actions` and compute its [`CandidateRank`] for `objective`.
+///
+/// Returns `None` if `actions` is empty, fails replay, or achieves zero positive progress.
+fn evaluate_candidate(
+    fixed: &[CardSlot; DEAL_SLOT_COUNT],
+    objective: Objective,
+    actions: &[TriPeaksMove],
+) -> Option<(ReplayReport, CandidateRank)> {
+    if actions.is_empty() {
+        return None;
+    }
+    let replay = verify_move_sequence(fixed, actions).ok()?;
+    let solved_objective = verify_objective_route(fixed, actions, objective).is_ok();
+    let cleared_board = replay.final_position.tableau_mask == 0;
+    let cards_cleared = (FULL_TABLEAU_MASK & !replay.final_position.tableau_mask).count_ones();
+    let peaks_cleared = (PEAK_MASK & !replay.final_position.tableau_mask).count_ones();
+    let score_delta = replay.final_position.score_delta;
+    if !solved_objective && !cleared_board && cards_cleared == 0 && score_delta == 0 {
+        return None;
+    }
+    let primary_metric = match objective {
+        Objective::ClearBoard => 0,
+        Objective::ClearRankQuota { rank, .. } => u32::from(
+            replay
+                .final_position
+                .cleared_by_rank
+                .get(usize::from(rank))
+                .copied()
+                .unwrap_or(0),
+        ),
+        Objective::ReachScoreDelta { .. } => score_delta,
+    };
+    let rank = CandidateRank {
+        solved_objective,
+        cleared_board,
+        primary_metric,
+        cards_cleared,
+        peaks_cleared,
+        score_delta,
+        reverse_steps: std::cmp::Reverse(actions.len()),
+    };
+    Some((replay, rank))
+}
+
 /// Shared borrowed control context passed across planning passes.
 struct PlanSearchEnv<'a, 'b> {
-    /// Validated `52`-slot deal table.
-    slots: &'a [CardSlot],
+    /// Fixed-size validated `52`-slot deal table for candidate replay scoring.
+    fixed: &'a [CardSlot; DEAL_SLOT_COUNT],
     /// Compiled known-card deal model.
     model: KnownDealModel,
+    /// Target caller objective used to rank candidates across passes.
+    objective: Objective,
     /// Resource bounds per search pass.
     limits: SearchLimits,
     /// Shared cancellation flag.
     cancel: &'a AtomicBool,
+    /// Optional soft-stop flag halting early to return the best scored route so far.
+    yield_best: Option<&'a AtomicBool>,
     /// Optional cooperative search progress observer.
-    progress: Option<&'b mut dyn FnMut(SearchProgress)>,
+    progress: Option<PlanProgress<'b>>,
     /// Optional cooperative Pause checkpoint callback.
     checkpoint: Option<&'a dyn Fn() -> Duration>,
     /// Cumulative search work across sub-passes.
     acc_stats: SearchStats,
+    /// Monotonic best score reported while a valid candidate route is available.
+    reported_best_score: u32,
+    /// Highest-ranking verified move sequence preserved across pass transitions.
+    best_candidate: Option<(Vec<TriPeaksMove>, CandidateRank)>,
 }
 
 impl PlanSearchEnv<'_, '_> {
@@ -1186,45 +1314,121 @@ impl PlanSearchEnv<'_, '_> {
         self.acc_stats.elapsed = self.acc_stats.elapsed.saturating_add(next.elapsed);
     }
 
+    /// Retain the highest-ranking non-empty verified candidate for `self.objective` across passes.
+    fn record_best_candidate(&mut self, actions: Vec<TriPeaksMove>, score: u32) {
+        if score == 0 || actions.is_empty() {
+            return;
+        }
+        let Some((_, rank)) = evaluate_candidate(self.fixed, self.objective, &actions) else {
+            return;
+        };
+        if self
+            .best_candidate
+            .as_ref()
+            .is_none_or(|(_, existing)| rank > *existing)
+        {
+            self.reported_best_score = self.reported_best_score.max(score);
+            self.best_candidate = Some((actions, rank));
+        }
+    }
+
+    /// Ensure an uncommitted prior-pass score does not keep `Play` enabled if no candidate route was preserved.
+    fn sync_score_for_next_pass(&mut self) {
+        if self.best_candidate.is_none() && self.reported_best_score > 0 {
+            self.reported_best_score = 0;
+            if let Some(PlanProgress::BestEffort(cb)) = self.progress.as_mut() {
+                cb(BestEffortProgress {
+                    search: SearchProgress {
+                        stats: self.acc_stats,
+                        finished: false,
+                    },
+                    best_score: 0,
+                });
+            }
+        }
+    }
+
+    /// Forward progress monotonically so sub-pass boundaries never drop a valid live best score.
+    fn forward_progress(
+        cb: &mut dyn FnMut(BestEffortProgress),
+        reported_best_score: &mut u32,
+        p: BestEffortProgress,
+    ) {
+        *reported_best_score = (*reported_best_score).max(p.best_score);
+        cb(BestEffortProgress {
+            search: p.search,
+            best_score: *reported_best_score,
+        });
+    }
+
     /// Run one `BestEffortProblem` pass cleanly, preserving partial proof and propagating `Stopped`.
     fn run_best_effort<P: BestEffortProblem<Action = TriPeaksMove>>(
         &mut self,
         problem: &P,
         options: SearchOptions,
     ) -> Result<(Vec<TriPeaksMove>, PartialProof), SearchStop> {
-        let outcome = match self.progress.as_deref_mut() {
-            Some(cb) => {
-                let mut forward = |p| cb(p);
-                solve_best_effort_with_control(
+        let cancel = self.cancel;
+        let yield_best = self.yield_best;
+        let checkpoint = self.checkpoint;
+        let limits = self.limits;
+        let reported_best = &mut self.reported_best_score;
+        let outcome = match self.progress.as_mut() {
+            Some(PlanProgress::BestEffort(cb)) => {
+                let mut forward = |p: BestEffortProgress| {
+                    Self::forward_progress(*cb, reported_best, p);
+                };
+                solve_best_effort_controlled(
                     problem,
-                    self.limits,
-                    self.cancel,
+                    limits,
                     options,
-                    Some(&mut forward),
-                    self.checkpoint,
+                    BestEffortControl {
+                        cancel,
+                        yield_best,
+                        progress: Some(&mut forward),
+                        checkpoint,
+                    },
                 )
             }
-            None => solve_best_effort_with_control(
+            Some(PlanProgress::Search(cb)) => {
+                let mut forward = |p: BestEffortProgress| cb(p.search);
+                solve_best_effort_controlled(
+                    problem,
+                    limits,
+                    options,
+                    BestEffortControl {
+                        cancel,
+                        yield_best,
+                        progress: Some(&mut forward),
+                        checkpoint,
+                    },
+                )
+            }
+            None => solve_best_effort_controlled(
                 problem,
-                self.limits,
-                self.cancel,
+                limits,
                 options,
-                None,
-                self.checkpoint,
+                BestEffortControl {
+                    cancel,
+                    yield_best,
+                    progress: None,
+                    checkpoint,
+                },
             ),
         };
         match outcome {
             BestEffortOutcome::Solved { actions, stats, .. } => {
                 self.record_stats(stats);
+                self.record_best_candidate(actions.clone(), 1);
                 Ok((actions, PartialProof::Exhaustive))
             }
             BestEffortOutcome::Partial {
                 actions,
+                score,
                 proof,
                 stats,
-                ..
             } => {
                 self.record_stats(stats);
+                self.record_best_candidate(actions.clone(), score);
                 Ok((actions, proof))
             }
             BestEffortOutcome::Stopped { reason, stats } => {
@@ -1234,77 +1438,186 @@ impl PlanSearchEnv<'_, '_> {
         }
     }
 
-    /// Run one bounded A* `SearchProblem` pass cleanly, recording stats without pinning `progress`.
-    fn run_astar<P: SearchProblem<Action = TriPeaksMove>>(
+    /// Run one bounded score-upgrade probe supporting cooperative `Play` without zeroing live best score.
+    fn run_clear_score_probe(
         &mut self,
-        problem: &P,
+        problem: &ClearBoardMinScoreProblem,
         limits: SearchLimits,
-    ) -> SearchOutcome<TriPeaksMove> {
-        let outcome = match self.progress.as_deref_mut() {
-            Some(cb) => {
-                let mut forward = |p| cb(p);
-                solve_with_control(
+    ) -> Result<Option<Vec<TriPeaksMove>>, SearchStop> {
+        let cancel = self.cancel;
+        let yield_best = self.yield_best;
+        let checkpoint = self.checkpoint;
+        let reported_best = &mut self.reported_best_score;
+        let outcome = match self.progress.as_mut() {
+            Some(PlanProgress::BestEffort(cb)) => {
+                let mut forward = |p: BestEffortProgress| {
+                    Self::forward_progress(*cb, reported_best, p);
+                };
+                solve_controlled(
                     problem,
                     limits,
-                    self.cancel,
                     SearchOptions::default(),
-                    Some(&mut forward),
-                    self.checkpoint,
+                    BestEffortControl {
+                        cancel,
+                        yield_best,
+                        progress: Some(&mut forward),
+                        checkpoint,
+                    },
                 )
             }
-            None => solve_with_control(
+            Some(PlanProgress::Search(cb)) => {
+                let mut forward = |p: BestEffortProgress| cb(p.search);
+                solve_controlled(
+                    problem,
+                    limits,
+                    SearchOptions::default(),
+                    BestEffortControl {
+                        cancel,
+                        yield_best,
+                        progress: Some(&mut forward),
+                        checkpoint,
+                    },
+                )
+            }
+            None => solve_controlled(
                 problem,
                 limits,
-                self.cancel,
                 SearchOptions::default(),
-                None,
-                self.checkpoint,
+                BestEffortControl {
+                    cancel,
+                    yield_best,
+                    progress: None,
+                    checkpoint,
+                },
             ),
         };
-        match &outcome {
-            SearchOutcome::Solved { stats, .. }
-            | SearchOutcome::Unsolvable { stats }
-            | SearchOutcome::Stopped { stats, .. } => self.record_stats(*stats),
+        match outcome {
+            BestEffortOutcome::Solved { actions, stats, .. } => {
+                self.record_stats(stats);
+                Ok(Some(actions))
+            }
+            BestEffortOutcome::Partial {
+                proof: PartialProof::Bounded(SearchStop::Interrupted),
+                stats,
+                ..
+            } => {
+                self.record_stats(stats);
+                Err(SearchStop::Interrupted)
+            }
+            BestEffortOutcome::Partial { stats, .. } => {
+                self.record_stats(stats);
+                Ok(None)
+            }
+            BestEffortOutcome::Stopped {
+                reason:
+                    reason @ (SearchStop::Cancelled
+                    | SearchStop::AllocationFailure
+                    | SearchStop::InternalInvariant),
+                stats,
+            } => {
+                self.record_stats(stats);
+                Err(reason)
+            }
+            BestEffortOutcome::Stopped { stats, .. } => {
+                self.record_stats(stats);
+                Ok(None)
+            }
         }
-        outcome
     }
 
-    /// Run one bounded `solve_known_subgraph_with_control` pass without pinning `progress` lifetime.
-    fn run_objective(&mut self, objective: Objective) -> SearchOutcome<TriPeaksMove> {
-        let outcome = match self.progress.as_deref_mut() {
-            Some(cb) => {
-                let mut forward = |p| cb(p);
-                solve_known_subgraph_with_control(
-                    self.slots,
-                    objective,
-                    self.limits,
+    /// Run one single-phase objective A* pass supporting cooperative `Play` best-prefix yield.
+    fn run_objective(&mut self, objective: Objective) -> ObjectivePassResult {
+        let problem = TriPeaksObjectiveProblem::new(self.model, objective);
+        let cancel = self.cancel;
+        let yield_best = self.yield_best;
+        let checkpoint = self.checkpoint;
+        let limits = self.limits;
+        let reported_best = &mut self.reported_best_score;
+        let outcome = match self.progress.as_mut() {
+            Some(PlanProgress::BestEffort(cb)) => {
+                let mut forward = |p: BestEffortProgress| {
+                    Self::forward_progress(*cb, reported_best, p);
+                };
+                solve_controlled(
+                    &problem,
+                    limits,
                     SearchOptions::default(),
-                    self.cancel,
-                    Some(&mut forward),
-                    self.checkpoint,
+                    BestEffortControl {
+                        cancel,
+                        yield_best,
+                        progress: Some(&mut forward),
+                        checkpoint,
+                    },
                 )
             }
-            None => solve_known_subgraph_with_control(
-                self.slots,
-                objective,
-                self.limits,
+            Some(PlanProgress::Search(cb)) => {
+                let mut forward = |p: BestEffortProgress| cb(p.search);
+                solve_controlled(
+                    &problem,
+                    limits,
+                    SearchOptions::default(),
+                    BestEffortControl {
+                        cancel,
+                        yield_best,
+                        progress: Some(&mut forward),
+                        checkpoint,
+                    },
+                )
+            }
+            None => solve_controlled(
+                &problem,
+                limits,
                 SearchOptions::default(),
-                self.cancel,
-                None,
-                self.checkpoint,
+                BestEffortControl {
+                    cancel,
+                    yield_best,
+                    progress: None,
+                    checkpoint,
+                },
             ),
         };
-        match &outcome {
-            SearchOutcome::Solved { stats, .. }
-            | SearchOutcome::Unsolvable { stats }
-            | SearchOutcome::Stopped { stats, .. } => self.record_stats(*stats),
+        match outcome {
+            BestEffortOutcome::Solved { actions, stats, .. } => {
+                self.record_stats(stats);
+                if verify_objective_route(self.fixed, &actions, objective).is_ok() {
+                    ObjectivePassResult::Solved(actions)
+                } else {
+                    ObjectivePassResult::Stopped(SearchStop::InternalInvariant)
+                }
+            }
+            BestEffortOutcome::Partial {
+                actions,
+                score,
+                proof: PartialProof::Exhaustive,
+                stats,
+            } => {
+                self.record_stats(stats);
+                self.record_best_candidate(actions, score);
+                ObjectivePassResult::Exhausted
+            }
+            BestEffortOutcome::Partial {
+                actions,
+                score,
+                proof: PartialProof::Bounded(SearchStop::Interrupted),
+                stats,
+            } => {
+                self.record_stats(stats);
+                ObjectivePassResult::PartialYield { actions, score }
+            }
+            BestEffortOutcome::Partial { stats, .. } => {
+                self.record_stats(stats);
+                ObjectivePassResult::Stopped(SearchStop::InternalInvariant)
+            }
+            BestEffortOutcome::Stopped { reason, stats } => {
+                self.record_stats(stats);
+                ObjectivePassResult::Stopped(reason)
+            }
         }
-        outcome
     }
 }
 
 /// Upgrade an escalated full-board clear for `ReachScoreDelta` via binary search over `100`-pt
-/// thresholds up to the `28`-card theoretical ceiling, preserving `fast_actions` if capped.
+/// thresholds up to the `28`-card theoretical ceiling, preserving `fast_actions` if capped or played.
 fn maybe_upgrade_clear_score(
     env: &mut PlanSearchEnv<'_, '_>,
     fast_actions: Vec<TriPeaksMove>,
@@ -1312,6 +1625,9 @@ fn maybe_upgrade_clear_score(
 ) -> Result<(Vec<TriPeaksMove>, ReplayReport), SearchStop> {
     let mut best_actions = fast_actions;
     let mut best_replay = fast_replay;
+    env.reported_best_score = env
+        .reported_best_score
+        .max(best_replay.final_position.score_delta.max(1));
     let max_theoretical = max_score_gain_in_taps(0, TABLEAU_SLOT_COUNT as u32, 3);
     let mut lo_hundreds = best_replay.final_position.score_delta / 100 + 1;
     let mut hi_hundreds = max_theoretical / 100;
@@ -1328,16 +1644,24 @@ fn maybe_upgrade_clear_score(
     };
 
     while lo_hundreds <= hi_hundreds {
+        if env.cancel.load(std::sync::atomic::Ordering::Acquire) {
+            return Err(SearchStop::Cancelled);
+        }
+        if env
+            .yield_best
+            .is_some_and(|flag| flag.load(std::sync::atomic::Ordering::Acquire))
+        {
+            break;
+        }
         let mid_hundreds = lo_hundreds + (hi_hundreds - lo_hundreds) / 2;
         let problem = ClearBoardMinScoreProblem {
             model: env.model,
             min_score: mid_hundreds * 100,
         };
-        match env.run_astar(&problem, probe_limits) {
-            SearchOutcome::Solved { actions, .. } => {
-                let candidate = actions.into_vec();
+        match env.run_clear_score_probe(&problem, probe_limits) {
+            Ok(Some(candidate)) => {
                 if let Ok(candidate_replay) =
-                    verify_objective_route(env.slots, &candidate, Objective::ClearBoard)
+                    verify_objective_route(env.fixed, &candidate, Objective::ClearBoard)
                 {
                     let candidate_score = candidate_replay.final_position.score_delta;
                     if candidate_score > best_replay.final_position.score_delta
@@ -1346,6 +1670,9 @@ fn maybe_upgrade_clear_score(
                     {
                         best_actions = candidate;
                         best_replay = candidate_replay;
+                        env.reported_best_score = env
+                            .reported_best_score
+                            .max(best_replay.final_position.score_delta.max(1));
                     }
                     lo_hundreds = (candidate_score / 100)
                         .saturating_add(1)
@@ -1354,16 +1681,11 @@ fn maybe_upgrade_clear_score(
                     hi_hundreds = mid_hundreds - 1;
                 }
             }
-            SearchOutcome::Stopped {
-                reason:
-                    reason @ (SearchStop::Cancelled
-                    | SearchStop::AllocationFailure
-                    | SearchStop::InternalInvariant),
-                ..
-            } => return Err(reason),
-            SearchOutcome::Unsolvable { .. } | SearchOutcome::Stopped { .. } => {
+            Ok(None) => {
                 hi_hundreds = mid_hundreds - 1;
             }
+            Err(SearchStop::Interrupted) => break,
+            Err(reason) => return Err(reason),
         }
     }
 
@@ -1384,24 +1706,156 @@ pub fn plan_deal_route_with_control(
     progress: Option<&mut dyn FnMut(SearchProgress)>,
     checkpoint: Option<&dyn Fn() -> Duration>,
 ) -> Result<TriPeaksPlanOutcome, ReplayError> {
+    plan_deal_route_inner(
+        slots,
+        objective,
+        limits,
+        cancel,
+        None,
+        progress.map(PlanProgress::Search),
+        checkpoint,
+    )
+}
+
+
+/// Plan a TriPeaks route with live best-score tracking, cooperative soft-yield (`Play`) and pause hooks.
+///
+/// Matches [`plan_deal_route_with_control`] when `control.yield_best` stays false. When
+/// `control.yield_best` becomes true without cancellation, the active pass halts promptly and
+/// returns the best independently verified partial route discovered so far with
+/// [`PartialProof::Bounded`] of [`SearchStop::Interrupted`].
+///
+/// # Errors
+///
+/// Returns [`ReplayError`] if `slots` fails validation or lacks a `Known` initial Waste slot.
+pub fn plan_deal_route_controlled(
+    slots: &[CardSlot],
+    objective: Objective,
+    limits: SearchLimits,
+    control: BestEffortControl<'_>,
+) -> Result<TriPeaksPlanOutcome, ReplayError> {
+    plan_deal_route_inner(
+        slots,
+        objective,
+        limits,
+        control.cancel,
+        control.yield_best,
+        control.progress.map(PlanProgress::BestEffort),
+        control.checkpoint,
+    )
+}
+
+
+/// Select the higher-ranked independently verified candidate between a current pass candidate
+/// and any prior verified fallback candidate for `objective`.
+fn select_best_candidate(
+    fixed: &[CardSlot; DEAL_SLOT_COUNT],
+    objective: Objective,
+    actions: Vec<TriPeaksMove>,
+    score: u32,
+    fallback_candidate: Option<(Vec<TriPeaksMove>, CandidateRank)>,
+) -> Vec<TriPeaksMove> {
+    let current = if score > 0 {
+        evaluate_candidate(fixed, objective, &actions).map(|(_, rank)| (actions, rank))
+    } else {
+        None
+    };
+    match (current, fallback_candidate) {
+        (Some((curr_actions, curr_rank)), Some((prev_actions, prev_rank))) => {
+            if prev_rank > curr_rank {
+                prev_actions
+            } else {
+                curr_actions
+            }
+        }
+        (Some((curr_actions, _)), None) => curr_actions,
+        (None, Some((prev_actions, _))) => prev_actions,
+        (None, None) => Vec::new(),
+    }
+}
+
+/// Convert an interrupted pass candidate into an independently replay-verified outcome,
+/// promoting full objective or ClearBoard achievements cleanly before falling back to partial.
+fn partial_yield_outcome(
+    fixed: &[CardSlot; DEAL_SLOT_COUNT],
+    objective: Objective,
+    actions: Vec<TriPeaksMove>,
+    score: u32,
+    fallback_candidate: Option<(Vec<TriPeaksMove>, CandidateRank)>,
+    unknown_slots: usize,
+    stats: SearchStats,
+) -> Result<TriPeaksPlanOutcome, ReplayError> {
+    let candidate = select_best_candidate(fixed, objective, actions, score, fallback_candidate);
+    if !candidate.is_empty() {
+        if let Ok(replay) = verify_objective_route(fixed, &candidate, objective) {
+            return Ok(TriPeaksPlanOutcome::SolvedObjective {
+                actions: candidate,
+                replay,
+                stats,
+            });
+        }
+        if matches!(
+            objective,
+            Objective::ClearRankQuota { .. } | Objective::ReachScoreDelta { .. }
+        ) && let Ok(replay) = verify_objective_route(fixed, &candidate, Objective::ClearBoard)
+        {
+            return Ok(TriPeaksPlanOutcome::EscalatedClearBoard {
+                actions: candidate,
+                replay,
+                stats,
+            });
+        }
+    }
+    let replay = verify_move_sequence(fixed, &candidate)?;
+    let max_tableau_cleared =
+        u8::try_from((FULL_TABLEAU_MASK & !replay.final_position.tableau_mask).count_ones())
+            .unwrap_or(28);
+    Ok(TriPeaksPlanOutcome::UnsolvablePartial {
+        actions: candidate,
+        replay,
+        max_tableau_cleared,
+        proof: PartialProof::Bounded(SearchStop::Interrupted),
+        unknown_slots,
+        stats,
+    })
+}
+
+
+/// Unified implementation of [`plan_deal_route_with_control`] and [`plan_deal_route_controlled`].
+fn plan_deal_route_inner(
+    slots: &[CardSlot],
+    objective: Objective,
+    limits: SearchLimits,
+    cancel: &AtomicBool,
+    yield_best: Option<&AtomicBool>,
+    progress: Option<PlanProgress<'_>>,
+    checkpoint: Option<&dyn Fn() -> Duration>,
+) -> Result<TriPeaksPlanOutcome, ReplayError> {
     let fixed = validate_slot_table(slots)?;
     let model = KnownDealModel::from_slots(fixed).ok_or(super::ModelError::UnknownInitialWaste)?;
     let mut env = PlanSearchEnv {
-        slots: fixed,
+        fixed,
         model,
+        objective,
         limits,
         cancel,
+        yield_best,
         progress,
         checkpoint,
         acc_stats: SearchStats::default(),
+        reported_best_score: 0,
+        best_candidate: None,
     };
+    let unknown_slots = fixed
+        .iter()
+        .filter(|slot| matches!(slot, CardSlot::Unknown))
+        .count();
 
     let mut prior_bound: Option<SearchStop> = None;
 
     // 1. Try the direct caller objective first; non-time resource bounds fall through to escalation/partial.
     match env.run_objective(objective) {
-        SearchOutcome::Solved { actions, .. } => {
-            let route = actions.into_vec();
+        ObjectivePassResult::Solved(route) => {
             let replay = verify_objective_route(fixed, &route, objective)?;
             return Ok(TriPeaksPlanOutcome::SolvedObjective {
                 actions: route,
@@ -1409,20 +1863,31 @@ pub fn plan_deal_route_with_control(
                 stats: env.acc_stats,
             });
         }
-        SearchOutcome::Stopped {
-            reason:
-                reason @ (SearchStop::StateLimit | SearchStop::ExpansionLimit | SearchStop::MemoryLimit),
-            ..
-        } => {
+        ObjectivePassResult::PartialYield { actions, score } => {
+            let fallback = env.best_candidate.take();
+            return partial_yield_outcome(
+                fixed,
+                objective,
+                actions,
+                score,
+                fallback,
+                unknown_slots,
+                env.acc_stats,
+            );
+        }
+        ObjectivePassResult::Stopped(
+            reason
+            @ (SearchStop::StateLimit | SearchStop::ExpansionLimit | SearchStop::MemoryLimit),
+        ) => {
             prior_bound = Some(reason);
         }
-        SearchOutcome::Stopped { reason, .. } => {
+        ObjectivePassResult::Stopped(reason) => {
             return Ok(TriPeaksPlanOutcome::Stopped {
                 reason,
                 stats: env.acc_stats,
             });
         }
-        SearchOutcome::Unsolvable { .. } => {}
+        ObjectivePassResult::Exhausted => {}
     }
 
     // 2. Multi-board ClearBoard escalation rule for rank/score challenges exceeding one board.
@@ -1430,9 +1895,9 @@ pub fn plan_deal_route_with_control(
         objective,
         Objective::ClearRankQuota { .. } | Objective::ReachScoreDelta { .. }
     ) {
+        env.sync_score_for_next_pass();
         match env.run_objective(Objective::ClearBoard) {
-            SearchOutcome::Solved { actions, .. } => {
-                let fast_route = actions.into_vec();
+            ObjectivePassResult::Solved(fast_route) => {
                 let fast_replay =
                     verify_objective_route(fixed, &fast_route, Objective::ClearBoard)?;
                 let (actions, replay) = if matches!(objective, Objective::ReachScoreDelta { .. }) {
@@ -1454,58 +1919,86 @@ pub fn plan_deal_route_with_control(
                     stats: env.acc_stats,
                 });
             }
-            SearchOutcome::Stopped {
-                reason:
-                    reason @ (SearchStop::StateLimit
-                    | SearchStop::ExpansionLimit
-                    | SearchStop::MemoryLimit),
-                ..
-            } => {
+            ObjectivePassResult::PartialYield { actions, score } => {
+                let fallback = env.best_candidate.take();
+                return partial_yield_outcome(
+                    fixed,
+                    objective,
+                    actions,
+                    score,
+                    fallback,
+                    unknown_slots,
+                    env.acc_stats,
+                );
+            }
+            ObjectivePassResult::Stopped(
+                reason @ (SearchStop::StateLimit
+                | SearchStop::ExpansionLimit
+                | SearchStop::MemoryLimit),
+            ) => {
                 if prior_bound.is_none() {
                     prior_bound = Some(reason);
                 }
             }
-            SearchOutcome::Stopped { reason, .. } => {
+            ObjectivePassResult::Stopped(reason) => {
                 return Ok(TriPeaksPlanOutcome::Stopped {
                     reason,
                     stats: env.acc_stats,
                 });
             }
-            SearchOutcome::Unsolvable { .. } => {}
+            ObjectivePassResult::Exhausted => {}
         }
     }
 
-    let unknown_slots = fixed
-        .iter()
-        .filter(|slot| matches!(slot, CardSlot::Unknown))
-        .count();
-
     // 3. Dead-end fallback: measure maximum clearable cards, and bank positive rank/score gain.
+    env.sync_score_for_next_pass();
     let dijkstra = SearchOptions {
         method: SearchMethod::Dijkstra,
         heuristic_weight: SearchOptions::default().heuristic_weight,
     };
-    let (best_cards_actions, best_cards_proof) =
-        match env.run_best_effort(&BestPartialProblem { model }, dijkstra) {
-            Ok((actions, pass3_proof)) => {
-                let combined_proof = match prior_bound {
-                    Some(stop) => combine_partial_proofs(PartialProof::Bounded(stop), pass3_proof),
-                    None => pass3_proof,
-                };
-                (actions, combined_proof)
-            }
-            Err(reason) => {
-                return Ok(TriPeaksPlanOutcome::Stopped {
-                    reason,
-                    stats: env.acc_stats,
-                });
-            }
-        };
+    let (best_cards_actions, best_cards_proof) = match env
+        .run_best_effort(&BestPartialProblem { model }, dijkstra)
+    {
+        Ok((actions, pass3_proof)) => {
+            let combined_proof = match (prior_bound, pass3_proof) {
+                (_, PartialProof::Bounded(SearchStop::Interrupted)) => {
+                    PartialProof::Bounded(SearchStop::Interrupted)
+                }
+                (Some(stop), _) => combine_partial_proofs(PartialProof::Bounded(stop), pass3_proof),
+                (None, _) => pass3_proof,
+            };
+            (actions, combined_proof)
+        }
+        Err(reason) => {
+            return Ok(TriPeaksPlanOutcome::Stopped {
+                reason,
+                stats: env.acc_stats,
+            });
+        }
+    };
     let best_cards_replay = verify_move_sequence(fixed, &best_cards_actions)?;
     let max_tableau_cleared = u8::try_from(
         (FULL_TABLEAU_MASK & !best_cards_replay.final_position.tableau_mask).count_ones(),
     )
     .unwrap_or(28);
+
+    if best_cards_proof == PartialProof::Bounded(SearchStop::Interrupted) {
+        let fallback = env.best_candidate.take();
+        let fallback_score = if max_tableau_cleared > 0 {
+            u32::from(max_tableau_cleared)
+        } else {
+            0
+        };
+        return partial_yield_outcome(
+            fixed,
+            objective,
+            best_cards_actions,
+            fallback_score,
+            fallback,
+            unknown_slots,
+            env.acc_stats,
+        );
+    }
 
     let (actions, replay, proof) = match objective {
         Objective::ClearBoard => (
@@ -1529,15 +2022,53 @@ pub fn plan_deal_route_with_control(
                 match env.run_best_effort(&problem, dijkstra) {
                     Ok((candidate, rank_proof)) => {
                         let proof = combine_partial_proofs(best_cards_proof, rank_proof);
-                        let candidate_replay = verify_move_sequence(fixed, &candidate)?;
-                        let cleared = candidate_replay
+                        if rank_proof == PartialProof::Bounded(SearchStop::Interrupted) {
+                            let fallback = env.best_candidate.take();
+                            let score = u32::from(!candidate.is_empty());
+                            return partial_yield_outcome(
+                                fixed,
+                                objective,
+                                candidate,
+                                score,
+                                fallback,
+                                unknown_slots,
+                                env.acc_stats,
+                            )
+                            .map(|outcome| match outcome {
+                                TriPeaksPlanOutcome::UnsolvablePartial {
+                                    actions,
+                                    replay,
+                                    max_tableau_cleared: yielded_cleared,
+                                    proof: _,
+                                    unknown_slots,
+                                    stats,
+                                } => TriPeaksPlanOutcome::UnsolvablePartial {
+                                    actions,
+                                    replay,
+                                    max_tableau_cleared: max_tableau_cleared.max(yielded_cleared),
+                                    proof,
+                                    unknown_slots,
+                                    stats,
+                                },
+                                other => other,
+                            });
+                        }
+                        let best = select_best_candidate(
+                            fixed,
+                            objective,
+                            candidate,
+                            1,
+                            env.best_candidate.take(),
+                        );
+                        let best_replay = verify_move_sequence(fixed, &best)?;
+                        let cleared = best_replay
                             .final_position
                             .cleared_by_rank
                             .get(usize::from(rank))
                             .copied()
                             .unwrap_or(0);
                         if cleared > 0 {
-                            (candidate, candidate_replay, proof)
+                            (best, best_replay, proof)
                         } else {
                             (Vec::new(), verify_move_sequence(fixed, &[])?, proof)
                         }
@@ -1553,16 +2084,56 @@ pub fn plan_deal_route_with_control(
         }
         Objective::ReachScoreDelta { .. } => {
             let problem = MaxScorePartialProblem { model };
-            let mut chosen = (best_cards_actions, best_cards_replay);
-            let proof = match env.run_best_effort(&problem, dijkstra) {
+            match env.run_best_effort(&problem, dijkstra) {
                 Ok((candidate, score_proof)) => {
-                    let candidate_replay = verify_move_sequence(fixed, &candidate)?;
-                    if candidate_replay.final_position.score_delta
-                        > chosen.1.final_position.score_delta
-                    {
-                        chosen = (candidate, candidate_replay);
+                    let proof = combine_partial_proofs(best_cards_proof, score_proof);
+                    if score_proof == PartialProof::Bounded(SearchStop::Interrupted) {
+                        let fallback = env.best_candidate.take();
+                        let score = u32::from(!candidate.is_empty());
+                        return partial_yield_outcome(
+                            fixed,
+                            objective,
+                            candidate,
+                            score,
+                            fallback,
+                            unknown_slots,
+                            env.acc_stats,
+                        )
+                        .map(|outcome| match outcome {
+                            TriPeaksPlanOutcome::UnsolvablePartial {
+                                actions,
+                                replay,
+                                max_tableau_cleared: yielded_cleared,
+                                proof: _,
+                                unknown_slots,
+                                stats,
+                            } => TriPeaksPlanOutcome::UnsolvablePartial {
+                                actions,
+                                replay,
+                                max_tableau_cleared: max_tableau_cleared.max(yielded_cleared),
+                                proof,
+                                unknown_slots,
+                                stats,
+                            },
+                            other => other,
+                        });
                     }
-                    combine_partial_proofs(best_cards_proof, score_proof)
+                    let base = select_best_candidate(
+                        fixed,
+                        objective,
+                        best_cards_actions,
+                        1,
+                        env.best_candidate.take(),
+                    );
+                    let base_rank =
+                        evaluate_candidate(fixed, objective, &base).map(|(_, rank)| (base, rank));
+                    let best = select_best_candidate(fixed, objective, candidate, 1, base_rank);
+                    let best_replay = verify_move_sequence(fixed, &best)?;
+                    if best_replay.final_position.score_delta > 0 {
+                        (best, best_replay, proof)
+                    } else {
+                        (Vec::new(), verify_move_sequence(fixed, &[])?, proof)
+                    }
                 }
                 Err(reason) => {
                     return Ok(TriPeaksPlanOutcome::Stopped {
@@ -1570,11 +2141,6 @@ pub fn plan_deal_route_with_control(
                         stats: env.acc_stats,
                     });
                 }
-            };
-            if chosen.1.final_position.score_delta > 0 {
-                (chosen.0, chosen.1, proof)
-            } else {
-                (Vec::new(), verify_move_sequence(fixed, &[])?, proof)
             }
         }
     };
@@ -1589,10 +2155,14 @@ pub fn plan_deal_route_with_control(
     })
 }
 
-/// Combine two partial-search proof flags conservatively (`Exhaustive` only when both are).
+/// Combine two partial-search proof flags (`Interrupted` and `Exhaustive` rules preserve `Play`).
 const fn combine_partial_proofs(first: PartialProof, second: PartialProof) -> PartialProof {
     match (first, second) {
         (PartialProof::Exhaustive, PartialProof::Exhaustive) => PartialProof::Exhaustive,
+        (PartialProof::Bounded(SearchStop::Interrupted), _)
+        | (_, PartialProof::Bounded(SearchStop::Interrupted)) => {
+            PartialProof::Bounded(SearchStop::Interrupted)
+        }
         (PartialProof::Bounded(stop), _) | (_, PartialProof::Bounded(stop)) => {
             PartialProof::Bounded(stop)
         }

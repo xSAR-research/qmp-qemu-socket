@@ -148,6 +148,19 @@ impl TriPeaksWorkflowState {
         }
     }
 
+    /// Reset all session and manual retained calculation/report state on mode switch.
+    pub(super) fn clear_inactive(&mut self, context: &ControllerContext) {
+        self.bind(context);
+        self.export_path = None;
+        self.manual_counts = None;
+        self.manual_probes_used = 0;
+        self.manual_objective_label = None;
+        self.live_calc_progress = None;
+        self.manual_report = None;
+        self.manual_message.clear();
+        self.show_route_inspector = false;
+    }
+
     /// Preserve diagnostic pixels after clean session or recon detach under the same context.
     pub(super) fn retain_after_detach(&self, context: &ControllerContext) -> bool {
         self.retained_preview.as_ref() == Some(context)
@@ -676,13 +689,54 @@ impl QmpQemuSocketApp {
                 if calc_active && let Some(pause) = self.worker.pause_state() {
                     let paused = pause.requested || pause.acknowledged;
                     let label = if paused { "Continue" } else { "Pause" };
-                    if bevel_button(ui, label, SETUP_BLUE, paused, mutable).clicked()
+                    let pause_btn = bevel_button(ui, label, SETUP_BLUE, paused, mutable);
+                    let pause_btn = if pause.is_auto_paused()
+                        && let Some(search) = pause.search
+                    {
+                        pause_btn.on_hover_text(format!(
+                            "Resume A* calculation for +{}s (next auto-pause step)",
+                            search.continue_step.as_secs()
+                        ))
+                    } else {
+                        pause_btn
+                    };
+                    if pause_btn.clicked()
                         && let Err(err) = self.worker.request_pause(pause.epoch, !paused)
                     {
                         self.push_log(err);
                     }
+                    if pause.phase == crate::worker::pyramid_pause::Phase::Search
+                        && bevel_button(
+                            ui,
+                            "Play",
+                            ACTION_GREEN,
+                            false,
+                            mutable && pause.can_play_best(),
+                        )
+                        .on_hover_text(
+                            "Stop A* search early and prepare the best route for playback",
+                        )
+                        .clicked()
+                    {
+                        match self.worker.request_play_best(pause.epoch) {
+                            Ok(()) => {
+                                self.tripeaks_workflow.manual_message =
+                                    "Play requested — stopping A* and preparing best route…"
+                                        .to_owned();
+                            }
+                            Err(err) => self.push_log(err),
+                        }
+                    }
                 }
             });
+
+            if calc_active && let Some(pause) = self.worker.pause_state() {
+                super::pyramid_workflow::render_pause_search_status(
+                    ui,
+                    pause,
+                    "Paused — frontier retained",
+                );
+            }
 
             if calc_active && let Some(progress) = &self.tripeaks_workflow.live_calc_progress {
                 render_tripeaks_live_search_stats(ui, &progress.search, progress.paused);
@@ -1214,11 +1268,12 @@ impl QmpQemuSocketApp {
                         );
                     }
                 }
-                let has_candidate = matches!(
-                    &report.outcome,
-                    tripeaks_calculation::Outcome::Solved { .. }
-                        | tripeaks_calculation::Outcome::Partial { .. }
-                );
+                let has_candidate = !stopped
+                    && match &report.outcome {
+                        tripeaks_calculation::Outcome::Solved { .. } => true,
+                        tripeaks_calculation::Outcome::Partial { moves, .. } => !moves.is_empty(),
+                        _ => false,
+                    };
                 self.tripeaks_workflow.prepared_plan = has_candidate.then_some(identity);
                 self.tripeaks_workflow.manual_report = Some(report);
             }
@@ -1601,5 +1656,28 @@ mod tests {
                 "unexpected jargon in UI text: {sample}"
             );
         }
+    }
+
+    #[test]
+    fn clear_inactive_wipes_session_and_manual_retained_state() {
+        let mut wf = TriPeaksWorkflowState {
+            export_path: Some(PathBuf::from("/tmp/old-tripeaks.json")),
+            manual_probes_used: 3,
+            manual_objective_label: Some("Old Challenge".to_owned()),
+            manual_message: "Old message".to_owned(),
+            show_route_inspector: true,
+            ..TriPeaksWorkflowState::default()
+        };
+        let ctx = test_context(42);
+        wf.clear_inactive(&ctx);
+        assert_eq!(wf.context, Some(ctx));
+        assert!(wf.export_path.is_none());
+        assert!(wf.manual_counts.is_none());
+        assert_eq!(wf.manual_probes_used, 0);
+        assert!(wf.manual_objective_label.is_none());
+        assert!(wf.manual_report.is_none());
+        assert!(wf.calculation_report.is_none());
+        assert!(wf.manual_message.is_empty());
+        assert!(!wf.show_route_inspector);
     }
 }

@@ -41,6 +41,13 @@ struct AcquiredDeal {
 enum PlanDecision {
     /// Replay-verified full 52-card route ready for guarded execution.
     Solved(freecell_route::Prepared),
+    /// Operator `Play` stopped search early with a replay-verified partial route (`1..=51` foundations).
+    PlayPartial {
+        /// Replay-verified closed partial route ready for guarded execution.
+        prepared: freecell_route::Prepared,
+        /// Closed foundation cards verified at the endpoint.
+        foundation_cards: u8,
+    },
     /// Exhaustive proof (`foundation_cards < 52`) with zero mid-game guest clicks (`Option 2A`).
     UnsolvablePartial {
         /// Maximum cards reachable on foundations across the explored state space.
@@ -174,8 +181,12 @@ fn drive_session(
 
         io.phase(generation, SessionPhase::Planning);
         io.check()?;
-        let prepared = match io.plan(generation, style, &acquired)? {
-            PlanDecision::Solved(prepared) => prepared,
+        let (prepared, play_partial_cards) = match io.plan(generation, style, &acquired)? {
+            PlanDecision::Solved(prepared) => (prepared, None),
+            PlanDecision::PlayPartial {
+                prepared,
+                foundation_cards,
+            } => (prepared, Some(foundation_cards)),
             PlanDecision::UnsolvablePartial {
                 foundation_cards,
                 expanded_states,
@@ -198,8 +209,57 @@ fn drive_session(
         io.check()?;
         let executed = io.execute(generation, &acquired, prepared)?;
         io.check()?;
+        if let Some(target_cards) = play_partial_cards {
+            let (game_won, summary) = match (executed.completion, executed.foundation_cards) {
+                (Some(crate::freecell_route::Completion::ChallengeComplete), foundations) => {
+                    completed_games = completed_games
+                        .checked_add(1)
+                        .ok_or("Completed Free Cell game counter exhausted")?;
+                    (
+                        true,
+                        format!(
+                            "Best partial route achieved Free Cell challenge win ({foundations}/52 foundations, board {generation}, export: {}); stopped without starting a new game.",
+                            acquired.path.display()
+                        ),
+                    )
+                }
+                (Some(crate::freecell_route::Completion::PartialRouteExhausted), foundations) => (
+                    false,
+                    format!(
+                        "Best partial Free Cell route finished ({foundations}/52 foundations reached, target {target_cards}/52, board {generation}, export: {}); stopped without starting a new game.",
+                        acquired.path.display()
+                    ),
+                ),
+                (Some(crate::freecell_route::Completion::FullBoard), COMPLETE_FOUNDATION_CARDS) => {
+                    completed_games = completed_games
+                        .checked_add(1)
+                        .ok_or("Completed Free Cell game counter exhausted")?;
+                    (
+                        true,
+                        format!(
+                            "Best Free Cell route completed 52/52 foundations (board {generation}, export: {}); stopped without starting a new game.",
+                            acquired.path.display()
+                        ),
+                    )
+                }
+                (completion, foundations) => {
+                    return Err(format!(
+                        "Free Cell best partial route ended unexpectedly ({completion:?}, {foundations}/52); no restart input authorised"
+                    ));
+                }
+            };
+            if game_won {
+                io.phase(generation, SessionPhase::Completion);
+            }
+            return Ok(SessionOutcome {
+                completed_games,
+                unsolvable_foundation_cards: None,
+                export_path: Some(acquired.path),
+                summary,
+            });
+        }
         if style == FreeCellPlayStyle::SingleBoard {
-            let summary = match (
+            let (game_won, summary) = match (
                 executed.completion,
                 executed.foundation_cards,
                 acquired.objective,
@@ -212,9 +272,12 @@ fn drive_session(
                     completed_games = completed_games
                         .checked_add(1)
                         .ok_or("Completed Free Cell game counter exhausted")?;
-                    format!(
-                        "Single board complete — 52/52 cards cleared (board {generation}, export: {}); leaving GAME WIN untouched.",
-                        acquired.path.display()
+                    (
+                        true,
+                        format!(
+                            "Single board complete — 52/52 cards cleared (board {generation}, export: {}); leaving GAME WIN untouched.",
+                            acquired.path.display()
+                        ),
                     )
                 }
                 (
@@ -225,18 +288,24 @@ fn drive_session(
                     completed_games = completed_games
                         .checked_add(1)
                         .ok_or("Completed Free Cell game counter exhausted")?;
-                    format!(
-                        "Single board challenge complete ({foundations}/52 foundations, board {generation}, export: {}); stopped without starting a new game.",
-                        acquired.path.display()
+                    (
+                        true,
+                        format!(
+                            "Single board challenge complete ({foundations}/52 foundations, board {generation}, export: {}); stopped without starting a new game.",
+                            acquired.path.display()
+                        ),
                     )
                 }
                 (
                     Some(crate::freecell_route::Completion::PartialRouteExhausted),
                     foundations,
                     Objective::Unresolved,
-                ) => format!(
-                    "Single board challenge partial route finished ({foundations}/52 foundations, board {generation}, export: {}); stopped without starting a new game.",
-                    acquired.path.display()
+                ) => (
+                    false,
+                    format!(
+                        "Single board challenge partial route finished ({foundations}/52 foundations, board {generation}, export: {}); stopped without starting a new game.",
+                        acquired.path.display()
+                    ),
                 ),
                 (completion, foundations, _) => {
                     return Err(format!(
@@ -244,7 +313,9 @@ fn drive_session(
                     ));
                 }
             };
-            io.phase(generation, SessionPhase::Completion);
+            if game_won {
+                io.phase(generation, SessionPhase::Completion);
+            }
             return Ok(SessionOutcome {
                 completed_games,
                 unsolvable_foundation_cards: None,
@@ -359,7 +430,7 @@ impl Native<'_> {
             planning_progress: None,
             calculation_report: Some(Arc::clone(report)),
             export_path: self.export_path.clone(),
-            message: freecell_calculation::outcome_summary_message(&report.outcome),
+            message: freecell_calculation::report_summary_message(report),
         });
     }
 
@@ -694,6 +765,24 @@ impl SessionIo for Native<'_> {
                     expanded_states,
                     &report,
                 );
+                if report.partial_proof != xsar::search::PartialProof::Exhaustive
+                    && foundation_cards > 0
+                    && !moves.is_empty()
+                {
+                    send_log(
+                        self.events,
+                        format!(
+                            "Free Cell Play requested — executing verified best partial route for cycle {generation} ({} moves, {foundation_cards}/52 foundations across {expanded_states} expanded states).",
+                            moves.len(),
+                        ),
+                    );
+                    let prepared = freecell_route::Prepared::new(identity, report, self.cancel)
+                        .map_err(|error| error.to_string())?;
+                    return Ok(PlanDecision::PlayPartial {
+                        prepared,
+                        foundation_cards,
+                    });
+                }
                 if allows_partial_execution(style, acquired.objective, moves.len()) {
                     send_log(
                         self.events,
@@ -1023,6 +1112,7 @@ mod tests {
             deal: deal.clone(),
             bytes: freecell_json::to_vec(deal).unwrap(),
             outcome: Outcome::Cancelled(xsar::search::SearchStats::default()),
+            partial_proof: xsar::search::PartialProof::Exhaustive,
             paused: Duration::ZERO,
         };
         freecell_route::Prepared::new(
@@ -1039,6 +1129,9 @@ mod tests {
 
     enum ScriptedPlan {
         Solve,
+        PlayPartial {
+            foundation_cards: u8,
+        },
         Partial {
             foundation_cards: u8,
             expanded_states: u64,
@@ -1115,6 +1208,10 @@ mod tests {
                 .unwrap_or_else(|| Err("unexpected plan".to_owned()))?
             {
                 ScriptedPlan::Solve => Ok(PlanDecision::Solved(dummy_prepared(&acquired.deal))),
+                ScriptedPlan::PlayPartial { foundation_cards } => Ok(PlanDecision::PlayPartial {
+                    prepared: dummy_prepared(&acquired.deal),
+                    foundation_cards,
+                }),
                 ScriptedPlan::Partial {
                     foundation_cards,
                     expanded_states,
@@ -1536,5 +1633,46 @@ mod tests {
 
         io.phase(2, SessionPhase::Reconnaissance);
         assert!(io.latest_calculation.is_none());
+    }
+
+
+    #[test]
+    fn freecell_350_play_partial_executes_and_stops_cleanly_in_both_session_modes() {
+        for style in [
+            FreeCellPlayStyle::SingleBoard,
+            FreeCellPlayStyle::ContinuousNormalGames,
+        ] {
+            let mut io = ScriptedIo::default();
+            io.acquires.push_back(Ok(ScriptedIo::make_acquired(7)));
+            io.plans.push_back(Ok(ScriptedPlan::PlayPartial {
+                foundation_cards: 19,
+            }));
+            io.executions.push_back(Ok(ExecutedBoard {
+                completion: Some(crate::freecell_route::Completion::PartialRouteExhausted),
+                foundation_cards: 19,
+            }));
+
+            let outcome = drive_session(style, &mut io).unwrap();
+            assert_eq!(outcome.completed_games, 0);
+            assert_eq!(outcome.unsolvable_foundation_cards, None);
+            assert!(outcome.summary.contains("19/52 foundations reached"));
+            assert!(io.events.iter().any(|e| e == "execute:1"));
+            assert!(!io.events.iter().any(|e| e == "phase:1:Completion"));
+            assert!(!io.events.iter().any(|e| e.starts_with("restart:")));
+        }
+
+        // Winning completions still emit Completion and bump completed_games to 1.
+        let mut win_io = ScriptedIo::default();
+        win_io.acquires.push_back(Ok(ScriptedIo::make_acquired(7)));
+        win_io.plans.push_back(Ok(ScriptedPlan::PlayPartial {
+            foundation_cards: 52,
+        }));
+        win_io.executions.push_back(Ok(ExecutedBoard {
+            completion: Some(crate::freecell_route::Completion::FullBoard),
+            foundation_cards: COMPLETE_FOUNDATION_CARDS,
+        }));
+        let win_outcome = drive_session(FreeCellPlayStyle::SingleBoard, &mut win_io).unwrap();
+        assert_eq!(win_outcome.completed_games, 1);
+        assert!(win_io.events.iter().any(|e| e == "phase:1:Completion"));
     }
 }

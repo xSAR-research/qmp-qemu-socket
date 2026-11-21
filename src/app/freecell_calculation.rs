@@ -142,6 +142,18 @@ impl Calculation {
     }
 
 
+    /// Retire retained calculation report, progress, and inspector state when switching modes.
+    pub(super) fn clear_retained(&mut self) {
+        self.pending = None;
+        self.progress = None;
+        self.report = None;
+        self.message.clear();
+        self.browser = false;
+        self.browser_pending = None;
+        self.route_open = false;
+    }
+
+
     /// Retire exactly one matching result; stale/duplicate work cannot replace it.
     fn finish(&mut self, identity: &Identity, result: Result<Arc<Report>, String>) -> bool {
         if self.pending.as_ref() != Some(identity) || self.generation != identity.source_generation
@@ -151,8 +163,7 @@ impl Calculation {
         self.pending = None;
         match result {
             Ok(report) => {
-                self.message =
-                    crate::worker::freecell_calculation::outcome_summary_message(&report.outcome);
+                self.message = crate::worker::freecell_calculation::report_summary_message(&report);
                 self.report = Some(report);
             }
             Err(error) => self.message = error,
@@ -404,17 +415,30 @@ impl QmpQemuSocketApp {
         });
         let active = self.active_run == Some(ActiveRun::FreeCellCalculation);
         let pause = active.then(|| self.worker.pause_state()).flatten();
-        let paused = pause
-            .as_ref()
-            .map(|state| state.requested || state.acknowledged);
+        let pause_active_search =
+            pause.is_some_and(|p| p.phase == crate::worker::pyramid_pause::Phase::Search);
+        let mut play_clicked = false;
         let [action_clicked, pause_clicked] = calculation_buttons(
             ui,
             idle,
             active,
-            paused,
+            pause,
             !self.stop_requested && !self.exiting,
         )
         .map(|response| response.is_some_and(|response| response.clicked()));
+        if active && pause_active_search {
+            let mutable = !self.stop_requested && !self.exiting;
+            let can_play =
+                mutable && pause.is_some_and(crate::worker::pyramid_pause::Snapshot::can_play_best);
+            if bevel_button(ui, "Play", ACTION_GREEN, false, can_play)
+                .on_hover_text(
+                    "Stop A* search early and independently replay the best partial route",
+                )
+                .clicked()
+            {
+                play_clicked = true;
+            }
+        }
         if action_clicked && !active {
             self.revoke_freecell_playback();
             let context = self.current_preview_context();
@@ -536,6 +560,23 @@ impl QmpQemuSocketApp {
                 self.freecell_calculation.message = error;
             }
         }
+        if play_clicked && let Some(pause) = pause.as_ref() {
+            match self.worker.request_play_best(pause.epoch) {
+                Ok(()) => {
+                    self.freecell_calculation.message =
+                        "Play requested — stopping A* and replaying best partial route…".to_owned();
+                }
+                Err(error) => {
+                    let identity = self.freecell_calculation.pending.clone();
+                    self.freecell_calculation_failure(
+                        "Free Cell calculation Play",
+                        &error,
+                        identity.as_ref(),
+                    );
+                    self.freecell_calculation.message = error;
+                }
+            }
+        }
         if active && action_clicked {
             self.trace_freecell_ui(
                 "calculation-cancel-intent",
@@ -546,12 +587,12 @@ impl QmpQemuSocketApp {
             self.worker.cancel_freecell_calculation();
             self.freecell_calculation.message = "Cancelling…".to_owned();
         }
-        if active && let Some(pause) = pause.as_ref() {
-            if pause.acknowledged {
-                ui.label("Paused — frontier retained");
-            } else if pause.requested {
-                ui.label("Pausing…");
-            }
+        if active && let Some(pause) = pause {
+            super::pyramid_workflow::render_pause_search_status(
+                ui,
+                pause,
+                "Paused — frontier retained",
+            );
         }
         if let Some(progress) = self
             .freecell_calculation
@@ -744,9 +785,10 @@ fn calculation_buttons(
     ui: &mut egui::Ui,
     idle: bool,
     active: bool,
-    paused: Option<bool>,
+    pause: Option<crate::worker::pyramid_pause::Snapshot>,
     mutable: bool,
 ) -> [Option<egui::Response>; 2] {
+    let paused = pause.map(|state| state.requested || state.acknowledged);
     ui.horizontal(|ui| {
         let action = ui
             .add_enabled(
@@ -759,14 +801,25 @@ fn calculation_buttons(
                 "Calculate a route offline without sending guest input"
             });
         let pause = active.then(|| {
-            ui.add_enabled(
+            let button = ui.add_enabled(
                 mutable && paused.is_some(),
                 PressableButton::new(if paused == Some(true) {
                     "Continue"
                 } else {
                     "Pause"
                 }),
-            )
+            );
+            if let Some(state) = pause
+                && state.is_auto_paused()
+                && let Some(search) = state.search
+            {
+                button.on_hover_text(format!(
+                    "Resume A* calculation for +{}s (next auto-pause step)",
+                    search.continue_step.as_secs()
+                ))
+            } else {
+                button
+            }
         });
         [Some(action), pause]
     })
@@ -825,36 +878,60 @@ mod tests {
 
 
     /// Render the production calculation row without a worker, filesystem or guest.
+    fn calculation_button_frame_with_snapshot(
+        context: &egui::Context,
+        idle: bool,
+        active: bool,
+        pause: Option<crate::worker::pyramid_pause::Snapshot>,
+        mutable: bool,
+        events: Vec<egui::Event>,
+        width: f32,
+    ) -> ([(egui::Rect, bool, bool); 2], Vec<String>) {
+        crate::ui_style::apply_dark_theme(context);
+        let mut buttons = [(egui::Rect::NOTHING, false, false); 2];
+        let output = context.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(width, 300.0),
+                )),
+                events,
+                ..Default::default()
+            },
+            |ui| {
+                buttons = calculation_buttons(ui, idle, active, pause, mutable).map(|response| {
+                    response.map_or((egui::Rect::NOTHING, false, false), |response| {
+                        (response.rect, response.enabled(), response.clicked())
+                    })
+                });
+            },
+        );
+        let mut texts = Vec::new();
+        super::pyramid_workflow_tests::collect_egui_text(&output.shapes, &mut texts);
+        output.drop_without_applying_deltas();
+        (buttons, texts)
+    }
+
+    /// Render the production calculation row from simple pause flag state.
     fn calculation_button_frame(
         context: &egui::Context,
         state: (bool, bool, Option<bool>, bool),
         events: Vec<egui::Event>,
         width: f32,
     ) -> [(egui::Rect, bool, bool); 2] {
-        crate::ui_style::apply_dark_theme(context);
-        let mut buttons = [(egui::Rect::NOTHING, false, false); 2];
-        context
-            .run_ui(
-                egui::RawInput {
-                    screen_rect: Some(egui::Rect::from_min_size(
-                        egui::Pos2::ZERO,
-                        egui::vec2(width, 300.0),
-                    )),
-                    events,
-                    ..Default::default()
-                },
-                |ui| {
-                    buttons = calculation_buttons(ui, state.0, state.1, state.2, state.3).map(
-                        |response| {
-                            response.map_or((egui::Rect::NOTHING, false, false), |response| {
-                                (response.rect, response.enabled(), response.clicked())
-                            })
-                        },
-                    );
-                },
-            )
-            .drop_without_applying_deltas();
-        buttons
+        let pause = state
+            .2
+            .map(|paused| crate::worker::pyramid_pause::Snapshot {
+                epoch: 1,
+                phase: crate::worker::pyramid_pause::Phase::Search,
+                requested: paused,
+                acknowledged: paused,
+                search: None,
+            });
+        calculation_button_frame_with_snapshot(
+            context, state.0, state.1, pause, state.3, events, width,
+        )
+        .0
     }
 
 
@@ -1155,5 +1232,135 @@ mod tests {
         state.set_source("next.json".into()).unwrap();
         assert!(!state.route_open);
         assert_eq!(state.route_text_size_points, Some(22.0));
+    }
+
+
+    /// Mode switches retire retained calculation messages, pending reports and inspector flags.
+    #[test]
+    fn clear_retained_wipes_report_progress_and_message() {
+        let mut state = Calculation {
+            message: "Old report summary".to_owned(),
+            route_open: true,
+            browser: true,
+            ..Calculation::default()
+        };
+        state.set_source("deal.json".to_owned()).unwrap();
+        let (id, _) = state.reserve(context()).unwrap();
+        assert!(state.finish(&id, Err("stale failure".to_owned())));
+        state.route_open = true;
+        state.clear_retained();
+        assert!(state.pending.is_none());
+        assert!(state.progress.is_none());
+        assert!(state.report.is_none());
+        assert!(state.message.is_empty());
+        assert!(!state.route_open);
+        assert!(!state.browser);
+    }
+
+    /// Auto-paused Free Cell Continue button shows the +60s extension tooltip, matching TriPeaks.
+    #[test]
+    fn freecell_350_auto_paused_continue_button_shows_plus_60s_tooltip() {
+        use crate::worker::pyramid_pause::{Phase, SearchSnapshot, Snapshot};
+        let context = egui::Context::default();
+        context.style_mut_of(egui::Theme::Dark, |style| {
+            style.interaction.tooltip_delay = 0.0;
+        });
+        let auto_paused = Snapshot {
+            epoch: 4,
+            phase: Phase::Search,
+            requested: true,
+            acknowledged: true,
+            search: Some(SearchSnapshot {
+                active_elapsed: Duration::from_secs(360),
+                next_auto_pause_at: Duration::from_secs(360),
+                continue_step: Duration::from_secs(60),
+                auto_paused: true,
+                best_score: 12,
+                play_requested: false,
+            }),
+        };
+        let (buttons, _) = calculation_button_frame_with_snapshot(
+            &context,
+            false,
+            true,
+            Some(auto_paused),
+            true,
+            vec![],
+            640.0,
+        );
+        let continue_center = buttons[1].0.center();
+        let (_, texts) = calculation_button_frame_with_snapshot(
+            &context,
+            false,
+            true,
+            Some(auto_paused),
+            true,
+            vec![egui::Event::PointerMoved(continue_center)],
+            640.0,
+        );
+        let (_, hovered_texts) = calculation_button_frame_with_snapshot(
+            &context,
+            false,
+            true,
+            Some(auto_paused),
+            true,
+            vec![egui::Event::PointerMoved(continue_center)],
+            640.0,
+        );
+        assert!(
+            texts
+                .iter()
+                .chain(hovered_texts.iter())
+                .any(|t| t == "Resume A* calculation for +60s (next auto-pause step)"),
+            "expected +60s auto-pause Continue tooltip, got {hovered_texts:?}"
+        );
+
+        // Ordinary manual pause must not show the auto-pause +60s tooltip.
+        let manual_paused = Snapshot {
+            search: Some(SearchSnapshot {
+                auto_paused: false,
+                ..auto_paused.search.expect("search snapshot")
+            }),
+            ..auto_paused
+        };
+        let manual_ctx = egui::Context::default();
+        manual_ctx.style_mut_of(egui::Theme::Dark, |style| {
+            style.interaction.tooltip_delay = 0.0;
+        });
+        let (manual_buttons, _) = calculation_button_frame_with_snapshot(
+            &manual_ctx,
+            false,
+            true,
+            Some(manual_paused),
+            true,
+            vec![],
+            640.0,
+        );
+        let manual_center = manual_buttons[1].0.center();
+        let (_, manual_texts) = calculation_button_frame_with_snapshot(
+            &manual_ctx,
+            false,
+            true,
+            Some(manual_paused),
+            true,
+            vec![egui::Event::PointerMoved(manual_center)],
+            640.0,
+        );
+        let (_, manual_hovered) = calculation_button_frame_with_snapshot(
+            &manual_ctx,
+            false,
+            true,
+            Some(manual_paused),
+            true,
+            vec![egui::Event::PointerMoved(manual_center)],
+            640.0,
+        );
+        assert!(
+            !manual_texts
+                .iter()
+                .chain(manual_hovered.iter())
+                .any(|t| t.contains("next auto-pause step")),
+            "manual pause must not display auto-pause tooltip: {manual_hovered:?}"
+        );
     }
 }
